@@ -32,7 +32,7 @@ impl Service for MainService {
 
         let mut resp = Response::new();
 
-        if let Some((_, key)) = url.query_pairs().find(|&(ref k, _)| k == "query") {
+        if let Some((_, key)) = url.query_pairs().find(|&(ref k, _)| k == "q") {
             let key = key.to_lowercase();
             let values = self.map.get(&key).map(|a| &a[..10]);
             resp.body(&format!("{:?}", values));
