@@ -54,7 +54,11 @@ impl Service for MainService {
         if let Some((_, key)) = url.query_pairs().find(|&(ref k, _)| k == "q") {
             let key = key.to_lowercase();
 
-            let lev = Levenshtein::new(&key, 2).unwrap();
+            let lev = if key.len() <= 8 {
+                Levenshtein::new(&key, 1).unwrap()
+            } else {
+                Levenshtein::new(&key, 2).unwrap()
+            };
 
             let mut body = String::new();
             body.push_str("<html><body>");
