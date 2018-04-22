@@ -2,6 +2,7 @@ extern crate env_logger;
 extern crate fst;
 extern crate fst_levenshtein;
 extern crate futures;
+#[macro_use]  extern crate lazy_static;
 extern crate raptor;
 extern crate tokio_minihttp;
 extern crate tokio_proto;
@@ -22,8 +23,17 @@ use tokio_service::Service;
 
 use raptor::MultiMap;
 
+lazy_static! {
+    static ref MAP: MultiMap = {
+        let map = read_to_vec("map.fst").unwrap();
+        let values = read_to_vec("values.vecs").unwrap();
+
+        MultiMap::from_bytes(map, &values).unwrap()
+    };
+}
+
 struct MainService {
-    map: MultiMap,
+    map: &'static MultiMap,
 }
 
 impl Service for MainService {
@@ -47,13 +57,15 @@ impl Service for MainService {
             let lev = Levenshtein::new(&key, 2).unwrap();
 
             let mut body = String::new();
+            body.push_str("<html><body>");
 
             let mut stream = self.map.search(lev).into_stream();
             while let Some((key, values)) = stream.next() {
                 let values = &values[..values.len().min(10)];
-                body.push_str(&format!("{:?} {:?}\n", key, values));
+                body.push_str(&format!("{:?} {:?}</br>", key, values));
             }
 
+            body.push_str("</body></html>");
             resp.body(&body);
         }
 
@@ -75,19 +87,5 @@ fn main() {
     drop(env_logger::init());
     let addr = "0.0.0.0:8080".parse().unwrap();
 
-    TcpServer::new(Http, addr).serve(|| {
-
-        // TODO move the MultiMap construction out of this
-        //      closure, make it global.
-        //      It will permit the server to be multithreaded.
-
-        let map = read_to_vec("map.fst").unwrap();
-        let values = read_to_vec("values.vecs").unwrap();
-
-        let map = MultiMap::from_bytes(map, &values).unwrap();
-
-        println!("Called Fn here !");
-
-        Ok(MainService { map })
-    })
+    TcpServer::new(Http, addr).serve(|| Ok(MainService { map: &MAP }))
 }
