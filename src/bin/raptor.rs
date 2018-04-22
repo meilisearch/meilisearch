@@ -9,6 +9,9 @@ extern crate tokio_service;
 extern crate url;
 
 use std::io;
+use std::path::Path;
+use std::fs::File;
+use std::io::{Read, BufReader};
 
 use fst_levenshtein::Levenshtein;
 use fst::{IntoStreamer, Streamer};
@@ -35,6 +38,8 @@ impl Service for MainService {
         let url = url::Url::parse(&url).unwrap();
 
         let mut resp = Response::new();
+        resp.header("Content-Type", "text/html");
+        resp.header("charset", "utf-8");
 
         if let Some((_, key)) = url.query_pairs().find(|&(ref k, _)| k == "q") {
             let key = key.to_lowercase();
@@ -56,6 +61,16 @@ impl Service for MainService {
     }
 }
 
+fn read_to_vec<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
+    let file = File::open(path)?;
+    let mut file = BufReader::new(file);
+
+    let mut vec = Vec::new();
+    file.read_to_end(&mut vec)?;
+
+    Ok(vec)
+}
+
 fn main() {
     drop(env_logger::init());
     let addr = "0.0.0.0:8080".parse().unwrap();
@@ -66,7 +81,10 @@ fn main() {
         //      closure, make it global.
         //      It will permit the server to be multithreaded.
 
-        let map = unsafe { MultiMap::from_paths("map.fst", "values.vecs").unwrap() };
+        let map = read_to_vec("map.fst").unwrap();
+        let values = read_to_vec("values.vecs").unwrap();
+
+        let map = MultiMap::from_bytes(map, &values).unwrap();
 
         println!("Called Fn here !");
 

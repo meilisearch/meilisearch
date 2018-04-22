@@ -53,8 +53,8 @@ fn main() {
         let description = product.ft.split_whitespace().filter(|&s| s != "Description");
         let words = title.chain(description)
                          .filter(|&s| s.chars().any(|c| c.is_alphabetic())) // remove that ?
-                         .filter(|&s| !common_words.contains(s))
-                         .map(|s| s.to_lowercase());
+                         .map(|s| s.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase())
+                         .filter(|s| !common_words.contains(s));
 
         for word in words {
             builder.insert(word, product.product_id);

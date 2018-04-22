@@ -1,12 +1,9 @@
 extern crate bincode;
 extern crate fst;
-extern crate serde;
-extern crate serde_json;
-#[macro_use] extern crate serde_derive;
 extern crate smallvec;
 
 use std::ops::{Deref, DerefMut};
-use std::io::Write;
+use std::io::{Write, BufReader};
 use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8_unchecked;
@@ -30,9 +27,17 @@ impl MultiMap {
     {
         let map = fst::Map::from_path(map)?;
 
-        // TODO handle error !!!
-        let values_file = File::open(values).unwrap();
-        let values = bincode::deserialize_from(values_file).unwrap();
+        // TODO handle errors !!!
+        let values = File::open(values).unwrap();
+        let values = BufReader::new(values);
+        let values = bincode::deserialize_from(values).unwrap();
+
+        Ok(MultiMap { map, values })
+    }
+
+    pub fn from_bytes(map: Vec<u8>, values: &[u8]) -> fst::Result<MultiMap> {
+        let map = fst::Map::from_bytes(map)?;
+        let values = bincode::deserialize(values).unwrap();
 
         Ok(MultiMap { map, values })
     }
