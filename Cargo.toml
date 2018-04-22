@@ -1,0 +1,17 @@
+[package]
+name = "raptor"
+version = "0.1.0"
+authors = ["Kerollmops <renault.cle@gmail.com>"]
+
+[dependencies]
+env_logger = { version = "0.3", default-features = false }
+fst = "0.3"
+futures = "0.1"
+tokio-minihttp = { git = "https://github.com/tokio-rs/tokio-minihttp.git" }
+tokio-proto = "0.1"
+tokio-service = "0.1"
+serde = "1.0"
+serde_json = "1.0"
+serde_derive = "1.0"
+smallvec = "0.6"
+url = "1.7"
