@@ -1,3 +1,4 @@
+extern crate bincode;
 extern crate fst;
 extern crate serde;
 extern crate serde_json;
@@ -5,18 +6,14 @@ extern crate serde_json;
 extern crate smallvec;
 
 use std::io::Write;
+use std::fs::File;
+use std::path::Path;
+use std::str::from_utf8_unchecked;
 
 pub use fst::MapBuilder;
 use smallvec::SmallVec;
 
 type SmallVec16<T> = SmallVec<[T; 16]>;
-
-#[derive(Debug, Serialize)]
-struct Product<'a> {
-    product_id: u64,
-    title: &'a str,
-    ft: &'a str,
-}
 
 #[derive(Debug)]
 pub struct MultiMap {
@@ -25,6 +22,27 @@ pub struct MultiMap {
 }
 
 impl MultiMap {
+    pub unsafe fn from_paths<P, Q>(map: P, values: Q) -> fst::Result<MultiMap>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>
+    {
+        let map = fst::Map::from_path(map)?;
+
+        // TODO handle error !!!
+        let values_file = File::open(values).unwrap();
+        let values = bincode::deserialize_from(values_file).unwrap();
+
+        Ok(MultiMap { map, values })
+    }
+
+    pub fn stream(&self) -> Stream {
+        Stream {
+            inner: self.map.stream(),
+            values: &self.values,
+        }
+    }
+
     pub fn contains_key<K: AsRef<[u8]>>(&self, key: K) -> bool {
         self.map.contains_key(key)
     }
@@ -34,22 +52,43 @@ impl MultiMap {
     }
 }
 
+pub struct Stream<'a, A: fst::Automaton = fst::automaton::AlwaysMatch> {
+    inner: fst::map::Stream<'a, A>,
+    values: &'a [SmallVec16<u64>],
+}
+
+impl<'a, 'm, A: fst::Automaton> fst::Streamer<'a> for Stream<'m, A> {
+    type Item = (&'a str, &'a [u64]);
+
+    fn next(&'a mut self) -> Option<Self::Item> {
+        // Here we can't just `map` because of some borrow rules
+        match self.inner.next() {
+            Some((key, i)) => {
+                let key = unsafe { from_utf8_unchecked(key) };
+                Some((key, &*self.values[i as usize]))
+            },
+            None => None,
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct MultiMapBuilder<'a> {
-    map: Vec<(&'a str, u64)>,
+pub struct MultiMapBuilder {
+    map: Vec<(String, u64)>,
     values: Vec<SmallVec16<u64>>,
 }
 
-impl<'a> MultiMapBuilder<'a> {
-    pub fn new() -> MultiMapBuilder<'a> {
+impl<'a> MultiMapBuilder {
+    pub fn new() -> MultiMapBuilder {
         MultiMapBuilder {
             map: Vec::new(),
             values: Vec::new(),
         }
     }
 
-    pub fn insert(&mut self, key: &'a str, value: u64) {
-        match self.map.binary_search_by_key(&key, |&(k, _)| k) {
+    pub fn insert<S: Into<String>>(&mut self, key: S, value: u64) {
+        let key = key.into();
+        match self.map.binary_search_by_key(&key.as_str(), |&(ref k, _)| k) {
             Ok(index) => {
                 let (_, index) = self.map[index];
                 let values = &mut self.values[index as usize];
@@ -77,5 +116,20 @@ impl<'a> MultiMapBuilder<'a> {
             map: fst::Map::from_iter(self.map)?,
             values: self.values.into_boxed_slice(),
         })
+    }
+
+    pub fn build<W, X>(self, map_wrt: W, mut values_wrt: X) -> fst::Result<(W, X)>
+    where
+        W: Write,
+        X: Write
+    {
+        let mut builder = MapBuilder::new(map_wrt)?;
+        builder.extend_iter(self.map)?;
+        let map = builder.into_inner()?;
+
+        // TODO handle that !!!
+        bincode::serialize_into(&mut values_wrt, &self.values).unwrap();
+
+        Ok((map, values_wrt))
     }
 }
