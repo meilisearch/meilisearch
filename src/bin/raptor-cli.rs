@@ -6,6 +6,7 @@ extern crate raptor;
 extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufReader, BufRead};
 
@@ -25,16 +26,34 @@ fn main() {
     let data = File::open("products.json_lines").unwrap();
     let data = BufReader::new(data);
 
+    let common_words = {
+        // TODO don't break if doesn't exist
+        let file = File::open("fr.stopwords.txt").unwrap();
+        let file = BufReader::new(file);
+        let mut set = HashSet::new();
+
+        for line in file.lines() {
+            let words = line.unwrap();
+            for word in words.split_whitespace() {
+                set.insert(word.to_owned());
+            }
+        }
+
+        set
+    };
+
     let mut builder = MultiMapBuilder::new();
     for line in data.lines() {
         let line = line.unwrap();
 
+        // TODO if possible remove String allocation of Product here...
         let product: Product = from_str(&line).unwrap();
 
-        // TODO filter words here !!!
         let title = product.title.split_whitespace();
-        let description = product.ft.split_whitespace();
-        let words = title.chain(description);
+        let description = product.ft.split_whitespace().filter(|&s| s != "Description");
+        let words = title.chain(description)
+                         .filter(|&s| s.chars().any(|c| c.is_alphabetic())) // remove that ?
+                         .filter(|&s| !common_words.contains(s));
 
         for word in words {
             builder.insert(word, product.product_id);
@@ -47,8 +66,8 @@ fn main() {
 
     let map = unsafe { MultiMap::from_paths("map.fst", "values.vecs").unwrap() };
 
-    let mut stream = map.stream();
-    while let Some(x) = stream.next() {
-        println!("{:?}", x);
-    }
+    // let mut stream = map.stream();
+    // while let Some(x) = stream.next() {
+    //     println!("{:?}", x);
+    // }
 }
