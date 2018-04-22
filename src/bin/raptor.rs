@@ -1,4 +1,6 @@
 extern crate env_logger;
+extern crate fst;
+extern crate fst_levenshtein;
 extern crate futures;
 extern crate raptor;
 extern crate tokio_minihttp;
@@ -8,6 +10,8 @@ extern crate url;
 
 use std::io;
 
+use fst_levenshtein::Levenshtein;
+use fst::{IntoStreamer, Streamer};
 use futures::future;
 use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
@@ -34,8 +38,18 @@ impl Service for MainService {
 
         if let Some((_, key)) = url.query_pairs().find(|&(ref k, _)| k == "q") {
             let key = key.to_lowercase();
-            let values = self.map.get(&key).map(|a| &a[..10]);
-            resp.body(&format!("{:?}", values));
+
+            let lev = Levenshtein::new(&key, 2).unwrap();
+
+            let mut body = String::new();
+
+            let mut stream = self.map.search(lev).into_stream();
+            while let Some((key, values)) = stream.next() {
+                let values = &values[..values.len().min(10)];
+                body.push_str(&format!("{:?} {:?}\n", key, values));
+            }
+
+            resp.body(&body);
         }
 
         future::ok(resp)

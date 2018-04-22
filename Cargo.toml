@@ -7,12 +7,13 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 bincode = "1.0"
 env_logger = { version = "0.3", default-features = false }
 fst = "0.3"
+fst-levenshtein = "0.2"
 futures = "0.1"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+smallvec = { version = "0.6", features = ["serde"] }
 tokio-minihttp = { git = "https://github.com/tokio-rs/tokio-minihttp.git" }
 tokio-proto = "0.1"
 tokio-service = "0.1"
-serde = "1.0"
-serde_json = "1.0"
-serde_derive = "1.0"
-smallvec = { version = "0.6", features = ["serde"] }
 url = "1.7"

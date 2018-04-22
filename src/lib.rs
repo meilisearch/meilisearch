@@ -5,6 +5,7 @@ extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 extern crate smallvec;
 
+use std::ops::{Deref, DerefMut};
 use std::io::Write;
 use std::fs::File;
 use std::path::Path;
@@ -49,6 +50,45 @@ impl MultiMap {
 
     pub fn get<K: AsRef<[u8]>>(&self, key: K) -> Option<&[u64]> {
         self.map.get(key).map(|i| &*self.values[i as usize])
+    }
+
+    pub fn search<A: fst::Automaton>(&self, aut: A) -> StreamBuilder<A> {
+        StreamBuilder {
+            inner: self.map.search(aut),
+            values: &self.values,
+        }
+    }
+}
+
+pub struct StreamBuilder<'a, A: fst::Automaton> {
+    inner: fst::map::StreamBuilder<'a, A>,
+    values: &'a [SmallVec32<u64>],
+}
+
+impl<'a, A: fst::Automaton> Deref for StreamBuilder<'a, A> {
+    type Target = fst::map::StreamBuilder<'a, A>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<'a, A: fst::Automaton> DerefMut for StreamBuilder<'a, A> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl<'a, A: fst::Automaton> fst::IntoStreamer<'a> for StreamBuilder<'a, A> {
+    type Item = (&'a str, &'a [u64]);
+
+    type Into = Stream<'a, A>;
+
+    fn into_stream(self) -> Self::Into {
+        Stream {
+            inner: self.inner.into_stream(),
+            values: self.values,
+        }
     }
 }
 
