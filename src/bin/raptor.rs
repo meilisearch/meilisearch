@@ -13,7 +13,7 @@ use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
 use tokio_service::Service;
 
-use raptor::{MultiMapBuilder, MultiMap};
+use raptor::MultiMap;
 
 struct MainService {
     map: MultiMap,
@@ -30,13 +30,14 @@ impl Service for MainService {
         let url = format!("http://raptor.net{}", request.path());
         let url = url::Url::parse(&url).unwrap();
 
+        let mut resp = Response::new();
+
         if let Some((_, key)) = url.query_pairs().find(|&(ref k, _)| k == "query") {
-            let values = self.map.get(&*key);
-            println!("{:?}", values);
+            let key = key.to_lowercase();
+            let values = self.map.get(&key).map(|a| &a[..10]);
+            resp.body(&format!("{:?}", values));
         }
 
-        let mut resp = Response::new();
-        resp.body("Hello, world!");
         future::ok(resp)
     }
 }
@@ -51,12 +52,7 @@ fn main() {
         //      closure, make it global.
         //      It will permit the server to be multithreaded.
 
-        let mut builder = MultiMapBuilder::new();
-        builder.insert("foo", 12);
-        builder.insert("foo", 13);
-        builder.insert("bar", 10);
-
-        let map = builder.build_memory().unwrap();
+        let map = unsafe { MultiMap::from_paths("map.fst", "values.vecs").unwrap() };
 
         println!("Called Fn here !");
 

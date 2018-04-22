@@ -53,7 +53,8 @@ fn main() {
         let description = product.ft.split_whitespace().filter(|&s| s != "Description");
         let words = title.chain(description)
                          .filter(|&s| s.chars().any(|c| c.is_alphabetic())) // remove that ?
-                         .filter(|&s| !common_words.contains(s));
+                         .filter(|&s| !common_words.contains(s))
+                         .map(|s| s.to_lowercase());
 
         for word in words {
             builder.insert(word, product.product_id);
@@ -64,6 +65,7 @@ fn main() {
     let values = File::create("values.vecs").unwrap();
     let (map, values) = builder.build(map, values).unwrap();
 
+    // just to check if the dump is valid
     let map = unsafe { MultiMap::from_paths("map.fst", "values.vecs").unwrap() };
 
     // let mut stream = map.stream();

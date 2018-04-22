@@ -13,12 +13,12 @@ use std::str::from_utf8_unchecked;
 pub use fst::MapBuilder;
 use smallvec::SmallVec;
 
-type SmallVec16<T> = SmallVec<[T; 16]>;
+type SmallVec32<T> = SmallVec<[T; 16]>;
 
 #[derive(Debug)]
 pub struct MultiMap {
     map: fst::Map,
-    values: Box<[SmallVec16<u64>]>,
+    values: Box<[SmallVec32<u64>]>,
 }
 
 impl MultiMap {
@@ -54,7 +54,7 @@ impl MultiMap {
 
 pub struct Stream<'a, A: fst::Automaton = fst::automaton::AlwaysMatch> {
     inner: fst::map::Stream<'a, A>,
-    values: &'a [SmallVec16<u64>],
+    values: &'a [SmallVec32<u64>],
 }
 
 impl<'a, 'm, A: fst::Automaton> fst::Streamer<'a> for Stream<'m, A> {
@@ -75,7 +75,7 @@ impl<'a, 'm, A: fst::Automaton> fst::Streamer<'a> for Stream<'m, A> {
 #[derive(Debug)]
 pub struct MultiMapBuilder {
     map: Vec<(String, u64)>,
-    values: Vec<SmallVec16<u64>>,
+    values: Vec<SmallVec32<u64>>,
 }
 
 impl<'a> MultiMapBuilder {
@@ -98,7 +98,7 @@ impl<'a> MultiMapBuilder {
             },
             Err(index) => {
                 let values = {
-                    let mut vec = SmallVec16::new();
+                    let mut vec = SmallVec32::new();
                     vec.push(value);
                     vec
                 };
