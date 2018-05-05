@@ -307,7 +307,6 @@ dependencies = [
  "env_logger 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "fst 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
- "lazy_static 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "levenshtein_automata 0.1.0 (git+https://github.com/tantivy-search/levenshtein-automata.git)",
  "serde 1.0.45 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.45 (registry+https://github.com/rust-lang/crates.io-index)",

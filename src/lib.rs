@@ -5,7 +5,7 @@ extern crate serde;
 
 mod fst_map;
 
-use std::ops::{Range, Deref, DerefMut};
+use std::ops::Range;
 use std::io::{Write, BufReader};
 use std::fs::File;
 use std::path::Path;
@@ -18,20 +18,6 @@ use self::fst_map::Values;
 pub struct StreamBuilder<'a, T: 'a, A: Automaton> {
     inner: fst::map::StreamBuilder<'a, A>,
     values: &'a Values<T>,
-}
-
-impl<'a, T, A: Automaton> Deref for StreamBuilder<'a, T, A> {
-    type Target = fst::map::StreamBuilder<'a, A>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<'a, T, A: Automaton> DerefMut for StreamBuilder<'a, T, A> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
 }
 
 impl<'a, T: 'a, A: Automaton> fst::IntoStreamer<'a> for StreamBuilder<'a, T, A> {

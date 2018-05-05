@@ -1,4 +1,3 @@
-#[macro_use] extern crate lazy_static;
 extern crate env_logger;
 extern crate fst;
 extern crate futures;
@@ -23,18 +22,10 @@ use tokio_service::Service;
 
 use raptor::FstMap;
 
-lazy_static! {
-    static ref MAP: FstMap<u64> = {
-        let map = read_to_vec("map.fst").unwrap();
-        let values = read_to_vec("values.vecs").unwrap();
-
-        FstMap::from_bytes(map, &values).unwrap()
-    };
-
-    static ref LEV_AUT_BLDR_0: LevenshteinAutomatonBuilder = LevenshteinAutomatonBuilder::new(0, false);
-    static ref LEV_AUT_BLDR_1: LevenshteinAutomatonBuilder = LevenshteinAutomatonBuilder::new(1, false);
-    static ref LEV_AUT_BLDR_2: LevenshteinAutomatonBuilder = LevenshteinAutomatonBuilder::new(2, false);
-}
+static mut MAP: Option<FstMap<u64>> = None;
+static mut LEV_AUT_BLDR_0: Option<LevenshteinAutomatonBuilder> = None;
+static mut LEV_AUT_BLDR_1: Option<LevenshteinAutomatonBuilder> = None;
+static mut LEV_AUT_BLDR_2: Option<LevenshteinAutomatonBuilder> = None;
 
 struct MainService {
     map: &'static FstMap<u64>,
@@ -109,18 +100,27 @@ fn read_to_vec<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
 fn main() {
     drop(env_logger::init());
 
-    // initialize all "lazy" variables
-    lazy_static::initialize(&MAP);
-    lazy_static::initialize(&LEV_AUT_BLDR_0);
-    lazy_static::initialize(&LEV_AUT_BLDR_1);
-    lazy_static::initialize(&LEV_AUT_BLDR_2);
+    // initialize all static variables
+    unsafe {
+        MAP = {
+            let map = read_to_vec("map.fst").unwrap();
+            let values = read_to_vec("values.vecs").unwrap();
+
+            Some(FstMap::from_bytes(map, &values).unwrap())
+        };
+        LEV_AUT_BLDR_0 = Some(LevenshteinAutomatonBuilder::new(0, false));
+        LEV_AUT_BLDR_1 = Some(LevenshteinAutomatonBuilder::new(1, false));
+        LEV_AUT_BLDR_2 = Some(LevenshteinAutomatonBuilder::new(2, false));
+    }
 
     let addr = "0.0.0.0:8080".parse().unwrap();
 
-    TcpServer::new(Http, addr).serve(|| Ok(MainService {
-        map: &MAP,
-        lev_aut_bldr_0: &LEV_AUT_BLDR_0,
-        lev_aut_bldr_1: &LEV_AUT_BLDR_1,
-        lev_aut_bldr_2: &LEV_AUT_BLDR_2,
-    }))
+    unsafe {
+        TcpServer::new(Http, addr).serve(|| Ok(MainService {
+            map: MAP.as_ref().unwrap(),
+            lev_aut_bldr_0: LEV_AUT_BLDR_0.as_ref().unwrap(),
+            lev_aut_bldr_1: LEV_AUT_BLDR_1.as_ref().unwrap(),
+            lev_aut_bldr_2: LEV_AUT_BLDR_2.as_ref().unwrap(),
+        }))
+    }
 }

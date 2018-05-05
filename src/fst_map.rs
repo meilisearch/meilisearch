@@ -4,7 +4,7 @@ use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use std::fs::File;
 use std::io::{Write, BufReader};
-use std::ops::{Range, Deref, DerefMut};
+use std::ops::Range;
 use std::path::Path;
 use {StreamBuilder, Stream};
 
