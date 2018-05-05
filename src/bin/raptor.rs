@@ -1,8 +1,8 @@
+#[macro_use] extern crate lazy_static;
 extern crate env_logger;
 extern crate fst;
-extern crate fst_levenshtein;
 extern crate futures;
-#[macro_use]  extern crate lazy_static;
+extern crate levenshtein_automata;
 extern crate raptor;
 extern crate tokio_minihttp;
 extern crate tokio_proto;
@@ -14,8 +14,8 @@ use std::path::Path;
 use std::fs::File;
 use std::io::{Read, BufReader};
 
-use fst_levenshtein::Levenshtein;
 use fst::{IntoStreamer, Streamer};
+use levenshtein_automata::LevenshteinAutomatonBuilder;
 use futures::future;
 use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
@@ -30,10 +30,17 @@ lazy_static! {
 
         FstMap::from_bytes(map, &values).unwrap()
     };
+
+    static ref LEV_AUT_BLDR_0: LevenshteinAutomatonBuilder = LevenshteinAutomatonBuilder::new(0, false);
+    static ref LEV_AUT_BLDR_1: LevenshteinAutomatonBuilder = LevenshteinAutomatonBuilder::new(1, false);
+    static ref LEV_AUT_BLDR_2: LevenshteinAutomatonBuilder = LevenshteinAutomatonBuilder::new(2, false);
 }
 
 struct MainService {
     map: &'static FstMap<u64>,
+    lev_aut_bldr_0: &'static LevenshteinAutomatonBuilder,
+    lev_aut_bldr_1: &'static LevenshteinAutomatonBuilder,
+    lev_aut_bldr_2: &'static LevenshteinAutomatonBuilder,
 }
 
 fn construct_body<'f, S>(mut stream: S) -> String
@@ -71,14 +78,12 @@ impl Service for MainService {
         if let Some((_, key)) = url.query_pairs().find(|&(ref k, _)| k == "q") {
             let key = key.to_lowercase();
 
-            // TODO prefer using the `tantivy-search/levenshtein-automata` instead
             let lev = if key.len() <= 4 {
-                // TODO prefer using AlwaysMatch with max_len ?
-                Levenshtein::new(&key, 0).unwrap()
+                self.lev_aut_bldr_0.build_dfa(&key)
             } else if key.len() <= 8 {
-                Levenshtein::new(&key, 1).unwrap()
+                self.lev_aut_bldr_1.build_dfa(&key)
             } else {
-                Levenshtein::new(&key, 2).unwrap()
+                self.lev_aut_bldr_2.build_dfa(&key)
             };
 
             let stream = self.map.search(lev).into_stream();
@@ -105,5 +110,10 @@ fn main() {
     drop(env_logger::init());
     let addr = "0.0.0.0:8080".parse().unwrap();
 
-    TcpServer::new(Http, addr).serve(|| Ok(MainService { map: &MAP }))
+    TcpServer::new(Http, addr).serve(|| Ok(MainService {
+        map: &MAP,
+        lev_aut_bldr_0: &LEV_AUT_BLDR_0,
+        lev_aut_bldr_1: &LEV_AUT_BLDR_1,
+        lev_aut_bldr_2: &LEV_AUT_BLDR_2,
+    }))
 }

@@ -7,7 +7,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 bincode = "1.0"
 env_logger = { version = "0.3", default-features = false }
 fst = "0.3"
-fst-levenshtein = "0.2"
+levenshtein_automata = { git = "https://github.com/tantivy-search/levenshtein-automata.git", features = ["fst_automaton"] }
 futures = "0.1"
 lazy_static = "1.0"
 serde = "1.0"
