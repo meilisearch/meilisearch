@@ -10,7 +10,6 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufReader, BufRead};
 
-use fst::Streamer;
 use serde_json::from_str;
 
 use raptor::{FstMapBuilder, FstMap};

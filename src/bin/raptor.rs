@@ -36,6 +36,23 @@ struct MainService {
     map: &'static FstMap<u64>,
 }
 
+fn construct_body<'f, S>(mut stream: S) -> String
+where
+    S: 'f + for<'a> Streamer<'a, Item=(&'a str, &'a [u64])>
+{
+    let mut body = String::new();
+    body.push_str("<html><body>");
+
+    while let Some((key, values)) = stream.next() {
+        let values = &values[..values.len().min(10)];
+        body.push_str(&format!("{:?} {:?}</br>", key, values));
+    }
+
+    body.push_str("</body></html>");
+
+    body
+}
+
 impl Service for MainService {
     type Request = Request;
     type Response = Response;
@@ -54,23 +71,20 @@ impl Service for MainService {
         if let Some((_, key)) = url.query_pairs().find(|&(ref k, _)| k == "q") {
             let key = key.to_lowercase();
 
-            let lev = if key.len() <= 8 {
+            // TODO prefer using the `tantivy-search/levenshtein-automata` instead
+            let lev = if key.len() <= 4 {
+                // TODO prefer using AlwaysMatch with max_len ?
+                Levenshtein::new(&key, 0).unwrap()
+            } else if key.len() <= 8 {
                 Levenshtein::new(&key, 1).unwrap()
             } else {
                 Levenshtein::new(&key, 2).unwrap()
             };
 
-            let mut body = String::new();
-            body.push_str("<html><body>");
+            let stream = self.map.search(lev).into_stream();
+            let body = construct_body(stream);
 
-            let mut stream = self.map.search(lev).into_stream();
-            while let Some((key, values)) = stream.next() {
-                let values = &values[..values.len().min(10)];
-                body.push_str(&format!("{:?} {:?}</br>", key, values));
-            }
-
-            body.push_str("</body></html>");
-            resp.body(&body);
+            resp.body_vec(body.into_bytes());
         }
 
         future::ok(resp)

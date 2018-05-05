@@ -13,7 +13,7 @@ lazy_static = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-tokio-minihttp = { git = "https://github.com/tokio-rs/tokio-minihttp.git" }
+tokio-minihttp = { git = "https://github.com/Kerollmops/tokio-minihttp.git" }
 tokio-proto = "0.1"
 tokio-service = "0.1"
 url = "1.7"
