@@ -30,7 +30,7 @@ impl<'m, 'v, T: 'v, A> StreamBuilder<'m, 'v, T, A> {
 }
 
 impl<'m, 'v, 'a, T: 'v + 'a, A: Automaton> fst::IntoStreamer<'a> for StreamBuilder<'m, 'v, T, A> {
-    type Item = (&'a str, &'a [T]);
+    type Item = <Self::Into as fst::Streamer<'a>>::Item;
     type Into = Stream<'m, 'v, T, A>;
 
     fn into_stream(self) -> Self::Into {
@@ -47,13 +47,12 @@ pub struct Stream<'m, 'v, T: 'v, A: Automaton = fst::automaton::AlwaysMatch> {
 }
 
 impl<'m, 'v, 'a, T: 'v + 'a, A: Automaton> fst::Streamer<'a> for Stream<'m, 'v, T, A> {
-    type Item = (&'a str, &'a [T]);
+    type Item = (&'a [u8], &'a [T]);
 
     fn next(&'a mut self) -> Option<Self::Item> {
         // Here we can't just `map` because of some borrow rules
         match self.inner.next() {
             Some((key, i)) => {
-                let key = unsafe { from_utf8_unchecked(key) };
                 let values = unsafe { self.values.get_unchecked(i as usize) };
                 Some((key, values))
             },
@@ -72,7 +71,7 @@ where
     A: Automaton,
     A::State: Clone,
 {
-    type Item = (&'a str, &'a [T], A::State);
+    type Item = <Self::Into as fst::Streamer<'a>>::Item;
     type Into = StreamWithState<'m, 'v, T, A>;
 
     fn into_stream(self) -> Self::Into {
@@ -93,12 +92,11 @@ where
     A: Automaton,
     A::State: Clone,
 {
-    type Item = (&'a str, &'a [T], A::State);
+    type Item = (&'a [u8], &'a [T], A::State);
 
     fn next(&'a mut self) -> Option<Self::Item> {
         match self.inner.next() {
-            Some((k, i, state)) => {
-                let key = unsafe { from_utf8_unchecked(k) };
+            Some((key, i, state)) => {
                 let values = unsafe { self.values.get_unchecked(i as usize) };
                 Some((key, values, state))
             },
