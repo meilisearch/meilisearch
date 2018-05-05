@@ -15,15 +15,23 @@ use fst::Automaton;
 pub use self::fst_map::{FstMap, FstMapBuilder};
 use self::fst_map::Values;
 
-pub struct StreamBuilder<'a, T: 'a, A: Automaton> {
-    inner: fst::map::StreamBuilder<'a, A>,
-    values: &'a Values<T>,
+pub struct StreamBuilder<'m, 'v, T: 'v, A> {
+    inner: fst::map::StreamBuilder<'m, A>,
+    values: &'v Values<T>,
 }
 
-impl<'a, T: 'a, A: Automaton> fst::IntoStreamer<'a> for StreamBuilder<'a, T, A> {
-    type Item = (&'a str, &'a [T]);
+impl<'m, 'v, T: 'v, A> StreamBuilder<'m, 'v, T, A> {
+    pub fn with_state(self) -> StreamWithStateBuilder<'m, 'v, T, A> {
+        StreamWithStateBuilder {
+            inner: self.inner.with_state(),
+            values: self.values,
+        }
+    }
+}
 
-    type Into = Stream<'a, T, A>;
+impl<'m, 'v, 'a, T: 'v + 'a, A: Automaton> fst::IntoStreamer<'a> for StreamBuilder<'m, 'v, T, A> {
+    type Item = (&'a str, &'a [T]);
+    type Into = Stream<'m, 'v, T, A>;
 
     fn into_stream(self) -> Self::Into {
         Stream {
@@ -33,12 +41,12 @@ impl<'a, T: 'a, A: Automaton> fst::IntoStreamer<'a> for StreamBuilder<'a, T, A> 
     }
 }
 
-pub struct Stream<'a, T: 'a, A: Automaton = fst::automaton::AlwaysMatch> {
-    inner: fst::map::Stream<'a, A>,
-    values: &'a Values<T>,
+pub struct Stream<'m, 'v, T: 'v, A: Automaton = fst::automaton::AlwaysMatch> {
+    inner: fst::map::Stream<'m, A>,
+    values: &'v Values<T>,
 }
 
-impl<'a, 'm, T: 'a, A: Automaton> fst::Streamer<'a> for Stream<'m, T, A> {
+impl<'m, 'v, 'a, T: 'v + 'a, A: Automaton> fst::Streamer<'a> for Stream<'m, 'v, T, A> {
     type Item = (&'a str, &'a [T]);
 
     fn next(&'a mut self) -> Option<Self::Item> {
@@ -48,6 +56,51 @@ impl<'a, 'm, T: 'a, A: Automaton> fst::Streamer<'a> for Stream<'m, T, A> {
                 let key = unsafe { from_utf8_unchecked(key) };
                 let values = unsafe { self.values.get_unchecked(i as usize) };
                 Some((key, values))
+            },
+            None => None,
+        }
+    }
+}
+
+pub struct StreamWithStateBuilder<'m, 'v, T: 'v, A> {
+    inner: fst::map::StreamWithStateBuilder<'m, A>,
+    values: &'v Values<T>,
+}
+
+impl<'m, 'v, 'a, T: 'v + 'a, A: 'a> fst::IntoStreamer<'a> for StreamWithStateBuilder<'m, 'v, T, A>
+where
+    A: Automaton,
+    A::State: Clone,
+{
+    type Item = (&'a str, &'a [T], A::State);
+    type Into = StreamWithState<'m, 'v, T, A>;
+
+    fn into_stream(self) -> Self::Into {
+        StreamWithState {
+            inner: self.inner.into_stream(),
+            values: self.values,
+        }
+    }
+}
+
+pub struct StreamWithState<'m, 'v, T: 'v, A: Automaton = fst::automaton::AlwaysMatch> {
+    inner: fst::map::StreamWithState<'m, A>,
+    values: &'v Values<T>,
+}
+
+impl<'m, 'v, 'a, T: 'v + 'a, A: 'a> fst::Streamer<'a> for StreamWithState<'m, 'v, T, A>
+where
+    A: Automaton,
+    A::State: Clone,
+{
+    type Item = (&'a str, &'a [T], A::State);
+
+    fn next(&'a mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            Some((k, i, state)) => {
+                let key = unsafe { from_utf8_unchecked(k) };
+                let values = unsafe { self.values.get_unchecked(i as usize) };
+                Some((key, values, state))
             },
             None => None,
         }

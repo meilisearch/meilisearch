@@ -14,8 +14,8 @@ use std::fs::File;
 use std::io::{Read, BufReader};
 
 use fst::{IntoStreamer, Streamer};
-use levenshtein_automata::LevenshteinAutomatonBuilder;
 use futures::future;
+use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
 use tokio_service::Service;
@@ -23,35 +23,18 @@ use tokio_service::Service;
 use raptor::FstMap;
 
 static mut MAP: Option<FstMap<u64>> = None;
-static mut LEV_AUT_BLDR_0: Option<LevenshteinAutomatonBuilder> = None;
-static mut LEV_AUT_BLDR_1: Option<LevenshteinAutomatonBuilder> = None;
-static mut LEV_AUT_BLDR_2: Option<LevenshteinAutomatonBuilder> = None;
+static mut LEV_BUILDER_0: Option<LevBuilder> = None;
+static mut LEV_BUILDER_1: Option<LevBuilder> = None;
+static mut LEV_BUILDER_2: Option<LevBuilder> = None;
 
-struct MainService {
-    map: &'static FstMap<u64>,
-    lev_aut_bldr_0: &'static LevenshteinAutomatonBuilder,
-    lev_aut_bldr_1: &'static LevenshteinAutomatonBuilder,
-    lev_aut_bldr_2: &'static LevenshteinAutomatonBuilder,
+struct MainService<'a> {
+    map: &'a FstMap<u64>,
+    lev_builder_0: &'a LevBuilder,
+    lev_builder_1: &'a LevBuilder,
+    lev_builder_2: &'a LevBuilder,
 }
 
-fn construct_body<'f, S>(mut stream: S) -> String
-where
-    S: 'f + for<'a> Streamer<'a, Item=(&'a str, &'a [u64])>
-{
-    let mut body = String::new();
-    body.push_str("<html><body>");
-
-    while let Some((key, values)) = stream.next() {
-        let values = &values[..values.len().min(10)];
-        body.push_str(&format!("{:?} {:?}</br>", key, values));
-    }
-
-    body.push_str("</body></html>");
-
-    body
-}
-
-impl Service for MainService {
+impl<'a> Service for MainService<'a> {
     type Request = Request;
     type Response = Response;
     type Error = io::Error;
@@ -66,19 +49,29 @@ impl Service for MainService {
         resp.header("Content-Type", "text/html");
         resp.header("charset", "utf-8");
 
-        if let Some((_, key)) = url.query_pairs().find(|&(ref k, _)| k == "q") {
-            let key = key.to_lowercase();
+        if let Some((_, query)) = url.query_pairs().find(|&(ref k, _)| k == "q") {
+            let query = query.to_lowercase();
 
-            let lev = if key.len() <= 4 {
-                self.lev_aut_bldr_0.build_dfa(&key)
-            } else if key.len() <= 8 {
-                self.lev_aut_bldr_1.build_dfa(&key)
+            let lev = if query.len() <= 4 {
+                self.lev_builder_0.build_dfa(&query)
+            } else if query.len() <= 8 {
+                self.lev_builder_1.build_dfa(&query)
             } else {
-                self.lev_aut_bldr_2.build_dfa(&key)
+                self.lev_builder_2.build_dfa(&query)
             };
 
-            let stream = self.map.search(lev).into_stream();
-            let body = construct_body(stream);
+            let mut stream = self.map.search(&lev).with_state().into_stream();
+
+            let mut body = String::new();
+            body.push_str("<html><body>");
+
+            while let Some((key, values, state)) = stream.next() {
+                let values = &values[..values.len().min(10)];
+                let distance = lev.distance(state);
+                body.push_str(&format!("<p>{:?} (dist: {:?}) {:?}</p>", key, distance, values));
+            }
+
+            body.push_str("</body></html>");
 
             resp.body_vec(body.into_bytes());
         }
@@ -108,9 +101,9 @@ fn main() {
 
             Some(FstMap::from_bytes(map, &values).unwrap())
         };
-        LEV_AUT_BLDR_0 = Some(LevenshteinAutomatonBuilder::new(0, false));
-        LEV_AUT_BLDR_1 = Some(LevenshteinAutomatonBuilder::new(1, false));
-        LEV_AUT_BLDR_2 = Some(LevenshteinAutomatonBuilder::new(2, false));
+        LEV_BUILDER_0 = Some(LevBuilder::new(0, false));
+        LEV_BUILDER_1 = Some(LevBuilder::new(1, false));
+        LEV_BUILDER_2 = Some(LevBuilder::new(2, false));
     }
 
     let addr = "0.0.0.0:8080".parse().unwrap();
@@ -118,9 +111,9 @@ fn main() {
     unsafe {
         TcpServer::new(Http, addr).serve(|| Ok(MainService {
             map: MAP.as_ref().unwrap(),
-            lev_aut_bldr_0: LEV_AUT_BLDR_0.as_ref().unwrap(),
-            lev_aut_bldr_1: LEV_AUT_BLDR_1.as_ref().unwrap(),
-            lev_aut_bldr_2: LEV_AUT_BLDR_2.as_ref().unwrap(),
+            lev_builder_0: LEV_BUILDER_0.as_ref().unwrap(),
+            lev_builder_1: LEV_BUILDER_1.as_ref().unwrap(),
+            lev_builder_2: LEV_BUILDER_2.as_ref().unwrap(),
         }))
     }
 }
