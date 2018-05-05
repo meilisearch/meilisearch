@@ -66,9 +66,14 @@ impl<'a> Service for MainService<'a> {
             body.push_str("<html><body>");
 
             while let Some((key, values, state)) = stream.next() {
-                let values = &values[..values.len().min(10)];
-                let distance = lev.distance(state);
-                body.push_str(&format!("<p>{:?} (dist: {:?}) {:?}</p>", key, distance, values));
+                match std::str::from_utf8(key) {
+                    Ok(key) => {
+                        let values = &values[..values.len().min(10)];
+                        let distance = lev.distance(state);
+                        body.push_str(&format!("<p>{:?} (dist: {:?}) {:?}</p>", key, distance, values));
+                    },
+                    Err(e) => eprintln!("{:?}", e),
+                }
             }
 
             body.push_str("</body></html>");

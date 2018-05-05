@@ -9,7 +9,6 @@ use std::ops::Range;
 use std::io::{Write, BufReader};
 use std::fs::File;
 use std::path::Path;
-use std::str::from_utf8_unchecked;
 use fst::Automaton;
 
 pub use self::fst_map::{FstMap, FstMapBuilder};
