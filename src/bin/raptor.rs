@@ -108,6 +108,13 @@ fn read_to_vec<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
 
 fn main() {
     drop(env_logger::init());
+
+    // initialize all "lazy" variables
+    lazy_static::initialize(&MAP);
+    lazy_static::initialize(&LEV_AUT_BLDR_0);
+    lazy_static::initialize(&LEV_AUT_BLDR_1);
+    lazy_static::initialize(&LEV_AUT_BLDR_2);
+
     let addr = "0.0.0.0:8080".parse().unwrap();
 
     TcpServer::new(Http, addr).serve(|| Ok(MainService {
