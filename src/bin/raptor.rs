@@ -21,19 +21,19 @@ use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
 use tokio_service::Service;
 
-use raptor::MultiMap;
+use raptor::FstMap;
 
 lazy_static! {
-    static ref MAP: MultiMap = {
+    static ref MAP: FstMap<u64> = {
         let map = read_to_vec("map.fst").unwrap();
         let values = read_to_vec("values.vecs").unwrap();
 
-        MultiMap::from_bytes(map, &values).unwrap()
+        FstMap::from_bytes(map, &values).unwrap()
     };
 }
 
 struct MainService {
-    map: &'static MultiMap,
+    map: &'static FstMap<u64>,
 }
 
 impl Service for MainService {

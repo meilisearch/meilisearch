@@ -13,7 +13,7 @@ use std::io::{BufReader, BufRead};
 use fst::Streamer;
 use serde_json::from_str;
 
-use raptor::{MultiMapBuilder, MultiMap};
+use raptor::{FstMapBuilder, FstMap};
 
 #[derive(Debug, Deserialize)]
 struct Product {
@@ -42,7 +42,7 @@ fn main() {
         set
     };
 
-    let mut builder = MultiMapBuilder::new();
+    let mut builder = FstMapBuilder::new();
     for line in data.lines() {
         let line = line.unwrap();
 
@@ -65,11 +65,6 @@ fn main() {
     let values = File::create("values.vecs").unwrap();
     let (map, values) = builder.build(map, values).unwrap();
 
-    // just to check if the dump is valid
-    let map = unsafe { MultiMap::from_paths("map.fst", "values.vecs").unwrap() };
-
-    // let mut stream = map.stream();
-    // while let Some(x) = stream.next() {
-    //     println!("{:?}", x);
-    // }
+    eprintln!("Checking the dump consistency...");
+    unsafe { FstMap::<u64>::from_paths("map.fst", "values.vecs").unwrap() };
 }

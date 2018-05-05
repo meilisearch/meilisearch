@@ -1,76 +1,26 @@
+#[macro_use] extern crate serde_derive;
 extern crate bincode;
 extern crate fst;
-extern crate smallvec;
+extern crate serde;
 
-use std::ops::{Deref, DerefMut};
+mod fst_map;
+
+use std::ops::{Range, Deref, DerefMut};
 use std::io::{Write, BufReader};
 use std::fs::File;
 use std::path::Path;
 use std::str::from_utf8_unchecked;
+use fst::Automaton;
 
-pub use fst::MapBuilder;
-use smallvec::SmallVec;
+pub use self::fst_map::{FstMap, FstMapBuilder};
+use self::fst_map::Values;
 
-type SmallVec32<T> = SmallVec<[T; 16]>;
-
-#[derive(Debug)]
-pub struct MultiMap {
-    map: fst::Map,
-    values: Box<[SmallVec32<u64>]>,
-}
-
-impl MultiMap {
-    pub unsafe fn from_paths<P, Q>(map: P, values: Q) -> fst::Result<MultiMap>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>
-    {
-        let map = fst::Map::from_path(map)?;
-
-        // TODO handle errors !!!
-        let values = File::open(values).unwrap();
-        let values = BufReader::new(values);
-        let values = bincode::deserialize_from(values).unwrap();
-
-        Ok(MultiMap { map, values })
-    }
-
-    pub fn from_bytes(map: Vec<u8>, values: &[u8]) -> fst::Result<MultiMap> {
-        let map = fst::Map::from_bytes(map)?;
-        let values = bincode::deserialize(values).unwrap();
-
-        Ok(MultiMap { map, values })
-    }
-
-    pub fn stream(&self) -> Stream {
-        Stream {
-            inner: self.map.stream(),
-            values: &self.values,
-        }
-    }
-
-    pub fn contains_key<K: AsRef<[u8]>>(&self, key: K) -> bool {
-        self.map.contains_key(key)
-    }
-
-    pub fn get<K: AsRef<[u8]>>(&self, key: K) -> Option<&[u64]> {
-        self.map.get(key).map(|i| &*self.values[i as usize])
-    }
-
-    pub fn search<A: fst::Automaton>(&self, aut: A) -> StreamBuilder<A> {
-        StreamBuilder {
-            inner: self.map.search(aut),
-            values: &self.values,
-        }
-    }
-}
-
-pub struct StreamBuilder<'a, A: fst::Automaton> {
+pub struct StreamBuilder<'a, T: 'a, A: Automaton> {
     inner: fst::map::StreamBuilder<'a, A>,
-    values: &'a [SmallVec32<u64>],
+    values: &'a Values<T>,
 }
 
-impl<'a, A: fst::Automaton> Deref for StreamBuilder<'a, A> {
+impl<'a, T, A: Automaton> Deref for StreamBuilder<'a, T, A> {
     type Target = fst::map::StreamBuilder<'a, A>;
 
     fn deref(&self) -> &Self::Target {
@@ -78,16 +28,16 @@ impl<'a, A: fst::Automaton> Deref for StreamBuilder<'a, A> {
     }
 }
 
-impl<'a, A: fst::Automaton> DerefMut for StreamBuilder<'a, A> {
+impl<'a, T, A: Automaton> DerefMut for StreamBuilder<'a, T, A> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
 
-impl<'a, A: fst::Automaton> fst::IntoStreamer<'a> for StreamBuilder<'a, A> {
-    type Item = (&'a str, &'a [u64]);
+impl<'a, T: 'a, A: Automaton> fst::IntoStreamer<'a> for StreamBuilder<'a, T, A> {
+    type Item = (&'a str, &'a [T]);
 
-    type Into = Stream<'a, A>;
+    type Into = Stream<'a, T, A>;
 
     fn into_stream(self) -> Self::Into {
         Stream {
@@ -97,84 +47,23 @@ impl<'a, A: fst::Automaton> fst::IntoStreamer<'a> for StreamBuilder<'a, A> {
     }
 }
 
-pub struct Stream<'a, A: fst::Automaton = fst::automaton::AlwaysMatch> {
+pub struct Stream<'a, T: 'a, A: Automaton = fst::automaton::AlwaysMatch> {
     inner: fst::map::Stream<'a, A>,
-    values: &'a [SmallVec32<u64>],
+    values: &'a Values<T>,
 }
 
-impl<'a, 'm, A: fst::Automaton> fst::Streamer<'a> for Stream<'m, A> {
-    type Item = (&'a str, &'a [u64]);
+impl<'a, 'm, T: 'a, A: Automaton> fst::Streamer<'a> for Stream<'m, T, A> {
+    type Item = (&'a str, &'a [T]);
 
     fn next(&'a mut self) -> Option<Self::Item> {
         // Here we can't just `map` because of some borrow rules
         match self.inner.next() {
             Some((key, i)) => {
                 let key = unsafe { from_utf8_unchecked(key) };
-                Some((key, &*self.values[i as usize]))
+                let values = unsafe { self.values.get_unchecked(i as usize) };
+                Some((key, values))
             },
             None => None,
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct MultiMapBuilder {
-    map: Vec<(String, u64)>,
-    values: Vec<SmallVec32<u64>>,
-}
-
-impl<'a> MultiMapBuilder {
-    pub fn new() -> MultiMapBuilder {
-        MultiMapBuilder {
-            map: Vec::new(),
-            values: Vec::new(),
-        }
-    }
-
-    pub fn insert<S: Into<String>>(&mut self, key: S, value: u64) {
-        let key = key.into();
-        match self.map.binary_search_by_key(&key.as_str(), |&(ref k, _)| k) {
-            Ok(index) => {
-                let (_, index) = self.map[index];
-                let values = &mut self.values[index as usize];
-                if let Err(index) = values.binary_search(&value) {
-                    values.insert(index, value)
-                }
-            },
-            Err(index) => {
-                let values = {
-                    let mut vec = SmallVec32::new();
-                    vec.push(value);
-                    vec
-                };
-                self.values.push(values);
-                let values_index = (self.values.len() - 1) as u64;
-
-                let value = (key, values_index);
-                self.map.insert(index, value);
-            },
-        }
-    }
-
-    pub fn build_memory(self) -> fst::Result<MultiMap> {
-        Ok(MultiMap {
-            map: fst::Map::from_iter(self.map)?,
-            values: self.values.into_boxed_slice(),
-        })
-    }
-
-    pub fn build<W, X>(self, map_wrt: W, mut values_wrt: X) -> fst::Result<(W, X)>
-    where
-        W: Write,
-        X: Write
-    {
-        let mut builder = MapBuilder::new(map_wrt)?;
-        builder.extend_iter(self.map)?;
-        let map = builder.into_inner()?;
-
-        // TODO handle that !!!
-        bincode::serialize_into(&mut values_wrt, &self.values).unwrap();
-
-        Ok((map, values_wrt))
     }
 }
