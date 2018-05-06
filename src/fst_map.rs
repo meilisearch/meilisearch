@@ -1,5 +1,5 @@
 use bincode;
-use fst::{self, Map, MapBuilder, Automaton};
+use fst::{self, Automaton};
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 use std::fs::File;
@@ -10,7 +10,7 @@ use {StreamBuilder, Stream};
 
 #[derive(Debug)]
 pub struct FstMap<T> {
-    inner: Map,
+    inner: fst::Map,
     values: Values<T>,
 }
 
@@ -21,7 +21,7 @@ impl<T> FstMap<T> {
         P: AsRef<Path>,
         Q: AsRef<Path>
     {
-        let inner = Map::from_path(map)?;
+        let inner = fst::Map::from_path(map)?;
 
         // TODO handle errors !!!
         let values = File::open(values).unwrap();
@@ -35,7 +35,7 @@ impl<T> FstMap<T> {
     where
         T: DeserializeOwned
     {
-        let inner = Map::from_bytes(map)?;
+        let inner = fst::Map::from_bytes(map)?;
         let values = bincode::deserialize(values).unwrap();
 
         Ok(Self { inner, values })
@@ -61,6 +61,19 @@ impl<T> FstMap<T> {
             inner: self.inner.search(aut),
             values: &self.values,
         }
+    }
+
+    pub fn op(&self) -> OpBuilder<T> {
+        // OpBuilder::new(&self.values).add(self.as_inner())
+        unimplemented!()
+    }
+
+    pub fn as_map(&self) -> &fst::Map {
+        &self.inner
+    }
+
+    pub fn values(&self) -> &Values<T> {
+        &self.values
     }
 }
 
@@ -137,7 +150,7 @@ impl<T> FstMapBuilder<T> {
 
     pub fn build_memory(self) -> fst::Result<FstMap<T>> {
         Ok(FstMap {
-            inner: Map::from_iter(self.map)?,
+            inner: fst::Map::from_iter(self.map)?,
             values: Values::new(self.values),
         })
     }
@@ -148,7 +161,7 @@ impl<T> FstMapBuilder<T> {
         W: Write,
         X: Write
     {
-        let mut builder = MapBuilder::new(map_wrt)?;
+        let mut builder = fst::MapBuilder::new(map_wrt)?;
         builder.extend_iter(self.map)?;
         let map = builder.into_inner()?;
         let values = Values::new(self.values);
@@ -158,4 +171,149 @@ impl<T> FstMapBuilder<T> {
 
         Ok((map, values_wrt))
     }
+}
+
+pub struct OpBuilder<'m, 'v, T: 'v> {
+    inner: fst::map::OpBuilder<'m>,
+    values: &'v Values<T>,
+}
+
+impl<'m, 'v, T: 'v> OpBuilder<'m, 'v, T> {
+    pub fn new(values: &'v Values<T>) -> Self {
+        OpBuilder {
+            inner: fst::map::OpBuilder::new(),
+            values: values,
+        }
+    }
+
+    pub fn add<I, S>(mut self, streamable: I) -> Self
+    where
+        I: for<'a> fst::IntoStreamer<'a, Into=S, Item=(&'a [u8], u64)>,
+        S: 'm + for<'a> fst::Streamer<'a, Item=(&'a [u8], u64)>,
+    {
+        self.push(streamable);
+        self
+    }
+
+    pub fn push<I, S>(&mut self, streamable: I)
+    where
+        I: for<'a> fst::IntoStreamer<'a, Into=S, Item=(&'a [u8], u64)>,
+        S: 'm + for<'a> fst::Streamer<'a, Item=(&'a [u8], u64)>,
+    {
+        self.inner.push(streamable);
+    }
+
+    pub fn union(self) -> Union<'m, 'v, T> {
+        Union {
+            inner: self.inner.union(),
+            outs: Vec::new(),
+            values: self.values,
+        }
+    }
+}
+
+pub struct Union<'m, 'v, T: 'v> {
+    inner: fst::map::Union<'m>,
+    outs: Vec<IndexedValues<'v, T>>,
+    values: &'v Values<T>,
+}
+
+impl<'a, 'm, 'v, T: 'v + 'a> fst::Streamer<'a> for Union<'m, 'v, T> {
+    type Item = (&'a [u8], &'a [IndexedValues<'a, T>]);
+
+    fn next(&'a mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            Some((s, ivalues)) => {
+                self.outs.clear();
+                for ivalue in ivalues {
+                    let index = ivalue.index;
+                    let values = unsafe { self.values.get_unchecked(ivalue.value as usize) };
+                    self.outs.push(IndexedValues { index, values })
+                }
+                Some((s, &self.outs))
+            },
+            None => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct IndexedValues<'a, T: 'a> {
+    pub index: usize,
+    pub values: &'a [T],
+}
+
+pub struct OpWithStateBuilder<'m, 'v, T: 'v, U> {
+    inner: fst::map::OpWithStateBuilder<'m, U>,
+    values: &'v Values<T>,
+}
+
+impl<'m, 'v, T: 'v, U: 'static> OpWithStateBuilder<'m, 'v, T, U> {
+    pub fn new(values: &'v Values<T>) -> Self {
+        Self {
+            inner: fst::map::OpWithStateBuilder::new(),
+            values: values,
+        }
+    }
+
+    pub fn add<I, S>(mut self, streamable: I) -> Self
+    where
+        I: for<'a> fst::IntoStreamer<'a, Into=S, Item=(&'a [u8], u64, U)>,
+        S: 'm + for<'a> fst::Streamer<'a, Item=(&'a [u8], u64, U)>,
+    {
+        self.push(streamable);
+        self
+    }
+
+    pub fn push<I, S>(&mut self, streamable: I)
+    where
+        I: for<'a> fst::IntoStreamer<'a, Into=S, Item=(&'a [u8], u64, U)>,
+        S: 'm + for<'a> fst::Streamer<'a, Item=(&'a [u8], u64, U)>,
+    {
+        self.inner.push(streamable);
+    }
+
+    pub fn union(self) -> UnionWithState<'m, 'v, T, U> {
+        UnionWithState {
+            inner: self.inner.union(),
+            outs: Vec::new(),
+            values: self.values,
+        }
+    }
+}
+
+pub struct UnionWithState<'m, 'v, T: 'v, U> {
+    inner: fst::map::UnionWithState<'m, U>,
+    outs: Vec<IndexedValuesWithState<'v, T, U>>,
+    values: &'v Values<T>,
+}
+
+impl<'a, 'm, 'v, T: 'v + 'a, U: 'a> fst::Streamer<'a> for UnionWithState<'m, 'v, T, U>
+where
+    U: Clone,
+{
+    type Item = (&'a [u8], &'a [IndexedValuesWithState<'a, T, U>]);
+
+    fn next(&'a mut self) -> Option<Self::Item> {
+        match self.inner.next() {
+            Some((s, ivalues)) => {
+                self.outs.clear();
+                for ivalue in ivalues {
+                    let index = ivalue.index;
+                    let values = unsafe { self.values.get_unchecked(ivalue.value as usize) };
+                    let state = ivalue.state.clone();
+                    self.outs.push(IndexedValuesWithState { index, values, state })
+                }
+                Some((s, &self.outs))
+            },
+            None => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct IndexedValuesWithState<'a, T: 'a, U> {
+    pub index: usize,
+    pub values: &'a [T],
+    pub state: U,
 }

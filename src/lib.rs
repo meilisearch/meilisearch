@@ -5,13 +5,13 @@ extern crate serde;
 
 mod fst_map;
 
-use std::ops::Range;
-use std::io::{Write, BufReader};
-use std::fs::File;
-use std::path::Path;
 use fst::Automaton;
 
 pub use self::fst_map::{FstMap, FstMapBuilder};
+pub use self::fst_map::{
+    OpBuilder, IndexedValues,
+    OpWithStateBuilder, IndexedValuesWithState,
+};
 use self::fst_map::Values;
 
 pub struct StreamBuilder<'m, 'v, T: 'v, A> {

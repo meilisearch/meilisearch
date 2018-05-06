@@ -13,14 +13,14 @@ use std::path::Path;
 use std::fs::File;
 use std::io::{Read, BufReader};
 
-use fst::{IntoStreamer, Streamer};
+use fst::Streamer;
 use futures::future;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
 use tokio_service::Service;
 
-use raptor::FstMap;
+use raptor::{FstMap, OpWithStateBuilder};
 
 static mut MAP: Option<FstMap<u64>> = None;
 static mut LEV_BUILDER_0: Option<LevBuilder> = None;
@@ -52,25 +52,40 @@ impl<'a> Service for MainService<'a> {
         if let Some((_, query)) = url.query_pairs().find(|&(ref k, _)| k == "q") {
             let query = query.to_lowercase();
 
-            let lev = if query.len() <= 4 {
-                self.lev_builder_0.build_dfa(&query)
-            } else if query.len() <= 8 {
-                self.lev_builder_1.build_dfa(&query)
-            } else {
-                self.lev_builder_2.build_dfa(&query)
-            };
+            let mut automatons = Vec::new();
 
-            let mut stream = self.map.search(&lev).with_state().into_stream();
+            for query in query.split_whitespace() {
+                let lev = if query.len() <= 4 {
+                    self.lev_builder_0.build_dfa(&query)
+                } else if query.len() <= 8 {
+                    self.lev_builder_1.build_dfa(&query)
+                } else {
+                    self.lev_builder_2.build_dfa(&query)
+                };
+                automatons.push(lev);
+            }
+
+            let mut op = OpWithStateBuilder::new(self.map.values());
+
+            for automaton in automatons.iter().cloned() {
+                let stream = self.map.as_map().search(automaton).with_state();
+                op.push(stream);
+            }
+
+            let mut stream = op.union();
 
             let mut body = String::new();
             body.push_str("<html><body>");
 
-            while let Some((key, values, state)) = stream.next() {
+            while let Some((key, ivalues)) = stream.next() {
                 match std::str::from_utf8(key) {
                     Ok(key) => {
-                        let values = &values[..values.len().min(10)];
-                        let distance = lev.distance(state);
-                        body.push_str(&format!("<p>{:?} (dist: {:?}) {:?}</p>", key, distance, values));
+                        for ivalue in ivalues {
+                            let i = ivalue.index;
+                            let state = ivalue.state;
+                            let distance = automatons[i].distance(state);
+                            body.push_str(&format!("<p>{:?} (dist: {:?}) {:?}</p>", key, distance, ivalue.values));
+                        }
                     },
                     Err(e) => eprintln!("{:?}", e),
                 }
