@@ -1,7 +1,6 @@
 // TODO make the raptor binary expose multiple subcommand
 //      make only one binary
 
-extern crate fst;
 extern crate raptor;
 extern crate serde_json;
 #[macro_use] extern crate serde_derive;
