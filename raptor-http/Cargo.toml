@@ -15,12 +15,13 @@ tokio-service = "0.1"
 url = "1.7"
 
 [dependencies.levenshtein_automata]
-path = "../../../levenshtein-automata"
-# git = "https://github.com/Kerollmops/levenshtein-automata.git"
-# branch = "custom-fst"
-features = ["fst_automaton"]
+git = "https://github.com/Kerollmops/levenshtein-automata.git"
+branch = "custom-fst"
+features = ["fst"]
 
 [dependencies.fst]
-path = "../../../fst"
-# git = "https://github.com/Kerollmops/fst.git"
-# branch = "stream-with-state"
+git = "https://github.com/Kerollmops/fst.git"
+branch = "op-builder-with-state"
+
+[profile.release]
+# lto = true

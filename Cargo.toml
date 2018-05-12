@@ -9,9 +9,5 @@ serde = "1.0"
 serde_derive = "1.0"
 
 [dependencies.fst]
-path = "../../fst"
-# git = "https://github.com/Kerollmops/fst.git"
-# branch = "stream-with-state"
-
-# [profile.release]
-# lto = true
+git = "https://github.com/Kerollmops/fst.git"
+branch = "op-builder-with-state"
