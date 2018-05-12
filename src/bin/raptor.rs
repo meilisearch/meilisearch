@@ -10,7 +10,7 @@ extern crate url;
 
 use std::io;
 use std::path::Path;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{Read, BufReader};
 
 use fst::Streamer;
@@ -100,24 +100,14 @@ impl<'a> Service for MainService<'a> {
     }
 }
 
-fn read_to_vec<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
-    let file = File::open(path)?;
-    let mut file = BufReader::new(file);
-
-    let mut vec = Vec::new();
-    file.read_to_end(&mut vec)?;
-
-    Ok(vec)
-}
-
 fn main() {
     drop(env_logger::init());
 
     // initialize all static variables
     unsafe {
         MAP = {
-            let map = read_to_vec("map.fst").unwrap();
-            let values = read_to_vec("values.vecs").unwrap();
+            let map = fs::read("map.fst").unwrap();
+            let values = fs::read("values.vecs").unwrap();
 
             Some(FstMap::from_bytes(map, &values).unwrap())
         };
