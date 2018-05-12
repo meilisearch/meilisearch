@@ -5,25 +5,13 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
 bincode = "1.0"
-env_logger = { version = "0.3", default-features = false }
-futures = "0.1"
 serde = "1.0"
 serde_derive = "1.0"
-tokio-minihttp = { git = "https://github.com/Kerollmops/tokio-minihttp.git" }
-tokio-proto = "0.1"
-tokio-service = "0.1"
-url = "1.7"
 
 [dependencies.fst]
 path = "../../fst"
 # git = "https://github.com/Kerollmops/fst.git"
 # branch = "stream-with-state"
-
-[dependencies.levenshtein_automata]
-path = "../../levenshtein-automata"
-# git = "https://github.com/Kerollmops/levenshtein-automata.git"
-# branch = "custom-fst"
-features = ["fst_automaton"]
 
 # [profile.release]
 # lto = true

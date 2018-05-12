@@ -1,0 +1,26 @@
+[package]
+name = "raptor-http"
+version = "0.1.0"
+authors = ["Kerollmops <renault.cle@gmail.com>"]
+
+[dependencies]
+env_logger = { version = "0.3", default-features = false }
+raptor = { path = ".." }
+futures = "0.1"
+serde = "1.0"
+serde_derive = "1.0"
+tokio-minihttp = { git = "https://github.com/Kerollmops/tokio-minihttp.git" }
+tokio-proto = "0.1"
+tokio-service = "0.1"
+url = "1.7"
+
+[dependencies.levenshtein_automata]
+path = "../../../levenshtein-automata"
+# git = "https://github.com/Kerollmops/levenshtein-automata.git"
+# branch = "custom-fst"
+features = ["fst_automaton"]
+
+[dependencies.fst]
+path = "../../../fst"
+# git = "https://github.com/Kerollmops/fst.git"
+# branch = "stream-with-state"
