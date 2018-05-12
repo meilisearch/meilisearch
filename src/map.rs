@@ -231,7 +231,7 @@ impl<'a, 'm, 'v, T: 'v + 'a> fst::Streamer<'a> for Union<'m, 'v, T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct IndexedValues<'a, T: 'a> {
     pub index: usize,
     pub values: &'a [T],
@@ -305,7 +305,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct IndexedValuesWithState<'a, T: 'a, U> {
     pub index: usize,
     pub values: &'a [T],
