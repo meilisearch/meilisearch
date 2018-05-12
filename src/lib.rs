@@ -3,16 +3,15 @@ extern crate bincode;
 extern crate fst;
 extern crate serde;
 
-mod fst_map;
+mod map;
 
 use fst::Automaton;
 
-pub use self::fst_map::{FstMap, FstMapBuilder};
-pub use self::fst_map::{
+pub use self::map::{Map, MapBuilder, Values};
+pub use self::map::{
     OpBuilder, IndexedValues,
     OpWithStateBuilder, IndexedValuesWithState,
 };
-use self::fst_map::Values;
 
 pub struct StreamBuilder<'m, 'v, T: 'v, A> {
     inner: fst::map::StreamBuilder<'m, A>,

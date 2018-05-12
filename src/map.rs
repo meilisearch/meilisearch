@@ -9,12 +9,12 @@ use std::path::Path;
 use {StreamBuilder, Stream};
 
 #[derive(Debug)]
-pub struct FstMap<T> {
+pub struct Map<T> {
     inner: fst::Map,
     values: Values<T>,
 }
 
-impl<T> FstMap<T> {
+impl<T> Map<T> {
     pub unsafe fn from_paths<P, Q>(map: P, values: Q) -> fst::Result<Self>
     where
         T: DeserializeOwned,
@@ -63,11 +63,6 @@ impl<T> FstMap<T> {
         }
     }
 
-    pub fn op(&self) -> OpBuilder<T> {
-        // OpBuilder::new(&self.values).add(self.as_inner())
-        unimplemented!()
-    }
-
     pub fn as_map(&self) -> &fst::Map {
         &self.inner
     }
@@ -114,14 +109,14 @@ impl<T> Values<T> {
 }
 
 #[derive(Debug)]
-pub struct FstMapBuilder<T> {
+pub struct MapBuilder<T> {
     map: Vec<(String, u64)>,
     // This makes many memory indirections but it is only used
     // at index time, not kept for query time.
     values: Vec<Vec<T>>,
 }
 
-impl<T> FstMapBuilder<T> {
+impl<T> MapBuilder<T> {
     pub fn new() -> Self {
         Self {
             map: Vec::new(),
@@ -148,8 +143,8 @@ impl<T> FstMapBuilder<T> {
         }
     }
 
-    pub fn build_memory(self) -> fst::Result<FstMap<T>> {
-        Ok(FstMap {
+    pub fn build_in_memory(self) -> fst::Result<Map<T>> {
+        Ok(Map {
             inner: fst::Map::from_iter(self.map)?,
             values: Values::new(self.values),
         })

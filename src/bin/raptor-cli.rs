@@ -12,7 +12,7 @@ use std::io::{BufReader, BufRead};
 
 use serde_json::from_str;
 
-use raptor::{FstMapBuilder, FstMap};
+use raptor::{MapBuilder, Map};
 
 #[derive(Debug, Deserialize)]
 struct Product {
@@ -41,7 +41,7 @@ fn main() {
         set
     };
 
-    let mut builder = FstMapBuilder::new();
+    let mut builder = MapBuilder::new();
     for line in data.lines() {
         let line = line.unwrap();
 
@@ -65,5 +65,5 @@ fn main() {
     let (map, values) = builder.build(map, values).unwrap();
 
     eprintln!("Checking the dump consistency...");
-    unsafe { FstMap::<u64>::from_paths("map.fst", "values.vecs").unwrap() };
+    unsafe { Map::<u64>::from_paths("map.fst", "values.vecs").unwrap() };
 }

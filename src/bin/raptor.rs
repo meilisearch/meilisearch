@@ -8,10 +8,7 @@ extern crate tokio_proto;
 extern crate tokio_service;
 extern crate url;
 
-use std::io;
-use std::path::Path;
-use std::fs::{self, File};
-use std::io::{Read, BufReader};
+use std::{io, fs};
 
 use fst::Streamer;
 use futures::future;
@@ -20,15 +17,15 @@ use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
 use tokio_service::Service;
 
-use raptor::{FstMap, OpWithStateBuilder};
+use raptor::{Map, OpWithStateBuilder};
 
-static mut MAP: Option<FstMap<u64>> = None;
+static mut MAP: Option<Map<u64>> = None;
 static mut LEV_BUILDER_0: Option<LevBuilder> = None;
 static mut LEV_BUILDER_1: Option<LevBuilder> = None;
 static mut LEV_BUILDER_2: Option<LevBuilder> = None;
 
 struct MainService<'a> {
-    map: &'a FstMap<u64>,
+    map: &'a Map<u64>,
     lev_builder_0: &'a LevBuilder,
     lev_builder_1: &'a LevBuilder,
     lev_builder_2: &'a LevBuilder,
@@ -109,7 +106,7 @@ fn main() {
             let map = fs::read("map.fst").unwrap();
             let values = fs::read("values.vecs").unwrap();
 
-            Some(FstMap::from_bytes(map, &values).unwrap())
+            Some(Map::from_bytes(map, &values).unwrap())
         };
         LEV_BUILDER_0 = Some(LevBuilder::new(0, false));
         LEV_BUILDER_1 = Some(LevBuilder::new(1, false));
