@@ -11,3 +11,8 @@ serde_derive = "1.0"
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
 branch = "op-builder-with-state"
+
+[dependencies.levenshtein_automata]
+git = "https://github.com/Kerollmops/levenshtein-automata.git"
+branch = "custom-fst"
+features = ["fst_automaton"]

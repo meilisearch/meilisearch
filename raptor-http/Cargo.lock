@@ -80,6 +80,7 @@ dependencies = [
 [[package]]
 name = "fst"
 version = "0.3.0"
+source = "git+https://github.com/Kerollmops/fst.git?branch=op-builder-with-state#6e0ab4e4ee5443cc55079996bf9f703086322c33"
 dependencies = [
  "byteorder 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -150,8 +151,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "levenshtein_automata"
 version = "0.1.0"
+source = "git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst#5e8183a7634c4a0182ea7bb398140b2fe9854f77"
 dependencies = [
- "fst 0.3.0",
+ "fst 0.3.0 (git+https://github.com/Kerollmops/fst.git?branch=op-builder-with-state)",
 ]
 
 [[package]]
@@ -292,7 +294,8 @@ name = "raptor"
 version = "0.1.0"
 dependencies = [
  "bincode 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "fst 0.3.0",
+ "fst 0.3.0 (git+https://github.com/Kerollmops/fst.git?branch=op-builder-with-state)",
+ "levenshtein_automata 0.1.0 (git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst)",
  "serde 1.0.54 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.54 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -302,9 +305,8 @@ name = "raptor-http"
 version = "0.1.0"
 dependencies = [
  "env_logger 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "fst 0.3.0",
+ "fst 0.3.0 (git+https://github.com/Kerollmops/fst.git?branch=op-builder-with-state)",
  "futures 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
- "levenshtein_automata 0.1.0",
  "raptor 0.1.0",
  "serde 1.0.54 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.54 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -627,6 +629,7 @@ dependencies = [
 "checksum crossbeam-epoch 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "9b4e2817eb773f770dcb294127c011e22771899c21d18fce7dd739c0b9832e81"
 "checksum crossbeam-utils 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "d636a8b3bcc1b409d7ffd3facef8f21dcb4009626adbd0c5e6c4305c07253c7b"
 "checksum env_logger 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)" = "15abd780e45b3ea4f76b4e9a26ff4843258dd8a3eed2775a0e7368c2e7936c2f"
+"checksum fst 0.3.0 (git+https://github.com/Kerollmops/fst.git?branch=op-builder-with-state)" = "<none>"
 "checksum fuchsia-zircon 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2e9763c69ebaae630ba35f74888db465e49e259ba1bc0eda7d06f4a067615d82"
 "checksum fuchsia-zircon-sys 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
 "checksum futures 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)" = "1a70b146671de62ec8c8ed572219ca5d594d9b06c0b364d5e67b722fc559b48c"
@@ -636,6 +639,7 @@ dependencies = [
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
 "checksum lazy_static 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c8f31047daa365f19be14b47c29df4f7c3b581832407daabe6ae77397619237d"
 "checksum lazycell 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "a6f08839bc70ef4a3fe1d566d5350f519c5912ea86be0df1740a7d247c7fc0ef"
+"checksum levenshtein_automata 0.1.0 (git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst)" = "<none>"
 "checksum libc 0.2.40 (registry+https://github.com/rust-lang/crates.io-index)" = "6fd41f331ac7c5b8ac259b8bf82c75c0fb2e469bbf37d2becbba9a6a2221965b"
 "checksum log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)" = "e19e8d5c34a3e0e2223db8e060f9e8264aeeb5c5fc64a4ee9965c062211c024b"
 "checksum log 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "89f010e843f2b1a31dbd316b3b8d443758bc634bed37aabade59c686d644e0a2"

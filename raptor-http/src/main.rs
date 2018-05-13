@@ -1,7 +1,6 @@
 extern crate env_logger;
 extern crate fst;
 extern crate futures;
-extern crate levenshtein_automata;
 extern crate raptor;
 extern crate tokio_minihttp;
 extern crate tokio_proto;
@@ -9,29 +8,22 @@ extern crate tokio_service;
 extern crate url;
 
 use std::{io, fs};
+use std::sync::Arc;
 
 use fst::Streamer;
 use futures::future;
-use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
 use tokio_service::Service;
 
-use raptor::{Map, OpWithStateBuilder};
+use raptor::{Map, OpWithStateBuilder, LevBuilder};
 
-static mut MAP: Option<Map<u64>> = None;
-static mut LEV_BUILDER_0: Option<LevBuilder> = None;
-static mut LEV_BUILDER_1: Option<LevBuilder> = None;
-static mut LEV_BUILDER_2: Option<LevBuilder> = None;
-
-struct MainService<'a> {
-    map: &'a Map<u64>,
-    lev_builder_0: &'a LevBuilder,
-    lev_builder_1: &'a LevBuilder,
-    lev_builder_2: &'a LevBuilder,
+struct MainService {
+    map: Arc<Map<u64>>,
+    lev_builder: Arc<LevBuilder>,
 }
 
-impl<'a> Service for MainService<'a> {
+impl Service for MainService {
     type Request = Request;
     type Response = Response;
     type Error = io::Error;
@@ -52,13 +44,7 @@ impl<'a> Service for MainService<'a> {
             let mut automatons = Vec::new();
 
             for query in query.split_whitespace() {
-                let lev = if query.len() <= 4 {
-                    self.lev_builder_0.build_dfa(&query)
-                } else if query.len() <= 8 {
-                    self.lev_builder_1.build_dfa(&query)
-                } else {
-                    self.lev_builder_2.build_dfa(&query)
-                };
+                let lev = self.lev_builder.build_automaton(query);
                 automatons.push(lev);
             }
 
@@ -100,27 +86,18 @@ impl<'a> Service for MainService<'a> {
 fn main() {
     drop(env_logger::init());
 
-    // initialize all static variables
-    unsafe {
-        MAP = {
-            let map = fs::read("map.fst").unwrap();
-            let values = fs::read("values.vecs").unwrap();
-
-            Some(Map::from_bytes(map, &values).unwrap())
-        };
-        LEV_BUILDER_0 = Some(LevBuilder::new(0, false));
-        LEV_BUILDER_1 = Some(LevBuilder::new(1, false));
-        LEV_BUILDER_2 = Some(LevBuilder::new(2, false));
-    }
-
     let addr = "0.0.0.0:8080".parse().unwrap();
 
-    unsafe {
-        TcpServer::new(Http, addr).serve(|| Ok(MainService {
-            map: MAP.as_ref().unwrap(),
-            lev_builder_0: LEV_BUILDER_0.as_ref().unwrap(),
-            lev_builder_1: LEV_BUILDER_1.as_ref().unwrap(),
-            lev_builder_2: LEV_BUILDER_2.as_ref().unwrap(),
-        }))
-    }
+    let lev_builder = Arc::new(LevBuilder::new());
+    let map = {
+        let fst = fs::read("map.fst").unwrap();
+        let values = fs::read("values.vecs").unwrap();
+        let map = Map::from_bytes(fst, &values).unwrap();
+        Arc::new(map)
+    };
+
+    TcpServer::new(Http, addr).serve(move || Ok(MainService {
+        map: map.clone(),
+        lev_builder: lev_builder.clone(),
+    }))
 }
