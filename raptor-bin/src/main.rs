@@ -3,59 +3,62 @@
 
 extern crate raptor;
 extern crate serde_json;
-#[macro_use] extern crate serde_derive;
 
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufReader, BufRead};
+use std::iter;
 
+use raptor::{MapBuilder, Map, Value, AttrIndex};
 use serde_json::from_str;
-
-use raptor::{MapBuilder, Map};
-
-#[derive(Debug, Deserialize)]
-struct Product {
-    product_id: u64,
-    title: String,
-    ft: String,
-}
 
 fn main() {
     let data = File::open("products.json_lines").unwrap();
     let data = BufReader::new(data);
 
     let common_words = {
-        // TODO don't break if doesn't exist
-        let file = File::open("fr.stopwords.txt").unwrap();
-        let file = BufReader::new(file);
-        let mut set = HashSet::new();
-
-        for line in file.lines() {
-            let words = line.unwrap();
-            for word in words.split_whitespace() {
-                set.insert(word.to_owned());
-            }
+        match File::open("fr.stopwords.txt") {
+            Ok(file) => {
+                let file = BufReader::new(file);
+                let mut set = HashSet::new();
+                for line in file.lines().filter_map(|l| l.ok()) {
+                    for word in line.split_whitespace() {
+                        set.insert(word.to_owned());
+                    }
+                }
+                set
+            },
+            Err(e) => {
+                eprintln!("{:?}", e);
+                HashSet::new()
+            },
         }
-
-        set
     };
 
     let mut builder = MapBuilder::new();
     for line in data.lines() {
         let line = line.unwrap();
 
-        // TODO if possible remove String allocation of Product here...
-        let product: Product = from_str(&line).unwrap();
+        let product: serde_json::Value = from_str(&line).unwrap();
 
-        let title = product.title.split_whitespace();
-        let description = product.ft.split_whitespace().filter(|&s| s != "Description");
-        let words = title.chain(description)
-                         .filter(|&s| s.chars().any(|c| c.is_alphabetic())) // remove that ?
-                         .map(|s| s.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase())
-                         .filter(|s| !common_words.contains(s));
+        // TODO use a real tokenizer
+        let title = iter::repeat(0).zip(product["title"].as_str().expect("invalid `title`").split_whitespace())
+                                    .filter(|(_, s)| !common_words.contains(*s))
+                                    .enumerate();
+        let description = iter::repeat(1).zip(product["ft"].as_str().expect("invalid `ft`").split_whitespace())
+                                    .filter(|(_, s)| !common_words.contains(*s))
+                                    .enumerate();
 
-        for word in words {
-            builder.insert(word, product.product_id);
+        let words = title.chain(description);
+        for (i, (attr, word)) in words {
+            let value = Value {
+                id: product["product_id"].as_u64().expect("invalid `product_id`"),
+                attr_index: AttrIndex {
+                    attribute: attr,
+                    index: i as u64,
+                },
+            };
+            builder.insert(word, value);
         }
     }
 
@@ -64,5 +67,5 @@ fn main() {
     let (map, values) = builder.build(map, values).unwrap();
 
     eprintln!("Checking the dump consistency...");
-    unsafe { Map::<u64>::from_paths("map.fst", "values.vecs").unwrap() };
+    unsafe { Map::<Value>::from_paths("map.fst", "values.vecs").unwrap() };
 }

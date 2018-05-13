@@ -14,3 +14,15 @@ pub use self::map::{
 };
 
 pub use self::levenshtein::LevBuilder;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Value {
+    pub id: u64,
+    pub attr_index: AttrIndex,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AttrIndex {
+    pub attribute: u8,
+    pub index: u64,
+}

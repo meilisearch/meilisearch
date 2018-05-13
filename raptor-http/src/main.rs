@@ -16,10 +16,10 @@ use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
 use tokio_service::Service;
 
-use raptor::{Map, OpWithStateBuilder, LevBuilder};
+use raptor::{Map, OpWithStateBuilder, LevBuilder, Value};
 
 struct MainService {
-    map: Arc<Map<u64>>,
+    map: Arc<Map<Value>>,
     lev_builder: Arc<LevBuilder>,
 }
 
