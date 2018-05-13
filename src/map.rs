@@ -2,6 +2,8 @@ use bincode;
 use fst::{self, Automaton};
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::fs::File;
 use std::io::{Write, BufReader};
 use std::ops::Range;
@@ -109,7 +111,7 @@ impl<T> Values<T> {
 
 #[derive(Debug)]
 pub struct MapBuilder<T> {
-    map: Vec<(String, u64)>,
+    map: BTreeMap<String, u64>,
     // This makes many memory indirections but it is only used
     // at index time, not kept for query time.
     values: Vec<Vec<T>>,
@@ -118,26 +120,23 @@ pub struct MapBuilder<T> {
 impl<T> MapBuilder<T> {
     pub fn new() -> Self {
         Self {
-            map: Vec::new(),
+            map: BTreeMap::new(),
             values: Vec::new(),
         }
     }
 
     pub fn insert<S: Into<String>>(&mut self, key: S, value: T) {
         let key = key.into();
-        match self.map.binary_search_by_key(&key.as_str(), |&(ref k, _)| k) {
-            Ok(index) => {
-                let (_, index) = self.map[index];
-                let values = &mut self.values[index as usize];
-
-                values.push(value);
-            },
-            Err(index) => {
+        match self.map.entry(key) {
+            Entry::Vacant(e) => {
                 self.values.push(vec![value]);
-                let values_index = (self.values.len() - 1) as u64;
-
-                let value = (key, values_index);
-                self.map.insert(index, value);
+                let index = (self.values.len() - 1) as u64;
+                e.insert(index);
+            },
+            Entry::Occupied(e) => {
+                let index = *e.get();
+                let values = &mut self.values[index as usize];
+                values.push(value);
             },
         }
     }
