@@ -16,10 +16,10 @@ use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
 use tokio_service::Service;
 
-use raptor::{Map, OpWithStateBuilder, LevBuilder, Value};
+use raptor::{DocIndexMap, OpWithStateBuilder, LevBuilder};
 
 struct MainService {
-    map: Arc<Map<Value>>,
+    map: Arc<DocIndexMap>,
     lev_builder: Arc<LevBuilder>,
 }
 
@@ -92,7 +92,7 @@ fn main() {
     let map = {
         let fst = fs::read("map.fst").unwrap();
         let values = fs::read("values.vecs").unwrap();
-        let map = Map::from_bytes(fst, &values).unwrap();
+        let map = DocIndexMap::from_bytes(fst, &values).unwrap();
         Arc::new(map)
     };
 

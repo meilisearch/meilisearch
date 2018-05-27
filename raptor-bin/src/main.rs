@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::{BufReader, BufRead};
 use std::iter;
 
-use raptor::{MapBuilder, Map, Value, AttrIndex};
+use raptor::{DocIndexMapBuilder, DocIndexMap, DocIndex};
 use serde_json::from_str;
 
 fn main() {
@@ -35,7 +35,7 @@ fn main() {
         }
     };
 
-    let mut builder = MapBuilder::new();
+    let mut builder = DocIndexMapBuilder::new();
     for line in data.lines() {
         let line = line.unwrap();
 
@@ -51,14 +51,12 @@ fn main() {
 
         let words = title.chain(description);
         for (i, (attr, word)) in words {
-            let value = Value {
-                id: product["product_id"].as_u64().expect("invalid `product_id`"),
-                attr_index: AttrIndex {
-                    attribute: attr,
-                    index: i as u64,
-                },
+            let doc_index = DocIndex {
+                document: product["product_id"].as_u64().expect("invalid `product_id`"),
+                attribute: attr,
+                attribute_index: i as u32,
             };
-            builder.insert(word, value);
+            builder.insert(word, doc_index);
         }
     }
 
@@ -66,6 +64,6 @@ fn main() {
     let values = File::create("values.vecs").unwrap();
     let (map, values) = builder.build(map, values).unwrap();
 
-    eprintln!("Checking the dump consistency...");
-    unsafe { Map::<Value>::from_paths("map.fst", "values.vecs").unwrap() };
+    println!("Checking the dump consistency...");
+    unsafe { DocIndexMap::from_paths("map.fst", "values.vecs").unwrap() };
 }
