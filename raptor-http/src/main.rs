@@ -16,7 +16,7 @@ use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
 use tokio_service::Service;
 
-use raptor::{DocIndexMap, OpWithStateBuilder, LevBuilder};
+use raptor::{DocIndexMap, RankedStream, LevBuilder};
 
 struct MainService {
     map: Arc<DocIndexMap>,
@@ -48,30 +48,18 @@ impl Service for MainService {
                 automatons.push(lev);
             }
 
-            let mut op = OpWithStateBuilder::new(self.map.values());
-
-            for automaton in automatons.iter().cloned() {
-                let stream = self.map.as_map().search(automaton).with_state();
-                op.push(stream);
-            }
-
-            let mut stream = op.union();
+            let mut limit = 20;
+            let mut stream = RankedStream::new(&self.map, self.map.values(), automatons.clone());
 
             let mut body = String::new();
             body.push_str("<html><body>");
 
-            while let Some((key, ivalues)) = stream.next() {
-                match std::str::from_utf8(key) {
-                    Ok(key) => {
-                        for ivalue in ivalues {
-                            let i = ivalue.index;
-                            let state = ivalue.state;
-                            let distance = automatons[i].distance(state);
-                            body.push_str(&format!("<p>{:?} (dist: {:?}) {:?}</p>", key, distance, ivalue.values));
-                        }
-                    },
-                    Err(e) => eprintln!("{:?}", e),
-                }
+            while let Some(document_id) = stream.next() {
+                if limit == 0 { break }
+
+                body.push_str(&format!("<p>{:?}</p>", document_id));
+
+                limit -= 1;
             }
 
             body.push_str("</body></html>");

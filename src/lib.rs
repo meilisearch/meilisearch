@@ -1,10 +1,12 @@
 #[macro_use] extern crate serde_derive;
 extern crate bincode;
 extern crate fst;
+extern crate group_by;
 extern crate levenshtein_automata;
 extern crate serde;
 
 pub mod map;
+pub mod rank;
 mod levenshtein;
 
 pub use self::map::{Map, MapBuilder, Values};
@@ -12,11 +14,13 @@ pub use self::map::{
     OpBuilder, IndexedValues,
     OpWithStateBuilder, IndexedValuesWithState,
 };
-
+pub use self::rank::{RankedStream};
 pub use self::levenshtein::LevBuilder;
 
 pub type DocIndexMap = Map<DocIndex>;
 pub type DocIndexMapBuilder = MapBuilder<DocIndex>;
+
+pub type DocumentId = u64;
 
 /// This structure represent the position of a word
 /// in a document and its attributes.
@@ -27,7 +31,7 @@ pub type DocIndexMapBuilder = MapBuilder<DocIndex>;
 pub struct DocIndex {
 
     /// The document identifier where the word was found.
-    pub document: u64,
+    pub document: DocumentId,
 
     /// The attribute identifier in the document
     /// where the word was found.
@@ -49,8 +53,15 @@ pub struct DocIndex {
 /// the way these structures are ordered between themselves.
 ///
 /// The word in itself is not important.
+// TODO do data oriented programming ? very arrays ?
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Match {
+
+    /// The word index in the query sentence.
+    /// Same as the `attribute_index` but for the query words.
+    ///
+    /// Used to retrieve the automaton that match this word.
+    pub query_index: u32,
 
     /// The distance the word has with the query word
     /// (i.e. the Levenshtein distance).
@@ -63,16 +74,30 @@ pub struct Match {
     /// can not have more than `2^8` attributes.
     pub attribute: u8,
 
-    /// The word index in the query sentence.
-    /// Same as the `attribute_index` but for the query words.
-    ///
-    /// Used to retrieve the automaton that match this word.
-    pub query_index: u32,
-
     /// Where does this word is located in the attribute string
     /// (i.e. at the start or the end of the attribute).
     ///
     /// The index in the attribute is limited to a maximum of `2^32`
     /// this is because we index only the first 1000 words in an attribute.
     pub attribute_index: u32,
+}
+
+impl Match {
+    pub fn zero() -> Self {
+        Match {
+            query_index: 0,
+            distance: 0,
+            attribute: 0,
+            attribute_index: 0,
+        }
+    }
+
+    pub fn max() -> Self {
+        Match {
+            query_index: u32::max_value(),
+            distance: u8::max_value(),
+            attribute: u8::max_value(),
+            attribute_index: u32::max_value(),
+        }
+    }
 }

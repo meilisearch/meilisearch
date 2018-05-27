@@ -56,7 +56,7 @@ fn main() {
                 attribute: attr,
                 attribute_index: i as u32,
             };
-            builder.insert(word, doc_index);
+            builder.insert(word.to_lowercase(), doc_index);
         }
     }
 

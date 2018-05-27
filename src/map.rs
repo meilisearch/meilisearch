@@ -285,12 +285,14 @@ impl<'a, 'm, 'v, T: 'v + 'a, U: 'a> fst::Streamer<'a> for UnionWithState<'m, 'v,
 where
     U: Clone,
 {
+    // TODO prefer returning (&[u8], index, value T, state) one by one
     type Item = (&'a [u8], &'a [IndexedValuesWithState<'a, T, U>]);
 
     fn next(&'a mut self) -> Option<Self::Item> {
         match self.inner.next() {
             Some((s, ivalues)) => {
                 self.outs.clear();
+                self.outs.reserve(ivalues.len());
                 for ivalue in ivalues {
                     let index = ivalue.index;
                     let values = unsafe { self.values.get_unchecked(ivalue.value as usize) };

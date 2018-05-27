@@ -16,3 +16,6 @@ branch = "op-builder-with-state"
 git = "https://github.com/Kerollmops/levenshtein-automata.git"
 branch = "custom-fst"
 features = ["fst_automaton"]
+
+[dependencies.group-by]
+git = "https://github.com/Kerollmops/group-by.git"

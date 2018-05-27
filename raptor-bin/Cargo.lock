@@ -27,6 +27,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "group-by"
+version = "0.1.0"
+source = "git+https://github.com/Kerollmops/group-by.git#7e432aa232834b650ca85ecd46056a43a0094dec"
+
+[[package]]
 name = "itoa"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -75,6 +80,7 @@ version = "0.1.0"
 dependencies = [
  "bincode 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "fst 0.3.0 (git+https://github.com/Kerollmops/fst.git?branch=op-builder-with-state)",
+ "group-by 0.1.0 (git+https://github.com/Kerollmops/group-by.git)",
  "levenshtein_automata 0.1.0 (git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst)",
  "serde 1.0.54 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.54 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -154,6 +160,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum byteorder 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "73b5bdfe7ee3ad0b99c9801d58807a9dbc9e09196365b0203853b99889ab3c87"
 "checksum dtoa 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "09c3753c3db574d215cba4ea76018483895d7bff25a31b49ba45db21c48e50ab"
 "checksum fst 0.3.0 (git+https://github.com/Kerollmops/fst.git?branch=op-builder-with-state)" = "<none>"
+"checksum group-by 0.1.0 (git+https://github.com/Kerollmops/group-by.git)" = "<none>"
 "checksum itoa 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c069bbec61e1ca5a596166e55dfe4773ff745c3d16b700013bcaff9a6df2c682"
 "checksum levenshtein_automata 0.1.0 (git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst)" = "<none>"
 "checksum libc 0.2.40 (registry+https://github.com/rust-lang/crates.io-index)" = "6fd41f331ac7c5b8ac259b8bf82c75c0fb2e469bbf37d2becbba9a6a2221965b"
