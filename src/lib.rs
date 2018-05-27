@@ -5,7 +5,6 @@ extern crate levenshtein_automata;
 extern crate serde;
 
 pub mod map;
-pub mod capped_btree_map;
 mod levenshtein;
 
 pub use self::map::{Map, MapBuilder, Values};
@@ -13,7 +12,7 @@ pub use self::map::{
     OpBuilder, IndexedValues,
     OpWithStateBuilder, IndexedValuesWithState,
 };
-pub use self::capped_btree_map::{CappedBTreeMap, Insertion};
+
 pub use self::levenshtein::LevBuilder;
 
 pub type DocIndexMap = Map<DocIndex>;
