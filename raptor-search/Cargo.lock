@@ -1,6 +1,6 @@
 [[package]]
 name = "bincode"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -46,8 +46,8 @@ source = "git+https://github.com/Kerollmops/group-by.git#7e432aa232834b650ca85ec
 
 [[package]]
 name = "levenshtein_automata"
-version = "0.1.0"
-source = "git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst#5e8183a7634c4a0182ea7bb398140b2fe9854f77"
+version = "0.1.1"
+source = "git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst#9d01a14e57ded8e7a9a8d2b4e790f7b364e710b4"
 dependencies = [
  "fst 0.3.0 (git+https://github.com/Kerollmops/fst.git?branch=op-builder-with-state)",
 ]
@@ -102,10 +102,10 @@ dependencies = [
 name = "raptor"
 version = "0.1.0"
 dependencies = [
- "bincode 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bincode 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "fst 0.3.0 (git+https://github.com/Kerollmops/fst.git?branch=op-builder-with-state)",
  "group-by 0.1.0 (git+https://github.com/Kerollmops/group-by.git)",
- "levenshtein_automata 0.1.0 (git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst)",
+ "levenshtein_automata 0.1.1 (git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst)",
  "serde 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -172,14 +172,14 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [metadata]
-"checksum bincode 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "bda13183df33055cbb84b847becce220d392df502ebe7a4a78d7021771ed94d0"
+"checksum bincode 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "9f2fb9e29e72fd6bc12071533d5dc7664cb01480c59406f656d7ac25c7bd8ff7"
 "checksum byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "74c0b906e9446b0a2e4f760cdb3fa4b2c48cdc6db8766a845c54b6ff063fd2e9"
 "checksum cfg-if 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "405216fd8fe65f718daa7102ea808a946b6ce40c742998fbfd3463645552de18"
 "checksum elapsed 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6f4e5af126dafd0741c2ad62d47f68b28602550102e5f0dd45c8a97fc8b49c29"
 "checksum env_logger 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)" = "15abd780e45b3ea4f76b4e9a26ff4843258dd8a3eed2775a0e7368c2e7936c2f"
 "checksum fst 0.3.0 (git+https://github.com/Kerollmops/fst.git?branch=op-builder-with-state)" = "<none>"
 "checksum group-by 0.1.0 (git+https://github.com/Kerollmops/group-by.git)" = "<none>"
-"checksum levenshtein_automata 0.1.0 (git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst)" = "<none>"
+"checksum levenshtein_automata 0.1.1 (git+https://github.com/Kerollmops/levenshtein-automata.git?branch=custom-fst)" = "<none>"
 "checksum libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)" = "b685088df2b950fccadf07a7187c8ef846a959c142338a48f9dc0b94517eb5f1"
 "checksum log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)" = "e19e8d5c34a3e0e2223db8e060f9e8264aeeb5c5fc64a4ee9965c062211c024b"
 "checksum log 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6fddaa003a65722a7fb9e26b0ce95921fe4ba590542ced664d8ce2fa26f9f3ac"
