@@ -8,6 +8,7 @@ env_logger = { version = "0.3", default-features = false }
 raptor = { path = ".." }
 serde = "1.0"
 serde_derive = "1.0"
+elapsed = "0.1"
 
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
