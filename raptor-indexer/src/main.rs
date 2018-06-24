@@ -60,12 +60,11 @@ fn main() {
 
         let product: Product = from_str(&line).unwrap();
 
-        let title = iter::repeat(0).zip(product.title.split_whitespace()).enumerate();
-        let description = iter::repeat(1).zip(product.ft.split_whitespace()).enumerate();
+        let title = iter::repeat(0).zip(product.title.split_whitespace()).filter(|&(_, w)| !common_words.contains(w)).enumerate();
+        let description = iter::repeat(1).zip(product.ft.split_whitespace()).filter(|&(_, w)| !common_words.contains(w)).enumerate();
 
         let words = title.chain(description);
         for (i, (attr, word)) in words {
-            if common_words.contains(word) { continue }
             let doc_index = DocIndex {
                 document: product.product_id,
                 attribute: attr,
