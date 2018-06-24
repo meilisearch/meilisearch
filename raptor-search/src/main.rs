@@ -17,8 +17,7 @@ fn search(map: &DocIndexMap, lev_builder: &LevBuilder, query: &str) {
         automatons.push(lev);
     }
 
-    let limit: Option<usize> = env::var("RAPTOR_OUTPUT_LIMIT").ok().and_then(|x| x.parse().ok());
-    let mut stream = RankedStream::new(&map, map.values(), automatons, limit.unwrap_or(20));
+    let mut stream = RankedStream::new(&map, map.values(), automatons, 20);
     while let Some(document_id) = stream.next() {
         print!("{:?}", document_id);
 
