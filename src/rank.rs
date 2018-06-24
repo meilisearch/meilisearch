@@ -142,8 +142,9 @@ pub struct Pool {
 #[derive(Debug, Copy, Clone)]
 enum Limitation {
     /// No limitation is specified.
-    Unspecified {
-        query_size: usize,
+    Unspecified { // FIXME rename that !
+        /// The maximum number of results to return.
+        limit: usize,
     },
 
     /// The limitation is specified but not reached.
@@ -178,33 +179,22 @@ impl Limitation {
     fn is_reached(&self) -> bool {
         self.reached().is_some()
     }
-
-    fn query_size(&self) -> usize {
-        match *self {
-            Limitation::Unspecified { query_size } => query_size,
-            _ => 1,
-        }
-    }
 }
 
 impl Pool {
-    pub fn new(query_size: usize) -> Self {
-        Self {
-            returned_documents: HashSet::new(),
-            documents: Vec::new(),
-            limitation: Limitation::Unspecified { query_size },
-        }
-    }
+    pub fn new(query_size: usize, limit: usize) -> Self {
+        assert!(query_size > 0, "query size can not be less that one");
+        assert!(limit > 0, "limit can not be less that one");
 
-    pub fn with_output_limit(query_size: usize, limit: usize) -> Self {
-        assert_eq!(query_size, 1, "limit can only be specified if the query size is 1");
+        let limitation = match query_size {
+            1 => Limitation::Specified { limit, matching_documents: 0 },
+            _ => Limitation::Unspecified { limit },
+        };
+
         Self {
             returned_documents: HashSet::new(),
             documents: Vec::new(),
-            limitation: Limitation::Specified {
-                limit: limit,
-                matching_documents: 0,
-            },
+            limitation: limitation,
         }
     }
 
@@ -268,17 +258,14 @@ impl IntoIterator for Pool {
     type IntoIter = vec::IntoIter<Self::Item>;
 
     fn into_iter(mut self) -> Self::IntoIter {
-        match self.limitation {
-            Limitation::Unspecified { .. } => self.documents.into_iter(),
-            Limitation::Specified { limit, .. } => {
-                self.documents.truncate(limit);
-                self.documents.into_iter()
-            },
-            Limitation::Reached { remaining } => {
-                self.documents.truncate(remaining);
-                self.documents.into_iter()
-            },
-        }
+        let limit = match self.limitation {
+            Limitation::Unspecified { limit } => limit,
+            Limitation::Specified { limit, .. } => limit,
+            Limitation::Reached { remaining } => remaining,
+        };
+
+        self.documents.truncate(limit);
+        self.documents.into_iter()
     }
 }
 
@@ -294,7 +281,7 @@ pub enum RankedStream<'m, 'v> {
 }
 
 impl<'m, 'v> RankedStream<'m, 'v> {
-    pub fn new(map: &'m DocIndexMap, values: &'v Values<DocIndex>, automatons: Vec<DFA>) -> Self {
+    pub fn new(map: &'m DocIndexMap, values: &'v Values<DocIndex>, automatons: Vec<DFA>, limit: usize) -> Self {
         let mut op = OpWithStateBuilder::new(values);
 
         for automaton in automatons.iter().cloned() {
@@ -302,10 +289,7 @@ impl<'m, 'v> RankedStream<'m, 'v> {
             op.push(stream);
         }
 
-        let pool = match automatons.len() {
-            1 => Pool::with_output_limit(automatons.len(), 20),
-            _ => Pool::new(automatons.len()),
-        };
+        let pool = Pool::new(automatons.len(), limit);
 
         RankedStream::Fed {
             inner: op.union(),
@@ -352,7 +336,7 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
                             }
                         },
                         None => {
-                            transfert_pool = Some(mem::replace(pool, Pool::new(0)));
+                            transfert_pool = Some(mem::replace(pool, Pool::new(1, 1)));
                         },
                     }
                 },

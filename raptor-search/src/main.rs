@@ -2,10 +2,9 @@ extern crate env_logger;
 extern crate fst;
 extern crate raptor;
 
-use std::path::Path;
-use std::{fs, env, io};
+use std::env;
 use fst::Streamer;
-use raptor::{load_map, DocIndexMap, RankedStream, LevBuilder};
+use raptor::{load_map, RankedStream, LevBuilder};
 
 fn main() {
     drop(env_logger::init());
@@ -24,13 +23,9 @@ fn main() {
         automatons.push(lev);
     }
 
-    let mut limit: Option<usize> = env::var("RAPTOR_OUTPUT_LIMIT").ok().and_then(|x| x.parse().ok());
-    let mut stream = RankedStream::new(&map, map.values(), automatons);
+    let limit: Option<usize> = env::var("RAPTOR_OUTPUT_LIMIT").ok().and_then(|x| x.parse().ok());
+    let mut stream = RankedStream::new(&map, map.values(), automatons, limit.unwrap_or(20));
     while let Some(document_id) = stream.next() {
-        if limit == Some(0) { println!("..."); break }
-
         println!("{:?}", document_id);
-
-        if let Some(ref mut limit) = limit { *limit -= 1 }
     }
 }

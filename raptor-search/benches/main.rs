@@ -4,10 +4,8 @@ extern crate test;
 extern crate fst;
 extern crate raptor;
 
-use std::path::Path;
-use std::{fs, env, io};
 use fst::Streamer;
-use raptor::{load_map, DocIndexMap, RankedStream, LevBuilder};
+use raptor::{load_map, RankedStream, LevBuilder};
 
 #[bench]
 fn chauve_souris(b: &mut test::Bencher) {
@@ -23,7 +21,7 @@ fn chauve_souris(b: &mut test::Bencher) {
             automatons.push(lev);
         }
 
-        let mut stream = RankedStream::new(&map, &map.values(), automatons);
+        let mut stream = RankedStream::new(&map, &map.values(), automatons, 20);
         while let Some(document_id) = stream.next() {
             test::black_box(document_id);
         }
