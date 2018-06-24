@@ -334,7 +334,7 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
                                 // TODO remove the Pool system !
                                 //      this is an internal Pool rule but
                                 //      it is more efficient to test that here
-                                if pool.limitation.reached().is_some() && distance != 0 { continue }
+                                if pool.limitation.is_reached() && distance != 0 { continue }
 
                                 let mut matches = HashMap::with_capacity(iv.values.len() / 2);
                                 for di in iv.values {

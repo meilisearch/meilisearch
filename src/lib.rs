@@ -9,6 +9,9 @@ pub mod map;
 pub mod rank;
 mod levenshtein;
 
+use std::path::Path;
+use std::fs;
+
 pub use self::map::{Map, MapBuilder, Values};
 pub use self::map::{
     OpBuilder, IndexedValues,
@@ -100,4 +103,13 @@ impl Match {
             attribute_index: u32::max_value(),
         }
     }
+}
+
+
+pub fn load_map<P, Q>(map: P, values: Q) -> fst::Result<DocIndexMap>
+where P: AsRef<Path>, Q: AsRef<Path>,
+{
+    let fst = fs::read(map)?;
+    let values = fs::read(values)?;
+    DocIndexMap::from_bytes(fst, &values)
 }

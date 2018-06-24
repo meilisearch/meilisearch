@@ -2,19 +2,16 @@ extern crate env_logger;
 extern crate fst;
 extern crate raptor;
 
-use std::{fs, env};
+use std::path::Path;
+use std::{fs, env, io};
 use fst::Streamer;
-use raptor::{DocIndexMap, RankedStream, LevBuilder};
+use raptor::{load_map, DocIndexMap, RankedStream, LevBuilder};
 
 fn main() {
     drop(env_logger::init());
 
     let lev_builder = LevBuilder::new();
-    let map = {
-        let fst = fs::read("map.fst").unwrap();
-        let values = fs::read("values.vecs").unwrap();
-        DocIndexMap::from_bytes(fst, &values).unwrap()
-    };
+    let map = load_map("map.fst", "values.vecs").unwrap();
 
     let query = env::args().nth(1).expect("Please enter query words!");
     let query = query.to_lowercase();
