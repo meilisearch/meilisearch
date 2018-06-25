@@ -1,6 +1,6 @@
 use std::cmp::{self, Ordering};
-use std::{mem, vec};
-use std::collections::{HashSet, HashMap};
+use std::collections::HashMap;
+use std::{mem, vec, iter};
 use DocIndexMap;
 use fst;
 use levenshtein_automata::DFA;
@@ -10,11 +10,16 @@ use map::{
     Values,
 };
 use {Match, DocIndex, DocumentId};
-use group_by::GroupBy;
+use group_by::{GroupBy, GroupByMut};
 
-const MAX_DISTANCE: usize = 8;
+const MAX_DISTANCE: u32 = 8;
 
-#[derive(Debug, Eq, Clone)]
+#[inline]
+fn match_query_index(a: &Match, b: &Match) -> bool {
+    a.query_index == b.query_index
+}
+
+#[derive(Debug, Clone)]
 pub struct Document {
     document_id: DocumentId,
     matches: Vec<Match>,
@@ -33,172 +38,83 @@ impl Document {
     }
 }
 
-impl PartialEq for Document {
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == Ordering::Equal
+fn sum_of_typos(lhs: &Document, rhs: &Document) -> Ordering {
+    fn sum_of_typos(doc: &Document) -> u8 {
+        GroupBy::new(&doc.matches, match_query_index).map(|m| m[0].distance).sum()
     }
+    sum_of_typos(lhs).cmp(&sum_of_typos(rhs))
 }
 
-impl PartialOrd for Document {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
+fn number_of_words(lhs: &Document, rhs: &Document) -> Ordering {
+    fn number_of_words(doc: &Document) -> usize {
+        GroupBy::new(&doc.matches, match_query_index).count()
     }
+    number_of_words(lhs).cmp(&number_of_words(rhs)).reverse()
 }
 
-impl Ord for Document {
-    fn cmp(&self, other: &Self) -> Ordering {
-        let lhs = DocumentScore::new(&self.matches);
-        let rhs = DocumentScore::new(&other.matches);
-        lhs.cmp(&rhs)
-    }
-}
-
-#[derive(Debug, Default, Eq, PartialEq, PartialOrd)]
-struct DocumentScore {
-    typo: usize,
-    words: usize,
-    proximity: usize,
-    attribute: usize,
-    words_position: usize,
-}
-
-impl Ord for DocumentScore {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.typo.cmp(&other.typo)
-        .then(self.words.cmp(&other.words).reverse())
-        .then(self.proximity.cmp(&other.proximity))
-        .then(self.attribute.cmp(&other.attribute))
-        .then(self.words_position.cmp(&other.words_position))
-        // ~exact~ (see prefix option of the `DFA` builder)
-    }
-}
-
-fn min_attribute(matches: &[Match]) -> usize {
-    let mut attribute = usize::max_value();
-    for match_ in matches {
-        if match_.attribute == 0 { return 0 }
-        attribute = cmp::min(match_.attribute as usize, attribute);
-    }
-    attribute
-}
-
-fn min_attribute_index(matches: &[Match]) -> usize {
-    let mut attribute_index = usize::max_value();
-    for match_ in matches {
-        if match_.attribute_index == 0 { return 0 }
-        attribute_index = cmp::min(match_.attribute_index as usize, attribute_index);
-    }
-    attribute_index
-}
-
-impl DocumentScore {
-    fn new(matches: &[Match]) -> Self {
-        let mut score = DocumentScore::default();
-
-        let mut index = 0; // FIXME could be replaced by the `GroupBy::remaining` method
-        for group in GroupBy::new(matches, |a, b| a.query_index == b.query_index) {
-            index += group.len();
-
-            score.typo = cmp::max(group[0].distance as usize, score.typo);
-            score.words += 1;
-
-            // FIXME distance is wrong if 2 different attributes matches
-            if let Some(first_next_group) = (&matches[index..]).first() {
-                score.proximity += attribute_proximity(first_next_group, &group[0]);
+fn words_proximity(lhs: &Document, rhs: &Document) -> Ordering {
+    fn word_proximity(doc: &Document) -> u32 {
+        fn attribute_proximity(lhs: &Match, rhs: &Match) -> u32 {
+            fn index_proximity(lhs: u32, rhs: u32) -> u32 {
+                if lhs < rhs {
+                    cmp::min(rhs - lhs, MAX_DISTANCE)
+                } else {
+                    cmp::min(lhs - rhs, MAX_DISTANCE) + 1
+                }
             }
 
-            score.attribute += min_attribute(group);
-            score.words_position += min_attribute_index(group);
+            if lhs.attribute != rhs.attribute { return MAX_DISTANCE }
+            index_proximity(lhs.attribute_index, rhs.attribute_index)
         }
 
-        score
+        let mut proximity = 0;
+        let mut next_group_index = 0;
+        for group in GroupBy::new(&doc.matches, match_query_index) {
+            next_group_index += group.len();
+            // FIXME distance is wrong if 2 different attributes matches
+            // FIXME do that in a manner to avoid memory cache misses
+            if let Some(first_next_group) = doc.matches.get(next_group_index) {
+                proximity += attribute_proximity(first_next_group, &group[0]);
+            }
+        }
+        proximity
     }
+    word_proximity(lhs).cmp(&word_proximity(rhs))
 }
 
-fn proximity(first: usize, second: usize) -> usize {
-    if first < second {
-        cmp::min(second - first, MAX_DISTANCE)
-    } else {
-        cmp::min(first - second, MAX_DISTANCE) + 1
+fn sum_of_words_attribute(lhs: &Document, rhs: &Document) -> Ordering {
+    fn sum_attribute(doc: &Document) -> u8 {
+        GroupBy::new(&doc.matches, match_query_index).map(|m| m[0].attribute).sum()
     }
+    sum_attribute(lhs).cmp(&sum_attribute(rhs))
 }
 
-fn attribute_proximity(lhs: &Match, rhs: &Match) -> usize {
-    if lhs.attribute != rhs.attribute {
-        MAX_DISTANCE
-    } else {
-        let lhs_attr = lhs.attribute_index as usize;
-        let rhs_attr = rhs.attribute_index as usize;
-        proximity(lhs_attr, rhs_attr)
+fn sum_of_words_position(lhs: &Document, rhs: &Document) -> Ordering {
+    fn sum_attribute_index(doc: &Document) -> u32 {
+        GroupBy::new(&doc.matches, match_query_index).map(|m| m[0].attribute_index).sum()
     }
+    sum_attribute_index(lhs).cmp(&sum_attribute_index(rhs))
+}
+
+fn exact(lhs: &Document, rhs: &Document) -> Ordering {
+    unimplemented!()
 }
 
 pub struct Pool {
-    returned_documents: HashSet<DocumentId>,
     documents: Vec<Document>,
-    limitation: Limitation,
-}
-
-#[derive(Debug, Copy, Clone)]
-enum Limitation {
-    /// No limitation is specified.
-    Unspecified { // FIXME rename that !
-        /// The maximum number of results to return.
-        limit: usize,
-    },
-
-    /// The limitation is specified but not reached.
-    Specified {
-        /// The maximum number of results to return.
-        limit: usize,
-
-        /// documents with a distance of zero which can be used
-        /// in the step-by-step sort-and-return.
-        ///
-        /// this field must be equal to the limit to reach
-        /// the limitation
-        matching_documents: usize,
-    },
-
-    /// No more documents with a distance of zero
-    /// can never be returned now.
-    Reached {
-        /// The number of remaining documents to return in order.
-        remaining: usize,
-    },
-}
-
-impl Limitation {
-    fn reached(&self) -> Option<usize> {
-        match self {
-            Limitation::Reached { remaining } => Some(*remaining),
-            _ => None,
-        }
-    }
-
-    fn is_reached(&self) -> bool {
-        self.reached().is_some()
-    }
+    limit: usize,
 }
 
 impl Pool {
     pub fn new(query_size: usize, limit: usize) -> Self {
-        assert!(query_size > 0, "query size can not be less that one");
-        assert!(limit > 0, "limit can not be less that one");
-
-        let limitation = match query_size {
-            1 => Limitation::Specified { limit, matching_documents: 0 },
-            _ => Limitation::Unspecified { limit },
-        };
-
         Self {
-            returned_documents: HashSet::new(),
             documents: Vec::new(),
-            limitation: limitation,
+            limit: limit,
         }
     }
 
-    pub fn extend(&mut self, mut matches: HashMap<DocumentId, Vec<Match>>) {
+    // TODO remove the matches HashMap, not proud of it
+    pub fn extend(&mut self, matches: &mut HashMap<DocumentId, Vec<Match>>) {
         for doc in self.documents.iter_mut() {
             if let Some(matches) = matches.remove(&doc.document_id) {
                 doc.matches.extend(matches);
@@ -206,51 +122,21 @@ impl Pool {
             }
         }
 
-        matches.retain(|id, _| !self.returned_documents.contains(id));
-        self.documents.reserve(matches.len());
-
-        let mut new_matches = 0;
-        for (id, mut matches) in matches.into_iter() {
+        for (id, mut matches) in matches.drain() {
+            // note that matches are already sorted we do that by security
+            // TODO remove this useless sort
             matches.sort_unstable();
-            if matches[0].distance == 0 { new_matches += 1 }
-
-            if self.limitation.is_reached() {
-                match matches.iter().position(|match_| match_.distance > 0) {
-                    Some(pos) if pos == 0 => continue,
-                    Some(pos) => matches.truncate(pos),
-                    None => (),
-                }
-            }
 
             let document = Document::from_sorted_matches(id, matches);
             self.documents.push(document);
         }
-        self.documents.sort_unstable();
-
-        self.limitation = match self.limitation {
-            Limitation::Specified { limit, matching_documents } if matching_documents + new_matches >= limit => {
-                // this is the biggest valid match
-                // used to find the next smallest invalid match
-                let biggest_valid = Match { query_index: 0, distance: 0, ..Match::max() };
-
-                // documents which does not have a match with a distance of 0 can be removed.
-                // note that documents have a query size of 1.
-                match self.documents.binary_search_by(|d| d.matches[0].cmp(&biggest_valid)) {
-                    Ok(index) => self.documents.truncate(index + 1), // this will never happen :)
-                    Err(index) => self.documents.truncate(index),
-                }
-
-                Limitation::Reached { remaining: limit }
-            },
-            Limitation::Specified { limit, matching_documents } => {
-                Limitation::Specified {
-                    limit: limit,
-                    matching_documents: matching_documents + new_matches
-                }
-            },
-            limitation => limitation,
-        };
     }
+}
+
+fn invert_sorts<F>(a: &Document, b: &Document, sorts: &[F]) -> bool
+where F: Fn(&Document, &Document) -> Ordering,
+{
+    sorts.iter().rev().all(|sort| sort(a, b) == Ordering::Equal)
 }
 
 impl IntoIterator for Pool {
@@ -258,13 +144,26 @@ impl IntoIterator for Pool {
     type IntoIter = vec::IntoIter<Self::Item>;
 
     fn into_iter(mut self) -> Self::IntoIter {
-        let limit = match self.limitation {
-            Limitation::Unspecified { limit } => limit,
-            Limitation::Specified { limit, .. } => limit,
-            Limitation::Reached { remaining } => remaining,
-        };
+        let sorts = &[
+            sum_of_typos,
+            number_of_words,
+            words_proximity,
+            sum_of_words_attribute,
+            sum_of_words_position,
+        ];
 
-        self.documents.truncate(limit);
+        for (i, sort) in sorts.iter().enumerate() {
+            let mut computed = 0;
+            for group in GroupByMut::new(&mut self.documents, |a, b| invert_sorts(a, b, &sorts[..i])) {
+                // TODO prefer using `sort_unstable_by_key` to allow reusing the key computation
+                //      `number of words` needs to be reversed, we can use the `cmp::Reverse` struct to do that
+                group.sort_unstable_by(sort);
+                computed += group.len();
+                if computed >= self.limit { break }
+            }
+        }
+
+        self.documents.truncate(self.limit);
         self.documents.into_iter()
     }
 }
@@ -303,6 +202,8 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
     type Item = DocumentId;
 
     fn next(&'a mut self) -> Option<Self::Item> {
+        let mut matches = HashMap::new();
+
         loop {
             // TODO remove that when NLL are here !
             let mut transfert_pool = None;
@@ -313,14 +214,21 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
                         Some((_string, indexed_values)) => {
                             for iv in indexed_values {
 
+                                // TODO extend documents matches by batch of query_index
+                                //      that way it will be possible to discard matches that
+                                //      have an invalid distance *before* adding them
+                                //      to the matches of the documents and, that way, avoid a sort
+
+                                // let string = unsafe { str::from_utf8_unchecked(_string) };
+                                // println!("for {:15} ", string);
+
                                 let distance = automatons[iv.index].distance(iv.state).to_u8();
 
                                 // TODO remove the Pool system !
                                 //      this is an internal Pool rule but
                                 //      it is more efficient to test that here
-                                if pool.limitation.is_reached() && distance != 0 { continue }
+                                // if pool.limitation.is_reached() && distance != 0 { continue }
 
-                                let mut matches = HashMap::with_capacity(iv.values.len() / 2);
                                 for di in iv.values {
                                     let match_ = Match {
                                         query_index: iv.index as u32,
@@ -329,10 +237,10 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
                                         attribute_index: di.attribute_index,
                                     };
                                     matches.entry(di.document)
-                                            .and_modify(|matches: &mut Vec<_>| matches.push(match_))
+                                            .and_modify(|ms: &mut Vec<_>| ms.push(match_))
                                             .or_insert_with(|| vec![match_]);
                                 }
-                                pool.extend(matches);
+                                pool.extend(&mut matches);
                             }
                         },
                         None => {

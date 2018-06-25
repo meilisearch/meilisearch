@@ -31,6 +31,12 @@ where P: AsRef<Path>
     fs::set_permissions(&path, perms)
 }
 
+fn is_readonly<P>(path: P) -> io::Result<bool>
+where P: AsRef<Path>
+{
+    fs::metadata(&path).map(|m| m.permissions().readonly())
+}
+
 fn main() {
     let data = File::open("products.json_lines").unwrap();
     let data = BufReader::new(data);
@@ -53,6 +59,18 @@ fn main() {
             },
         }
     };
+
+    let map_file = "map.fst";
+    let values_file = "values.vecs";
+
+    for file in &[map_file, values_file] {
+        match is_readonly(file) {
+            Ok(true) => panic!("the {:?} file is readonly, please make it writeable", file),
+            Err(ref e) if e.kind() == io::ErrorKind::NotFound => (),
+            Err(e) => panic!("{:?}", e),
+            _ => (),
+        }
+    }
 
     let mut builder = DocIndexMapBuilder::new();
     for line in data.lines() {
@@ -83,13 +101,13 @@ fn main() {
         }
     }
 
-    let map = File::create("map.fst").unwrap();
-    let values = File::create("values.vecs").unwrap();
+    let map = File::create(map_file).unwrap();
+    let values = File::create(values_file).unwrap();
 
     let (map, values) = builder.build(map, values).unwrap();
 
-    set_readonly("map.fst", true).unwrap();
-    set_readonly("values.vecs", true).unwrap();
+    set_readonly(map_file, true).unwrap();
+    set_readonly(values_file, true).unwrap();
 
     println!("Checking the dump consistency...");
     unsafe { DocIndexMap::from_paths("map.fst", "values.vecs").unwrap() };

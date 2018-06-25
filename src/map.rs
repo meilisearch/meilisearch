@@ -86,7 +86,7 @@ impl<T> Values<T> {
         let cap = raw.iter().map(Vec::len).sum();
         let mut values = Vec::with_capacity(cap);
 
-        for v in &raw {
+        for mut v in &raw {
             let len = v.len() as u64;
             let start = ranges.last().map(|&Range { end, .. }| end).unwrap_or(0);
 

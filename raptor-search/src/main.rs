@@ -3,8 +3,7 @@ extern crate fst;
 extern crate raptor;
 extern crate elapsed;
 
-use std::{env, fs};
-use std::process::Command;
+use std::env;
 use std::io::{self, Write};
 use elapsed::measure_time;
 use fst::Streamer;
@@ -21,7 +20,8 @@ fn search(map: &DocIndexMap, lev_builder: &LevBuilder, query: &str) {
     while let Some(document_id) = stream.next() {
         print!("{:?}", document_id);
 
-        /* only here to debug !
+        // /* only here to debug !
+        use std::{fs, process::Command};
         if let Ok(_) = fs::File::open("products.json_lines") {
             let output = Command::new("rg")
                                 .arg(document_id.to_string())
