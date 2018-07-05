@@ -39,34 +39,36 @@ impl Document {
 }
 
 fn sum_of_typos(lhs: &Document, rhs: &Document) -> Ordering {
-    fn sum_of_typos(doc: &Document) -> u8 {
+    let key = |doc: &Document| -> u8 {
         GroupBy::new(&doc.matches, match_query_index).map(|m| m[0].distance).sum()
-    }
-    sum_of_typos(lhs).cmp(&sum_of_typos(rhs))
+    };
+
+    key(lhs).cmp(&key(rhs))
 }
 
 fn number_of_words(lhs: &Document, rhs: &Document) -> Ordering {
-    fn number_of_words(doc: &Document) -> usize {
+    let key = |doc: &Document| -> usize {
         GroupBy::new(&doc.matches, match_query_index).count()
+    };
+
+    key(lhs).cmp(&key(rhs)).reverse()
+}
+
+fn index_proximity(lhs: u32, rhs: u32) -> u32 {
+    if lhs < rhs {
+        cmp::min(rhs - lhs, MAX_DISTANCE)
+    } else {
+        cmp::min(lhs - rhs, MAX_DISTANCE) + 1
     }
-    number_of_words(lhs).cmp(&number_of_words(rhs)).reverse()
+}
+
+fn attribute_proximity(lhs: &Match, rhs: &Match) -> u32 {
+    if lhs.attribute != rhs.attribute { return MAX_DISTANCE }
+    index_proximity(lhs.attribute_index, rhs.attribute_index)
 }
 
 fn words_proximity(lhs: &Document, rhs: &Document) -> Ordering {
-    fn word_proximity(doc: &Document) -> u32 {
-        fn attribute_proximity(lhs: &Match, rhs: &Match) -> u32 {
-            fn index_proximity(lhs: u32, rhs: u32) -> u32 {
-                if lhs < rhs {
-                    cmp::min(rhs - lhs, MAX_DISTANCE)
-                } else {
-                    cmp::min(lhs - rhs, MAX_DISTANCE) + 1
-                }
-            }
-
-            if lhs.attribute != rhs.attribute { return MAX_DISTANCE }
-            index_proximity(lhs.attribute_index, rhs.attribute_index)
-        }
-
+    let key = |doc: &Document| -> u32 {
         let mut proximity = 0;
         let mut next_group_index = 0;
         for group in GroupBy::new(&doc.matches, match_query_index) {
@@ -78,22 +80,25 @@ fn words_proximity(lhs: &Document, rhs: &Document) -> Ordering {
             }
         }
         proximity
-    }
-    word_proximity(lhs).cmp(&word_proximity(rhs))
+    };
+
+    key(lhs).cmp(&key(rhs))
 }
 
 fn sum_of_words_attribute(lhs: &Document, rhs: &Document) -> Ordering {
-    fn sum_attribute(doc: &Document) -> u8 {
+    let key = |doc: &Document| -> u8 {
         GroupBy::new(&doc.matches, match_query_index).map(|m| m[0].attribute).sum()
-    }
-    sum_attribute(lhs).cmp(&sum_attribute(rhs))
+    };
+
+    key(lhs).cmp(&key(rhs))
 }
 
 fn sum_of_words_position(lhs: &Document, rhs: &Document) -> Ordering {
-    fn sum_attribute_index(doc: &Document) -> u32 {
+    let key = |doc: &Document| -> u32 {
         GroupBy::new(&doc.matches, match_query_index).map(|m| m[0].attribute_index).sum()
-    }
-    sum_attribute_index(lhs).cmp(&sum_attribute_index(rhs))
+    };
+
+    key(lhs).cmp(&key(rhs))
 }
 
 fn exact(lhs: &Document, rhs: &Document) -> Ordering {
