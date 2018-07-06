@@ -83,6 +83,9 @@ pub struct Match {
     /// The index in the attribute is limited to a maximum of `2^32`
     /// this is because we index only the first 1000 words in an attribute.
     pub attribute_index: u32,
+
+    /// Whether the word that match is an exact match or a prefix.
+    pub is_exact: bool,
 }
 
 impl Match {
@@ -92,6 +95,7 @@ impl Match {
             distance: 0,
             attribute: 0,
             attribute_index: 0,
+            is_exact: false,
         }
     }
 
@@ -101,6 +105,7 @@ impl Match {
             distance: u8::max_value(),
             attribute: u8::max_value(),
             attribute_index: u32::max_value(),
+            is_exact: true,
         }
     }
 }

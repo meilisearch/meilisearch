@@ -12,7 +12,7 @@ use raptor::{load_map, DocIndexMap, RankedStream, LevBuilder};
 fn search(map: &DocIndexMap, lev_builder: &LevBuilder, query: &str) {
     let mut automatons = Vec::new();
     for query in query.split_whitespace() {
-        let lev = lev_builder.build_automaton(query);
+        let lev = lev_builder.get_automaton(query);
         automatons.push(lev);
     }
 
@@ -46,12 +46,11 @@ fn search(map: &DocIndexMap, lev_builder: &LevBuilder, query: &str) {
 fn main() {
     drop(env_logger::init());
 
-    let (elapsed, (lev_builder, map)) = measure_time(|| {
-        let lev_builder = LevBuilder::new();
-        let map = load_map("map.fst", "values.vecs").unwrap();
-        (lev_builder, map)
-    });
-    println!("Loaded in {}", elapsed);
+    let (elapsed, map) = measure_time(|| load_map("map.fst", "values.vecs").unwrap());
+    println!("{} to load the map", elapsed);
+
+    let (elapsed, lev_builder) = measure_time(|| LevBuilder::new());
+    println!("{} to load the levenshtein automaton", elapsed);
 
     match env::args().nth(1) {
         Some(query) => {

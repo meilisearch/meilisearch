@@ -15,13 +15,21 @@ impl LevBuilder {
         }
     }
 
-    pub fn build_automaton(&self, query: &str) -> DFA {
-        if query.len() <= 4 {
-            self.automatons[0].build_dfa(query)
+    pub fn get_automaton(&self, query: &str) -> Levenshtein {
+        let dfa = if query.len() <= 4 {
+            self.automatons[0].build_prefix_dfa(query)
         } else if query.len() <= 8 {
-            self.automatons[1].build_dfa(query)
+            self.automatons[1].build_prefix_dfa(query)
         } else {
-            self.automatons[2].build_dfa(query)
-        }
+            self.automatons[2].build_prefix_dfa(query)
+        };
+
+        Levenshtein { dfa, query_len: query.len() }
     }
+}
+
+#[derive(Clone)]
+pub struct Levenshtein {
+    pub dfa: DFA,
+    pub query_len: usize,
 }

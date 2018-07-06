@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::{mem, vec, iter};
 use DocIndexMap;
 use fst;
-use levenshtein_automata::DFA;
+use levenshtein::Levenshtein;
 use map::{
     OpWithStateBuilder, UnionWithState,
     StreamWithStateBuilder,
@@ -102,7 +102,12 @@ fn sum_of_words_position(lhs: &Document, rhs: &Document) -> Ordering {
 }
 
 fn exact(lhs: &Document, rhs: &Document) -> Ordering {
-    unimplemented!()
+    let contains_exact = |matches: &[Match]| matches.iter().any(|m| m.is_exact);
+    let key = |doc: &Document| -> usize {
+        GroupBy::new(&doc.matches, match_query_index).map(contains_exact).filter(|x| *x).count()
+    };
+
+    key(lhs).cmp(&key(rhs))
 }
 
 pub struct Pool {
@@ -155,6 +160,7 @@ impl IntoIterator for Pool {
             words_proximity,
             sum_of_words_attribute,
             sum_of_words_position,
+            exact,
         ];
 
         for (i, sort) in sorts.iter().enumerate() {
@@ -176,7 +182,7 @@ impl IntoIterator for Pool {
 pub enum RankedStream<'m, 'v> {
     Fed {
         inner: UnionWithState<'m, 'v, DocIndex, u32>,
-        automatons: Vec<DFA>,
+        automatons: Vec<Levenshtein>,
         pool: Pool,
     },
     Pours {
@@ -185,10 +191,10 @@ pub enum RankedStream<'m, 'v> {
 }
 
 impl<'m, 'v> RankedStream<'m, 'v> {
-    pub fn new(map: &'m DocIndexMap, values: &'v Values<DocIndex>, automatons: Vec<DFA>, limit: usize) -> Self {
+    pub fn new(map: &'m DocIndexMap, values: &'v Values<DocIndex>, automatons: Vec<Levenshtein>, limit: usize) -> Self {
         let mut op = OpWithStateBuilder::new(values);
 
-        for automaton in automatons.iter().cloned() {
+        for automaton in automatons.iter().map(|l| l.dfa.clone()) {
             let stream = map.as_map().search(automaton).with_state();
             op.push(stream);
         }
@@ -216,7 +222,7 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
             match self {
                 RankedStream::Fed { inner, automatons, pool } => {
                     match inner.next() {
-                        Some((_string, indexed_values)) => {
+                        Some((string, indexed_values)) => {
                             for iv in indexed_values {
 
                                 // TODO extend documents matches by batch of query_index
@@ -224,10 +230,8 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
                                 //      have an invalid distance *before* adding them
                                 //      to the matches of the documents and, that way, avoid a sort
 
-                                // let string = unsafe { str::from_utf8_unchecked(_string) };
-                                // println!("for {:15} ", string);
-
-                                let distance = automatons[iv.index].distance(iv.state).to_u8();
+                                let automaton = &automatons[iv.index];
+                                let distance = automaton.dfa.distance(iv.state).to_u8();
 
                                 // TODO remove the Pool system !
                                 //      this is an internal Pool rule but
@@ -240,6 +244,7 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
                                         distance: distance,
                                         attribute: di.attribute,
                                         attribute_index: di.attribute_index,
+                                        is_exact: string.len() == automaton.query_len,
                                     };
                                     matches.entry(di.document)
                                             .and_modify(|ms: &mut Vec<_>| ms.push(match_))
@@ -249,6 +254,7 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
                             }
                         },
                         None => {
+                            // TODO remove this when NLL are here !
                             transfert_pool = Some(mem::replace(pool, Pool::new(1, 1)));
                         },
                     }
