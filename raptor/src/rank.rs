@@ -21,8 +21,8 @@ fn match_query_index(a: &Match, b: &Match) -> bool {
 
 #[derive(Debug, Clone)]
 pub struct Document {
-    document_id: DocumentId,
-    matches: Vec<Match>,
+    pub document_id: DocumentId,
+    pub matches: Vec<Match>,
 }
 
 impl Document {
@@ -210,7 +210,7 @@ impl<'m, 'v> RankedStream<'m, 'v> {
 }
 
 impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
-    type Item = DocumentId;
+    type Item = Document;
 
     fn next(&'a mut self) -> Option<Self::Item> {
         let mut matches = HashMap::new();
@@ -260,7 +260,7 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
                     }
                 },
                 RankedStream::Pours { inner } => {
-                    return inner.next().map(|d| d.document_id)
+                    return inner.next()
                 },
             }
 

@@ -20,10 +20,10 @@ fn search(map: &DocIndexMap, lev_builder: &LevBuilder, db: &DB, query: &str) {
     }
 
     let mut stream = RankedStream::new(&map, map.values(), automatons, 20);
-    while let Some(document_id) = stream.next() {
-        print!("{:?} ", document_id);
+    while let Some(document) = stream.next() {
+        print!("{:?} ", document.document_id);
 
-        let title_key = format!("{}-title", document_id);
+        let title_key = format!("{}-title", document.document_id);
         let title = db.get(title_key.as_bytes()).unwrap().unwrap();
         let title = unsafe { from_utf8_unchecked(&title) };
         print!("{:?}", title);
