@@ -2,6 +2,7 @@
 //      make only one binary
 
 extern crate raptor;
+extern crate rocksdb;
 extern crate serde_json;
 #[macro_use] extern crate serde_derive;
 extern crate unidecode;
@@ -13,6 +14,7 @@ use std::io::{self, BufReader, BufRead};
 use std::iter;
 
 use raptor::{DocIndexMapBuilder, DocIndexMap, DocIndex};
+use rocksdb::{DB, WriteBatch, Writable};
 use serde_json::from_str;
 use unidecode::unidecode;
 
@@ -62,8 +64,9 @@ fn main() {
 
     let map_file = "map.fst";
     let values_file = "values.vecs";
+    let rocksdb_file = "rocksdb/storage";
 
-    for file in &[map_file, values_file] {
+    for file in &[map_file, values_file, rocksdb_file] {
         match is_readonly(file) {
             Ok(true) => panic!("the {:?} file is readonly, please make it writeable", file),
             Err(ref e) if e.kind() == io::ErrorKind::NotFound => (),
@@ -71,6 +74,9 @@ fn main() {
             _ => (),
         }
     }
+
+    fs::remove_file(rocksdb_file);
+    let db = DB::open_default(rocksdb_file).unwrap();
 
     let mut builder = DocIndexMapBuilder::new();
     for line in data.lines() {
@@ -80,6 +86,16 @@ fn main() {
 
         let title = iter::repeat(0).zip(product.title.split_whitespace()).filter(|&(_, w)| !common_words.contains(w)).enumerate();
         let description = iter::repeat(1).zip(product.ft.split_whitespace()).filter(|&(_, w)| !common_words.contains(w)).enumerate();
+
+        let mut batch = WriteBatch::new();
+
+        let title_key = format!("{}-title", product.product_id);
+        let _ = batch.put(title_key.as_bytes(), product.title.as_bytes());
+
+        let description_key = format!("{}-description", product.product_id);
+        let _ = batch.put(description_key.as_bytes(), product.ft.as_bytes());
+
+        db.write(batch).unwrap();
 
         let words = title.chain(description);
         for (i, (attr, word)) in words {
@@ -108,6 +124,7 @@ fn main() {
 
     set_readonly(map_file, true).unwrap();
     set_readonly(values_file, true).unwrap();
+    set_readonly(rocksdb_file, true).unwrap();
 
     println!("Checking the dump consistency...");
     unsafe { DocIndexMap::from_paths("map.fst", "values.vecs").unwrap() };

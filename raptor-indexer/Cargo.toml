@@ -10,6 +10,9 @@ serde_derive = "1.0"
 serde_json = "1.0"
 unidecode = "0.3"
 
+[dependencies.rocksdb]
+git = "https://github.com/pingcap/rust-rocksdb.git"
+
 [profile.release]
 debug = true
 lto = true
