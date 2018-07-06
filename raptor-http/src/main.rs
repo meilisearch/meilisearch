@@ -1,4 +1,5 @@
 extern crate env_logger;
+extern crate rocksdb;
 extern crate fst;
 extern crate futures;
 extern crate raptor;
@@ -12,6 +13,7 @@ use std::sync::Arc;
 
 use fst::Streamer;
 use futures::future;
+use rocksdb::{DB, DBOptions};
 use tokio_minihttp::{Request, Response, Http};
 use tokio_proto::TcpServer;
 use tokio_service::Service;
@@ -21,6 +23,7 @@ use raptor::{DocIndexMap, RankedStream, LevBuilder};
 struct MainService {
     map: Arc<DocIndexMap>,
     lev_builder: Arc<LevBuilder>,
+    db: Arc<DB>,
 }
 
 impl Service for MainService {
@@ -44,12 +47,12 @@ impl Service for MainService {
             let mut automatons = Vec::new();
 
             for query in query.split_whitespace() {
-                let lev = self.lev_builder.build_automaton(query);
+                let lev = self.lev_builder.get_automaton(query);
                 automatons.push(lev);
             }
 
             let mut limit = 20;
-            let mut stream = RankedStream::new(&self.map, self.map.values(), automatons.clone());
+            let mut stream = RankedStream::new(&self.map, self.map.values(), automatons.clone(), 20);
 
             let mut body = String::new();
             body.push_str("<html><body>");
@@ -84,8 +87,16 @@ fn main() {
         Arc::new(map)
     };
 
+    let db = {
+        let opts = DBOptions::new();
+        let error_if_log_file_exist = false;
+        let db = DB::open_for_read_only(opts, "rocksdb/storage", error_if_log_file_exist).unwrap();
+        Arc::new(db)
+    };
+
     TcpServer::new(Http, addr).serve(move || Ok(MainService {
         map: map.clone(),
         lev_builder: lev_builder.clone(),
+        db: db.clone(),
     }))
 }

@@ -1,21 +1,11 @@
-[package]
-name = "raptor"
-version = "0.1.0"
-authors = ["Kerollmops <renault.cle@gmail.com>"]
+[workspace]
+members = [
+    "raptor",
+    "raptor-indexer",
+    "raptor-search",
+    "raptor-http",
+]
 
-[dependencies]
-bincode = "1.0"
-serde = "1.0"
-serde_derive = "1.0"
-
-[dependencies.fst]
-git = "https://github.com/Kerollmops/fst.git"
-branch = "op-builder-with-state"
-
-[dependencies.levenshtein_automata]
-git = "https://github.com/Kerollmops/levenshtein-automata.git"
-branch = "custom-fst"
-features = ["fst_automaton"]
-
-[dependencies.group-by]
-git = "https://github.com/Kerollmops/group-by.git"
+[profile.release]
+lto = true
+debug = true

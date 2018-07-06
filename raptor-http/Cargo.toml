@@ -5,7 +5,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
 env_logger = { version = "0.3", default-features = false }
-raptor = { path = ".." }
+raptor = { path = "../raptor" }
 futures = "0.1"
 serde = "1.0"
 serde_derive = "1.0"
@@ -18,5 +18,5 @@ url = "1.7"
 git = "https://github.com/Kerollmops/fst.git"
 branch = "op-builder-with-state"
 
-[profile.release]
-# lto = true
+[dependencies.rocksdb]
+git = "https://github.com/pingcap/rust-rocksdb.git"
