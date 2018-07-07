@@ -1,18 +1,26 @@
-use std::cmp::{self, Ordering};
+mod sum_of_typos;
+mod number_of_words;
+mod words_proximity;
+mod sum_of_words_attribute;
+mod sum_of_words_position;
+mod exact;
+
+use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::{mem, vec, iter};
+use std::{mem, vec};
 use DocIndexMap;
 use fst;
 use levenshtein::Levenshtein;
-use map::{
-    OpWithStateBuilder, UnionWithState,
-    StreamWithStateBuilder,
-    Values,
-};
+use map::{OpWithStateBuilder, UnionWithState, Values};
 use {Match, DocIndex, DocumentId};
-use group_by::{GroupBy, GroupByMut};
+use group_by::GroupByMut;
 
-const MAX_DISTANCE: u32 = 8;
+use self::sum_of_typos::sum_of_typos;
+use self::number_of_words::number_of_words;
+use self::words_proximity::words_proximity;
+use self::sum_of_words_attribute::sum_of_words_attribute;
+use self::sum_of_words_position::sum_of_words_position;
+use self::exact::exact;
 
 #[inline]
 fn match_query_index(a: &Match, b: &Match) -> bool {
@@ -36,139 +44,6 @@ impl Document {
             matches: matches,
         }
     }
-}
-
-fn sum_of_typos(lhs: &Document, rhs: &Document) -> Ordering {
-    let key = |matches: &[Match]| -> u8 {
-        GroupBy::new(matches, match_query_index).map(|m| m[0].distance).sum()
-    };
-
-    key(&lhs.matches).cmp(&key(&rhs.matches))
-}
-
-fn number_of_words(lhs: &Document, rhs: &Document) -> Ordering {
-    let key = |matches: &[Match]| -> usize {
-        GroupBy::new(matches, match_query_index).count()
-    };
-
-    key(&lhs.matches).cmp(&key(&rhs.matches)).reverse()
-}
-
-fn index_proximity(lhs: u32, rhs: u32) -> u32 {
-    if lhs < rhs {
-        cmp::min(rhs - lhs, MAX_DISTANCE)
-    } else {
-        cmp::min(lhs - rhs, MAX_DISTANCE) + 1
-    }
-}
-
-fn attribute_proximity(lhs: &Match, rhs: &Match) -> u32 {
-    if lhs.attribute != rhs.attribute { return MAX_DISTANCE }
-    index_proximity(lhs.attribute_index, rhs.attribute_index)
-}
-
-fn min_proximity(lhs: &[Match], rhs: &[Match]) -> u32 {
-    let mut min_prox = u32::max_value();
-    for a in lhs {
-        for b in rhs {
-            min_prox = cmp::min(min_prox, attribute_proximity(a, b));
-        }
-    }
-    min_prox
-}
-
-fn matches_proximity(matches: &[Match]) -> u32 {
-    let mut proximity = 0;
-    let mut iter = GroupBy::new(matches, match_query_index);
-
-    let mut last = iter.next();
-    while let (Some(lhs), Some(rhs)) = (last, iter.next()) {
-        proximity += min_proximity(lhs, rhs);
-        last = Some(rhs);
-    }
-
-    proximity
-}
-
-fn words_proximity(lhs: &Document, rhs: &Document) -> Ordering {
-    matches_proximity(&lhs.matches).cmp(&matches_proximity(&rhs.matches))
-}
-
-#[test]
-fn easy_matches_proximity() {
-
-    // "soup" "of the" "the day"
-    //
-    // { id: 0, attr: 0, attr_index: 0 }
-    // { id: 1, attr: 1, attr_index: 0 }
-    // { id: 2, attr: 1, attr_index: 1 }
-    // { id: 2, attr: 2, attr_index: 0 }
-    // { id: 3, attr: 3, attr_index: 1 }
-
-    let matches = &[
-        Match { query_index: 0, attribute: 0, attribute_index: 0, ..Match::zero() },
-        Match { query_index: 1, attribute: 1, attribute_index: 0, ..Match::zero() },
-        Match { query_index: 2, attribute: 1, attribute_index: 1, ..Match::zero() },
-        Match { query_index: 2, attribute: 2, attribute_index: 0, ..Match::zero() },
-        Match { query_index: 3, attribute: 3, attribute_index: 1, ..Match::zero() },
-    ];
-
-    //   soup -> of = 8
-    // + of -> the  = 1
-    // + the -> day = 8 (not 1)
-    assert_eq!(matches_proximity(matches), 17);
-}
-
-#[test]
-fn another_matches_proximity() {
-
-    // "soup day" "soup of the day"
-    //
-    // { id: 0, attr: 0, attr_index: 0 }
-    // { id: 0, attr: 1, attr_index: 0 }
-    // { id: 1, attr: 1, attr_index: 1 }
-    // { id: 2, attr: 1, attr_index: 2 }
-    // { id: 3, attr: 0, attr_index: 1 }
-    // { id: 3, attr: 1, attr_index: 3 }
-
-    let matches = &[
-        Match { query_index: 0, attribute: 0, attribute_index: 0, ..Match::zero() },
-        Match { query_index: 0, attribute: 1, attribute_index: 0, ..Match::zero() },
-        Match { query_index: 1, attribute: 1, attribute_index: 1, ..Match::zero() },
-        Match { query_index: 2, attribute: 1, attribute_index: 2, ..Match::zero() },
-        Match { query_index: 3, attribute: 0, attribute_index: 1, ..Match::zero() },
-        Match { query_index: 3, attribute: 1, attribute_index: 3, ..Match::zero() },
-    ];
-
-    //   soup -> of = 1
-    // + of -> the  = 1
-    // + the -> day = 1
-    assert_eq!(matches_proximity(matches), 3);
-}
-
-fn sum_of_words_attribute(lhs: &Document, rhs: &Document) -> Ordering {
-    let key = |matches: &[Match]| -> u8 {
-        GroupBy::new(matches, match_query_index).map(|m| m[0].attribute).sum()
-    };
-
-    key(&lhs.matches).cmp(&key(&rhs.matches))
-}
-
-fn sum_of_words_position(lhs: &Document, rhs: &Document) -> Ordering {
-    let key = |matches: &[Match]| -> u32 {
-        GroupBy::new(matches, match_query_index).map(|m| m[0].attribute_index).sum()
-    };
-
-    key(&lhs.matches).cmp(&key(&rhs.matches))
-}
-
-fn exact(lhs: &Document, rhs: &Document) -> Ordering {
-    let contains_exact = |matches: &[Match]| matches.iter().any(|m| m.is_exact);
-    let key = |matches: &[Match]| -> usize {
-        GroupBy::new(matches, match_query_index).map(contains_exact).filter(Clone::clone).count()
-    };
-
-    key(&lhs.matches).cmp(&key(&rhs.matches))
 }
 
 pub struct Pool {
