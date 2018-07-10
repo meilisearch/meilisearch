@@ -4,9 +4,7 @@ version = "0.1.0"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
-bincode = "1.0"
-serde = "1.0"
-serde_derive = "1.0"
+byteorder = "1.2"
 
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
@@ -16,6 +14,9 @@ branch = "op-builder-with-state"
 git = "https://github.com/Kerollmops/levenshtein-automata.git"
 branch = "custom-fst"
 features = ["fst_automaton"]
+
+[dependencies.rocksdb]
+git = "https://github.com/pingcap/rust-rocksdb.git"
 
 [dependencies.group-by]
 git = "https://github.com/Kerollmops/group-by.git"

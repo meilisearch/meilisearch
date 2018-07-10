@@ -8,11 +8,10 @@ mod exact;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::{mem, vec};
-use DocIndexMap;
 use fst;
 use levenshtein::Levenshtein;
-use map::{OpWithStateBuilder, UnionWithState, Values};
-use {Match, DocIndex, DocumentId};
+use metadata::{DocIndexes, OpWithStateBuilder, UnionWithState};
+use {Match, DocumentId};
 use group_by::GroupByMut;
 
 use self::sum_of_typos::sum_of_typos;
@@ -117,7 +116,7 @@ impl IntoIterator for Pool {
 
 pub enum RankedStream<'m, 'v> {
     Fed {
-        inner: UnionWithState<'m, 'v, DocIndex, u32>,
+        inner: UnionWithState<'m, 'v, u32>,
         automatons: Vec<Levenshtein>,
         pool: Pool,
     },
@@ -127,11 +126,11 @@ pub enum RankedStream<'m, 'v> {
 }
 
 impl<'m, 'v> RankedStream<'m, 'v> {
-    pub fn new(map: &'m DocIndexMap, values: &'v Values<DocIndex>, automatons: Vec<Levenshtein>, limit: usize) -> Self {
-        let mut op = OpWithStateBuilder::new(values);
+    pub fn new(map: &'m fst::Map, indexes: &'v DocIndexes, automatons: Vec<Levenshtein>, limit: usize) -> Self {
+        let mut op = OpWithStateBuilder::new(indexes);
 
         for automaton in automatons.iter().map(|l| l.dfa.clone()) {
-            let stream = map.as_map().search(automaton).with_state();
+            let stream = map.search(automaton).with_state();
             op.push(stream);
         }
 

@@ -13,7 +13,7 @@ use std::fs::{self, File};
 use std::io::{self, BufReader, BufRead};
 use std::iter;
 
-use raptor::{DocIndexMapBuilder, DocIndexMap, DocIndex};
+use raptor::{MetadataBuilder, Metadata, DocIndex};
 use rocksdb::{DB, WriteBatch, Writable};
 use serde_json::from_str;
 use unidecode::unidecode;
@@ -62,11 +62,11 @@ fn main() {
         }
     };
 
-    let map_file = "map.fst";
-    let values_file = "values.vecs";
+    let map_file = "map.meta";
+    let indexes_file = "indexes.meta";
     let rocksdb_file = "rocksdb/storage";
 
-    for file in &[map_file, values_file, rocksdb_file] {
+    for file in &[map_file, indexes_file, rocksdb_file] {
         match is_readonly(file) {
             Ok(true) => panic!("the {:?} file is readonly, please make it writeable", file),
             Err(ref e) if e.kind() == io::ErrorKind::NotFound => (),
@@ -75,10 +75,12 @@ fn main() {
         }
     }
 
-    fs::remove_file(rocksdb_file);
     let db = DB::open_default(rocksdb_file).unwrap();
 
-    let mut builder = DocIndexMapBuilder::new();
+    let map = File::create(map_file).unwrap();
+    let indexes = File::create(indexes_file).unwrap();
+    let mut builder = MetadataBuilder::new(map, indexes);
+
     for line in data.lines() {
         let line = line.unwrap();
 
@@ -117,15 +119,12 @@ fn main() {
         }
     }
 
-    let map = File::create(map_file).unwrap();
-    let values = File::create(values_file).unwrap();
-
-    let (map, values) = builder.build(map, values).unwrap();
+    builder.finish().unwrap();
 
     set_readonly(map_file, true).unwrap();
-    set_readonly(values_file, true).unwrap();
+    set_readonly(indexes_file, true).unwrap();
     set_readonly(rocksdb_file, true).unwrap();
 
     println!("Checking the dump consistency...");
-    unsafe { DocIndexMap::from_paths("map.fst", "values.vecs").unwrap() };
+    unsafe { Metadata::from_paths(map_file, indexes_file).unwrap() };
 }

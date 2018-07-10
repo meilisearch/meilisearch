@@ -1,27 +1,21 @@
-#[macro_use] extern crate serde_derive;
-extern crate bincode;
 extern crate fst;
 extern crate group_by;
 extern crate levenshtein_automata;
-extern crate serde;
+extern crate byteorder;
+extern crate rocksdb;
 
-pub mod map;
 pub mod rank;
-mod levenshtein;
+pub mod metadata;
+pub mod levenshtein;
 
-use std::path::Path;
-use std::fs;
-
-pub use self::map::{Map, MapBuilder, Values};
-pub use self::map::{
-    OpBuilder, IndexedValues,
-    OpWithStateBuilder, IndexedValuesWithState,
+pub use self::metadata::{
+    Metadata, MetadataBuilder,
+    StreamWithState, StreamWithStateBuilder,
+    UnionWithState, OpWithStateBuilder,
+    IndexedValuesWithState,
 };
 pub use self::rank::{RankedStream};
 pub use self::levenshtein::LevBuilder;
-
-pub type DocIndexMap = Map<DocIndex>;
-pub type DocIndexMapBuilder = MapBuilder<DocIndex>;
 
 pub type DocumentId = u64;
 
@@ -30,7 +24,8 @@ pub type DocumentId = u64;
 ///
 /// This is stored in the map, generated at index time,
 /// extracted and interpreted at search time.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[repr(C)]
 pub struct DocIndex {
 
     /// The document identifier where the word was found.
@@ -108,13 +103,4 @@ impl Match {
             is_exact: true,
         }
     }
-}
-
-
-pub fn load_map<P, Q>(map: P, values: Q) -> fst::Result<DocIndexMap>
-where P: AsRef<Path>, Q: AsRef<Path>,
-{
-    let fst = fs::read(map)?;
-    let values = fs::read(values)?;
-    DocIndexMap::from_bytes(fst, &values)
 }
