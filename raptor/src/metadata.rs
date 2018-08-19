@@ -186,8 +186,8 @@ pub struct MetadataBuilder<W, X> {
     indexes: X,
 }
 
-impl<W: Write, X: Write> MetadataBuilder<W, X> {
-
+impl<W: Write, X: Write> MetadataBuilder<W, X>
+{
     pub fn new(map: W, indexes: X) -> Self {
         Self { inner: Inner::new(), map, indexes }
     }

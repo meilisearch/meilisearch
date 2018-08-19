@@ -8,7 +8,7 @@ byteorder = "1.2"
 
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
-branch = "op-builder-with-state"
+branch = "always-match-clone"
 
 [dependencies.levenshtein_automata]
 git = "https://github.com/Kerollmops/levenshtein-automata.git"

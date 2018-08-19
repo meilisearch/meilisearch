@@ -8,7 +8,7 @@ use std::str::from_utf8_unchecked;
 use std::io::{self, Write};
 use elapsed::measure_time;
 use fst::Streamer;
-use rocksdb::{DB, DBOptions};
+use rocksdb::{DB, IngestExternalFileOptions};
 use raptor::{Metadata, RankedStream, LevBuilder};
 
 fn search(metadata: &Metadata, database: &DB, lev_builder: &LevBuilder, query: &str) {
@@ -35,43 +35,39 @@ fn search(metadata: &Metadata, database: &DB, lev_builder: &LevBuilder, query: &
 }
 
 fn main() {
-    let map_file = "map.meta";
-    let indexes_file = "indexes.meta";
-    let rocksdb_file = "rocksdb/storage";
+    let name = env::args().nth(1).expect("Missing meta file name (e.g. lucid-ptolemy)");
+    let map_file = format!("{}.map", name);
+    let idx_file = format!("{}.idx", name);
+    let sst_file = format!("{}.sst", name);
+
+    let rocksdb = "rocksdb/storage";
 
     let (elapsed, meta) = measure_time(|| unsafe {
-        Metadata::from_paths(map_file, indexes_file).unwrap()
+        Metadata::from_paths(map_file, idx_file).unwrap()
     });
     println!("{} to load metadata", elapsed);
 
     let (elapsed, db) = measure_time(|| {
-        let options = DBOptions::new();
-        DB::open_for_read_only(options, rocksdb_file, false).unwrap()
+        let db = DB::open_default(rocksdb).unwrap();
+        db.ingest_external_file(&IngestExternalFileOptions::new(), &[&sst_file]).unwrap();
+        db
     });
     println!("{} to load the RocksDB database", elapsed);
 
     let (elapsed, lev_builder) = measure_time(|| LevBuilder::new());
     println!("{} to load the levenshtein automaton", elapsed);
 
-    match env::args().nth(1) {
-        Some(query) => {
-            println!("Searching for: {:?}", query);
-            let query = query.to_lowercase();
-            let (elapsed, _) = measure_time(|| search(&meta, &db, &lev_builder, &query));
-            println!("Finished in {}", elapsed);
-        },
-        None => loop {
-            print!("Searching for: ");
-            io::stdout().flush().unwrap();
+    loop {
+        print!("Searching for: ");
+        io::stdout().flush().unwrap();
 
-            let mut query = String::new();
-            io::stdin().read_line(&mut query).unwrap();
-            let query = query.trim().to_lowercase();
+        let mut query = String::new();
+        io::stdin().read_line(&mut query).unwrap();
+        let query = query.trim().to_lowercase();
 
-            if query.is_empty() { break }
+        if query.is_empty() { break }
 
-            let (elapsed, _) = measure_time(|| search(&meta, &db, &lev_builder, &query));
-            println!("Finished in {}", elapsed);
-        },
+        let (elapsed, _) = measure_time(|| search(&meta, &db, &lev_builder, &query));
+        println!("Finished in {}", elapsed);
     }
 }
