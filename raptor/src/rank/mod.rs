@@ -78,12 +78,6 @@ impl Pool {
     }
 }
 
-fn invert_sorts<F>(a: &Document, b: &Document, sorts: &[F]) -> bool
-where F: Fn(&Document, &Document) -> Ordering,
-{
-    sorts.iter().rev().all(|sort| sort(a, b) == Ordering::Equal)
-}
-
 impl IntoIterator for Pool {
     type Item = Document;
     type IntoIter = vec::IntoIter<Self::Item>;
@@ -98,14 +92,21 @@ impl IntoIterator for Pool {
             exact,
         ];
 
-        for (i, sort) in sorts.iter().enumerate() {
-            let mut computed = 0;
-            for group in GroupByMut::new(&mut self.documents, |a, b| invert_sorts(a, b, &sorts[..i])) {
-                // TODO prefer using `sort_unstable_by_key` to allow reusing the key computation
-                //      `number of words` needs to be reversed, we can use the `cmp::Reverse` struct to do that
-                group.sort_unstable_by(sort);
-                computed += group.len();
-                if computed >= self.limit { break }
+        {
+            let mut groups = vec![self.documents.as_mut_slice()];
+
+            for sort in sorts {
+                let mut temp = mem::replace(&mut groups, Vec::new());
+                let mut computed = 0;
+
+                for group in temp {
+                    group.sort_unstable_by(sort);
+                    for group in GroupByMut::new(group, |a, b| sort(a, b) == Ordering::Equal) {
+                        computed += group.len();
+                        groups.push(group);
+                        if computed >= self.limit { break }
+                    }
+                }
             }
         }
 
