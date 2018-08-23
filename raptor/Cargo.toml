@@ -5,6 +5,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
 byteorder = "1.2"
+fnv = "1.0"
 
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"

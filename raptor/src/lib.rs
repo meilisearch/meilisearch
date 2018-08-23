@@ -1,4 +1,5 @@
 extern crate fst;
+extern crate fnv;
 extern crate group_by;
 extern crate levenshtein_automata;
 extern crate byteorder;

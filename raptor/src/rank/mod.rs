@@ -6,9 +6,9 @@ mod sum_of_words_position;
 mod exact;
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::{mem, vec};
 use fst;
+use fnv::FnvHashMap;
 use levenshtein::Levenshtein;
 use metadata::{DocIndexes, OpWithStateBuilder, UnionWithState};
 use {Match, DocumentId};
@@ -59,7 +59,7 @@ impl Pool {
     }
 
     // TODO remove the matches HashMap, not proud of it
-    pub fn extend(&mut self, matches: &mut HashMap<DocumentId, Vec<Match>>) {
+    pub fn extend(&mut self, matches: &mut FnvHashMap<DocumentId, Vec<Match>>) {
         for doc in self.documents.iter_mut() {
             if let Some(matches) = matches.remove(&doc.document_id) {
                 doc.matches.extend(matches);
@@ -149,7 +149,7 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
     type Item = Document;
 
     fn next(&'a mut self) -> Option<Self::Item> {
-        let mut matches = HashMap::new();
+        let mut matches = FnvHashMap::default();
 
         loop {
             // TODO remove that when NLL are here !
