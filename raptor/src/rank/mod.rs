@@ -45,81 +45,49 @@ impl Document {
     }
 }
 
-pub struct Pool {
-    documents: Vec<Document>,
-    limit: usize,
-}
+fn matches_into_iter(matches: FnvHashMap<DocumentId, Vec<Match>>, limit: usize) -> vec::IntoIter<Document> {
+    let mut documents: Vec<_> = matches.into_iter().map(|(id, mut matches)| {
+        matches.sort_unstable();
+        Document::from_sorted_matches(id, matches)
+    }).collect();
 
-impl Pool {
-    pub fn new(query_size: usize, limit: usize) -> Self {
-        Self {
-            documents: Vec::new(),
-            limit: limit,
-        }
-    }
+    let sorts = &[
+        sum_of_typos,
+        number_of_words,
+        words_proximity,
+        sum_of_words_attribute,
+        sum_of_words_position,
+        exact,
+    ];
 
-    // TODO remove the matches HashMap, not proud of it
-    pub fn extend(&mut self, matches: &mut FnvHashMap<DocumentId, Vec<Match>>) {
-        for doc in self.documents.iter_mut() {
-            if let Some(matches) = matches.remove(&doc.document_id) {
-                doc.matches.extend(matches);
-                doc.matches.sort_unstable();
-            }
-        }
+    {
+        let mut groups = vec![documents.as_mut_slice()];
 
-        for (id, mut matches) in matches.drain() {
-            // note that matches are already sorted we do that by security
-            // TODO remove this useless sort
-            matches.sort_unstable();
+        for sort in sorts {
+            let mut temp = mem::replace(&mut groups, Vec::new());
+            let mut computed = 0;
 
-            let document = Document::from_sorted_matches(id, matches);
-            self.documents.push(document);
-        }
-    }
-}
-
-impl IntoIterator for Pool {
-    type Item = Document;
-    type IntoIter = vec::IntoIter<Self::Item>;
-
-    fn into_iter(mut self) -> Self::IntoIter {
-        let sorts = &[
-            sum_of_typos,
-            number_of_words,
-            words_proximity,
-            sum_of_words_attribute,
-            sum_of_words_position,
-            exact,
-        ];
-
-        {
-            let mut groups = vec![self.documents.as_mut_slice()];
-
-            for sort in sorts {
-                let mut temp = mem::replace(&mut groups, Vec::new());
-                let mut computed = 0;
-
-                for group in temp {
-                    group.sort_unstable_by(sort);
-                    for group in GroupByMut::new(group, |a, b| sort(a, b) == Ordering::Equal) {
-                        computed += group.len();
-                        groups.push(group);
-                        if computed >= self.limit { break }
-                    }
+            for group in temp {
+                group.sort_unstable_by(sort);
+                for group in GroupByMut::new(group, |a, b| sort(a, b) == Ordering::Equal) {
+                    computed += group.len();
+                    groups.push(group);
+                    if computed >= limit { break }
                 }
             }
         }
-
-        self.documents.truncate(self.limit);
-        self.documents.into_iter()
     }
+
+    documents.truncate(limit);
+    documents.into_iter()
 }
 
 pub enum RankedStream<'m, 'v> {
     Fed {
         inner: UnionWithState<'m, 'v, u32>,
         automatons: Vec<Levenshtein>,
-        pool: Pool,
+        limit: usize,
+        matches: FnvHashMap<DocumentId, Vec<Match>>,
     },
     Pours {
         inner: vec::IntoIter<Document>,
@@ -135,12 +103,11 @@ impl<'m, 'v> RankedStream<'m, 'v> {
             op.push(stream);
         }
 
-        let pool = Pool::new(automatons.len(), limit);
-
         RankedStream::Fed {
             inner: op.union(),
             automatons: automatons,
-            pool: pool,
+            limit: limit,
+            matches: FnvHashMap::default(),
         }
     }
 }
@@ -149,14 +116,13 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
     type Item = Document;
 
     fn next(&'a mut self) -> Option<Self::Item> {
-        let mut matches = FnvHashMap::default();
-
         loop {
             // TODO remove that when NLL are here !
-            let mut transfert_pool = None;
+            let mut transfert_matches = None;
+            let mut transfert_limit = None;
 
             match self {
-                RankedStream::Fed { inner, automatons, pool } => {
+                RankedStream::Fed { inner, automatons, limit, matches } => {
                     match inner.next() {
                         Some((string, indexed_values)) => {
                             for iv in indexed_values {
@@ -183,15 +149,15 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
                                         is_exact: string.len() == automaton.query_len,
                                     };
                                     matches.entry(di.document)
-                                            .and_modify(|ms: &mut Vec<_>| ms.push(match_))
-                                            .or_insert_with(|| vec![match_]);
+                                            .or_insert_with(Vec::new)
+                                            .push(match_);
                                 }
-                                pool.extend(&mut matches);
                             }
                         },
                         None => {
                             // TODO remove this when NLL are here !
-                            transfert_pool = Some(mem::replace(pool, Pool::new(1, 1)));
+                            transfert_matches = Some(mem::replace(matches, FnvHashMap::default()));
+                            transfert_limit = Some(mem::replace(limit, 0));
                         },
                     }
                 },
@@ -201,9 +167,9 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
             }
 
             // transform the `RankedStream` into a `Pours`
-            if let Some(pool) = transfert_pool {
+            if let (Some(matches), Some(limit)) = (transfert_matches, transfert_limit) {
                 *self = RankedStream::Pours {
-                    inner: pool.into_iter(),
+                    inner: matches_into_iter(matches, limit).into_iter(),
                 }
             }
         }
