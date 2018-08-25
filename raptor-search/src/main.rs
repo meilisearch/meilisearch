@@ -8,7 +8,7 @@ use std::str::from_utf8_unchecked;
 use std::io::{self, Write};
 use elapsed::measure_time;
 use fst::Streamer;
-use rocksdb::{DB, IngestExternalFileOptions};
+use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
 use raptor::{Metadata, RankedStream, LevBuilder};
 
 fn search(metadata: &Metadata, database: &DB, lev_builder: &LevBuilder, query: &str) {
@@ -50,9 +50,10 @@ fn main() {
     let (elapsed, db) = measure_time(|| {
         let db = DB::open_default(rocksdb).unwrap();
         db.ingest_external_file(&IngestExternalFileOptions::new(), &[&sst_file]).unwrap();
-        db
+        drop(db);
+        DB::open_for_read_only(DBOptions::default(), rocksdb, false).unwrap()
     });
-    println!("{} to load the RocksDB database", elapsed);
+    println!("{} to load the SST file in RocksDB and reopen it for read-only", elapsed);
 
     let (elapsed, lev_builder) = measure_time(|| LevBuilder::new());
     println!("{} to load the levenshtein automaton", elapsed);
