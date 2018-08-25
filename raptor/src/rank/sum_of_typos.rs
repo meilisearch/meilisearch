@@ -3,10 +3,19 @@ use Match;
 use rank::{match_query_index, Document};
 use group_by::GroupBy;
 
-pub fn sum_of_typos(lhs: &Document, rhs: &Document) -> Ordering {
-    let key = |matches: &[Match]| -> u8 {
-        GroupBy::new(matches, match_query_index).map(|m| m[0].distance).sum()
-    };
+#[inline]
+fn sum_matches_typos(matches: &[Match]) -> u8 {
+    // note that GroupBy will never return an empty group
+    // so we can do this assumption safely
+    GroupBy::new(matches, match_query_index).map(|group| unsafe {
+        group.get_unchecked(0).distance
+    }).sum()
+}
 
-    key(&lhs.matches).cmp(&key(&rhs.matches))
+#[inline]
+pub fn sum_of_typos(lhs: &Document, rhs: &Document) -> Ordering {
+    let lhs = sum_matches_typos(&lhs.matches);
+    let rhs = sum_matches_typos(&rhs.matches);
+
+    lhs.cmp(&rhs)
 }

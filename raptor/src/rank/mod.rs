@@ -14,12 +14,14 @@ use metadata::{DocIndexes, OpWithStateBuilder, UnionWithState};
 use {Match, DocumentId};
 use group_by::GroupByMut;
 
-use self::sum_of_typos::sum_of_typos;
-use self::number_of_words::number_of_words;
-use self::words_proximity::words_proximity;
-use self::sum_of_words_attribute::sum_of_words_attribute;
-use self::sum_of_words_position::sum_of_words_position;
-use self::exact::exact;
+use self::{
+    sum_of_typos::sum_of_typos,
+    number_of_words::number_of_words,
+    words_proximity::words_proximity,
+    sum_of_words_attribute::sum_of_words_attribute,
+    sum_of_words_position::sum_of_words_position,
+    exact::exact,
+};
 
 #[inline]
 fn match_query_index(a: &Match, b: &Match) -> bool {
