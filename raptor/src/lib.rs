@@ -1,3 +1,5 @@
+#![feature(nll)]
+
 extern crate fst;
 extern crate fnv;
 extern crate group_by;
@@ -77,7 +79,8 @@ pub struct Match {
     /// (i.e. at the start or the end of the attribute).
     ///
     /// The index in the attribute is limited to a maximum of `2^32`
-    /// this is because we index only the first 1000 words in an attribute.
+    /// this is because we index only the first 1000 words
+    /// in an attribute.
     pub attribute_index: u32,
 
     /// Whether the word that match is an exact match or a prefix.
