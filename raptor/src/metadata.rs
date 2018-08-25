@@ -118,13 +118,17 @@ impl Metadata {
     {
         let map = Map::from_path(map)?;
         let indexes = DocIndexes::from_path(indexes)?;
-        Ok(Metadata { map, indexes })
+        Ok(Metadata::from_raw(map, indexes))
     }
 
     pub fn from_bytes(map: Vec<u8>, indexes: Vec<u8>) -> Result<Self, Box<Error>> {
         let map = Map::from_bytes(map)?;
         let indexes = DocIndexes::from_bytes(indexes)?;
-        Ok(Metadata { map, indexes })
+        Ok(Metadata::from_raw(map, indexes))
+    }
+
+    pub fn from_raw(map: Map, indexes: DocIndexes) -> Self {
+        Metadata { map, indexes }
     }
 
     pub fn get<K: AsRef<[u8]>>(&self, key: K) -> Option<&[DocIndex]> {
