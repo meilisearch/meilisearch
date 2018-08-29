@@ -16,6 +16,8 @@ impl LevBuilder {
     }
 
     pub fn get_automaton(&self, query: &str) -> Levenshtein {
+        assert!(!query.is_empty());
+
         let dfa = if query.len() <= 4 {
             self.automatons[0].build_prefix_dfa(query)
         } else if query.len() <= 8 {
