@@ -71,12 +71,12 @@ fn matches_into_iter(matches: FnvHashMap<DocumentId, Vec<Match>>, limit: usize) 
         let temp = mem::replace(&mut groups, Vec::new());
         let mut computed = 0;
 
-        for group in temp {
+        'grp: for group in temp {
             group.sort_unstable_by(sort);
             for group in GroupByMut::new(group, |a, b| sort(a, b) == Ordering::Equal) {
                 computed += group.len();
                 groups.push(group);
-                if computed >= limit { break }
+                if computed >= limit { break 'grp }
             }
         }
     }
