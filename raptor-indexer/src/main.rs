@@ -3,13 +3,12 @@
 
 #[macro_use] extern crate serde_derive;
 
-use std::path::Path;
 use std::collections::{HashSet, BTreeMap};
-use std::fs::{self, File};
-use std::io::{self, BufReader, BufRead};
+use std::fs::File;
+use std::io::{BufReader, BufRead};
 use std::iter;
 
-use raptor::{MetadataBuilder, Metadata, DocIndex};
+use raptor::{MetadataBuilder, DocIndex};
 use rocksdb::{SstFileWriter, EnvOptions, ColumnFamilyOptions};
 use serde_json::from_str;
 use unidecode::unidecode;
@@ -19,18 +18,6 @@ struct Product {
     title: String,
     product_id: u64,
     ft: String,
-}
-
-fn set_readonly<P>(path: P, readonly: bool) -> io::Result<()>
-where P: AsRef<Path>
-{
-    let mut perms = fs::metadata(&path)?.permissions();
-    perms.set_readonly(readonly);
-    fs::set_permissions(&path, perms)
-}
-
-fn is_readonly<P: AsRef<Path>>(path: P) -> io::Result<bool> {
-    fs::metadata(&path).map(|m| m.permissions().readonly())
 }
 
 fn main() {
@@ -61,15 +48,6 @@ fn main() {
     let map_file = format!("{}.map", random_name);
     let idx_file = format!("{}.idx", random_name);
     let sst_file = format!("{}.sst", random_name);
-
-    for file in &[&map_file, &idx_file, &sst_file] {
-        match is_readonly(file) {
-            Ok(true) => panic!("the {:?} file is readonly, please make it writeable", file),
-            Err(ref e) if e.kind() == io::ErrorKind::NotFound => (),
-            Err(e) => panic!("{:?}", e),
-            Ok(false) => (),
-        }
-    }
 
     let env_options = EnvOptions::new();
     let cf_options = ColumnFamilyOptions::new();
@@ -128,13 +106,5 @@ fn main() {
 
     builder.finish().unwrap();
 
-    println!("Succesfully created files: {}, {}, {}", map_file, idx_file, sst_file);
-
-    set_readonly(&map_file, true).unwrap();
-    set_readonly(&idx_file, true).unwrap();
-    set_readonly(&sst_file, true).unwrap();
-
-    println!("Checking the dump consistency...");
-    unsafe { Metadata::from_paths(map_file, idx_file).unwrap() };
-    // TODO do it better!
+    println!("Succesfully created {:?} dump.", random_name);
 }

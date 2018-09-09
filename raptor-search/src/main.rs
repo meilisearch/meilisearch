@@ -13,10 +13,7 @@ fn search(metadata: &Metadata, database: &DB, query: &str) {
         automatons.push(lev);
     }
 
-    let map = metadata.as_map();
-    let indexes = metadata.as_indexes();
-
-    let mut stream = RankedStream::new(&map, &indexes, automatons, 20);
+    let mut stream = RankedStream::new(&metadata, automatons, 20);
     while let Some(document) = stream.next() {
         print!("{:?}", document.document_id);
 

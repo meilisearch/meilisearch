@@ -8,11 +8,13 @@ mod exact;
 use std::cmp::Ordering;
 use std::rc::Rc;
 use std::{mem, vec};
-use fst;
+use fst::Streamer;
 use fnv::FnvHashMap;
 use group_by::GroupByMut;
 use crate::automaton::{DfaExt, AutomatonExt};
-use crate::metadata::{DocIndexes, OpBuilder, Union};
+use crate::metadata::Metadata;
+use crate::metadata::ops::{OpBuilder, Union};
+use crate::metadata::doc_indexes::DocIndexes;
 use crate::{Match, DocumentId};
 
 use self::{
@@ -83,20 +85,16 @@ fn matches_into_iter(matches: FnvHashMap<DocumentId, Vec<Match>>, limit: usize) 
     documents.into_iter()
 }
 
-pub struct RankedStream<'m, 'v>(RankedStreamInner<'m, 'v>);
+pub struct RankedStream<'m>(RankedStreamInner<'m>);
 
-impl<'m, 'v> RankedStream<'m, 'v> {
-    pub fn new(map: &'m fst::Map, indexes: &'v DocIndexes, automatons: Vec<DfaExt>, limit: usize) -> Self {
-        let mut op = OpBuilder::new(indexes);
-
+impl<'m> RankedStream<'m> {
+    pub fn new(metadata: &'m Metadata, automatons: Vec<DfaExt>, limit: usize) -> Self {
         let automatons: Vec<_> = automatons.into_iter().map(Rc::new).collect();
-        for automaton in automatons.iter().cloned() {
-            let stream = map.search(automaton);
-            op.push(stream);
-        }
+        let mut builder = OpBuilder::with_automatons(automatons.clone());
+        builder.push(metadata);
 
         let inner = RankedStreamInner::Fed {
-            inner: op.union(),
+            inner: builder.union(),
             automatons: automatons,
             limit: limit,
             matches: FnvHashMap::default(),
@@ -106,7 +104,7 @@ impl<'m, 'v> RankedStream<'m, 'v> {
     }
 }
 
-impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
+impl<'m, 'a> fst::Streamer<'a> for RankedStream<'m> {
     type Item = Document;
 
     fn next(&'a mut self) -> Option<Self::Item> {
@@ -114,9 +112,9 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
     }
 }
 
-enum RankedStreamInner<'m, 'v> {
+enum RankedStreamInner<'m> {
     Fed {
-        inner: Union<'m, 'v>,
+        inner: Union<'m>,
         automatons: Vec<Rc<DfaExt>>,
         limit: usize,
         matches: FnvHashMap<DocumentId, Vec<Match>>,
@@ -126,7 +124,7 @@ enum RankedStreamInner<'m, 'v> {
     },
 }
 
-impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStreamInner<'m, 'v> {
+impl<'m, 'a> fst::Streamer<'a> for RankedStreamInner<'m> {
     type Item = Document;
 
     fn next(&'a mut self) -> Option<Self::Item> {
@@ -141,7 +139,7 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStreamInner<'m, 'v> {
                                 let distance = automaton.eval(string).to_u8();
                                 let same_length = string.len() == automaton.query_len();
 
-                                for di in iv.values {
+                                for di in iv.doc_indexes.as_slice() {
                                     let match_ = Match {
                                         query_index: iv.index as u32,
                                         distance: distance,

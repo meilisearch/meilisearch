@@ -16,11 +16,37 @@ pub struct DfaExt {
     automaton: DFA,
 }
 
-impl Deref for DfaExt {
-    type Target = DFA;
+impl Automaton for DfaExt {
+    type State = <DFA as Automaton>::State;
 
-    fn deref(&self) -> &Self::Target {
-        &self.automaton
+    fn start(&self) -> Self::State {
+        self.automaton.start()
+    }
+
+    fn is_match(&self, state: &Self::State) -> bool {
+        self.automaton.is_match(state)
+    }
+
+    fn can_match(&self, state: &Self::State) -> bool {
+        self.automaton.can_match(state)
+    }
+
+    fn will_always_match(&self, state: &Self::State) -> bool {
+        self.automaton.will_always_match(state)
+    }
+
+    fn accept(&self, state: &Self::State, byte: u8) -> Self::State {
+        self.automaton.accept(state, byte)
+    }
+}
+
+impl AutomatonExt for DfaExt {
+    fn eval<B: AsRef<[u8]>>(&self, s: B) -> Distance {
+        self.automaton.eval(s)
+    }
+
+    fn query_len(&self) -> usize {
+        self.query_len
     }
 }
 
@@ -39,12 +65,15 @@ pub trait AutomatonExt: Automaton {
     fn query_len(&self) -> usize;
 }
 
-impl AutomatonExt for DfaExt {
+impl<T> AutomatonExt for T
+where T: Deref,
+      T::Target: AutomatonExt,
+{
     fn eval<B: AsRef<[u8]>>(&self, s: B) -> Distance {
-        self.automaton.eval(s)
+        (**self).eval(s)
     }
 
     fn query_len(&self) -> usize {
-        self.query_len
+        (**self).query_len()
     }
 }

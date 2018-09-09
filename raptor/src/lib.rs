@@ -2,13 +2,14 @@
 
 pub mod rank;
 pub mod metadata;
+pub mod vec_read_only;
 pub mod automaton;
 
 pub use self::metadata::{
     Metadata, MetadataBuilder,
-    Stream, StreamBuilder,
-    Union, OpBuilder,
-    IndexedValues,
+    // Stream, StreamBuilder,
+    // Union, OpBuilder,
+    // IndexedValues,
 };
 pub use self::rank::RankedStream;
 
