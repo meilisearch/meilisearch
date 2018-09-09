@@ -1,12 +1,7 @@
 // TODO make the raptor binary expose multiple subcommand
 //      make only one binary
 
-extern crate raptor;
-extern crate rocksdb;
-extern crate serde_json;
 #[macro_use] extern crate serde_derive;
-extern crate unidecode;
-extern crate moby_name_gen;
 
 use std::path::Path;
 use std::collections::{HashSet, BTreeMap};
@@ -129,7 +124,7 @@ fn main() {
     for (key, value) in fields {
         sst_file_writer.put(key.as_bytes(), value.as_bytes()).unwrap();
     }
-    let sst_file_info = sst_file_writer.finish().unwrap();
+    let _sst_file_info = sst_file_writer.finish().unwrap();
 
     builder.finish().unwrap();
 

@@ -1,7 +1,7 @@
 use std::cmp::{self, Ordering};
-use Match;
-use rank::{match_query_index, Document};
 use group_by::GroupBy;
+use crate::Match;
+use crate::rank::{match_query_index, Document};
 
 const MAX_DISTANCE: u32 = 8;
 

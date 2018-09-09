@@ -1,4 +1,7 @@
+cargo-features = ["edition"]
+
 [package]
+edition = "2018"
 name = "raptor-search"
 version = "0.1.0"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
@@ -9,7 +12,7 @@ elapsed = "0.1"
 
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
-branch = "always-match-clone"
+branch = "automaton-for-deref"
 
 [dependencies.rocksdb]
 git = "https://github.com/pingcap/rust-rocksdb.git"

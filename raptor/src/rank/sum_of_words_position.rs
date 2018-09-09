@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
-use Match;
-use rank::{match_query_index, Document};
 use group_by::GroupBy;
+use crate::Match;
+use crate::rank::{match_query_index, Document};
 
 #[inline]
 fn sum_matches_attribute_index(matches: &[Match]) -> u32 {

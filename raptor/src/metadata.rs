@@ -9,7 +9,7 @@ use std::mem;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use fst::{self, Map, MapBuilder, Automaton};
 use fst::raw::MmapReadOnly;
-use DocIndex;
+use crate::DocIndex;
 
 #[repr(C)]
 struct Range {
@@ -256,23 +256,23 @@ unsafe fn into_u8_slice<T>(slice: &[T]) -> &[u8] {
     from_raw_parts(ptr, len)
 }
 
-pub struct OpWithStateBuilder<'m, 'v, U> {
-    inner: fst::map::OpWithStateBuilder<'m, U>,
+pub struct OpBuilder<'m, 'v> {
+    inner: fst::map::OpBuilder<'m>,
     indexes: &'v DocIndexes,
 }
 
-impl<'m, 'v, U: 'static> OpWithStateBuilder<'m, 'v, U> {
+impl<'m, 'v> OpBuilder<'m, 'v> {
     pub fn new(indexes: &'v DocIndexes) -> Self {
         Self {
-            inner: fst::map::OpWithStateBuilder::new(),
+            inner: fst::map::OpBuilder::new(),
             indexes: indexes,
         }
     }
 
     pub fn add<I, S>(mut self, streamable: I) -> Self
     where
-        I: for<'a> fst::IntoStreamer<'a, Into=S, Item=(&'a [u8], u64, U)>,
-        S: 'm + for<'a> fst::Streamer<'a, Item=(&'a [u8], u64, U)>,
+        I: for<'a> fst::IntoStreamer<'a, Into=S, Item=(&'a [u8], u64)>,
+        S: 'm + for<'a> fst::Streamer<'a, Item=(&'a [u8], u64)>,
     {
         self.push(streamable);
         self
@@ -280,14 +280,14 @@ impl<'m, 'v, U: 'static> OpWithStateBuilder<'m, 'v, U> {
 
     pub fn push<I, S>(&mut self, streamable: I)
     where
-        I: for<'a> fst::IntoStreamer<'a, Into=S, Item=(&'a [u8], u64, U)>,
-        S: 'm + for<'a> fst::Streamer<'a, Item=(&'a [u8], u64, U)>,
+        I: for<'a> fst::IntoStreamer<'a, Into=S, Item=(&'a [u8], u64)>,
+        S: 'm + for<'a> fst::Streamer<'a, Item=(&'a [u8], u64)>,
     {
         self.inner.push(streamable);
     }
 
-    pub fn union(self) -> UnionWithState<'m, 'v, U> {
-        UnionWithState {
+    pub fn union(self) -> Union<'m, 'v> {
+        Union {
             inner: self.inner.union(),
             outs: Vec::new(),
             indexes: self.indexes,
@@ -296,23 +296,19 @@ impl<'m, 'v, U: 'static> OpWithStateBuilder<'m, 'v, U> {
 }
 
 #[derive(Copy, Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct IndexedValuesWithState<'a, U> {
+pub struct IndexedValues<'a> {
     pub index: usize,
     pub values: &'a [DocIndex],
-    pub state: U,
 }
 
-pub struct UnionWithState<'m, 'v, U> {
-    inner: fst::map::UnionWithState<'m, U>,
-    outs: Vec<IndexedValuesWithState<'v, U>>,
+pub struct Union<'m, 'v> {
+    inner: fst::map::Union<'m>,
+    outs: Vec<IndexedValues<'v>>,
     indexes: &'v DocIndexes,
 }
 
-impl<'a, 'm, 'v, U: 'a> fst::Streamer<'a> for UnionWithState<'m, 'v, U>
-where
-    U: Clone,
-{
-    type Item = (&'a [u8], &'a [IndexedValuesWithState<'a, U>]);
+impl<'a, 'm, 'v> fst::Streamer<'a> for Union<'m, 'v> {
+    type Item = (&'a [u8], &'a [IndexedValues<'a>]);
 
     fn next(&'a mut self) -> Option<Self::Item> {
         match self.inner.next() {
@@ -322,8 +318,7 @@ where
                 for ivalue in ivalues {
                     if let Some(values) = self.indexes.get(ivalue.value) {
                         let index = ivalue.index;
-                        let state = ivalue.state.clone();
-                        self.outs.push(IndexedValuesWithState { index, values, state })
+                        self.outs.push(IndexedValues { index, values })
                     }
                 }
                 Some((s, &self.outs))
@@ -333,44 +328,43 @@ where
     }
 }
 
-pub struct StreamWithStateBuilder<'m, 'v, A> {
-    inner: fst::map::StreamWithStateBuilder<'m, A>,
+pub struct StreamBuilder<'m, 'v, A> {
+    inner: fst::map::StreamBuilder<'m, A>,
     indexes: &'v DocIndexes,
 }
 
-impl<'m, 'v, 'a, A: 'a> fst::IntoStreamer<'a> for StreamWithStateBuilder<'m, 'v, A>
+impl<'m, 'v, 'a, A: 'a> fst::IntoStreamer<'a> for StreamBuilder<'m, 'v, A>
 where
     A: Automaton,
     A::State: Clone,
 {
     type Item = <Self::Into as fst::Streamer<'a>>::Item;
-    type Into = StreamWithState<'m, 'v, A>;
+    type Into = Stream<'m, 'v, A>;
 
     fn into_stream(self) -> Self::Into {
-        StreamWithState {
+        Stream {
             inner: self.inner.into_stream(),
             indexes: self.indexes,
         }
     }
 }
 
-pub struct StreamWithState<'m, 'v, A: Automaton = fst::automaton::AlwaysMatch> {
-    inner: fst::map::StreamWithState<'m, A>,
+pub struct Stream<'m, 'v, A: Automaton = fst::automaton::AlwaysMatch> {
+    inner: fst::map::Stream<'m, A>,
     indexes: &'v DocIndexes,
 }
 
-impl<'m, 'v, 'a, A: 'a> fst::Streamer<'a> for StreamWithState<'m, 'v, A>
+impl<'m, 'v, 'a, A: 'a> fst::Streamer<'a> for Stream<'m, 'v, A>
 where
     A: Automaton,
-    A::State: Clone,
 {
-    type Item = (&'a [u8], &'a [DocIndex], A::State);
+    type Item = (&'a [u8], &'a [DocIndex]);
 
     fn next(&'a mut self) -> Option<Self::Item> {
         match self.inner.next() {
-            Some((key, i, state)) => {
+            Some((key, i)) => {
                 match self.indexes.get(i) {
-                    Some(values) => Some((key, values, state)),
+                    Some(values) => Some((key, values)),
                     None => None,
                 }
             },

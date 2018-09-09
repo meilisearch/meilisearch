@@ -6,13 +6,14 @@ mod sum_of_words_position;
 mod exact;
 
 use std::cmp::Ordering;
+use std::rc::Rc;
 use std::{mem, vec};
 use fst;
 use fnv::FnvHashMap;
-use levenshtein::Levenshtein;
-use metadata::{DocIndexes, OpWithStateBuilder, UnionWithState};
-use {Match, DocumentId};
 use group_by::GroupByMut;
+use crate::automaton::{DfaExt, AutomatonExt};
+use crate::metadata::{DocIndexes, OpBuilder, Union};
+use crate::{Match, DocumentId};
 
 use self::{
     sum_of_typos::sum_of_typos,
@@ -85,11 +86,12 @@ fn matches_into_iter(matches: FnvHashMap<DocumentId, Vec<Match>>, limit: usize) 
 pub struct RankedStream<'m, 'v>(RankedStreamInner<'m, 'v>);
 
 impl<'m, 'v> RankedStream<'m, 'v> {
-    pub fn new(map: &'m fst::Map, indexes: &'v DocIndexes, automatons: Vec<Levenshtein>, limit: usize) -> Self {
-        let mut op = OpWithStateBuilder::new(indexes);
+    pub fn new(map: &'m fst::Map, indexes: &'v DocIndexes, automatons: Vec<DfaExt>, limit: usize) -> Self {
+        let mut op = OpBuilder::new(indexes);
 
-        for automaton in automatons.iter().map(|l| l.dfa.clone()) {
-            let stream = map.search(automaton).with_state();
+        let automatons: Vec<_> = automatons.into_iter().map(Rc::new).collect();
+        for automaton in automatons.iter().cloned() {
+            let stream = map.search(automaton);
             op.push(stream);
         }
 
@@ -114,8 +116,8 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStream<'m, 'v> {
 
 enum RankedStreamInner<'m, 'v> {
     Fed {
-        inner: UnionWithState<'m, 'v, u32>,
-        automatons: Vec<Levenshtein>,
+        inner: Union<'m, 'v>,
+        automatons: Vec<Rc<DfaExt>>,
         limit: usize,
         matches: FnvHashMap<DocumentId, Vec<Match>>,
     },
@@ -136,7 +138,8 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStreamInner<'m, 'v> {
                             for iv in indexed_values {
 
                                 let automaton = &automatons[iv.index];
-                                let distance = automaton.dfa.distance(iv.state).to_u8();
+                                let distance = automaton.eval(string).to_u8();
+                                let same_length = string.len() == automaton.query_len();
 
                                 for di in iv.values {
                                     let match_ = Match {
@@ -144,11 +147,11 @@ impl<'m, 'v, 'a> fst::Streamer<'a> for RankedStreamInner<'m, 'v> {
                                         distance: distance,
                                         attribute: di.attribute,
                                         attribute_index: di.attribute_index,
-                                        is_exact: distance == 0 && string.len() == automaton.query_len,
+                                        is_exact: distance == 0 && same_length,
                                     };
                                     matches.entry(di.document)
-                                            .or_insert_with(Vec::new)
-                                            .push(match_);
+                                           .or_insert_with(Vec::new)
+                                           .push(match_);
                                 }
                             }
                         },

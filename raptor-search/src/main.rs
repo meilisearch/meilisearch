@@ -1,20 +1,15 @@
-extern crate rocksdb;
-extern crate fst;
-extern crate raptor;
-extern crate elapsed;
-
 use std::env;
 use std::str::from_utf8_unchecked;
 use std::io::{self, Write};
 use elapsed::measure_time;
 use fst::Streamer;
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
-use raptor::{Metadata, RankedStream, LevBuilder};
+use raptor::{automaton, Metadata, RankedStream};
 
-fn search(metadata: &Metadata, database: &DB, lev_builder: &LevBuilder, query: &str) {
+fn search(metadata: &Metadata, database: &DB, query: &str) {
     let mut automatons = Vec::new();
     for query in query.split_whitespace() {
-        let lev = lev_builder.get_automaton(query);
+        let lev = automaton::build(query);
         automatons.push(lev);
     }
 
@@ -55,9 +50,6 @@ fn main() {
     });
     println!("{} to load the SST file in RocksDB and reopen it for read-only", elapsed);
 
-    let (elapsed, lev_builder) = measure_time(|| LevBuilder::new());
-    println!("{} to load the levenshtein automaton", elapsed);
-
     loop {
         print!("Searching for: ");
         io::stdout().flush().unwrap();
@@ -68,7 +60,7 @@ fn main() {
 
         if query.is_empty() { break }
 
-        let (elapsed, _) = measure_time(|| search(&meta, &db, &lev_builder, &query));
+        let (elapsed, _) = measure_time(|| search(&meta, &db, &query));
         println!("Finished in {}", elapsed);
     }
 }

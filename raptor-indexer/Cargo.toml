@@ -1,4 +1,7 @@
+cargo-features = ["edition"]
+
 [package]
+edition = "2018"
 name = "raptor-indexer"
 version = "0.1.0"
 authors = ["Kerollmops <renault.cle@gmail.com>"]

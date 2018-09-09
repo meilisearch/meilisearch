@@ -1,4 +1,7 @@
+cargo-features = ["edition"]
+
 [package]
+edition = "2018"
 name = "raptor"
 version = "0.1.0"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
@@ -6,14 +9,15 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 [dependencies]
 byteorder = "1.2"
 fnv = "1.0"
+lazy_static = "1.1"
 
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
-branch = "always-match-clone"
+branch = "automaton-for-deref"
 
 [dependencies.levenshtein_automata]
 git = "https://github.com/Kerollmops/levenshtein-automata.git"
-branch = "custom-fst"
+branch = "new-custom-fst"
 features = ["fst_automaton"]
 
 [dependencies.rocksdb]

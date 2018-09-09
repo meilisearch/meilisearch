@@ -1,24 +1,16 @@
-#![feature(nll)]
-
-extern crate fst;
-extern crate fnv;
-extern crate group_by;
-extern crate levenshtein_automata;
-extern crate byteorder;
-extern crate rocksdb;
+#[macro_use] extern crate lazy_static;
 
 pub mod rank;
 pub mod metadata;
-pub mod levenshtein;
+pub mod automaton;
 
 pub use self::metadata::{
     Metadata, MetadataBuilder,
-    StreamWithState, StreamWithStateBuilder,
-    UnionWithState, OpWithStateBuilder,
-    IndexedValuesWithState,
+    Stream, StreamBuilder,
+    Union, OpBuilder,
+    IndexedValues,
 };
-pub use self::rank::{RankedStream};
-pub use self::levenshtein::LevBuilder;
+pub use self::rank::RankedStream;
 
 pub type DocumentId = u64;
 
