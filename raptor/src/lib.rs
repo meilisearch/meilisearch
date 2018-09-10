@@ -5,12 +5,7 @@ pub mod metadata;
 pub mod vec_read_only;
 pub mod automaton;
 
-pub use self::metadata::{
-    Metadata, MetadataBuilder,
-    // Stream, StreamBuilder,
-    // Union, OpBuilder,
-    // IndexedValues,
-};
+pub use self::metadata::{Metadata, MetadataBuilder};
 pub use self::rank::RankedStream;
 
 pub type DocumentId = u64;
@@ -23,7 +18,6 @@ pub type DocumentId = u64;
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 #[repr(C)]
 pub struct DocIndex {
-
     /// The document identifier where the word was found.
     pub document: DocumentId,
 
@@ -50,7 +44,6 @@ pub struct DocIndex {
 // TODO do data oriented programming ? very arrays ?
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Match {
-
     /// The word index in the query sentence.
     /// Same as the `attribute_index` but for the query words.
     ///

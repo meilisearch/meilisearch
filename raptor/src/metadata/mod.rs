@@ -1,6 +1,8 @@
-mod ops_indexed_value;
 pub mod ops;
+pub mod stream_ops;
 pub mod doc_indexes;
+pub mod difference;
+pub mod ops_indexed_value;
 
 use fst::{Map, MapBuilder};
 use std::error::Error;
