@@ -5,8 +5,8 @@ use std::path::Path;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::mem;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use fst::raw::MmapReadOnly;
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use crate::DocIndex;
 
 #[repr(C)]
@@ -180,9 +180,6 @@ fn into_sliced_ranges<T>(vecs: Vec<Vec<T>>, number_docs: usize) -> (Vec<Range>, 
     let mut ranges = Vec::with_capacity(cap);
     let mut values = Vec::with_capacity(number_docs);
 
-    // @Improvement: remove bounds duplications: the left bound of a range
-    //               is already the right bound of the previous range,
-    //               we could use a slice window of size 2.
     for v in &vecs {
         let len = v.len() as u64;
         let start = ranges.last().map(|&Range { end, .. }| end).unwrap_or(0);

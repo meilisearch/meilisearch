@@ -14,7 +14,6 @@ use group_by::GroupByMut;
 use crate::automaton::{DfaExt, AutomatonExt};
 use crate::metadata::Metadata;
 use crate::metadata::ops::{OpBuilder, Union};
-use crate::metadata::doc_indexes::DocIndexes;
 use crate::{Match, DocumentId};
 
 use self::{

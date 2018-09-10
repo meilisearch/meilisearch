@@ -1,5 +1,4 @@
-use std::hash::{Hash, Hasher};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::BTreeMap;
 use fst::{map, Streamer, Automaton};
 use fst::automaton::AlwaysMatch;
 use sdset::multi::OpBuilder as SdOpBuilder;
@@ -9,7 +8,6 @@ use crate::metadata::ops_indexed_value::{
 };
 use crate::metadata::doc_indexes::DocIndexes;
 use crate::metadata::Metadata;
-use crate::automaton::AutomatonExt;
 use crate::vec_read_only::VecReadOnly;
 use crate::DocIndex;
 
@@ -60,19 +58,19 @@ impl<'m, A: 'm + Automaton> OpBuilder<'m, A> {
     }
 
     pub fn union(self) -> Union<'m> {
-        Union::new(self.maps, self.indexes)
+        Union::new(self.maps, self.indexes, self.automatons.len())
     }
 
     pub fn intersection(self) -> Intersection<'m> {
-        Intersection::new(self.maps, self.indexes)
+        Intersection::new(self.maps, self.indexes, self.automatons.len())
     }
 
     pub fn difference(self) -> Difference<'m> {
-        Difference::new(self.maps, self.indexes)
+        Difference::new(self.maps, self.indexes, self.automatons.len())
     }
 
     pub fn symmetric_difference(self) -> SymmetricDifference<'m> {
-        SymmetricDifference::new(self.maps, self.indexes)
+        SymmetricDifference::new(self.maps, self.indexes, self.automatons.len())
     }
 }
 
@@ -94,15 +92,16 @@ macro_rules! logical_operation {
 pub struct $name<'m> {
     maps: UnionIndexedValue<'m>,
     indexes: Vec<&'m DocIndexes>,
+    number_automatons: usize,
     outs: Vec<IndexedDocIndexes>,
 }
 
 impl<'m> $name<'m> {
-    fn new(maps: OpIndexedValueBuilder<'m>, indexes: Vec<&'m DocIndexes>) -> Self
-    {
+    fn new(maps: OpIndexedValueBuilder<'m>, indexes: Vec<&'m DocIndexes>, number_automatons: usize) -> Self {
         $name {
             maps: maps.union(),
             indexes: indexes,
+            number_automatons: number_automatons,
             outs: Vec::new(),
         }
     }
@@ -116,17 +115,15 @@ impl<'m, 'a> fst::Streamer<'a> for $name<'m> {
             Some((input, ivalues)) => {
                 self.outs.clear();
 
-                // @Improvement: better use a `Vec` instead,
-                //               `aut indexes` follow them selfs
-                let mut builders = HashMap::new();
+                let mut builders = vec![BTreeMap::new(); self.number_automatons];
                 for iv in ivalues {
-                    let builder = builders.entry(iv.aut_index).or_insert_with(BTreeMap::new);
+                    let builder = &mut builders[iv.aut_index];
                     builder.insert(iv.rdr_index, iv.value);
                 }
 
                 let mut doc_indexes = Vec::new();
                 let mut doc_indexes_slots = Vec::with_capacity(builders.len());
-                for (aut_index, values) in builders.into_iter() {
+                for (aut_index, values) in builders.into_iter().enumerate() {
                     let mut builder = SdOpBuilder::with_capacity(values.len());
                     for (rdr_index, value) in values {
                         let indexes = self.indexes[rdr_index].get(value).expect("could not find indexes");
@@ -137,14 +134,14 @@ impl<'m, 'a> fst::Streamer<'a> for $name<'m> {
                     let start = doc_indexes.len();
                     builder.$operation().extend_vec(&mut doc_indexes);
                     let len = doc_indexes.len() - start;
-                    if len == 0 { continue }
-
-                    let slot = SlotIndexedDocIndexes {
-                        index: aut_index,
-                        start: start,
-                        len: len,
-                    };
-                    doc_indexes_slots.push(slot);
+                    if len != 0 {
+                        let slot = SlotIndexedDocIndexes {
+                            index: aut_index,
+                            start: start,
+                            len: len,
+                        };
+                        doc_indexes_slots.push(slot);
+                    }
                 }
 
                 let read_only = VecReadOnly::new(doc_indexes);

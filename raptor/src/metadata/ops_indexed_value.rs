@@ -38,6 +38,12 @@ pub struct UnionIndexedValue<'f> {
     cur_slot: Option<SlotIndexedValue>,
 }
 
+impl<'f> UnionIndexedValue<'f> {
+    pub fn len(&self) -> usize {
+        self.heap.num_slots()
+    }
+}
+
 impl<'a, 'm> fst::Streamer<'a> for UnionIndexedValue<'m> {
     type Item = (&'a [u8], &'a [IndexedValue]);
 
@@ -54,7 +60,7 @@ impl<'a, 'm> fst::Streamer<'a> for UnionIndexedValue<'m> {
         };
         self.outs.clear();
         self.outs.push(slot.indexed_value());
-        while let Some(mut slot2) = self.heap.pop_if_equal(slot.input()) {
+        while let Some(slot2) = self.heap.pop_if_equal(slot.input()) {
             self.outs.push(slot2.indexed_value());
             self.heap.refill(slot2);
         }

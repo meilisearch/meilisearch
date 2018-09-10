@@ -1,15 +1,13 @@
-// pub mod difference;
-// pub mod stream_ops;
 mod ops_indexed_value;
 pub mod ops;
 pub mod doc_indexes;
 
 use fst::{Map, MapBuilder};
-use self::doc_indexes::{DocIndexes, DocIndexesBuilder};
 use std::error::Error;
 use std::path::Path;
 use std::io::Write;
 use crate::DocIndex;
+use self::doc_indexes::{DocIndexes, DocIndexesBuilder};
 
 pub struct Metadata {
     map: Map,
@@ -87,8 +85,6 @@ impl<W: Write, X: Write> MetadataBuilder<W, X> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vec_read_only::VecReadOnly;
-    use crate::metadata::ops::IndexedDocIndexes;
 
     #[test]
     fn empty_serialize_deserialize() {
