@@ -1,7 +1,10 @@
 #[macro_use] extern crate serde_derive;
 
 use std::env;
-use std::io::Write;
+use std::fs::File;
+use std::path::Path;
+use std::collections::hash_set::HashSet;
+use std::io::{self, BufReader, BufRead, Write};
 use std::sync::Arc;
 use std::error::Error;
 use std::str::from_utf8_unchecked;
@@ -20,12 +23,28 @@ struct Document<'a> {
     description: &'a str,
 }
 
-fn search<M, D>(metadata: M, database: D, query: &str) -> Result<String, Box<Error>>
+type CommonWords = HashSet<String>;
+
+fn common_words<P>(path: P) -> io::Result<CommonWords>
+where P: AsRef<Path>,
+{
+    let file = File::open(path)?;
+    let file = BufReader::new(file);
+    let mut set = HashSet::new();
+    for line in file.lines().filter_map(|l| l.ok()) {
+        for word in line.split_whitespace() {
+            set.insert(word.to_owned());
+        }
+    }
+    Ok(set)
+}
+
+fn search<M, D>(metadata: M, database: D, common_words: &CommonWords, query: &str) -> Result<String, Box<Error>>
 where M: AsRef<Metadata>,
       D: AsRef<DB>,
 {
     let mut automatons = Vec::new();
-    for query in query.split_whitespace() {
+    for query in query.split_whitespace().filter(|q| !common_words.contains(*q)) {
         let lev = automaton::build(query);
         automatons.push(lev);
     }
@@ -78,10 +97,12 @@ fn main() {
     let db = DB::open_for_read_only(DBOptions::default(), rocksdb, false).unwrap();
     let db = Arc::new(db);
 
+    let common_words = common_words("fr.stopwords.txt").unwrap();
+
     let routes = warp::path("search")
         .and(warp::query())
         .map(move |query: SearchQuery| {
-            let body = search(meta.clone(), db.clone(), &query.query).unwrap();
+            let body = search(meta.clone(), db.clone(), &common_words, &query.query).unwrap();
             body
         })
         .with(warp::reply::with::header("Content-Type", "application/json"));

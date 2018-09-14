@@ -3,9 +3,10 @@
 
 #[macro_use] extern crate serde_derive;
 
+use std::path::Path;
 use std::collections::{HashSet, BTreeMap};
+use std::io::{self, BufReader, BufRead};
 use std::fs::File;
-use std::io::{BufReader, BufRead};
 use std::iter;
 
 use raptor::{MetadataBuilder, DocIndex};
@@ -20,28 +21,31 @@ struct Product {
     ft: String,
 }
 
+type CommonWords = HashSet<String>;
+
+fn common_words<P>(path: P) -> io::Result<CommonWords>
+where P: AsRef<Path>,
+{
+    let file = File::open(path)?;
+    let file = BufReader::new(file);
+    let mut set = HashSet::new();
+    for line in file.lines().filter_map(|l| l.ok()) {
+        for word in line.split_whitespace() {
+            set.insert(word.to_owned());
+        }
+    }
+    Ok(set)
+}
+
 fn main() {
     let data = File::open("products.json_lines").unwrap();
     let data = BufReader::new(data);
 
-    let common_words = {
-        match File::open("fr.stopwords.txt") {
-            Ok(file) => {
-                let file = BufReader::new(file);
-                let mut set = HashSet::new();
-                for line in file.lines().filter_map(|l| l.ok()) {
-                    for word in line.split_whitespace() {
-                        set.insert(word.to_owned());
-                    }
-                }
-                set
-            },
-            Err(e) => {
-                eprintln!("{:?}", e);
-                HashSet::new()
-            },
-        }
-    };
+    let common_path = "fr.stopwords.txt";
+    let common_words = common_words(common_path).unwrap_or_else(|e| {
+        println!("{:?}: {:?}", common_path, e);
+        HashSet::new()
+    });
 
     // TODO add a subcommand to pack these files in a tar.xxx archive
     let random_name = moby_name_gen::random_name();
