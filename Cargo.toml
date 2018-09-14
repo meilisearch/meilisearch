@@ -3,6 +3,7 @@ members = [
     "raptor",
     "raptor-indexer",
     "raptor-search",
+    "raptor-http",
 ]
 
 [profile.release]

@@ -1,0 +1,21 @@
+cargo-features = ["edition"]
+
+[package]
+edition = "2018"
+name = "raptor-http"
+version = "0.1.0"
+authors = ["Clément Renault <renault.cle@gmail.com>"]
+
+[dependencies]
+raptor = { path = "../raptor" }
+serde_derive = "1.0"
+serde_json = "1.0"
+serde = "1.0"
+warp = "0.1"
+
+[dependencies.fst]
+git = "https://github.com/Kerollmops/fst.git"
+branch = "automaton-for-deref"
+
+[dependencies.rocksdb]
+git = "https://github.com/pingcap/rust-rocksdb.git"
