@@ -17,7 +17,7 @@ use unidecode::unidecode;
 #[derive(Debug, Deserialize)]
 struct Product {
     title: String,
-    product_id: u64,
+    group_id: u64,
     ft: String,
 }
 
@@ -76,7 +76,7 @@ fn main() {
             let words = title.chain(description);
             for (i, (attr, word)) in words {
                 let doc_index = DocIndex {
-                    document: product.product_id,
+                    document: product.group_id,
                     attribute: attr,
                     attribute_index: i as u32,
                 };
@@ -95,11 +95,11 @@ fn main() {
 
         // TODO simplify this by using functions and
         //      use the MetadataBuilder internal BTreeMap ?
-        let key = format!("{}-title", product.product_id);
+        let key = format!("{}-title", product.group_id);
         let value = product.title;
         fields.insert(key, value);
 
-        let key = format!("{}-description", product.product_id);
+        let key = format!("{}-description", product.group_id);
         let value = product.ft;
         fields.insert(key, value);
     }
