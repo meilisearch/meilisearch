@@ -7,7 +7,7 @@ use std::path::Path;
 use std::collections::{HashSet, BTreeMap};
 use std::io::{self, BufReader, BufRead};
 use std::fs::File;
-use std::iter;
+use std::{env, iter};
 
 use raptor::{MetadataBuilder, DocIndex};
 use rocksdb::{SstFileWriter, EnvOptions, ColumnFamilyOptions};
@@ -38,7 +38,8 @@ where P: AsRef<Path>,
 }
 
 fn main() {
-    let data = File::open("products.json_lines").unwrap();
+    let data_path = env::args().nth(1).expect("Missing data json lines file (e.g. products.json_lines)");
+    let data = File::open(data_path).unwrap();
     let data = BufReader::new(data);
 
     let common_path = "fr.stopwords.txt";
