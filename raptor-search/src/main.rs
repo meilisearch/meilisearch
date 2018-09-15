@@ -46,7 +46,7 @@ fn search(metadata: &Metadata, database: &DB, common_words: &CommonWords, query:
 }
 
 fn main() {
-    let name = env::args().nth(1).expect("Missing meta file name (e.g. lucid-ptolemy)");
+    let name = env::args().nth(1).expect("Missing meta file name (e.g. relaxed-colden)");
     let map_file = format!("{}.map", name);
     let idx_file = format!("{}.idx", name);
     let sst_file = format!("{}.sst", name);
