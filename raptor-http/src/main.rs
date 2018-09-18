@@ -105,7 +105,8 @@ fn main() {
             let body = search(meta.clone(), db.clone(), &common_words, &query.query).unwrap();
             body
         })
-        .with(warp::reply::with::header("Content-Type", "application/json"));
+        .with(warp::reply::with::header("Content-Type", "application/json"))
+        .with(warp::reply::with::header("Access-Control-Allow-Origin", "*"));
 
     warp::serve(routes).run(([127, 0, 0, 1], 3030));
 }
