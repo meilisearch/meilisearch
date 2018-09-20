@@ -10,6 +10,7 @@ authors = ["Clément Renault <renault.cle@gmail.com>"]
 raptor = { path = "../raptor" }
 serde_derive = "1.0"
 serde_json = "1.0"
+structopt = "0.2"
 serde = "1.0"
 warp = "0.1"
 

@@ -1,8 +1,9 @@
 #[macro_use] extern crate serde_derive;
 
-use std::env;
 use std::fs::File;
-use std::path::Path;
+use std::net::SocketAddr;
+use structopt::StructOpt;
+use std::path::{Path, PathBuf};
 use std::collections::hash_set::HashSet;
 use std::io::{self, BufReader, BufRead, Write};
 use std::sync::Arc;
@@ -12,6 +13,21 @@ use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
 use raptor::{automaton, Metadata, RankedStream};
 use fst::Streamer;
 use warp::Filter;
+
+#[derive(Debug, StructOpt)]
+#[structopt(name = "raptor-http", about = "Raptor but wrapped by an http server.")]
+struct Opt {
+    /// The addresse and port to bind the server to.
+    #[structopt(short = "l", default_value = "127.0.0.1:3030")]
+    listen_addr: SocketAddr,
+
+    /// The stop word file, each word must be separated by a newline.
+    #[structopt(long = "stop-words", parse(from_os_str))]
+    stop_words: PathBuf,
+
+    /// Meta file name (e.g. relaxed-colden).
+    meta_name: String,
+}
 
 #[derive(Debug, Deserialize)]
 struct SearchQuery { query: String }
@@ -81,7 +97,9 @@ where M: AsRef<Metadata>,
 }
 
 fn main() {
-    let name = env::args().nth(1).expect("Missing meta file name (e.g. relaxed-colden)");
+    let opt = Opt::from_args();
+
+    let name = opt.meta_name;
     let map_file = format!("{}.map", name);
     let idx_file = format!("{}.idx", name);
     let sst_file = format!("{}.sst", name);
@@ -97,7 +115,7 @@ fn main() {
     let db = DB::open_for_read_only(DBOptions::default(), rocksdb, false).unwrap();
     let db = Arc::new(db);
 
-    let common_words = common_words("fr.stopwords.txt").unwrap();
+    let common_words = common_words(opt.stop_words).expect("reading stop words");
 
     let routes = warp::path("search")
         .and(warp::query())
@@ -108,5 +126,5 @@ fn main() {
         .with(warp::reply::with::header("Content-Type", "application/json"))
         .with(warp::reply::with::header("Access-Control-Allow-Origin", "*"));
 
-    warp::serve(routes).run(([127, 0, 0, 1], 3030));
+    warp::serve(routes).run(opt.listen_addr);
 }

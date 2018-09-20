@@ -1,3 +1,6 @@
-
+/rocksdb
 /target
 **/*.rs.bk
+**/*.idx
+**/*.map
+**/*.sst
