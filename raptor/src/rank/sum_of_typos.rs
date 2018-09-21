@@ -7,9 +7,10 @@ use crate::rank::{match_query_index, Document};
 fn sum_matches_typos(matches: &[Match]) -> u8 {
     // note that GroupBy will never return an empty group
     // so we can do this assumption safely
+    // matches must and will never be empty
     GroupBy::new(matches, match_query_index).map(|group| unsafe {
         group.get_unchecked(0).distance
-    }).sum()
+    }).min().unwrap()
 }
 
 #[inline]
