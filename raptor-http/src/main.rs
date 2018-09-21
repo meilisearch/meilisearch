@@ -30,7 +30,7 @@ struct Opt {
 }
 
 #[derive(Debug, Deserialize)]
-struct SearchQuery { query: String }
+struct SearchQuery { q: String }
 
 #[derive(Debug, Serialize)]
 struct Document<'a> {
@@ -120,7 +120,7 @@ fn main() {
     let routes = warp::path("search")
         .and(warp::query())
         .map(move |query: SearchQuery| {
-            let body = search(meta.clone(), db.clone(), &common_words, &query.query).unwrap();
+            let body = search(meta.clone(), db.clone(), &common_words, &query.q).unwrap();
             body
         })
         .with(warp::reply::with::header("Content-Type", "application/json"))
