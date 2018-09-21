@@ -18,5 +18,5 @@ pub fn exact(lhs: &Document, rhs: &Document) -> Ordering {
     let lhs = number_exact_matches(&lhs.matches);
     let rhs = number_exact_matches(&rhs.matches);
 
-    lhs.cmp(&rhs)
+    lhs.cmp(&rhs).reverse()
 }
