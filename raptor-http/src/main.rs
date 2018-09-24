@@ -37,6 +37,7 @@ struct Document<'a> {
     id: u64,
     title: &'a str,
     description: &'a str,
+    image: &'a str,
 }
 
 type CommonWords = HashSet<String>;
@@ -79,10 +80,15 @@ where M: AsRef<Metadata>,
         let description = database.as_ref().get(description_key.as_bytes()).unwrap().unwrap();
         let description = unsafe { from_utf8_unchecked(&description) };
 
+        let image_key = format!("{}-image", document.document_id);
+        let image = database.as_ref().get(image_key.as_bytes()).unwrap().unwrap();
+        let image = unsafe { from_utf8_unchecked(&image) };
+
         let document = Document {
             id: document.document_id,
             title: title,
             description: description,
+            image: image,
         };
 
         if !first { write!(&mut body, ",")? }

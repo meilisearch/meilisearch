@@ -2,6 +2,7 @@
 members = [
     "raptor",
     "raptor-indexer",
+    "raptor-indexer-csv",
     "raptor-search",
     "raptor-http",
 ]

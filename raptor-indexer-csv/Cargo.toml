@@ -1,16 +1,17 @@
 [package]
 edition = "2018"
-name = "raptor-search"
+name = "raptor-indexer-csv"
 version = "0.1.0"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
 raptor = { path = "../raptor" }
-elapsed = "0.1"
-
-[dependencies.fst]
-git = "https://github.com/Kerollmops/fst.git"
-branch = "automaton-for-deref"
+serde = "1.0"
+structopt = "0.2"
+serde_derive = "1.0"
+csv = "1.0"
+unidecode = "0.3"
+moby-name-gen = "0.1"
 
 [dependencies.rocksdb]
 git = "https://github.com/pingcap/rust-rocksdb.git"
