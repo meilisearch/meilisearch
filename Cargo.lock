@@ -772,6 +772,7 @@ dependencies = [
  "fst 0.3.2 (git+https://github.com/Kerollmops/fst.git?branch=automaton-for-deref)",
  "raptor 0.1.0",
  "rocksdb 0.3.0 (git+https://github.com/pingcap/rust-rocksdb.git)",
+ "structopt 0.2.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

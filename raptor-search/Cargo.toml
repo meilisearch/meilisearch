@@ -6,6 +6,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
 raptor = { path = "../raptor" }
+structopt = "0.2"
 elapsed = "0.1"
 
 [dependencies.fst]

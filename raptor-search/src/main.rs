@@ -1,13 +1,24 @@
-use std::env;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::collections::HashSet;
 use std::str::from_utf8_unchecked;
 use std::io::{self, BufReader, BufRead, Write};
+use structopt::StructOpt;
 use elapsed::measure_time;
 use fst::Streamer;
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
 use raptor::{automaton, Metadata, RankedStream};
+
+#[derive(Debug, StructOpt)]
+#[structopt(name = "raptor-search", about = "A Raptor binary to search in a dump.")]
+struct Opt {
+    /// The stop word file, each word must be separated by a newline.
+    #[structopt(long = "stop-words", parse(from_os_str))]
+    stop_words: PathBuf,
+
+    /// Meta file name (e.g. relaxed-colden).
+    meta_name: String,
+}
 
 type CommonWords = HashSet<String>;
 
@@ -46,7 +57,9 @@ fn search(metadata: &Metadata, database: &DB, common_words: &CommonWords, query:
 }
 
 fn main() {
-    let name = env::args().nth(1).expect("Missing meta file name (e.g. relaxed-colden)");
+    let opt = Opt::from_args();
+
+    let name = opt.meta_name;
     let map_file = format!("{}.map", name);
     let idx_file = format!("{}.idx", name);
     let sst_file = format!("{}.sst", name);
@@ -66,11 +79,7 @@ fn main() {
     });
     println!("{} to load the SST file in RocksDB and reopen it for read-only", elapsed);
 
-    let common_path = "fr.stopwords.txt";
-    let common_words = common_words(common_path).unwrap_or_else(|e| {
-        println!("{:?}: {:?}", common_path, e);
-        HashSet::new()
-    });
+    let common_words = common_words(opt.stop_words).expect("reading stop words");
 
     loop {
         print!("Searching for: ");
