@@ -61,8 +61,9 @@ where M: AsRef<Metadata>,
       D: AsRef<DB>,
 {
     let mut automatons = Vec::new();
-    for query in query.split_whitespace().filter(|q| !common_words.contains(*q)) {
-        let lev = automaton::build(query);
+    for query in query.split_whitespace().map(str::to_lowercase) {
+        if common_words.contains(&query) { continue }
+        let lev = automaton::build(&query);
         automatons.push(lev);
     }
 
