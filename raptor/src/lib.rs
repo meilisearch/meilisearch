@@ -4,6 +4,7 @@ pub mod rank;
 pub mod metadata;
 pub mod vec_read_only;
 pub mod automaton;
+pub mod tokenizer;
 
 pub use self::metadata::{Metadata, MetadataBuilder};
 pub use self::rank::RankedStream;
