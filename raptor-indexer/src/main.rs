@@ -7,9 +7,9 @@ use std::path::Path;
 use std::collections::{HashSet, BTreeMap};
 use std::io::{self, BufReader, BufRead};
 use std::fs::File;
-use std::{env, iter};
+use std::env;
 
-use raptor::{MetadataBuilder, DocIndex};
+use raptor::{MetadataBuilder, DocIndex, Tokenizer};
 use rocksdb::{SstFileWriter, EnvOptions, ColumnFamilyOptions};
 use serde_json::from_str;
 use unidecode::unidecode;
@@ -35,6 +35,30 @@ where P: AsRef<Path>,
         }
     }
     Ok(set)
+}
+
+fn insert_document_words<'a, I, A, B>(builder: &mut MetadataBuilder<A, B>, doc_index: u64, attr: u8, words: I)
+where A: io::Write,
+      B: io::Write,
+      I: IntoIterator<Item=(usize, &'a str)>,
+{
+    for (index, word) in words {
+        let doc_index = DocIndex {
+            document: doc_index,
+            attribute: attr,
+            attribute_index: index as u32,
+        };
+        // insert the exact representation
+        let word_lower = word.to_lowercase();
+
+        // and the unidecoded lowercased version
+        let word_unidecoded = unidecode(word).to_lowercase();
+        if word_lower != word_unidecoded {
+            builder.insert(word_unidecoded, doc_index);
+        }
+
+        builder.insert(word_lower, doc_index);
+    }
 }
 
 fn main() {
@@ -69,29 +93,13 @@ fn main() {
 
         let product: Product = from_str(&line).unwrap();
 
-        {
-            let title = iter::repeat(0).zip(product.title.split_whitespace()).filter(|&(_, w)| !common_words.contains(w)).enumerate();
-            let description = iter::repeat(1).zip(product.ft.split_whitespace()).filter(|&(_, w)| !common_words.contains(w)).enumerate();
+        let title = Tokenizer::new(&product.title);
+        let title = title.iter().filter(|&(_, w)| !common_words.contains(w));
+        insert_document_words(&mut builder, product.group_id, 0, title);
 
-            let words = title.chain(description);
-            for (i, (attr, word)) in words {
-                let doc_index = DocIndex {
-                    document: product.group_id,
-                    attribute: attr,
-                    attribute_index: i as u32,
-                };
-                // insert the exact representation
-                let word_lower = word.to_lowercase();
-
-                // and the unidecoded lowercased version
-                let word_unidecoded = unidecode(word).to_lowercase();
-                if word_lower != word_unidecoded {
-                    builder.insert(word_unidecoded, doc_index);
-                }
-
-                builder.insert(word_lower, doc_index);
-            }
-        }
+        let description = Tokenizer::new(&product.ft);
+        let description = description.iter().filter(|&(_, w)| !common_words.contains(w));
+        insert_document_words(&mut builder, product.group_id, 1, description);
 
         // TODO simplify this by using functions and
         //      use the MetadataBuilder internal BTreeMap ?
