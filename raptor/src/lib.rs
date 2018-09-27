@@ -8,6 +8,7 @@ pub mod tokenizer;
 
 pub use self::metadata::{Metadata, MetadataBuilder};
 pub use self::rank::RankedStream;
+pub use self::tokenizer::Tokenizer;
 
 pub type DocumentId = u64;
 
