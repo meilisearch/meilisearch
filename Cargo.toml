@@ -1,11 +1,36 @@
-[workspace]
-members = [
-    "raptor",
-    "raptor-indexer",
-    "raptor-indexer-csv",
-    "raptor-search",
-    "raptor-http",
-]
+[package]
+edition = "2018"
+name = "raptor-cli"
+version = "0.1.0"
+authors = ["Clément Renault <renault.cle@gmail.com>"]
+
+[dependencies]
+raptor = { path = "raptor" }
+rocksdb = { git = "https://github.com/pingcap/rust-rocksdb.git" }
+serde_derive = "1.0"
+structopt = "0.2"
+serde = "1.0"
+warp = { version = "0.1", optional = true }
+serde_json = { version = "1.0", optional = true }
+csv = { version = "1.0", optional = true }
+moby-name-gen = { version = "0.1", optional = true }
+unidecode = { version = "0.3", optional = true }
+elapsed = { version = "0.1", optional = true }
+
+[dependencies.fst]
+git = "https://github.com/Kerollmops/fst.git"
+branch = "automaton-for-deref"
+
+[features]
+default = ["index-csv", "serve-http", "serve-console"]
+
+index-jsonlines = ["index", "serde_json"]
+index-csv = ["index", "csv"]
+index = ["moby-name-gen", "unidecode"]
+
+serve-http = ["serve", "warp", "serde_json"]
+serve-console = ["serve", "elapsed"]
+serve = []
 
 [profile.release]
 lto = true
