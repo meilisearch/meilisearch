@@ -21,15 +21,15 @@ struct Document<'a> {
     image: &'a str,
 }
 
+#[derive(Debug, Deserialize)]
+struct SearchQuery { q: String }
+
 pub struct HttpServer {
     listen_addr: SocketAddr,
     common_words: Arc<CommonWords>,
     metadata: Arc<Metadata>,
     db: Arc<DB>,
 }
-
-#[derive(Debug, Deserialize)]
-struct SearchQuery { q: String }
 
 impl HttpServer {
     pub fn from_command(command: CommandHttp) -> io::Result<HttpServer> {

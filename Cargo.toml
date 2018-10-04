@@ -22,7 +22,7 @@ git = "https://github.com/Kerollmops/fst.git"
 branch = "automaton-for-deref"
 
 [features]
-default = ["index-csv", "serve-http", "serve-console"]
+default = ["index-csv", "serve-http"]
 
 index-jsonlines = ["index", "serde_json"]
 index-csv = ["index", "csv"]
