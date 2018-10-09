@@ -1,17 +1,34 @@
+#[macro_use] extern crate serde_derive;
+
 use std::str::from_utf8_unchecked;
 use std::io::{self, Write};
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::error::Error;
 use std::sync::Arc;
 
-use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
-use raptor::{automaton, Metadata};
 use raptor::rank::RankedStream;
+use raptor::{automaton, Metadata, CommonWords};
+use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
 use fst::Streamer;
 use warp::Filter;
 
-use crate::serve::http_feature::CommandHttp;
-use crate::common_words::{self, CommonWords};
+use structopt::StructOpt;
+
+#[derive(Debug, StructOpt)]
+pub struct CommandHttp {
+    /// The address and port to bind the server to.
+    #[structopt(short = "l", default_value = "127.0.0.1:3030")]
+    pub listen_addr: SocketAddr,
+
+    /// The stop word file, each word must be separated by a newline.
+    #[structopt(long = "stop-words", parse(from_os_str))]
+    pub stop_words: PathBuf,
+
+    /// Meta file name (e.g. relaxed-colden).
+    #[structopt(parse(from_os_str))]
+    pub meta_name: PathBuf,
+}
 
 #[derive(Debug, Serialize)]
 struct Document<'a> {
@@ -33,16 +50,16 @@ pub struct HttpServer {
 
 impl HttpServer {
     pub fn from_command(command: CommandHttp) -> io::Result<HttpServer> {
-        let common_words = common_words::from_file(command.stop_words)?;
+        let common_words = CommonWords::from_file(command.stop_words)?;
 
-        let meta_name = command.meta_name.display();
-        let map_file = format!("{}.map", meta_name);
-        let idx_file = format!("{}.idx", meta_name);
-        let sst_file = format!("{}.sst", meta_name);
+        let map_file = command.meta_name.with_extension("map");
+        let idx_file = command.meta_name.with_extension("idx");
+        let sst_file = command.meta_name.with_extension("sst");
         let metadata = unsafe { Metadata::from_paths(map_file, idx_file).unwrap() };
 
         let rocksdb = "rocksdb/storage";
         let db = DB::open_default(rocksdb).unwrap();
+        let sst_file = sst_file.to_str().unwrap();
         db.ingest_external_file(&IngestExternalFileOptions::new(), &[&sst_file]).unwrap();
         drop(db);
         let db = DB::open_for_read_only(DBOptions::default(), rocksdb, false).unwrap();
@@ -117,4 +134,10 @@ where M: AsRef<Metadata>,
     write!(&mut body, "]")?;
 
     Ok(String::from_utf8(body)?)
+}
+
+fn main() {
+    let command = CommandHttp::from_args();
+    let server = HttpServer::from_command(command).unwrap();
+    server.serve();
 }

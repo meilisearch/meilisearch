@@ -1,13 +1,23 @@
 use std::str::from_utf8_unchecked;
 use std::io::{self, Write};
+use structopt::StructOpt;
+use std::path::PathBuf;
 
 use fst::Streamer;
 use elapsed::measure_time;
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
-use raptor::{automaton, Metadata, RankedStream};
+use raptor::{automaton, Metadata, RankedStream, CommonWords};
 
-use crate::serve::console_feature::CommandConsole;
-use crate::common_words::{self, CommonWords};
+#[derive(Debug, StructOpt)]
+pub struct CommandConsole {
+    /// The stop word file, each word must be separated by a newline.
+    #[structopt(long = "stop-words", parse(from_os_str))]
+    pub stop_words: PathBuf,
+
+    /// Meta file name (e.g. relaxed-colden).
+    #[structopt(parse(from_os_str))]
+    pub meta_name: PathBuf,
+}
 
 pub struct ConsoleSearch {
     common_words: CommonWords,
@@ -17,17 +27,18 @@ pub struct ConsoleSearch {
 
 impl ConsoleSearch {
     pub fn from_command(command: CommandConsole) -> io::Result<ConsoleSearch> {
-        let common_words = common_words::from_file(command.stop_words)?;
+        let common_words = CommonWords::from_file(command.stop_words)?;
 
-        let meta_name = command.meta_name.display();
-        let map_file = format!("{}.map", meta_name);
-        let idx_file = format!("{}.idx", meta_name);
-        let sst_file = format!("{}.sst", meta_name);
+        let map_file = command.meta_name.with_extension("map");
+        let idx_file = command.meta_name.with_extension("idx");
+        let sst_file = command.meta_name.with_extension("sst");
+
         let metadata = unsafe { Metadata::from_paths(map_file, idx_file).unwrap() };
 
         let rocksdb = "rocksdb/storage";
         let db = DB::open_default(rocksdb).unwrap();
-        db.ingest_external_file(&IngestExternalFileOptions::new(), &[&sst_file]).unwrap();
+        let sst_file = sst_file.to_str().unwrap();
+        db.ingest_external_file(&IngestExternalFileOptions::new(), &[sst_file]).unwrap();
         drop(db);
         let db = DB::open_for_read_only(DBOptions::default(), rocksdb, false).unwrap();
 
@@ -60,13 +71,20 @@ fn search(metadata: &Metadata, database: &DB, common_words: &CommonWords, query:
 
     let mut stream = RankedStream::new(&metadata, automatons, 20);
     while let Some(document) = stream.next() {
-        print!("{:?}", document.document_id);
+        let id_key = format!("{}-id", document.document_id);
+        let id = database.get(id_key.as_bytes()).unwrap().unwrap();
+        let id = unsafe { from_utf8_unchecked(&id) };
+        print!("{} ", id);
 
         let title_key = format!("{}-title", document.document_id);
         let title = database.get(title_key.as_bytes()).unwrap().unwrap();
         let title = unsafe { from_utf8_unchecked(&title) };
-        print!(" {:?}", title);
-
-        println!();
+        println!("{:?}", title);
     }
+}
+
+fn main() {
+    let command = CommandConsole::from_args();
+    let console = ConsoleSearch::from_command(command).unwrap();
+    console.serve()
 }

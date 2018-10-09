@@ -5,10 +5,12 @@ pub mod metadata;
 pub mod vec_read_only;
 pub mod automaton;
 pub mod tokenizer;
+mod common_words;
 
 pub use self::metadata::{Metadata, MetadataBuilder};
 pub use self::rank::RankedStream;
 pub use self::tokenizer::Tokenizer;
+pub use self::common_words::CommonWords;
 
 pub type DocumentId = u64;
 
