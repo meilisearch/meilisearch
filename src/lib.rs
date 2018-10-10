@@ -8,7 +8,6 @@ pub mod tokenizer;
 mod common_words;
 
 pub use self::metadata::{Metadata, MetadataBuilder};
-pub use self::rank::RankedStream;
 pub use self::tokenizer::Tokenizer;
 pub use self::common_words::CommonWords;
 

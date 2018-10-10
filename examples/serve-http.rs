@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::error::Error;
 use std::sync::Arc;
 
-use raptor::rank::RankedStream;
+use raptor::rank;
 use raptor::{automaton, Metadata, CommonWords};
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
 use fst::Streamer;
@@ -100,26 +100,33 @@ where M: AsRef<Metadata>,
         automatons.push(lev);
     }
 
-    let mut stream = RankedStream::new(metadata.as_ref(), automatons, 20);
+    let config = rank::Config {
+        criteria: rank::criterion::default(),
+        metadata: metadata.as_ref(),
+        automatons: automatons,
+        limit: 20,
+    };
+
+    let mut stream = rank::RankedStream::new(config);
     let mut body = Vec::new();
     write!(&mut body, "[")?;
 
     let mut first = true;
     while let Some(document) = stream.next() {
-        let title_key = format!("{}-title", document.document_id);
+        let title_key = format!("{}-title", document.id);
         let title = database.as_ref().get(title_key.as_bytes()).unwrap().unwrap();
         let title = unsafe { from_utf8_unchecked(&title) };
 
-        let description_key = format!("{}-description", document.document_id);
+        let description_key = format!("{}-description", document.id);
         let description = database.as_ref().get(description_key.as_bytes()).unwrap().unwrap();
         let description = unsafe { from_utf8_unchecked(&description) };
 
-        let image_key = format!("{}-image", document.document_id);
+        let image_key = format!("{}-image", document.id);
         let image = database.as_ref().get(image_key.as_bytes()).unwrap().unwrap();
         let image = unsafe { from_utf8_unchecked(&image) };
 
         let document = Document {
-            id: document.document_id,
+            id: document.id,
             title: title,
             description: description,
             image: image,

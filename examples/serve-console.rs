@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use fst::Streamer;
 use elapsed::measure_time;
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
-use raptor::{automaton, Metadata, RankedStream, CommonWords};
+use raptor::{automaton, Metadata, CommonWords};
+use raptor::rank;
 
 #[derive(Debug, StructOpt)]
 pub struct CommandConsole {
@@ -69,14 +70,21 @@ fn search(metadata: &Metadata, database: &DB, common_words: &CommonWords, query:
         automatons.push(lev);
     }
 
-    let mut stream = RankedStream::new(&metadata, automatons, 20);
+    let config = rank::Config {
+        criteria: rank::criterion::default(),
+        metadata: &metadata,
+        automatons: automatons,
+        limit: 20,
+    };
+
+    let mut stream = rank::RankedStream::new(config);
     while let Some(document) = stream.next() {
-        let id_key = format!("{}-id", document.document_id);
+        let id_key = format!("{}-id", document.id);
         let id = database.get(id_key.as_bytes()).unwrap().unwrap();
         let id = unsafe { from_utf8_unchecked(&id) };
         print!("{} ", id);
 
-        let title_key = format!("{}-title", document.document_id);
+        let title_key = format!("{}-title", document.id);
         let title = database.get(title_key.as_bytes()).unwrap().unwrap();
         let title = unsafe { from_utf8_unchecked(&title) };
         println!("{:?}", title);
