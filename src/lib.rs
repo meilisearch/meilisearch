@@ -1,3 +1,5 @@
+#![feature(range_contains)]
+
 #[macro_use] extern crate lazy_static;
 
 pub mod rank;

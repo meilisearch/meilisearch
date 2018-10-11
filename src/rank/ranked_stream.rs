@@ -1,5 +1,6 @@
+use std::ops::Range;
 use std::rc::Rc;
-use std::{mem, vec};
+use std::{mem, vec, cmp};
 
 use fnv::FnvHashMap;
 use fst::Streamer;
@@ -51,7 +52,7 @@ pub struct RankedStream<'a, 'm, C> {
 }
 
 impl<'a, 'm, C> RankedStream<'a, 'm, C> {
-    pub fn retrieve_documents(&mut self, limit: usize) -> Vec<Document>
+    pub fn retrieve_documents(&mut self, range: Range<usize>) -> Vec<Document>
     where C: Criterion
     {
         let mut matches = FnvHashMap::default();
@@ -84,20 +85,33 @@ impl<'a, 'm, C> RankedStream<'a, 'm, C> {
         let mut groups = vec![documents.as_mut_slice()];
 
         for criterion in self.criteria {
-            let temp = mem::replace(&mut groups, Vec::new());
-            let mut computed = 0;
+            let tmp_groups = mem::replace(&mut groups, Vec::new());
+            let mut current_range = Range { start: 0, end: 0 };
 
-            'grp: for group in temp {
-                group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                for group in GroupByMut::new(group, |a, b| criterion.eq(a, b)) {
-                    computed += group.len();
-                    groups.push(group);
-                    if computed >= limit { break 'grp }
+            'grp: for group in tmp_groups {
+                current_range.end += group.len();
+
+                // if a part of the current group is in the range returned
+                // we must sort it and emit the sub-groups
+                if current_range.contains(&range.start) {
+                    group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
+                    for group in GroupByMut::new(group, |a, b| criterion.eq(a, b)) {
+                        groups.push(group);
+                        if current_range.end >= range.end { break 'grp }
+                    }
+                } else {
+                    groups.push(group)
                 }
+
+                current_range.start = current_range.end;
             }
         }
 
-        documents.truncate(limit);
+        // TODO find a better algorithm, here we allocate for too many documents
+        //      and we do a useless allocation, we should reuse the documents Vec
+        let start = cmp::min(range.start, documents.len());
+        let mut documents = documents.split_off(start);
+        documents.truncate(range.len());
         documents
     }
 }

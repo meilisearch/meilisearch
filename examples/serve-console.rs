@@ -73,7 +73,7 @@ fn search(metadata: &Metadata, database: &DB, common_words: &CommonWords, query:
     builder.criteria(criterion::default());
 
     let mut stream = builder.build();
-    let documents = stream.retrieve_documents(20);
+    let documents = stream.retrieve_documents(0..20);
 
     for document in documents {
         let id_key = format!("{}-id", document.id);

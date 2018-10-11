@@ -103,7 +103,7 @@ where M: AsRef<Metadata>,
     builder.criteria(criterion::default());
 
     let mut stream = builder.build();
-    let documents = stream.retrieve_documents(20);
+    let documents = stream.retrieve_documents(0..20);
 
     let mut body = Vec::new();
     write!(&mut body, "[")?;
