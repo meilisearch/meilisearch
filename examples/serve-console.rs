@@ -3,11 +3,10 @@ use std::io::{self, Write};
 use structopt::StructOpt;
 use std::path::PathBuf;
 
-use fst::Streamer;
 use elapsed::measure_time;
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
 use raptor::{automaton, Metadata, CommonWords};
-use raptor::rank;
+use raptor::rank::{criterion, RankedStreamBuilder};
 
 #[derive(Debug, StructOpt)]
 pub struct CommandConsole {
@@ -70,15 +69,13 @@ fn search(metadata: &Metadata, database: &DB, common_words: &CommonWords, query:
         automatons.push(lev);
     }
 
-    let config = rank::Config {
-        criteria: rank::criterion::default(),
-        metadata: &metadata,
-        automatons: automatons,
-        limit: 20,
-    };
+    let mut builder = RankedStreamBuilder::new(metadata, automatons);
+    builder.criteria(criterion::default());
 
-    let mut stream = rank::RankedStream::new(config);
-    while let Some(document) = stream.next() {
+    let mut stream = builder.build();
+    let documents = stream.retrieve_documents(20);
+
+    for document in documents {
         let id_key = format!("{}-id", document.id);
         let id = database.get(id_key.as_bytes()).unwrap().unwrap();
         let id = unsafe { from_utf8_unchecked(&id) };

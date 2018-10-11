@@ -7,10 +7,9 @@ use std::path::PathBuf;
 use std::error::Error;
 use std::sync::Arc;
 
-use raptor::rank;
+use raptor::rank::{criterion, RankedStreamBuilder};
 use raptor::{automaton, Metadata, CommonWords};
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
-use fst::Streamer;
 use warp::Filter;
 
 use structopt::StructOpt;
@@ -100,19 +99,17 @@ where M: AsRef<Metadata>,
         automatons.push(lev);
     }
 
-    let config = rank::Config {
-        criteria: rank::criterion::default(),
-        metadata: metadata.as_ref(),
-        automatons: automatons,
-        limit: 20,
-    };
+    let mut builder = RankedStreamBuilder::new(metadata.as_ref(), automatons);
+    builder.criteria(criterion::default());
 
-    let mut stream = rank::RankedStream::new(config);
+    let mut stream = builder.build();
+    let documents = stream.retrieve_documents(20);
+
     let mut body = Vec::new();
     write!(&mut body, "[")?;
 
     let mut first = true;
-    while let Some(document) = stream.next() {
+    for document in documents {
         let title_key = format!("{}-title", document.id);
         let title = database.as_ref().get(title_key.as_bytes()).unwrap().unwrap();
         let title = unsafe { from_utf8_unchecked(&title) };

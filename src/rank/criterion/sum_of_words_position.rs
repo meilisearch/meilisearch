@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use group_by::GroupBy;
 use crate::Match;
 use crate::rank::{match_query_index, Document};
+use crate::rank::criterion::Criterion;
 
 #[inline]
 fn sum_matches_attribute_index(matches: &[Match]) -> u32 {
@@ -12,10 +13,14 @@ fn sum_matches_attribute_index(matches: &[Match]) -> u32 {
     }).sum()
 }
 
-#[inline]
-pub fn sum_of_words_position(lhs: &Document, rhs: &Document) -> Ordering {
-    let lhs = sum_matches_attribute_index(&lhs.matches);
-    let rhs = sum_matches_attribute_index(&rhs.matches);
+#[derive(Debug, Clone, Copy)]
+pub struct SumOfWordsPosition;
 
-    lhs.cmp(&rhs)
+impl Criterion for SumOfWordsPosition {
+    fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
+        let lhs = sum_matches_attribute_index(&lhs.matches);
+        let rhs = sum_matches_attribute_index(&rhs.matches);
+
+        lhs.cmp(&rhs)
+    }
 }

@@ -3,7 +3,7 @@ mod ranked_stream;
 
 use crate::{Match, DocumentId};
 
-pub use self::ranked_stream::{RankedStream, Config};
+pub use self::ranked_stream::{RankedStreamBuilder, RankedStream};
 
 #[inline]
 fn match_query_index(a: &Match, b: &Match) -> bool {
@@ -18,10 +18,10 @@ pub struct Document {
 
 impl Document {
     pub fn new(doc: DocumentId, match_: Match) -> Self {
-        Self::from_sorted_matches(doc, vec![match_])
+        unsafe { Self::from_sorted_matches(doc, vec![match_]) }
     }
 
-    pub fn from_sorted_matches(id: DocumentId, matches: Vec<Match>) -> Self {
+    pub unsafe fn from_sorted_matches(id: DocumentId, matches: Vec<Match>) -> Self {
         Self { id, matches }
     }
 }

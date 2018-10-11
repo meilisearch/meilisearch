@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use group_by::GroupBy;
 use crate::Match;
 use crate::rank::{match_query_index, Document};
+use crate::rank::criterion::Criterion;
 
 #[inline]
 fn sum_matches_typos(matches: &[Match]) -> i8 {
@@ -18,13 +19,18 @@ fn sum_matches_typos(matches: &[Match]) -> i8 {
     sum_typos - number_words
 }
 
-#[inline]
-pub fn sum_of_typos(lhs: &Document, rhs: &Document) -> Ordering {
-    let lhs = sum_matches_typos(&lhs.matches);
-    let rhs = sum_matches_typos(&rhs.matches);
+#[derive(Debug, Clone, Copy)]
+pub struct SumOfTypos;
 
-    lhs.cmp(&rhs)
+impl Criterion for SumOfTypos {
+    fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
+        let lhs = sum_matches_typos(&lhs.matches);
+        let rhs = sum_matches_typos(&rhs.matches);
+
+        lhs.cmp(&rhs)
+    }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -42,7 +48,7 @@ mod tests {
                 Match { query_index: 1, distance: 0, attribute: 0, attribute_index: 2, is_exact: false },
             ];
             Document {
-                document_id: 0,
+                id: 0,
                 matches: matches,
             }
         };
@@ -53,12 +59,12 @@ mod tests {
                 Match { query_index: 1, distance: 0, attribute: 0, attribute_index: 2, is_exact: false },
             ];
             Document {
-                document_id: 1,
+                id: 1,
                 matches: matches,
             }
         };
 
-        assert_eq!(sum_of_typos(&doc0, &doc1), Ordering::Less);
+        assert_eq!(SumOfTypos.evaluate(&doc0, &doc1), Ordering::Less);
     }
 
     // typing: "bouton manchette"
@@ -73,7 +79,7 @@ mod tests {
                 Match { query_index: 1, distance: 0, attribute: 0, attribute_index: 1, is_exact: false },
             ];
             Document {
-                document_id: 0,
+                id: 0,
                 matches: matches,
             }
         };
@@ -83,12 +89,12 @@ mod tests {
                 Match { query_index: 0, distance: 0, attribute: 0, attribute_index: 0, is_exact: false },
             ];
             Document {
-                document_id: 1,
+                id: 1,
                 matches: matches,
             }
         };
 
-        assert_eq!(sum_of_typos(&doc0, &doc1), Ordering::Less);
+        assert_eq!(SumOfTypos.evaluate(&doc0, &doc1), Ordering::Less);
     }
 
     // typing: "bouton manchztte"
@@ -103,7 +109,7 @@ mod tests {
                 Match { query_index: 1, distance: 1, attribute: 0, attribute_index: 1, is_exact: false },
             ];
             Document {
-                document_id: 0,
+                id: 0,
                 matches: matches,
             }
         };
@@ -113,11 +119,11 @@ mod tests {
                 Match { query_index: 0, distance: 0, attribute: 0, attribute_index: 0, is_exact: false },
             ];
             Document {
-                document_id: 1,
+                id: 1,
                 matches: matches,
             }
         };
 
-        assert_eq!(sum_of_typos(&doc0, &doc1), Ordering::Equal);
+        assert_eq!(SumOfTypos.evaluate(&doc0, &doc1), Ordering::Equal);
     }
 }
