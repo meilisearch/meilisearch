@@ -7,11 +7,10 @@ use std::path::PathBuf;
 use std::error::Error;
 use std::sync::Arc;
 
-use raptor::rank::{criterion, RankedStreamBuilder};
+use raptor::rank::{criterion, Config, RankedStream};
 use raptor::{automaton, Metadata, CommonWords};
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
 use warp::Filter;
-
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -99,10 +98,14 @@ where M: AsRef<Metadata>,
         automatons.push(lev);
     }
 
-    let mut builder = RankedStreamBuilder::new(metadata.as_ref(), automatons);
-    builder.criteria(criterion::default());
+    let config = Config {
+        metadata: metadata.as_ref(),
+        automatons: automatons,
+        criteria: criterion::default(),
+        distinct: ((), 1),
+    };
+    let stream = RankedStream::new(config);
 
-    let mut stream = builder.build();
     let documents = stream.retrieve_documents(0..20);
 
     let mut body = Vec::new();

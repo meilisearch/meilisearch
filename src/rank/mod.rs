@@ -3,7 +3,7 @@ mod ranked_stream;
 
 use crate::{Match, DocumentId};
 
-pub use self::ranked_stream::{RankedStreamBuilder, RankedStream};
+pub use self::ranked_stream::{Config, RankedStream};
 
 #[inline]
 fn match_query_index(a: &Match, b: &Match) -> bool {

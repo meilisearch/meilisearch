@@ -24,7 +24,7 @@ pub type DocumentId = u64;
 #[repr(C)]
 pub struct DocIndex {
     /// The document identifier where the word was found.
-    pub document: DocumentId,
+    pub document_id: DocumentId,
 
     /// The attribute identifier in the document
     /// where the word was found.

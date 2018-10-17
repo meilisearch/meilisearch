@@ -7,7 +7,6 @@ mod exact;
 
 use std::vec;
 use std::cmp::Ordering;
-use std::ops::Deref;
 use crate::rank::Document;
 
 pub use self::{
@@ -31,21 +30,21 @@ pub trait Criterion {
 
 impl<'a, T: Criterion + ?Sized> Criterion for &'a T {
     fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
-        self.deref().evaluate(lhs, rhs)
+        (**self).evaluate(lhs, rhs)
     }
 
     fn eq(&self, lhs: &Document, rhs: &Document) -> bool {
-        self.deref().eq(lhs, rhs)
+        (**self).eq(lhs, rhs)
     }
 }
 
 impl<T: Criterion + ?Sized> Criterion for Box<T> {
     fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
-        self.deref().evaluate(lhs, rhs)
+        (**self).evaluate(lhs, rhs)
     }
 
     fn eq(&self, lhs: &Document, rhs: &Document) -> bool {
-        self.deref().eq(lhs, rhs)
+        (**self).eq(lhs, rhs)
     }
 }
 

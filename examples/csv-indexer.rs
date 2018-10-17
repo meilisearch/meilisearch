@@ -117,14 +117,14 @@ impl CsvIndexer {
     }
 }
 
-fn insert_document_words<'a, I, A, B>(builder: &mut MetadataBuilder<A, B>, doc_index: u64, attr: u8, words: I)
+fn insert_document_words<'a, I, A, B>(builder: &mut MetadataBuilder<A, B>, doc_id: u64, attr: u8, words: I)
 where A: io::Write,
       B: io::Write,
       I: IntoIterator<Item=(usize, &'a str)>,
 {
     for (index, word) in words {
         let doc_index = DocIndex {
-            document: doc_index,
+            document_id: doc_id,
             attribute: attr,
             attribute_index: index as u32,
         };

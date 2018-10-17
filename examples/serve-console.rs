@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use elapsed::measure_time;
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
+use raptor::rank::{criterion, Config, RankedStream, Document};
 use raptor::{automaton, Metadata, CommonWords};
-use raptor::rank::{criterion, RankedStreamBuilder};
 
 #[derive(Debug, StructOpt)]
 pub struct CommandConsole {
@@ -62,6 +62,13 @@ impl ConsoleSearch {
     }
 }
 
+// "Sony" "PlayStation 4 500GB"
+fn starts_with_playstation(doc: &Document, database: &DB) -> Vec<u8> {
+    let title_key = format!("{}-title", doc.id);
+    let title = database.get(title_key.as_bytes()).unwrap().unwrap();
+    title.get(0..4).map(|s| s.to_vec()).unwrap_or(Vec::new())
+}
+
 fn search(metadata: &Metadata, database: &DB, common_words: &CommonWords, query: &str) {
     let mut automatons = Vec::new();
     for query in query.split_whitespace().filter(|q| !common_words.contains(*q)) {
@@ -69,10 +76,15 @@ fn search(metadata: &Metadata, database: &DB, common_words: &CommonWords, query:
         automatons.push(lev);
     }
 
-    let mut builder = RankedStreamBuilder::new(metadata, automatons);
-    builder.criteria(criterion::default());
+    let config = Config {
+        metadata: metadata,
+        automatons: automatons,
+        criteria: criterion::default(),
+        distinct: ((), 1),
+    };
+    let stream = RankedStream::new(config);
 
-    let mut stream = builder.build();
+    // let documents = stream.retrieve_distinct_documents(|doc| starts_with_playstation(doc, database), 0..20);
     let documents = stream.retrieve_documents(0..20);
 
     for document in documents {
