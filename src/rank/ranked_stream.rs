@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::ops::Range;
 use std::rc::Rc;
-use std::{mem, vec};
+use std::{mem, vec, cmp};
 
 use fnv::FnvHashMap;
 use fst::Streamer;
@@ -92,6 +92,10 @@ where C: Criterion
             }
         }
 
+        let range = Range {
+            start: cmp::min(range.start, documents.len()),
+            end: cmp::min(range.end, documents.len()),
+        };
         documents[range].to_vec()
     }
 
