@@ -24,7 +24,7 @@ impl<'a> Tokens<'a> {
     fn new(string: &str) -> Tokens {
         Tokens {
             index: 0,
-            inner: string.trim_matches(&[' ', '.', ';', ',', '!', '?', '-'][..]),
+            inner: string.trim_matches(&[' ', '.', ';', ',', '!', '?', '-', '\'', '"'][..]),
         }
     }
 }
@@ -62,7 +62,7 @@ impl<'a> Iterator for Tokens<'a> {
         for (i, c) in self.inner.char_indices() {
             let separator = match c {
                 '.' | ';' | ',' | '!' | '?' | '-' => Some(Long),
-                ' ' => Some(Short),
+                ' ' | '\'' | '"' => Some(Short),
                 _   => None,
             };
 
