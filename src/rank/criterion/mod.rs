@@ -65,5 +65,6 @@ pub fn default() -> Vec<Box<dyn Criterion>> {
         Box::new(SumOfWordsAttribute),
         Box::new(SumOfWordsPosition),
         Box::new(Exact),
+        Box::new(DocumentId),
     ]
 }
