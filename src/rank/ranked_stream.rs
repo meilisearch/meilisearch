@@ -100,7 +100,7 @@ where C: Criterion
     }
 
     pub fn retrieve_distinct_documents<K>(mut self, range: Range<usize>) -> Vec<Document>
-    where F: Fn(&DocumentId) -> K,
+    where F: Fn(&DocumentId) -> Option<K>,
           K: Hash + Eq,
     {
         let mut documents = self.retrieve_all_documents();
@@ -122,8 +122,10 @@ where C: Criterion
         let mut seen = DistinctMap::new(limit);
 
         for document in documents {
-            let key = distinct(&document.id);
-            let accepted = seen.digest(key);
+            let accepted = match distinct(&document.id) {
+                Some(key) => seen.digest(key),
+                None => seen.accept_without_key(),
+            };
 
             if accepted {
                 if seen.len() == range.end { break }
@@ -154,7 +156,18 @@ impl<K: Hash + Eq> DistinctMap<K> {
 
     pub fn digest(&mut self, key: K) -> bool {
         let seen = self.inner.entry(key).or_insert(0);
-        if *seen < self.limit { *seen += 1; self.len += 1; true } else { false }
+        if *seen < self.limit {
+            *seen += 1;
+            self.len += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn accept_without_key(&mut self) -> bool {
+        self.len += 1;
+        true
     }
 
     pub fn len(&self) -> usize {
