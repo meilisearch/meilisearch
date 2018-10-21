@@ -1,5 +1,6 @@
 /rocksdb
 /target
+/Cargo.lock
 **/*.rs.bk
 **/*.idx
 **/*.map
