@@ -57,6 +57,8 @@ impl Criterion for DocumentId {
     }
 }
 
+// TODO there is too much Box here, can we use
+//      static references or static closures
 pub fn default() -> Vec<Box<dyn Criterion>> {
     vec![
         Box::new(SumOfTypos),

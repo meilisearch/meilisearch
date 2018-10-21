@@ -10,25 +10,18 @@ use pentium::{automaton, DocumentId, Metadata};
 
 #[derive(Debug, StructOpt)]
 pub struct CommandConsole {
-    /// The stop word file, each word must be separated by a newline.
-    #[structopt(long = "stop-words", parse(from_os_str))]
-    pub stop_words: PathBuf,
-
     /// Meta file name (e.g. relaxed-colden).
     #[structopt(parse(from_os_str))]
     pub meta_name: PathBuf,
 }
 
 pub struct ConsoleSearch {
-    common_words: CommonWords,
     metadata: Metadata,
     db: DB,
 }
 
 impl ConsoleSearch {
     pub fn from_command(command: CommandConsole) -> io::Result<ConsoleSearch> {
-        let common_words = CommonWords::from_file(command.stop_words)?;
-
         let map_file = command.meta_name.with_extension("map");
         let idx_file = command.meta_name.with_extension("idx");
         let sst_file = command.meta_name.with_extension("sst");
@@ -42,7 +35,7 @@ impl ConsoleSearch {
         drop(db);
         let db = DB::open_for_read_only(DBOptions::default(), rocksdb, false).unwrap();
 
-        Ok(ConsoleSearch { common_words, metadata, db })
+        Ok(ConsoleSearch { metadata, db })
     }
 
     pub fn serve(self) {
@@ -52,20 +45,19 @@ impl ConsoleSearch {
 
             let mut query = String::new();
             io::stdin().read_line(&mut query).unwrap();
-            let query = query.trim().to_lowercase();
 
             if query.is_empty() { break }
 
-            let (elapsed, _) = measure_time(|| search(&self.metadata, &self.db, &self.common_words, &query));
+            let (elapsed, _) = measure_time(|| search(&self.metadata, &self.db, &query));
             println!("Finished in {}", elapsed);
         }
     }
 }
 
-fn search(metadata: &Metadata, database: &DB, common_words: &CommonWords, query: &str) {
+fn search(metadata: &Metadata, database: &DB, query: &str) {
     let mut automatons = Vec::new();
-    for query in query.split_whitespace().filter(|q| !common_words.contains(*q)) {
-        let lev = automaton::build(query);
+    for query in query.split_whitespace().map(str::to_lowercase) {
+        let lev = automaton::build_prefix_dfa(&query);
         automatons.push(lev);
     }
 

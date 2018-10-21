@@ -1,4 +1,5 @@
 use std::ops::Deref;
+
 use fst::Automaton;
 use levenshtein_automata::{
     LevenshteinAutomatonBuilder as LevBuilder,
@@ -50,14 +51,38 @@ impl AutomatonExt for DfaExt {
     }
 }
 
-pub fn build(query: &str) -> DfaExt {
+enum PrefixSetting {
+    Prefix,
+    NoPrefix,
+}
+
+fn build_dfa_with_setting(query: &str, setting: PrefixSetting) -> DfaExt {
+    use self::PrefixSetting::{Prefix, NoPrefix};
+
     let dfa = match query.len() {
-        0 ..= 4 => LEVDIST0.build_prefix_dfa(query),
-        5 ..= 8 => LEVDIST1.build_prefix_dfa(query),
-        _       => LEVDIST2.build_prefix_dfa(query),
+        0 ..= 4 => match setting {
+            Prefix   => LEVDIST0.build_prefix_dfa(query),
+            NoPrefix => LEVDIST0.build_dfa(query),
+        },
+        5 ..= 8 => match setting {
+            Prefix   => LEVDIST1.build_prefix_dfa(query),
+            NoPrefix => LEVDIST1.build_dfa(query),
+        },
+        _ => match setting {
+            Prefix   => LEVDIST2.build_prefix_dfa(query),
+            NoPrefix => LEVDIST2.build_dfa(query),
+        },
     };
 
     DfaExt { query_len: query.len(), automaton: dfa }
+}
+
+pub fn build_prefix_dfa(query: &str) -> DfaExt {
+    build_dfa_with_setting(query, PrefixSetting::Prefix)
+}
+
+pub fn build_dfa(query: &str) -> DfaExt {
+    build_dfa_with_setting(query, PrefixSetting::NoPrefix)
 }
 
 pub trait AutomatonExt: Automaton {

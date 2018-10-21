@@ -19,10 +19,6 @@ pub struct CommandHttp {
     #[structopt(short = "l", default_value = "127.0.0.1:3030")]
     pub listen_addr: SocketAddr,
 
-    /// The stop word file, each word must be separated by a newline.
-    #[structopt(long = "stop-words", parse(from_os_str))]
-    pub stop_words: PathBuf,
-
     /// Meta file name (e.g. relaxed-colden).
     #[structopt(parse(from_os_str))]
     pub meta_name: PathBuf,
@@ -41,15 +37,12 @@ struct SearchQuery { q: String }
 
 pub struct HttpServer {
     listen_addr: SocketAddr,
-    common_words: Arc<CommonWords>,
     metadata: Arc<Metadata>,
     db: Arc<DB>,
 }
 
 impl HttpServer {
     pub fn from_command(command: CommandHttp) -> io::Result<HttpServer> {
-        let common_words = CommonWords::from_file(command.stop_words)?;
-
         let map_file = command.meta_name.with_extension("map");
         let idx_file = command.meta_name.with_extension("idx");
         let sst_file = command.meta_name.with_extension("sst");
@@ -64,19 +57,18 @@ impl HttpServer {
 
         Ok(HttpServer {
             listen_addr: command.listen_addr,
-            common_words: Arc::new(common_words),
             metadata: Arc::new(metadata),
             db: Arc::new(db),
         })
     }
 
     pub fn serve(self) {
-        let HttpServer { listen_addr, common_words, metadata, db } = self;
+        let HttpServer { listen_addr, metadata, db } = self;
 
         let routes = warp::path("search")
             .and(warp::query())
             .map(move |query: SearchQuery| {
-                let body = search(metadata.clone(), db.clone(), common_words.clone(), &query.q).unwrap();
+                let body = search(metadata.clone(), db.clone(), &query.q).unwrap();
                 body
             })
             .with(warp::reply::with::header("Content-Type", "application/json"))
@@ -86,15 +78,13 @@ impl HttpServer {
     }
 }
 
-fn search<M, D, C>(metadata: M, database: D, common_words: C, query: &str) -> Result<String, Box<Error>>
+fn search<M, D>(metadata: M, database: D, query: &str) -> Result<String, Box<Error>>
 where M: AsRef<Metadata>,
       D: AsRef<DB>,
-      C: AsRef<CommonWords>,
 {
     let mut automatons = Vec::new();
     for query in query.split_whitespace().map(str::to_lowercase) {
-        if common_words.as_ref().contains(&query) { continue }
-        let lev = automaton::build(&query);
+        let lev = automaton::build_prefix_dfa(&query);
         automatons.push(lev);
     }
 

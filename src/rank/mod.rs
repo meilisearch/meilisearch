@@ -21,6 +21,11 @@ impl Document {
         unsafe { Self::from_sorted_matches(doc, vec![match_]) }
     }
 
+    pub fn from_matches(doc: DocumentId, mut matches: Vec<Match>) -> Self {
+        matches.sort_unstable();
+        unsafe { Self::from_sorted_matches(doc, matches) }
+    }
+
     pub unsafe fn from_sorted_matches(id: DocumentId, matches: Vec<Match>) -> Self {
         Self { id, matches }
     }

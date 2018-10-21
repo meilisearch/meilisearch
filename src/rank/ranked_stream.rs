@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::ops::Range;
 use std::rc::Rc;
-use std::{mem, vec, cmp};
+use std::{mem, vec};
 
 use fnv::FnvHashMap;
 use fst::Streamer;
@@ -11,9 +11,16 @@ use group_by::GroupByMut;
 use crate::automaton::{DfaExt, AutomatonExt};
 use crate::metadata::Metadata;
 use crate::metadata::ops::OpBuilder;
-use crate::rank::criterion::{self, Criterion};
+use crate::rank::criterion::Criterion;
 use crate::rank::Document;
 use crate::{Match, DocumentId};
+
+fn clamp_range<T: Copy + Ord>(range: Range<T>, big: Range<T>) -> Range<T> {
+    Range {
+        start: range.start.min(big.end).max(big.start),
+        end: range.end.min(big.end).max(big.start),
+    }
+}
 
 pub struct Config<'m, C, F> {
     pub metadata: &'m Metadata,
@@ -67,10 +74,7 @@ impl<'m, C, F> RankedStream<'m, C, F> {
             }
         }
 
-        matches.into_iter().map(|(id, mut matches)| {
-            matches.sort_unstable();
-            unsafe { Document::from_sorted_matches(id, matches) }
-        }).collect()
+        matches.into_iter().map(|(id, matches)| Document::from_matches(id, matches)).collect()
     }
 }
 
@@ -92,10 +96,7 @@ where C: Criterion
             }
         }
 
-        let range = Range {
-            start: cmp::min(range.start, documents.len()),
-            end: cmp::min(range.end, documents.len()),
-        };
+        let range = clamp_range(range, 0..documents.len());
         documents[range].to_vec()
     }
 
