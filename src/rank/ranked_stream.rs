@@ -81,6 +81,7 @@ impl<'m, C, F> RankedStream<'m, C, F> {
 impl<'a, C, F> RankedStream<'a, C, F>
 where C: Criterion
 {
+    // TODO don't sort to much documents, we can skip useless sorts
     pub fn retrieve_documents(mut self, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.retrieve_all_documents();
         let mut groups = vec![documents.as_mut_slice()];
