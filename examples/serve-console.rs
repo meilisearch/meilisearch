@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use elapsed::measure_time;
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
-use raptor::rank::{criterion, Config, RankedStream, Document};
-use raptor::{automaton, DocumentId, Metadata, CommonWords};
+use pentium::rank::{criterion, Config, RankedStream};
+use pentium::{automaton, DocumentId, Metadata};
 
 #[derive(Debug, StructOpt)]
 pub struct CommandConsole {

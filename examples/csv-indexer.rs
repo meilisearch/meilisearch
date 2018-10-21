@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io;
 
 use csv::ReaderBuilder;
-use raptor::{MetadataBuilder, DocIndex, Tokenizer, CommonWords};
+use pentium::{MetadataBuilder, DocIndex, Tokenizer, CommonWords};
 use rocksdb::{SstFileWriter, EnvOptions, ColumnFamilyOptions};
 use structopt::StructOpt;
 

@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::error::Error;
 use std::sync::Arc;
 
-use raptor::rank::{criterion, Config, RankedStream};
-use raptor::{automaton, Metadata, CommonWords};
+use pentium::rank::{criterion, Config, RankedStream};
+use pentium::{automaton, Metadata};
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
 use warp::Filter;
 use structopt::StructOpt;

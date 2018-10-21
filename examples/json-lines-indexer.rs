@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use serde_json::from_str;
 use rocksdb::{SstFileWriter, EnvOptions, ColumnFamilyOptions};
-use raptor::{MetadataBuilder, DocIndex, Tokenizer, CommonWords};
+use pentium::{MetadataBuilder, DocIndex, Tokenizer, CommonWords};
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
