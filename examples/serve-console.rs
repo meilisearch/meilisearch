@@ -77,7 +77,7 @@ fn search(metadata: &Metadata, database: &DB, query: &str) {
 
     // "Sony" "PlayStation 4 500GB"
     let config = Config {
-        metadata: metadata,
+        index: unimplemented!(),
         automatons: automatons,
         criteria: criterion::default(),
         distinct: (distinct_by_title_first_four_chars, 1),

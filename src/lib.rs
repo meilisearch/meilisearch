@@ -2,6 +2,11 @@
 
 #[macro_use] extern crate lazy_static;
 
+pub mod index;
+pub mod pentium;
+pub mod blob;
+pub mod doc_indexes;
+
 pub mod rank;
 pub mod metadata;
 pub mod vec_read_only;

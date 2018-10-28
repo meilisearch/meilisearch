@@ -1,7 +1,8 @@
 use std::ops::Deref;
 use std::sync::Arc;
+use std::fmt;
 
-#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct VecReadOnly<T> {
     inner: Arc<Vec<T>>,
     offset: usize,
@@ -40,5 +41,11 @@ impl<T> Deref for VecReadOnly<T> {
 
     fn deref(&self) -> &Self::Target {
         self.as_slice()
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for VecReadOnly<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.inner.fmt(f)
     }
 }

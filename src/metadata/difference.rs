@@ -64,13 +64,13 @@ mod tests {
     #[test]
     fn empty() {
         let positive_metas = construct_metadata(vec![
-            ("chameau".into(), DocIndex{ document: 12, attribute: 1, attribute_index: 22 }),
-            ("chameau".into(), DocIndex{ document: 31, attribute: 0, attribute_index: 1 }),
+            ("chameau".into(), DocIndex{ document_id: 12, attribute: 1, attribute_index: 22 }),
+            ("chameau".into(), DocIndex{ document_id: 31, attribute: 0, attribute_index: 1 }),
         ]);
 
         let negative_metas = construct_metadata(vec![
-            ("chameau".into(), DocIndex{ document: 12, attribute: 1, attribute_index: 22 }),
-            ("chameau".into(), DocIndex{ document: 31, attribute: 0, attribute_index: 1 }),
+            ("chameau".into(), DocIndex{ document_id: 12, attribute: 1, attribute_index: 22 }),
+            ("chameau".into(), DocIndex{ document_id: 31, attribute: 0, attribute_index: 1 }),
         ]);
 
         let positives = &[positive_metas];
@@ -82,8 +82,8 @@ mod tests {
 
     #[test]
     fn one_positive() {
-        let di1 = DocIndex{ document: 12, attribute: 1, attribute_index: 22 };
-        let di2 = DocIndex{ document: 31, attribute: 0, attribute_index: 1 };
+        let di1 = DocIndex{ document_id: 12, attribute: 1, attribute_index: 22 };
+        let di2 = DocIndex{ document_id: 31, attribute: 0, attribute_index: 1 };
 
         let positive_metas = construct_metadata(vec![
             ("chameau".into(), di1),
@@ -105,8 +105,8 @@ mod tests {
 
     #[test]
     fn more_negative_than_positive() {
-        let di1 = DocIndex{ document: 12, attribute: 1, attribute_index: 22 };
-        let di2 = DocIndex{ document: 31, attribute: 0, attribute_index: 1 };
+        let di1 = DocIndex{ document_id: 12, attribute: 1, attribute_index: 22 };
+        let di2 = DocIndex{ document_id: 31, attribute: 0, attribute_index: 1 };
 
         let positive_metas = construct_metadata(vec![
             ("chameau".into(), di1),

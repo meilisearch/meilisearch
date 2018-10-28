@@ -107,7 +107,7 @@ mod tests {
 
         let mut builder = MetadataBuilder::new(mapw, indexesw);
 
-        let doc = DocIndex { document: 12, attribute: 1, attribute_index: 22 };
+        let doc = DocIndex { document_id: 12, attribute: 1, attribute_index: 22 };
         builder.insert("chameau".into(), doc);
 
         let (map, indexes) = builder.into_inner().unwrap();
@@ -123,8 +123,8 @@ mod tests {
 
         let mut builder = MetadataBuilder::new(mapw, indexesw);
 
-        let doc1 = DocIndex { document: 12, attribute: 1, attribute_index: 22 };
-        let doc2 = DocIndex { document: 31, attribute: 0, attribute_index: 1 };
+        let doc1 = DocIndex { document_id: 12, attribute: 1, attribute_index: 22 };
+        let doc2 = DocIndex { document_id: 31, attribute: 0, attribute_index: 1 };
         builder.insert("chameau".into(), doc1);
         builder.insert("chameau".into(), doc2);
 

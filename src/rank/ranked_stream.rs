@@ -9,8 +9,8 @@ use fst::Streamer;
 use group_by::GroupByMut;
 
 use crate::automaton::{DfaExt, AutomatonExt};
-use crate::metadata::Metadata;
-use crate::metadata::ops::OpBuilder;
+use crate::index::Index;
+use crate::blob::{Blob, Merge};
 use crate::rank::criterion::Criterion;
 use crate::rank::Document;
 use crate::{Match, DocumentId};
@@ -22,28 +22,26 @@ fn clamp_range<T: Copy + Ord>(range: Range<T>, big: Range<T>) -> Range<T> {
     }
 }
 
-pub struct Config<'m, C, F> {
-    pub metadata: &'m Metadata,
+pub struct Config<C, F> {
+    pub index: Index,
     pub automatons: Vec<DfaExt>,
     pub criteria: Vec<C>,
     pub distinct: (F, usize),
 }
 
 pub struct RankedStream<'m, C, F> {
-    stream: crate::metadata::ops::Union<'m>,
+    stream: crate::blob::Merge<'m>,
     automatons: Vec<Rc<DfaExt>>,
     criteria: Vec<C>,
     distinct: (F, usize),
 }
 
 impl<'m, C, F> RankedStream<'m, C, F> {
-    pub fn new(config: Config<'m, C, F>) -> Self {
+    pub fn new(config: Config<C, F>) -> Self {
         let automatons: Vec<_> = config.automatons.into_iter().map(Rc::new).collect();
-        let mut builder = OpBuilder::with_automatons(automatons.clone());
-        builder.push(config.metadata);
 
         RankedStream {
-            stream: builder.union(),
+            stream: Merge::with_automatons(automatons.clone(), unimplemented!()),
             automatons: automatons,
             criteria: config.criteria,
             distinct: config.distinct,

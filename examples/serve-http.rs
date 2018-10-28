@@ -89,7 +89,7 @@ where M: AsRef<Metadata>,
     }
 
     let config = Config {
-        metadata: metadata.as_ref(),
+        index: unimplemented!(),
         automatons: automatons,
         criteria: criterion::default(),
         distinct: ((), 1),

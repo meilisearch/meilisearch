@@ -1,13 +1,15 @@
 use std::collections::BTreeMap;
+
 use fst::{map, Streamer, Automaton};
 use fst::automaton::AlwaysMatch;
 use sdset::multi::OpBuilder as SdOpBuilder;
 use sdset::{SetOperation, Set};
-use crate::metadata::ops_indexed_value::{
+
+use crate::blob::ops_indexed_value::{
     OpIndexedValueBuilder, UnionIndexedValue,
 };
-use crate::metadata::doc_indexes::DocIndexes;
-use crate::metadata::Metadata;
+use crate::blob::Blob;
+use crate::doc_indexes::DocIndexes;
 use crate::vec_read_only::VecReadOnly;
 use crate::DocIndex;
 
@@ -38,20 +40,20 @@ impl<'m, A: 'm + Automaton> OpBuilder<'m, A> {
         }
     }
 
-    pub fn add(mut self, metadata: &'m Metadata) -> Self where A: Clone {
-        self.push(metadata);
+    pub fn add(mut self, blob: &'m Blob) -> Self where A: Clone {
+        self.push(blob);
         self
     }
 
-    pub fn push(&mut self, metadata: &'m Metadata) where A: Clone {
+    pub fn push(&mut self, blob: &'m Blob) where A: Clone {
         let mut op = map::OpBuilder::new();
         for automaton in self.automatons.iter().cloned() {
-            let stream = metadata.as_map().search(automaton);
+            let stream = blob.as_map().search(automaton);
             op.push(stream);
         }
 
         let stream = op.union();
-        let indexes = metadata.as_indexes();
+        let indexes = blob.as_indexes();
 
         self.maps.push(stream);
         self.indexes.push(indexes);
@@ -171,7 +173,7 @@ logical_operation!(struct SymmetricDifference, symmetric_difference);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::MetadataBuilder;
+    use crate::blob::PositiveBlobBuilder;
 
     fn get_exact_key<'m, I, S>(stream: I, key: &[u8]) -> Option<VecReadOnly<DocIndex>>
     where
@@ -188,30 +190,28 @@ mod tests {
     }
 
     #[test]
-    fn union_two_metadata() {
+    fn union_two_blobs() {
         let doc1 = DocIndex { document_id: 12, attribute: 1, attribute_index: 22 };
         let doc2 = DocIndex { document_id: 31, attribute: 0, attribute_index: 1 };
 
         let meta1 = {
             let mapw = Vec::new();
             let indexesw = Vec::new();
-            let mut builder = MetadataBuilder::new(mapw, indexesw);
+            let mut builder = PositiveBlobBuilder::new(mapw, indexesw);
 
-            builder.insert("chameau".into(), doc1);
+            builder.insert("chameau", doc1);
 
-            let (map, indexes) = builder.into_inner().unwrap();
-            Metadata::from_bytes(map, indexes).unwrap()
+            Blob::Positive(builder.build().unwrap())
         };
 
         let meta2 = {
             let mapw = Vec::new();
             let indexesw = Vec::new();
-            let mut builder = MetadataBuilder::new(mapw, indexesw);
+            let mut builder = PositiveBlobBuilder::new(mapw, indexesw);
 
-            builder.insert("chameau".into(), doc2);
+            builder.insert("chameau", doc2);
 
-            let (map, indexes) = builder.into_inner().unwrap();
-            Metadata::from_bytes(map, indexes).unwrap()
+            Blob::Positive(builder.build().unwrap())
         };
 
         let metas = OpBuilder::new().add(&meta1).add(&meta2).union();
@@ -221,30 +221,28 @@ mod tests {
     }
 
     #[test]
-    fn intersection_two_metadata() {
+    fn intersection_two_blobs() {
         let doc1 = DocIndex { document_id: 31, attribute: 0, attribute_index: 1 };
         let doc2 = DocIndex { document_id: 31, attribute: 0, attribute_index: 1 };
 
         let meta1 = {
             let mapw = Vec::new();
             let indexesw = Vec::new();
-            let mut builder = MetadataBuilder::new(mapw, indexesw);
+            let mut builder = PositiveBlobBuilder::new(mapw, indexesw);
 
-            builder.insert("chameau".into(), doc1);
+            builder.insert("chameau", doc1);
 
-            let (map, indexes) = builder.into_inner().unwrap();
-            Metadata::from_bytes(map, indexes).unwrap()
+            Blob::Positive(builder.build().unwrap())
         };
 
         let meta2 = {
             let mapw = Vec::new();
             let indexesw = Vec::new();
-            let mut builder = MetadataBuilder::new(mapw, indexesw);
+            let mut builder = PositiveBlobBuilder::new(mapw, indexesw);
 
-            builder.insert("chameau".into(), doc2);
+            builder.insert("chameau", doc2);
 
-            let (map, indexes) = builder.into_inner().unwrap();
-            Metadata::from_bytes(map, indexes).unwrap()
+            Blob::Positive(builder.build().unwrap())
         };
 
         let metas = OpBuilder::new().add(&meta1).add(&meta2).intersection();
@@ -254,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn difference_two_metadata() {
+    fn difference_two_blobs() {
         let doc1 = DocIndex { document_id: 12, attribute: 1, attribute_index: 22 };
         let doc2 = DocIndex { document_id: 31, attribute: 0, attribute_index: 1 };
         let doc3 = DocIndex { document_id: 31, attribute: 0, attribute_index: 1 };
@@ -262,24 +260,22 @@ mod tests {
         let meta1 = {
             let mapw = Vec::new();
             let indexesw = Vec::new();
-            let mut builder = MetadataBuilder::new(mapw, indexesw);
+            let mut builder = PositiveBlobBuilder::new(mapw, indexesw);
 
-            builder.insert("chameau".into(), doc1);
-            builder.insert("chameau".into(), doc2);
+            builder.insert("chameau", doc1);
+            builder.insert("chameau", doc2);
 
-            let (map, indexes) = builder.into_inner().unwrap();
-            Metadata::from_bytes(map, indexes).unwrap()
+            Blob::Positive(builder.build().unwrap())
         };
 
         let meta2 = {
             let mapw = Vec::new();
             let indexesw = Vec::new();
-            let mut builder = MetadataBuilder::new(mapw, indexesw);
+            let mut builder = PositiveBlobBuilder::new(mapw, indexesw);
 
-            builder.insert("chameau".into(), doc3);
+            builder.insert("chameau", doc3);
 
-            let (map, indexes) = builder.into_inner().unwrap();
-            Metadata::from_bytes(map, indexes).unwrap()
+            Blob::Positive(builder.build().unwrap())
         };
 
         let metas = OpBuilder::new().add(&meta1).add(&meta2).difference();
@@ -289,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn symmetric_difference_two_metadata() {
+    fn symmetric_difference_two_blobs() {
         let doc1 = DocIndex { document_id: 12, attribute: 1, attribute_index: 22 };
         let doc2 = DocIndex { document_id: 31, attribute: 0, attribute_index: 1 };
         let doc3 = DocIndex { document_id: 32, attribute: 0, attribute_index: 1 };
@@ -298,27 +294,25 @@ mod tests {
         let meta1 = {
             let mapw = Vec::new();
             let indexesw = Vec::new();
-            let mut builder = MetadataBuilder::new(mapw, indexesw);
+            let mut builder = PositiveBlobBuilder::new(mapw, indexesw);
 
-            builder.insert("chameau".into(), doc1);
-            builder.insert("chameau".into(), doc2);
-            builder.insert("chameau".into(), doc3);
+            builder.insert("chameau", doc1);
+            builder.insert("chameau", doc2);
+            builder.insert("chameau", doc3);
 
-            let (map, indexes) = builder.into_inner().unwrap();
-            Metadata::from_bytes(map, indexes).unwrap()
+            Blob::Positive(builder.build().unwrap())
         };
 
         let meta2 = {
             let mapw = Vec::new();
             let indexesw = Vec::new();
-            let mut builder = MetadataBuilder::new(mapw, indexesw);
+            let mut builder = PositiveBlobBuilder::new(mapw, indexesw);
 
-            builder.insert("chameau".into(), doc2);
-            builder.insert("chameau".into(), doc3);
-            builder.insert("chameau".into(), doc4);
+            builder.insert("chameau", doc2);
+            builder.insert("chameau", doc3);
+            builder.insert("chameau", doc4);
 
-            let (map, indexes) = builder.into_inner().unwrap();
-            Metadata::from_bytes(map, indexes).unwrap()
+            Blob::Positive(builder.build().unwrap())
         };
 
         let metas = OpBuilder::new().add(&meta1).add(&meta2).symmetric_difference();
