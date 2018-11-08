@@ -2,86 +2,61 @@ use std::error::Error;
 use std::path::Path;
 use std::io::Write;
 
-use fst::{Map, MapBuilder};
-
-use crate::DocIndex;
-use crate::doc_indexes::{DocIndexes, DocIndexesBuilder};
+use crate::DocumentId;
+use crate::data::{DocIds, DocIdsBuilder};
 
 pub struct NegativeBlob {
-    map: Map,
-    indexes: DocIndexes,
+    doc_ids: DocIds,
 }
 
 impl NegativeBlob {
-    pub unsafe fn from_paths<P, Q>(map: P, indexes: Q) -> Result<Self, Box<Error>>
+    pub unsafe fn from_path<P>(doc_ids: P) -> Result<Self, Box<Error>>
     where P: AsRef<Path>,
-          Q: AsRef<Path>,
     {
-        let map = Map::from_path(map)?;
-        let indexes = DocIndexes::from_path(indexes)?;
-        Ok(NegativeBlob { map, indexes })
+        let doc_ids = DocIds::from_path(doc_ids)?;
+        Ok(NegativeBlob { doc_ids })
     }
 
-    pub fn from_bytes(map: Vec<u8>, indexes: Vec<u8>) -> Result<Self, Box<Error>> {
-        let map = Map::from_bytes(map)?;
-        let indexes = DocIndexes::from_bytes(indexes)?;
-        Ok(NegativeBlob { map, indexes })
+    pub fn from_bytes(doc_ids: Vec<u8>) -> Result<Self, Box<Error>> {
+        let doc_ids = DocIds::from_bytes(doc_ids)?;
+        Ok(NegativeBlob { doc_ids })
     }
 
-    pub fn get<K: AsRef<[u8]>>(&self, key: K) -> Option<&[DocIndex]> {
-        self.map.get(key).and_then(|index| self.indexes.get(index))
+    pub fn as_ids(&self) -> &DocIds {
+        &self.doc_ids
     }
 
-    pub fn as_map(&self) -> &Map {
-        &self.map
-    }
-
-    pub fn as_indexes(&self) -> &DocIndexes {
-        &self.indexes
-    }
-
-    pub fn explode(self) -> (Map, DocIndexes) {
-        (self.map, self.indexes)
+    pub fn into_doc_ids(self) -> DocIds {
+        self.doc_ids
     }
 }
 
-pub struct NegativeBlobBuilder<W, X> {
-    map: W,
-    indexes: DocIndexesBuilder<X>,
+pub struct NegativeBlobBuilder<W> {
+    doc_ids: DocIdsBuilder<W>,
 }
 
-impl<W: Write, X: Write> NegativeBlobBuilder<W, X> {
-    pub fn new(map: W, indexes: X) -> Self {
-        Self { map, indexes: DocIndexesBuilder::new(indexes) }
+impl<W: Write> NegativeBlobBuilder<W> {
+    pub fn new(wrt: W) -> Self {
+        Self { doc_ids: DocIdsBuilder::new(wrt) }
     }
 
-    pub fn insert<S: Into<String>>(&mut self, key: S, index: DocIndex) {
-        self.indexes.insert(key.into(), index)
+    pub fn insert(&mut self, doc: DocumentId) {
+        self.doc_ids.insert(doc)
     }
 
     pub fn finish(self) -> Result<(), Box<Error>> {
         self.into_inner().map(|_| ())
     }
 
-    pub fn into_inner(self) -> Result<(W, X), Box<Error>> {
+    pub fn into_inner(self) -> Result<W, Box<Error>> {
         // FIXME insert a magic number that indicates if the endianess
         //       of the input is the same as the machine that is reading it.
-
-        let map = {
-            let mut keys_builder = MapBuilder::new(self.map)?;
-            let keys = self.indexes.keys().map(|(s, v)| (s, *v));
-            keys_builder.extend_iter(keys)?;
-            keys_builder.into_inner()?
-        };
-
-        let indexes = self.indexes.into_inner()?;
-
-        Ok((map, indexes))
+        Ok(self.doc_ids.into_inner()?)
     }
 }
 
-impl NegativeBlobBuilder<Vec<u8>, Vec<u8>> {
+impl NegativeBlobBuilder<Vec<u8>> {
     pub fn build(self) -> Result<NegativeBlob, Box<Error>> {
-        self.into_inner().and_then(|(m, i)| NegativeBlob::from_bytes(m, i))
+        self.into_inner().and_then(|ids| NegativeBlob::from_bytes(ids))
     }
 }

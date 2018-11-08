@@ -8,6 +8,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 byteorder = "1.2"
 lazy_static = "1.1"
 sdset = "0.2"
+fs2 = "0.4"
 fnv = "1.0"
 
 [dependencies.fst]

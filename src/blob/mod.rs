@@ -10,11 +10,20 @@ pub use self::negative_blob::{NegativeBlob, NegativeBlobBuilder};
 
 use fst::Map;
 
-use crate::doc_indexes::DocIndexes;
+use crate::data::DocIndexes;
 
 pub enum Blob {
     Positive(PositiveBlob),
     Negative(NegativeBlob),
+}
+
+impl Blob {
+    pub fn sign(&self) -> Sign {
+        match self {
+            Blob::Positive(_) => Sign::Positive,
+            Blob::Negative(_) => Sign::Negative,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -28,29 +37,6 @@ impl Sign {
         match self {
             Sign::Positive => Sign::Negative,
             Sign::Negative => Sign::Positive,
-        }
-    }
-}
-
-impl Blob {
-    pub fn sign(&self) -> Sign {
-        match self {
-            Blob::Positive(_) => Sign::Positive,
-            Blob::Negative(_) => Sign::Negative,
-        }
-    }
-
-    pub fn as_map(&self) -> &Map {
-        match self {
-            Blob::Positive(blob) => blob.as_map(),
-            Blob::Negative(blob) => blob.as_map(),
-        }
-    }
-
-    pub fn as_indexes(&self) -> &DocIndexes {
-        match self {
-            Blob::Positive(blob) => blob.as_indexes(),
-            Blob::Negative(blob) => blob.as_indexes(),
         }
     }
 }

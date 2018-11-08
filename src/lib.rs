@@ -3,18 +3,14 @@
 #[macro_use] extern crate lazy_static;
 
 pub mod index;
-pub mod pentium;
 pub mod blob;
-pub mod doc_indexes;
-
+pub mod data;
 pub mod rank;
-pub mod metadata;
 pub mod vec_read_only;
 pub mod automaton;
 pub mod tokenizer;
 mod common_words;
 
-pub use self::metadata::{Metadata, MetadataBuilder};
 pub use self::tokenizer::Tokenizer;
 pub use self::common_words::CommonWords;
 

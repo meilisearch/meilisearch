@@ -5,7 +5,7 @@ use std::io::Write;
 use fst::{Map, MapBuilder};
 
 use crate::DocIndex;
-use crate::doc_indexes::{DocIndexes, DocIndexesBuilder};
+use crate::data::{DocIndexes, DocIndexesBuilder};
 
 pub struct PositiveBlob {
     map: Map,

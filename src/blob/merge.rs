@@ -288,18 +288,13 @@ mod tests {
 
     #[test]
     fn single_negative_blob() {
-        let doc1 = DocIndex{ document_id: 0,  attribute: 0, attribute_index: 0 };
-        let doc2 = DocIndex{ document_id: 12, attribute: 0, attribute_index: 2 };
-        let doc3 = DocIndex{ document_id: 0,  attribute: 0, attribute_index: 1 };
-        let doc4 = DocIndex{ document_id: 0,  attribute: 0, attribute_index: 2 };
-
         let a = {
-            let mut builder = NegativeBlobBuilder::new(Vec::new(), Vec::new());
+            let mut builder = NegativeBlobBuilder::new(Vec::new());
 
-            builder.insert("hell",  doc1);
-            builder.insert("hell",  doc2);
-            builder.insert("hello", doc3);
-            builder.insert("wor",   doc4);
+            builder.insert(1);
+            builder.insert(2);
+            builder.insert(3);
+            builder.insert(4);
 
             Blob::Negative(builder.build().unwrap())
         };
@@ -371,10 +366,10 @@ mod tests {
         };
 
         let b = {
-            let mut builder = NegativeBlobBuilder::new(Vec::new(), Vec::new());
+            let mut builder = NegativeBlobBuilder::new(Vec::new());
 
-            builder.insert("hell",  doc2);
-            builder.insert("hello", doc3);
+            builder.insert(2);
+            builder.insert(3);
 
             Blob::Negative(builder.build().unwrap())
         };
@@ -410,10 +405,10 @@ mod tests {
         };
 
         let b = {
-            let mut builder = NegativeBlobBuilder::new(Vec::new(), Vec::new());
+            let mut builder = NegativeBlobBuilder::new(Vec::new());
 
-            builder.insert("hell",  doc1);
-            builder.insert("wor",   doc4);
+            builder.insert(1);
+            builder.insert(4);
 
             Blob::Negative(builder.build().unwrap())
         };
@@ -428,9 +423,9 @@ mod tests {
         };
 
         let d = {
-            let mut builder = NegativeBlobBuilder::new(Vec::new(), Vec::new());
+            let mut builder = NegativeBlobBuilder::new(Vec::new());
 
-            builder.insert("hell",  doc1);
+            builder.insert(1);
 
             Blob::Negative(builder.build().unwrap())
         };
@@ -478,18 +473,18 @@ mod tests {
         };
 
         let c = {
-            let mut builder = NegativeBlobBuilder::new(Vec::new(), Vec::new());
+            let mut builder = NegativeBlobBuilder::new(Vec::new());
 
-            builder.insert("hell",  doc1);
-            builder.insert("wor",   doc4);
+            builder.insert(1);
+            builder.insert(4);
 
             Blob::Negative(builder.build().unwrap())
         };
 
         let d = {
-            let mut builder = NegativeBlobBuilder::new(Vec::new(), Vec::new());
+            let mut builder = NegativeBlobBuilder::new(Vec::new());
 
-            builder.insert("hell",  doc1);
+            builder.insert(1);
 
             Blob::Negative(builder.build().unwrap())
         };

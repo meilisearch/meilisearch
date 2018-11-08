@@ -9,7 +9,7 @@ use crate::blob::ops_indexed_value::{
     OpIndexedValueBuilder, UnionIndexedValue,
 };
 use crate::blob::Blob;
-use crate::doc_indexes::DocIndexes;
+use crate::data::DocIndexes;
 use crate::vec_read_only::VecReadOnly;
 use crate::DocIndex;
 
@@ -40,23 +40,34 @@ impl<'m, A: 'm + Automaton> OpBuilder<'m, A> {
         }
     }
 
-    pub fn add(mut self, blob: &'m Blob) -> Self where A: Clone {
+    pub fn add(mut self, blob: &'m Blob) -> Self
+    where A: Clone
+    {
         self.push(blob);
         self
     }
 
-    pub fn push(&mut self, blob: &'m Blob) where A: Clone {
-        let mut op = map::OpBuilder::new();
-        for automaton in self.automatons.iter().cloned() {
-            let stream = blob.as_map().search(automaton);
-            op.push(stream);
+    pub fn push(&mut self, blob: &'m Blob)
+    where A: Clone
+    {
+        match blob {
+            Blob::Positive(blob) => {
+                let mut op = map::OpBuilder::new();
+                for automaton in self.automatons.iter().cloned() {
+                    let stream = blob.as_map().search(automaton);
+                    op.push(stream);
+                }
+
+                let stream = op.union();
+                let indexes = blob.as_indexes();
+
+                self.maps.push(stream);
+                self.indexes.push(indexes);
+            },
+            Blob::Negative(blob) => {
+                unimplemented!()
+            },
         }
-
-        let stream = op.union();
-        let indexes = blob.as_indexes();
-
-        self.maps.push(stream);
-        self.indexes.push(indexes);
     }
 
     pub fn union(self) -> Union<'m> {

@@ -5,9 +5,12 @@ use std::path::Path;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::mem;
+
 use fst::raw::MmapReadOnly;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+
 use crate::DocIndex;
+use crate::data::Data;
 
 #[repr(C)]
 struct Range {
@@ -16,32 +19,9 @@ struct Range {
 }
 
 #[derive(Clone)]
-enum DocIndexesData {
-    Shared {
-        vec: Arc<Vec<u8>>,
-        offset: usize,
-        len: usize,
-    },
-    Mmap(MmapReadOnly),
-}
-
-impl Deref for DocIndexesData {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            DocIndexesData::Shared { vec, offset, len } => {
-                &vec[*offset..offset + len]
-            },
-            DocIndexesData::Mmap(m) => m.as_slice(),
-        }
-    }
-}
-
-#[derive(Clone)]
 pub struct DocIndexes {
-    ranges: DocIndexesData,
-    indexes: DocIndexesData,
+    ranges: Data,
+    indexes: Data,
 }
 
 impl DocIndexes {
@@ -52,11 +32,11 @@ impl DocIndexes {
         let range_len = range_len as usize * mem::size_of::<Range>();
 
         let offset = mem::size_of::<u64>() as usize;
-        let ranges = DocIndexesData::Mmap(mmap.range(offset, range_len));
+        let ranges = Data::Mmap(mmap.range(offset, range_len));
 
         let len = mmap.len() - range_len - offset;
         let offset = offset + range_len;
-        let indexes = DocIndexesData::Mmap(mmap.range(offset, len));
+        let indexes = Data::Mmap(mmap.range(offset, len));
 
         Ok(DocIndexes { ranges, indexes })
     }
@@ -68,7 +48,7 @@ impl DocIndexes {
         let range_len = range_len as usize * mem::size_of::<Range>();
 
         let offset = mem::size_of::<u64>() as usize;
-        let ranges = DocIndexesData::Shared {
+        let ranges = Data::Shared {
             vec: vec.clone(),
             offset,
             len: range_len
@@ -76,7 +56,7 @@ impl DocIndexes {
 
         let len = vec.len() - range_len - offset;
         let offset = offset + range_len;
-        let indexes = DocIndexesData::Shared { vec, offset, len };
+        let indexes = Data::Shared { vec, offset, len };
 
         Ok(DocIndexes { ranges, indexes })
     }
