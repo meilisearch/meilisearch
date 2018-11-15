@@ -40,7 +40,7 @@ impl<W: Write> NegativeBlobBuilder<W> {
         Self { doc_ids: DocIdsBuilder::new(wrt) }
     }
 
-    pub fn insert(&mut self, doc: DocumentId) {
+    pub fn insert(&mut self, doc: DocumentId) -> bool {
         self.doc_ids.insert(doc)
     }
 

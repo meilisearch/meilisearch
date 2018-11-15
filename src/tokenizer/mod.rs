@@ -1,28 +1,32 @@
 use std::mem;
 use self::Separator::*;
 
+pub trait TokenizerBuilder {
+    fn build<'a>(&self, text: &'a str) -> Box<Iterator<Item=(usize, &'a str)> + 'a>;
+}
+
+pub struct DefaultBuilder;
+
+impl DefaultBuilder {
+    pub fn new() -> DefaultBuilder {
+        DefaultBuilder
+    }
+}
+
+impl TokenizerBuilder for DefaultBuilder {
+    fn build<'a>(&self, text: &'a str) -> Box<Iterator<Item=(usize, &'a str)> + 'a> {
+        Box::new(Tokenizer::new(text))
+    }
+}
+
 pub struct Tokenizer<'a> {
+    index: usize,
     inner: &'a str,
 }
 
 impl<'a> Tokenizer<'a> {
     pub fn new(string: &str) -> Tokenizer {
-        Tokenizer { inner: string }
-    }
-
-    pub fn iter(&self) -> Tokens {
-        Tokens::new(self.inner)
-    }
-}
-
-pub struct Tokens<'a> {
-    index: usize,
-    inner: &'a str,
-}
-
-impl<'a> Tokens<'a> {
-    fn new(string: &str) -> Tokens {
-        Tokens {
+        Tokenizer {
             index: 0,
             inner: string.trim_matches(&[' ', '.', ';', ',', '!', '?', '-', '\'', '"'][..]),
         }
@@ -52,7 +56,7 @@ impl Separator {
     }
 }
 
-impl<'a> Iterator for Tokens<'a> {
+impl<'a> Iterator for Tokenizer<'a> {
     type Item = (usize, &'a str);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -101,37 +105,33 @@ mod tests {
 
     #[test]
     fn easy() {
-        let tokenizer = Tokenizer::new("salut");
-        let mut tokens = tokenizer.iter();
+        let mut tokenizer = Tokenizer::new("salut");
 
-        assert_eq!(tokens.next(), Some((0, "salut")));
-        assert_eq!(tokens.next(), None);
+        assert_eq!(tokenizer.next(), Some((0, "salut")));
+        assert_eq!(tokenizer.next(), None);
 
-        let tokenizer = Tokenizer::new("yo    ");
-        let mut tokens = tokenizer.iter();
+        let mut tokenizer = Tokenizer::new("yo    ");
 
-        assert_eq!(tokens.next(), Some((0, "yo")));
-        assert_eq!(tokens.next(), None);
+        assert_eq!(tokenizer.next(), Some((0, "yo")));
+        assert_eq!(tokenizer.next(), None);
     }
 
     #[test]
     fn hard() {
-        let tokenizer = Tokenizer::new(" .? yo lolo. aïe");
-        let mut tokens = tokenizer.iter();
+        let mut tokenizer = Tokenizer::new(" .? yo lolo. aïe");
 
-        assert_eq!(tokens.next(), Some((0, "yo")));
-        assert_eq!(tokens.next(), Some((1, "lolo")));
-        assert_eq!(tokens.next(), Some((9, "aïe")));
-        assert_eq!(tokens.next(), None);
+        assert_eq!(tokenizer.next(), Some((0, "yo")));
+        assert_eq!(tokenizer.next(), Some((1, "lolo")));
+        assert_eq!(tokenizer.next(), Some((9, "aïe")));
+        assert_eq!(tokenizer.next(), None);
 
-        let tokenizer = Tokenizer::new("yo ! lolo ? wtf - lol . aïe ,");
-        let mut tokens = tokenizer.iter();
+        let mut tokenizer = Tokenizer::new("yo ! lolo ? wtf - lol . aïe ,");
 
-        assert_eq!(tokens.next(), Some((0, "yo")));
-        assert_eq!(tokens.next(), Some((8, "lolo")));
-        assert_eq!(tokens.next(), Some((16, "wtf")));
-        assert_eq!(tokens.next(), Some((24, "lol")));
-        assert_eq!(tokens.next(), Some((32, "aïe")));
-        assert_eq!(tokens.next(), None);
+        assert_eq!(tokenizer.next(), Some((0, "yo")));
+        assert_eq!(tokenizer.next(), Some((8, "lolo")));
+        assert_eq!(tokenizer.next(), Some((16, "wtf")));
+        assert_eq!(tokenizer.next(), Some((24, "lol")));
+        assert_eq!(tokenizer.next(), Some((32, "aïe")));
+        assert_eq!(tokenizer.next(), None);
     }
 }

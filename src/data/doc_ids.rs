@@ -47,7 +47,7 @@ impl DocIds {
 }
 
 pub struct DocIdsBuilder<W> {
-    doc_ids: BTreeSet<DocumentId>,
+    doc_ids: BTreeSet<DocumentId>, // TODO: prefer a linked-list
     wrt: W,
 }
 
@@ -59,8 +59,8 @@ impl<W: io::Write> DocIdsBuilder<W> {
         }
     }
 
-    pub fn insert(&mut self, doc: DocumentId) {
-        self.doc_ids.insert(doc);
+    pub fn insert(&mut self, doc: DocumentId) -> bool {
+        self.doc_ids.insert(doc)
     }
 
     pub fn into_inner(mut self) -> io::Result<W> {

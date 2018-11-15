@@ -84,8 +84,7 @@ impl JsonLinesIndexer {
             }
 
             {
-                let title = Tokenizer::new(&product.title);
-                let title = title.iter().filter(|&(_, w)| !self.common_words.contains(w));
+                let title = Tokenizer::new(&product.title).filter(|&(_, w)| !self.common_words.contains(w));
                 insert_document_words(&mut builder, product.id, 1, title);
 
                 let key = format!("{}-title", product.id);
@@ -94,8 +93,7 @@ impl JsonLinesIndexer {
             }
 
             {
-                let description = Tokenizer::new(&product.description);
-                let description = description.iter().filter(|&(_, w)| !self.common_words.contains(w));
+                let description = Tokenizer::new(&product.description).filter(|&(_, w)| !self.common_words.contains(w));
                 insert_document_words(&mut builder, product.id, 2, description);
 
                 let key = format!("{}-description", product.id);

@@ -6,10 +6,11 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
 byteorder = "1.2"
+fnv = "1.0"
+fs2 = "0.4"
 lazy_static = "1.1"
 sdset = "0.2"
-fs2 = "0.4"
-fnv = "1.0"
+unidecode = "0.3"
 
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
@@ -27,12 +28,11 @@ git = "https://github.com/pingcap/rust-rocksdb.git"
 git = "https://github.com/Kerollmops/group-by.git"
 
 [dev-dependencies]
+csv = "1.0"
+elapsed = "0.1"
 moby-name-gen = "0.1"
+serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 structopt = "0.2"
-unidecode = "0.3"
-elapsed = "0.1"
-serde = "1.0"
 warp = "0.1"
-csv = "1.0"
