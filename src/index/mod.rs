@@ -1,6 +1,5 @@
 pub mod blob_name;
 pub mod schema;
-pub mod search;
 pub mod update;
 
 use std::io;
@@ -19,9 +18,12 @@ use ::rocksdb::merge_operator::MergeOperands;
 use crate::rank::Document;
 use crate::data::DocIdsBuilder;
 use crate::{DocIndex, DocumentId};
-use crate::index::{update::Update, search::Search};
+use crate::index::update::Update;
 use crate::blob::{PositiveBlobBuilder, Blob, Sign};
+use crate::blob::ordered_blobs_from_slice;
 use crate::tokenizer::{TokenizerBuilder, DefaultBuilder, Tokenizer};
+use crate::rank::{criterion, Config, RankedStream};
+use crate::automaton;
 
 fn simple_vec_append(key: &[u8], value: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
     let mut output = Vec::new();
@@ -36,6 +38,12 @@ pub struct Index {
 }
 
 impl Index {
+    pub fn create<P: AsRef<Path>>(path: P) -> Result<Index, Box<Error>> {
+        unimplemented!("return a soft error: the database already exist at the given path")
+        // Self::open must not take a parameter for create_if_missing
+        // or we must create an OpenOptions with many parameters
+        // https://doc.rust-lang.org/std/fs/struct.OpenOptions.html
+    }
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Index, Box<Error>> {
         let path = path.as_ref().to_string_lossy();
 
@@ -66,50 +74,47 @@ impl Index {
         Ok(())
     }
 
-    pub fn snapshot(&self) -> Snapshot<&rocksdb::DB> {
-        Snapshot::new(&self.database)
+    fn blobs(&self) -> Result<Vec<Blob>, Box<Error>> {
+        match self.database.get(b"00-blobs-order")? {
+            Some(value) => Ok(ordered_blobs_from_slice(&value)?),
+            None => Ok(Vec::new()),
+        }
     }
-}
 
-impl Search for Index {
-    fn search(&self, text: &str) -> Vec<Document> {
-        unimplemented!()
-    }
-}
+    pub fn search(&self, query: &str) -> Result<Vec<Document>, Box<Error>> {
 
-pub struct Snapshot<D>
-where D: Deref<Target=rocksdb::DB>,
-{
-    inner: rocksdb::Snapshot<D>,
-}
+        // FIXME create a SNAPSHOT for the search !
+        let blobs = self.blobs()?;
 
-impl<D> Snapshot<D>
-where D: Deref<Target=rocksdb::DB>,
-{
-    pub fn new(inner: D) -> Snapshot<D> {
-        Self { inner: rocksdb::Snapshot::new(inner) }
-    }
-}
+        let mut automatons = Vec::new();
+        for query in query.split_whitespace().map(str::to_lowercase) {
+            let lev = automaton::build_prefix_dfa(&query);
+            automatons.push(lev);
+        }
 
-impl<D> Search for Snapshot<D>
-where D: Deref<Target=rocksdb::DB>,
-{
-    fn search(&self, text: &str) -> Vec<Document> {
-        unimplemented!()
+        let config = Config {
+            blobs: &blobs,
+            automatons: automatons,
+            criteria: criterion::default(),
+            distinct: ((), 1),
+        };
+
+        Ok(RankedStream::new(config).retrieve_documents(0..20))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use tempfile::NamedTempFile;
+
     use super::*;
     use crate::index::schema::Schema;
     use crate::index::update::{PositiveUpdateBuilder, NegativeUpdateBuilder};
 
     #[test]
     fn generate_negative_update() -> Result<(), Box<Error>> {
-
-        let schema = Schema::open("/meili/default.sch")?;
-        let mut builder = NegativeUpdateBuilder::new("update-delete-0001.sst");
+        let path = NamedTempFile::new()?.into_temp_path();
+        let mut builder = NegativeUpdateBuilder::new(&path);
 
         // you can insert documents in any order, it is sorted internally
         builder.remove(1);
@@ -157,18 +162,18 @@ mod tests {
 
         //////////////
 
-        let index = Index::open("/meili/data")?;
-        let update = Update::open("update-0001.sst")?;
+        // let index = Index::open("/meili/data")?;
+        // let update = Update::open("update-0001.sst")?;
 
-        // if you create a snapshot before an update
-        let snapshot = index.snapshot();
-        index.ingest_update(update)?;
+        // // if you create a snapshot before an update
+        // let snapshot = index.snapshot();
+        // index.ingest_update(update)?;
 
-        // the snapshot does not see the updates
-        let results = snapshot.search("helo");
+        // // the snapshot does not see the updates
+        // let results = snapshot.search("helo");
 
-        // the raw index itself see new results
-        let results = index.search("helo");
+        // // the raw index itself see new results
+        // let results = index.search("helo");
 
         Ok(())
     }

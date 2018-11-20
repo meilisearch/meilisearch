@@ -8,8 +8,8 @@ pub use self::merge::Merge;
 pub use self::positive_blob::{PositiveBlob, PositiveBlobBuilder};
 pub use self::negative_blob::{NegativeBlob, NegativeBlobBuilder};
 
+use std::error::Error;
 use fst::Map;
-
 use crate::data::DocIndexes;
 
 pub enum Blob {
@@ -39,4 +39,8 @@ impl Sign {
             Sign::Negative => Sign::Positive,
         }
     }
+}
+
+pub fn ordered_blobs_from_slice(slice: &[u8]) -> Result<Vec<Blob>, Box<Error>> {
+    unimplemented!()
 }

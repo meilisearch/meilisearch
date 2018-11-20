@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::str::from_utf8_unchecked;
 use std::io::{self, Write};
 use structopt::StructOpt;
@@ -5,37 +6,25 @@ use std::path::PathBuf;
 
 use elapsed::measure_time;
 use rocksdb::{DB, DBOptions, IngestExternalFileOptions};
+use pentium::index::Index;
 use pentium::rank::{criterion, Config, RankedStream};
-use pentium::{automaton, DocumentId, Metadata};
+use pentium::{automaton, DocumentId};
 
 #[derive(Debug, StructOpt)]
 pub struct CommandConsole {
     /// Meta file name (e.g. relaxed-colden).
     #[structopt(parse(from_os_str))]
-    pub meta_name: PathBuf,
+    pub index_path: PathBuf,
 }
 
 pub struct ConsoleSearch {
-    metadata: Metadata,
-    db: DB,
+    index: Index,
 }
 
 impl ConsoleSearch {
-    pub fn from_command(command: CommandConsole) -> io::Result<ConsoleSearch> {
-        let map_file = command.meta_name.with_extension("map");
-        let idx_file = command.meta_name.with_extension("idx");
-        let sst_file = command.meta_name.with_extension("sst");
-
-        let metadata = unsafe { Metadata::from_paths(map_file, idx_file).unwrap() };
-
-        let rocksdb = "rocksdb/storage";
-        let db = DB::open_default(rocksdb).unwrap();
-        let sst_file = sst_file.to_str().unwrap();
-        db.ingest_external_file(&IngestExternalFileOptions::new(), &[sst_file]).unwrap();
-        drop(db);
-        let db = DB::open_for_read_only(DBOptions::default(), rocksdb, false).unwrap();
-
-        Ok(ConsoleSearch { metadata, db })
+    pub fn from_command(command: CommandConsole) -> Result<ConsoleSearch, Box<Error>> {
+        let index = Index::open(command.index_path)?;
+        Ok(ConsoleSearch { index })
     }
 
     pub fn serve(self) {
@@ -48,13 +37,13 @@ impl ConsoleSearch {
 
             if query.is_empty() { break }
 
-            let (elapsed, _) = measure_time(|| search(&self.metadata, &self.db, &query));
+            let (elapsed, _) = measure_time(|| search(&self.index, &query));
             println!("Finished in {}", elapsed);
         }
     }
 }
 
-fn search(metadata: &Metadata, database: &DB, query: &str) {
+fn search(index: &Index, query: &str) {
     let mut automatons = Vec::new();
     for query in query.split_whitespace().map(str::to_lowercase) {
         let lev = automaton::build_prefix_dfa(&query);
@@ -75,9 +64,11 @@ fn search(metadata: &Metadata, database: &DB, query: &str) {
         }
     };
 
+    let index: Index = unimplemented!();
+
     // "Sony" "PlayStation 4 500GB"
     let config = Config {
-        index: unimplemented!(),
+        blobs: &index.blobs().unwrap(),
         automatons: automatons,
         criteria: criterion::default(),
         distinct: (distinct_by_title_first_four_chars, 1),

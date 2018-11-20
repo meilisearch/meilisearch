@@ -1,6 +1,8 @@
+use std::io::{Read, Write};
 use std::error::Error;
 use std::path::Path;
 use std::ops::BitOr;
+use std::fs::File;
 use std::fmt;
 
 pub const STORED: SchemaProps = SchemaProps { stored: true, indexed: false };
@@ -33,18 +35,52 @@ impl BitOr for SchemaProps {
     }
 }
 
-pub struct SchemaBuilder;
+pub struct SchemaBuilder {
+    fields: Vec<(String, SchemaProps)>,
+}
 
 impl SchemaBuilder {
     pub fn new() -> SchemaBuilder {
-        unimplemented!()
+        SchemaBuilder { fields: Vec::new() }
     }
 
-    pub fn field(&mut self, name: &str, props: SchemaProps) -> SchemaField {
-        unimplemented!()
+    pub fn field<N>(&mut self, name: N, props: SchemaProps) -> SchemaField
+    where N: Into<String>,
+    {
+        let len = self.fields.len();
+        let name = name.into();
+        self.fields.push((name, props));
+
+        SchemaField(len as u32)
     }
 
     pub fn build(self) -> Schema {
+        unimplemented!()
+    }
+}
+
+#[derive(Clone)]
+pub struct Schema;
+
+impl Schema {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Schema, Box<Error>> {
+        let file = File::open(path)?;
+        Schema::read_from(file)
+    }
+
+    pub fn read_from<R: Read>(reader: R) -> Result<Schema, Box<Error>> {
+        unimplemented!()
+    }
+
+    pub fn write_to<W: Write>(writer: W) -> Result<(), Box<Error>> {
+        unimplemented!()
+    }
+
+    pub fn props(&self, field: SchemaField) -> SchemaProps {
+        unimplemented!()
+    }
+
+    pub fn field(&self, name: &str) -> Option<SchemaField> {
         unimplemented!()
     }
 }
@@ -61,22 +97,5 @@ impl SchemaField {
 impl fmt::Display for SchemaField {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Clone)]
-pub struct Schema;
-
-impl Schema {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Schema, Box<Error>> {
-        unimplemented!()
-    }
-
-    pub fn props(&self, field: SchemaField) -> SchemaProps {
-        unimplemented!()
-    }
-
-    pub fn field(&self, name: &str) -> Option<SchemaField> {
-        unimplemented!()
     }
 }

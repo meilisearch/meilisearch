@@ -22,8 +22,8 @@ fn clamp_range<T: Copy + Ord>(range: Range<T>, big: Range<T>) -> Range<T> {
     }
 }
 
-pub struct Config<C, F> {
-    pub index: Index,
+pub struct Config<'a, C, F> {
+    pub blobs: &'a [Blob],
     pub automatons: Vec<DfaExt>,
     pub criteria: Vec<C>,
     pub distinct: (F, usize),
@@ -37,11 +37,11 @@ pub struct RankedStream<'m, C, F> {
 }
 
 impl<'m, C, F> RankedStream<'m, C, F> {
-    pub fn new(config: Config<C, F>) -> Self {
+    pub fn new(config: Config<'m, C, F>) -> Self {
         let automatons: Vec<_> = config.automatons.into_iter().map(Rc::new).collect();
 
         RankedStream {
-            stream: Merge::with_automatons(automatons.clone(), unimplemented!()),
+            stream: Merge::with_automatons(automatons.clone(), config.blobs),
             automatons: automatons,
             criteria: config.criteria,
             distinct: config.distinct,
