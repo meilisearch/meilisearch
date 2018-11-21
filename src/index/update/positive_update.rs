@@ -5,7 +5,7 @@ use std::fmt::Write;
 
 use ::rocksdb::rocksdb_options;
 
-use crate::index::schema::{SchemaProps, Schema, SchemaField};
+use crate::index::schema::{SchemaProps, Schema, SchemaAttr};
 use crate::index::update::{FIELD_BLOBS_ORDER, Update};
 use crate::tokenizer::TokenizerBuilder;
 use crate::index::blob_name::BlobName;
@@ -24,7 +24,7 @@ pub struct PositiveUpdateBuilder<B> {
     path: PathBuf,
     schema: Schema,
     tokenizer_builder: B,
-    new_states: BTreeMap<(DocumentId, SchemaField), NewState>,
+    new_states: BTreeMap<(DocumentId, SchemaAttr), NewState>,
 }
 
 impl<B> PositiveUpdateBuilder<B> {
@@ -38,12 +38,12 @@ impl<B> PositiveUpdateBuilder<B> {
     }
 
     // TODO value must be a field that can be indexed
-    pub fn update_field(&mut self, id: DocumentId, field: SchemaField, value: String) {
+    pub fn update_field(&mut self, id: DocumentId, field: SchemaAttr, value: String) {
         let state = NewState::Updated { value, props: self.schema.props(field) };
         self.new_states.insert((id, field), state);
     }
 
-    pub fn remove_field(&mut self, id: DocumentId, field: SchemaField) {
+    pub fn remove_field(&mut self, id: DocumentId, field: SchemaAttr) {
         self.new_states.insert((id, field), NewState::Removed);
     }
 }

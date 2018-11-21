@@ -1,14 +1,16 @@
+use std::collections::{HashMap, BTreeMap};
 use std::io::{Read, Write};
-use std::error::Error;
 use std::path::Path;
 use std::ops::BitOr;
 use std::fs::File;
 use std::fmt;
 
+use linked_hash_map::LinkedHashMap;
+
 pub const STORED: SchemaProps = SchemaProps { stored: true, indexed: false };
 pub const INDEXED: SchemaProps = SchemaProps { stored: false, indexed: true };
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaProps {
     stored: bool,
     indexed: bool,
@@ -36,66 +38,110 @@ impl BitOr for SchemaProps {
 }
 
 pub struct SchemaBuilder {
-    fields: Vec<(String, SchemaProps)>,
+    attrs: LinkedHashMap<String, SchemaProps>,
 }
 
 impl SchemaBuilder {
     pub fn new() -> SchemaBuilder {
-        SchemaBuilder { fields: Vec::new() }
+        SchemaBuilder { attrs: LinkedHashMap::new() }
     }
 
-    pub fn field<N>(&mut self, name: N, props: SchemaProps) -> SchemaField
-    where N: Into<String>,
-    {
-        let len = self.fields.len();
-        let name = name.into();
-        self.fields.push((name, props));
-
-        SchemaField(len as u32)
+    pub fn new_field<S: Into<String>>(&mut self, name: S, props: SchemaProps) -> SchemaAttr {
+        let len = self.attrs.len();
+        self.attrs.insert(name.into(), props);
+        SchemaAttr(len as u32)
     }
 
     pub fn build(self) -> Schema {
-        unimplemented!()
+        let mut attrs = HashMap::new();
+        let mut props = Vec::new();
+
+        for (i, (name, prop)) in self.attrs.into_iter().enumerate() {
+            attrs.insert(name, SchemaAttr(i as u32));
+            props.push(prop);
+        }
+
+        Schema { attrs, props }
     }
 }
 
-#[derive(Clone)]
-pub struct Schema;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Schema {
+    attrs: HashMap<String, SchemaAttr>,
+    props: Vec<SchemaProps>,
+}
 
 impl Schema {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Schema, Box<Error>> {
+    pub fn open<P: AsRef<Path>>(path: P) -> bincode::Result<Schema> {
         let file = File::open(path)?;
         Schema::read_from(file)
     }
 
-    pub fn read_from<R: Read>(reader: R) -> Result<Schema, Box<Error>> {
-        unimplemented!()
+    pub fn read_from<R: Read>(reader: R) -> bincode::Result<Schema> {
+        let attrs = bincode::deserialize_from(reader)?;
+        let builder = SchemaBuilder { attrs };
+        Ok(builder.build())
     }
 
-    pub fn write_to<W: Write>(writer: W) -> Result<(), Box<Error>> {
-        unimplemented!()
+    pub fn write_to<W: Write>(&self, writer: W) -> bincode::Result<()> {
+        let mut ordered = BTreeMap::new();
+        for (name, field) in &self.attrs {
+            let index = field.as_u32();
+            let props = self.props[index as usize];
+            ordered.insert(index, (name, props));
+        }
+
+        let mut attrs = LinkedHashMap::with_capacity(ordered.len());
+        for (_, (name, props)) in ordered {
+            attrs.insert(name, props);
+        }
+
+        bincode::serialize_into(writer, &attrs)
     }
 
-    pub fn props(&self, field: SchemaField) -> SchemaProps {
-        unimplemented!()
+    pub fn props(&self, attr: SchemaAttr) -> SchemaProps {
+        self.props[attr.as_u32() as usize]
     }
 
-    pub fn field(&self, name: &str) -> Option<SchemaField> {
-        unimplemented!()
+    pub fn attribute<S: AsRef<str>>(&self, name: S) -> Option<SchemaAttr> {
+        self.attrs.get(name.as_ref()).cloned()
     }
 }
 
-#[derive(Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
-pub struct SchemaField(u32);
+#[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
+pub struct SchemaAttr(u32);
 
-impl SchemaField {
+impl SchemaAttr {
     pub fn as_u32(&self) -> u32 {
         self.0
     }
 }
 
-impl fmt::Display for SchemaField {
+impl fmt::Display for SchemaAttr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serialize_deserialize() -> bincode::Result<()> {
+        let mut builder = SchemaBuilder::new();
+        builder.new_field("alphabet", STORED);
+        builder.new_field("beta", STORED | INDEXED);
+        builder.new_field("gamma", INDEXED);
+        let schema = builder.build();
+
+        let mut buffer = Vec::new();
+
+        schema.write_to(&mut buffer)?;
+        let schema2 = Schema::read_from(buffer.as_slice())?;
+
+        assert_eq!(schema, schema2);
+
+        Ok(())
     }
 }

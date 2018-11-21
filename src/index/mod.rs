@@ -136,12 +136,12 @@ mod tests {
         let mut builder = PositiveUpdateBuilder::new("update-positive-0001.sst", schema.clone(), tokenizer_builder);
 
         // you can insert documents in any order, it is sorted internally
-        let title_field = schema.field("title").unwrap();
+        let title_field = schema.attribute("title").unwrap();
         builder.update_field(1, title_field, "hallo!".to_owned());
         builder.update_field(5, title_field, "hello!".to_owned());
         builder.update_field(2, title_field, "hi!".to_owned());
 
-        let name_field = schema.field("name").unwrap();
+        let name_field = schema.attribute("name").unwrap();
         builder.remove_field(4, name_field);
 
         let update = builder.build()?;

@@ -5,11 +5,15 @@ version = "0.1.0"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
+bincode = "1.0"
 byteorder = "1.2"
 fnv = "1.0"
 fs2 = "0.4"
 lazy_static = "1.1"
+linked-hash-map = { version = "0.5", features = ["serde_impl"] }
 sdset = "0.2"
+serde = "1.0"
+serde_derive = "1.0"
 unidecode = "0.3"
 
 [dependencies.fst]
@@ -31,8 +35,6 @@ git = "https://github.com/Kerollmops/group-by.git"
 csv = "1.0"
 elapsed = "0.1"
 moby-name-gen = "0.1"
-serde = "1.0"
-serde_derive = "1.0"
 serde_json = "1.0"
 structopt = "0.2"
 tempfile = "3.0"
