@@ -12,18 +12,27 @@ use std::path::{Path, PathBuf};
 use std::collections::{BTreeSet, BTreeMap};
 
 use fs2::FileExt;
+use ::rocksdb::rocksdb::Writable;
 use ::rocksdb::{rocksdb, rocksdb_options};
 use ::rocksdb::merge_operator::MergeOperands;
 
 use crate::rank::Document;
 use crate::data::DocIdsBuilder;
 use crate::{DocIndex, DocumentId};
+use crate::index::schema::Schema;
 use crate::index::update::Update;
 use crate::blob::{PositiveBlobBuilder, Blob, Sign};
 use crate::blob::ordered_blobs_from_slice;
 use crate::tokenizer::{TokenizerBuilder, DefaultBuilder, Tokenizer};
 use crate::rank::{criterion, Config, RankedStream};
 use crate::automaton;
+
+const DATA_PREFIX: &str = "data";
+const BLOB_PREFIX: &str = "blob";
+const DOCU_PREFIX: &str = "docu";
+
+const DATA_BLOBS_ORDER: &str = "data-blobs-order";
+const DATA_SCHEMA:      &str = "data-schema";
 
 fn simple_vec_append(key: &[u8], value: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
     let mut output = Vec::new();
@@ -38,15 +47,18 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn create<P: AsRef<Path>>(path: P) -> Result<Index, Box<Error>> {
-        unimplemented!("return a soft error: the database already exist at the given path")
+    pub fn create<P: AsRef<Path>>(path: P, schema: Schema) -> Result<Index, Box<Error>> {
         // Self::open must not take a parameter for create_if_missing
         // or we must create an OpenOptions with many parameters
         // https://doc.rust-lang.org/std/fs/struct.OpenOptions.html
-    }
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Index, Box<Error>> {
-        let path = path.as_ref().to_string_lossy();
 
+        let path = path.as_ref();
+        if path.exists() {
+            return Err(format!("File already exists at path: {}, cannot create database.",
+                                path.display()).into())
+        }
+
+        let path = path.to_string_lossy();
         let mut opts = rocksdb_options::DBOptions::new();
         opts.create_if_missing(true);
 
@@ -55,8 +67,28 @@ impl Index {
 
         let database = rocksdb::DB::open_cf(opts, &path, vec![("default", cf_opts)])?;
 
-        // check if index is a valid RocksDB and
-        // contains the right key-values (i.e. "blobs-order")
+        let mut schema_bytes = Vec::new();
+        schema.write_to(&mut schema_bytes)?;
+        database.put(DATA_SCHEMA.as_bytes(), &schema_bytes)?;
+
+        Ok(Self { database })
+    }
+
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Index, Box<Error>> {
+        let path = path.as_ref().to_string_lossy();
+
+        let mut opts = rocksdb_options::DBOptions::new();
+        opts.create_if_missing(false);
+
+        let mut cf_opts = rocksdb_options::ColumnFamilyOptions::new();
+        cf_opts.add_merge_operator("blobs order operator", simple_vec_append);
+
+        let database = rocksdb::DB::open_cf(opts, &path, vec![("default", cf_opts)])?;
+
+        let _schema = match database.get(DATA_SCHEMA.as_bytes())? {
+            Some(value) => Schema::read_from(&*value)?,
+            None => return Err(String::from("Database does not contain a schema").into()),
+        };
 
         Ok(Self { database })
     }
@@ -74,17 +106,20 @@ impl Index {
         Ok(())
     }
 
-    fn blobs(&self) -> Result<Vec<Blob>, Box<Error>> {
-        match self.database.get(b"00-blobs-order")? {
-            Some(value) => Ok(ordered_blobs_from_slice(&value)?),
-            None => Ok(Vec::new()),
-        }
+    pub fn schema(&self) -> Result<Schema, Box<Error>> {
+        let bytes = self.database.get(DATA_SCHEMA.as_bytes())?.expect("data-schema entry not found");
+        Ok(Schema::read_from(&*bytes).expect("Invalid schema"))
     }
 
     pub fn search(&self, query: &str) -> Result<Vec<Document>, Box<Error>> {
+        // this snapshot will allow consistent operations on documents
+        let snapshot = self.database.snapshot();
 
         // FIXME create a SNAPSHOT for the search !
-        let blobs = self.blobs()?;
+        let blobs = match snapshot.get(DATA_BLOBS_ORDER.as_bytes())? {
+            Some(value) => ordered_blobs_from_slice(&value)?,
+            None => Vec::new(),
+        };
 
         let mut automatons = Vec::new();
         for query in query.split_whitespace().map(str::to_lowercase) {

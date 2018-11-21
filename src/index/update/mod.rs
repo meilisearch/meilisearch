@@ -12,11 +12,6 @@ mod positive_update;
 pub use self::negative_update::{NegativeUpdateBuilder};
 pub use self::positive_update::{PositiveUpdateBuilder, NewState};
 
-// These prefixes are here to make sure the documents fields
-// and the internal data doesn't collide and the internal data are
-// at the top of the sst file.
-const FIELD_BLOBS_ORDER: &str = "00-blobs-order";
-
 pub struct Update {
     path: PathBuf,
 }
@@ -31,10 +26,7 @@ impl Update {
         file_writer.open(&path.to_string_lossy())?;
         let infos = file_writer.finish()?;
 
-        if infos.smallest_key() != FIELD_BLOBS_ORDER.as_bytes() {
-            // FIXME return a nice error
-            panic!("Invalid update file: the blobs-order field is not the smallest key")
-        }
+        // FIXME check if the update contains a blobs-order entry
 
         Ok(Update { path })
     }

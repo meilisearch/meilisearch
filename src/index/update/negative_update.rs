@@ -3,7 +3,8 @@ use std::error::Error;
 
 use ::rocksdb::rocksdb_options;
 
-use crate::index::update::{FIELD_BLOBS_ORDER, Update};
+use crate::index::DATA_BLOBS_ORDER;
+use crate::index::update::Update;
 use crate::index::blob_name::BlobName;
 use crate::data::DocIdsBuilder;
 use crate::DocumentId;
@@ -40,16 +41,16 @@ impl NegativeUpdateBuilder {
 
         // write the blob name to be merged
         let blob_name = blob_name.to_string();
-        file_writer.merge(FIELD_BLOBS_ORDER.as_bytes(), blob_name.as_bytes())?;
+        file_writer.merge(DATA_BLOBS_ORDER.as_bytes(), blob_name.as_bytes())?;
 
         // write the doc ids
-        let blob_key = format!("0b-{}-doc-ids", blob_name);
+        let blob_key = format!("BLOB-{}-doc-ids", blob_name);
         let blob_doc_ids = self.doc_ids.into_inner()?;
         file_writer.put(blob_key.as_bytes(), &blob_doc_ids)?;
 
         for id in blob_doc_ids {
-            let start = format!("5d-{}", id);
-            let end = format!("5d-{}", id + 1);
+            let start = format!("DOCU-{}", id);
+            let end = format!("DOCU-{}", id + 1);
             file_writer.delete_range(start.as_bytes(), end.as_bytes())?;
         }
 
