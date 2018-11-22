@@ -1,4 +1,3 @@
-pub mod blob_name;
 pub mod schema;
 pub mod update;
 
@@ -21,8 +20,7 @@ use crate::data::DocIdsBuilder;
 use crate::{DocIndex, DocumentId};
 use crate::index::schema::Schema;
 use crate::index::update::Update;
-use crate::blob::{PositiveBlobBuilder, Blob, Sign};
-use crate::blob::ordered_blobs_from_slice;
+use crate::blob::{PositiveBlobBuilder, BlobInfo, Sign, Blob, blobs_from_blob_infos};
 use crate::tokenizer::{TokenizerBuilder, DefaultBuilder, Tokenizer};
 use crate::rank::{criterion, Config, RankedStream};
 use crate::automaton;
@@ -112,12 +110,14 @@ impl Index {
     }
 
     pub fn search(&self, query: &str) -> Result<Vec<Document>, Box<Error>> {
-        // this snapshot will allow consistent operations on documents
+        // this snapshot will allow consistent reads for the whole search operation
         let snapshot = self.database.snapshot();
 
-        // FIXME create a SNAPSHOT for the search !
         let blobs = match snapshot.get(DATA_BLOBS_ORDER.as_bytes())? {
-            Some(value) => ordered_blobs_from_slice(&value)?,
+            Some(value) => {
+                let blob_infos = BlobInfo::read_from_slice(&value)?;
+                blobs_from_blob_infos(&blob_infos, &snapshot)?
+            },
             None => Vec::new(),
         };
 
@@ -143,7 +143,7 @@ mod tests {
     use tempfile::NamedTempFile;
 
     use super::*;
-    use crate::index::schema::Schema;
+    use crate::index::schema::{Schema, SchemaBuilder, STORED, INDEXED};
     use crate::index::update::{PositiveUpdateBuilder, NegativeUpdateBuilder};
 
     #[test]
@@ -151,7 +151,8 @@ mod tests {
         let path = NamedTempFile::new()?.into_temp_path();
         let mut builder = NegativeUpdateBuilder::new(&path);
 
-        // you can insert documents in any order, it is sorted internally
+        // you can insert documents in any order,
+        // it is sorted internally
         builder.remove(1);
         builder.remove(5);
         builder.remove(2);
@@ -165,19 +166,26 @@ mod tests {
 
     #[test]
     fn generate_positive_update() -> Result<(), Box<Error>> {
+        let title;
+        let description;
+        let schema = {
+            let mut builder = SchemaBuilder::new();
+            title =       builder.new_attribute("title",       STORED | INDEXED);
+            description = builder.new_attribute("description", STORED | INDEXED);
+            builder.build()
+        };
 
-        let schema = Schema::open("/meili/default.sch")?;
+        let sst_path = NamedTempFile::new()?.into_temp_path();
         let tokenizer_builder = DefaultBuilder::new();
-        let mut builder = PositiveUpdateBuilder::new("update-positive-0001.sst", schema.clone(), tokenizer_builder);
+        let mut builder = PositiveUpdateBuilder::new(&sst_path, schema.clone(), tokenizer_builder);
 
-        // you can insert documents in any order, it is sorted internally
-        let title_field = schema.attribute("title").unwrap();
-        builder.update_field(1, title_field, "hallo!".to_owned());
-        builder.update_field(5, title_field, "hello!".to_owned());
-        builder.update_field(2, title_field, "hi!".to_owned());
+        // you can insert documents in any order,
+        // it is sorted internally
+        builder.update_field(1, title, "hallo!".to_owned());
+        builder.update_field(5, title, "hello!".to_owned());
+        builder.update_field(2, title, "hi!".to_owned());
 
-        let name_field = schema.attribute("name").unwrap();
-        builder.remove_field(4, name_field);
+        builder.remove_field(4, description);
 
         let update = builder.build()?;
 

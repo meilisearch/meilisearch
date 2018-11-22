@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<Error>> {
         let (elapsed, result) = measure_time(|| index.search(&query));
         match result {
             Ok(documents) => {
-                // display documents here !
+                println!("{:?}", documents);
                 println!("Finished in {}", elapsed)
             },
             Err(e) => panic!("{}", e),

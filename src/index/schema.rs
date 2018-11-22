@@ -46,9 +46,11 @@ impl SchemaBuilder {
         SchemaBuilder { attrs: LinkedHashMap::new() }
     }
 
-    pub fn new_field<S: Into<String>>(&mut self, name: S, props: SchemaProps) -> SchemaAttr {
+    pub fn new_attribute<S: Into<String>>(&mut self, name: S, props: SchemaProps) -> SchemaAttr {
         let len = self.attrs.len();
-        self.attrs.insert(name.into(), props);
+        if self.attrs.insert(name.into(), props).is_some() {
+            panic!("Field already inserted.")
+        }
         SchemaAttr(len as u32)
     }
 
@@ -119,7 +121,7 @@ impl SchemaAttr {
 
 impl fmt::Display for SchemaAttr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
+        self.0.fmt(f)
     }
 }
 
@@ -130,9 +132,9 @@ mod tests {
     #[test]
     fn serialize_deserialize() -> bincode::Result<()> {
         let mut builder = SchemaBuilder::new();
-        builder.new_field("alphabet", STORED);
-        builder.new_field("beta", STORED | INDEXED);
-        builder.new_field("gamma", INDEXED);
+        builder.new_attribute("alphabet", STORED);
+        builder.new_attribute("beta", STORED | INDEXED);
+        builder.new_attribute("gamma", INDEXED);
         let schema = builder.build();
 
         let mut buffer = Vec::new();

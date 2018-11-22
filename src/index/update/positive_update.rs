@@ -7,10 +7,9 @@ use ::rocksdb::rocksdb_options;
 
 use crate::index::DATA_BLOBS_ORDER;
 use crate::index::update::Update;
-use crate::index::blob_name::BlobName;
 use crate::index::schema::{SchemaProps, Schema, SchemaAttr};
 use crate::tokenizer::TokenizerBuilder;
-use crate::blob::PositiveBlobBuilder;
+use crate::blob::{BlobInfo, PositiveBlobBuilder};
 use crate::{DocIndex, DocumentId};
 
 pub enum NewState {
@@ -53,21 +52,13 @@ impl<B> PositiveUpdateBuilder<B>
 where B: TokenizerBuilder
 {
     pub fn build(self) -> Result<Update, Box<Error>> {
-        let blob_name = BlobName::new();
+        let blob_info = BlobInfo::new_positive();
 
         let env_options = rocksdb_options::EnvOptions::new();
         let column_family_options = rocksdb_options::ColumnFamilyOptions::new();
         let mut file_writer = rocksdb::SstFileWriter::new(env_options, column_family_options);
 
         file_writer.open(&self.path.to_string_lossy())?;
-
-        // TODO the blob-name must be written in bytes (16 bytes)
-        //      along with the sign
-        unimplemented!("write the blob sign and name");
-
-        // write the blob name to be merged
-        let blob_name = blob_name.to_string();
-        file_writer.put(DATA_BLOBS_ORDER.as_bytes(), blob_name.as_bytes())?;
 
         let mut builder = PositiveBlobBuilder::new(Vec::new(), Vec::new());
         for ((document_id, field), state) in &self.new_states {
@@ -96,17 +87,26 @@ where B: TokenizerBuilder
         }
         let (blob_fst_map, blob_doc_idx) = builder.into_inner()?;
 
-        // write the fst
-        let blob_key = format!("BLOB-{}-fst", blob_name);
-        file_writer.put(blob_key.as_bytes(), &blob_fst_map)?;
-
         // write the doc-idx
-        let blob_key = format!("BLOB-{}-doc-idx", blob_name);
+        let blob_key = format!("blob-{}-doc-idx", blob_info.name);
         file_writer.put(blob_key.as_bytes(), &blob_doc_idx)?;
 
+        // write the fst
+        let blob_key = format!("blob-{}-fst", blob_info.name);
+        file_writer.put(blob_key.as_bytes(), &blob_fst_map)?;
+
+        {
+            // write the blob name to be merged
+            let mut buffer = Vec::new();
+            blob_info.write_into(&mut buffer);
+            file_writer.merge(DATA_BLOBS_ORDER.as_bytes(), &buffer)?;
+        }
+
         // write all the documents fields updates
-        let mut key = String::from("DOCU-");
+        let mut key = String::from("docu-");
         let prefix_len = key.len();
+
+        // FIXME write numbers in bytes not decimal representation
 
         for ((id, field), state) in self.new_states {
             key.truncate(prefix_len);
