@@ -16,6 +16,7 @@ use fst::Map;
 use uuid::Uuid;
 use rocksdb::rocksdb::{DB, Snapshot};
 
+use crate::index::identifier::Identifier;
 use crate::data::DocIndexes;
 
 pub enum Blob {
@@ -53,6 +54,10 @@ pub struct BlobName(Uuid);
 impl BlobName {
     pub fn new() -> BlobName {
         BlobName(Uuid::new_v4())
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 16] {
+        self.0.as_bytes()
     }
 }
 
@@ -113,21 +118,21 @@ pub fn blobs_from_blob_infos(infos: &[BlobInfo], snapshot: &Snapshot<&DB>) -> Re
     for info in infos {
         let blob = match info.sign {
             Sign::Positive => {
-                let key_map = format!("blob-{}-fst", info.name);
-                let map = match snapshot.get(key_map.as_bytes())? {
+                let blob_key = Identifier::blob(info.name).fst_map().build();
+                let map = match snapshot.get(&blob_key)? {
                     Some(value) => value.to_vec(),
                     None => return Err(format!("No fst entry found for blob {}", info.name).into()),
                 };
-                let key_doc_idx = format!("blob-{}-doc-idx", info.name);
-                let doc_idx = match snapshot.get(key_doc_idx.as_bytes())? {
+                let blob_key = Identifier::blob(info.name).document_indexes().build();
+                let doc_idx = match snapshot.get(&blob_key)? {
                     Some(value) => value.to_vec(),
                     None => return Err(format!("No doc-idx entry found for blob {}", info.name).into()),
                 };
                 PositiveBlob::from_bytes(map, doc_idx).map(Blob::Positive)?
             },
             Sign::Negative => {
-                let key_doc_ids = format!("blob-{}-doc-ids", info.name);
-                let doc_ids = match snapshot.get(key_doc_ids.as_bytes())? {
+                let blob_key = Identifier::blob(info.name).document_ids().build();
+                let doc_ids = match snapshot.get(&blob_key)? {
                     Some(value) => value.to_vec(),
                     None => return Err(format!("No doc-ids entry found for blob {}", info.name).into()),
                 };

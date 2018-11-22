@@ -5,8 +5,8 @@ use std::fmt::Write;
 
 use ::rocksdb::rocksdb_options;
 
-use crate::index::DATA_BLOBS_ORDER;
 use crate::index::update::Update;
+use crate::index::identifier::Identifier;
 use crate::index::schema::{SchemaProps, Schema, SchemaAttr};
 use crate::tokenizer::TokenizerBuilder;
 use crate::blob::{BlobInfo, PositiveBlobBuilder};
@@ -88,34 +88,29 @@ where B: TokenizerBuilder
         let (blob_fst_map, blob_doc_idx) = builder.into_inner()?;
 
         // write the doc-idx
-        let blob_key = format!("blob-{}-doc-idx", blob_info.name);
-        file_writer.put(blob_key.as_bytes(), &blob_doc_idx)?;
+        let blob_key = Identifier::blob(blob_info.name).document_indexes().build();
+        file_writer.put(&blob_key, &blob_doc_idx)?;
 
         // write the fst
-        let blob_key = format!("blob-{}-fst", blob_info.name);
-        file_writer.put(blob_key.as_bytes(), &blob_fst_map)?;
+        let blob_key = Identifier::blob(blob_info.name).fst_map().build();
+        file_writer.put(&blob_key, &blob_fst_map)?;
 
         {
             // write the blob name to be merged
             let mut buffer = Vec::new();
             blob_info.write_into(&mut buffer);
-            file_writer.merge(DATA_BLOBS_ORDER.as_bytes(), &buffer)?;
+            let data_key = Identifier::data().blobs_order().build();
+            file_writer.merge(&data_key, &buffer)?;
         }
 
         // write all the documents fields updates
-        let mut key = String::from("docu-");
-        let prefix_len = key.len();
-
-        // FIXME write numbers in bytes not decimal representation
-
-        for ((id, field), state) in self.new_states {
-            key.truncate(prefix_len);
-            write!(&mut key, "{}-{}", id, field)?;
+        for ((id, attr), state) in self.new_states {
+            let key = Identifier::document(id).attribute(attr).build();
             match state {
                 NewState::Updated { value, props } => if props.is_stored() {
-                    file_writer.put(key.as_bytes(), value.as_bytes())?
+                    file_writer.put(&key, value.as_bytes())?
                 },
-                NewState::Removed => file_writer.delete(key.as_bytes())?,
+                NewState::Removed => file_writer.delete(&key)?,
             }
         }
 

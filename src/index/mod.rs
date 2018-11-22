@@ -1,3 +1,4 @@
+pub mod identifier;
 pub mod schema;
 pub mod update;
 
@@ -20,17 +21,11 @@ use crate::data::DocIdsBuilder;
 use crate::{DocIndex, DocumentId};
 use crate::index::schema::Schema;
 use crate::index::update::Update;
+use crate::index::identifier::Identifier;
 use crate::blob::{PositiveBlobBuilder, BlobInfo, Sign, Blob, blobs_from_blob_infos};
 use crate::tokenizer::{TokenizerBuilder, DefaultBuilder, Tokenizer};
 use crate::rank::{criterion, Config, RankedStream};
 use crate::automaton;
-
-const DATA_PREFIX: &str = "data";
-const BLOB_PREFIX: &str = "blob";
-const DOCU_PREFIX: &str = "docu";
-
-const DATA_BLOBS_ORDER: &str = "data-blobs-order";
-const DATA_SCHEMA:      &str = "data-schema";
 
 fn simple_vec_append(key: &[u8], value: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
     let mut output = Vec::new();
@@ -67,7 +62,8 @@ impl Index {
 
         let mut schema_bytes = Vec::new();
         schema.write_to(&mut schema_bytes)?;
-        database.put(DATA_SCHEMA.as_bytes(), &schema_bytes)?;
+        let data_key = Identifier::data().schema().build();
+        database.put(&data_key, &schema_bytes)?;
 
         Ok(Self { database })
     }
@@ -83,7 +79,8 @@ impl Index {
 
         let database = rocksdb::DB::open_cf(opts, &path, vec![("default", cf_opts)])?;
 
-        let _schema = match database.get(DATA_SCHEMA.as_bytes())? {
+        let data_key = Identifier::data().schema().build();
+        let _schema = match database.get(&data_key)? {
             Some(value) => Schema::read_from(&*value)?,
             None => return Err(String::from("Database does not contain a schema").into()),
         };
@@ -105,7 +102,8 @@ impl Index {
     }
 
     pub fn schema(&self) -> Result<Schema, Box<Error>> {
-        let bytes = self.database.get(DATA_SCHEMA.as_bytes())?.expect("data-schema entry not found");
+        let data_key = Identifier::data().schema().build();
+        let bytes = self.database.get(&data_key)?.expect("data-schema entry not found");
         Ok(Schema::read_from(&*bytes).expect("Invalid schema"))
     }
 
@@ -113,7 +111,8 @@ impl Index {
         // this snapshot will allow consistent reads for the whole search operation
         let snapshot = self.database.snapshot();
 
-        let blobs = match snapshot.get(DATA_BLOBS_ORDER.as_bytes())? {
+        let data_key = Identifier::data().blobs_order().build();
+        let blobs = match snapshot.get(&data_key)? {
             Some(value) => {
                 let blob_infos = BlobInfo::read_from_slice(&value)?;
                 blobs_from_blob_infos(&blob_infos, &snapshot)?

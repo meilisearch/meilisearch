@@ -23,7 +23,8 @@ impl DocIds {
         Ok(DocIds { doc_ids })
     }
 
-    pub fn from_bytes(vec: Vec<u8>) -> io::Result<Self> {
+    pub fn from_bytes(vec: Vec<u8>) -> Result<Self, Box<Error>> {
+        // FIXME check if modulo DocumentId
         let len = vec.len();
         let doc_ids = Data::Shared {
             vec: Arc::new(vec),
