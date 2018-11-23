@@ -22,7 +22,7 @@ use crate::{DocIndex, DocumentId};
 use crate::index::schema::Schema;
 use crate::index::update::Update;
 use crate::index::identifier::Identifier;
-use crate::blob::{PositiveBlobBuilder, BlobInfo, Sign, Blob, blobs_from_blob_infos};
+use crate::blob::{PositiveBlobBuilder, PositiveBlob, BlobInfo, Sign, Blob, blobs_from_blob_infos};
 use crate::tokenizer::{TokenizerBuilder, DefaultBuilder, Tokenizer};
 use crate::rank::{criterion, Config, RankedStream};
 use crate::automaton;
@@ -33,6 +33,45 @@ fn simple_vec_append(key: &[u8], value: Option<&[u8]>, operands: &mut MergeOpera
         output.extend_from_slice(bytes);
     }
     output
+}
+
+pub struct MergeBuilder {
+    blobs: Vec<Blob>,
+}
+
+impl MergeBuilder {
+    pub fn new() -> MergeBuilder {
+        MergeBuilder { blobs: Vec::new() }
+    }
+
+    pub fn push(&mut self, blob: Blob) {
+        if blob.sign() == Sign::Negative && self.blobs.is_empty() { return }
+        self.blobs.push(blob);
+    }
+
+    pub fn merge(self) -> PositiveBlob {
+        unimplemented!()
+    }
+}
+
+fn merge_indexes(key: &[u8], existing_value: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
+    if key != b"data-index" { panic!("The merge operator only allow \"data-index\" merging") }
+
+    let mut merge_builder = MergeBuilder::new();
+
+    if let Some(existing_value) = existing_value {
+        let base: PositiveBlob = bincode::deserialize(existing_value).unwrap(); // FIXME what do we do here ?
+        merge_builder.push(Blob::Positive(base));
+    }
+
+    for bytes in operands {
+        let blob: Blob = bincode::deserialize(bytes).unwrap();
+        merge_builder.push(blob);
+    }
+
+    let blob = merge_builder.merge();
+    // blob.to_vec()
+    unimplemented!()
 }
 
 pub struct Index {

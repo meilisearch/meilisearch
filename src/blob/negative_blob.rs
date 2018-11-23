@@ -1,9 +1,11 @@
+use std::io::{Read, Write};
 use std::error::Error;
 use std::path::Path;
-use std::io::Write;
 
 use crate::DocumentId;
 use crate::data::{DocIds, DocIdsBuilder};
+use serde::ser::{Serialize, Serializer};
+use serde::de::{self, Deserialize, Deserializer};
 
 pub struct NegativeBlob {
     doc_ids: DocIds,
@@ -28,6 +30,19 @@ impl NegativeBlob {
 
     pub fn into_doc_ids(self) -> DocIds {
         self.doc_ids
+    }
+}
+
+impl Serialize for NegativeBlob {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.doc_ids.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for NegativeBlob {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<NegativeBlob, D::Error> {
+        let bytes = Vec::deserialize(deserializer)?;
+        NegativeBlob::from_bytes(bytes).map_err(de::Error::custom)
     }
 }
 

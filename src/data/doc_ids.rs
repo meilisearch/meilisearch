@@ -7,31 +7,32 @@ use std::{io, mem};
 
 use byteorder::{NativeEndian, WriteBytesExt};
 use fst::raw::MmapReadOnly;
+use serde::ser::{Serialize, Serializer};
 
 use crate::DocumentId;
 use crate::data::Data;
 
 #[derive(Clone)]
 pub struct DocIds {
-    doc_ids: Data,
+    data: Data,
 }
 
 impl DocIds {
     pub unsafe fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let mmap = MmapReadOnly::open_path(path)?;
-        let doc_ids = Data::Mmap(mmap);
-        Ok(DocIds { doc_ids })
+        let data = Data::Mmap(mmap);
+        Ok(DocIds { data })
     }
 
     pub fn from_bytes(vec: Vec<u8>) -> Result<Self, Box<Error>> {
         // FIXME check if modulo DocumentId
         let len = vec.len();
-        let doc_ids = Data::Shared {
+        let data = Data::Shared {
             vec: Arc::new(vec),
             offset: 0,
             len: len
         };
-        Ok(DocIds { doc_ids })
+        Ok(DocIds { data })
     }
 
     pub fn contains(&self, doc: DocumentId) -> bool {
@@ -40,10 +41,16 @@ impl DocIds {
     }
 
     pub fn doc_ids(&self) -> &[DocumentId] {
-        let slice = &self.doc_ids;
+        let slice = &self.data;
         let ptr = slice.as_ptr() as *const DocumentId;
         let len = slice.len() / mem::size_of::<DocumentId>();
         unsafe { from_raw_parts(ptr, len) }
+    }
+}
+
+impl Serialize for DocIds {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.data.as_ref().serialize(serializer)
     }
 }
 

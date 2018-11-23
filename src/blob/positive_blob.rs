@@ -1,11 +1,14 @@
+use std::io::{Read, Write};
 use std::error::Error;
 use std::path::Path;
-use std::io::Write;
+use std::fmt;
 
 use fst::{Map, MapBuilder};
 
 use crate::DocIndex;
 use crate::data::{DocIndexes, DocIndexesBuilder};
+use serde::ser::{Serialize, Serializer, SerializeTuple};
+use serde::de::{self, Deserialize, Deserializer, SeqAccess, Visitor};
 
 pub struct PositiveBlob {
     map: Map,
@@ -42,6 +45,52 @@ impl PositiveBlob {
 
     pub fn explode(self) -> (Map, DocIndexes) {
         (self.map, self.indexes)
+    }
+}
+
+impl Serialize for PositiveBlob {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut tuple = serializer.serialize_tuple(2)?;
+        tuple.serialize_element(&self.map.as_fst().to_vec())?;
+        tuple.serialize_element(&self.indexes)?;
+        tuple.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for PositiveBlob {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<PositiveBlob, D::Error> {
+        struct TupleVisitor;
+
+        impl<'de> Visitor<'de> for TupleVisitor {
+            type Value = PositiveBlob;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a PositiveBlob struct")
+            }
+
+            #[inline]
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let map = match seq.next_element()? {
+                    Some(bytes) => match Map::from_bytes(bytes) {
+                        Ok(value) => value,
+                        Err(err) => return Err(de::Error::custom(err)),
+                    },
+                    None => return Err(de::Error::invalid_length(0, &self)),
+                };
+
+                let indexes = match seq.next_element()? {
+                    Some(bytes) => match DocIndexes::from_bytes(bytes) {
+                        Ok(value) => value,
+                        Err(err) => return Err(de::Error::custom(err)),
+                    },
+                    None => return Err(de::Error::invalid_length(1, &self)),
+                };
+
+                Ok(PositiveBlob { map, indexes })
+            }
+        }
+
+        deserializer.deserialize_tuple(2, TupleVisitor)
     }
 }
 

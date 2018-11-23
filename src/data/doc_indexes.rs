@@ -8,6 +8,7 @@ use std::mem;
 
 use fst::raw::MmapReadOnly;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use serde::ser::{Serialize, Serializer, SerializeTuple};
 
 use crate::DocIndex;
 use crate::data::Data;
@@ -81,6 +82,15 @@ impl DocIndexes {
         let ptr = slice.as_ptr() as *const DocIndex;
         let len = slice.len() / mem::size_of::<DocIndex>();
         unsafe { from_raw_parts(ptr, len) }
+    }
+}
+
+impl Serialize for DocIndexes {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut tuple = serializer.serialize_tuple(2)?;
+        tuple.serialize_element(self.ranges.as_ref())?;
+        tuple.serialize_element(self.indexes.as_ref())?;
+        tuple.end()
     }
 }
 
