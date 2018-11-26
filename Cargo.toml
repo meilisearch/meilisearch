@@ -8,10 +8,9 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 bincode = "1.0"
 byteorder = "1.2"
 fnv = "1.0"
-fs2 = "0.4"
 lazy_static = "1.1"
 linked-hash-map = { version = "0.5", features = ["serde_impl"] }
-sdset = "0.2"
+sdset = "0.3"
 serde = "1.0"
 serde_derive = "1.0"
 unidecode = "0.3"

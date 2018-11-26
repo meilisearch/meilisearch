@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 use std::error::Error;
 
-use ::rocksdb::rocksdb_options;
-
 use crate::blob::{BlobName, Sign};
 
 mod negative_update;

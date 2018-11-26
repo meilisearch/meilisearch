@@ -1,17 +1,17 @@
-use crate::vec_read_only::VecReadOnly;
 use std::collections::BinaryHeap;
-use std::{mem, cmp};
 use std::rc::Rc;
+use std::cmp;
 
 use fst::{Automaton, Streamer};
 use fst::automaton::AlwaysMatch;
-use sdset::{Set, SetBuf, SetOperation};
+use sdset::{Set, SetOperation};
 use sdset::duo::OpBuilder as SdOpBuilder;
 use group_by::GroupBy;
 
-use crate::blob::{Blob, Sign};
-use crate::blob::ops::{OpBuilder, Union, IndexedDocIndexes};
 use crate::DocIndex;
+use crate::blob::{Blob, Sign};
+use crate::vec_read_only::VecReadOnly;
+use crate::blob::ops::{OpBuilder, Union, IndexedDocIndexes};
 
 fn group_is_negative(blobs: &&[Blob]) -> bool {
     blobs[0].sign() == Sign::Negative

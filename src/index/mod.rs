@@ -2,76 +2,163 @@ pub mod identifier;
 pub mod schema;
 pub mod update;
 
-use std::io;
-use std::rc::Rc;
 use std::error::Error;
-use std::fs::{self, File};
-use std::fmt::{self, Write};
-use std::ops::{Deref, BitOr};
-use std::path::{Path, PathBuf};
-use std::collections::{BTreeSet, BTreeMap};
+use std::path::Path;
 
-use fs2::FileExt;
+use fst::map::{Map, MapBuilder, OpBuilder};
+use fst::{IntoStreamer, Streamer};
+use sdset::duo::Union as SdUnion;
+use sdset::duo::DifferenceByKey;
+use sdset::{Set, SetOperation};
 use ::rocksdb::rocksdb::Writable;
 use ::rocksdb::{rocksdb, rocksdb_options};
 use ::rocksdb::merge_operator::MergeOperands;
 
+use crate::DocIndex;
+use crate::automaton;
 use crate::rank::Document;
-use crate::data::DocIdsBuilder;
-use crate::{DocIndex, DocumentId};
 use crate::index::schema::Schema;
 use crate::index::update::Update;
+use crate::tokenizer::TokenizerBuilder;
 use crate::index::identifier::Identifier;
-use crate::blob::{PositiveBlobBuilder, PositiveBlob, BlobInfo, Sign, Blob, blobs_from_blob_infos};
-use crate::tokenizer::{TokenizerBuilder, DefaultBuilder, Tokenizer};
 use crate::rank::{criterion, Config, RankedStream};
-use crate::automaton;
+use crate::data::{DocIds, DocIndexes, RawDocIndexesBuilder};
+use crate::blob::{PositiveBlob, NegativeBlob, Blob};
 
-fn simple_vec_append(key: &[u8], value: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    let mut output = Vec::new();
-    for bytes in operands.chain(value) {
-        output.extend_from_slice(bytes);
+fn union_positives(a: &PositiveBlob, b: &PositiveBlob) -> Result<PositiveBlob, Box<Error>> {
+    let (a_map, a_indexes) = (a.as_map(), a.as_indexes());
+    let (b_map, b_indexes) = (b.as_map(), b.as_indexes());
+
+    let mut map_builder = MapBuilder::memory();
+    let mut indexes_builder = RawDocIndexesBuilder::memory();
+
+    let op_builder = OpBuilder::new().add(a_map).add(b_map);
+    let mut stream = op_builder.union();
+    let mut i = 0;
+
+    while let Some((key, indexed)) = stream.next() {
+        let doc_idx: Vec<DocIndex> = match indexed {
+            [a, b] => {
+                let a_doc_idx = a_indexes.get(a.value).expect("BUG: could not find document indexes");
+                let b_doc_idx = b_indexes.get(b.value).expect("BUG: could not find document indexes");
+
+                let a_doc_idx = Set::new_unchecked(a_doc_idx);
+                let b_doc_idx = Set::new_unchecked(b_doc_idx);
+
+                let sd_union = SdUnion::new(a_doc_idx, b_doc_idx);
+                sd_union.into_set_buf().into_vec()
+            },
+            [a] => {
+                let indexes = if a.index == 0 { a_indexes } else { b_indexes };
+                let doc_idx = indexes.get(a.value).expect("BUG: could not find document indexes");
+                doc_idx.to_vec()
+            },
+            _ => unreachable!(),
+        };
+
+        if !doc_idx.is_empty() {
+            map_builder.insert(key, i)?;
+            indexes_builder.insert(&doc_idx)?;
+            i += 1;
+        }
     }
-    output
+
+    let inner = map_builder.into_inner()?;
+    let map = Map::from_bytes(inner)?;
+
+    let inner = indexes_builder.into_inner()?;
+    let indexes = DocIndexes::from_bytes(inner)?;
+
+    Ok(PositiveBlob::from_raw(map, indexes))
 }
 
-pub struct MergeBuilder {
-    blobs: Vec<Blob>,
+fn union_negatives(a: &NegativeBlob, b: &NegativeBlob) -> NegativeBlob {
+    let a_doc_ids = a.as_ids().doc_ids();
+    let b_doc_ids = b.as_ids().doc_ids();
+
+    let a_doc_ids = Set::new_unchecked(a_doc_ids);
+    let b_doc_ids = Set::new_unchecked(b_doc_ids);
+
+    let sd_union = SdUnion::new(a_doc_ids, b_doc_ids);
+    let doc_ids = sd_union.into_set_buf().into_vec();
+    let doc_ids = DocIds::from_document_ids(doc_ids);
+
+    NegativeBlob::from_raw(doc_ids)
 }
 
-impl MergeBuilder {
-    pub fn new() -> MergeBuilder {
-        MergeBuilder { blobs: Vec::new() }
+fn merge_positive_negative(pos: &PositiveBlob, neg: &NegativeBlob) -> Result<PositiveBlob, Box<Error>> {
+    let (map, indexes) = (pos.as_map(), pos.as_indexes());
+    let doc_ids = neg.as_ids().doc_ids();
+
+    let doc_ids = Set::new_unchecked(doc_ids);
+
+    let mut map_builder = MapBuilder::memory();
+    let mut indexes_builder = RawDocIndexesBuilder::memory();
+
+    let mut stream = map.into_stream();
+    let mut i = 0;
+
+    while let Some((key, index)) = stream.next() {
+        let doc_idx = indexes.get(index).expect("BUG: could not find document indexes");
+        let doc_idx = Set::new_unchecked(doc_idx);
+
+        let diff = DifferenceByKey::new(doc_idx, doc_ids, |&d| d.document_id, |id| *id);
+        let doc_idx: Vec<DocIndex> = diff.into_set_buf().into_vec();
+
+        map_builder.insert(key, i)?;
+        indexes_builder.insert(&doc_idx)?;
+        i += 1;
     }
 
-    pub fn push(&mut self, blob: Blob) {
-        if blob.sign() == Sign::Negative && self.blobs.is_empty() { return }
-        self.blobs.push(blob);
+    let inner = map_builder.into_inner()?;
+    let map = Map::from_bytes(inner)?;
+
+    let inner = indexes_builder.into_inner()?;
+    let indexes = DocIndexes::from_bytes(inner)?;
+
+    Ok(PositiveBlob::from_raw(map, indexes))
+}
+
+#[derive(Default)]
+struct Merge {
+    blob: PositiveBlob,
+}
+
+impl Merge {
+    fn new(blob: PositiveBlob) -> Merge {
+        Merge { blob }
     }
 
-    pub fn merge(self) -> PositiveBlob {
-        unimplemented!()
+    fn merge(&mut self, blob: Blob) {
+        self.blob = match blob {
+            Blob::Positive(blob) => union_positives(&self.blob, &blob).unwrap(),
+            Blob::Negative(blob) => merge_positive_negative(&self.blob, &blob).unwrap(),
+        };
+    }
+
+    fn build(self) -> PositiveBlob {
+        self.blob
     }
 }
 
 fn merge_indexes(key: &[u8], existing_value: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    if key != b"data-index" { panic!("The merge operator only allow \"data-index\" merging") }
+    if key != b"data-index" { panic!("The merge operator only supports \"data-index\" merging") }
 
-    let mut merge_builder = MergeBuilder::new();
-
-    if let Some(existing_value) = existing_value {
-        let base: PositiveBlob = bincode::deserialize(existing_value).unwrap(); // FIXME what do we do here ?
-        merge_builder.push(Blob::Positive(base));
-    }
+    let mut merge = match existing_value {
+        Some(existing_value) => {
+            let blob = bincode::deserialize(existing_value).expect("BUG: could not deserialize data-index");
+            Merge::new(blob)
+        },
+        None => Merge::default(),
+    };
 
     for bytes in operands {
-        let blob: Blob = bincode::deserialize(bytes).unwrap();
-        merge_builder.push(blob);
+        let blob = bincode::deserialize(bytes).expect("BUG: could not deserialize blobs");
+        merge.merge(blob);
     }
 
-    let blob = merge_builder.merge();
-    // blob.to_vec()
-    unimplemented!()
+    let blob = merge.build();
+    bincode::serialize(&blob).expect("BUG: could not serialize merged blob")
 }
 
 pub struct Index {
@@ -95,7 +182,7 @@ impl Index {
         opts.create_if_missing(true);
 
         let mut cf_opts = rocksdb_options::ColumnFamilyOptions::new();
-        cf_opts.add_merge_operator("blobs order operator", simple_vec_append);
+        cf_opts.add_merge_operator("data-index merge operator", merge_indexes);
 
         let database = rocksdb::DB::open_cf(opts, &path, vec![("default", cf_opts)])?;
 
@@ -114,7 +201,7 @@ impl Index {
         opts.create_if_missing(false);
 
         let mut cf_opts = rocksdb_options::ColumnFamilyOptions::new();
-        cf_opts.add_merge_operator("blobs order operator", simple_vec_append);
+        cf_opts.add_merge_operator("data-index merge operator", merge_indexes);
 
         let database = rocksdb::DB::open_cf(opts, &path, vec![("default", cf_opts)])?;
 
@@ -150,12 +237,9 @@ impl Index {
         // this snapshot will allow consistent reads for the whole search operation
         let snapshot = self.database.snapshot();
 
-        let data_key = Identifier::data().blobs_order().build();
-        let blobs = match snapshot.get(&data_key)? {
-            Some(value) => {
-                let blob_infos = BlobInfo::read_from_slice(&value)?;
-                blobs_from_blob_infos(&blob_infos, &snapshot)?
-            },
+        let index_key = Identifier::data().index().build();
+        let map = match snapshot.get(&index_key)? {
+            Some(value) => bincode::deserialize(&value)?,
             None => Vec::new(),
         };
 
@@ -166,7 +250,7 @@ impl Index {
         }
 
         let config = Config {
-            blobs: &blobs,
+            map: map,
             automatons: automatons,
             criteria: criterion::default(),
             distinct: ((), 1),

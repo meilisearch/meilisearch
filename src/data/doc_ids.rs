@@ -35,6 +35,10 @@ impl DocIds {
         Ok(DocIds { data })
     }
 
+    pub fn from_document_ids(vec: Vec<DocumentId>) -> Self {
+        DocIds::from_bytes(unsafe { mem::transmute(vec) }).unwrap()
+    }
+
     pub fn contains(&self, doc: DocumentId) -> bool {
         // FIXME prefer using the sdset::exponential_search function
         self.doc_ids().binary_search(&doc).is_ok()

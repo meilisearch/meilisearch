@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::error::Error;
-use std::fmt::Write;
 
 use ::rocksdb::rocksdb_options;
 

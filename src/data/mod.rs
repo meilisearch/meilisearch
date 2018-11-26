@@ -7,7 +7,7 @@ use std::sync::Arc;
 use fst::raw::MmapReadOnly;
 
 pub use self::doc_ids::{DocIds, DocIdsBuilder};
-pub use self::doc_indexes::{DocIndexes, DocIndexesBuilder};
+pub use self::doc_indexes::{DocIndexes, DocIndexesBuilder, RawDocIndexesBuilder};
 
 #[derive(Clone)]
 enum Data {
@@ -17,6 +17,16 @@ enum Data {
         len: usize,
     },
     Mmap(MmapReadOnly),
+}
+
+impl Default for Data {
+    fn default() -> Data {
+        Data::Shared {
+            vec: Arc::default(),
+            offset: 0,
+            len: 0,
+        }
+    }
 }
 
 impl Deref for Data {

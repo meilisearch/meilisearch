@@ -1,7 +1,7 @@
-use std::io::{Read, Write};
-use std::error::Error;
-use std::path::Path;
 use std::fmt;
+use std::io::Write;
+use std::path::Path;
+use std::error::Error;
 
 use fst::{Map, MapBuilder};
 
@@ -10,6 +10,7 @@ use crate::data::{DocIndexes, DocIndexesBuilder};
 use serde::ser::{Serialize, Serializer, SerializeTuple};
 use serde::de::{self, Deserialize, Deserializer, SeqAccess, Visitor};
 
+#[derive(Default)]
 pub struct PositiveBlob {
     map: Map,
     indexes: DocIndexes,
@@ -29,6 +30,10 @@ impl PositiveBlob {
         let map = Map::from_bytes(map)?;
         let indexes = DocIndexes::from_bytes(indexes)?;
         Ok(PositiveBlob { map, indexes })
+    }
+
+    pub fn from_raw(map: Map, indexes: DocIndexes) -> Self {
+        PositiveBlob { map, indexes }
     }
 
     pub fn get<K: AsRef<[u8]>>(&self, key: K) -> Option<&[DocIndex]> {
@@ -109,7 +114,7 @@ impl<W: Write, X: Write> PositiveBlobBuilder<W, X> {
     }
 
     pub fn finish(self) -> Result<(), Box<Error>> {
-        self.into_inner().map(|_| ())
+        self.into_inner().map(drop)
     }
 
     pub fn into_inner(self) -> Result<(W, X), Box<Error>> {
@@ -130,6 +135,10 @@ impl<W: Write, X: Write> PositiveBlobBuilder<W, X> {
 }
 
 impl PositiveBlobBuilder<Vec<u8>, Vec<u8>> {
+    pub fn memory() -> Self {
+        PositiveBlobBuilder::new(Vec::new(), Vec::new())
+    }
+
     pub fn build(self) -> Result<PositiveBlob, Box<Error>> {
         self.into_inner().and_then(|(m, i)| PositiveBlob::from_bytes(m, i))
     }

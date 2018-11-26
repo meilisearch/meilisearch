@@ -1,6 +1,6 @@
-use std::io::{Read, Write};
-use std::error::Error;
+use std::io::Write;
 use std::path::Path;
+use std::error::Error;
 
 use crate::DocumentId;
 use crate::data::{DocIds, DocIdsBuilder};
@@ -22,6 +22,10 @@ impl NegativeBlob {
     pub fn from_bytes(doc_ids: Vec<u8>) -> Result<Self, Box<Error>> {
         let doc_ids = DocIds::from_bytes(doc_ids)?;
         Ok(NegativeBlob { doc_ids })
+    }
+
+    pub fn from_raw(doc_ids: DocIds) -> Self {
+        NegativeBlob { doc_ids }
     }
 
     pub fn as_ids(&self) -> &DocIds {
