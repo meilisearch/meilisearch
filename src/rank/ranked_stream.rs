@@ -1,19 +1,24 @@
+use std::ops::{Deref, Range, RangeBounds};
 use std::collections::HashMap;
+use std::{mem, vec, str};
+use std::ops::Bound::*;
+use std::error::Error;
 use std::hash::Hash;
-use std::ops::Range;
 use std::rc::Rc;
-use std::{mem, vec};
 
 use fnv::FnvHashMap;
 use fst::Streamer;
 use group_by::GroupByMut;
+use ::rocksdb::rocksdb::{DB, Snapshot};
 
-use crate::automaton::{DfaExt, AutomatonExt};
-use crate::index::Index;
-use crate::blob::{Blob, Merge};
-use crate::rank::criterion::Criterion;
-use crate::rank::Document;
+use crate::automaton::{self, DfaExt, AutomatonExt};
+use crate::rank::criterion::{self, Criterion};
+use crate::blob::{PositiveBlob, Merge};
+use crate::blob::ops::Union;
 use crate::{Match, DocumentId};
+use crate::database::Retrieve;
+use crate::rank::Document;
+use crate::index::Index;
 
 fn clamp_range<T: Copy + Ord>(range: Range<T>, big: Range<T>) -> Range<T> {
     Range {
@@ -22,40 +27,58 @@ fn clamp_range<T: Copy + Ord>(range: Range<T>, big: Range<T>) -> Range<T> {
     }
 }
 
-pub struct Config<'a, C, F> {
-    pub blobs: &'a [Blob],
-    pub automatons: Vec<DfaExt>,
-    pub criteria: Vec<C>,
-    pub distinct: (F, usize),
+fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
+    let mut automatons = Vec::new();
+    for query in query.split_whitespace().map(str::to_lowercase) {
+        let lev = automaton::build_prefix_dfa(&query);
+        automatons.push(lev);
+    }
+    automatons
 }
 
-pub struct RankedStream<'m, C, F> {
-    stream: crate::blob::Merge<'m>,
-    automatons: Vec<Rc<DfaExt>>,
+pub struct QueryBuilder<T: Deref<Target=DB>, C> {
+    snapshot: Snapshot<T>,
+    blob: PositiveBlob,
     criteria: Vec<C>,
-    distinct: (F, usize),
 }
 
-impl<'m, C, F> RankedStream<'m, C, F> {
-    pub fn new(config: Config<'m, C, F>) -> Self {
-        let automatons: Vec<_> = config.automatons.into_iter().map(Rc::new).collect();
-
-        RankedStream {
-            stream: Merge::with_automatons(automatons.clone(), config.blobs),
-            automatons: automatons,
-            criteria: config.criteria,
-            distinct: config.distinct,
-        }
+impl<T: Deref<Target=DB>> QueryBuilder<T, Box<dyn Criterion>> {
+    pub fn new(snapshot: Snapshot<T>) -> Result<Self, Box<Error>> {
+        QueryBuilder::with_criteria(snapshot, criterion::default())
     }
 }
 
-impl<'m, C, F> RankedStream<'m, C, F> {
-    fn retrieve_all_documents(&mut self) -> Vec<Document> {
+impl<T, C> QueryBuilder<T, C>
+where T: Deref<Target=DB>,
+{
+    pub fn with_criteria(snapshot: Snapshot<T>, criteria: Vec<C>) -> Result<Self, Box<Error>> {
+        let blob = snapshot.data_index()?;
+        Ok(QueryBuilder { snapshot, blob, criteria })
+    }
+
+    pub fn criteria(&mut self, criteria: Vec<C>) -> &mut Self {
+        self.criteria = criteria;
+        self
+    }
+
+    pub fn with_distinct<F>(self, function: F, size: usize) -> DistinctQueryBuilder<T, F, C> {
+        DistinctQueryBuilder {
+            snapshot: self.snapshot,
+            blob: self.blob,
+            criteria: self.criteria,
+            function: function,
+            size: size
+        }
+    }
+
+    fn query_all(&self, query: &str) -> Vec<Document> {
+        let automatons = split_whitespace_automatons(query);
+        let mut stream: Union = unimplemented!();
         let mut matches = FnvHashMap::default();
 
-        while let Some((string, indexed_values)) = self.stream.next() {
+        while let Some((string, indexed_values)) = stream.next() {
             for iv in indexed_values {
-                let automaton = &self.automatons[iv.index];
+                let automaton = &automatons[iv.index];
                 let distance = automaton.eval(string).to_u8();
                 let is_exact = distance == 0 && string.len() == automaton.query_len();
 
@@ -76,12 +99,12 @@ impl<'m, C, F> RankedStream<'m, C, F> {
     }
 }
 
-impl<'a, C, F> RankedStream<'a, C, F>
-where C: Criterion
+impl<T, C> QueryBuilder<T, C>
+where T: Deref<Target=DB>,
+      C: Criterion,
 {
-    // TODO don't sort to much documents, we can skip useless sorts
-    pub fn retrieve_documents(mut self, range: Range<usize>) -> Vec<Document> {
-        let mut documents = self.retrieve_all_documents();
+    pub fn query(&self, query: &str, range: impl RangeBounds<usize>) -> Vec<Document> {
+        let mut documents = self.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
 
         for criterion in self.criteria {
@@ -95,47 +118,65 @@ where C: Criterion
             }
         }
 
-        let range = clamp_range(range, 0..documents.len());
+        // let range = clamp_range(range, 0..documents.len());
+        let range: Range<usize> = unimplemented!();
         documents[range].to_vec()
     }
+}
 
-    pub fn retrieve_distinct_documents<K>(mut self, range: Range<usize>) -> Vec<Document>
-    where F: Fn(&DocumentId) -> Option<K>,
-          K: Hash + Eq,
-    {
-        let mut documents = self.retrieve_all_documents();
-        let mut groups = vec![documents.as_mut_slice()];
+pub struct DistinctQueryBuilder<T: Deref<Target=DB>, F, C> {
+    snapshot: Snapshot<T>,
+    blob: PositiveBlob,
+    criteria: Vec<C>,
+    function: F,
+    size: usize,
+}
 
-        for criterion in self.criteria {
-            let tmp_groups = mem::replace(&mut groups, Vec::new());
+// pub struct Schema;
+// pub struct DocDatabase;
+// where F: Fn(&Schema, &DocDatabase) -> Option<K>,
+//       K: Hash + Eq,
 
-            for group in tmp_groups {
-                group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                for group in GroupByMut::new(group, |a, b| criterion.eq(a, b)) {
-                    groups.push(group);
-                }
-            }
-        }
+impl<T: Deref<Target=DB>, F, C> DistinctQueryBuilder<T, F, C>
+where T: Deref<Target=DB>,
+      C: Criterion,
+{
+    pub fn query(&self, query: &str, range: impl RangeBounds<usize>) -> Vec<Document> {
+        // let mut documents = self.retrieve_all_documents();
+        // let mut groups = vec![documents.as_mut_slice()];
 
-        let mut out_documents = Vec::with_capacity(range.len());
-        let (distinct, limit) = self.distinct;
-        let mut seen = DistinctMap::new(limit);
+        // for criterion in self.criteria {
+        //     let tmp_groups = mem::replace(&mut groups, Vec::new());
 
-        for document in documents {
-            let accepted = match distinct(&document.id) {
-                Some(key) => seen.digest(key),
-                None => seen.accept_without_key(),
-            };
+        //     for group in tmp_groups {
+        //         group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
+        //         for group in GroupByMut::new(group, |a, b| criterion.eq(a, b)) {
+        //             groups.push(group);
+        //         }
+        //     }
+        // }
 
-            if accepted {
-                if seen.len() == range.end { break }
-                if seen.len() >= range.start {
-                    out_documents.push(document);
-                }
-            }
-        }
+        // let mut out_documents = Vec::with_capacity(range.len());
+        // let (distinct, limit) = self.distinct;
+        // let mut seen = DistinctMap::new(limit);
 
-        out_documents
+        // for document in documents {
+        //     let accepted = match distinct(&document.id) {
+        //         Some(key) => seen.digest(key),
+        //         None => seen.accept_without_key(),
+        //     };
+
+        //     if accepted {
+        //         if seen.len() == range.end { break }
+        //         if seen.len() >= range.start {
+        //             out_documents.push(document);
+        //         }
+        //     }
+        // }
+
+        // out_documents
+
+        unimplemented!()
     }
 }
 

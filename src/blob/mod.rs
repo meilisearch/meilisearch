@@ -1,5 +1,5 @@
 mod merge;
-mod ops;
+pub mod ops;
 mod ops_indexed_value;
 mod positive_blob;
 mod negative_blob;

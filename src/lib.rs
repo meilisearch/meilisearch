@@ -3,13 +3,14 @@
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate serde_derive;
 
-pub mod index;
+pub mod automaton;
 pub mod blob;
 pub mod data;
+pub mod database;
+pub mod index;
 pub mod rank;
-pub mod vec_read_only;
-pub mod automaton;
 pub mod tokenizer;
+pub mod vec_read_only;
 mod common_words;
 
 pub use self::tokenizer::Tokenizer;

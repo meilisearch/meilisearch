@@ -8,7 +8,7 @@ use crate::index::update::Update;
 use crate::index::identifier::Identifier;
 use crate::index::schema::{SchemaProps, Schema, SchemaAttr};
 use crate::tokenizer::TokenizerBuilder;
-use crate::blob::{BlobInfo, PositiveBlobBuilder};
+use crate::blob::PositiveBlobBuilder;
 use crate::{DocIndex, DocumentId};
 
 pub enum NewState {

@@ -238,9 +238,9 @@ impl Index {
         let snapshot = self.database.snapshot();
 
         let index_key = Identifier::data().index().build();
-        let map = match snapshot.get(&index_key)? {
+        let blob = match snapshot.get(&index_key)? {
             Some(value) => bincode::deserialize(&value)?,
-            None => Vec::new(),
+            None => PositiveBlob::default(),
         };
 
         let mut automatons = Vec::new();
@@ -250,7 +250,7 @@ impl Index {
         }
 
         let config = Config {
-            map: map,
+            blob: blob,
             automatons: automatons,
             criteria: criterion::default(),
             distinct: ((), 1),
