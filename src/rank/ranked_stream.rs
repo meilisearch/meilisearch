@@ -1,10 +1,7 @@
-use std::ops::{Deref, Range, RangeBounds};
-use std::collections::HashMap;
+use std::ops::{Deref, Range};
 use std::{mem, vec, str};
-use std::ops::Bound::*;
 use std::error::Error;
 use std::hash::Hash;
-use std::rc::Rc;
 
 use fnv::FnvHashMap;
 use fst::Streamer;
@@ -13,12 +10,11 @@ use ::rocksdb::rocksdb::{DB, Snapshot};
 
 use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::rank::criterion::{self, Criterion};
-use crate::blob::{PositiveBlob, Merge};
-use crate::blob::ops::Union;
+use crate::rank::distinct_map::DistinctMap;
+use crate::blob::PositiveBlob;
 use crate::{Match, DocumentId};
-use crate::database::Retrieve;
+use crate::retrieve::Retrieve;
 use crate::rank::Document;
-use crate::index::Index;
 
 fn clamp_range<T: Copy + Ord>(range: Range<T>, big: Range<T>) -> Range<T> {
     Range {
@@ -63,9 +59,7 @@ where T: Deref<Target=DB>,
 
     pub fn with_distinct<F>(self, function: F, size: usize) -> DistinctQueryBuilder<T, F, C> {
         DistinctQueryBuilder {
-            snapshot: self.snapshot,
-            blob: self.blob,
-            criteria: self.criteria,
+            inner: self,
             function: function,
             size: size
         }
@@ -73,16 +67,28 @@ where T: Deref<Target=DB>,
 
     fn query_all(&self, query: &str) -> Vec<Document> {
         let automatons = split_whitespace_automatons(query);
-        let mut stream: Union = unimplemented!();
+
+        let mut stream = {
+            let mut op_builder = fst::map::OpBuilder::new();
+            for automaton in &automatons {
+                let stream = self.blob.as_map().search(automaton);
+                op_builder.push(stream);
+            }
+            op_builder.union()
+        };
+
         let mut matches = FnvHashMap::default();
 
-        while let Some((string, indexed_values)) = stream.next() {
+        while let Some((input, indexed_values)) = stream.next() {
             for iv in indexed_values {
                 let automaton = &automatons[iv.index];
-                let distance = automaton.eval(string).to_u8();
-                let is_exact = distance == 0 && string.len() == automaton.query_len();
+                let distance = automaton.eval(input).to_u8();
+                let is_exact = distance == 0 && input.len() == automaton.query_len();
 
-                for doc_index in iv.doc_indexes.as_slice() {
+                let doc_indexes = self.blob.as_indexes();
+                let doc_indexes = doc_indexes.get(iv.value).expect("BUG: could not find document indexes");
+
+                for doc_index in doc_indexes {
                     let match_ = Match {
                         query_index: iv.index as u32,
                         distance: distance,
@@ -103,11 +109,11 @@ impl<T, C> QueryBuilder<T, C>
 where T: Deref<Target=DB>,
       C: Criterion,
 {
-    pub fn query(&self, query: &str, range: impl RangeBounds<usize>) -> Vec<Document> {
+    pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
 
-        for criterion in self.criteria {
+        for criterion in &self.criteria {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
 
             for group in tmp_groups {
@@ -118,127 +124,58 @@ where T: Deref<Target=DB>,
             }
         }
 
-        // let range = clamp_range(range, 0..documents.len());
-        let range: Range<usize> = unimplemented!();
+        let range = clamp_range(range, 0..documents.len());
         documents[range].to_vec()
     }
 }
 
 pub struct DistinctQueryBuilder<T: Deref<Target=DB>, F, C> {
-    snapshot: Snapshot<T>,
-    blob: PositiveBlob,
-    criteria: Vec<C>,
+    inner: QueryBuilder<T, C>,
     function: F,
     size: usize,
 }
 
-// pub struct Schema;
-// pub struct DocDatabase;
-// where F: Fn(&Schema, &DocDatabase) -> Option<K>,
-//       K: Hash + Eq,
+pub struct DocDatabase;
 
-impl<T: Deref<Target=DB>, F, C> DistinctQueryBuilder<T, F, C>
+impl<T: Deref<Target=DB>, F, K, C> DistinctQueryBuilder<T, F, C>
 where T: Deref<Target=DB>,
+      F: Fn(DocumentId, &DocDatabase) -> Option<K>,
+      K: Hash + Eq,
       C: Criterion,
 {
-    pub fn query(&self, query: &str, range: impl RangeBounds<usize>) -> Vec<Document> {
-        // let mut documents = self.retrieve_all_documents();
-        // let mut groups = vec![documents.as_mut_slice()];
+    pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
+        let mut documents = self.inner.query_all(query);
+        let mut groups = vec![documents.as_mut_slice()];
 
-        // for criterion in self.criteria {
-        //     let tmp_groups = mem::replace(&mut groups, Vec::new());
+        for criterion in &self.inner.criteria {
+            let tmp_groups = mem::replace(&mut groups, Vec::new());
 
-        //     for group in tmp_groups {
-        //         group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
-        //         for group in GroupByMut::new(group, |a, b| criterion.eq(a, b)) {
-        //             groups.push(group);
-        //         }
-        //     }
-        // }
-
-        // let mut out_documents = Vec::with_capacity(range.len());
-        // let (distinct, limit) = self.distinct;
-        // let mut seen = DistinctMap::new(limit);
-
-        // for document in documents {
-        //     let accepted = match distinct(&document.id) {
-        //         Some(key) => seen.digest(key),
-        //         None => seen.accept_without_key(),
-        //     };
-
-        //     if accepted {
-        //         if seen.len() == range.end { break }
-        //         if seen.len() >= range.start {
-        //             out_documents.push(document);
-        //         }
-        //     }
-        // }
-
-        // out_documents
-
-        unimplemented!()
-    }
-}
-
-pub struct DistinctMap<K> {
-    inner: HashMap<K, usize>,
-    limit: usize,
-    len: usize,
-}
-
-impl<K: Hash + Eq> DistinctMap<K> {
-    pub fn new(limit: usize) -> Self {
-        DistinctMap {
-            inner: HashMap::new(),
-            limit: limit,
-            len: 0,
+            for group in tmp_groups {
+                group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
+                for group in GroupByMut::new(group, |a, b| criterion.eq(a, b)) {
+                    groups.push(group);
+                }
+            }
         }
-    }
 
-    pub fn digest(&mut self, key: K) -> bool {
-        let seen = self.inner.entry(key).or_insert(0);
-        if *seen < self.limit {
-            *seen += 1;
-            self.len += 1;
-            true
-        } else {
-            false
+        let doc_database = DocDatabase;
+        let mut out_documents = Vec::with_capacity(range.len());
+        let mut seen = DistinctMap::new(self.size);
+
+        for document in documents {
+            let accepted = match (self.function)(document.id, &doc_database) {
+                Some(key) => seen.digest(key),
+                None => seen.accept_without_key(),
+            };
+
+            if accepted {
+                if seen.len() == range.end { break }
+                if seen.len() >= range.start {
+                    out_documents.push(document);
+                }
+            }
         }
-    }
 
-    pub fn accept_without_key(&mut self) -> bool {
-        self.len += 1;
-        true
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn easy_distinct_map() {
-        let mut map = DistinctMap::new(2);
-        for x in &[1, 1, 1, 2, 3, 4, 5, 6, 6, 6, 6, 6] {
-            map.digest(x);
-        }
-        assert_eq!(map.len(), 8);
-
-        let mut map = DistinctMap::new(2);
-        assert_eq!(map.digest(1), true);
-        assert_eq!(map.digest(1), true);
-        assert_eq!(map.digest(1), false);
-        assert_eq!(map.digest(1), false);
-
-        assert_eq!(map.digest(2), true);
-        assert_eq!(map.digest(3), true);
-        assert_eq!(map.digest(2), true);
-        assert_eq!(map.digest(2), false);
-
-        assert_eq!(map.len(), 5);
+        out_documents
     }
 }

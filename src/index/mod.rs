@@ -1,4 +1,3 @@
-pub mod identifier;
 pub mod schema;
 pub mod update;
 
@@ -15,13 +14,10 @@ use ::rocksdb::{rocksdb, rocksdb_options};
 use ::rocksdb::merge_operator::MergeOperands;
 
 use crate::DocIndex;
-use crate::automaton;
 use crate::rank::Document;
 use crate::index::schema::Schema;
 use crate::index::update::Update;
-use crate::tokenizer::TokenizerBuilder;
-use crate::index::identifier::Identifier;
-use crate::rank::{criterion, Config, RankedStream};
+use crate::rank::QueryBuilder;
 use crate::data::{DocIds, DocIndexes, RawDocIndexesBuilder};
 use crate::blob::{PositiveBlob, NegativeBlob, Blob};
 
@@ -188,8 +184,7 @@ impl Index {
 
         let mut schema_bytes = Vec::new();
         schema.write_to(&mut schema_bytes)?;
-        let data_key = Identifier::data().schema().build();
-        database.put(&data_key, &schema_bytes)?;
+        database.put(b"data-schema", &schema_bytes)?;
 
         Ok(Self { database })
     }
@@ -205,8 +200,7 @@ impl Index {
 
         let database = rocksdb::DB::open_cf(opts, &path, vec![("default", cf_opts)])?;
 
-        let data_key = Identifier::data().schema().build();
-        let _schema = match database.get(&data_key)? {
+        let _schema = match database.get(b"data-schema")? {
             Some(value) => Schema::read_from(&*value)?,
             None => return Err(String::from("Database does not contain a schema").into()),
         };
@@ -228,8 +222,7 @@ impl Index {
     }
 
     pub fn schema(&self) -> Result<Schema, Box<Error>> {
-        let data_key = Identifier::data().schema().build();
-        let bytes = self.database.get(&data_key)?.expect("data-schema entry not found");
+        let bytes = self.database.get(b"data-schema")?.expect("data-schema entry not found");
         Ok(Schema::read_from(&*bytes).expect("Invalid schema"))
     }
 
@@ -237,26 +230,10 @@ impl Index {
         // this snapshot will allow consistent reads for the whole search operation
         let snapshot = self.database.snapshot();
 
-        let index_key = Identifier::data().index().build();
-        let blob = match snapshot.get(&index_key)? {
-            Some(value) => bincode::deserialize(&value)?,
-            None => PositiveBlob::default(),
-        };
+        let builder = QueryBuilder::new(snapshot)?;
+        let documents = builder.query(query, 0..20);
 
-        let mut automatons = Vec::new();
-        for query in query.split_whitespace().map(str::to_lowercase) {
-            let lev = automaton::build_prefix_dfa(&query);
-            automatons.push(lev);
-        }
-
-        let config = Config {
-            blob: blob,
-            automatons: automatons,
-            criteria: criterion::default(),
-            distinct: ((), 1),
-        };
-
-        Ok(RankedStream::new(config).retrieve_documents(0..20))
+        Ok(documents)
     }
 }
 

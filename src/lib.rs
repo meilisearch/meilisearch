@@ -6,7 +6,7 @@
 pub mod automaton;
 pub mod blob;
 pub mod data;
-pub mod database;
+pub mod retrieve;
 pub mod index;
 pub mod rank;
 pub mod tokenizer;

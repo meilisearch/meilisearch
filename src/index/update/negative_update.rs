@@ -3,10 +3,8 @@ use std::error::Error;
 
 use ::rocksdb::rocksdb_options;
 
-use crate::blob::BlobInfo;
 use crate::index::update::Update;
-use crate::index::identifier::Identifier;
-use crate::data::{DocIds, DocIdsBuilder};
+use crate::data::DocIdsBuilder;
 use crate::DocumentId;
 
 pub struct NegativeUpdateBuilder {
@@ -27,34 +25,34 @@ impl NegativeUpdateBuilder {
     }
 
     pub fn build(self) -> Result<Update, Box<Error>> {
-        let blob_info = BlobInfo::new_negative();
-
         let env_options = rocksdb_options::EnvOptions::new();
         let column_family_options = rocksdb_options::ColumnFamilyOptions::new();
         let mut file_writer = rocksdb::SstFileWriter::new(env_options, column_family_options);
         file_writer.open(&self.path.to_string_lossy())?;
 
-        // write the doc ids
-        let blob_key = Identifier::blob(blob_info.name).document_ids().build();
-        let blob_doc_ids = self.doc_ids.into_inner()?;
-        file_writer.put(&blob_key, &blob_doc_ids)?;
+        // // write the doc ids
+        // let blob_key = Identifier::blob(blob_info.name).document_ids().build();
+        // let blob_doc_ids = self.doc_ids.into_inner()?;
+        // file_writer.put(&blob_key, &blob_doc_ids)?;
 
-        {
-            // write the blob name to be merged
-            let mut buffer = Vec::new();
-            blob_info.write_into(&mut buffer);
-            let data_key = Identifier::data().blobs_order().build();
-            file_writer.merge(&data_key, &buffer)?;
-        }
+        // {
+        //     // write the blob name to be merged
+        //     let mut buffer = Vec::new();
+        //     blob_info.write_into(&mut buffer);
+        //     let data_key = Identifier::data().blobs_order().build();
+        //     file_writer.merge(&data_key, &buffer)?;
+        // }
 
-        let blob_doc_ids = DocIds::from_bytes(blob_doc_ids)?;
-        for id in blob_doc_ids.doc_ids().iter().cloned() {
-            let start = Identifier::document(id).build();
-            let end = Identifier::document(id + 1).build();
-            file_writer.delete_range(&start, &end)?;
-        }
+        // let blob_doc_ids = DocIds::from_bytes(blob_doc_ids)?;
+        // for id in blob_doc_ids.doc_ids().iter().cloned() {
+        //     let start = Identifier::document(id).build();
+        //     let end = Identifier::document(id + 1).build();
+        //     file_writer.delete_range(&start, &end)?;
+        // }
 
-        file_writer.finish()?;
-        Update::open(self.path)
+        // file_writer.finish()?;
+        // Update::open(self.path)
+
+        unimplemented!()
     }
 }

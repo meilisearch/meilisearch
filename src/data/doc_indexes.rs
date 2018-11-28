@@ -2,7 +2,6 @@ use std::collections::btree_map::{BTreeMap, Iter, Entry};
 use std::slice::from_raw_parts;
 use std::io::{self, Write};
 use std::path::Path;
-use std::ops::Deref;
 use std::sync::Arc;
 use std::mem;
 
@@ -28,38 +27,28 @@ pub struct DocIndexes {
 impl DocIndexes {
     pub unsafe fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Self> {
         let mmap = MmapReadOnly::open_path(path)?;
-
-        let ranges_len_offset = mmap.as_slice().len() - mem::size_of::<u64>();
-        let ranges_len = (&mmap.as_slice()[ranges_len_offset..]).read_u64::<LittleEndian>()?;
-        let ranges_len = ranges_len as usize * mem::size_of::<Range>();
-
-        let ranges_offset = ranges_len_offset - ranges_len;
-        let ranges = Data::Mmap(mmap.range(ranges_offset, ranges_len));
-
-        let indexes = Data::Mmap(mmap.range(0, ranges_offset));
-
-        Ok(DocIndexes { ranges, indexes })
+        DocIndexes::from_data(Data::Mmap(mmap))
     }
 
     pub fn from_bytes(vec: Vec<u8>) -> io::Result<Self> {
-        let vec = Arc::new(vec);
+        let len = vec.len();
+        DocIndexes::from_shared_bytes(Arc::new(vec), 0, len)
+    }
 
-        let ranges_len_offset = vec.len() - mem::size_of::<u64>();
-        let ranges_len = (&vec[ranges_len_offset..]).read_u64::<LittleEndian>()?;
+    pub fn from_shared_bytes(bytes: Arc<Vec<u8>>, offset: usize, len: usize) -> io::Result<Self> {
+        let data = Data::Shared { bytes, offset, len };
+        DocIndexes::from_data(data)
+    }
+
+    fn from_data(data: Data) -> io::Result<Self> {
+        let ranges_len_offset = data.len() - mem::size_of::<u64>();
+        let ranges_len = (&data[ranges_len_offset..]).read_u64::<LittleEndian>()?;
         let ranges_len = ranges_len as usize * mem::size_of::<Range>();
 
         let ranges_offset = ranges_len_offset - ranges_len;
-        let ranges = Data::Shared {
-            vec: vec.clone(),
-            offset: ranges_offset,
-            len: ranges_len,
-        };
+        let ranges = data.range(ranges_offset, ranges_len);
 
-        let indexes = Data::Shared {
-            vec: vec,
-            offset: 0,
-            len: ranges_offset,
-        };
+        let indexes = data.range(0, ranges_offset);
 
         Ok(DocIndexes { ranges, indexes })
     }

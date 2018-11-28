@@ -1,24 +1,15 @@
-mod merge;
-pub mod ops;
-mod ops_indexed_value;
-mod positive_blob;
-mod negative_blob;
+mod ops;
+pub mod positive;
+pub mod negative;
 
-pub use self::merge::Merge;
-pub use self::positive_blob::{PositiveBlob, PositiveBlobBuilder};
-pub use self::negative_blob::{NegativeBlob, NegativeBlobBuilder};
+pub use self::positive::{PositiveBlob, RawPositiveBlobBuilder, PositiveBlobBuilder};
+pub use self::negative::{NegativeBlob, NegativeBlobBuilder};
+pub use self::ops::OpBuilder;
 
-use std::error::Error;
-use std::io::{Write, Read};
-use std::{io, fmt, mem};
+use std::fmt;
 
-use uuid::Uuid;
-use rocksdb::rocksdb::{DB, Snapshot};
 use serde::ser::{Serialize, Serializer, SerializeTuple};
 use serde::de::{self, Deserialize, Deserializer, SeqAccess, Visitor};
-
-use crate::index::identifier::Identifier;
-use crate::data::DocIndexes;
 
 pub enum Blob {
     Positive(PositiveBlob),
@@ -26,6 +17,14 @@ pub enum Blob {
 }
 
 impl Blob {
+    pub fn is_negative(&self) -> bool {
+        self.sign() == Sign::Negative
+    }
+
+    pub fn is_positive(&self) -> bool {
+        self.sign() == Sign::Positive
+    }
+
     pub fn sign(&self) -> Sign {
         match self {
             Blob::Positive(_) => Sign::Positive,

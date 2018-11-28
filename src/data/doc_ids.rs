@@ -28,7 +28,7 @@ impl DocIds {
         // FIXME check if modulo DocumentId
         let len = vec.len();
         let data = Data::Shared {
-            vec: Arc::new(vec),
+            bytes: Arc::new(vec),
             offset: 0,
             len: len
         };

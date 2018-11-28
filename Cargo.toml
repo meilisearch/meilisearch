@@ -8,13 +8,13 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 bincode = "1.0"
 byteorder = "1.2"
 fnv = "1.0"
+itertools = "0.7"
 lazy_static = "1.1"
 linked-hash-map = { version = "0.5", features = ["serde_impl"] }
 sdset = "0.3"
 serde = "1.0"
 serde_derive = "1.0"
 unidecode = "0.3"
-uuid = { version = "0.7", features = ["serde", "v4"] }
 
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"

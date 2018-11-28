@@ -37,6 +37,12 @@ impl NegativeBlob {
     }
 }
 
+impl AsRef<[DocumentId]> for NegativeBlob {
+    fn as_ref(&self) -> &[DocumentId] {
+        self.as_ids().doc_ids()
+    }
+}
+
 impl Serialize for NegativeBlob {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.doc_ids.serialize(serializer)
