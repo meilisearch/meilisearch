@@ -16,14 +16,14 @@ fn blob_same_sign(a: &Blob, b: &Blob) -> bool {
 fn unwrap_positive(blob: &Blob) -> &PositiveBlob {
     match blob {
         Blob::Positive(blob) => blob,
-        Blob::Negative(_) => panic!("called `Blob::unwrap_positive()` on a `Negative` value"),
+        Blob::Negative(_) => panic!("called `unwrap_positive()` on a `Negative` value"),
     }
 }
 
 fn unwrap_negative(blob: &Blob) -> &NegativeBlob {
     match blob {
         Blob::Negative(blob) => blob,
-        Blob::Positive(_) => panic!("called `Blob::unwrap_negative()` on a `Positive` value"),
+        Blob::Positive(_) => panic!("called `unwrap_negative()` on a `Positive` value"),
     }
 }
 
@@ -57,14 +57,12 @@ impl OpBuilder {
 
                     let mut stream = op_builder.union().into_stream();
                     let mut builder = RawPositiveBlobBuilder::memory();
-
                     while let Some((input, doc_indexes)) = stream.next() {
                         // FIXME empty doc_indexes must be handled by OpBuilder
                         if !doc_indexes.is_empty() {
                             builder.insert(input, doc_indexes).unwrap();
                         }
                     }
-
                     let (map, doc_indexes) = builder.into_inner().unwrap();
                     let blob = PositiveBlob::from_bytes(map, doc_indexes).unwrap();
                     Either::Left(blob)
@@ -74,7 +72,6 @@ impl OpBuilder {
                     for blob in blobs {
                         op_builder.push(unwrap_negative(blob));
                     }
-
                     let blob = op_builder.union().into_negative_blob();
                     Either::Right(blob)
                 },
@@ -83,14 +80,12 @@ impl OpBuilder {
 
         let mut zipped = positives.into_iter().zip(negatives);
         let mut buffer = Vec::new();
-
         zipped.try_fold(PositiveBlob::default(), |base, (positive, negative)| {
             let mut builder = RawPositiveBlobBuilder::memory();
             let doc_ids = Set::new_unchecked(negative.as_ref());
 
             let op_builder = positive::OpBuilder::new().add(&base).add(&positive);
             let mut stream = op_builder.union().into_stream();
-
             while let Some((input, doc_indexes)) = stream.next() {
                 let doc_indexes = Set::new_unchecked(doc_indexes);
                 let op = DifferenceByKey::new(doc_indexes, doc_ids, |x| x.document_id, |x| *x);
