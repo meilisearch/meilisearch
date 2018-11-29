@@ -6,7 +6,7 @@ use std::error::Error;
 use fst::{map, Map, Streamer, IntoStreamer};
 
 use crate::DocIndex;
-use crate::data::{DocIndexes, RawDocIndexesBuilder, DocIndexesBuilder};
+use crate::data::{DocIndexes, RawDocIndexesBuilder};
 use serde::ser::{Serialize, Serializer, SerializeTuple};
 use serde::de::{self, Deserialize, Deserializer, SeqAccess, Visitor};
 
@@ -133,15 +133,15 @@ impl<'de> Deserialize<'de> for PositiveBlob {
     }
 }
 
-pub struct RawPositiveBlobBuilder<W, X> {
+pub struct PositiveBlobBuilder<W, X> {
     map: fst::MapBuilder<W>,
     indexes: RawDocIndexesBuilder<X>,
     value: u64,
 }
 
-impl RawPositiveBlobBuilder<Vec<u8>, Vec<u8>> {
+impl PositiveBlobBuilder<Vec<u8>, Vec<u8>> {
     pub fn memory() -> Self {
-        RawPositiveBlobBuilder {
+        PositiveBlobBuilder {
             map: fst::MapBuilder::memory(),
             indexes: RawDocIndexesBuilder::memory(),
             value: 0,
@@ -149,15 +149,18 @@ impl RawPositiveBlobBuilder<Vec<u8>, Vec<u8>> {
     }
 }
 
-impl<W: Write, X: Write> RawPositiveBlobBuilder<W, X> {
+impl<W: Write, X: Write> PositiveBlobBuilder<W, X> {
     pub fn new(map: W, indexes: X) -> Result<Self, Box<Error>> {
-        Ok(RawPositiveBlobBuilder {
+        Ok(PositiveBlobBuilder {
             map: fst::MapBuilder::new(map)?,
             indexes: RawDocIndexesBuilder::new(indexes),
             value: 0,
         })
     }
 
+    /// If a key is inserted that is less than or equal to any previous key added,
+    /// then an error is returned. Similarly, if there was a problem writing
+    /// to the underlying writer, an error is returned.
     // FIXME what if one write doesn't work but the other do ?
     pub fn insert(&mut self, key: &[u8], doc_indexes: &[DocIndex]) -> Result<(), Box<Error>> {
         self.map.insert(key, self.value)?;
@@ -174,50 +177,5 @@ impl<W: Write, X: Write> RawPositiveBlobBuilder<W, X> {
         let map = self.map.into_inner()?;
         let indexes = self.indexes.into_inner()?;
         Ok((map, indexes))
-    }
-}
-
-pub struct PositiveBlobBuilder<W, X> {
-    map: W,
-    indexes: DocIndexesBuilder<X>,
-}
-
-impl<W: Write, X: Write> PositiveBlobBuilder<W, X> {
-    pub fn new(map: W, indexes: X) -> Self {
-        Self { map, indexes: DocIndexesBuilder::new(indexes) }
-    }
-
-    pub fn insert<S: Into<String>>(&mut self, key: S, index: DocIndex) {
-        self.indexes.insert(key.into(), index)
-    }
-
-    pub fn finish(self) -> Result<(), Box<Error>> {
-        self.into_inner().map(drop)
-    }
-
-    pub fn into_inner(self) -> Result<(W, X), Box<Error>> {
-        // FIXME insert a magic number that indicates if the endianess
-        //       of the input is the same as the machine that is reading it.
-
-        let map = {
-            let mut keys_builder = fst::MapBuilder::new(self.map)?;
-            let keys = self.indexes.keys().map(|(s, v)| (s, *v));
-            keys_builder.extend_iter(keys)?;
-            keys_builder.into_inner()?
-        };
-
-        let indexes = self.indexes.into_inner()?;
-
-        Ok((map, indexes))
-    }
-}
-
-impl PositiveBlobBuilder<Vec<u8>, Vec<u8>> {
-    pub fn memory() -> Self {
-        PositiveBlobBuilder::new(Vec::new(), Vec::new())
-    }
-
-    pub fn build(self) -> Result<PositiveBlob, Box<Error>> {
-        self.into_inner().and_then(|(m, i)| PositiveBlob::from_bytes(m, i))
     }
 }

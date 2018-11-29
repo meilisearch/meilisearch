@@ -6,7 +6,7 @@ use itertools::{Itertools, Either};
 use sdset::duo::DifferenceByKey;
 use sdset::{Set, SetOperation};
 
-use crate::blob::{Blob, Sign, PositiveBlob, RawPositiveBlobBuilder, NegativeBlob};
+use crate::blob::{Blob, Sign, PositiveBlob, PositiveBlobBuilder, NegativeBlob};
 use crate::blob::{positive, negative};
 
 fn blob_same_sign(a: &Blob, b: &Blob) -> bool {
@@ -56,7 +56,7 @@ impl OpBuilder {
                     }
 
                     let mut stream = op_builder.union().into_stream();
-                    let mut builder = RawPositiveBlobBuilder::memory();
+                    let mut builder = PositiveBlobBuilder::memory();
                     while let Some((input, doc_indexes)) = stream.next() {
                         // FIXME empty doc_indexes must be handled by OpBuilder
                         if !doc_indexes.is_empty() {
@@ -81,7 +81,7 @@ impl OpBuilder {
         let mut zipped = positives.into_iter().zip(negatives);
         let mut buffer = Vec::new();
         zipped.try_fold(PositiveBlob::default(), |base, (positive, negative)| {
-            let mut builder = RawPositiveBlobBuilder::memory();
+            let mut builder = PositiveBlobBuilder::memory();
             let doc_ids = Set::new_unchecked(negative.as_ref());
 
             let op_builder = positive::OpBuilder::new().add(&base).add(&positive);

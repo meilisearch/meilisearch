@@ -2,7 +2,7 @@ mod ops;
 pub mod positive;
 pub mod negative;
 
-pub use self::positive::{PositiveBlob, RawPositiveBlobBuilder, PositiveBlobBuilder};
+pub use self::positive::{PositiveBlob, PositiveBlobBuilder};
 pub use self::negative::{NegativeBlob, NegativeBlobBuilder};
 pub use self::ops::OpBuilder;
 

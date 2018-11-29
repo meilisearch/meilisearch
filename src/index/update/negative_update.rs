@@ -50,7 +50,7 @@ impl NegativeUpdateBuilder {
         let doc_ids = DocIds::from_bytes(bytes)?;
         let blob = Blob::Negative(NegativeBlob::from_raw(doc_ids));
         let bytes = bincode::serialize(&blob)?;
-        file_writer.merge(DATA_INDEX, &bytes);
+        file_writer.merge(DATA_INDEX, &bytes)?;
 
         // FIXME remove this ugly thing !
         // let Blob::Negative(negative_blob) = blob;
