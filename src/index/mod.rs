@@ -14,8 +14,11 @@ use crate::index::update::Update;
 use crate::rank::QueryBuilder;
 use crate::blob::{self, Blob};
 
+const DATA_INDEX: &[u8] =  b"data-index";
+const DATA_SCHEMA: &[u8] = b"data-schema";
+
 fn merge_indexes(key: &[u8], existing_value: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    if key != b"data-index" { panic!("The merge operator only supports \"data-index\" merging") }
+    if key != DATA_INDEX { panic!("The merge operator only supports \"data-index\" merging") }
 
     let capacity = {
         let remaining = operands.size_hint().0;
@@ -65,7 +68,7 @@ impl Index {
 
         let mut schema_bytes = Vec::new();
         schema.write_to(&mut schema_bytes)?;
-        database.put(b"data-schema", &schema_bytes)?;
+        database.put(DATA_SCHEMA, &schema_bytes)?;
 
         Ok(Self { database })
     }
@@ -81,7 +84,7 @@ impl Index {
 
         let database = rocksdb::DB::open_cf(opts, &path, vec![("default", cf_opts)])?;
 
-        let _schema = match database.get(b"data-schema")? {
+        let _schema = match database.get(DATA_SCHEMA)? {
             Some(value) => Schema::read_from(&*value)?,
             None => return Err(String::from("Database does not contain a schema").into()),
         };
@@ -103,7 +106,7 @@ impl Index {
     }
 
     pub fn schema(&self) -> Result<Schema, Box<Error>> {
-        let bytes = self.database.get(b"data-schema")?.expect("data-schema entry not found");
+        let bytes = self.database.get(DATA_SCHEMA)?.expect("data-schema entry not found");
         Ok(Schema::read_from(&*bytes).expect("Invalid schema"))
     }
 

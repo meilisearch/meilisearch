@@ -1,11 +1,26 @@
 use std::path::PathBuf;
 use std::error::Error;
+use std::io::{Cursor, Write};
 
+use byteorder::{NetworkEndian, WriteBytesExt};
 use ::rocksdb::rocksdb_options;
 
+use crate::data::{DocIds, DocIdsBuilder};
+use crate::blob::{Blob, NegativeBlob};
 use crate::index::update::Update;
-use crate::data::DocIdsBuilder;
+use crate::index::DATA_INDEX;
 use crate::DocumentId;
+
+const DOC_KEY_LEN: usize = 4 + std::mem::size_of::<u64>();
+
+// "doc-ID_8_BYTES"
+fn raw_document_key(id: DocumentId) -> [u8; DOC_KEY_LEN] {
+    let mut key = [0; DOC_KEY_LEN];
+    let mut rdr = Cursor::new(&mut key[..]);
+    rdr.write_all(b"doc-").unwrap();
+    rdr.write_u64::<NetworkEndian>(id).unwrap();
+    key
+}
 
 pub struct NegativeUpdateBuilder {
     path: PathBuf,
@@ -30,29 +45,27 @@ impl NegativeUpdateBuilder {
         let mut file_writer = rocksdb::SstFileWriter::new(env_options, column_family_options);
         file_writer.open(&self.path.to_string_lossy())?;
 
-        // // write the doc ids
-        // let blob_key = Identifier::blob(blob_info.name).document_ids().build();
-        // let blob_doc_ids = self.doc_ids.into_inner()?;
-        // file_writer.put(&blob_key, &blob_doc_ids)?;
+        // write the data-index aka negative blob
+        let bytes = self.doc_ids.into_inner()?;
+        let doc_ids = DocIds::from_bytes(bytes)?;
+        let blob = Blob::Negative(NegativeBlob::from_raw(doc_ids));
+        let bytes = bincode::serialize(&blob)?;
+        file_writer.merge(DATA_INDEX, &bytes);
 
-        // {
-        //     // write the blob name to be merged
-        //     let mut buffer = Vec::new();
-        //     blob_info.write_into(&mut buffer);
-        //     let data_key = Identifier::data().blobs_order().build();
-        //     file_writer.merge(&data_key, &buffer)?;
-        // }
+        // FIXME remove this ugly thing !
+        // let Blob::Negative(negative_blob) = blob;
+        let negative_blob = match blob {
+            Blob::Negative(blob) => blob,
+            Blob::Positive(_) => unreachable!(),
+        };
 
-        // let blob_doc_ids = DocIds::from_bytes(blob_doc_ids)?;
-        // for id in blob_doc_ids.doc_ids().iter().cloned() {
-        //     let start = Identifier::document(id).build();
-        //     let end = Identifier::document(id + 1).build();
-        //     file_writer.delete_range(&start, &end)?;
-        // }
+        for &document_id in negative_blob.as_ref() {
+            let start = raw_document_key(document_id);
+            let end = raw_document_key(document_id + 1);
+            file_writer.delete_range(&start, &end)?;
+        }
 
-        // file_writer.finish()?;
-        // Update::open(self.path)
-
-        unimplemented!()
+        file_writer.finish()?;
+        Update::open(self.path)
     }
 }

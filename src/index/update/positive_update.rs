@@ -52,7 +52,6 @@ where B: TokenizerBuilder
         let env_options = rocksdb_options::EnvOptions::new();
         let column_family_options = rocksdb_options::ColumnFamilyOptions::new();
         let mut file_writer = rocksdb::SstFileWriter::new(env_options, column_family_options);
-
         file_writer.open(&self.path.to_string_lossy())?;
 
         // let mut builder = PositiveBlobBuilder::new(Vec::new(), Vec::new());
