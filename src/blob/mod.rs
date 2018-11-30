@@ -3,7 +3,7 @@ pub mod positive;
 pub mod negative;
 
 pub use self::positive::{PositiveBlob, PositiveBlobBuilder};
-pub use self::negative::{NegativeBlob, NegativeBlobBuilder};
+pub use self::negative::NegativeBlob;
 pub use self::ops::OpBuilder;
 
 use std::fmt;

@@ -1,37 +1,24 @@
 use std::path::PathBuf;
 use std::error::Error;
-use std::io::{Cursor, Write};
 
-use byteorder::{NetworkEndian, WriteBytesExt};
 use ::rocksdb::rocksdb_options;
 
-use crate::data::{DocIds, DocIdsBuilder};
+use crate::index::update::negative::unordered_builder::UnorderedNegativeBlobBuilder;
+use crate::index::update::{Update, raw_document_key};
 use crate::blob::{Blob, NegativeBlob};
-use crate::index::update::Update;
 use crate::index::DATA_INDEX;
 use crate::DocumentId;
 
-const DOC_KEY_LEN: usize = 4 + std::mem::size_of::<u64>();
-
-// "doc-ID_8_BYTES"
-fn raw_document_key(id: DocumentId) -> [u8; DOC_KEY_LEN] {
-    let mut key = [0; DOC_KEY_LEN];
-    let mut rdr = Cursor::new(&mut key[..]);
-    rdr.write_all(b"doc-").unwrap();
-    rdr.write_u64::<NetworkEndian>(id).unwrap();
-    key
-}
-
 pub struct NegativeUpdateBuilder {
     path: PathBuf,
-    doc_ids: DocIdsBuilder<Vec<u8>>,
+    doc_ids: UnorderedNegativeBlobBuilder<Vec<u8>>,
 }
 
 impl NegativeUpdateBuilder {
     pub fn new<P: Into<PathBuf>>(path: P) -> NegativeUpdateBuilder {
         NegativeUpdateBuilder {
             path: path.into(),
-            doc_ids: DocIdsBuilder::new(Vec::new()),
+            doc_ids: UnorderedNegativeBlobBuilder::memory(),
         }
     }
 
@@ -45,10 +32,11 @@ impl NegativeUpdateBuilder {
         let mut file_writer = rocksdb::SstFileWriter::new(env_options, column_family_options);
         file_writer.open(&self.path.to_string_lossy())?;
 
-        // write the data-index aka negative blob
         let bytes = self.doc_ids.into_inner()?;
-        let doc_ids = DocIds::from_bytes(bytes)?;
-        let blob = Blob::Negative(NegativeBlob::from_raw(doc_ids));
+        let negative_blob = NegativeBlob::from_bytes(bytes)?;
+        let blob = Blob::Negative(negative_blob);
+
+        // write the data-index aka negative blob
         let bytes = bincode::serialize(&blob)?;
         file_writer.merge(DATA_INDEX, &bytes)?;
 

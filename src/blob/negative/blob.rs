@@ -1,11 +1,10 @@
-use std::io::Write;
 use std::path::Path;
 use std::error::Error;
 
-use crate::DocumentId;
-use crate::data::{DocIds, DocIdsBuilder};
-use serde::ser::{Serialize, Serializer};
 use serde::de::{self, Deserialize, Deserializer};
+use serde::ser::{Serialize, Serializer};
+use crate::data::DocIds;
+use crate::DocumentId;
 
 pub struct NegativeBlob {
     doc_ids: DocIds,
@@ -53,35 +52,5 @@ impl<'de> Deserialize<'de> for NegativeBlob {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<NegativeBlob, D::Error> {
         let bytes = Vec::deserialize(deserializer)?;
         NegativeBlob::from_bytes(bytes).map_err(de::Error::custom)
-    }
-}
-
-pub struct NegativeBlobBuilder<W> {
-    doc_ids: DocIdsBuilder<W>,
-}
-
-impl<W: Write> NegativeBlobBuilder<W> {
-    pub fn new(wrt: W) -> Self {
-        Self { doc_ids: DocIdsBuilder::new(wrt) }
-    }
-
-    pub fn insert(&mut self, doc: DocumentId) -> bool {
-        self.doc_ids.insert(doc)
-    }
-
-    pub fn finish(self) -> Result<(), Box<Error>> {
-        self.into_inner().map(|_| ())
-    }
-
-    pub fn into_inner(self) -> Result<W, Box<Error>> {
-        // FIXME insert a magic number that indicates if the endianess
-        //       of the input is the same as the machine that is reading it.
-        Ok(self.doc_ids.into_inner()?)
-    }
-}
-
-impl NegativeBlobBuilder<Vec<u8>> {
-    pub fn build(self) -> Result<NegativeBlob, Box<Error>> {
-        self.into_inner().and_then(|ids| NegativeBlob::from_bytes(ids))
     }
 }

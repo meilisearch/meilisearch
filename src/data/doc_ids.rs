@@ -1,11 +1,9 @@
-use std::collections::BTreeSet;
 use std::slice::from_raw_parts;
 use std::error::Error;
 use std::path::Path;
 use std::sync::Arc;
 use std::{io, mem};
 
-use byteorder::{NativeEndian, WriteBytesExt};
 use fst::raw::MmapReadOnly;
 use serde::ser::{Serialize, Serializer};
 
@@ -55,30 +53,5 @@ impl DocIds {
 impl Serialize for DocIds {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.data.as_ref().serialize(serializer)
-    }
-}
-
-pub struct DocIdsBuilder<W> {
-    doc_ids: BTreeSet<DocumentId>, // TODO: prefer a linked-list
-    wrt: W,
-}
-
-impl<W: io::Write> DocIdsBuilder<W> {
-    pub fn new(wrt: W) -> Self {
-        Self {
-            doc_ids: BTreeSet::new(),
-            wrt: wrt,
-        }
-    }
-
-    pub fn insert(&mut self, doc: DocumentId) -> bool {
-        self.doc_ids.insert(doc)
-    }
-
-    pub fn into_inner(mut self) -> io::Result<W> {
-        for id in self.doc_ids {
-            self.wrt.write_u64::<NativeEndian>(id)?;
-        }
-        Ok(self.wrt)
     }
 }
