@@ -2,7 +2,6 @@ use std::error::Error;
 
 use fst::{IntoStreamer, Streamer};
 use group_by::GroupBy;
-use itertools::{Itertools, Either};
 use sdset::duo::DifferenceByKey;
 use sdset::{Set, SetOperation};
 
@@ -47,7 +46,9 @@ impl OpBuilder {
 
     pub fn merge(self) -> Result<PositiveBlob, Box<Error>> {
         let groups = GroupBy::new(&self.blobs, blob_same_sign);
-        let (positives, negatives): (Vec<_>, Vec<_>) = groups.partition_map(|blobs| {
+        let mut positives = Vec::new();
+        let mut negatives = Vec::new();
+        for blobs in groups {
             match blobs[0].sign() {
                 Sign::Positive => {
                     let mut op_builder = positive::OpBuilder::with_capacity(blobs.len());
@@ -65,7 +66,7 @@ impl OpBuilder {
                     }
                     let (map, doc_indexes) = builder.into_inner().unwrap();
                     let blob = PositiveBlob::from_bytes(map, doc_indexes).unwrap();
-                    Either::Left(blob)
+                    positives.push(blob);
                 },
                 Sign::Negative => {
                     let mut op_builder = negative::OpBuilder::with_capacity(blobs.len());
@@ -73,10 +74,10 @@ impl OpBuilder {
                         op_builder.push(unwrap_negative(blob));
                     }
                     let blob = op_builder.union().into_negative_blob();
-                    Either::Right(blob)
+                    negatives.push(blob);
                 },
             }
-        });
+        }
 
         let mut zipped = positives.into_iter().zip(negatives);
         let mut buffer = Vec::new();
