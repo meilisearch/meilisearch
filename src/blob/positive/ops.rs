@@ -106,7 +106,8 @@ impl<'m, 'a> fst::Streamer<'a> for $name<'m> {
 
                 let mut builder = SdOpBuilder::with_capacity(ivalues.len());
                 for ivalue in ivalues {
-                    let indexes = self.indexes[ivalue.index].get(ivalue.value).expect("");
+                    let indexes = self.indexes[ivalue.index].get(ivalue.value);
+                    let indexes = indexes.expect("BUG: could not find document indexes");
                     let set = Set::new_unchecked(indexes);
                     builder.push(set);
                 }

@@ -1,4 +1,3 @@
-use std::collections::btree_map::{BTreeMap, Iter, Entry};
 use std::slice::from_raw_parts;
 use std::io::{self, Write};
 use std::path::Path;
@@ -12,6 +11,7 @@ use serde::ser::{Serialize, Serializer, SerializeTuple};
 use crate::DocIndex;
 use crate::data::Data;
 
+#[derive(Debug)]
 #[repr(C)]
 struct Range {
     start: u64,
@@ -43,7 +43,7 @@ impl DocIndexes {
     fn from_data(data: Data) -> io::Result<Self> {
         let ranges_len_offset = data.len() - mem::size_of::<u64>();
         let ranges_len = (&data[ranges_len_offset..]).read_u64::<LittleEndian>()?;
-        let ranges_len = ranges_len as usize * mem::size_of::<Range>();
+        let ranges_len = ranges_len as usize;
 
         let ranges_offset = ranges_len_offset - ranges_len;
         let ranges = data.range(ranges_offset, ranges_len);
@@ -85,20 +85,20 @@ impl Serialize for DocIndexes {
     }
 }
 
-pub struct RawDocIndexesBuilder<W> {
+pub struct DocIndexesBuilder<W> {
     ranges: Vec<Range>,
     wtr: W,
 }
 
-impl RawDocIndexesBuilder<Vec<u8>> {
+impl DocIndexesBuilder<Vec<u8>> {
     pub fn memory() -> Self {
-        RawDocIndexesBuilder::new(Vec::new())
+        DocIndexesBuilder::new(Vec::new())
     }
 }
 
-impl<W: Write> RawDocIndexesBuilder<W> {
+impl<W: Write> DocIndexesBuilder<W> {
     pub fn new(wtr: W) -> Self {
-        RawDocIndexesBuilder {
+        DocIndexesBuilder {
             ranges: Vec::new(),
             wtr: wtr,
         }
@@ -106,7 +106,7 @@ impl<W: Write> RawDocIndexesBuilder<W> {
 
     pub fn insert(&mut self, indexes: &[DocIndex]) -> io::Result<()> {
         let len = indexes.len() as u64;
-        let start = self.ranges.last().map(|r| r.start).unwrap_or(0);
+        let start = self.ranges.last().map(|r| r.end).unwrap_or(0);
         let range = Range { start, end: start + len };
         self.ranges.push(range);
 
@@ -132,95 +132,36 @@ impl<W: Write> RawDocIndexesBuilder<W> {
     }
 }
 
-pub struct DocIndexesBuilder<W> {
-    keys: BTreeMap<String, u64>,
-    indexes: Vec<Vec<DocIndex>>,
-    number_docs: usize,
-    wtr: W,
-}
-
-impl<W: Write> DocIndexesBuilder<W> {
-    pub fn new(wtr: W) -> Self {
-        Self {
-            keys: BTreeMap::new(),
-            indexes: Vec::new(),
-            number_docs: 0,
-            wtr: wtr,
-        }
-    }
-
-    pub fn number_doc_indexes(&self) -> usize {
-        self.number_docs
-    }
-
-    pub fn insert(&mut self, key: String, value: DocIndex) {
-        match self.keys.entry(key) {
-            Entry::Vacant(e) => {
-                let index = self.indexes.len() as u64;
-                self.indexes.push(vec![value]);
-                e.insert(index);
-            },
-            Entry::Occupied(e) => {
-                let index = *e.get();
-                let vec = &mut self.indexes[index as usize];
-                vec.push(value);
-            },
-        }
-        self.number_docs += 1;
-    }
-
-    pub fn keys(&self) -> Iter<String, u64> {
-        self.keys.iter()
-    }
-
-    pub fn finish(self) -> io::Result<()> {
-        self.into_inner().map(drop)
-    }
-
-    pub fn into_inner(mut self) -> io::Result<W> {
-        for vec in &mut self.indexes {
-            vec.sort_unstable();
-        }
-
-        let (ranges, values) = into_sliced_ranges(self.indexes, self.number_docs);
-
-        // write values first
-        let slice = unsafe { into_u8_slice(values.as_slice()) };
-        self.wtr.write_all(slice)?;
-
-        // write ranges after
-        let slice = unsafe { into_u8_slice(ranges.as_slice()) };
-        self.wtr.write_all(slice)?;
-
-        // write the length of the ranges
-        let len = ranges.len() as u64;
-        self.wtr.write_u64::<LittleEndian>(len)?;
-
-        self.wtr.flush()?;
-        Ok(self.wtr)
-    }
-}
-
-fn into_sliced_ranges<T>(vecs: Vec<Vec<T>>, number_docs: usize) -> (Vec<Range>, Vec<T>) {
-    let cap = vecs.len();
-    let mut ranges = Vec::with_capacity(cap);
-    let mut values = Vec::with_capacity(number_docs);
-
-    for v in &vecs {
-        let len = v.len() as u64;
-        let start = ranges.last().map(|&Range { end, .. }| end).unwrap_or(0);
-
-        let range = Range { start, end: start + len };
-        ranges.push(range);
-    }
-
-    values.extend(vecs.into_iter().flatten());
-
-    (ranges, values)
-}
-
 unsafe fn into_u8_slice<T>(slice: &[T]) -> &[u8] {
     let ptr = slice.as_ptr() as *const u8;
     let len = slice.len() * mem::size_of::<T>();
     from_raw_parts(ptr, len)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error;
+
+    #[test]
+    fn serialize_deserialize() -> Result<(), Box<Error>> {
+        let a = DocIndex { document_id: 0, attribute: 3, attribute_index: 11 };
+        let b = DocIndex { document_id: 1, attribute: 4, attribute_index: 21 };
+        let c = DocIndex { document_id: 2, attribute: 8, attribute_index: 2 };
+
+        let mut builder = DocIndexesBuilder::memory();
+
+        builder.insert(&[a])?;
+        builder.insert(&[a, b, c])?;
+        builder.insert(&[a, c])?;
+
+        let bytes = builder.into_inner()?;
+        let docs = DocIndexes::from_bytes(bytes)?;
+
+        assert_eq!(docs.get(0).unwrap(), &[a]);
+        assert_eq!(docs.get(1).unwrap(), &[a, b, c]);
+        assert_eq!(docs.get(2).unwrap(), &[a, c]);
+
+        Ok(())
+    }
 }

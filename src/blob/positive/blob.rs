@@ -6,7 +6,7 @@ use std::error::Error;
 use fst::{map, Map, Streamer, IntoStreamer};
 
 use crate::DocIndex;
-use crate::data::{DocIndexes, RawDocIndexesBuilder};
+use crate::data::{DocIndexes, DocIndexesBuilder};
 use serde::ser::{Serialize, Serializer, SerializeTuple};
 use serde::de::{self, Deserialize, Deserializer, SeqAccess, Visitor};
 
@@ -135,7 +135,7 @@ impl<'de> Deserialize<'de> for PositiveBlob {
 
 pub struct PositiveBlobBuilder<W, X> {
     map: fst::MapBuilder<W>,
-    indexes: RawDocIndexesBuilder<X>,
+    indexes: DocIndexesBuilder<X>,
     value: u64,
 }
 
@@ -143,7 +143,7 @@ impl PositiveBlobBuilder<Vec<u8>, Vec<u8>> {
     pub fn memory() -> Self {
         PositiveBlobBuilder {
             map: fst::MapBuilder::memory(),
-            indexes: RawDocIndexesBuilder::memory(),
+            indexes: DocIndexesBuilder::memory(),
             value: 0,
         }
     }
@@ -153,7 +153,7 @@ impl<W: Write, X: Write> PositiveBlobBuilder<W, X> {
     pub fn new(map: W, indexes: X) -> Result<Self, Box<Error>> {
         Ok(PositiveBlobBuilder {
             map: fst::MapBuilder::new(map)?,
-            indexes: RawDocIndexesBuilder::new(indexes),
+            indexes: DocIndexesBuilder::new(indexes),
             value: 0,
         })
     }

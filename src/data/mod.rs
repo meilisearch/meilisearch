@@ -7,7 +7,7 @@ use std::sync::Arc;
 use fst::raw::MmapReadOnly;
 
 pub use self::doc_ids::DocIds;
-pub use self::doc_indexes::{DocIndexes, DocIndexesBuilder, RawDocIndexesBuilder};
+pub use self::doc_indexes::{DocIndexes, DocIndexesBuilder};
 
 #[derive(Clone)]
 enum Data {
