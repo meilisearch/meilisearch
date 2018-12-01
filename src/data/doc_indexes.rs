@@ -1,12 +1,12 @@
 use std::slice::from_raw_parts;
 use std::io::{self, Write};
+use std::mem::size_of;
+use std::ops::Index;
 use std::path::Path;
 use std::sync::Arc;
-use std::mem;
 
 use fst::raw::MmapReadOnly;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use serde::ser::{Serialize, Serializer, SerializeTuple};
 
 use crate::DocIndex;
 use crate::data::Data;
@@ -41,7 +41,7 @@ impl DocIndexes {
     }
 
     fn from_data(data: Data) -> io::Result<Self> {
-        let ranges_len_offset = data.len() - mem::size_of::<u64>();
+        let ranges_len_offset = data.len() - size_of::<u64>();
         let ranges_len = (&data[ranges_len_offset..]).read_u64::<LittleEndian>()?;
         let ranges_len = ranges_len as usize;
 
@@ -53,7 +53,18 @@ impl DocIndexes {
         Ok(DocIndexes { ranges, indexes })
     }
 
-    pub fn get(&self, index: u64) -> Option<&[DocIndex]> {
+    pub fn to_vec(&self) -> Vec<u8> {
+        let capacity = self.indexes.len() + self.ranges.len() + size_of::<u64>();
+        let mut bytes = Vec::with_capacity(capacity);
+
+        bytes.extend_from_slice(&self.indexes);
+        bytes.extend_from_slice(&self.ranges);
+        bytes.write_u64::<LittleEndian>(self.ranges.len() as u64).unwrap();
+
+        bytes
+    }
+
+    pub fn get(&self, index: usize) -> Option<&[DocIndex]> {
         self.ranges().get(index as usize).map(|Range { start, end }| {
             let start = *start as usize;
             let end = *end as usize;
@@ -64,24 +75,26 @@ impl DocIndexes {
     fn ranges(&self) -> &[Range] {
         let slice = &self.ranges;
         let ptr = slice.as_ptr() as *const Range;
-        let len = slice.len() / mem::size_of::<Range>();
+        let len = slice.len() / size_of::<Range>();
         unsafe { from_raw_parts(ptr, len) }
     }
 
     fn indexes(&self) -> &[DocIndex] {
         let slice = &self.indexes;
         let ptr = slice.as_ptr() as *const DocIndex;
-        let len = slice.len() / mem::size_of::<DocIndex>();
+        let len = slice.len() / size_of::<DocIndex>();
         unsafe { from_raw_parts(ptr, len) }
     }
 }
 
-impl Serialize for DocIndexes {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut tuple = serializer.serialize_tuple(2)?;
-        tuple.serialize_element(self.ranges.as_ref())?;
-        tuple.serialize_element(self.indexes.as_ref())?;
-        tuple.end()
+impl Index<usize> for DocIndexes {
+    type Output = [DocIndex];
+
+    fn index(&self, index: usize) -> &Self::Output {
+        match self.get(index) {
+            Some(indexes) => indexes,
+            None => panic!("index {} out of range for a maximum of {} ranges", index, self.ranges().len()),
+        }
     }
 }
 
@@ -134,7 +147,7 @@ impl<W: Write> DocIndexesBuilder<W> {
 
 unsafe fn into_u8_slice<T>(slice: &[T]) -> &[u8] {
     let ptr = slice.as_ptr() as *const u8;
-    let len = slice.len() * mem::size_of::<T>();
+    let len = slice.len() * size_of::<T>();
     from_raw_parts(ptr, len)
 }
 
@@ -144,7 +157,7 @@ mod tests {
     use std::error::Error;
 
     #[test]
-    fn serialize_deserialize() -> Result<(), Box<Error>> {
+    fn builder_serialize_deserialize() -> Result<(), Box<Error>> {
         let a = DocIndex { document_id: 0, attribute: 3, attribute_index: 11 };
         let b = DocIndex { document_id: 1, attribute: 4, attribute_index: 21 };
         let c = DocIndex { document_id: 2, attribute: 8, attribute_index: 2 };
@@ -158,9 +171,31 @@ mod tests {
         let bytes = builder.into_inner()?;
         let docs = DocIndexes::from_bytes(bytes)?;
 
-        assert_eq!(docs.get(0).unwrap(), &[a]);
-        assert_eq!(docs.get(1).unwrap(), &[a, b, c]);
-        assert_eq!(docs.get(2).unwrap(), &[a, c]);
+        assert_eq!(docs.get(0), Some(&[a][..]));
+        assert_eq!(docs.get(1), Some(&[a, b, c][..]));
+        assert_eq!(docs.get(2), Some(&[a, c][..]));
+        assert_eq!(docs.get(3), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_deserialize() -> Result<(), Box<Error>> {
+        let a = DocIndex { document_id: 0, attribute: 3, attribute_index: 11 };
+        let b = DocIndex { document_id: 1, attribute: 4, attribute_index: 21 };
+        let c = DocIndex { document_id: 2, attribute: 8, attribute_index: 2 };
+
+        let mut builder = DocIndexesBuilder::memory();
+
+        builder.insert(&[a])?;
+        builder.insert(&[a, b, c])?;
+        builder.insert(&[a, c])?;
+
+        let builder_bytes = builder.into_inner()?;
+        let docs = DocIndexes::from_bytes(builder_bytes.clone())?;
+        let bytes = docs.to_vec();
+
+        assert_eq!(builder_bytes, bytes);
 
         Ok(())
     }

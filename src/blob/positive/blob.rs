@@ -37,7 +37,7 @@ impl PositiveBlob {
     }
 
     pub fn get<K: AsRef<[u8]>>(&self, key: K) -> Option<&[DocIndex]> {
-        self.map.get(key).and_then(|index| self.indexes.get(index))
+        self.map.get(key).map(|index| &self.indexes[index as usize])
     }
 
     pub fn as_map(&self) -> &Map {
@@ -50,6 +50,22 @@ impl PositiveBlob {
 
     pub fn explode(self) -> (Map, DocIndexes) {
         (self.map, self.indexes)
+    }
+}
+
+impl fmt::Debug for PositiveBlob {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "PositiveBlob([")?;
+        let mut stream = self.into_stream();
+        let mut first = true;
+        while let Some((k, v)) = stream.next() {
+            if !first {
+                write!(f, ", ")?;
+            }
+            first = false;
+            write!(f, "({}, {:?})", String::from_utf8_lossy(k), v)?;
+        }
+        write!(f, "])")
     }
 }
 
@@ -78,8 +94,7 @@ impl<'m, 'a> Streamer<'a> for PositiveBlobStream<'m> {
     fn next(&'a mut self) -> Option<Self::Item> {
         match self.map_stream.next() {
             Some((input, index)) => {
-                let doc_indexes = self.doc_indexes.get(index);
-                let doc_indexes = doc_indexes.expect("BUG: could not find document indexes");
+                let doc_indexes = &self.doc_indexes[index as usize];
                 Some((input, doc_indexes))
             },
             None => None,
@@ -91,7 +106,7 @@ impl Serialize for PositiveBlob {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut tuple = serializer.serialize_tuple(2)?;
         tuple.serialize_element(&self.map.as_fst().to_vec())?;
-        tuple.serialize_element(&self.indexes)?;
+        tuple.serialize_element(&self.indexes.to_vec())?;
         tuple.end()
     }
 }
@@ -162,7 +177,9 @@ impl<W: Write, X: Write> PositiveBlobBuilder<W, X> {
     /// then an error is returned. Similarly, if there was a problem writing
     /// to the underlying writer, an error is returned.
     // FIXME what if one write doesn't work but the other do ?
-    pub fn insert(&mut self, key: &[u8], doc_indexes: &[DocIndex]) -> Result<(), Box<Error>> {
+    pub fn insert<K>(&mut self, key: K, doc_indexes: &[DocIndex]) -> Result<(), Box<Error>>
+    where K: AsRef<[u8]>,
+    {
         self.map.insert(key, self.value)?;
         self.indexes.insert(doc_indexes)?;
         self.value += 1;
@@ -177,5 +194,60 @@ impl<W: Write, X: Write> PositiveBlobBuilder<W, X> {
         let map = self.map.into_inner()?;
         let indexes = self.indexes.into_inner()?;
         Ok((map, indexes))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error;
+
+    #[test]
+    fn serialize_deserialize() -> Result<(), Box<Error>> {
+        let a = DocIndex { document_id: 0, attribute: 3, attribute_index: 11 };
+        let b = DocIndex { document_id: 1, attribute: 4, attribute_index: 21 };
+        let c = DocIndex { document_id: 2, attribute: 8, attribute_index: 2 };
+
+        let mut builder = PositiveBlobBuilder::memory();
+
+        builder.insert("aaa", &[a])?;
+        builder.insert("aab", &[a, b, c])?;
+        builder.insert("aac", &[a, c])?;
+
+        let (map_bytes, indexes_bytes) = builder.into_inner()?;
+        let positive_blob = PositiveBlob::from_bytes(map_bytes, indexes_bytes)?;
+
+        assert_eq!(positive_blob.get("aaa"), Some(&[a][..]));
+        assert_eq!(positive_blob.get("aab"), Some(&[a, b, c][..]));
+        assert_eq!(positive_blob.get("aac"), Some(&[a, c][..]));
+        assert_eq!(positive_blob.get("aad"), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn serde_serialize_deserialize() -> Result<(), Box<Error>> {
+        let a = DocIndex { document_id: 0, attribute: 3, attribute_index: 11 };
+        let b = DocIndex { document_id: 1, attribute: 4, attribute_index: 21 };
+        let c = DocIndex { document_id: 2, attribute: 8, attribute_index: 2 };
+
+        let mut builder = PositiveBlobBuilder::memory();
+
+        builder.insert("aaa", &[a])?;
+        builder.insert("aab", &[a, b, c])?;
+        builder.insert("aac", &[a, c])?;
+
+        let (map_bytes, indexes_bytes) = builder.into_inner()?;
+        let positive_blob = PositiveBlob::from_bytes(map_bytes, indexes_bytes)?;
+
+        let bytes = bincode::serialize(&positive_blob)?;
+        let positive_blob: PositiveBlob = bincode::deserialize(&bytes)?;
+
+        assert_eq!(positive_blob.get("aaa"), Some(&[a][..]));
+        assert_eq!(positive_blob.get("aab"), Some(&[a, b, c][..]));
+        assert_eq!(positive_blob.get("aac"), Some(&[a, c][..]));
+        assert_eq!(positive_blob.get("aad"), None);
+
+        Ok(())
     }
 }

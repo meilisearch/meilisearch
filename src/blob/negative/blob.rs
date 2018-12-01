@@ -1,11 +1,13 @@
-use std::path::Path;
 use std::error::Error;
+use std::path::Path;
+use std::fmt;
 
 use serde::de::{self, Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 use crate::data::DocIds;
 use crate::DocumentId;
 
+#[derive(Default)]
 pub struct NegativeBlob {
     doc_ids: DocIds,
 }
@@ -39,6 +41,14 @@ impl NegativeBlob {
 impl AsRef<[DocumentId]> for NegativeBlob {
     fn as_ref(&self) -> &[DocumentId] {
         self.as_ids().doc_ids()
+    }
+}
+
+impl fmt::Debug for NegativeBlob {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "NegativeBlob(")?;
+        f.debug_list().entries(self.as_ref()).finish()?;
+        write!(f, ")")
     }
 }
 

@@ -10,7 +10,7 @@ use serde::ser::{Serialize, Serializer};
 use crate::DocumentId;
 use crate::data::Data;
 
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct DocIds {
     data: Data,
 }

@@ -11,6 +11,7 @@ use std::fmt;
 use serde::ser::{Serialize, Serializer, SerializeTuple};
 use serde::de::{self, Deserialize, Deserializer, SeqAccess, Visitor};
 
+#[derive(Debug)]
 pub enum Blob {
     Positive(PositiveBlob),
     Negative(NegativeBlob),

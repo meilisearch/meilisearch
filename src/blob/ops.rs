@@ -46,8 +46,8 @@ impl OpBuilder {
 
     pub fn merge(self) -> Result<PositiveBlob, Box<Error>> {
         let groups = GroupBy::new(&self.blobs, blob_same_sign);
-        let mut positives = Vec::new();
-        let mut negatives = Vec::new();
+        let mut aggregated = Vec::new();
+
         for blobs in groups {
             match blobs[0].sign() {
                 Sign::Positive => {
@@ -66,7 +66,7 @@ impl OpBuilder {
                     }
                     let (map, doc_indexes) = builder.into_inner().unwrap();
                     let blob = PositiveBlob::from_bytes(map, doc_indexes).unwrap();
-                    positives.push(blob);
+                    aggregated.push(Blob::Positive(blob));
                 },
                 Sign::Negative => {
                     let mut op_builder = negative::OpBuilder::with_capacity(blobs.len());
@@ -74,14 +74,20 @@ impl OpBuilder {
                         op_builder.push(unwrap_negative(blob));
                     }
                     let blob = op_builder.union().into_negative_blob();
-                    negatives.push(blob);
+                    aggregated.push(Blob::Negative(blob));
                 },
             }
         }
 
-        let mut zipped = positives.into_iter().zip(negatives);
         let mut buffer = Vec::new();
-        zipped.try_fold(PositiveBlob::default(), |base, (positive, negative)| {
+        aggregated.chunks(2).try_fold(PositiveBlob::default(), |base, slice| {
+            let negative = NegativeBlob::default();
+            let (positive, negative) = match slice {
+                [a, b] => (unwrap_positive(a), unwrap_negative(b)),
+                [a] => (unwrap_positive(a), &negative),
+                _ => unreachable!(),
+            };
+
             let mut builder = PositiveBlobBuilder::memory();
             let doc_ids = Set::new_unchecked(negative.as_ref());
 

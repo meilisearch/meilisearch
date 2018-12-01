@@ -86,7 +86,7 @@ where T: Deref<Target=DB>,
                 let is_exact = distance == 0 && input.len() == automaton.query_len();
 
                 let doc_indexes = self.blob.as_indexes();
-                let doc_indexes = doc_indexes.get(iv.value).expect("BUG: could not find document indexes");
+                let doc_indexes = &doc_indexes[iv.value as usize];
 
                 for doc_index in doc_indexes {
                     let match_ = Match {
