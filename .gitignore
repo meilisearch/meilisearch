@@ -2,6 +2,6 @@
 /target
 /Cargo.lock
 **/*.rs.bk
-**/*.idx
-**/*.map
-**/*.sst
+**/*.csv
+**/*.json_lines
+**/*.rdb

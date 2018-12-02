@@ -65,7 +65,7 @@ fn generate_update_from_csv(path: &Path) -> Result<(Schema, Update), Box<Error>>
 fn main() -> Result<(), Box<Error>> {
     let command = Cmd::from_args();
 
-    let path = random_name();
+    let path = random_name() + ".rdb";
 
     println!("generating the update...");
     let (schema, update) = generate_update_from_csv(&command.csv_file)?;
