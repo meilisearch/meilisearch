@@ -1,5 +1,6 @@
-use std::collections::HashMap;
 use std::hash::Hash;
+
+use hashbrown::HashMap;
 
 pub struct DistinctMap<K> {
     inner: HashMap<K, usize>,

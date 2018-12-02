@@ -3,10 +3,10 @@ use std::{mem, vec, str};
 use std::error::Error;
 use std::hash::Hash;
 
-use fnv::FnvHashMap;
-use fst::Streamer;
-use group_by::GroupByMut;
 use ::rocksdb::rocksdb::{DB, Snapshot};
+use group_by::GroupByMut;
+use hashbrown::HashMap;
+use fst::Streamer;
 
 use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::rank::criterion::{self, Criterion};
@@ -77,7 +77,7 @@ where T: Deref<Target=DB>,
             op_builder.union()
         };
 
-        let mut matches = FnvHashMap::default();
+        let mut matches = HashMap::new();
 
         while let Some((input, indexed_values)) = stream.next() {
             for iv in indexed_values {
