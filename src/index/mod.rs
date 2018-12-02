@@ -84,6 +84,9 @@ impl Index {
 
         let database = rocksdb::DB::open_cf(opts, &path, vec![("default", cf_opts)])?;
 
+        // compacting to avoid calling the merge operator
+        database.compact_range(Some(DATA_INDEX), Some(DATA_INDEX));
+
         let _schema = match database.get(DATA_SCHEMA)? {
             Some(value) => Schema::read_from(&*value)?,
             None => return Err(String::from("Database does not contain a schema").into()),
@@ -101,6 +104,9 @@ impl Index {
 
         let cf_handle = self.database.cf_handle("default").unwrap();
         self.database.ingest_external_file_optimized(&cf_handle, &options, &[&path])?;
+
+        // compacting to avoid calling the merge operator
+        self.database.compact_range(Some(DATA_INDEX), Some(DATA_INDEX));
 
         Ok(())
     }
