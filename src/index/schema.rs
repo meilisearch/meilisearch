@@ -108,6 +108,10 @@ impl Schema {
     pub fn attribute<S: AsRef<str>>(&self, name: S) -> Option<SchemaAttr> {
         self.attrs.get(name.as_ref()).cloned()
     }
+
+    pub fn attribute_name(&self, attr: SchemaAttr) -> &str {
+        unimplemented!("cannot retrieve the attribute name by its attribute number")
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
