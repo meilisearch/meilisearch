@@ -18,11 +18,20 @@ const DOC_KEY_ATTR_LEN: usize = DOC_KEY_LEN + 1 + std::mem::size_of::<u32>();
 
 pub struct Update {
     path: PathBuf,
+    can_be_moved: bool,
 }
 
 impl Update {
     pub fn open<P: Into<PathBuf>>(path: P) -> Result<Update, Box<Error>> {
-        Ok(Update { path: path.into() })
+        Ok(Update { path: path.into(), can_be_moved: false })
+    }
+
+    pub fn open_and_move<P: Into<PathBuf>>(path: P) -> Result<Update, Box<Error>> {
+        Ok(Update { path: path.into(), can_be_moved: true })
+    }
+
+    pub fn can_be_moved(&self) -> bool {
+        self.can_be_moved
     }
 
     pub fn into_path_buf(self) -> PathBuf {
