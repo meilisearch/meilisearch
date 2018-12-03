@@ -32,6 +32,7 @@ git = "https://github.com/Kerollmops/group-by.git"
 
 [features]
 default = []
+i128 = ["bincode/i128", "byteorder/i128"]
 sse = ["rocksdb/sse"]
 
 [dev-dependencies]
