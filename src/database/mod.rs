@@ -8,6 +8,7 @@ use crate::database::database_view::DatabaseView;
 
 pub mod document_key;
 pub mod database_view;
+mod deserializer;
 
 const DATA_INDEX:  &[u8] = b"data-index";
 const DATA_SCHEMA: &[u8] = b"data-schema";
