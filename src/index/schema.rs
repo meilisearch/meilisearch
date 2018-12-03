@@ -111,7 +111,11 @@ impl Schema {
     }
 
     pub fn attribute_name(&self, attr: SchemaAttr) -> &str {
-        unimplemented!("cannot retrieve the attribute name by its attribute number")
+        // FIXME complexity is insane !
+        for (key, &value) in &self.attrs {
+            if value == attr { return &key }
+        }
+        panic!("schema attribute name not found for {:?}", attr)
     }
 }
 

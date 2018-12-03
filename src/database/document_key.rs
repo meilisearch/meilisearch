@@ -1,5 +1,6 @@
 use std::io::{Cursor, Read, Write};
 use std::mem::size_of;
+use std::fmt;
 
 use byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};
 
@@ -48,6 +49,14 @@ impl AsRef<[u8]> for DocumentKey {
     }
 }
 
+impl fmt::Debug for DocumentKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("DocumentKey")
+            .field("document_id", &self.document_id())
+            .finish()
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct DocumentKeyAttr([u8; DOC_KEY_ATTR_LEN]);
 
@@ -92,5 +101,14 @@ impl DocumentKeyAttr {
 impl AsRef<[u8]> for DocumentKeyAttr {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl fmt::Debug for DocumentKeyAttr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("DocumentKeyAttr")
+            .field("document_id", &self.document_id())
+            .field("attribute", &self.attribute().as_u32())
+            .finish()
     }
 }

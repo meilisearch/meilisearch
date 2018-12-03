@@ -4,7 +4,8 @@ use std::error::Error;
 use ::rocksdb::rocksdb_options;
 
 use crate::index::update::negative::unordered_builder::UnorderedNegativeBlobBuilder;
-use crate::index::update::{Update, raw_document_key};
+use crate::index::update::Update;
+use crate::database::{DocumentKey, DocumentKeyAttr};
 use crate::blob::{Blob, NegativeBlob};
 use crate::index::DATA_INDEX;
 use crate::DocumentId;
@@ -48,9 +49,9 @@ impl NegativeUpdateBuilder {
         };
 
         for &document_id in negative_blob.as_ref() {
-            let start = raw_document_key(document_id);
-            let end = raw_document_key(document_id + 1);
-            file_writer.delete_range(&start, &end)?;
+            let start = DocumentKey::new(document_id);
+            let end = DocumentKey::new(document_id + 1);
+            file_writer.delete_range(start.as_ref(), end.as_ref())?;
         }
 
         file_writer.finish()?;

@@ -1,13 +1,15 @@
 use std::error::Error;
-use std::marker;
+use std::{fmt, marker};
 
-use rocksdb::rocksdb::{DB, Snapshot};
+use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey};
+use rocksdb::rocksdb_options::ReadOptions;
 use serde::de::DeserializeOwned;
 
-use crate::index::schema::Schema;
-use crate::blob::positive::PositiveBlob;
 use crate::database::deserializer::{Deserializer, DeserializerError};
 use crate::database::{DATA_INDEX, DATA_SCHEMA};
+use crate::blob::positive::PositiveBlob;
+use crate::index::schema::Schema;
+use crate::database::{DocumentKey, DocumentKeyAttr};
 use crate::DocumentId;
 
 // FIXME Do not panic!
@@ -40,6 +42,10 @@ impl<'a> DatabaseView<'a> {
         self.snapshot
     }
 
+    pub fn get(&self, key: &[u8]) -> Result<Option<DBVector>, Box<Error>> {
+        Ok(self.snapshot.get(key)?)
+    }
+
     // TODO create an enum error type
     pub fn retrieve_document<D>(&self, id: DocumentId) -> Result<D, Box<Error>>
     where D: DeserializeOwned
@@ -57,6 +63,36 @@ impl<'a> DatabaseView<'a> {
             document_ids: ids.into_iter(),
             _phantom: marker::PhantomData,
         }
+    }
+}
+
+impl<'a> fmt::Debug for DatabaseView<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut options = ReadOptions::new();
+        let lower = DocumentKey::new(0);
+        options.set_iterate_lower_bound(lower.as_ref());
+
+        let mut iter = self.snapshot.iter_opt(options);
+        iter.seek(SeekKey::Start);
+        let iter = iter.map(|(key, _)| DocumentKeyAttr::from_bytes(&key));
+
+        if f.alternate() {
+            writeln!(f, "DatabaseView(")?;
+        } else {
+            write!(f, "DatabaseView(")?;
+        }
+
+        self.schema.fmt(f)?;
+
+        if f.alternate() {
+            writeln!(f, ",")?;
+        } else {
+            write!(f, ", ")?;
+        }
+
+        f.debug_list().entries(iter).finish()?;
+
+        write!(f, ")")
     }
 }
 
