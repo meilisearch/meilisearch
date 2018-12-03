@@ -60,7 +60,7 @@ impl<'a> DatabaseView<'a> {
     }
 }
 
-// TODO impl ExactSizeIterator, DoubleEndedIterator
+// TODO this is just an iter::Map !!!
 pub struct DocumentIter<'a, D, I> {
     database_view: &'a DatabaseView<'a>,
     document_ids: I,
@@ -73,8 +73,29 @@ where D: DeserializeOwned,
 {
     type Item = Result<D, Box<Error>>;
 
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.document_ids.size_hint()
+    }
+
     fn next(&mut self) -> Option<Self::Item> {
         match self.document_ids.next() {
+            Some(id) => Some(self.database_view.retrieve_document(id)),
+            None => None
+        }
+    }
+}
+
+impl<'a, D, I> ExactSizeIterator for DocumentIter<'a, D, I>
+where D: DeserializeOwned,
+      I: ExactSizeIterator + Iterator<Item=DocumentId>,
+{ }
+
+impl<'a, D, I> DoubleEndedIterator for DocumentIter<'a, D, I>
+where D: DeserializeOwned,
+      I: DoubleEndedIterator + Iterator<Item=DocumentId>,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        match self.document_ids.next_back() {
             Some(id) => Some(self.database_view.retrieve_document(id)),
             None => None
         }
