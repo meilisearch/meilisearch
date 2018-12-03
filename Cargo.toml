@@ -30,6 +30,10 @@ git = "https://github.com/pingcap/rust-rocksdb.git"
 [dependencies.group-by]
 git = "https://github.com/Kerollmops/group-by.git"
 
+[features]
+default = []
+sse = ["rocksdb/sse"]
+
 [dev-dependencies]
 csv = "1.0"
 elapsed = "0.1"
