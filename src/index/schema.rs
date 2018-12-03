@@ -5,6 +5,7 @@ use std::ops::BitOr;
 use std::fs::File;
 use std::fmt;
 
+use serde_derive::{Serialize, Deserialize};
 use linked_hash_map::LinkedHashMap;
 
 pub const STORED: SchemaProps = SchemaProps { stored: true, indexed: false };
@@ -118,6 +119,10 @@ impl Schema {
 pub struct SchemaAttr(u32);
 
 impl SchemaAttr {
+    pub fn new(value: u32) -> SchemaAttr {
+        SchemaAttr(value)
+    }
+
     pub fn as_u32(&self) -> u32 {
         self.0
     }

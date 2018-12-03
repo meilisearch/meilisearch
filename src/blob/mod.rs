@@ -8,6 +8,7 @@ pub use self::ops::OpBuilder;
 
 use std::fmt;
 
+use serde_derive::{Serialize, Deserialize};
 use serde::ser::{Serialize, Serializer, SerializeTuple};
 use serde::de::{self, Deserialize, Deserializer, SeqAccess, Visitor};
 

@@ -1,13 +1,15 @@
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
 use std::{fmt, marker};
 use std::error::Error;
+use std::mem::size_of;
 use std::path::Path;
 
 use rocksdb::rocksdb::{DB, Snapshot, DBVector};
 use rocksdb::rocksdb_options::ReadOptions;
-use byteorder::{NetworkEndian, WriteBytesExt};
+use byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};
 use serde::de::{DeserializeOwned, Visitor};
 use serde::de::value::MapDeserializer;
+use serde::forward_to_deserialize_any;
 
 use crate::index::schema::{Schema, SchemaAttr};
 use crate::blob::positive::PositiveBlob;
@@ -17,8 +19,8 @@ use crate::DocumentId;
 const DATA_INDEX:  &[u8] = b"data-index";
 const DATA_SCHEMA: &[u8] = b"data-schema";
 
-const DOC_KEY_LEN:      usize = 4 + std::mem::size_of::<u64>();
-const DOC_KEY_ATTR_LEN: usize = DOC_KEY_LEN + 1 + std::mem::size_of::<u32>();
+const DOC_KEY_LEN:      usize = 4 + size_of::<u64>();
+const DOC_KEY_ATTR_LEN: usize = DOC_KEY_LEN + 1 + size_of::<u32>();
 
 // FIXME Do not panic!
 fn retrieve_data_schema(snapshot: &Snapshot<&DB>) -> Result<Schema, Box<Error>> {
@@ -35,36 +37,90 @@ fn retrieve_data_index(snapshot: &Snapshot<&DB>) -> Result<PositiveBlob, Box<Err
     }
 }
 
-fn retrieve_document_attribute(
-    snapshot: &Snapshot<&DB>,
-    id: DocumentId,
-    attr: SchemaAttr
-) -> Result<Option<DBVector>, Box<Error>>
-{
-    let attribute_key = document_key_attr(id, attr);
-    Ok(snapshot.get(&attribute_key)?)
+#[derive(Copy, Clone)]
+pub struct DocumentKey([u8; DOC_KEY_LEN]);
+
+impl DocumentKey {
+    pub fn new(id: DocumentId) -> DocumentKey {
+        let mut buffer = [0; DOC_KEY_LEN];
+
+        let mut wtr = Cursor::new(&mut buffer[..]);
+        wtr.write_all(b"doc-").unwrap();
+        wtr.write_u64::<NativeEndian>(id).unwrap();
+
+        DocumentKey(buffer)
+    }
+
+    pub fn from_bytes(mut bytes: &[u8]) -> DocumentKey {
+        assert!(bytes.len() >= DOC_KEY_LEN);
+        assert_eq!(&bytes[..4], b"doc-");
+
+        let mut buffer = [0; DOC_KEY_LEN];
+        bytes.read_exact(&mut buffer).unwrap();
+
+        DocumentKey(buffer)
+    }
+
+    pub fn with_attribute(&self, attr: SchemaAttr) -> DocumentKeyAttr {
+        DocumentKeyAttr::new(self.document_id(), attr)
+    }
+
+    pub fn document_id(&self) -> DocumentId {
+        (&self.0[4..]).read_u64::<NativeEndian>().unwrap()
+    }
 }
 
-fn document_key(id: DocumentId) -> [u8; DOC_KEY_LEN] {
-    let mut key = [0; DOC_KEY_LEN];
-
-    let mut wtr = Cursor::new(&mut key[..]);
-    wtr.write_all(b"doc-").unwrap();
-    wtr.write_u64::<NetworkEndian>(id).unwrap();
-
-    key
+impl AsRef<[u8]> for DocumentKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
 }
 
-fn document_key_attr(id: DocumentId, attr: SchemaAttr) -> [u8; DOC_KEY_ATTR_LEN] {
-    let mut key = [0; DOC_KEY_ATTR_LEN];
-    let raw_key = document_key(id);
+#[derive(Copy, Clone)]
+pub struct DocumentKeyAttr([u8; DOC_KEY_ATTR_LEN]);
 
-    let mut wtr = Cursor::new(&mut key[..]);
-    wtr.write_all(&raw_key).unwrap();
-    wtr.write_all(b"-").unwrap();
-    wtr.write_u32::<NetworkEndian>(attr.as_u32()).unwrap();
+impl DocumentKeyAttr {
+    pub fn new(id: DocumentId, attr: SchemaAttr) -> DocumentKeyAttr {
+        let mut buffer = [0; DOC_KEY_ATTR_LEN];
+        let DocumentKey(raw_key) = DocumentKey::new(id);
 
-    key
+        let mut wtr = Cursor::new(&mut buffer[..]);
+        wtr.write_all(&raw_key).unwrap();
+        wtr.write_all(b"-").unwrap();
+        wtr.write_u32::<NativeEndian>(attr.as_u32()).unwrap();
+
+        DocumentKeyAttr(buffer)
+    }
+
+    pub fn from_bytes(mut bytes: &[u8]) -> DocumentKeyAttr {
+        assert!(bytes.len() >= DOC_KEY_ATTR_LEN);
+        assert_eq!(&bytes[..4], b"doc-");
+
+        let mut buffer = [0; DOC_KEY_ATTR_LEN];
+        bytes.read_exact(&mut buffer).unwrap();
+
+        DocumentKeyAttr(buffer)
+    }
+
+    pub fn document_id(&self) -> DocumentId {
+        (&self.0[4..]).read_u64::<NativeEndian>().unwrap()
+    }
+
+    pub fn attribute(&self) -> SchemaAttr {
+        let offset = 4 + size_of::<u64>() + 1;
+        let value = (&self.0[offset..]).read_u32::<NativeEndian>().unwrap();
+        SchemaAttr::new(value)
+    }
+
+    pub fn into_document_key(self) -> DocumentKey {
+        DocumentKey::new(self.document_id())
+    }
+}
+
+impl AsRef<[u8]> for DocumentKeyAttr {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 pub struct Database(DB);
@@ -162,229 +218,56 @@ impl<'de, 'a, 'b> serde::de::Deserializer<'de> for &'b mut Deserializer<'a> {
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        unimplemented!()
+        self.deserialize_map(visitor)
     }
 
-    fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_i8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_char<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_unit_struct<V>(
-        self,
-        name: &'static str,
-        visitor: V
-    ) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_newtype_struct<V>(
-        self,
-        name: &'static str,
-        visitor: V
-    ) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_tuple<V>(
-        self,
-        len: usize,
-        visitor: V
-    ) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_tuple_struct<V>(
-        self,
-        name: &'static str,
-        len: usize,
-        visitor: V
-    ) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
+    forward_to_deserialize_any! {
+        bool u8 u16 u32 u64 i8 i16 i32 i64 f32 f64 char str string unit seq
+        bytes byte_buf unit_struct tuple_struct
+        identifier tuple ignored_any option newtype_struct enum
+        struct
     }
 
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: Visitor<'de>
     {
-        unimplemented!()
-    }
-
-    fn deserialize_struct<V>(
-        self,
-        name: &'static str,
-        fields: &'static [&'static str],
-        visitor: V
-    ) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
         let mut options = ReadOptions::new();
-        options.set_iterate_lower_bound(&document_key(self.document_id));
-        options.set_iterate_upper_bound(&document_key(self.document_id + 1));
+        let lower = DocumentKey::new(self.document_id);
+        let upper = DocumentKey::new(self.document_id + 1);
+        options.set_iterate_lower_bound(lower.as_ref());
+        options.set_iterate_upper_bound(upper.as_ref());
 
         let mut db_iter = self.snapshot.iter_opt(options);
-        let iter = db_iter.map(|(key, value)| ("hello", "ok"));
-
-        // Create the DocumentKey and DocumentKeyAttr types
-        // to help create and parse document keys attributes...
-        unimplemented!();
+        let iter = db_iter.map(|(key, value)| {
+            // retrieve the schema attribute name
+            // from the schema attribute number
+            let document_key_attr = DocumentKeyAttr::from_bytes(&key);
+            let schema_attr = document_key_attr.attribute();
+            let attribute_name = self.schema.attribute_name(schema_attr);
+            (attribute_name, value)
+        });
 
         let map_deserializer = MapDeserializer::new(iter);
         visitor.visit_map(map_deserializer)
     }
-
-    fn deserialize_enum<V>(
-        self,
-        name: &'static str,
-        variants: &'static [&'static str],
-        visitor: V
-    ) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>,
-    {
-        unimplemented!()
-    }
-
-    fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: Visitor<'de>
-    {
-        unimplemented!()
-    }
 }
 
 #[derive(Debug)]
-struct DeserializerError;
+enum DeserializerError {
+    Custom(String),
+}
 
 impl serde::de::Error for DeserializerError {
     fn custom<T: fmt::Display>(msg: T) -> Self {
-        unimplemented!()
+        DeserializerError::Custom(msg.to_string())
     }
 }
 
 impl fmt::Display for DeserializerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        unimplemented!()
+        match self {
+            DeserializerError::Custom(s) => f.write_str(&s),
+        }
     }
 }
 

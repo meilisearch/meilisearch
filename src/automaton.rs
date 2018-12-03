@@ -1,6 +1,7 @@
 use std::ops::Deref;
 
 use fst::Automaton;
+use lazy_static::lazy_static;
 use levenshtein_automata::{
     LevenshteinAutomatonBuilder as LevBuilder,
     DFA, Distance,
