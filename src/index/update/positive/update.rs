@@ -17,7 +17,7 @@ use crate::index::DATA_INDEX;
 use crate::blob::Blob;
 
 pub enum NewState {
-    Updated { value: String },
+    Updated { value: Vec<u8> },
     Removed,
 }
 
@@ -50,6 +50,7 @@ impl<B> PositiveUpdateBuilder<B> {
 
     // TODO value must be a field that can be indexed
     pub fn update_field(&mut self, id: DocumentId, field: SchemaAttr, value: String) {
+        let value = bincode::serialize(&value).unwrap();
         self.new_states.insert((id, field), NewState::Updated { value });
     }
 
@@ -112,7 +113,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeMap = MapSerializer<'a>;
+    type SerializeMap = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeStruct = StructSerializer<'a>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
@@ -221,11 +222,12 @@ impl<'a> ser::Serializer for Serializer<'a> {
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        Ok(MapSerializer {
-            schema: self.schema,
-            document_id: self.document_id,
-            new_states: self.new_states,
-        })
+        // Ok(MapSerializer {
+        //     schema: self.schema,
+        //     document_id: self.document_id,
+        //     new_states: self.new_states,
+        // })
+        Err(SerializerError::UnserializableType { name: "map" })
     }
 
     fn serialize_struct(
@@ -253,19 +255,18 @@ impl<'a> ser::Serializer for Serializer<'a> {
     }
 }
 
-fn serialize_field<T: ?Sized>(
+fn serialize_field(
     schema: &Schema,
     document_id: DocumentId,
     new_states: &mut BTreeMap<(DocumentId, SchemaAttr), NewState>,
     name: &str,
-    value: &T
+    value: Vec<u8>,
 ) -> Result<(), SerializerError>
-where T: Serialize,
 {
     match schema.attribute(name) {
         Some(attr) => {
-            if schema.props(attr).is_stored() {
-                let value = unimplemented!();
+            let props = schema.props(attr);
+            if props.is_stored() {
                 new_states.insert((document_id, attr), NewState::Updated { value });
             }
             Ok(())
@@ -291,6 +292,10 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
     ) -> Result<(), Self::Error>
     where T: Serialize,
     {
+        let value = match bincode::serialize(value) {
+            Ok(value) => value,
+            Err(e) => return Err(SerializerError::UnserializableType { name: "???" }),
+        };
         serialize_field(self.schema, self.document_id, self.new_states, key, value)
     }
 
@@ -298,57 +303,6 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
         Ok(())
     }
 }
-
-struct MapSerializer<'a> {
-    schema: &'a Schema,
-    document_id: DocumentId,
-    new_states: &'a mut BTreeMap<(DocumentId, SchemaAttr), NewState>,
-    // pending_key: Option<String>,
-}
-
-impl<'a> ser::SerializeMap for MapSerializer<'a> {
-    type Ok = ();
-    type Error = SerializerError;
-
-    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
-    where T: Serialize
-    {
-        Err(SerializerError::UnserializableType { name: "setmap" })
-    }
-
-    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-    where T: Serialize
-    {
-        unimplemented!()
-    }
-
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(())
-    }
-
-    fn serialize_entry<K: ?Sized, V: ?Sized>(
-        &mut self,
-        key: &K,
-        value: &V
-    ) -> Result<(), Self::Error>
-    where K: Serialize, V: Serialize,
-    {
-        let key = unimplemented!();
-        serialize_field(self.schema, self.document_id, self.new_states, key, value)
-    }
-}
-
-// struct MapKeySerializer;
-
-// impl ser::Serializer for MapKeySerializer {
-//     type Ok = String;
-//     type Error = SerializerError;
-
-//     #[inline]
-//     fn serialize_str(self, value: &str) -> Result<()> {
-//         unimplemented!()
-//     }
-// }
 
 impl<B> PositiveUpdateBuilder<B>
 where B: TokenizerBuilder
@@ -367,7 +321,15 @@ where B: TokenizerBuilder
                 _ => continue,
             };
 
-            for (index, word) in self.tokenizer_builder.build(value) {
+            let value: String = match bincode::deserialize(&value) {
+                Ok(value) => value,
+                Err(e) => {
+                    eprintln!("{}", e);
+                    continue
+                },
+            };
+
+            for (index, word) in self.tokenizer_builder.build(&value) {
                 let doc_index = DocIndex {
                     document_id: *document_id,
                     attribute: attr.as_u32() as u8,
@@ -401,7 +363,7 @@ where B: TokenizerBuilder
             let props = self.schema.props(attr);
             match state {
                 NewState::Updated { value } => if props.is_stored() {
-                    file_writer.put(key.as_ref(), value.as_bytes())?
+                    file_writer.put(key.as_ref(), &value)?
                 },
                 NewState::Removed => file_writer.delete(key.as_ref())?,
             }

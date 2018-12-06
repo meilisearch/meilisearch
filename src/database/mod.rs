@@ -213,14 +213,14 @@ mod tests {
             title: char,
         }
 
-        let de_doc0: DeSimpleDoc = view.retrieve_document(0)?;
-        let de_doc1: DeSimpleDoc = view.retrieve_document(1)?;
+        let de_doc0: SimpleDoc = view.retrieve_document(0)?;
+        let de_doc1: SimpleDoc = view.retrieve_document(1)?;
 
         println!("{:?}", de_doc0);
         println!("{:?}", de_doc1);
 
-        // assert_eq!(doc0, de_doc0);
-        // assert_eq!(doc1, de_doc1);
+        assert_eq!(doc0, de_doc0);
+        assert_eq!(doc1, de_doc1);
 
         Ok(dir.close()?)
     }
