@@ -5,7 +5,9 @@ use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey};
 use rocksdb::rocksdb_options::ReadOptions;
 use serde::de::DeserializeOwned;
 
-use crate::database::{retrieve_data_schema, DocumentKey, DocumentKeyAttr};
+use crate::database::{DocumentKey, DocumentKeyAttr};
+use crate::database::{retrieve_data_schema, retrieve_data_index};
+use crate::database::blob::positive::PositiveBlob;
 use crate::database::deserializer::Deserializer;
 use crate::rank::criterion::Criterion;
 use crate::database::schema::Schema;
@@ -14,17 +16,23 @@ use crate::DocumentId;
 
 pub struct DatabaseView<'a> {
     snapshot: Snapshot<&'a DB>,
+    blob: PositiveBlob,
     schema: Schema,
 }
 
 impl<'a> DatabaseView<'a> {
     pub fn new(snapshot: Snapshot<&'a DB>) -> Result<DatabaseView, Box<Error>> {
         let schema = retrieve_data_schema(&snapshot)?;
-        Ok(DatabaseView { snapshot, schema })
+        let blob = retrieve_data_index(&snapshot)?;
+        Ok(DatabaseView { snapshot, blob, schema })
     }
 
     pub fn schema(&self) -> &Schema {
         &self.schema
+    }
+
+    pub fn blob(&self) -> &PositiveBlob {
+        &self.blob
     }
 
     pub fn into_snapshot(self) -> Snapshot<&'a DB> {

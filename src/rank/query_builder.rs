@@ -10,8 +10,6 @@ use fst::Streamer;
 use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::rank::criterion::{self, Criterion};
 use crate::rank::distinct_map::DistinctMap;
-use crate::database::retrieve_data_index;
-use crate::database::blob::PositiveBlob;
 use crate::database::DatabaseView;
 use crate::{Match, DocumentId};
 use crate::rank::Document;
@@ -27,7 +25,6 @@ fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
 
 pub struct QueryBuilder<'a, C> {
     view: &'a DatabaseView<'a>,
-    blob: PositiveBlob,
     criteria: Vec<C>,
 }
 
@@ -39,8 +36,7 @@ impl<'a> QueryBuilder<'a, Box<dyn Criterion>> {
 
 impl<'a, C> QueryBuilder<'a, C> {
     pub fn with_criteria(view: &'a DatabaseView<'a>, criteria: Vec<C>) -> Result<Self, Box<Error>> {
-        let blob = retrieve_data_index(view.snapshot())?;
-        Ok(QueryBuilder { view, blob, criteria })
+        Ok(QueryBuilder { view, criteria })
     }
 
     pub fn criteria(&mut self, criteria: Vec<C>) -> &mut Self {
@@ -62,7 +58,7 @@ impl<'a, C> QueryBuilder<'a, C> {
         let mut stream = {
             let mut op_builder = fst::map::OpBuilder::new();
             for automaton in &automatons {
-                let stream = self.blob.as_map().search(automaton);
+                let stream = self.view.blob().as_map().search(automaton);
                 op_builder.push(stream);
             }
             op_builder.union()
@@ -76,7 +72,7 @@ impl<'a, C> QueryBuilder<'a, C> {
                 let distance = automaton.eval(input).to_u8();
                 let is_exact = distance == 0 && input.len() == automaton.query_len();
 
-                let doc_indexes = self.blob.as_indexes();
+                let doc_indexes = self.view.blob().as_indexes();
                 let doc_indexes = &doc_indexes[iv.value as usize];
 
                 for doc_index in doc_indexes {
