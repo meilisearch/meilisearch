@@ -7,6 +7,8 @@ mod exact;
 
 use std::vec;
 use std::cmp::Ordering;
+
+use crate::database::DatabaseView;
 use crate::rank::Document;
 
 pub use self::{
@@ -20,31 +22,31 @@ pub use self::{
 
 pub trait Criterion {
     #[inline]
-    fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering;
+    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> Ordering;
 
     #[inline]
-    fn eq(&self, lhs: &Document, rhs: &Document) -> bool {
-        self.evaluate(lhs, rhs) == Ordering::Equal
+    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> bool {
+        self.evaluate(lhs, rhs, view) == Ordering::Equal
     }
 }
 
 impl<'a, T: Criterion + ?Sized> Criterion for &'a T {
-    fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
-        (**self).evaluate(lhs, rhs)
+    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> Ordering {
+        (**self).evaluate(lhs, rhs, view)
     }
 
-    fn eq(&self, lhs: &Document, rhs: &Document) -> bool {
-        (**self).eq(lhs, rhs)
+    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> bool {
+        (**self).eq(lhs, rhs, view)
     }
 }
 
 impl<T: Criterion + ?Sized> Criterion for Box<T> {
-    fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
-        (**self).evaluate(lhs, rhs)
+    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> Ordering {
+        (**self).evaluate(lhs, rhs, view)
     }
 
-    fn eq(&self, lhs: &Document, rhs: &Document) -> bool {
-        (**self).eq(lhs, rhs)
+    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> bool {
+        (**self).eq(lhs, rhs, view)
     }
 }
 
@@ -52,7 +54,7 @@ impl<T: Criterion + ?Sized> Criterion for Box<T> {
 pub struct DocumentId;
 
 impl Criterion for DocumentId {
-    fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
+    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView) -> Ordering {
         lhs.id.cmp(&rhs.id)
     }
 }

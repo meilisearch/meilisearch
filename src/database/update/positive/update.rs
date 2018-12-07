@@ -107,7 +107,7 @@ struct Serializer<'a, B> {
 macro_rules! forward_to_unserializable_type {
     ($($ty:ident => $se_method:ident,)*) => {
         $(
-            fn $se_method(self, v: $ty) -> Result<Self::Ok, Self::Error> {
+            fn $se_method(self, _v: $ty) -> Result<Self::Ok, Self::Error> {
                 Err(SerializerError::UnserializableType { name: "$ty" })
             }
         )*
@@ -145,11 +145,11 @@ where B: TokenizerBuilder
         f64 => serialize_f64,
     }
 
-    fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_str(self, _v: &str) -> Result<Self::Ok, Self::Error> {
         Err(SerializerError::UnserializableType { name: "str" })
     }
 
-    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
+    fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
         Err(SerializerError::UnserializableType { name: "&[u8]" })
     }
 
@@ -375,7 +375,7 @@ where B: TokenizerBuilder
         Ok(())
     }
 
-    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
+    fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
         Err(SerializerError::UnserializableType { name: "&[u8]" })
     }
 

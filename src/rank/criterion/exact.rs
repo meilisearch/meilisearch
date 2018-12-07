@@ -1,8 +1,11 @@
 use std::cmp::Ordering;
+
 use group_by::GroupBy;
-use crate::Match;
+
 use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
+use crate::database::DatabaseView;
+use crate::Match;
 
 #[inline]
 fn contains_exact(matches: &[Match]) -> bool {
@@ -18,7 +21,7 @@ fn number_exact_matches(matches: &[Match]) -> usize {
 pub struct Exact;
 
 impl Criterion for Exact {
-    fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
+    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView) -> Ordering {
         let lhs = number_exact_matches(&lhs.matches);
         let rhs = number_exact_matches(&rhs.matches);
 

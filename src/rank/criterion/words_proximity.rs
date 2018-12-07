@@ -1,8 +1,11 @@
 use std::cmp::{self, Ordering};
+
 use group_by::GroupBy;
-use crate::Match;
+
 use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
+use crate::database::DatabaseView;
+use crate::Match;
 
 const MAX_DISTANCE: u32 = 8;
 
@@ -47,7 +50,7 @@ fn matches_proximity(matches: &[Match]) -> u32 {
 pub struct WordsProximity;
 
 impl Criterion for WordsProximity {
-    fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
+    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView) -> Ordering {
         let lhs = matches_proximity(&lhs.matches);
         let rhs = matches_proximity(&rhs.matches);
 

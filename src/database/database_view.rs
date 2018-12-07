@@ -7,7 +7,9 @@ use serde::de::DeserializeOwned;
 
 use crate::database::{retrieve_data_schema, DocumentKey, DocumentKeyAttr};
 use crate::database::deserializer::Deserializer;
+use crate::rank::criterion::Criterion;
 use crate::database::schema::Schema;
+use crate::rank::QueryBuilder;
 use crate::DocumentId;
 
 pub struct DatabaseView<'a> {
@@ -21,12 +23,24 @@ impl<'a> DatabaseView<'a> {
         Ok(DatabaseView { snapshot, schema })
     }
 
+    pub fn schema(&self) -> &Schema {
+        &self.schema
+    }
+
     pub fn into_snapshot(self) -> Snapshot<&'a DB> {
         self.snapshot
     }
 
+    pub fn snapshot(&self) -> &Snapshot<&'a DB> {
+        &self.snapshot
+    }
+
     pub fn get(&self, key: &[u8]) -> Result<Option<DBVector>, Box<Error>> {
         Ok(self.snapshot.get(key)?)
+    }
+
+    pub fn query_builder(&self) -> Result<QueryBuilder<Box<dyn Criterion>>, Box<Error>> {
+        QueryBuilder::new(self)
     }
 
     // TODO create an enum error type

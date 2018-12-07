@@ -1,8 +1,11 @@
 use std::cmp::Ordering;
+
 use group_by::GroupBy;
-use crate::Match;
+
+use crate::database::DatabaseView;
 use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
+use crate::Match;
 
 #[inline]
 fn sum_matches_attribute_index(matches: &[Match]) -> u32 {
@@ -17,7 +20,7 @@ fn sum_matches_attribute_index(matches: &[Match]) -> u32 {
 pub struct SumOfWordsPosition;
 
 impl Criterion for SumOfWordsPosition {
-    fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
+    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView) -> Ordering {
         let lhs = sum_matches_attribute_index(&lhs.matches);
         let rhs = sum_matches_attribute_index(&rhs.matches);
 

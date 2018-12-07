@@ -8,7 +8,7 @@ use rocksdb::{DB, DBVector, MergeOperands, SeekKey};
 use rocksdb::rocksdb::{Writable, Snapshot};
 
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
-pub use self::database_view::DatabaseView;
+pub use self::database_view::{DatabaseView, DocumentIter};
 use self::blob::positive::PositiveBlob;
 use self::update::Update;
 use self::schema::Schema;
@@ -126,7 +126,7 @@ impl fmt::Debug for Database {
         let mut iter = self.0.iter();
         iter.seek(SeekKey::Start);
         let mut first = true;
-        for (key, value) in &mut iter {
+        for (key, _value) in &mut iter {
             if !first { write!(f, ", ")?; }
             first = false;
             let key = String::from_utf8_lossy(&key);

@@ -1,8 +1,11 @@
 use std::cmp::Ordering;
+
 use group_by::GroupBy;
-use crate::Match;
+
 use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
+use crate::database::DatabaseView;
+use crate::Match;
 
 #[inline]
 fn sum_matches_typos(matches: &[Match]) -> i8 {
@@ -23,7 +26,7 @@ fn sum_matches_typos(matches: &[Match]) -> i8 {
 pub struct SumOfTypos;
 
 impl Criterion for SumOfTypos {
-    fn evaluate(&self, lhs: &Document, rhs: &Document) -> Ordering {
+    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView) -> Ordering {
         let lhs = sum_matches_typos(&lhs.matches);
         let rhs = sum_matches_typos(&rhs.matches);
 
@@ -64,7 +67,9 @@ mod tests {
             }
         };
 
-        assert_eq!(SumOfTypos.evaluate(&doc0, &doc1), Ordering::Less);
+        let lhs = sum_matches_typos(&doc0.matches);
+        let rhs = sum_matches_typos(&doc1.matches);
+        assert_eq!(lhs.cmp(&rhs), Ordering::Less);
     }
 
     // typing: "bouton manchette"
@@ -94,7 +99,9 @@ mod tests {
             }
         };
 
-        assert_eq!(SumOfTypos.evaluate(&doc0, &doc1), Ordering::Less);
+        let lhs = sum_matches_typos(&doc0.matches);
+        let rhs = sum_matches_typos(&doc1.matches);
+        assert_eq!(lhs.cmp(&rhs), Ordering::Less);
     }
 
     // typing: "bouton manchztte"
@@ -124,6 +131,8 @@ mod tests {
             }
         };
 
-        assert_eq!(SumOfTypos.evaluate(&doc0, &doc1), Ordering::Equal);
+        let lhs = sum_matches_typos(&doc0.matches);
+        let rhs = sum_matches_typos(&doc1.matches);
+        assert_eq!(lhs.cmp(&rhs), Ordering::Equal);
     }
 }
