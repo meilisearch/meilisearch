@@ -43,7 +43,7 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
     {
         let mut options = ReadOptions::new();
         let lower = DocumentKey::new(self.document_id);
-        let upper = DocumentKey::new(self.document_id + 1);
+        let upper = lower.with_attribute_max();
         options.set_iterate_lower_bound(lower.as_ref());
         options.set_iterate_upper_bound(upper.as_ref());
 

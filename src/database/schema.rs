@@ -1,9 +1,9 @@
 use std::collections::{HashMap, BTreeMap};
 use std::io::{Read, Write};
+use std::{fmt, u32};
 use std::path::Path;
 use std::ops::BitOr;
 use std::fs::File;
-use std::fmt;
 
 use serde_derive::{Serialize, Deserialize};
 use linked_hash_map::LinkedHashMap;
@@ -125,6 +125,10 @@ pub struct SchemaAttr(u32);
 impl SchemaAttr {
     pub fn new(value: u32) -> SchemaAttr {
         SchemaAttr(value)
+    }
+
+    pub fn max() -> SchemaAttr {
+        SchemaAttr(u32::MAX)
     }
 
     pub fn as_u32(&self) -> u32 {
