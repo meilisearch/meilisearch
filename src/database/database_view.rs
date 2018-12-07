@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::ops::Deref;
 use std::{fmt, marker};
 
 use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey};
@@ -14,14 +15,18 @@ use crate::database::schema::Schema;
 use crate::rank::QueryBuilder;
 use crate::DocumentId;
 
-pub struct DatabaseView<'a> {
-    snapshot: Snapshot<&'a DB>,
+pub struct DatabaseView<D>
+where D: Deref<Target=DB>
+{
+    snapshot: Snapshot<D>,
     blob: PositiveBlob,
     schema: Schema,
 }
 
-impl<'a> DatabaseView<'a> {
-    pub fn new(snapshot: Snapshot<&'a DB>) -> Result<DatabaseView, Box<Error>> {
+impl<D> DatabaseView<D>
+where D: Deref<Target=DB>
+{
+    pub fn new(snapshot: Snapshot<D>) -> Result<DatabaseView<D>, Box<Error>> {
         let schema = retrieve_data_schema(&snapshot)?;
         let blob = retrieve_data_index(&snapshot)?;
         Ok(DatabaseView { snapshot, blob, schema })
@@ -35,11 +40,11 @@ impl<'a> DatabaseView<'a> {
         &self.blob
     }
 
-    pub fn into_snapshot(self) -> Snapshot<&'a DB> {
+    pub fn into_snapshot(self) -> Snapshot<D> {
         self.snapshot
     }
 
-    pub fn snapshot(&self) -> &Snapshot<&'a DB> {
+    pub fn snapshot(&self) -> &Snapshot<D> {
         &self.snapshot
     }
 
@@ -47,20 +52,20 @@ impl<'a> DatabaseView<'a> {
         Ok(self.snapshot.get(key)?)
     }
 
-    pub fn query_builder(&self) -> Result<QueryBuilder<Box<dyn Criterion>>, Box<Error>> {
+    pub fn query_builder(&self) -> Result<QueryBuilder<D, Box<dyn Criterion<D>>>, Box<Error>> {
         QueryBuilder::new(self)
     }
 
     // TODO create an enum error type
-    pub fn retrieve_document<D>(&self, id: DocumentId) -> Result<D, Box<Error>>
-    where D: DeserializeOwned
+    pub fn retrieve_document<T>(&self, id: DocumentId) -> Result<T, Box<Error>>
+    where T: DeserializeOwned
     {
         let mut deserializer = Deserializer::new(&self.snapshot, &self.schema, id);
-        Ok(D::deserialize(&mut deserializer)?)
+        Ok(T::deserialize(&mut deserializer)?)
     }
 
-    pub fn retrieve_documents<D, I>(&self, ids: I) -> DocumentIter<D, I::IntoIter>
-    where D: DeserializeOwned,
+    pub fn retrieve_documents<T, I>(&self, ids: I) -> DocumentIter<D, T, I::IntoIter>
+    where T: DeserializeOwned,
           I: IntoIterator<Item=DocumentId>,
     {
         DocumentIter {
@@ -71,7 +76,9 @@ impl<'a> DatabaseView<'a> {
     }
 }
 
-impl<'a> fmt::Debug for DatabaseView<'a> {
+impl<D> fmt::Debug for DatabaseView<D>
+where D: Deref<Target=DB>
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut options = ReadOptions::new();
         let lower = DocumentKey::new(0);
@@ -102,17 +109,20 @@ impl<'a> fmt::Debug for DatabaseView<'a> {
 }
 
 // TODO this is just an iter::Map !!!
-pub struct DocumentIter<'a, D, I> {
-    database_view: &'a DatabaseView<'a>,
+pub struct DocumentIter<'a, D, T, I>
+where D: Deref<Target=DB>
+{
+    database_view: &'a DatabaseView<D>,
     document_ids: I,
-    _phantom: marker::PhantomData<D>,
+    _phantom: marker::PhantomData<T>,
 }
 
-impl<'a, D, I> Iterator for DocumentIter<'a, D, I>
-where D: DeserializeOwned,
+impl<'a, D, T, I> Iterator for DocumentIter<'a, D, T, I>
+where D: Deref<Target=DB>,
+      T: DeserializeOwned,
       I: Iterator<Item=DocumentId>,
 {
-    type Item = Result<D, Box<Error>>;
+    type Item = Result<T, Box<Error>>;
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.document_ids.size_hint()
@@ -126,13 +136,15 @@ where D: DeserializeOwned,
     }
 }
 
-impl<'a, D, I> ExactSizeIterator for DocumentIter<'a, D, I>
-where D: DeserializeOwned,
+impl<'a, D, T, I> ExactSizeIterator for DocumentIter<'a, D, T, I>
+where D: Deref<Target=DB>,
+      T: DeserializeOwned,
       I: ExactSizeIterator + Iterator<Item=DocumentId>,
 { }
 
-impl<'a, D, I> DoubleEndedIterator for DocumentIter<'a, D, I>
-where D: DeserializeOwned,
+impl<'a, D, T, I> DoubleEndedIterator for DocumentIter<'a, D, T, I>
+where D: Deref<Target=DB>,
+      T: DeserializeOwned,
       I: DoubleEndedIterator + Iterator<Item=DocumentId>,
 {
     fn next_back(&mut self) -> Option<Self::Item> {

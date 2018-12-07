@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::ops::Deref;
 use std::fmt;
 
 use rocksdb::rocksdb::{DB, Snapshot, SeekKey};
@@ -11,19 +12,25 @@ use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
 use crate::database::schema::Schema;
 use crate::DocumentId;
 
-pub struct Deserializer<'a> {
-    snapshot: &'a Snapshot<&'a DB>,
+pub struct Deserializer<'a, D>
+where D: Deref<Target=DB>
+{
+    snapshot: &'a Snapshot<D>,
     schema: &'a Schema,
     document_id: DocumentId,
 }
 
-impl<'a> Deserializer<'a> {
-    pub fn new(snapshot: &'a Snapshot<&DB>, schema: &'a Schema, doc: DocumentId) -> Self {
+impl<'a, D> Deserializer<'a, D>
+where D: Deref<Target=DB>
+{
+    pub fn new(snapshot: &'a Snapshot<D>, schema: &'a Schema, doc: DocumentId) -> Self {
         Deserializer { snapshot, schema, document_id: doc }
     }
 }
 
-impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
+impl<'de, 'a, 'b, D> de::Deserializer<'de> for &'b mut Deserializer<'a, D>
+where D: Deref<Target=DB>
+{
     type Error = DeserializerError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>

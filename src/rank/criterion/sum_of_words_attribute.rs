@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
+use std::ops::Deref;
 
+use rocksdb::DB;
 use group_by::GroupBy;
 
 use crate::database::DatabaseView;
@@ -19,8 +21,10 @@ fn sum_matches_attributes(matches: &[Match]) -> u8 {
 #[derive(Debug, Clone, Copy)]
 pub struct SumOfWordsAttribute;
 
-impl Criterion for SumOfWordsAttribute {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView) -> Ordering {
+impl<D> Criterion<D> for SumOfWordsAttribute
+where D: Deref<Target=DB>
+{
+    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = sum_matches_attributes(&lhs.matches);
         let rhs = sum_matches_attributes(&rhs.matches);
 

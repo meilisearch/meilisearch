@@ -5,8 +5,11 @@ mod sum_of_words_attribute;
 mod sum_of_words_position;
 mod exact;
 
-use std::vec;
 use std::cmp::Ordering;
+use std::ops::Deref;
+use std::vec;
+
+use rocksdb::DB;
 
 use crate::database::DatabaseView;
 use crate::rank::Document;
@@ -20,32 +23,38 @@ pub use self::{
     exact::Exact,
 };
 
-pub trait Criterion {
+pub trait Criterion<D>
+where D: Deref<Target=DB>
+{
     #[inline]
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> Ordering;
+    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering;
 
     #[inline]
-    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> bool {
+    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
         self.evaluate(lhs, rhs, view) == Ordering::Equal
     }
 }
 
-impl<'a, T: Criterion + ?Sized> Criterion for &'a T {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> Ordering {
+impl<'a, D, T: Criterion<D> + ?Sized> Criterion<D> for &'a T
+where D: Deref<Target=DB>
+{
+    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
         (**self).evaluate(lhs, rhs, view)
     }
 
-    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> bool {
+    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
         (**self).eq(lhs, rhs, view)
     }
 }
 
-impl<T: Criterion + ?Sized> Criterion for Box<T> {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> Ordering {
+impl<D, T: Criterion<D> + ?Sized> Criterion<D> for Box<T>
+where D: Deref<Target=DB>
+{
+    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
         (**self).evaluate(lhs, rhs, view)
     }
 
-    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView) -> bool {
+    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
         (**self).eq(lhs, rhs, view)
     }
 }
@@ -53,15 +62,19 @@ impl<T: Criterion + ?Sized> Criterion for Box<T> {
 #[derive(Debug, Clone, Copy)]
 pub struct DocumentId;
 
-impl Criterion for DocumentId {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView) -> Ordering {
+impl<D> Criterion<D> for DocumentId
+where D: Deref<Target=DB>
+{
+    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         lhs.id.cmp(&rhs.id)
     }
 }
 
 // TODO there is too much Box here, can we use
 //      static references or static closures
-pub fn default() -> Vec<Box<dyn Criterion>> {
+pub fn default<D>() -> Vec<Box<dyn Criterion<D>>>
+where D: Deref<Target=DB>
+{
     vec![
         Box::new(SumOfTypos),
         Box::new(NumberOfWords),

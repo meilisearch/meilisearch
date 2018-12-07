@@ -1,11 +1,12 @@
+use std::ops::{Deref, Range};
 use std::error::Error;
 use std::hash::Hash;
-use std::ops::Range;
 use std::{mem, vec, str};
 
 use group_by::GroupByMut;
 use hashbrown::HashMap;
 use fst::Streamer;
+use rocksdb::DB;
 
 use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::rank::criterion::{self, Criterion};
@@ -23,19 +24,25 @@ fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
     automatons
 }
 
-pub struct QueryBuilder<'a, C> {
-    view: &'a DatabaseView<'a>,
+pub struct QueryBuilder<'a, D, C>
+where D: Deref<Target=DB>
+{
+    view: &'a DatabaseView<D>,
     criteria: Vec<C>,
 }
 
-impl<'a> QueryBuilder<'a, Box<dyn Criterion>> {
-    pub fn new(view: &'a DatabaseView<'a>) -> Result<Self, Box<Error>> {
+impl<'a, D> QueryBuilder<'a, D, Box<dyn Criterion<D>>>
+where D: Deref<Target=DB>
+{
+    pub fn new(view: &'a DatabaseView<D>) -> Result<Self, Box<Error>> {
         QueryBuilder::with_criteria(view, criterion::default())
     }
 }
 
-impl<'a, C> QueryBuilder<'a, C> {
-    pub fn with_criteria(view: &'a DatabaseView<'a>, criteria: Vec<C>) -> Result<Self, Box<Error>> {
+impl<'a, D, C> QueryBuilder<'a, D, C>
+where D: Deref<Target=DB>
+{
+    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Vec<C>) -> Result<Self, Box<Error>> {
         Ok(QueryBuilder { view, criteria })
     }
 
@@ -44,7 +51,7 @@ impl<'a, C> QueryBuilder<'a, C> {
         self
     }
 
-    pub fn with_distinct<F>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, F, C> {
+    pub fn with_distinct<F>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, D, F, C> {
         DistinctQueryBuilder {
             inner: self,
             function: function,
@@ -92,8 +99,9 @@ impl<'a, C> QueryBuilder<'a, C> {
     }
 }
 
-impl<'a, C> QueryBuilder<'a, C>
-where C: Criterion
+impl<'a, D, C> QueryBuilder<'a, D, C>
+where D: Deref<Target=DB>,
+      C: Criterion<D>
 {
     pub fn query(&self, query: &str, limit: usize) -> Vec<Document> {
         let mut documents = self.query_all(query);
@@ -119,16 +127,19 @@ where C: Criterion
     }
 }
 
-pub struct DistinctQueryBuilder<'a, F, C> {
-    inner: QueryBuilder<'a, C>,
+pub struct DistinctQueryBuilder<'a, D, F, C>
+where D: Deref<Target=DB>
+{
+    inner: QueryBuilder<'a, D, C>,
     function: F,
     size: usize,
 }
 
-impl<'a, F, K, C> DistinctQueryBuilder<'a, F, C>
-where F: Fn(DocumentId, &DatabaseView) -> Option<K>,
+impl<'a, D, F, K, C> DistinctQueryBuilder<'a, D, F, C>
+where D: Deref<Target=DB>,
+      F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
       K: Hash + Eq,
-      C: Criterion,
+      C: Criterion<D>,
 {
     pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.inner.query_all(query);

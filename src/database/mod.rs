@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::path::Path;
 use std::ops::Deref;
+use std::sync::Arc;
 use std::fmt;
 
 use rocksdb::rocksdb_options::{DBOptions, IngestExternalFileOptions, ColumnFamilyOptions};
@@ -42,7 +43,8 @@ where D: Deref<Target=DB>
     }
 }
 
-pub struct Database(DB);
+#[derive(Clone)]
+pub struct Database(Arc<DB>);
 
 impl Database {
     pub fn create<P: AsRef<Path>>(path: P, schema: Schema) -> Result<Database, Box<Error>> {
@@ -66,7 +68,7 @@ impl Database {
         schema.write_to(&mut schema_bytes)?;
         db.put(DATA_SCHEMA, &schema_bytes)?;
 
-        Ok(Database(db))
+        Ok(Database(Arc::new(db)))
     }
 
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Database, Box<Error>> {
@@ -86,7 +88,7 @@ impl Database {
             None => return Err(String::from("Database does not contain a schema").into()),
         };
 
-        Ok(Database(db))
+        Ok(Database(Arc::new(db)))
     }
 
     pub fn ingest_update_file(&self, update: Update) -> Result<(), Box<Error>> {
@@ -114,8 +116,13 @@ impl Database {
         Ok(self.0.flush(true)?)
     }
 
-    pub fn view(&self) -> Result<DatabaseView, Box<Error>> {
+    pub fn view(&self) -> Result<DatabaseView<&DB>, Box<Error>> {
         let snapshot = self.0.snapshot();
+        DatabaseView::new(snapshot)
+    }
+
+    pub fn view_arc(&self) -> Result<DatabaseView<Arc<DB>>, Box<Error>> {
+        let snapshot = Snapshot::new(self.0.clone());
         DatabaseView::new(snapshot)
     }
 }

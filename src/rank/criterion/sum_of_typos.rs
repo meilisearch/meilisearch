@@ -1,4 +1,7 @@
 use std::cmp::Ordering;
+use std::ops::Deref;
+
+use rocksdb::DB;
 
 use group_by::GroupBy;
 
@@ -25,8 +28,10 @@ fn sum_matches_typos(matches: &[Match]) -> i8 {
 #[derive(Debug, Clone, Copy)]
 pub struct SumOfTypos;
 
-impl Criterion for SumOfTypos {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView) -> Ordering {
+impl<D> Criterion<D> for SumOfTypos
+where D: Deref<Target=DB>
+{
+    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = sum_matches_typos(&lhs.matches);
         let rhs = sum_matches_typos(&rhs.matches);
 
