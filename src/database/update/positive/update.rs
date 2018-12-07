@@ -26,7 +26,7 @@ pub struct PositiveUpdateBuilder<B> {
     schema: Schema,
     tokenizer_builder: B,
     builder: UnorderedPositiveBlobBuilder<Vec<u8>, Vec<u8>>,
-    new_states: BTreeMap<(DocumentId, SchemaAttr), NewState>,
+    new_states: BTreeMap<DocumentKeyAttr, NewState>,
 }
 
 impl<B> PositiveUpdateBuilder<B> {
@@ -55,13 +55,13 @@ impl<B> PositiveUpdateBuilder<B> {
     }
 
     // TODO value must be a field that can be indexed
-    pub fn update_field(&mut self, id: DocumentId, field: SchemaAttr, value: String) {
+    pub fn update_field(&mut self, id: DocumentId, attr: SchemaAttr, value: String) {
         let value = bincode::serialize(&value).unwrap();
-        self.new_states.insert((id, field), NewState::Updated { value });
+        self.new_states.insert(DocumentKeyAttr::new(id, attr), NewState::Updated { value });
     }
 
-    pub fn remove_field(&mut self, id: DocumentId, field: SchemaAttr) {
-        self.new_states.insert((id, field), NewState::Removed);
+    pub fn remove_field(&mut self, id: DocumentId, attr: SchemaAttr) {
+        self.new_states.insert(DocumentKeyAttr::new(id, attr), NewState::Removed);
     }
 }
 
@@ -101,7 +101,7 @@ struct Serializer<'a, B> {
     tokenizer_builder: &'a B,
     document_id: DocumentId,
     builder: &'a mut UnorderedPositiveBlobBuilder<Vec<u8>, Vec<u8>>,
-    new_states: &'a mut BTreeMap<(DocumentId, SchemaAttr), NewState>,
+    new_states: &'a mut BTreeMap<DocumentKeyAttr, NewState>,
 }
 
 macro_rules! forward_to_unserializable_type {
@@ -272,7 +272,7 @@ struct StructSerializer<'a, B> {
     tokenizer_builder: &'a B,
     document_id: DocumentId,
     builder: &'a mut UnorderedPositiveBlobBuilder<Vec<u8>, Vec<u8>>,
-    new_states: &'a mut BTreeMap<(DocumentId, SchemaAttr), NewState>,
+    new_states: &'a mut BTreeMap<DocumentKeyAttr, NewState>,
 }
 
 impl<'a, B> ser::SerializeStruct for StructSerializer<'a, B>
@@ -293,7 +293,8 @@ where B: TokenizerBuilder
                 let props = self.schema.props(attr);
                 if props.is_stored() {
                     let value = bincode::serialize(value).unwrap();
-                    self.new_states.insert((self.document_id, attr), NewState::Updated { value });
+                    let key = DocumentKeyAttr::new(self.document_id, attr);
+                    self.new_states.insert(key, NewState::Updated { value });
                 }
                 if props.is_indexed() {
                     let serializer = IndexerSerializer {
@@ -498,11 +499,9 @@ impl<B> PositiveUpdateBuilder<B> {
         file_writer.merge(DATA_INDEX, &bytes)?;
 
         // write all the documents fields updates
-        for ((id, attr), state) in self.new_states {
-            let key = DocumentKeyAttr::new(id, attr);
-            let props = self.schema.props(attr);
+        for (key, state) in self.new_states {
             match state {
-                NewState::Updated { value } => if props.is_stored() {
+                NewState::Updated { value } => {
                     file_writer.put(key.as_ref(), &value)?
                 },
                 NewState::Removed => file_writer.delete(key.as_ref())?,

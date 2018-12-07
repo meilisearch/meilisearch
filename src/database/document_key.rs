@@ -57,7 +57,7 @@ impl fmt::Debug for DocumentKey {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DocumentKeyAttr([u8; DOC_KEY_ATTR_LEN]);
 
 impl DocumentKeyAttr {
