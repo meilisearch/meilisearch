@@ -1,10 +1,10 @@
 pub mod criterion;
-mod ranked_stream;
+mod query_builder;
 mod distinct_map;
 
 use crate::{Match, DocumentId};
 
-pub use self::ranked_stream::{QueryBuilder, DistinctQueryBuilder};
+pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder};
 
 #[inline]
 fn match_query_index(a: &Match, b: &Match) -> bool {

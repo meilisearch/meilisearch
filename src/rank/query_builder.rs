@@ -109,23 +109,28 @@ impl<T, C> QueryBuilder<T, C>
 where T: Deref<Target=DB>,
       C: Criterion,
 {
-    pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(&self, query: &str, limit: usize) -> Vec<Document> {
         let mut documents = self.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
 
-        for criterion in &self.criteria {
+        'group: for criterion in &self.criteria {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
+            let mut computed = 0;
 
             for group in tmp_groups {
+
                 group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
                 for group in GroupByMut::new(group, |a, b| criterion.eq(a, b)) {
+
+                    computed += group.len();
                     groups.push(group);
+                    if computed >= limit { break 'group }
                 }
             }
         }
 
-        let range = clamp_range(range, 0..documents.len());
-        documents[range].to_vec()
+        documents.truncate(limit);
+        documents
     }
 }
 

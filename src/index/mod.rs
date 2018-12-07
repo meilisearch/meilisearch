@@ -121,7 +121,7 @@ impl Index {
         let snapshot = self.database.snapshot();
 
         let builder = QueryBuilder::new(snapshot)?;
-        let documents = builder.query(query, 0..20);
+        let documents = builder.query(query, 20);
 
         Ok(documents)
     }
