@@ -9,23 +9,8 @@ use crate::database::deserializer::{Deserializer, DeserializerError};
 use crate::database::{DATA_INDEX, DATA_SCHEMA};
 use crate::blob::positive::PositiveBlob;
 use crate::index::schema::Schema;
-use crate::database::{DocumentKey, DocumentKeyAttr};
+use crate::database::{retrieve_data_schema, DocumentKey, DocumentKeyAttr};
 use crate::DocumentId;
-
-// FIXME Do not panic!
-fn retrieve_data_schema(snapshot: &Snapshot<&DB>) -> Result<Schema, Box<Error>> {
-    match snapshot.get(DATA_SCHEMA)? {
-        Some(vector) => Ok(Schema::read_from(&*vector)?),
-        None => panic!("BUG: no schema found in the database"),
-    }
-}
-
-fn retrieve_data_index(snapshot: &Snapshot<&DB>) -> Result<PositiveBlob, Box<Error>> {
-    match snapshot.get(DATA_INDEX)? {
-        Some(vector) => Ok(bincode::deserialize(&*vector)?),
-        None => Ok(PositiveBlob::default()),
-    }
-}
 
 pub struct DatabaseView<'a> {
     snapshot: Snapshot<&'a DB>,

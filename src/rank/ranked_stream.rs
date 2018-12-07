@@ -11,9 +11,9 @@ use fst::Streamer;
 use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::rank::criterion::{self, Criterion};
 use crate::rank::distinct_map::DistinctMap;
+use crate::database::retrieve_data_index;
 use crate::blob::PositiveBlob;
 use crate::{Match, DocumentId};
-use crate::retrieve::Retrieve;
 use crate::rank::Document;
 
 fn clamp_range<T: Copy + Ord>(range: Range<T>, big: Range<T>) -> Range<T> {
@@ -48,7 +48,7 @@ impl<T, C> QueryBuilder<T, C>
 where T: Deref<Target=DB>,
 {
     pub fn with_criteria(snapshot: Snapshot<T>, criteria: Vec<C>) -> Result<Self, Box<Error>> {
-        let blob = snapshot.data_index()?;
+        let blob = retrieve_data_index(&snapshot)?;
         Ok(QueryBuilder { snapshot, blob, criteria })
     }
 

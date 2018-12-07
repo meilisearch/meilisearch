@@ -1,52 +1,6 @@
 use std::mem;
 use self::Separator::*;
 
-struct MegaTokenizer<I> {
-    strings: I,
-}
-
-impl From<String> for MegaTokenizer<Option<String>> {
-    fn from(string: String) -> Self {
-        MegaTokenizer { strings: Some(string) }
-    }
-}
-
-impl From<Vec<String>> for MegaTokenizer<Vec<String>> {
-    fn from(strings: Vec<String>) -> Self {
-        MegaTokenizer { strings }
-    }
-}
-
-impl<I> Iterator for MegaTokenizer<I> {
-    type Item = (usize, String);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        unimplemented!()
-    }
-}
-
-#[test]
-fn xxx() {
-    let s1 = "hello world!";
-    let mut s1 = MegaTokenizer::from(s1.to_owned());
-
-    assert_eq!(s1.next(), Some((0, "hello".into())));
-    assert_eq!(s1.next(), Some((1, "world".into())));
-
-    assert_eq!(s1.next(), None);
-
-    let v1 = vec!["Vin Diesel".to_owned(), "Quentin Tarantino".to_owned()];
-    let mut v1 = MegaTokenizer::from(v1);
-
-    assert_eq!(v1.next(), Some((0, "Vin".into())));
-    assert_eq!(v1.next(), Some((1, "Diesel".into())));
-
-    assert_eq!(v1.next(), Some((8, "Quentin".into())));
-    assert_eq!(v1.next(), Some((9, "Tarantino".into())));
-
-    assert_eq!(v1.next(), None);
-}
-
 pub trait TokenizerBuilder {
     fn build<'a>(&self, text: &'a str) -> Box<Iterator<Item=(usize, &'a str)> + 'a>;
 }

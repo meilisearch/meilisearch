@@ -1,15 +1,17 @@
 use std::error::Error;
 use std::path::Path;
+use std::ops::Deref;
 use std::fmt;
 
 use rocksdb::rocksdb_options::{DBOptions, IngestExternalFileOptions, ColumnFamilyOptions};
 use rocksdb::{DB, DBVector, MergeOperands, SeekKey};
-use rocksdb::rocksdb::Writable;
+use rocksdb::rocksdb::{Writable, Snapshot};
 
-pub use crate::database::database_view::DatabaseView;
 pub use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
+pub use crate::database::database_view::DatabaseView;
 use crate::index::update::Update;
 use crate::index::schema::Schema;
+use crate::blob::positive::PositiveBlob;
 use crate::blob::{self, Blob};
 
 mod document_key;
@@ -18,6 +20,24 @@ mod deserializer;
 
 const DATA_INDEX:  &[u8] = b"data-index";
 const DATA_SCHEMA: &[u8] = b"data-schema";
+
+pub fn retrieve_data_schema<D>(snapshot: &Snapshot<D>) -> Result<Schema, Box<Error>>
+where D: Deref<Target=DB>
+{
+    match snapshot.get(DATA_SCHEMA)? {
+        Some(vector) => Ok(Schema::read_from(&*vector)?),
+        None => Err(String::from("BUG: no schema found in the database").into()),
+    }
+}
+
+pub fn retrieve_data_index<D>(snapshot: &Snapshot<D>) -> Result<PositiveBlob, Box<Error>>
+where D: Deref<Target=DB>
+{
+    match snapshot.get(DATA_INDEX)? {
+        Some(vector) => Ok(bincode::deserialize(&*vector)?),
+        None => Ok(PositiveBlob::default()),
+    }
+}
 
 pub struct Database(DB);
 
@@ -162,14 +182,14 @@ mod tests {
         struct SimpleDoc {
             title: String,
             description: String,
+            timestamp: u64,
         }
 
-        let title;
-        let description;
         let schema = {
             let mut builder = SchemaBuilder::new();
-            title = builder.new_attribute("title", STORED | INDEXED);
-            description = builder.new_attribute("description", STORED | INDEXED);
+            builder.new_attribute("title", STORED | INDEXED);
+            builder.new_attribute("description", STORED | INDEXED);
+            builder.new_attribute("timestamp", STORED);
             builder.build()
         };
 
@@ -181,20 +201,16 @@ mod tests {
         let doc0 = SimpleDoc {
             title: String::from("I am a title"),
             description: String::from("I am a description"),
+            timestamp: 1234567,
         };
         let doc1 = SimpleDoc {
             title: String::from("I am the second title"),
             description: String::from("I am the second description"),
+            timestamp: 7654321,
         };
 
         let mut update = {
             let mut builder = PositiveUpdateBuilder::new(update_path, schema, tokenizer_builder);
-
-            // builder.update_field(0, title, doc0.title.clone());
-            // builder.update_field(0, description, doc0.description.clone());
-
-            // builder.update_field(1, title, doc1.title.clone());
-            // builder.update_field(1, description, doc1.description.clone());
 
             builder.update(0, &doc0).unwrap();
             builder.update(1, &doc1).unwrap();
@@ -206,18 +222,8 @@ mod tests {
         database.ingest_update_file(update)?;
         let view = database.view()?;
 
-        println!("{:?}", view);
-
-        #[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
-        struct DeSimpleDoc {
-            title: char,
-        }
-
         let de_doc0: SimpleDoc = view.retrieve_document(0)?;
         let de_doc1: SimpleDoc = view.retrieve_document(1)?;
-
-        println!("{:?}", de_doc0);
-        println!("{:?}", de_doc1);
 
         assert_eq!(doc0, de_doc0);
         assert_eq!(doc1, de_doc1);
