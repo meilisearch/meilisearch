@@ -4,7 +4,7 @@ use std::fmt;
 
 use byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};
 
-use crate::index::schema::SchemaAttr;
+use crate::database::schema::SchemaAttr;
 use crate::DocumentId;
 
 const DOC_KEY_LEN:      usize = 4 + size_of::<u64>();

@@ -8,7 +8,7 @@ use serde::de::value::MapDeserializer;
 use serde::de::{self, Visitor, IntoDeserializer};
 
 use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
-use crate::index::schema::Schema;
+use crate::database::schema::Schema;
 use crate::DocumentId;
 
 pub struct Deserializer<'a> {

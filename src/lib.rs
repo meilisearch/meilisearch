@@ -1,8 +1,6 @@
 pub mod automaton;
-pub mod blob;
 pub mod database;
 pub mod data;
-pub mod index;
 pub mod rank;
 pub mod tokenizer;
 pub mod vec_read_only;

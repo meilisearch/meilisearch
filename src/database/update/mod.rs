@@ -1,11 +1,5 @@
-use std::io::{Cursor, Write};
 use std::path::PathBuf;
 use std::error::Error;
-
-use byteorder::{NetworkEndian, WriteBytesExt};
-
-use crate::index::schema::SchemaAttr;
-use crate::DocumentId;
 
 mod negative;
 mod positive;

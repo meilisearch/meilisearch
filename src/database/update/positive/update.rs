@@ -6,15 +6,15 @@ use std::fmt;
 use ::rocksdb::rocksdb_options;
 use serde::ser::{self, Serialize};
 
-use crate::index::update::positive::unordered_builder::UnorderedPositiveBlobBuilder;
-use crate::index::schema::{SchemaProps, Schema, SchemaAttr};
-use crate::index::update::Update;
-use crate::database::{DocumentKey, DocumentKeyAttr};
-use crate::blob::positive::PositiveBlob;
+use crate::database::update::positive::unordered_builder::UnorderedPositiveBlobBuilder;
+use crate::database::blob::positive::PositiveBlob;
+use crate::database::schema::{Schema, SchemaAttr};
 use crate::tokenizer::TokenizerBuilder;
+use crate::database::DocumentKeyAttr;
+use crate::database::update::Update;
 use crate::{DocumentId, DocIndex};
-use crate::index::DATA_INDEX;
-use crate::blob::Blob;
+use crate::database::DATA_INDEX;
+use crate::database::blob::Blob;
 
 pub enum NewState {
     Updated { value: Vec<u8> },

@@ -7,13 +7,16 @@ use rocksdb::rocksdb_options::{DBOptions, IngestExternalFileOptions, ColumnFamil
 use rocksdb::{DB, DBVector, MergeOperands, SeekKey};
 use rocksdb::rocksdb::{Writable, Snapshot};
 
-pub use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
-pub use crate::database::database_view::DatabaseView;
-use crate::index::update::Update;
-use crate::index::schema::Schema;
-use crate::blob::positive::PositiveBlob;
-use crate::blob::{self, Blob};
+pub use self::document_key::{DocumentKey, DocumentKeyAttr};
+pub use self::database_view::DatabaseView;
+use self::blob::positive::PositiveBlob;
+use self::update::Update;
+use self::schema::Schema;
+use self::blob::Blob;
 
+pub mod blob;
+pub mod schema;
+pub mod update;
 mod document_key;
 mod database_view;
 mod deserializer;
@@ -163,14 +166,13 @@ fn merge_indexes(key: &[u8], existing_value: Option<&[u8]>, operands: &mut Merge
 mod tests {
     use super::*;
     use std::error::Error;
-    use std::path::PathBuf;
 
     use serde_derive::{Serialize, Deserialize};
     use tempfile::tempdir;
 
     use crate::tokenizer::DefaultBuilder;
-    use crate::index::update::PositiveUpdateBuilder;
-    use crate::index::schema::{Schema, SchemaBuilder, STORED, INDEXED};
+    use crate::database::update::PositiveUpdateBuilder;
+    use crate::database::schema::{SchemaBuilder, STORED, INDEXED};
 
     #[test]
     fn ingest_update_file() -> Result<(), Box<Error>> {

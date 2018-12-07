@@ -3,11 +3,11 @@ use std::error::Error;
 
 use ::rocksdb::rocksdb_options;
 
-use crate::index::update::negative::unordered_builder::UnorderedNegativeBlobBuilder;
-use crate::index::update::Update;
-use crate::database::{DocumentKey, DocumentKeyAttr};
-use crate::blob::{Blob, NegativeBlob};
-use crate::index::DATA_INDEX;
+use crate::database::update::negative::unordered_builder::UnorderedNegativeBlobBuilder;
+use crate::database::blob::{Blob, NegativeBlob};
+use crate::database::update::Update;
+use crate::database::DocumentKey;
+use crate::database::DATA_INDEX;
 use crate::DocumentId;
 
 pub struct NegativeUpdateBuilder {

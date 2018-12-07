@@ -5,11 +5,9 @@ use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey};
 use rocksdb::rocksdb_options::ReadOptions;
 use serde::de::DeserializeOwned;
 
-use crate::database::deserializer::{Deserializer, DeserializerError};
-use crate::database::{DATA_INDEX, DATA_SCHEMA};
-use crate::blob::positive::PositiveBlob;
-use crate::index::schema::Schema;
 use crate::database::{retrieve_data_schema, DocumentKey, DocumentKeyAttr};
+use crate::database::deserializer::Deserializer;
+use crate::database::schema::Schema;
 use crate::DocumentId;
 
 pub struct DatabaseView<'a> {

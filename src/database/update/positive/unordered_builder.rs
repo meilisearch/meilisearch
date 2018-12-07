@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::Write;
 
-use crate::blob::positive::PositiveBlobBuilder;
+use crate::database::blob::positive::PositiveBlobBuilder;
 use crate::DocIndex;
 
 pub struct UnorderedPositiveBlobBuilder<W, X> {

@@ -5,8 +5,8 @@ use group_by::GroupBy;
 use sdset::duo::DifferenceByKey;
 use sdset::{Set, SetOperation};
 
-use crate::blob::{Blob, Sign, PositiveBlob, PositiveBlobBuilder, NegativeBlob};
-use crate::blob::{positive, negative};
+use crate::database::blob::{Blob, Sign, PositiveBlob, PositiveBlobBuilder, NegativeBlob};
+use crate::database::blob::{positive, negative};
 
 fn blob_same_sign(a: &Blob, b: &Blob) -> bool {
     a.sign() == b.sign()

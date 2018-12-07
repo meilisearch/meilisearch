@@ -12,7 +12,7 @@ use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::rank::criterion::{self, Criterion};
 use crate::rank::distinct_map::DistinctMap;
 use crate::database::retrieve_data_index;
-use crate::blob::PositiveBlob;
+use crate::database::blob::PositiveBlob;
 use crate::{Match, DocumentId};
 use crate::rank::Document;
 

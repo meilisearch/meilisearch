@@ -1,7 +1,7 @@
 use sdset::multi::OpBuilder as SdOpBuilder;
 use sdset::{SetOperation, Set};
 
-use crate::blob::PositiveBlob;
+use crate::database::blob::PositiveBlob;
 use crate::data::DocIndexes;
 use crate::DocIndex;
 

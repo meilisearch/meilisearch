@@ -1,7 +1,7 @@
 use sdset::multi::OpBuilder as SdOpBuilder;
 use sdset::Set;
 
-use crate::blob::NegativeBlob;
+use crate::database::blob::NegativeBlob;
 use crate::data::DocIds;
 use crate::DocumentId;
 
