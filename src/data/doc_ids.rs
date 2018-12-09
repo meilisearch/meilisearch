@@ -4,6 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::{io, mem};
 
+use sdset::Set;
 use fst::raw::MmapReadOnly;
 use serde::ser::{Serialize, Serializer};
 
@@ -42,11 +43,12 @@ impl DocIds {
         self.doc_ids().binary_search(&doc).is_ok()
     }
 
-    pub fn doc_ids(&self) -> &[DocumentId] {
+    pub fn doc_ids(&self) -> &Set<DocumentId> {
         let slice = &self.data;
         let ptr = slice.as_ptr() as *const DocumentId;
         let len = slice.len() / mem::size_of::<DocumentId>();
-        unsafe { from_raw_parts(ptr, len) }
+        let slice = unsafe { from_raw_parts(ptr, len) };
+        Set::new_unchecked(slice)
     }
 }
 

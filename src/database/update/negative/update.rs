@@ -48,9 +48,9 @@ impl NegativeUpdateBuilder {
             Blob::Positive(_) => unreachable!(),
         };
 
-        for &document_id in negative_blob.as_ref() {
+        for &document_id in negative_blob.as_ref().as_slice() {
             let start = DocumentKey::new(document_id);
-            let end = DocumentKey::new(document_id + 1);
+            let end = start.with_attribute_max();
             file_writer.delete_range(start.as_ref(), end.as_ref())?;
         }
 

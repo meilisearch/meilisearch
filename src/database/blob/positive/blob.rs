@@ -4,6 +4,7 @@ use std::path::Path;
 use std::error::Error;
 
 use fst::{map, Map, Streamer, IntoStreamer};
+use sdset::Set;
 
 use crate::DocIndex;
 use crate::data::{DocIndexes, DocIndexesBuilder};
@@ -177,7 +178,7 @@ impl<W: Write, X: Write> PositiveBlobBuilder<W, X> {
     /// then an error is returned. Similarly, if there was a problem writing
     /// to the underlying writer, an error is returned.
     // FIXME what if one write doesn't work but the other do ?
-    pub fn insert<K>(&mut self, key: K, doc_indexes: &[DocIndex]) -> Result<(), Box<Error>>
+    pub fn insert<K>(&mut self, key: K, doc_indexes: &Set<DocIndex>) -> Result<(), Box<Error>>
     where K: AsRef<[u8]>,
     {
         self.map.insert(key, self.value)?;
@@ -210,9 +211,9 @@ mod tests {
 
         let mut builder = PositiveBlobBuilder::memory();
 
-        builder.insert("aaa", &[a])?;
-        builder.insert("aab", &[a, b, c])?;
-        builder.insert("aac", &[a, c])?;
+        builder.insert("aaa", Set::new(&[a])?)?;
+        builder.insert("aab", Set::new(&[a, b, c])?)?;
+        builder.insert("aac", Set::new(&[a, c])?)?;
 
         let (map_bytes, indexes_bytes) = builder.into_inner()?;
         let positive_blob = PositiveBlob::from_bytes(map_bytes, indexes_bytes)?;
@@ -233,9 +234,9 @@ mod tests {
 
         let mut builder = PositiveBlobBuilder::memory();
 
-        builder.insert("aaa", &[a])?;
-        builder.insert("aab", &[a, b, c])?;
-        builder.insert("aac", &[a, c])?;
+        builder.insert("aaa", Set::new(&[a])?)?;
+        builder.insert("aab", Set::new(&[a, b, c])?)?;
+        builder.insert("aac", Set::new(&[a, c])?)?;
 
         let (map_bytes, indexes_bytes) = builder.into_inner()?;
         let positive_blob = PositiveBlob::from_bytes(map_bytes, indexes_bytes)?;

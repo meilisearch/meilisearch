@@ -5,8 +5,9 @@ use std::ops::Index;
 use std::path::Path;
 use std::sync::Arc;
 
-use fst::raw::MmapReadOnly;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use fst::raw::MmapReadOnly;
+use sdset::Set;
 
 use crate::DocIndex;
 use crate::data::Data;
@@ -64,11 +65,12 @@ impl DocIndexes {
         bytes
     }
 
-    pub fn get(&self, index: usize) -> Option<&[DocIndex]> {
+    pub fn get(&self, index: usize) -> Option<&Set<DocIndex>> {
         self.ranges().get(index as usize).map(|Range { start, end }| {
             let start = *start as usize;
             let end = *end as usize;
-            &self.indexes()[start..end]
+            let slice = &self.indexes()[start..end];
+            Set::new_unchecked(slice)
         })
     }
 
@@ -117,7 +119,7 @@ impl<W: Write> DocIndexesBuilder<W> {
         }
     }
 
-    pub fn insert(&mut self, indexes: &[DocIndex]) -> io::Result<()> {
+    pub fn insert(&mut self, indexes: &Set<DocIndex>) -> io::Result<()> {
         let len = indexes.len() as u64;
         let start = self.ranges.last().map(|r| r.end).unwrap_or(0);
         let range = Range { start, end: start + len };
@@ -164,16 +166,16 @@ mod tests {
 
         let mut builder = DocIndexesBuilder::memory();
 
-        builder.insert(&[a])?;
-        builder.insert(&[a, b, c])?;
-        builder.insert(&[a, c])?;
+        builder.insert(Set::new(&[a])?)?;
+        builder.insert(Set::new(&[a, b, c])?)?;
+        builder.insert(Set::new(&[a, c])?)?;
 
         let bytes = builder.into_inner()?;
         let docs = DocIndexes::from_bytes(bytes)?;
 
-        assert_eq!(docs.get(0), Some(&[a][..]));
-        assert_eq!(docs.get(1), Some(&[a, b, c][..]));
-        assert_eq!(docs.get(2), Some(&[a, c][..]));
+        assert_eq!(docs.get(0), Some(Set::new(&[a])?));
+        assert_eq!(docs.get(1), Some(Set::new(&[a, b, c])?));
+        assert_eq!(docs.get(2), Some(Set::new(&[a, c])?));
         assert_eq!(docs.get(3), None);
 
         Ok(())
@@ -187,9 +189,9 @@ mod tests {
 
         let mut builder = DocIndexesBuilder::memory();
 
-        builder.insert(&[a])?;
-        builder.insert(&[a, b, c])?;
-        builder.insert(&[a, c])?;
+        builder.insert(Set::new(&[a])?)?;
+        builder.insert(Set::new(&[a, b, c])?)?;
+        builder.insert(Set::new(&[a, c])?)?;
 
         let builder_bytes = builder.into_inner()?;
         let docs = DocIndexes::from_bytes(builder_bytes.clone())?;

@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::io::Write;
 
+use sdset::Set;
+
 use crate::database::blob::positive::PositiveBlobBuilder;
 use crate::DocIndex;
 
@@ -40,7 +42,7 @@ impl<W: Write, X: Write> UnorderedPositiveBlobBuilder<W, X> {
     pub fn into_inner(mut self) -> Result<(W, X), Box<Error>> {
         for (key, mut doc_indexes) in self.map {
             doc_indexes.sort_unstable();
-            self.builder.insert(&key, &doc_indexes)?;
+            self.builder.insert(&key, Set::new_unchecked(&doc_indexes))?;
         }
         self.builder.into_inner()
     }

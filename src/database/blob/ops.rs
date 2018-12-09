@@ -1,9 +1,9 @@
 use std::error::Error;
 
 use fst::{IntoStreamer, Streamer};
-use group_by::GroupBy;
 use sdset::duo::DifferenceByKey;
 use sdset::{Set, SetOperation};
+use group_by::GroupBy;
 
 use crate::database::blob::{Blob, Sign, PositiveBlob, PositiveBlobBuilder, NegativeBlob};
 use crate::database::blob::{positive, negative};
@@ -89,18 +89,16 @@ impl OpBuilder {
             };
 
             let mut builder = PositiveBlobBuilder::memory();
-            let doc_ids = Set::new_unchecked(negative.as_ref());
 
             let op_builder = positive::OpBuilder::new().add(&base).add(&positive);
             let mut stream = op_builder.union().into_stream();
             while let Some((input, doc_indexes)) = stream.next() {
-                let doc_indexes = Set::new_unchecked(doc_indexes);
-                let op = DifferenceByKey::new(doc_indexes, doc_ids, |x| x.document_id, |x| *x);
+                let op = DifferenceByKey::new(doc_indexes, negative.as_ref(), |x| x.document_id, |x| *x);
 
                 buffer.clear();
                 op.extend_vec(&mut buffer);
                 if !buffer.is_empty() {
-                    builder.insert(input, &buffer)?;
+                    builder.insert(input, Set::new_unchecked(&buffer))?;
                 }
             }
 

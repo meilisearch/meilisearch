@@ -2,6 +2,7 @@ use std::error::Error;
 use std::path::Path;
 use std::fmt;
 
+use sdset::Set;
 use serde::de::{self, Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 use crate::data::DocIds;
@@ -38,8 +39,8 @@ impl NegativeBlob {
     }
 }
 
-impl AsRef<[DocumentId]> for NegativeBlob {
-    fn as_ref(&self) -> &[DocumentId] {
+impl AsRef<Set<DocumentId>> for NegativeBlob {
+    fn as_ref(&self) -> &Set<DocumentId> {
         self.as_ids().doc_ids()
     }
 }
@@ -47,7 +48,7 @@ impl AsRef<[DocumentId]> for NegativeBlob {
 impl fmt::Debug for NegativeBlob {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "NegativeBlob(")?;
-        f.debug_list().entries(self.as_ref()).finish()?;
+        f.debug_list().entries(self.as_ref().as_slice()).finish()?;
         write!(f, ")")
     }
 }

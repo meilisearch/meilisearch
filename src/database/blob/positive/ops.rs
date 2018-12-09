@@ -74,7 +74,7 @@ impl<'m> $name<'m> {
 }
 
 impl<'m, 'a> fst::Streamer<'a> for $name<'m> {
-    type Item = (&'a [u8], &'a [DocIndex]);
+    type Item = (&'a [u8], &'a Set<DocIndex>);
 
     fn next(&'a mut self) -> Option<Self::Item> {
         // loop {
@@ -114,7 +114,7 @@ impl<'m, 'a> fst::Streamer<'a> for $name<'m> {
                 builder.$operation().extend_vec(&mut self.outs);
 
                 if self.outs.is_empty() { return None }
-                return Some((input, &self.outs))
+                return Some((input, Set::new_unchecked(&self.outs)))
             },
             None => None
         }
