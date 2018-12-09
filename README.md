@@ -1,4 +1,4 @@
-# pentium
+# meili-core
 
 A search engine based on the [blog posts serie](https://blog.algolia.com/inside-the-algolia-engine-part-1-indexing-vs-search/) of the great Algolia company.
 
@@ -23,7 +23,7 @@ Network is mesured, servers are located in amsterdam and tests are made between 
 
 ## Usage and examples
 
-Pentium work with an index like most of the search engines.
+Meili-core work with an index like most of the search engines.
 So to test the library you can create one by indexing a simple csv file.
 
 ```bash

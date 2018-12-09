@@ -1,6 +1,6 @@
 [package]
 edition = "2018"
-name = "pentium"
+name = "meili-core"
 version = "0.1.0"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
 
