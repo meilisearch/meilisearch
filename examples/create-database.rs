@@ -26,6 +26,7 @@ pub struct Opt {
 #[allow(non_snake_case)]
 struct Document<'a> {
     skuId: &'a str,
+    productGroup: &'a str,
     fr_FR_commercialName: &'a str,
     en_GB_commercialName: &'a str,
     maketingColorInternalName: &'a str,
@@ -48,6 +49,7 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 fn create_schema() -> Schema {
     let mut schema = SchemaBuilder::new();
     schema.new_attribute("skuId", STORED | INDEXED);
+    schema.new_attribute("productGroup", STORED | INDEXED);
     schema.new_attribute("fr_FR_commercialName", STORED | INDEXED);
     schema.new_attribute("en_GB_commercialName", STORED | INDEXED);
     schema.new_attribute("maketingColorInternalName", STORED | INDEXED);

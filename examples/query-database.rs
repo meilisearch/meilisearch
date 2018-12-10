@@ -1,5 +1,3 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::error::Error;
@@ -14,12 +12,17 @@ pub struct Opt {
     /// The destination where the database must be created
     #[structopt(parse(from_os_str))]
     pub database_path: PathBuf,
+
+    /// The number of returned results
+    #[structopt(short = "n", long = "number-results", default_value = "10")]
+    pub number_results: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 struct Document {
     skuId: String,
+    productGroup: String,
     fr_FR_commercialName: String,
     en_GB_commercialName: String,
     maketingColorInternalName: String,
@@ -28,24 +31,18 @@ struct Document {
     en_GB_description: String,
 }
 
-fn calculate_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
-}
-
 fn main() -> Result<(), Box<Error>> {
     let opt = Opt::from_args();
 
     let (elapsed, result) = elapsed::measure_time(|| Database::open(&opt.database_path));
     let database = result?;
-    println!("database opened in {}", elapsed);
+    println!("database prepared for you in {}", elapsed);
 
     let mut buffer = String::new();
     let input = io::stdin();
 
     loop {
-        print!("Search: ");
+        print!("Searching for: ");
         io::stdout().flush()?;
 
         if input.read_line(&mut buffer)? == 0 { break }
@@ -54,7 +51,7 @@ fn main() -> Result<(), Box<Error>> {
 
         let (elapsed, documents) = elapsed::measure_time(|| {
             let builder = view.query_builder().unwrap();
-            builder.query(&buffer, 10)
+            builder.query(&buffer, opt.number_results)
         });
 
         let mut full_documents = Vec::with_capacity(documents.len());
@@ -67,7 +64,7 @@ fn main() -> Result<(), Box<Error>> {
         }
 
         println!("{:#?}", full_documents);
-        println!("{}", elapsed);
+        println!("Found {} results in {}", full_documents.len(), elapsed);
 
         buffer.clear();
     }
