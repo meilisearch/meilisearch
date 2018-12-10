@@ -17,8 +17,12 @@ use crate::rank::Document;
 
 fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
     let mut automatons = Vec::new();
-    for query in query.split_whitespace().map(str::to_lowercase) {
-        let lev = automaton::build_prefix_dfa(&query);
+    let mut words = query.split_whitespace().map(str::to_lowercase).peekable();
+    while let Some(word) = words.next() {
+        let lev = match words.peek() {
+            Some(_) => automaton::build_dfa(&word),
+            None => automaton::build_prefix_dfa(&word),
+        };
         automatons.push(lev);
     }
     automatons
