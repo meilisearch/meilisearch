@@ -9,8 +9,8 @@ use fst::Streamer;
 use rocksdb::DB;
 
 use crate::automaton::{self, DfaExt, AutomatonExt};
-use crate::rank::criterion::{self, Criterion};
 use crate::rank::distinct_map::DistinctMap;
+use crate::rank::criterion::Criteria;
 use crate::database::DatabaseView;
 use crate::{Match, DocumentId};
 use crate::rank::Document;
@@ -28,34 +28,34 @@ fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
     automatons
 }
 
-pub struct QueryBuilder<'a, D, C>
+pub struct QueryBuilder<'a, D>
 where D: Deref<Target=DB>
 {
     view: &'a DatabaseView<D>,
-    criteria: Vec<C>,
+    criteria: Criteria<D>,
 }
 
-impl<'a, D> QueryBuilder<'a, D, Box<dyn Criterion<D>>>
+impl<'a, D> QueryBuilder<'a, D>
 where D: Deref<Target=DB>
 {
     pub fn new(view: &'a DatabaseView<D>) -> Result<Self, Box<Error>> {
-        QueryBuilder::with_criteria(view, criterion::default())
+        QueryBuilder::with_criteria(view, Criteria::default())
     }
 }
 
-impl<'a, D, C> QueryBuilder<'a, D, C>
+impl<'a, D> QueryBuilder<'a, D>
 where D: Deref<Target=DB>
 {
-    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Vec<C>) -> Result<Self, Box<Error>> {
+    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria<D>) -> Result<Self, Box<Error>> {
         Ok(QueryBuilder { view, criteria })
     }
 
-    pub fn criteria(&mut self, criteria: Vec<C>) -> &mut Self {
+    pub fn criteria(&mut self, criteria: Criteria<D>) -> &mut Self {
         self.criteria = criteria;
         self
     }
 
-    pub fn with_distinct<F>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, D, F, C> {
+    pub fn with_distinct<F>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, D, F> {
         DistinctQueryBuilder {
             inner: self,
             function: function,
@@ -103,16 +103,15 @@ where D: Deref<Target=DB>
     }
 }
 
-impl<'a, D, C> QueryBuilder<'a, D, C>
+impl<'a, D> QueryBuilder<'a, D>
 where D: Deref<Target=DB>,
-      C: Criterion<D>
 {
     pub fn query(&self, query: &str, limit: usize) -> Vec<Document> {
         let mut documents = self.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
         let view = &self.view;
 
-        for criterion in &self.criteria {
+        for criterion in self.criteria.as_ref() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
             let mut computed = 0;
 
@@ -131,26 +130,25 @@ where D: Deref<Target=DB>,
     }
 }
 
-pub struct DistinctQueryBuilder<'a, D, F, C>
+pub struct DistinctQueryBuilder<'a, D, F>
 where D: Deref<Target=DB>
 {
-    inner: QueryBuilder<'a, D, C>,
+    inner: QueryBuilder<'a, D>,
     function: F,
     size: usize,
 }
 
-impl<'a, D, F, K, C> DistinctQueryBuilder<'a, D, F, C>
+impl<'a, D, F, K> DistinctQueryBuilder<'a, D, F>
 where D: Deref<Target=DB>,
       F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
       K: Hash + Eq,
-      C: Criterion<D>,
 {
     pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.inner.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
         let view = &self.inner.view;
 
-        for criterion in &self.inner.criteria {
+        for criterion in self.inner.criteria.as_ref() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
 
             for group in tmp_groups {

@@ -11,7 +11,6 @@ use crate::database::{DocumentKey, DocumentKeyAttr};
 use crate::database::{retrieve_data_schema, retrieve_data_index};
 use crate::database::blob::positive::PositiveBlob;
 use crate::database::deserializer::Deserializer;
-use crate::rank::criterion::Criterion;
 use crate::database::schema::Schema;
 use crate::rank::QueryBuilder;
 use crate::DocumentId;
@@ -72,7 +71,7 @@ where D: Deref<Target=DB>
         Ok(())
     }
 
-    pub fn query_builder(&self) -> Result<QueryBuilder<D, Box<dyn Criterion<D>>>, Box<Error>> {
+    pub fn query_builder(&self) -> Result<QueryBuilder<D>, Box<Error>> {
         QueryBuilder::new(self)
     }
 
