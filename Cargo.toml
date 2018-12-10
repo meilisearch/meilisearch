@@ -34,6 +34,7 @@ git = "https://github.com/Kerollmops/group-by.git"
 default = ["simd"]
 i128 = ["bincode/i128", "byteorder/i128"]
 simd = ["rocksdb/sse"]
+portable = ["rocksdb/portable"]
 
 [dev-dependencies]
 csv = "1.0"
