@@ -31,9 +31,9 @@ git = "https://github.com/pingcap/rust-rocksdb.git"
 git = "https://github.com/Kerollmops/group-by.git"
 
 [features]
-default = []
+default = ["simd"]
 i128 = ["bincode/i128", "byteorder/i128"]
-sse = ["rocksdb/sse"]
+simd = ["rocksdb/sse"]
 
 [dev-dependencies]
 csv = "1.0"
