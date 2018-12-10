@@ -7,7 +7,6 @@ mod exact;
 
 use std::cmp::Ordering;
 use std::ops::Deref;
-use std::vec;
 
 use rocksdb::DB;
 
@@ -70,18 +69,55 @@ where D: Deref<Target=DB>
     }
 }
 
-// TODO there is too much Box here, can we use
-//      static references or static closures
+pub struct CriteriaBuilder<D>
+where D: Deref<Target=DB>
+{
+    inner: Vec<Box<dyn Criterion<D>>>
+}
+
+impl<D> CriteriaBuilder<D>
+where D: Deref<Target=DB>
+{
+    pub fn new() -> CriteriaBuilder<D> {
+        CriteriaBuilder { inner: Vec::new() }
+    }
+
+    pub fn with_capacity(capacity: usize) -> CriteriaBuilder<D> {
+        CriteriaBuilder { inner: Vec::with_capacity(capacity) }
+    }
+
+    pub fn reserve(&mut self, additional: usize) {
+        self.inner.reserve(additional)
+    }
+
+    pub fn add<C>(mut self, criterion: C) -> CriteriaBuilder<D>
+    where C: 'static + Criterion<D>,
+    {
+        self.push(criterion);
+        self
+    }
+
+    pub fn push<C>(&mut self, criterion: C)
+    where C: 'static + Criterion<D>,
+    {
+        self.inner.push(Box::new(criterion));
+    }
+
+    pub fn build(self) -> Vec<Box<dyn Criterion<D>>> {
+        self.inner
+    }
+}
+
 pub fn default<D>() -> Vec<Box<dyn Criterion<D>>>
 where D: Deref<Target=DB>
 {
-    vec![
-        Box::new(SumOfTypos),
-        Box::new(NumberOfWords),
-        Box::new(WordsProximity),
-        Box::new(SumOfWordsAttribute),
-        Box::new(SumOfWordsPosition),
-        Box::new(Exact),
-        Box::new(DocumentId),
-    ]
+    CriteriaBuilder::with_capacity(7)
+        .add(SumOfTypos)
+        .add(NumberOfWords)
+        .add(WordsProximity)
+        .add(SumOfWordsAttribute)
+        .add(SumOfWordsPosition)
+        .add(Exact)
+        .add(DocumentId)
+        .build()
 }
