@@ -112,11 +112,11 @@ where D: Deref<Target=DB>,
         let mut groups = vec![documents.as_mut_slice()];
         let view = &self.view;
 
-        'group: for criterion in &self.criteria {
+        for criterion in &self.criteria {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
             let mut computed = 0;
 
-            for group in tmp_groups {
+            'group: for group in tmp_groups {
                 group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
                 for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
                     computed += group.len();
