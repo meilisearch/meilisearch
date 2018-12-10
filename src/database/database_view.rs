@@ -1,9 +1,10 @@
 use std::error::Error;
+use std::path::Path;
 use std::ops::Deref;
 use std::{fmt, marker};
 
-use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey};
-use rocksdb::rocksdb_options::ReadOptions;
+use rocksdb::rocksdb_options::{ReadOptions, EnvOptions, ColumnFamilyOptions};
+use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey, SstFileWriter};
 use serde::de::DeserializeOwned;
 
 use crate::database::{DocumentKey, DocumentKeyAttr};
@@ -50,6 +51,25 @@ where D: Deref<Target=DB>
 
     pub fn get(&self, key: &[u8]) -> Result<Option<DBVector>, Box<Error>> {
         Ok(self.snapshot.get(key)?)
+    }
+
+    pub fn dump_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<Error>> {
+        let path = path.as_ref().to_string_lossy();
+
+        let env_options = EnvOptions::new();
+        let column_family_options = ColumnFamilyOptions::new();
+        let mut file_writer = SstFileWriter::new(env_options, column_family_options);
+        file_writer.open(&path)?;
+
+        let mut iter = self.snapshot.iter();
+        iter.seek(SeekKey::Start);
+
+        for (key, value) in &mut iter {
+            file_writer.put(&key, &value)?;
+        }
+
+        file_writer.finish()?;
+        Ok(())
     }
 
     pub fn query_builder(&self) -> Result<QueryBuilder<D, Box<dyn Criterion<D>>>, Box<Error>> {
