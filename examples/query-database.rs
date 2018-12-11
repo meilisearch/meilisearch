@@ -19,16 +19,11 @@ pub struct Opt {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[allow(non_snake_case)]
 struct Document {
-    skuId: String,
-    productGroup: String,
-    fr_FR_commercialName: String,
-    en_GB_commercialName: String,
-    maketingColorInternalName: String,
-    materialInternalName: String,
-    fr_FR_description: String,
-    en_GB_description: String,
+    id: String,
+    title: String,
+    description: String,
+    image: String,
 }
 
 fn main() -> Result<(), Box<Error>> {

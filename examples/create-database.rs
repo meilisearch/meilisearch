@@ -23,21 +23,11 @@ pub struct Opt {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[allow(non_snake_case)]
 struct Document<'a> {
-    skuId: &'a str,
-    productGroup: &'a str,
-    fr_FR_commercialName: &'a str,
-    en_GB_commercialName: &'a str,
-    maketingColorInternalName: &'a str,
-    materialInternalName: &'a str,
-    fr_FR_description: &'a str,
-    fr_FR_detailedDescription: &'a str,
-    fr_FR_Price: &'a str,
-    fr_FR_images_url: &'a str,
-    en_GB_description: &'a str,
-    en_GB_detailedDescription: &'a str,
-    en_GB_Price: &'a str,
+    id: &'a str,
+    title: &'a str,
+    description: &'a str,
+    image: &'a str,
 }
 
 fn calculate_hash<T: Hash>(t: &T) -> u64 {
@@ -48,19 +38,10 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 
 fn create_schema() -> Schema {
     let mut schema = SchemaBuilder::new();
-    schema.new_attribute("skuId", STORED | INDEXED);
-    schema.new_attribute("productGroup", STORED | INDEXED);
-    schema.new_attribute("fr_FR_commercialName", STORED | INDEXED);
-    schema.new_attribute("en_GB_commercialName", STORED | INDEXED);
-    schema.new_attribute("maketingColorInternalName", STORED | INDEXED);
-    schema.new_attribute("materialInternalName", STORED | INDEXED);
-    schema.new_attribute("fr_FR_description", STORED | INDEXED);
-    schema.new_attribute("fr_FR_detailedDescription", STORED);
-    schema.new_attribute("fr_FR_Price", STORED);
-    schema.new_attribute("fr_FR_images_url", STORED);
-    schema.new_attribute("en_GB_description", STORED | INDEXED);
-    schema.new_attribute("en_GB_detailedDescription", STORED);
-    schema.new_attribute("en_GB_Price", STORED);
+    schema.new_attribute("id", STORED);
+    schema.new_attribute("title", STORED | INDEXED);
+    schema.new_attribute("description", STORED | INDEXED);
+    schema.new_attribute("image", STORED);
     schema.build()
 }
 
@@ -86,7 +67,7 @@ fn index(schema: Schema, database_path: &Path, csv_data_path: &Path) -> Result<D
             }
         };
 
-        let document_id = calculate_hash(&document.skuId);
+        let document_id = calculate_hash(&document.id);
         update.update(document_id, &document).unwrap();
     }
 
@@ -107,7 +88,9 @@ fn main() -> Result<(), Box<Error>> {
         index(schema, &opt.database_path, &opt.csv_data_path)
     });
 
-    let _ = result?;
+    if let Err(e) = result {
+        return Err(e.into())
+    }
 
     println!("database created in {} at: {:?}", elapsed, opt.database_path);
 
