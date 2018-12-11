@@ -39,8 +39,5 @@ portable = ["rocksdb/portable"]
 [dev-dependencies]
 csv = "1.0"
 elapsed = "0.1"
-moby-name-gen = "0.1"
-serde_json = "1.0"
 structopt = "0.2"
 tempfile = "3.0"
-warp = "0.1"
