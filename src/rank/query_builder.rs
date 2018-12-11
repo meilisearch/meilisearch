@@ -1,7 +1,7 @@
+use std::{mem, vec, str, char};
 use std::ops::{Deref, Range};
 use std::error::Error;
 use std::hash::Hash;
-use std::{mem, vec, str};
 
 use group_by::GroupByMut;
 use hashbrown::HashMap;
@@ -16,15 +16,21 @@ use crate::{Match, DocumentId};
 use crate::rank::Document;
 
 fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
+    let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
     let mut automatons = Vec::new();
     let mut words = query.split_whitespace().map(str::to_lowercase).peekable();
+
     while let Some(word) = words.next() {
-        let lev = match words.peek() {
-            Some(_) => automaton::build_dfa(&word),
-            None => automaton::build_prefix_dfa(&word),
+
+        let has_following_word = words.peek().is_some();
+        let lev = if has_following_word || has_end_whitespace {
+            automaton::build_dfa(&word)
+        } else {
+            automaton::build_prefix_dfa(&word)
         };
         automatons.push(lev);
     }
+
     automatons
 }
 
