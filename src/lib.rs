@@ -6,6 +6,8 @@ pub mod tokenizer;
 pub mod vec_read_only;
 mod common_words;
 
+pub use rocksdb;
+
 pub use self::tokenizer::Tokenizer;
 pub use self::common_words::CommonWords;
 
