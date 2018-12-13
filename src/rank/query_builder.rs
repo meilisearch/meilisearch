@@ -21,7 +21,6 @@ fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
     let mut words = query.split_whitespace().map(str::to_lowercase).peekable();
 
     while let Some(word) = words.next() {
-
         let has_following_word = words.peek().is_some();
         let lev = if has_following_word || has_end_whitespace {
             automaton::build_dfa(&word)
@@ -160,6 +159,12 @@ where D: Deref<Target=DB>,
             for group in tmp_groups {
                 group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
                 for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
+                    for document in group.iter() {
+                        match (self.function)(document.id, view) {
+                            Some(key) => seen.register(key),
+                            None => seen.register_without_key(),
+                        };
+                    }
                     groups.push(group);
                 }
             }
@@ -169,9 +174,9 @@ where D: Deref<Target=DB>,
         let mut seen = DistinctMap::new(self.size);
 
         for document in documents {
-            let accepted = match (self.function)(document.id, &self.inner.view) {
-                Some(key) => seen.digest(key),
-                None => seen.accept_without_key(),
+            let accepted = match (self.function)(document.id, view) {
+                Some(key) => seen.register(key),
+                None => seen.register_without_key(),
             };
 
             if accepted {

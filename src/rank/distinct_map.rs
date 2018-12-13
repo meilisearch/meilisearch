@@ -17,7 +17,7 @@ impl<K: Hash + Eq> DistinctMap<K> {
         }
     }
 
-    pub fn digest(&mut self, key: K) -> bool {
+    pub fn register(&mut self, key: K) -> bool {
         let seen = self.inner.entry(key).or_insert(0);
         if *seen < self.limit {
             *seen += 1;
@@ -28,7 +28,7 @@ impl<K: Hash + Eq> DistinctMap<K> {
         }
     }
 
-    pub fn accept_without_key(&mut self) -> bool {
+    pub fn register_without_key(&mut self) -> bool {
         self.len += 1;
         true
     }
@@ -46,20 +46,20 @@ mod tests {
     fn easy_distinct_map() {
         let mut map = DistinctMap::new(2);
         for x in &[1, 1, 1, 2, 3, 4, 5, 6, 6, 6, 6, 6] {
-            map.digest(x);
+            map.register(x);
         }
         assert_eq!(map.len(), 8);
 
         let mut map = DistinctMap::new(2);
-        assert_eq!(map.digest(1), true);
-        assert_eq!(map.digest(1), true);
-        assert_eq!(map.digest(1), false);
-        assert_eq!(map.digest(1), false);
+        assert_eq!(map.register(1), true);
+        assert_eq!(map.register(1), true);
+        assert_eq!(map.register(1), false);
+        assert_eq!(map.register(1), false);
 
-        assert_eq!(map.digest(2), true);
-        assert_eq!(map.digest(3), true);
-        assert_eq!(map.digest(2), true);
-        assert_eq!(map.digest(2), false);
+        assert_eq!(map.register(2), true);
+        assert_eq!(map.register(3), true);
+        assert_eq!(map.register(2), true);
+        assert_eq!(map.register(2), false);
 
         assert_eq!(map.len(), 5);
     }
