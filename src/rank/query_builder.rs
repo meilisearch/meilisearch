@@ -1,6 +1,6 @@
 use std::{mem, vec, str, char};
-use std::ops::{Deref, Range};
 use std::error::Error;
+use std::ops::Deref;
 use std::hash::Hash;
 
 use group_by::GroupByMut;
@@ -148,15 +148,16 @@ where D: Deref<Target=DB>,
       F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
       K: Hash + Eq,
 {
-    pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(&self, query: &str, limit: usize) -> Vec<Document> {
         let mut documents = self.inner.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
         let view = &self.inner.view;
 
         for criterion in self.inner.criteria.as_ref() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
+            let mut seen = DistinctMap::new(self.size);
 
-            for group in tmp_groups {
+            'group: for group in tmp_groups {
                 group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
                 for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
                     for document in group.iter() {
@@ -166,11 +167,12 @@ where D: Deref<Target=DB>,
                         };
                     }
                     groups.push(group);
+                    if seen.len() >= limit { break 'group }
                 }
             }
         }
 
-        let mut out_documents = Vec::with_capacity(range.len());
+        let mut out_documents = Vec::with_capacity(limit);
         let mut seen = DistinctMap::new(self.size);
 
         for document in documents {
@@ -180,10 +182,8 @@ where D: Deref<Target=DB>,
             };
 
             if accepted {
-                if seen.len() == range.end { break }
-                if seen.len() >= range.start {
-                    out_documents.push(document);
-                }
+                out_documents.push(document);
+                if out_documents.len() == limit { break }
             }
         }
 
