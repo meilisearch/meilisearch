@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use std::{fmt, u32};
 use std::path::Path;
 use std::ops::BitOr;
+use std::sync::Arc;
 use std::fs::File;
 
 use serde_derive::{Serialize, Deserialize};
@@ -60,18 +61,23 @@ impl SchemaBuilder {
         let mut props = Vec::new();
 
         for (i, (name, prop)) in self.attrs.into_iter().enumerate() {
-            attrs.insert(name, SchemaAttr(i as u32));
-            props.push(prop);
+            attrs.insert(name.clone(), SchemaAttr(i as u32));
+            props.push((name, prop));
         }
 
-        Schema { attrs, props }
+        Schema { inner: Arc::new(InnerSchema { attrs, props }) }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Schema {
+    inner: Arc<InnerSchema>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct InnerSchema {
     attrs: HashMap<String, SchemaAttr>,
-    props: Vec<SchemaProps>,
+    props: Vec<(String, SchemaProps)>,
 }
 
 impl Schema {
@@ -88,9 +94,9 @@ impl Schema {
 
     pub fn write_to<W: Write>(&self, writer: W) -> bincode::Result<()> {
         let mut ordered = BTreeMap::new();
-        for (name, field) in &self.attrs {
+        for (name, field) in &self.inner.attrs {
             let index = field.as_u32();
-            let props = self.props[index as usize];
+            let (_, props) = self.inner.props[index as usize];
             ordered.insert(index, (name, props));
         }
 
@@ -103,19 +109,19 @@ impl Schema {
     }
 
     pub fn props(&self, attr: SchemaAttr) -> SchemaProps {
-        self.props[attr.as_u32() as usize]
+        let index = attr.as_u32();
+        let (_, props) = self.inner.props[index as usize];
+        props
     }
 
     pub fn attribute<S: AsRef<str>>(&self, name: S) -> Option<SchemaAttr> {
-        self.attrs.get(name.as_ref()).cloned()
+        self.inner.attrs.get(name.as_ref()).cloned()
     }
 
     pub fn attribute_name(&self, attr: SchemaAttr) -> &str {
-        // FIXME complexity is insane !
-        for (key, &value) in &self.attrs {
-            if value == attr { return &key }
-        }
-        panic!("schema attribute name not found for {:?}", attr)
+        let index = attr.as_u32();
+        let (name, _) = &self.inner.props[index as usize];
+        name
     }
 }
 
