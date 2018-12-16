@@ -10,7 +10,7 @@ use fst::Streamer;
 use rocksdb::DB;
 
 use crate::automaton::{self, DfaExt, AutomatonExt};
-use crate::rank::distinct_map::DistinctMap;
+use crate::rank::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::rank::criterion::Criteria;
 use crate::database::DatabaseView;
 use crate::{Match, DocumentId};
