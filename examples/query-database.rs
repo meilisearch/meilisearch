@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<Error>> {
 
         let (elapsed, documents) = elapsed::measure_time(|| {
             let builder = view.query_builder().unwrap();
-            builder.query(&buffer, opt.number_results)
+            builder.query(&buffer, 0..opt.number_results)
         });
 
         let mut full_documents = Vec::with_capacity(documents.len());

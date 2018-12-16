@@ -1,7 +1,8 @@
-use std::{mem, vec, str, char};
+use std::{cmp, mem, vec, str, char};
+use std::ops::{Deref, Range};
 use std::error::Error;
-use std::ops::Deref;
 use std::hash::Hash;
+use std::rc::Rc;
 
 use group_by::GroupByMut;
 use hashbrown::HashMap;
@@ -111,26 +112,42 @@ where D: Deref<Target=DB>
 impl<'a, D> QueryBuilder<'a, D>
 where D: Deref<Target=DB>,
 {
-    pub fn query(&self, query: &str, limit: usize) -> Vec<Document> {
+    pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
         let view = &self.view;
 
-        for criterion in self.criteria.as_ref() {
+        'criteria: for criterion in self.criteria.as_ref() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
-            let mut computed = 0;
+            let mut documents_seen = 0;
 
-            'group: for group in tmp_groups {
-                group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
-                for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
-                    computed += group.len();
+            for group in tmp_groups {
+                // if this group does not overlap with the requested range,
+                // push it without sorting and splitting it
+                if documents_seen + group.len() < range.start {
+                    documents_seen += group.len();
                     groups.push(group);
-                    if computed >= limit { break 'group }
+                    continue;
+                }
+
+                group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
+
+                for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
+                    documents_seen += group.len();
+                    groups.push(group);
+
+                    // we have sort enough documents if the last document sorted is after
+                    // the end of the requested range, we can continue to the next criterion
+                    if documents_seen >= range.end { continue 'criteria }
                 }
             }
         }
 
-        documents.truncate(limit);
+        // `drain` removes the documents efficiently using `ptr::copy`
+        // TODO it could be more efficient to have a custom iterator
+        let offset = cmp::min(documents.len(), range.start);
+        documents.drain(0..offset);
+        documents.truncate(range.len());
         documents
     }
 }
