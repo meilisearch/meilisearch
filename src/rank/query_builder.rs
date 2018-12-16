@@ -165,42 +165,80 @@ where D: Deref<Target=DB>,
       F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
       K: Hash + Eq,
 {
-    pub fn query(&self, query: &str, limit: usize) -> Vec<Document> {
+    pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.inner.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
+        let mut key_cache = HashMap::new();
         let view = &self.inner.view;
 
-        for criterion in self.inner.criteria.as_ref() {
-            let tmp_groups = mem::replace(&mut groups, Vec::new());
-            let mut seen = DistinctMap::new(self.size);
+        // these two variables informs on the current distinct map and
+        // on the raw offset of the start of the group where the
+        // range.start bound is located according to the distinct function
+        let mut distinct_map = DistinctMap::new(self.size);
+        let mut distinct_raw_offset = 0;
 
-            'group: for group in tmp_groups {
-                group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
-                for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
-                    for document in group.iter() {
-                        match (self.function)(document.id, view) {
-                            Some(key) => seen.register(key),
-                            None => seen.register_without_key(),
-                        };
-                    }
+        'criteria: for criterion in self.inner.criteria.as_ref() {
+            let tmp_groups = mem::replace(&mut groups, Vec::new());
+            let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
+            let mut documents_seen = 0;
+
+            for group in tmp_groups {
+                // if this group does not overlap with the requested range,
+                // push it without sorting and splitting it
+                if documents_seen + group.len() < distinct_raw_offset {
+                    documents_seen += group.len();
                     groups.push(group);
-                    if seen.len() >= limit { break 'group }
+                    continue;
+                }
+
+                group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
+
+                for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
+                    // we must compute the real distinguished len of this sub-group
+                    for document in group.iter() {
+                        let entry = key_cache.entry(document.id);
+                        let key = entry.or_insert_with(|| (self.function)(document.id, view).map(Rc::new));
+
+                        match key.clone() {
+                            Some(key) => buf_distinct.register(key),
+                            None      => buf_distinct.register_without_key(),
+                        };
+
+                        // the requested range end is reached: stop computing distinct
+                        if buf_distinct.len() >= range.end { break }
+                    }
+
+                    documents_seen += group.len();
+                    groups.push(group);
+
+                    // if this sub-group does not overlap with the requested range
+                    // we must update the distinct map and its start index
+                    if buf_distinct.len() < range.start {
+                        buf_distinct.transfert_to_internal();
+                        distinct_raw_offset = documents_seen;
+                    }
+
+                    // we have sort enough documents if the last document sorted is after
+                    // the end of the requested range, we can continue to the next criterion
+                    if buf_distinct.len() >= range.end { continue 'criteria }
                 }
             }
         }
 
-        let mut out_documents = Vec::with_capacity(limit);
-        let mut seen = DistinctMap::new(self.size);
+        let mut out_documents = Vec::with_capacity(range.len());
+        let mut seen = BufferedDistinctMap::new(&mut distinct_map);
 
-        for document in documents {
-            let accepted = match (self.function)(document.id, view) {
+        for document in documents.into_iter().skip(distinct_raw_offset) {
+            let key = key_cache.remove(&document.id).expect("BUG: cached key not found");
+
+            let accepted = match key {
                 Some(key) => seen.register(key),
-                None => seen.register_without_key(),
+                None      => seen.register_without_key(),
             };
 
-            if accepted {
+            if accepted && seen.len() > range.start {
                 out_documents.push(document);
-                if out_documents.len() == limit { break }
+                if out_documents.len() == range.len() { break }
             }
         }
 
