@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use fst::Automaton;
 use lazy_static::lazy_static;
 use levenshtein_automata::{
@@ -89,17 +87,4 @@ pub fn build_dfa(query: &str) -> DfaExt {
 pub trait AutomatonExt: Automaton {
     fn eval<B: AsRef<[u8]>>(&self, s: B) -> Distance;
     fn query_len(&self) -> usize;
-}
-
-impl<T> AutomatonExt for T
-where T: Deref,
-      T::Target: AutomatonExt,
-{
-    fn eval<B: AsRef<[u8]>>(&self, s: B) -> Distance {
-        (**self).eval(s)
-    }
-
-    fn query_len(&self) -> usize {
-        (**self).query_len()
-    }
 }
