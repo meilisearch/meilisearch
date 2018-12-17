@@ -1,0 +1,22 @@
+language: rust
+
+cache: cargo
+
+branches:
+  only:
+    - master
+
+matrix:
+  fast_finish: true
+  include:
+
+  # Test crates on their minimum Rust versions.
+  - rust: 1.31.0
+    name: "meilidb on 1.31.0"
+    script: ./ci/meilidb.sh
+
+  # Test crates on nightly Rust.
+  - rust: nightly
+    name: "meilidb on nightly"
+    script: ./ci/meilidb.sh
+
