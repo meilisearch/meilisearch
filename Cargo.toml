@@ -35,6 +35,7 @@ default = ["simd"]
 i128 = ["bincode/i128", "byteorder/i128"]
 simd = ["rocksdb/sse"]
 portable = ["rocksdb/portable"]
+nightly = []
 
 [dev-dependencies]
 csv = "1.0"
