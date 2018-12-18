@@ -1,5 +1,11 @@
 # MeiliDB
 
+[![Build Status](https://travis-ci.org/Kerollmops/MeiliDB.svg?branch=master)](https://travis-ci.org/Kerollmops/MeiliDB)
+[![dependency status](https://deps.rs/repo/github/Kerollmops/MeiliDB/status.svg)](https://deps.rs/repo/github/Kerollmops/MeiliDB)
+[![License](https://img.shields.io/github/license/Kerollmops/MeiliDB.svg)](https://github.com/Kerollmops/MeiliDB)
+[![Rust 1.31+](https://img.shields.io/badge/rust-1.31+-lightgray.svg)](
+https://www.rust-lang.org)
+
 A _full-text search database_ using a key-value store internally.
 
 It uses [RocksDB](https://github.com/facebook/rocksdb) like a classic database, to store documents and internal data. The key-value store power allow us to handle updates and queries with small memory and CPU overheads.
