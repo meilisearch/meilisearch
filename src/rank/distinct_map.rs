@@ -17,10 +17,33 @@ impl<K: Hash + Eq> DistinctMap<K> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.len
+    }
+}
+
+pub struct BufferedDistinctMap<'a, K> {
+    internal: &'a mut DistinctMap<K>,
+    inner: HashMap<K, usize>,
+    len: usize,
+}
+
+impl<'a, K: Hash + Eq> BufferedDistinctMap<'a, K> {
+    pub fn new(internal: &'a mut DistinctMap<K>) -> BufferedDistinctMap<'a, K> {
+        BufferedDistinctMap {
+            internal: internal,
+            inner: HashMap::new(),
+            len: 0,
+        }
+    }
+
     pub fn register(&mut self, key: K) -> bool {
-        let seen = self.inner.entry(key).or_insert(0);
-        if *seen < self.limit {
-            *seen += 1;
+        let internal_seen = self.internal.inner.get(&key).unwrap_or(&0);
+        let inner_seen = self.inner.entry(key).or_insert(0);
+        let seen = *internal_seen + *inner_seen;
+
+        if seen < self.internal.limit {
+            *inner_seen += 1;
             self.len += 1;
             true
         } else {
@@ -33,8 +56,18 @@ impl<K: Hash + Eq> DistinctMap<K> {
         true
     }
 
+    pub fn transfert_to_internal(&mut self) {
+        for (k, v) in self.inner.drain() {
+            let value = self.internal.inner.entry(k).or_insert(0);
+            *value += v;
+        }
+
+        self.internal.len += self.len;
+        self.len = 0;
+    }
+
     pub fn len(&self) -> usize {
-        self.len
+        self.internal.len() + self.len
     }
 }
 
@@ -45,22 +78,27 @@ mod tests {
     #[test]
     fn easy_distinct_map() {
         let mut map = DistinctMap::new(2);
+        let mut buffered = BufferedDistinctMap::new(&mut map);
+
         for x in &[1, 1, 1, 2, 3, 4, 5, 6, 6, 6, 6, 6] {
-            map.register(x);
+            buffered.register(x);
         }
+        buffered.transfert_to_internal();
         assert_eq!(map.len(), 8);
 
         let mut map = DistinctMap::new(2);
-        assert_eq!(map.register(1), true);
-        assert_eq!(map.register(1), true);
-        assert_eq!(map.register(1), false);
-        assert_eq!(map.register(1), false);
+        let mut buffered = BufferedDistinctMap::new(&mut map);
+        assert_eq!(buffered.register(1), true);
+        assert_eq!(buffered.register(1), true);
+        assert_eq!(buffered.register(1), false);
+        assert_eq!(buffered.register(1), false);
 
-        assert_eq!(map.register(2), true);
-        assert_eq!(map.register(3), true);
-        assert_eq!(map.register(2), true);
-        assert_eq!(map.register(2), false);
+        assert_eq!(buffered.register(2), true);
+        assert_eq!(buffered.register(3), true);
+        assert_eq!(buffered.register(2), true);
+        assert_eq!(buffered.register(2), false);
 
+        buffered.transfert_to_internal();
         assert_eq!(map.len(), 5);
     }
 }
