@@ -1,17 +1,14 @@
 pub mod automaton;
 pub mod database;
-pub mod data;
 pub mod rank;
 pub mod tokenizer;
-pub mod vec_read_only;
-mod common_words;
+
+mod data;
 
 use std::fmt;
 
 pub use rocksdb;
-
 pub use self::tokenizer::Tokenizer;
-pub use self::common_words::CommonWords;
 
 /// Represent an internally generated document unique identifier.
 ///

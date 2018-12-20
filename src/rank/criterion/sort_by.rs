@@ -24,16 +24,17 @@ use crate::rank::Document;
 ///
 /// # Example
 ///
-/// ```no-test
+/// ```
 /// use serde_derive::Deserialize;
 /// use meilidb::rank::criterion::*;
+/// use meilidb::rocksdb::DB;
 ///
 /// #[derive(Deserialize, PartialOrd, Ord, PartialEq, Eq)]
 /// struct TimeOnly {
 ///     time: String,
 /// }
 ///
-/// let builder = CriteriaBuilder::with_capacity(8)
+/// let builder = CriteriaBuilder::<&DB>::new()
 ///        .add(SumOfTypos)
 ///        .add(NumberOfWords)
 ///        .add(WordsProximity)
