@@ -34,6 +34,9 @@ fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
     automatons
 }
 
+/// A structure that allows to query documents that match a query.
+///
+/// This builder is able to handle different criteria, useful to implement custom ranking.
 pub struct QueryBuilder<'a, D>
 where D: Deref<Target=DB>
 {
@@ -44,6 +47,11 @@ where D: Deref<Target=DB>
 impl<'a, D> QueryBuilder<'a, D>
 where D: Deref<Target=DB>
 {
+    /// Create a builder that use the default criteria.
+    ///
+    /// You can have more informations about [the default criteria][1] on the documentation of it.
+    ///
+    /// [1]: criterion/struct.Criteria.html
     pub fn new(view: &'a DatabaseView<D>) -> Result<Self, Box<Error>> {
         QueryBuilder::with_criteria(view, Criteria::default())
     }
@@ -52,15 +60,24 @@ where D: Deref<Target=DB>
 impl<'a, D> QueryBuilder<'a, D>
 where D: Deref<Target=DB>
 {
+    /// Create a builder that use the criteria that you specify.
     pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria<D>) -> Result<Self, Box<Error>> {
         Ok(QueryBuilder { view, criteria })
     }
 
+    /// Change the criteria of this builder with the one specified.
     pub fn criteria(&mut self, criteria: Criteria<D>) -> &mut Self {
         self.criteria = criteria;
         self
     }
 
+    /// Change this query builder to become a query distinct builder.
+    ///
+    /// The `F` parameter is a function that takes the document id, the database view and must
+    /// return a key that will identify to which group the given document belongs.
+    ///
+    /// The `size` parameter specify the length of the groups. How many maximum number of documents
+    /// of the same group must appear in the result.
     pub fn with_distinct<F>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, D, F> {
         DistinctQueryBuilder {
             inner: self,
@@ -112,6 +129,9 @@ where D: Deref<Target=DB>
 impl<'a, D> QueryBuilder<'a, D>
 where D: Deref<Target=DB>,
 {
+    /// Query the database with a string and the range that is interresting to have.
+    ///
+    /// The range is useful for infinite scroll or page-based applications.
     pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
@@ -152,6 +172,12 @@ where D: Deref<Target=DB>,
     }
 }
 
+/// A structure that allows to query documents that match a query and
+/// that distinct documents of the same group.
+///
+/// This builder is created from a simple the `QueryBuilder` [with_distinct][1] method.
+///
+/// [1]: struct.QueryBuilder.html#method.with_distinct
 pub struct DistinctQueryBuilder<'a, D, F>
 where D: Deref<Target=DB>
 {
@@ -165,6 +191,9 @@ where D: Deref<Target=DB>,
       F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
       K: Hash + Eq,
 {
+    /// Query the database with a string and the range that is interresting to have.
+    ///
+    /// The range is useful for infinite scroll or page-based applications.
     pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.inner.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];

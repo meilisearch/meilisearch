@@ -1,3 +1,7 @@
+//! Everything related to criteria and criterion rules.
+//!
+//! Useful to create custom ranking rules.
+
 mod sum_of_typos;
 mod number_of_words;
 mod words_proximity;
