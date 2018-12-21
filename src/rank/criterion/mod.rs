@@ -106,8 +106,8 @@ where D: Deref<Target=DB>
 ///
 /// ```
 /// use meilidb::rank::criterion::*;
-/// use meilidb::rank::*;
 /// use meilidb::rocksdb::DB;
+/// use meilidb::rank::*;
 ///
 /// CriteriaBuilder::<&DB>::new()
 ///     .add(SumOfTypos)
@@ -153,8 +153,8 @@ where D: Deref<Target=DB>
     ///
     /// ```
     /// use meilidb::rank::criterion::*;
-    /// use meilidb::rank::*;
     /// use meilidb::rocksdb::DB;
+    /// use meilidb::rank::*;
     ///
     /// CriteriaBuilder::<&DB>::new()
     ///     .add(SumOfTypos)
