@@ -188,11 +188,11 @@ where D: Deref<Target=DB>
     }
 }
 
-/// Represents a list of [Criteria][1] which will be applied in order.
+/// Represents a list of [Criterion][1] which will be applied in order.
 ///
 /// For more informaition on the default criteria see [the module documentation][2].
 ///
-/// [1]: trait.Criteria.html
+/// [1]: trait.Criterion.html
 /// [2]: index.html
 pub struct Criteria<D>
 where D: Deref<Target=DB>
