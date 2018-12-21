@@ -24,7 +24,7 @@ mod deserializer;
 const DATA_INDEX:  &[u8] = b"data-index";
 const DATA_SCHEMA: &[u8] = b"data-schema";
 
-pub fn retrieve_data_schema<D>(snapshot: &Snapshot<D>) -> Result<Schema, Box<Error>>
+fn retrieve_data_schema<D>(snapshot: &Snapshot<D>) -> Result<Schema, Box<Error>>
 where D: Deref<Target=DB>
 {
     match snapshot.get(DATA_SCHEMA)? {
@@ -33,7 +33,7 @@ where D: Deref<Target=DB>
     }
 }
 
-pub fn retrieve_data_index<D>(snapshot: &Snapshot<D>) -> Result<PositiveBlob, Box<Error>>
+fn retrieve_data_index<D>(snapshot: &Snapshot<D>) -> Result<PositiveBlob, Box<Error>>
 where D: Deref<Target=DB>
 {
     match snapshot.get(DATA_INDEX)? {
@@ -42,6 +42,11 @@ where D: Deref<Target=DB>
     }
 }
 
+/// This is the main type, used to be queried and to be updated with documents.
+///
+/// It is a RocksDB wrapper, documents and internal data is stored as key-values entries.
+/// Queried always runs over a snapshot of this database to keep consistent results,
+/// the `database` always keeps a snapshot at the last update ingestion point.
 pub struct Database {
     // DB is under a Mutex to sync update ingestions and separate DB update locking
     // and DatabaseView acquiring locking in other words:
