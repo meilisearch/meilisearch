@@ -25,12 +25,15 @@ fn sum_matches_typos(matches: &[Match]) -> i8 {
     sum_typos - number_words
 }
 
+/// A criterion that do the sum of all typos of all matches in documents
+/// and sort them by this sum, a document having more typos is less important.
 #[derive(Debug, Clone, Copy)]
 pub struct SumOfTypos;
 
 impl<D> Criterion<D> for SumOfTypos
 where D: Deref<Target=DB>
 {
+    #[inline]
     fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = sum_matches_typos(&lhs.matches);
         let rhs = sum_matches_typos(&rhs.matches);
@@ -38,7 +41,6 @@ where D: Deref<Target=DB>
         lhs.cmp(&rhs)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

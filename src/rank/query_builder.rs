@@ -36,7 +36,9 @@ fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
 
 /// A structure that allows to query documents that match a query.
 ///
-/// This builder is able to handle different criteria, useful to implement custom ranking.
+/// This builder is able to handle different [Criteria][1], useful to implement custom ranking.
+///
+/// [1]: criterion/struct.Criteria.html
 pub struct QueryBuilder<'a, D>
 where D: Deref<Target=DB>
 {

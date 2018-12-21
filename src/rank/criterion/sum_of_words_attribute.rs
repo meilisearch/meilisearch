@@ -13,17 +13,20 @@ use crate::Match;
 fn sum_matches_attributes(matches: &[Match]) -> u16 {
     // note that GroupBy will never return an empty group
     // so we can do this assumption safely
-    GroupBy::new(matches, match_query_index).map(|group| unsafe {
-        group.get_unchecked(0).attribute.attribute()
-    }).sum()
+    GroupBy::new(matches, match_query_index).map(|group|
+        unsafe { group.get_unchecked(0).attribute.attribute() }
+    ).sum()
 }
 
+/// A document that have more matches in a top attribute is
+/// considered better than one with matches in a bottom attribute.
 #[derive(Debug, Clone, Copy)]
 pub struct SumOfWordsAttribute;
 
 impl<D> Criterion<D> for SumOfWordsAttribute
 where D: Deref<Target=DB>
 {
+    #[inline]
     fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = sum_matches_attributes(&lhs.matches);
         let rhs = sum_matches_attributes(&rhs.matches);

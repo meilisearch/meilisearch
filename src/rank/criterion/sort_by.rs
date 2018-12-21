@@ -9,12 +9,11 @@ use crate::rank::criterion::Criterion;
 use crate::database::DatabaseView;
 use crate::rank::Document;
 
-/// An helper struct that permit to sort documents by
-/// some of their stored attributes.
+/// A criterion that sort documents by some of their stored attributes.
 ///
 /// # Note
 ///
-/// If a document cannot be deserialized it will be considered [`None`][].
+/// If a document cannot be deserialized it will be considered [`None`].
 ///
 /// Deserialized documents are compared like `Some(doc0).cmp(&Some(doc1))`,
 /// so you must check the [`Ord`] of `Option` implementation.

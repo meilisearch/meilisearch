@@ -14,12 +14,15 @@ fn number_of_query_words(matches: &[Match]) -> usize {
     GroupBy::new(matches, match_query_index).count()
 }
 
+/// A criterion that count the number of different words that a document
+/// have matches for, a document with more different words is considered better.
 #[derive(Debug, Clone, Copy)]
 pub struct NumberOfWords;
 
 impl<D> Criterion<D> for NumberOfWords
 where D: Deref<Target=DB>
 {
+    #[inline]
     fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = number_of_query_words(&lhs.matches);
         let rhs = number_of_query_words(&rhs.matches);

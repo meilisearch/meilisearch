@@ -19,12 +19,15 @@ fn number_exact_matches(matches: &[Match]) -> usize {
     GroupBy::new(matches, match_query_index).map(contains_exact).count()
 }
 
+/// A document with matches that are the exact word searched is
+/// considered better than one with prefixes of words or typos.
 #[derive(Debug, Clone, Copy)]
 pub struct Exact;
 
 impl<D> Criterion<D> for Exact
 where D: Deref<Target=DB>
 {
+    #[inline]
     fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = number_exact_matches(&lhs.matches);
         let rhs = number_exact_matches(&rhs.matches);

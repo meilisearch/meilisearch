@@ -11,6 +11,7 @@ use crate::Match;
 
 const MAX_DISTANCE: u32 = 8;
 
+#[inline]
 fn index_proximity(lhs: u32, rhs: u32) -> u32 {
     if lhs < rhs {
         cmp::min(rhs - lhs, MAX_DISTANCE)
@@ -19,11 +20,13 @@ fn index_proximity(lhs: u32, rhs: u32) -> u32 {
     }
 }
 
+#[inline]
 fn attribute_proximity(lhs: &Match, rhs: &Match) -> u32 {
     if lhs.attribute.attribute() != rhs.attribute.attribute() { return MAX_DISTANCE }
     index_proximity(lhs.attribute.word_index(), rhs.attribute.word_index())
 }
 
+#[inline]
 fn min_proximity(lhs: &[Match], rhs: &[Match]) -> u32 {
     let mut min_prox = u32::max_value();
     for a in lhs {
@@ -34,6 +37,7 @@ fn min_proximity(lhs: &[Match], rhs: &[Match]) -> u32 {
     min_prox
 }
 
+#[inline]
 fn matches_proximity(matches: &[Match]) -> u32 {
     let mut proximity = 0;
     let mut iter = GroupBy::new(matches, match_query_index);
@@ -48,12 +52,15 @@ fn matches_proximity(matches: &[Match]) -> u32 {
     proximity
 }
 
+/// Measure the sum of proximities between the different words of each documents,
+/// a document with a proximity that is shorter is considered better.
 #[derive(Debug, Clone, Copy)]
 pub struct WordsProximity;
 
 impl<D> Criterion<D> for WordsProximity
 where D: Deref<Target=DB>
 {
+    #[inline]
     fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = matches_proximity(&lhs.matches);
         let rhs = matches_proximity(&rhs.matches);
@@ -61,7 +68,6 @@ where D: Deref<Target=DB>
         lhs.cmp(&rhs)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
