@@ -11,7 +11,12 @@ pub use rocksdb;
 pub use self::tokenizer::Tokenizer;
 pub use self::common_words::CommonWords;
 
-pub type DocumentId = u64;
+/// Represent an internally generated document unique identifier.
+///
+/// It is used to inform the database the document you want to deserialize.
+/// Helpful for custom ranking.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct DocumentId(pub u64);
 
 /// This structure represent the position of a word
 /// in a document and its attributes.

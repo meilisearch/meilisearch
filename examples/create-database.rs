@@ -10,6 +10,7 @@ use meilidb::database::schema::{Schema, SchemaBuilder, STORED, INDEXED};
 use meilidb::database::update::PositiveUpdateBuilder;
 use meilidb::tokenizer::DefaultBuilder;
 use meilidb::database::Database;
+use meilidb::DocumentId;
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {
@@ -67,7 +68,7 @@ fn index(schema: Schema, database_path: &Path, csv_data_path: &Path) -> Result<D
             }
         };
 
-        let document_id = calculate_hash(&document.id);
+        let document_id = DocumentId(calculate_hash(&document.id));
         update.update(document_id, &document).unwrap();
     }
 
