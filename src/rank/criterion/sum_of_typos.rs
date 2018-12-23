@@ -44,7 +44,7 @@ where D: Deref<Target=DB>
 mod tests {
     use super::*;
 
-    use crate::DocumentId;
+    use crate::{DocumentId, Attribute, WordArea};
 
     // typing: "Geox CEO"
     //
@@ -54,8 +54,8 @@ mod tests {
     fn one_typo_reference() {
         let doc0 = {
             let matches = vec![
-                Match { query_index: 0, distance: 0, attribute: 0, attribute_index: 0, is_exact: false },
-                Match { query_index: 1, distance: 0, attribute: 0, attribute_index: 2, is_exact: false },
+                Match { query_index: 0, distance: 0, attribute: Attribute::new(0, 0), is_exact: false, word_area: WordArea::new(0, 6) },
+                Match { query_index: 1, distance: 0, attribute: Attribute::new(0, 2), is_exact: false, word_area: WordArea::new(0, 6) },
             ];
             Document {
                 id: DocumentId(0),
@@ -65,8 +65,8 @@ mod tests {
 
         let doc1 = {
             let matches = vec![
-                Match { query_index: 0, distance: 1, attribute: 0, attribute_index: 0, is_exact: false },
-                Match { query_index: 1, distance: 0, attribute: 0, attribute_index: 2, is_exact: false },
+                Match { query_index: 0, distance: 1, attribute: Attribute::new(0, 0), is_exact: false, word_area: WordArea::new(0, 6) },
+                Match { query_index: 1, distance: 0, attribute: Attribute::new(0, 2), is_exact: false, word_area: WordArea::new(0, 6) },
             ];
             Document {
                 id: DocumentId(1),
@@ -87,8 +87,8 @@ mod tests {
     fn no_typo() {
         let doc0 = {
             let matches = vec![
-                Match { query_index: 0, distance: 0, attribute: 0, attribute_index: 0, is_exact: false },
-                Match { query_index: 1, distance: 0, attribute: 0, attribute_index: 1, is_exact: false },
+                Match { query_index: 0, distance: 0, attribute: Attribute::new(0, 0), is_exact: false, word_area: WordArea::new(0, 6) },
+                Match { query_index: 1, distance: 0, attribute: Attribute::new(0, 1), is_exact: false, word_area: WordArea::new(0, 6) },
             ];
             Document {
                 id: DocumentId(0),
@@ -98,7 +98,7 @@ mod tests {
 
         let doc1 = {
             let matches = vec![
-                Match { query_index: 0, distance: 0, attribute: 0, attribute_index: 0, is_exact: false },
+                Match { query_index: 0, distance: 0, attribute: Attribute::new(0, 0), is_exact: false, word_area: WordArea::new(0, 6) },
             ];
             Document {
                 id: DocumentId(1),
@@ -119,8 +119,8 @@ mod tests {
     fn one_typo() {
         let doc0 = {
             let matches = vec![
-                Match { query_index: 0, distance: 0, attribute: 0, attribute_index: 0, is_exact: false },
-                Match { query_index: 1, distance: 1, attribute: 0, attribute_index: 1, is_exact: false },
+                Match { query_index: 0, distance: 0, attribute: Attribute::new(0, 0), is_exact: false, word_area: WordArea::new(0, 6) },
+                Match { query_index: 1, distance: 1, attribute: Attribute::new(0, 1), is_exact: false, word_area: WordArea::new(0, 6) },
             ];
             Document {
                 id: DocumentId(0),
@@ -130,7 +130,7 @@ mod tests {
 
         let doc1 = {
             let matches = vec![
-                Match { query_index: 0, distance: 0, attribute: 0, attribute_index: 0, is_exact: false },
+                Match { query_index: 0, distance: 0, attribute: Attribute::new(0, 0), is_exact: false, word_area: WordArea::new(0, 6) },
             ];
             Document {
                 id: DocumentId(1),

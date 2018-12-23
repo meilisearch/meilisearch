@@ -203,14 +203,15 @@ mod tests {
     use super::*;
 
     use std::error::Error;
+    use crate::{Attribute, WordArea};
 
     use crate::DocumentId;
 
     #[test]
     fn serialize_deserialize() -> Result<(), Box<Error>> {
-        let a = DocIndex { document_id: DocumentId(0), attribute: 3, attribute_index: 11 };
-        let b = DocIndex { document_id: DocumentId(1), attribute: 4, attribute_index: 21 };
-        let c = DocIndex { document_id: DocumentId(2), attribute: 8, attribute_index: 2 };
+        let a = DocIndex { document_id: DocumentId(0), attribute: Attribute::new(3, 11), word_area: WordArea::new(30, 4) };
+        let b = DocIndex { document_id: DocumentId(1), attribute: Attribute::new(4, 21), word_area: WordArea::new(35, 6) };
+        let c = DocIndex { document_id: DocumentId(2), attribute: Attribute::new(8, 2), word_area: WordArea::new(89, 6) };
 
         let mut builder = PositiveBlobBuilder::memory();
 
@@ -231,9 +232,9 @@ mod tests {
 
     #[test]
     fn serde_serialize_deserialize() -> Result<(), Box<Error>> {
-        let a = DocIndex { document_id: DocumentId(0), attribute: 3, attribute_index: 11 };
-        let b = DocIndex { document_id: DocumentId(1), attribute: 4, attribute_index: 21 };
-        let c = DocIndex { document_id: DocumentId(2), attribute: 8, attribute_index: 2 };
+        let a = DocIndex { document_id: DocumentId(0), attribute: Attribute::new(3, 11), word_area: WordArea::new(30, 4) };
+        let b = DocIndex { document_id: DocumentId(1), attribute: Attribute::new(4, 21), word_area: WordArea::new(35, 6) };
+        let c = DocIndex { document_id: DocumentId(2), attribute: Attribute::new(8, 2), word_area: WordArea::new(89, 6) };
 
         let mut builder = PositiveBlobBuilder::memory();
 

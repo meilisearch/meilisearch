@@ -35,5 +35,7 @@ nightly = []
 [dev-dependencies]
 csv = "1.0"
 elapsed = "0.1"
+quickcheck = "0.7"
 structopt = "0.2"
 tempfile = "3.0"
+termcolor = "1.0"

@@ -20,8 +20,8 @@ fn index_proximity(lhs: u32, rhs: u32) -> u32 {
 }
 
 fn attribute_proximity(lhs: &Match, rhs: &Match) -> u32 {
-    if lhs.attribute != rhs.attribute { return MAX_DISTANCE }
-    index_proximity(lhs.attribute_index, rhs.attribute_index)
+    if lhs.attribute.attribute() != rhs.attribute.attribute() { return MAX_DISTANCE }
+    index_proximity(lhs.attribute.word_index(), rhs.attribute.word_index())
 }
 
 fn min_proximity(lhs: &[Match], rhs: &[Match]) -> u32 {
@@ -67,6 +67,8 @@ where D: Deref<Target=DB>
 mod tests {
     use super::*;
 
+    use crate::Attribute;
+
     #[test]
     fn three_different_attributes() {
 
@@ -79,11 +81,11 @@ mod tests {
         // { id: 3, attr: 3, attr_index: 1 }
 
         let matches = &[
-            Match { query_index: 0, attribute: 0, attribute_index: 0, ..Match::zero() },
-            Match { query_index: 1, attribute: 1, attribute_index: 0, ..Match::zero() },
-            Match { query_index: 2, attribute: 1, attribute_index: 1, ..Match::zero() },
-            Match { query_index: 2, attribute: 2, attribute_index: 0, ..Match::zero() },
-            Match { query_index: 3, attribute: 3, attribute_index: 1, ..Match::zero() },
+            Match { query_index: 0, attribute: Attribute::new(0, 0), ..Match::zero() },
+            Match { query_index: 1, attribute: Attribute::new(1, 0), ..Match::zero() },
+            Match { query_index: 2, attribute: Attribute::new(1, 1), ..Match::zero() },
+            Match { query_index: 2, attribute: Attribute::new(2, 0), ..Match::zero() },
+            Match { query_index: 3, attribute: Attribute::new(3, 1), ..Match::zero() },
         ];
 
         //   soup -> of = 8
@@ -105,12 +107,12 @@ mod tests {
         // { id: 3, attr: 1, attr_index: 3 }
 
         let matches = &[
-            Match { query_index: 0, attribute: 0, attribute_index: 0, ..Match::zero() },
-            Match { query_index: 0, attribute: 1, attribute_index: 0, ..Match::zero() },
-            Match { query_index: 1, attribute: 1, attribute_index: 1, ..Match::zero() },
-            Match { query_index: 2, attribute: 1, attribute_index: 2, ..Match::zero() },
-            Match { query_index: 3, attribute: 0, attribute_index: 1, ..Match::zero() },
-            Match { query_index: 3, attribute: 1, attribute_index: 3, ..Match::zero() },
+            Match { query_index: 0, attribute: Attribute::new(0, 0), ..Match::zero() },
+            Match { query_index: 0, attribute: Attribute::new(1, 0), ..Match::zero() },
+            Match { query_index: 1, attribute: Attribute::new(1, 1), ..Match::zero() },
+            Match { query_index: 2, attribute: Attribute::new(1, 2), ..Match::zero() },
+            Match { query_index: 3, attribute: Attribute::new(0, 1), ..Match::zero() },
+            Match { query_index: 3, attribute: Attribute::new(1, 3), ..Match::zero() },
         ];
 
         //   soup -> of = 1

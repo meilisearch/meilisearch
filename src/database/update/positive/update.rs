@@ -9,12 +9,12 @@ use serde::ser::{self, Serialize};
 use crate::database::update::positive::unordered_builder::UnorderedPositiveBlobBuilder;
 use crate::database::blob::positive::PositiveBlob;
 use crate::database::schema::{Schema, SchemaAttr};
-use crate::tokenizer::TokenizerBuilder;
+use crate::tokenizer::{TokenizerBuilder, Token};
 use crate::database::DocumentKeyAttr;
 use crate::database::update::Update;
-use crate::{DocumentId, DocIndex};
 use crate::database::DATA_INDEX;
 use crate::database::blob::Blob;
+use crate::{DocumentId, DocIndex, Attribute, WordArea};
 
 pub enum NewState {
     Updated { value: Vec<u8> },
@@ -355,11 +355,11 @@ where B: TokenizerBuilder
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        for (index, word) in self.tokenizer_builder.build(v) {
+        for Token { word, word_index, char_index } in self.tokenizer_builder.build(v) {
             let doc_index = DocIndex {
                 document_id: self.document_id,
-                attribute: self.attribute.as_u32() as u8,
-                attribute_index: index as u32,
+                attribute: Attribute::new(self.attribute.0, word_index as u32),
+                word_area: WordArea::new(char_index as u32, word.len() as u16),
             };
 
             // insert the exact representation
