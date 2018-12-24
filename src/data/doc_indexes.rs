@@ -130,10 +130,6 @@ impl<W: Write> DocIndexesBuilder<W> {
         self.wtr.write_all(indexes)
     }
 
-    pub fn finish(self) -> io::Result<()> {
-        self.into_inner().map(drop)
-    }
-
     pub fn into_inner(mut self) -> io::Result<W> {
         // write the ranges
         let ranges = unsafe { into_u8_slice(self.ranges.as_slice()) };

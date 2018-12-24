@@ -5,7 +5,7 @@ use std::ops::Deref;
 
 use rocksdb::rocksdb_options::{DBOptions, IngestExternalFileOptions, ColumnFamilyOptions};
 use rocksdb::rocksdb::{Writable, Snapshot};
-use rocksdb::{DB, DBVector, MergeOperands};
+use rocksdb::{DB, MergeOperands};
 
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::database_view::{DatabaseView, DocumentIter};
@@ -58,6 +58,7 @@ pub struct Database {
 }
 
 impl Database {
+    /// Create a database specifying its path and tha schema that will be used.
     pub fn create<P: AsRef<Path>>(path: P, schema: Schema) -> Result<Database, Box<Error>> {
         let path = path.as_ref();
         if path.exists() {
@@ -86,6 +87,7 @@ impl Database {
         Ok(Database { db: Mutex::new(db), view })
     }
 
+    /// Open an existing database specifying its path.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Database, Box<Error>> {
         let path = path.as_ref().to_string_lossy();
 
@@ -110,6 +112,11 @@ impl Database {
         Ok(Database { db: Mutex::new(db), view })
     }
 
+    /// Ingest an update file, this file must be created using
+    /// the [PositiveUpdateBuilder][1] or the [NegativeUpdateBuilder][2].
+    ///
+    /// [1]: update/struct.PositiveUpdateBuilder.html
+    /// [2]: update/struct.NegativeUpdateBuilder.html
     pub fn ingest_update_file(&self, update: Update) -> Result<(), Box<Error>> {
         let snapshot = {
             // We must have a mutex here to ensure that update ingestions and compactions
@@ -149,17 +156,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn get(&self, key: &[u8]) -> Result<Option<DBVector>, Box<Error>> {
-        self.view().get(key)
-    }
-
-    pub fn flush(&self) -> Result<(), Box<Error>> {
-        match self.db.lock() {
-            Ok(db) => Ok(db.flush(true)?),
-            Err(e) => Err(e.to_string().into()),
-        }
-    }
-
+    /// Return a previsouly generated snapshot of the database.
     pub fn view(&self) -> RwLockReadGuard<DatabaseView<Arc<DB>>> {
         self.view.read().unwrap()
     }

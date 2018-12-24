@@ -2,11 +2,9 @@ pub mod automaton;
 pub mod database;
 pub mod rank;
 pub mod tokenizer;
-
 mod data;
 
 use std::fmt;
-
 pub use rocksdb;
 pub use self::tokenizer::Tokenizer;
 
@@ -41,10 +39,12 @@ impl Attribute {
         Attribute(attribute | index)
     }
 
+    /// Returns the attribute number.
     pub fn attribute(&self) -> u16 {
         (self.0 >> 22) as u16
     }
 
+    /// Returns the word index according to the tokenizer used.
     pub fn word_index(&self) -> u32 {
         self.0 & 0b0000_0000_0011_1111_1111_1111_1111
     }
@@ -82,10 +82,12 @@ impl WordArea {
         WordArea(byte_index | (length as u32))
     }
 
+    /// Returns the index of the start of the word in bytes.
     pub fn byte_index(&self) -> u32 {
         self.0 >> 10
     }
 
+    /// Returns the length in bytes of the word.
     pub fn length(&self) -> u16 {
         (self.0 & 0b0000_0000_0000_0000_0011_1111_1111) as u16
     }
@@ -158,24 +160,15 @@ pub struct Match {
     pub word_area: WordArea,
 }
 
+#[cfg(test)]
 impl Match {
-    pub fn zero() -> Self {
+    fn zero() -> Self {
         Match {
             query_index: 0,
             distance: 0,
             attribute: Attribute::new(0, 0),
             is_exact: false,
             word_area: WordArea::new(0, 0),
-        }
-    }
-
-    pub fn max() -> Self {
-        Match {
-            query_index: u32::max_value(),
-            distance: u8::max_value(),
-            attribute: Attribute(u32::max_value()),
-            is_exact: true,
-            word_area: WordArea(u32::max_value()),
         }
     }
 }
