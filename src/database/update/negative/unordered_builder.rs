@@ -30,7 +30,7 @@ impl<W: io::Write> UnorderedNegativeBlobBuilder<W> {
 
     pub fn into_inner(mut self) -> io::Result<W> {
         for id in self.doc_ids {
-            self.wrt.write_u64::<NativeEndian>(id)?;
+            self.wrt.write_u64::<NativeEndian>(id.0)?;
         }
         Ok(self.wrt)
     }

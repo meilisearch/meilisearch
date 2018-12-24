@@ -100,7 +100,7 @@ where D: Deref<Target=DB>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut options = ReadOptions::new();
-        let lower = DocumentKey::new(0);
+        let lower = DocumentKey::new(DocumentId(0));
         options.set_iterate_lower_bound(lower.as_ref());
 
         let mut iter = self.snapshot.iter_opt(options);

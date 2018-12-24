@@ -156,13 +156,16 @@ unsafe fn into_u8_slice<T>(slice: &[T]) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use std::error::Error;
+
+    use crate::DocumentId;
 
     #[test]
     fn builder_serialize_deserialize() -> Result<(), Box<Error>> {
-        let a = DocIndex { document_id: 0, attribute: 3, attribute_index: 11 };
-        let b = DocIndex { document_id: 1, attribute: 4, attribute_index: 21 };
-        let c = DocIndex { document_id: 2, attribute: 8, attribute_index: 2 };
+        let a = DocIndex { document_id: DocumentId(0), attribute: 3, attribute_index: 11 };
+        let b = DocIndex { document_id: DocumentId(1), attribute: 4, attribute_index: 21 };
+        let c = DocIndex { document_id: DocumentId(2), attribute: 8, attribute_index: 2 };
 
         let mut builder = DocIndexesBuilder::memory();
 
@@ -183,9 +186,9 @@ mod tests {
 
     #[test]
     fn serialize_deserialize() -> Result<(), Box<Error>> {
-        let a = DocIndex { document_id: 0, attribute: 3, attribute_index: 11 };
-        let b = DocIndex { document_id: 1, attribute: 4, attribute_index: 21 };
-        let c = DocIndex { document_id: 2, attribute: 8, attribute_index: 2 };
+        let a = DocIndex { document_id: DocumentId(0), attribute: 3, attribute_index: 11 };
+        let b = DocIndex { document_id: DocumentId(1), attribute: 4, attribute_index: 21 };
+        let c = DocIndex { document_id: DocumentId(2), attribute: 8, attribute_index: 2 };
 
         let mut builder = DocIndexesBuilder::memory();
 

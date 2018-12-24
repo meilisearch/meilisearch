@@ -194,6 +194,7 @@ mod tests {
     use serde_derive::{Serialize, Deserialize};
     use tempfile::tempdir;
 
+    use crate::DocumentId;
     use crate::tokenizer::DefaultBuilder;
     use crate::database::update::PositiveUpdateBuilder;
     use crate::database::schema::{SchemaBuilder, STORED, INDEXED};
@@ -238,8 +239,8 @@ mod tests {
         let mut update = {
             let mut builder = PositiveUpdateBuilder::new(update_path, schema, tokenizer_builder);
 
-            builder.update(0, &doc0).unwrap();
-            builder.update(1, &doc1).unwrap();
+            builder.update(DocumentId(0), &doc0).unwrap();
+            builder.update(DocumentId(1), &doc1).unwrap();
 
             builder.build()?
         };
@@ -248,8 +249,8 @@ mod tests {
         database.ingest_update_file(update)?;
         let view = database.view();
 
-        let de_doc0: SimpleDoc = view.retrieve_document(0)?;
-        let de_doc1: SimpleDoc = view.retrieve_document(1)?;
+        let de_doc0: SimpleDoc = view.retrieve_document(DocumentId(0))?;
+        let de_doc1: SimpleDoc = view.retrieve_document(DocumentId(1))?;
 
         assert_eq!(doc0, de_doc0);
         assert_eq!(doc1, de_doc1);

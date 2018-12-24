@@ -44,6 +44,8 @@ where D: Deref<Target=DB>
 mod tests {
     use super::*;
 
+    use crate::DocumentId;
+
     // typing: "Geox CEO"
     //
     // doc0: "Geox SpA: CEO and Executive"
@@ -56,7 +58,7 @@ mod tests {
                 Match { query_index: 1, distance: 0, attribute: 0, attribute_index: 2, is_exact: false },
             ];
             Document {
-                id: 0,
+                id: DocumentId(0),
                 matches: matches,
             }
         };
@@ -67,7 +69,7 @@ mod tests {
                 Match { query_index: 1, distance: 0, attribute: 0, attribute_index: 2, is_exact: false },
             ];
             Document {
-                id: 1,
+                id: DocumentId(1),
                 matches: matches,
             }
         };
@@ -89,7 +91,7 @@ mod tests {
                 Match { query_index: 1, distance: 0, attribute: 0, attribute_index: 1, is_exact: false },
             ];
             Document {
-                id: 0,
+                id: DocumentId(0),
                 matches: matches,
             }
         };
@@ -99,7 +101,7 @@ mod tests {
                 Match { query_index: 0, distance: 0, attribute: 0, attribute_index: 0, is_exact: false },
             ];
             Document {
-                id: 1,
+                id: DocumentId(1),
                 matches: matches,
             }
         };
@@ -121,7 +123,7 @@ mod tests {
                 Match { query_index: 1, distance: 1, attribute: 0, attribute_index: 1, is_exact: false },
             ];
             Document {
-                id: 0,
+                id: DocumentId(0),
                 matches: matches,
             }
         };
@@ -131,7 +133,7 @@ mod tests {
                 Match { query_index: 0, distance: 0, attribute: 0, attribute_index: 0, is_exact: false },
             ];
             Document {
-                id: 1,
+                id: DocumentId(1),
                 matches: matches,
             }
         };

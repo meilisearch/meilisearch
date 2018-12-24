@@ -19,7 +19,7 @@ impl DocumentKey {
 
         let mut wtr = Cursor::new(&mut buffer[..]);
         wtr.write_all(b"doc-").unwrap();
-        wtr.write_u64::<NativeEndian>(id).unwrap();
+        wtr.write_u64::<NativeEndian>(id.0).unwrap();
 
         DocumentKey(buffer)
     }
@@ -43,7 +43,8 @@ impl DocumentKey {
     }
 
     pub fn document_id(&self) -> DocumentId {
-        (&self.0[4..]).read_u64::<NativeEndian>().unwrap()
+        let id = (&self.0[4..]).read_u64::<NativeEndian>().unwrap();
+        DocumentId(id)
     }
 }
 
@@ -88,7 +89,8 @@ impl DocumentKeyAttr {
     }
 
     pub fn document_id(&self) -> DocumentId {
-        (&self.0[4..]).read_u64::<NativeEndian>().unwrap()
+        let id = (&self.0[4..]).read_u64::<NativeEndian>().unwrap();
+        DocumentId(id)
     }
 
     pub fn attribute(&self) -> SchemaAttr {
