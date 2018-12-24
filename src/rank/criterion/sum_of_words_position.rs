@@ -14,7 +14,7 @@ fn sum_matches_attribute_index(matches: &[Match]) -> u32 {
     // note that GroupBy will never return an empty group
     // so we can do this assumption safely
     GroupBy::new(matches, match_query_index).map(|group| unsafe {
-        group.get_unchecked(0).attribute_index
+        group.get_unchecked(0).attribute.word_index()
     }).sum()
 }
 

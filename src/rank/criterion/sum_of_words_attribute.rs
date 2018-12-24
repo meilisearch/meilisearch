@@ -10,11 +10,11 @@ use crate::rank::criterion::Criterion;
 use crate::Match;
 
 #[inline]
-fn sum_matches_attributes(matches: &[Match]) -> u8 {
+fn sum_matches_attributes(matches: &[Match]) -> u16 {
     // note that GroupBy will never return an empty group
     // so we can do this assumption safely
     GroupBy::new(matches, match_query_index).map(|group| unsafe {
-        group.get_unchecked(0).attribute
+        group.get_unchecked(0).attribute.attribute()
     }).sum()
 }
 

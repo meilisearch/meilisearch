@@ -1,6 +1,6 @@
 use std::collections::{HashMap, BTreeMap};
 use std::io::{Read, Write};
-use std::{fmt, u32};
+use std::{fmt, u16};
 use std::path::Path;
 use std::ops::BitOr;
 use std::sync::Arc;
@@ -53,7 +53,7 @@ impl SchemaBuilder {
         if self.attrs.insert(name.into(), props).is_some() {
             panic!("Field already inserted.")
         }
-        SchemaAttr(len as u32)
+        SchemaAttr(len as u16)
     }
 
     pub fn build(self) -> Schema {
@@ -61,7 +61,7 @@ impl SchemaBuilder {
         let mut props = Vec::new();
 
         for (i, (name, prop)) in self.attrs.into_iter().enumerate() {
-            attrs.insert(name.clone(), SchemaAttr(i as u32));
+            attrs.insert(name.clone(), SchemaAttr(i as u16));
             props.push((name, prop));
         }
 
@@ -94,10 +94,9 @@ impl Schema {
 
     pub fn write_to<W: Write>(&self, writer: W) -> bincode::Result<()> {
         let mut ordered = BTreeMap::new();
-        for (name, field) in &self.inner.attrs {
-            let index = field.as_u32();
-            let (_, props) = self.inner.props[index as usize];
-            ordered.insert(index, (name, props));
+        for (name, attr) in &self.inner.attrs {
+            let (_, props) = self.inner.props[attr.0 as usize];
+            ordered.insert(attr.0, (name, props));
         }
 
         let mut attrs = LinkedHashMap::with_capacity(ordered.len());
@@ -109,8 +108,7 @@ impl Schema {
     }
 
     pub fn props(&self, attr: SchemaAttr) -> SchemaProps {
-        let index = attr.as_u32();
-        let (_, props) = self.inner.props[index as usize];
+        let (_, props) = self.inner.props[attr.0 as usize];
         props
     }
 
@@ -119,26 +117,21 @@ impl Schema {
     }
 
     pub fn attribute_name(&self, attr: SchemaAttr) -> &str {
-        let index = attr.as_u32();
-        let (name, _) = &self.inner.props[index as usize];
+        let (name, _) = &self.inner.props[attr.0 as usize];
         name
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
-pub struct SchemaAttr(u32);
+pub struct SchemaAttr(pub(crate) u16);
 
 impl SchemaAttr {
-    pub fn new(value: u32) -> SchemaAttr {
+    pub fn new(value: u16) -> SchemaAttr {
         SchemaAttr(value)
     }
 
     pub fn max() -> SchemaAttr {
-        SchemaAttr(u32::MAX)
-    }
-
-    pub fn as_u32(&self) -> u32 {
-        self.0
+        SchemaAttr(u16::MAX)
     }
 }
 

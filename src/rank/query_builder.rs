@@ -97,8 +97,8 @@ where D: Deref<Target=DB>
                         query_index: iv.index as u32,
                         distance: distance,
                         attribute: doc_index.attribute,
-                        attribute_index: doc_index.attribute_index,
                         is_exact: is_exact,
+                        word_area: doc_index.word_area,
                     };
                     matches.entry(doc_index.document_id).or_insert_with(Vec::new).push(match_);
                 }

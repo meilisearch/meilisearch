@@ -73,7 +73,7 @@ impl DocumentKeyAttr {
         let mut wtr = Cursor::new(&mut buffer[..]);
         wtr.write_all(&raw_key).unwrap();
         wtr.write_all(b"-").unwrap();
-        wtr.write_u32::<NativeEndian>(attr.as_u32()).unwrap();
+        wtr.write_u16::<NativeEndian>(attr.0).unwrap();
 
         DocumentKeyAttr(buffer)
     }
@@ -95,7 +95,7 @@ impl DocumentKeyAttr {
 
     pub fn attribute(&self) -> SchemaAttr {
         let offset = 4 + size_of::<u64>() + 1;
-        let value = (&self.0[offset..]).read_u32::<NativeEndian>().unwrap();
+        let value = (&self.0[offset..]).read_u16::<NativeEndian>().unwrap();
         SchemaAttr::new(value)
     }
 
@@ -114,7 +114,7 @@ impl fmt::Debug for DocumentKeyAttr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("DocumentKeyAttr")
             .field("document_id", &self.document_id())
-            .field("attribute", &self.attribute().as_u32())
+            .field("attribute", &self.attribute().0)
             .finish()
     }
 }
