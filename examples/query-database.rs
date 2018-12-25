@@ -88,7 +88,7 @@ fn main() -> Result<(), Box<Error>> {
 
         let number_of_documents = documents.len();
         for doc in documents {
-            match view.retrieve_document::<Document>(doc.id) {
+            match view.document_by_id::<Document>(doc.id) {
                 Ok(document) => {
 
                     print!("title: ");

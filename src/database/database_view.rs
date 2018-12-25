@@ -75,15 +75,14 @@ where D: Deref<Target=DB>
         QueryBuilder::new(self)
     }
 
-    // TODO create an enum error type
-    pub fn retrieve_document<T>(&self, id: DocumentId) -> Result<T, Box<Error>>
+    pub fn document_by_id<T>(&self, id: DocumentId) -> Result<T, Box<Error>>
     where T: DeserializeOwned
     {
         let mut deserializer = Deserializer::new(&self.snapshot, &self.schema, id);
         Ok(T::deserialize(&mut deserializer)?)
     }
 
-    pub fn retrieve_documents<T, I>(&self, ids: I) -> DocumentIter<D, T, I::IntoIter>
+    pub fn documents_by_id<T, I>(&self, ids: I) -> DocumentIter<D, T, I::IntoIter>
     where T: DeserializeOwned,
           I: IntoIterator<Item=DocumentId>,
     {
@@ -149,7 +148,7 @@ where D: Deref<Target=DB>,
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.document_ids.next() {
-            Some(id) => Some(self.database_view.retrieve_document(id)),
+            Some(id) => Some(self.database_view.document_by_id(id)),
             None => None
         }
     }
@@ -168,7 +167,7 @@ where D: Deref<Target=DB>,
 {
     fn next_back(&mut self) -> Option<Self::Item> {
         match self.document_ids.next_back() {
-            Some(id) => Some(self.database_view.retrieve_document(id)),
+            Some(id) => Some(self.database_view.document_by_id(id)),
             None => None
         }
     }

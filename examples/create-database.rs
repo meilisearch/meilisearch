@@ -1,6 +1,4 @@
-use std::collections::hash_map::DefaultHasher;
 use std::path::{Path, PathBuf};
-use std::hash::{Hash, Hasher};
 use std::error::Error;
 
 use serde_derive::{Serialize, Deserialize};
@@ -10,7 +8,6 @@ use meilidb::database::schema::{Schema, SchemaBuilder, STORED, INDEXED};
 use meilidb::database::update::PositiveUpdateBuilder;
 use meilidb::tokenizer::DefaultBuilder;
 use meilidb::database::Database;
-use meilidb::DocumentId;
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {
@@ -31,14 +28,8 @@ struct Document<'a> {
     image: &'a str,
 }
 
-fn calculate_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
-}
-
 fn create_schema() -> Schema {
-    let mut schema = SchemaBuilder::new();
+    let mut schema = SchemaBuilder::with_identifier("id");
     schema.new_attribute("id", STORED);
     schema.new_attribute("title", STORED | INDEXED);
     schema.new_attribute("description", STORED | INDEXED);
@@ -68,8 +59,7 @@ fn index(schema: Schema, database_path: &Path, csv_data_path: &Path) -> Result<D
             }
         };
 
-        let document_id = DocumentId(calculate_hash(&document.id));
-        update.update(document_id, &document).unwrap();
+        update.update(&document).unwrap();
     }
 
     let mut update = update.build()?;

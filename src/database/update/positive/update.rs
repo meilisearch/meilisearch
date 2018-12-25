@@ -40,18 +40,21 @@ impl<B> PositiveUpdateBuilder<B> {
         }
     }
 
-    pub fn update<T: Serialize>(&mut self, id: DocumentId, document: &T) -> Result<(), Box<Error>>
+    pub fn update<T: Serialize>(&mut self, document: &T) -> Result<DocumentId, SerializerError>
     where B: TokenizerBuilder
     {
+        let document_id = self.schema.document_id(document)?;
+
         let serializer = Serializer {
             schema: &self.schema,
-            document_id: id,
             tokenizer_builder: &self.tokenizer_builder,
+            document_id: document_id,
             builder: &mut self.builder,
             new_states: &mut self.new_states
         };
+        document.serialize(serializer)?;
 
-        Ok(ser::Serialize::serialize(document, serializer)?)
+        Ok(document_id)
     }
 
     // TODO value must be a field that can be indexed
@@ -67,7 +70,7 @@ impl<B> PositiveUpdateBuilder<B> {
 
 #[derive(Debug)]
 pub enum SerializerError {
-    SchemaDontMatch { attribute: String },
+    DocumentIdNotFound,
     UnserializableType { name: &'static str },
     Custom(String),
 }
@@ -81,10 +84,9 @@ impl ser::Error for SerializerError {
 impl fmt::Display for SerializerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            SerializerError::SchemaDontMatch { attribute } => {
-                write!(f, "serialized document try to specify the \
-                           {:?} attribute that is not known by the schema", attribute)
-            },
+            SerializerError::DocumentIdNotFound => {
+                write!(f, "serialized document does not have an id according to the schema")
+            }
             SerializerError::UnserializableType { name } => {
                 write!(f, "Only struct and map types are considered valid documents and
                            can be serialized, not {} types directly.", name)
@@ -102,16 +104,6 @@ struct Serializer<'a, B> {
     document_id: DocumentId,
     builder: &'a mut UnorderedPositiveBlobBuilder<Vec<u8>, Vec<u8>>,
     new_states: &'a mut BTreeMap<DocumentKeyAttr, NewState>,
-}
-
-macro_rules! forward_to_unserializable_type {
-    ($($ty:ident => $se_method:ident,)*) => {
-        $(
-            fn $se_method(self, _v: $ty) -> Result<Self::Ok, Self::Error> {
-                Err(SerializerError::UnserializableType { name: "$ty" })
-            }
-        )*
-    }
 }
 
 impl<'a, B> ser::Serializer for Serializer<'a, B>
@@ -288,27 +280,25 @@ where B: TokenizerBuilder
     ) -> Result<(), Self::Error>
     where T: Serialize,
     {
-        match self.schema.attribute(key) {
-            Some(attr) => {
-                let props = self.schema.props(attr);
-                if props.is_stored() {
-                    let value = bincode::serialize(value).unwrap();
-                    let key = DocumentKeyAttr::new(self.document_id, attr);
-                    self.new_states.insert(key, NewState::Updated { value });
-                }
-                if props.is_indexed() {
-                    let serializer = IndexerSerializer {
-                        builder: self.builder,
-                        tokenizer_builder: self.tokenizer_builder,
-                        document_id: self.document_id,
-                        attribute: attr,
-                    };
-                    value.serialize(serializer)?;
-                }
-                Ok(())
-            },
-            None => Err(SerializerError::SchemaDontMatch { attribute: key.to_owned() }),
+        if let Some(attr) = self.schema.attribute(key) {
+            let props = self.schema.props(attr);
+            if props.is_stored() {
+                let value = bincode::serialize(value).unwrap();
+                let key = DocumentKeyAttr::new(self.document_id, attr);
+                self.new_states.insert(key, NewState::Updated { value });
+            }
+            if props.is_indexed() {
+                let serializer = IndexerSerializer {
+                    builder: self.builder,
+                    tokenizer_builder: self.tokenizer_builder,
+                    document_id: self.document_id,
+                    attribute: attr,
+                };
+                value.serialize(serializer)?;
+            }
         }
+
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {

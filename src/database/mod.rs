@@ -1,4 +1,6 @@
 use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::error::Error;
 use std::path::Path;
 use std::ops::Deref;
@@ -14,6 +16,16 @@ use self::update::Update;
 use self::schema::Schema;
 use self::blob::Blob;
 
+macro_rules! forward_to_unserializable_type {
+    ($($ty:ident => $se_method:ident,)*) => {
+        $(
+            fn $se_method(self, _v: $ty) -> Result<Self::Ok, Self::Error> {
+                Err(SerializerError::UnserializableType { name: "$ty" })
+            }
+        )*
+    }
+}
+
 pub mod blob;
 pub mod schema;
 pub mod update;
@@ -23,6 +35,12 @@ mod deserializer;
 
 const DATA_INDEX:  &[u8] = b"data-index";
 const DATA_SCHEMA: &[u8] = b"data-schema";
+
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
+}
 
 pub fn retrieve_data_schema<D>(snapshot: &Snapshot<D>) -> Result<Schema, Box<Error>>
 where D: Deref<Target=DB>
@@ -194,7 +212,6 @@ mod tests {
     use serde_derive::{Serialize, Deserialize};
     use tempfile::tempdir;
 
-    use crate::DocumentId;
     use crate::tokenizer::DefaultBuilder;
     use crate::database::update::PositiveUpdateBuilder;
     use crate::database::schema::{SchemaBuilder, STORED, INDEXED};
@@ -207,13 +224,15 @@ mod tests {
 
         #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
         struct SimpleDoc {
+            id: u64,
             title: String,
             description: String,
             timestamp: u64,
         }
 
         let schema = {
-            let mut builder = SchemaBuilder::new();
+            let mut builder = SchemaBuilder::with_identifier("id");
+            builder.new_attribute("id", STORED);
             builder.new_attribute("title", STORED | INDEXED);
             builder.new_attribute("description", STORED | INDEXED);
             builder.new_attribute("timestamp", STORED);
@@ -226,21 +245,25 @@ mod tests {
         let update_path = dir.path().join("update.sst");
 
         let doc0 = SimpleDoc {
+            id: 0,
             title: String::from("I am a title"),
             description: String::from("I am a description"),
             timestamp: 1234567,
         };
         let doc1 = SimpleDoc {
+            id: 1,
             title: String::from("I am the second title"),
             description: String::from("I am the second description"),
             timestamp: 7654321,
         };
 
+        let docid0;
+        let docid1;
         let mut update = {
             let mut builder = PositiveUpdateBuilder::new(update_path, schema, tokenizer_builder);
 
-            builder.update(DocumentId(0), &doc0).unwrap();
-            builder.update(DocumentId(1), &doc1).unwrap();
+            docid0 = builder.update(&doc0).unwrap();
+            docid1 = builder.update(&doc1).unwrap();
 
             builder.build()?
         };
@@ -249,8 +272,8 @@ mod tests {
         database.ingest_update_file(update)?;
         let view = database.view();
 
-        let de_doc0: SimpleDoc = view.retrieve_document(DocumentId(0))?;
-        let de_doc1: SimpleDoc = view.retrieve_document(DocumentId(1))?;
+        let de_doc0: SimpleDoc = view.document_by_id(docid0)?;
+        let de_doc1: SimpleDoc = view.document_by_id(docid1)?;
 
         assert_eq!(doc0, de_doc0);
         assert_eq!(doc1, de_doc1);
