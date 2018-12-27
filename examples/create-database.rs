@@ -5,7 +5,7 @@ use serde_derive::{Serialize, Deserialize};
 use structopt::StructOpt;
 
 use meilidb::database::schema::{Schema, SchemaBuilder, STORED, INDEXED};
-use meilidb::database::update::PositiveUpdateBuilder;
+use meilidb::database::PositiveUpdateBuilder;
 use meilidb::tokenizer::DefaultBuilder;
 use meilidb::database::Database;
 
