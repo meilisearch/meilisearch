@@ -62,12 +62,12 @@ where D: Deref<Target=DB>,
       T: DeserializeOwned + Ord,
 {
     fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
-        let lhs = match view.retrieve_document::<T>(lhs.id) {
+        let lhs = match view.document_by_id::<T>(lhs.id) {
             Ok(doc) => Some(doc),
             Err(e) => { eprintln!("{}", e); None },
         };
 
-        let rhs = match view.retrieve_document::<T>(rhs.id) {
+        let rhs = match view.document_by_id::<T>(rhs.id) {
             Ok(doc) => Some(doc),
             Err(e) => { eprintln!("{}", e); None },
         };

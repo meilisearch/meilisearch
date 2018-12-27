@@ -4,7 +4,7 @@ use std::error::Error;
 mod negative;
 mod positive;
 
-pub use self::positive::{PositiveUpdateBuilder, NewState};
+pub use self::positive::{PositiveUpdateBuilder, NewState, SerializerError};
 pub use self::negative::NegativeUpdateBuilder;
 
 pub struct Update {

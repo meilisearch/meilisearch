@@ -18,7 +18,7 @@ pub use self::common_words::CommonWords;
 /// It is used to inform the database the document you want to deserialize.
 /// Helpful for custom ranking.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct DocumentId(pub u64);
+pub struct DocumentId(u64);
 
 /// Represent an attribute number along with the word index
 /// according to the tokenizer used.
