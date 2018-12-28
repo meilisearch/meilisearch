@@ -17,6 +17,11 @@ serde = "1.0"
 serde_derive = "1.0"
 unidecode = "0.3"
 
+[dependencies.toml]
+git = "https://github.com/Kerollmops/toml-rs.git"
+features = ["preserve_order"]
+rev = "0372ba6"
+
 [dependencies.rocksdb]
 git = "https://github.com/pingcap/rust-rocksdb.git"
 rev = "c2eb140"

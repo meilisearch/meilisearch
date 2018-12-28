@@ -39,7 +39,7 @@ impl Database {
         let db = DB::open_cf(opts, &path, vec![("default", cf_opts)])?;
 
         let mut schema_bytes = Vec::new();
-        schema.write_to(&mut schema_bytes)?;
+        schema.write_to_bin(&mut schema_bytes)?;
         db.put(DATA_SCHEMA, &schema_bytes)?;
 
         let db = Arc::new(db);
@@ -62,7 +62,7 @@ impl Database {
 
         // FIXME create a generic function to do that !
         let _schema = match db.get(DATA_SCHEMA)? {
-            Some(value) => Schema::read_from(&*value)?,
+            Some(value) => Schema::read_from_bin(&*value)?,
             None => return Err(String::from("Database does not contain a schema").into()),
         };
 
