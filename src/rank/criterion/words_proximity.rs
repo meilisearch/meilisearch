@@ -81,11 +81,11 @@ mod tests {
         // { id: 3, attr: 3, attr_index: 1 }
 
         let matches = &[
-            Match { query_index: 0, attribute: Attribute::new(0, 0), ..Match::zero() },
-            Match { query_index: 1, attribute: Attribute::new(1, 0), ..Match::zero() },
-            Match { query_index: 2, attribute: Attribute::new(1, 1), ..Match::zero() },
-            Match { query_index: 2, attribute: Attribute::new(2, 0), ..Match::zero() },
-            Match { query_index: 3, attribute: Attribute::new(3, 1), ..Match::zero() },
+            Match { query_index: 0, attribute: Attribute::new_faillible(0, 0), ..Match::zero() },
+            Match { query_index: 1, attribute: Attribute::new_faillible(1, 0), ..Match::zero() },
+            Match { query_index: 2, attribute: Attribute::new_faillible(1, 1), ..Match::zero() },
+            Match { query_index: 2, attribute: Attribute::new_faillible(2, 0), ..Match::zero() },
+            Match { query_index: 3, attribute: Attribute::new_faillible(3, 1), ..Match::zero() },
         ];
 
         //   soup -> of = 8
@@ -107,12 +107,12 @@ mod tests {
         // { id: 3, attr: 1, attr_index: 3 }
 
         let matches = &[
-            Match { query_index: 0, attribute: Attribute::new(0, 0), ..Match::zero() },
-            Match { query_index: 0, attribute: Attribute::new(1, 0), ..Match::zero() },
-            Match { query_index: 1, attribute: Attribute::new(1, 1), ..Match::zero() },
-            Match { query_index: 2, attribute: Attribute::new(1, 2), ..Match::zero() },
-            Match { query_index: 3, attribute: Attribute::new(0, 1), ..Match::zero() },
-            Match { query_index: 3, attribute: Attribute::new(1, 3), ..Match::zero() },
+            Match { query_index: 0, attribute: Attribute::new_faillible(0, 0), ..Match::zero() },
+            Match { query_index: 0, attribute: Attribute::new_faillible(1, 0), ..Match::zero() },
+            Match { query_index: 1, attribute: Attribute::new_faillible(1, 1), ..Match::zero() },
+            Match { query_index: 2, attribute: Attribute::new_faillible(1, 2), ..Match::zero() },
+            Match { query_index: 3, attribute: Attribute::new_faillible(0, 1), ..Match::zero() },
+            Match { query_index: 3, attribute: Attribute::new_faillible(1, 3), ..Match::zero() },
         ];
 
         //   soup -> of = 1

@@ -209,9 +209,21 @@ mod tests {
 
     #[test]
     fn serialize_deserialize() -> Result<(), Box<Error>> {
-        let a = DocIndex { document_id: DocumentId(0), attribute: Attribute::new(3, 11), word_area: WordArea::new(30, 4) };
-        let b = DocIndex { document_id: DocumentId(1), attribute: Attribute::new(4, 21), word_area: WordArea::new(35, 6) };
-        let c = DocIndex { document_id: DocumentId(2), attribute: Attribute::new(8, 2), word_area: WordArea::new(89, 6) };
+        let a = DocIndex {
+            document_id: DocumentId(0),
+            attribute: Attribute::new_faillible(3, 11),
+            word_area: WordArea::new_faillible(30, 4)
+        };
+        let b = DocIndex {
+            document_id: DocumentId(1),
+            attribute: Attribute::new_faillible(4, 21),
+            word_area: WordArea::new_faillible(35, 6)
+        };
+        let c = DocIndex {
+            document_id: DocumentId(2),
+            attribute: Attribute::new_faillible(8, 2),
+            word_area: WordArea::new_faillible(89, 6)
+        };
 
         let mut builder = PositiveBlobBuilder::memory();
 
@@ -232,9 +244,21 @@ mod tests {
 
     #[test]
     fn serde_serialize_deserialize() -> Result<(), Box<Error>> {
-        let a = DocIndex { document_id: DocumentId(0), attribute: Attribute::new(3, 11), word_area: WordArea::new(30, 4) };
-        let b = DocIndex { document_id: DocumentId(1), attribute: Attribute::new(4, 21), word_area: WordArea::new(35, 6) };
-        let c = DocIndex { document_id: DocumentId(2), attribute: Attribute::new(8, 2), word_area: WordArea::new(89, 6) };
+        let a = DocIndex {
+            document_id: DocumentId(0),
+            attribute: Attribute::new_faillible(3, 11),
+            word_area: WordArea::new_faillible(30, 4)
+        };
+        let b = DocIndex {
+            document_id: DocumentId(1),
+            attribute: Attribute::new_faillible(4, 21),
+            word_area: WordArea::new_faillible(35, 6)
+        };
+        let c = DocIndex {
+            document_id: DocumentId(2),
+            attribute: Attribute::new_faillible(8, 2),
+            word_area: WordArea::new_faillible(89, 6)
+        };
 
         let mut builder = PositiveBlobBuilder::memory();
 

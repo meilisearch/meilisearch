@@ -31,17 +31,36 @@ pub struct Attribute(u32);
 impl Attribute {
     /// Construct an `Attribute` from an attribute number and
     /// the word position of a match according to the tokenizer used.
+    fn new(attribute: u16, index: u32) -> Result<Attribute, AttributeError> {
+        if attribute & 0b1111_1100_0000_0000 != 0 {
+            return Err(AttributeError::AttributeTooBig)
+        }
+
+        if index & 0b1111_1111_1100_0000_0000_0000_0000 != 0 {
+            return Err(AttributeError::IndexTooBig)
+        }
+
+        let attribute = (attribute as u32) << 22;
+        Ok(Attribute(attribute | index))
+    }
+
+    /// Construct an `Attribute` from an attribute number and
+    /// the word position of a match according to the tokenizer used.
     ///
     /// # Panics
     ///
     /// The attribute must not be greater than 1024
     /// and the word index not greater than 2^22.
-    fn new(attribute: u16, index: u32) -> Attribute {
-        assert!(attribute & 0b1111_1100_0000_0000 == 0);
-        assert!(index & 0b1111_1111_1100_0000_0000_0000_0000 == 0);
-
-        let attribute = (attribute as u32) << 22;
-        Attribute(attribute | index)
+    fn new_faillible(attribute: u16, index: u32) -> Attribute {
+        match Attribute::new(attribute, index) {
+            Ok(attribute) => attribute,
+            Err(AttributeError::AttributeTooBig) => {
+                panic!("attribute must not be greater than 1024")
+            },
+            Err(AttributeError::IndexTooBig) => {
+                panic!("attribute word index must not be greater than 2^22")
+            },
+        }
     }
 
     pub fn attribute(&self) -> u16 {
@@ -62,6 +81,11 @@ impl fmt::Debug for Attribute {
     }
 }
 
+enum AttributeError {
+    AttributeTooBig,
+    IndexTooBig,
+}
+
 /// Represent a word position in bytes along with the length of it.
 ///
 /// It can represent words byte index to maximum 2^22 and
@@ -77,12 +101,32 @@ impl WordArea {
     ///
     /// The byte index must not be greater than 2^22
     /// and the length not greater than 1024.
-    fn new(byte_index: u32, length: u16) -> WordArea {
+    fn new(byte_index: u32, length: u16) -> Result<WordArea, WordAreaError> {
         assert!(byte_index & 0b1111_1111_1100_0000_0000_0000_0000 == 0);
         assert!(length & 0b1111_1100_0000_0000 == 0);
 
+        if byte_index & 0b1111_1111_1100_0000_0000_0000_0000 != 0 {
+            return Err(WordAreaError::ByteIndexTooBig)
+        }
+
+        if length & 0b1111_1100_0000_0000 != 0 {
+            return Err(WordAreaError::LengthTooBig)
+        }
+
         let byte_index = byte_index << 10;
-        WordArea(byte_index | (length as u32))
+        Ok(WordArea(byte_index | (length as u32)))
+    }
+
+    fn new_faillible(byte_index: u32, length: u16) -> WordArea {
+        match WordArea::new(byte_index, length) {
+            Ok(word_area) => word_area,
+            Err(WordAreaError::ByteIndexTooBig) => {
+                panic!("word area byte index must not be greater than 2^22")
+            },
+            Err(WordAreaError::LengthTooBig) => {
+                panic!("word area length must not be greater than 1024")
+            },
+        }
     }
 
     pub fn byte_index(&self) -> u32 {
@@ -101,6 +145,11 @@ impl fmt::Debug for WordArea {
             .field("length", &self.length())
             .finish()
     }
+}
+
+enum WordAreaError {
+    ByteIndexTooBig,
+    LengthTooBig,
 }
 
 /// This structure represent the position of a word
@@ -166,9 +215,9 @@ impl Match {
         Match {
             query_index: 0,
             distance: 0,
-            attribute: Attribute::new(0, 0),
+            attribute: Attribute::new_faillible(0, 0),
             is_exact: false,
-            word_area: WordArea::new(0, 0),
+            word_area: WordArea::new_faillible(0, 0),
         }
     }
 
@@ -200,7 +249,7 @@ mod tests {
                 return TestResult::discard()
             }
 
-            let attribute = Attribute::new(gen_attr, gen_index);
+            let attribute = Attribute::new_faillible(gen_attr, gen_index);
 
             let valid_attribute = attribute.attribute() == gen_attr;
             let valid_index = attribute.word_index() == gen_index;
@@ -213,8 +262,8 @@ mod tests {
                 return TestResult::discard()
             }
 
-            let a = Attribute::new(gen_attr, gen_index);
-            let b = Attribute::new(gen_attr + 1, gen_index + 1);
+            let a = Attribute::new_faillible(gen_attr, gen_index);
+            let b = Attribute::new_faillible(gen_attr + 1, gen_index + 1);
 
             TestResult::from_bool(a < b)
         }
@@ -224,7 +273,7 @@ mod tests {
                 return TestResult::discard()
             }
 
-            let word_area = WordArea::new(gen_byte_index, gen_length);
+            let word_area = WordArea::new_faillible(gen_byte_index, gen_length);
 
             let valid_char_index = word_area.byte_index() == gen_byte_index;
             let valid_length = word_area.length() == gen_length;
@@ -237,8 +286,8 @@ mod tests {
                 return TestResult::discard()
             }
 
-            let a = WordArea::new(gen_byte_index, gen_length);
-            let b = WordArea::new(gen_byte_index + 1, gen_length + 1);
+            let a = WordArea::new_faillible(gen_byte_index, gen_length);
+            let b = WordArea::new_faillible(gen_byte_index + 1, gen_length + 1);
 
             TestResult::from_bool(a < b)
         }
