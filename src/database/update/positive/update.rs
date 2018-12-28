@@ -348,8 +348,8 @@ where B: TokenizerBuilder
         for Token { word, word_index, char_index } in self.tokenizer_builder.build(v) {
             let doc_index = DocIndex {
                 document_id: self.document_id,
-                attribute: Attribute::new(self.attribute.0, word_index as u32),
-                word_area: WordArea::new(char_index as u32, word.len() as u16),
+                attribute: Attribute::new_faillible(self.attribute.0, word_index as u32),
+                word_area: WordArea::new_faillible(char_index as u32, word.len() as u16),
             };
 
             // insert the exact representation
