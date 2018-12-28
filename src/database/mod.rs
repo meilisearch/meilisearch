@@ -46,7 +46,7 @@ fn retrieve_data_schema<D>(snapshot: &Snapshot<D>) -> Result<Schema, Box<Error>>
 where D: Deref<Target=DB>
 {
     match snapshot.get(DATA_SCHEMA)? {
-        Some(vector) => Ok(Schema::read_from(&*vector)?),
+        Some(vector) => Ok(Schema::read_from_bin(&*vector)?),
         None => Err(String::from("BUG: no schema found in the database").into()),
     }
 }

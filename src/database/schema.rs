@@ -2,11 +2,10 @@ use crate::database::update::SerializerError;
 use std::collections::{HashMap, BTreeMap};
 use crate::database::calculate_hash;
 use std::io::{Read, Write};
+use std::error::Error;
 use std::{fmt, u16};
-use std::path::Path;
 use std::ops::BitOr;
 use std::sync::Arc;
-use std::fs::File;
 
 use serde_derive::{Serialize, Deserialize};
 use serde::ser::{self, Serialize};
@@ -19,7 +18,10 @@ pub const INDEXED: SchemaProps = SchemaProps { stored: false, indexed: true };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaProps {
+    #[serde(default)]
     stored: bool,
+
+    #[serde(default)]
     indexed: bool,
 }
 
@@ -44,22 +46,23 @@ impl BitOr for SchemaProps {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct SchemaBuilder {
     identifier: String,
-    attrs: LinkedHashMap<String, SchemaProps>,
+    attributes: LinkedHashMap<String, SchemaProps>,
 }
 
 impl SchemaBuilder {
     pub fn with_identifier<S: Into<String>>(name: S) -> SchemaBuilder {
         SchemaBuilder {
             identifier: name.into(),
-            attrs: LinkedHashMap::new(),
+            attributes: LinkedHashMap::new(),
         }
     }
 
     pub fn new_attribute<S: Into<String>>(&mut self, name: S, props: SchemaProps) -> SchemaAttr {
-        let len = self.attrs.len();
-        if self.attrs.insert(name.into(), props).is_some() {
+        let len = self.attributes.len();
+        if self.attributes.insert(name.into(), props).is_some() {
             panic!("Field already inserted.")
         }
         SchemaAttr(len as u16)
@@ -69,7 +72,7 @@ impl SchemaBuilder {
         let mut attrs = HashMap::new();
         let mut props = Vec::new();
 
-        for (i, (name, prop)) in self.attrs.into_iter().enumerate() {
+        for (i, (name, prop)) in self.attributes.into_iter().enumerate() {
             attrs.insert(name.clone(), SchemaAttr(i as u16));
             props.push((name, prop));
         }
@@ -92,31 +95,50 @@ struct InnerSchema {
 }
 
 impl Schema {
-    pub fn open<P: AsRef<Path>>(path: P) -> bincode::Result<Schema> {
-        let file = File::open(path)?;
-        Schema::read_from(file)
-    }
-
-    pub fn read_from<R: Read>(reader: R) -> bincode::Result<Schema> {
-        let (identifier, attrs) = bincode::deserialize_from(reader)?;
-        let builder = SchemaBuilder { identifier, attrs };
+    pub fn from_toml<R: Read>(mut reader: R) -> Result<Schema, Box<Error>> {
+        let mut buffer = Vec::new();
+        reader.read_to_end(&mut buffer)?;
+        let builder: SchemaBuilder = toml::from_slice(&buffer)?;
         Ok(builder.build())
     }
 
-    pub fn write_to<W: Write>(&self, writer: W) -> bincode::Result<()> {
+    pub fn to_toml<W: Write>(&self, mut writer: W) -> Result<(), Box<Error>> {
+        let identifier = self.inner.identifier.clone();
+        let attributes = self.attributes_ordered();
+        let builder = SchemaBuilder { identifier, attributes };
+
+        let string = toml::to_string_pretty(&builder)?;
+        writer.write_all(string.as_bytes())?;
+
+        Ok(())
+    }
+
+    pub(crate) fn read_from_bin<R: Read>(reader: R) -> bincode::Result<Schema> {
+        let builder: SchemaBuilder = bincode::deserialize_from(reader)?;
+        Ok(builder.build())
+    }
+
+    pub(crate) fn write_to_bin<W: Write>(&self, writer: W) -> bincode::Result<()> {
+        let identifier = self.inner.identifier.clone();
+        let attributes = self.attributes_ordered();
+        let builder = SchemaBuilder { identifier, attributes };
+
+        bincode::serialize_into(writer, &builder)
+    }
+
+    fn attributes_ordered(&self) -> LinkedHashMap<String, SchemaProps> {
         let mut ordered = BTreeMap::new();
         for (name, attr) in &self.inner.attrs {
             let (_, props) = self.inner.props[attr.0 as usize];
             ordered.insert(attr.0, (name, props));
         }
 
-        let identifier = &self.inner.identifier;
-        let mut attrs = LinkedHashMap::with_capacity(ordered.len());
+        let mut attributes = LinkedHashMap::with_capacity(ordered.len());
         for (_, (name, props)) in ordered {
-            attrs.insert(name, props);
+            attributes.insert(name.clone(), props);
         }
 
-        bincode::serialize_into(writer, &(identifier, attrs))
+        attributes
     }
 
     pub fn document_id<T>(&self, document: &T) -> Result<DocumentId, SerializerError>
@@ -355,20 +377,54 @@ impl<'a> ser::SerializeStruct for FindDocumentIdStructSerializer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error;
 
     #[test]
     fn serialize_deserialize() -> bincode::Result<()> {
         let mut builder = SchemaBuilder::with_identifier("id");
-        builder.new_attribute("alphabet", STORED);
+        builder.new_attribute("alpha", STORED);
         builder.new_attribute("beta", STORED | INDEXED);
         builder.new_attribute("gamma", INDEXED);
         let schema = builder.build();
 
         let mut buffer = Vec::new();
 
-        schema.write_to(&mut buffer)?;
-        let schema2 = Schema::read_from(buffer.as_slice())?;
+        schema.write_to_bin(&mut buffer)?;
+        let schema2 = Schema::read_from_bin(buffer.as_slice())?;
 
+        assert_eq!(schema, schema2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_deserialize_toml() -> Result<(), Box<Error>> {
+        let mut builder = SchemaBuilder::with_identifier("id");
+        builder.new_attribute("alpha", STORED);
+        builder.new_attribute("beta", STORED | INDEXED);
+        builder.new_attribute("gamma", INDEXED);
+        let schema = builder.build();
+
+        let mut buffer = Vec::new();
+        schema.to_toml(&mut buffer)?;
+
+        let schema2 = Schema::from_toml(buffer.as_slice())?;
+        assert_eq!(schema, schema2);
+
+        let data = r#"
+            identifier = "id"
+
+            [attributes."alpha"]
+            stored = true
+
+            [attributes."beta"]
+            stored = true
+            indexed = true
+
+            [attributes."gamma"]
+            indexed = true
+        "#;
+        let schema2 = Schema::from_toml(data.as_bytes())?;
         assert_eq!(schema, schema2);
 
         Ok(())
