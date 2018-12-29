@@ -198,6 +198,7 @@ where D: Deref<Target=DB>,
         let mut key_cache = HashMap::new();
         let view = &self.inner.view;
 
+        let mut filter_map = HashMap::new();
         // these two variables informs on the current distinct map and
         // on the raw offset of the start of the group where the
         // range.start bound is located according to the distinct function
@@ -223,13 +224,23 @@ where D: Deref<Target=DB>,
                 for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
                     // we must compute the real distinguished len of this sub-group
                     for document in group.iter() {
-                        let entry = key_cache.entry(document.id);
-                        let key = entry.or_insert_with(|| (self.function)(document.id, view).map(Rc::new));
-
-                        match key.clone() {
-                            Some(key) => buf_distinct.register(key),
-                            None      => buf_distinct.register_without_key(),
+                        let filter_accepted = match &self.inner.filter {
+                            None => true,
+                            Some(filter) => {
+                                let entry = filter_map.entry(document.id);
+                                *entry.or_insert_with(|| (filter)(document.id, view))
+                            },
                         };
+
+                        if filter_accepted {
+                            let entry = key_cache.entry(document.id);
+                            let key = entry.or_insert_with(|| (self.function)(document.id, view).map(Rc::new));
+
+                            match key.clone() {
+                                Some(key) => buf_distinct.register(key),
+                                None => buf_distinct.register_without_key(),
+                            };
+                        }
 
                         // the requested range end is reached: stop computing distinct
                         if buf_distinct.len() >= range.end { break }
@@ -256,16 +267,22 @@ where D: Deref<Target=DB>,
         let mut seen = BufferedDistinctMap::new(&mut distinct_map);
 
         for document in documents.into_iter().skip(distinct_raw_offset) {
-            let key = key_cache.remove(&document.id).expect("BUG: cached key not found");
-
-            let accepted = match key {
-                Some(key) => seen.register(key),
-                None      => seen.register_without_key(),
+            let filter_accepted = match &self.inner.filter {
+                Some(_) => filter_map.remove(&document.id).expect("BUG: filtered not found"),
+                None => true,
             };
 
-            if accepted && seen.len() > range.start {
-                out_documents.push(document);
-                if out_documents.len() == range.len() { break }
+            if filter_accepted {
+                let key = key_cache.remove(&document.id).expect("BUG: cached key not found");
+                let distinct_accepted = match key {
+                    Some(key) => seen.register(key),
+                    None => seen.register_without_key(),
+                };
+
+                if distinct_accepted && seen.len() > range.start {
+                    out_documents.push(document);
+                    if out_documents.len() == range.len() { break }
+                }
             }
         }
 
