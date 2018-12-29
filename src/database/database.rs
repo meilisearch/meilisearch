@@ -74,7 +74,7 @@ impl Database {
         Ok(Database { db: Mutex::new(db), view })
     }
 
-    pub fn ingest_update_file(&self, update: Update) -> Result<(), Box<Error>> {
+    pub fn ingest_update_file(&self, update: Update) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>> {
         let snapshot = {
             // We must have a mutex here to ensure that update ingestions and compactions
             // are done atomatically and in the right order.
@@ -103,9 +103,9 @@ impl Database {
         };
 
         let view = Arc::new(DatabaseView::new(snapshot)?);
-        self.view.set(view);
+        self.view.set(view.clone());
 
-        Ok(())
+        Ok(view)
     }
 
     pub fn get(&self, key: &[u8]) -> Result<Option<DBVector>, Box<Error>> {
