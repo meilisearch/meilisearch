@@ -34,14 +34,17 @@ fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
     automatons
 }
 
-pub struct QueryBuilder<'a, D>
+pub type FilterFunc<D> = fn(DocumentId, &DatabaseView<D>) -> bool;
+
+pub struct QueryBuilder<'a, D, FI>
 where D: Deref<Target=DB>
 {
     view: &'a DatabaseView<D>,
     criteria: Criteria<D>,
+    filter: Option<FI>,
 }
 
-impl<'a, D> QueryBuilder<'a, D>
+impl<'a, D> QueryBuilder<'a, D, FilterFunc<D>>
 where D: Deref<Target=DB>
 {
     pub fn new(view: &'a DatabaseView<D>) -> Result<Self, Box<Error>> {
@@ -49,19 +52,27 @@ where D: Deref<Target=DB>
     }
 }
 
-impl<'a, D> QueryBuilder<'a, D>
-where D: Deref<Target=DB>
+impl<'a, D, FI> QueryBuilder<'a, D, FI>
+where D: Deref<Target=DB>,
 {
     pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria<D>) -> Result<Self, Box<Error>> {
-        Ok(QueryBuilder { view, criteria })
+        Ok(QueryBuilder { view, criteria, filter: None })
     }
 
-    pub fn criteria(&mut self, criteria: Criteria<D>) -> &mut Self {
-        self.criteria = criteria;
-        self
+    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'a, D, F>
+    where F: Fn(DocumentId, &DatabaseView<D>) -> bool,
+    {
+        QueryBuilder {
+            view: self.view,
+            criteria: self.criteria,
+            filter: Some(function)
+        }
     }
 
-    pub fn with_distinct<F>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, D, F> {
+    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, D, FI, F>
+    where F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
+          K: Hash + Eq,
+    {
         DistinctQueryBuilder {
             inner: self,
             function: function,
@@ -109,8 +120,9 @@ where D: Deref<Target=DB>
     }
 }
 
-impl<'a, D> QueryBuilder<'a, D>
+impl<'a, D, FI> QueryBuilder<'a, D, FI>
 where D: Deref<Target=DB>,
+      FI: Fn(DocumentId, &DatabaseView<D>) -> bool,
 {
     pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.query_all(query);
@@ -152,20 +164,35 @@ where D: Deref<Target=DB>,
     }
 }
 
-pub struct DistinctQueryBuilder<'a, D, F>
+pub struct DistinctQueryBuilder<'a, D, FI, FD>
 where D: Deref<Target=DB>
 {
-    inner: QueryBuilder<'a, D>,
-    function: F,
+    inner: QueryBuilder<'a, D, FI>,
+    function: FD,
     size: usize,
 }
 
-impl<'a, D, F, K> DistinctQueryBuilder<'a, D, F>
+impl<'a, D, FI, FD> DistinctQueryBuilder<'a, D, FI, FD>
 where D: Deref<Target=DB>,
-      F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
+{
+    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'a, D, F, FD>
+    where F: Fn(DocumentId, &DatabaseView<D>) -> bool,
+    {
+        DistinctQueryBuilder {
+            inner: self.inner.with_filter(function),
+            function: self.function,
+            size: self.size
+        }
+    }
+}
+
+impl<'a, D, FI, FD, K> DistinctQueryBuilder<'a, D, FI, FD>
+where D: Deref<Target=DB>,
+      FI: Fn(DocumentId, &DatabaseView<D>) -> bool,
+      FD: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
       K: Hash + Eq,
 {
-    pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.inner.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
         let mut key_cache = HashMap::new();

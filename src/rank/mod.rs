@@ -4,7 +4,7 @@ mod distinct_map;
 
 use crate::{Match, DocumentId};
 
-pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder};
+pub use self::query_builder::{FilterFunc, QueryBuilder, DistinctQueryBuilder};
 
 #[inline]
 fn match_query_index(a: &Match, b: &Match) -> bool {
