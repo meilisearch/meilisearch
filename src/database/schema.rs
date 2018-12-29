@@ -1,5 +1,4 @@
 use std::collections::{HashMap, BTreeMap};
-use crate::database::calculate_hash;
 use std::io::{Read, Write};
 use std::error::Error;
 use std::{fmt, u16};
@@ -7,9 +6,11 @@ use std::ops::BitOr;
 use std::sync::Arc;
 
 use serde_derive::{Serialize, Deserialize};
-use serde::ser::{self, Serialize};
 use linked_hash_map::LinkedHashMap;
+use serde::Serialize;
 
+use crate::database::serde::find_id::FindDocumentIdSerializer;
+use crate::database::serde::SerializerError;
 use crate::DocumentId;
 
 pub const STORED: SchemaProps = SchemaProps { stored: true, indexed: false };
