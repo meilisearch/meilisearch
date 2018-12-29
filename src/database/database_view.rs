@@ -12,7 +12,7 @@ use crate::database::{retrieve_data_schema, retrieve_data_index};
 use crate::database::blob::positive::PositiveBlob;
 use crate::database::deserializer::Deserializer;
 use crate::database::schema::Schema;
-use crate::rank::QueryBuilder;
+use crate::rank::{QueryBuilder, FilterFunc};
 use crate::DocumentId;
 
 pub struct DatabaseView<D>
@@ -71,7 +71,7 @@ where D: Deref<Target=DB>
         Ok(())
     }
 
-    pub fn query_builder(&self) -> Result<QueryBuilder<D>, Box<Error>> {
+    pub fn query_builder(&self) -> Result<QueryBuilder<D, FilterFunc<D>>, Box<Error>> {
         QueryBuilder::new(self)
     }
 

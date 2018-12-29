@@ -34,14 +34,17 @@ fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
     automatons
 }
 
-pub struct QueryBuilder<'a, D>
+pub type FilterFunc<D> = fn(DocumentId, &DatabaseView<D>) -> bool;
+
+pub struct QueryBuilder<'a, D, FI>
 where D: Deref<Target=DB>
 {
     view: &'a DatabaseView<D>,
     criteria: Criteria<D>,
+    filter: Option<FI>,
 }
 
-impl<'a, D> QueryBuilder<'a, D>
+impl<'a, D> QueryBuilder<'a, D, FilterFunc<D>>
 where D: Deref<Target=DB>
 {
     pub fn new(view: &'a DatabaseView<D>) -> Result<Self, Box<Error>> {
@@ -49,19 +52,27 @@ where D: Deref<Target=DB>
     }
 }
 
-impl<'a, D> QueryBuilder<'a, D>
-where D: Deref<Target=DB>
+impl<'a, D, FI> QueryBuilder<'a, D, FI>
+where D: Deref<Target=DB>,
 {
     pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria<D>) -> Result<Self, Box<Error>> {
-        Ok(QueryBuilder { view, criteria })
+        Ok(QueryBuilder { view, criteria, filter: None })
     }
 
-    pub fn criteria(&mut self, criteria: Criteria<D>) -> &mut Self {
-        self.criteria = criteria;
-        self
+    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'a, D, F>
+    where F: Fn(DocumentId, &DatabaseView<D>) -> bool,
+    {
+        QueryBuilder {
+            view: self.view,
+            criteria: self.criteria,
+            filter: Some(function)
+        }
     }
 
-    pub fn with_distinct<F>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, D, F> {
+    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, D, FI, F>
+    where F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
+          K: Hash + Eq,
+    {
         DistinctQueryBuilder {
             inner: self,
             function: function,
@@ -109,10 +120,18 @@ where D: Deref<Target=DB>
     }
 }
 
-impl<'a, D> QueryBuilder<'a, D>
+impl<'a, D, FI> QueryBuilder<'a, D, FI>
 where D: Deref<Target=DB>,
+      FI: Fn(DocumentId, &DatabaseView<D>) -> bool,
 {
-    pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
+        // We give the filtering work to the query distinct builder,
+        // specifying a distinct rule that has no effect.
+        if self.filter.is_some() {
+            let builder = self.with_distinct(|_, _| None as Option<()>, 1);
+            return builder.query(query, range);
+        }
+
         let mut documents = self.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
         let view = &self.view;
@@ -152,25 +171,41 @@ where D: Deref<Target=DB>,
     }
 }
 
-pub struct DistinctQueryBuilder<'a, D, F>
+pub struct DistinctQueryBuilder<'a, D, FI, FD>
 where D: Deref<Target=DB>
 {
-    inner: QueryBuilder<'a, D>,
-    function: F,
+    inner: QueryBuilder<'a, D, FI>,
+    function: FD,
     size: usize,
 }
 
-impl<'a, D, F, K> DistinctQueryBuilder<'a, D, F>
+impl<'a, D, FI, FD> DistinctQueryBuilder<'a, D, FI, FD>
 where D: Deref<Target=DB>,
-      F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
+{
+    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'a, D, F, FD>
+    where F: Fn(DocumentId, &DatabaseView<D>) -> bool,
+    {
+        DistinctQueryBuilder {
+            inner: self.inner.with_filter(function),
+            function: self.function,
+            size: self.size
+        }
+    }
+}
+
+impl<'a, D, FI, FD, K> DistinctQueryBuilder<'a, D, FI, FD>
+where D: Deref<Target=DB>,
+      FI: Fn(DocumentId, &DatabaseView<D>) -> bool,
+      FD: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
       K: Hash + Eq,
 {
-    pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.inner.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
         let mut key_cache = HashMap::new();
         let view = &self.inner.view;
 
+        let mut filter_map = HashMap::new();
         // these two variables informs on the current distinct map and
         // on the raw offset of the start of the group where the
         // range.start bound is located according to the distinct function
@@ -196,13 +231,23 @@ where D: Deref<Target=DB>,
                 for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
                     // we must compute the real distinguished len of this sub-group
                     for document in group.iter() {
-                        let entry = key_cache.entry(document.id);
-                        let key = entry.or_insert_with(|| (self.function)(document.id, view).map(Rc::new));
-
-                        match key.clone() {
-                            Some(key) => buf_distinct.register(key),
-                            None      => buf_distinct.register_without_key(),
+                        let filter_accepted = match &self.inner.filter {
+                            None => true,
+                            Some(filter) => {
+                                let entry = filter_map.entry(document.id);
+                                *entry.or_insert_with(|| (filter)(document.id, view))
+                            },
                         };
+
+                        if filter_accepted {
+                            let entry = key_cache.entry(document.id);
+                            let key = entry.or_insert_with(|| (self.function)(document.id, view).map(Rc::new));
+
+                            match key.clone() {
+                                Some(key) => buf_distinct.register(key),
+                                None => buf_distinct.register_without_key(),
+                            };
+                        }
 
                         // the requested range end is reached: stop computing distinct
                         if buf_distinct.len() >= range.end { break }
@@ -229,16 +274,22 @@ where D: Deref<Target=DB>,
         let mut seen = BufferedDistinctMap::new(&mut distinct_map);
 
         for document in documents.into_iter().skip(distinct_raw_offset) {
-            let key = key_cache.remove(&document.id).expect("BUG: cached key not found");
-
-            let accepted = match key {
-                Some(key) => seen.register(key),
-                None      => seen.register_without_key(),
+            let filter_accepted = match &self.inner.filter {
+                Some(_) => filter_map.remove(&document.id).expect("BUG: filtered not found"),
+                None => true,
             };
 
-            if accepted && seen.len() > range.start {
-                out_documents.push(document);
-                if out_documents.len() == range.len() { break }
+            if filter_accepted {
+                let key = key_cache.remove(&document.id).expect("BUG: cached key not found");
+                let distinct_accepted = match key {
+                    Some(key) => seen.register(key),
+                    None => seen.register_without_key(),
+                };
+
+                if distinct_accepted && seen.len() > range.start {
+                    out_documents.push(document);
+                    if out_documents.len() == range.len() { break }
+                }
             }
         }
 
