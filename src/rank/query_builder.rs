@@ -124,7 +124,14 @@ impl<'a, D, FI> QueryBuilder<'a, D, FI>
 where D: Deref<Target=DB>,
       FI: Fn(DocumentId, &DatabaseView<D>) -> bool,
 {
-    pub fn query(&self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
+        // We give the filtering work to the query distinct builder,
+        // specifying a distinct rule that has no effect.
+        if self.filter.is_some() {
+            let builder = self.with_distinct(|_, _| None as Option<()>, 1);
+            return builder.query(query, range);
+        }
+
         let mut documents = self.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
         let view = &self.view;
