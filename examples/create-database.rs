@@ -1,41 +1,35 @@
 use std::path::{Path, PathBuf};
 use std::error::Error;
+use std::borrow::Cow;
+use std::fs::File;
 
+use hashbrown::HashMap;
 use serde_derive::{Serialize, Deserialize};
 use structopt::StructOpt;
 
-use meilidb::database::schema::{Schema, SchemaBuilder, STORED, INDEXED};
-use meilidb::database::UpdateBuilder;
+use meilidb::database::{Database, Schema, UpdateBuilder};
 use meilidb::tokenizer::DefaultBuilder;
-use meilidb::database::Database;
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {
-    /// The destination where the database must be created
+    /// The destination where the database must be created.
     #[structopt(parse(from_os_str))]
     pub database_path: PathBuf,
 
     /// The csv file to index.
     #[structopt(parse(from_os_str))]
     pub csv_data_path: PathBuf,
+
+    /// The path to the schema.
+    #[structopt(long = "schema", parse(from_os_str))]
+    pub schema_path: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Document<'a> {
-    id: &'a str,
-    title: &'a str,
-    description: &'a str,
-    image: &'a str,
-}
-
-fn create_schema() -> Schema {
-    let mut schema = SchemaBuilder::with_identifier("id");
-    schema.new_attribute("id", STORED);
-    schema.new_attribute("title", STORED | INDEXED);
-    schema.new_attribute("description", STORED | INDEXED);
-    schema.new_attribute("image", STORED);
-    schema.build()
-}
+#[derive(Serialize, Deserialize)]
+struct Document<'a> (
+    #[serde(borrow)]
+    HashMap<Cow<'a, str>, Cow<'a, str>>
+);
 
 fn index(schema: Schema, database_path: &Path, csv_data_path: &Path) -> Result<Database, Box<Error>> {
     let database = Database::create(database_path, schema.clone())?;
@@ -71,7 +65,10 @@ fn index(schema: Schema, database_path: &Path, csv_data_path: &Path) -> Result<D
 fn main() -> Result<(), Box<Error>> {
     let opt = Opt::from_args();
 
-    let schema = create_schema();
+    let schema = {
+        let file = File::open(&opt.schema_path)?;
+        Schema::from_toml(file)?
+    };
 
     let (elapsed, result) = elapsed::measure_time(|| {
         index(schema, &opt.database_path, &opt.csv_data_path)
@@ -82,6 +79,5 @@ fn main() -> Result<(), Box<Error>> {
     }
 
     println!("database created in {} at: {:?}", elapsed, opt.database_path);
-
     Ok(())
 }

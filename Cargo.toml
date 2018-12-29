@@ -9,7 +9,7 @@ bincode = "1.0"
 byteorder = "1.2"
 crossbeam = "0.6"
 fst = "0.3"
-hashbrown = "0.1"
+hashbrown = { version = "0.1", features = ["serde"] }
 lazy_static = "1.1"
 levenshtein_automata = { version = "0.1", features = ["fst_automaton"] }
 linked-hash-map = { version = "0.5", features = ["serde_impl"] }
