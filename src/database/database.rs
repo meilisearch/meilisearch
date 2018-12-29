@@ -1,10 +1,11 @@
-use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
+use std::sync::{Arc, Mutex};
 use std::error::Error;
 use std::path::Path;
 
 use rocksdb::rocksdb_options::{DBOptions, IngestExternalFileOptions, ColumnFamilyOptions};
 use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::{DB, DBVector, MergeOperands};
+use crossbeam::atomic::ArcCell;
 
 use crate::database::{DatabaseView, Update, Schema};
 use crate::database::{DATA_INDEX, DATA_SCHEMA};
@@ -17,7 +18,7 @@ pub struct Database {
     db: Mutex<Arc<DB>>,
 
     // This view is updated each time the DB ingests an update
-    view: RwLock<DatabaseView<Arc<DB>>>,
+    view: ArcCell<DatabaseView<Arc<DB>>>,
 }
 
 impl Database {
@@ -44,7 +45,7 @@ impl Database {
 
         let db = Arc::new(db);
         let snapshot = Snapshot::new(db.clone());
-        let view = RwLock::new(DatabaseView::new(snapshot)?);
+        let view = ArcCell::new(Arc::new(DatabaseView::new(snapshot)?));
 
         Ok(Database { db: Mutex::new(db), view })
     }
@@ -68,7 +69,7 @@ impl Database {
 
         let db = Arc::new(db);
         let snapshot = Snapshot::new(db.clone());
-        let view = RwLock::new(DatabaseView::new(snapshot)?);
+        let view = ArcCell::new(Arc::new(DatabaseView::new(snapshot)?));
 
         Ok(Database { db: Mutex::new(db), view })
     }
@@ -101,13 +102,8 @@ impl Database {
             Snapshot::new(db.clone())
         };
 
-        // Here we will block the view creation for the minimum amount of time:
-        // updating the DatabaseView itself with the new database snapshot
-        let view = DatabaseView::new(snapshot)?;
-        match self.view.write() {
-            Ok(mut lock) => *lock = view,
-            Err(e) => return Err(e.to_string().into()),
-        }
+        let view = Arc::new(DatabaseView::new(snapshot)?);
+        self.view.set(view);
 
         Ok(())
     }
@@ -123,8 +119,8 @@ impl Database {
         }
     }
 
-    pub fn view(&self) -> RwLockReadGuard<DatabaseView<Arc<DB>>> {
-        self.view.read().unwrap()
+    pub fn view(&self) -> Arc<DatabaseView<Arc<DB>>> {
+        self.view.get()
     }
 }
 
