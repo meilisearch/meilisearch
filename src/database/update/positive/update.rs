@@ -485,7 +485,8 @@ impl<B> PositiveUpdateBuilder<B> {
         let blob = Blob::Positive(positive_blob);
 
         // write the data-index aka positive blob
-        let bytes = bincode::serialize(&blob)?;
+        let mut bytes = Vec::new();
+        blob.write_to_bytes(&mut bytes);
         file_writer.merge(DATA_INDEX, &bytes)?;
 
         // write all the documents fields updates

@@ -2,15 +2,13 @@ use std::slice::from_raw_parts;
 use std::io::{self, Write};
 use std::mem::size_of;
 use std::ops::Index;
-use std::path::Path;
 use std::sync::Arc;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use fst::raw::MmapReadOnly;
 use sdset::Set;
 
 use crate::DocIndex;
-use crate::data::Data;
+use crate::data::SharedData;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -21,27 +19,22 @@ struct Range {
 
 #[derive(Clone, Default)]
 pub struct DocIndexes {
-    ranges: Data,
-    indexes: Data,
+    ranges: SharedData,
+    indexes: SharedData,
 }
 
 impl DocIndexes {
-    pub unsafe fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        let mmap = MmapReadOnly::open_path(path)?;
-        DocIndexes::from_data(Data::Mmap(mmap))
-    }
-
     pub fn from_bytes(vec: Vec<u8>) -> io::Result<Self> {
         let len = vec.len();
         DocIndexes::from_shared_bytes(Arc::new(vec), 0, len)
     }
 
     pub fn from_shared_bytes(bytes: Arc<Vec<u8>>, offset: usize, len: usize) -> io::Result<Self> {
-        let data = Data::Shared { bytes, offset, len };
+        let data = SharedData { bytes, offset, len };
         DocIndexes::from_data(data)
     }
 
-    fn from_data(data: Data) -> io::Result<Self> {
+    fn from_data(data: SharedData) -> io::Result<Self> {
         let ranges_len_offset = data.len() - size_of::<u64>();
         let ranges_len = (&data[ranges_len_offset..]).read_u64::<LittleEndian>()?;
         let ranges_len = ranges_len as usize;

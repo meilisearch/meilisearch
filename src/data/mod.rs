@@ -4,40 +4,30 @@ mod doc_indexes;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use fst::raw::MmapReadOnly;
-
 pub use self::doc_ids::DocIds;
 pub use self::doc_indexes::{DocIndexes, DocIndexesBuilder};
 
 #[derive(Clone)]
-enum Data {
-    Shared {
-        bytes: Arc<Vec<u8>>,
-        offset: usize,
-        len: usize,
-    },
-    Mmap(MmapReadOnly),
+struct SharedData {
+    bytes: Arc<Vec<u8>>,
+    offset: usize,
+    len: usize,
 }
 
-impl Data {
-    pub fn range(&self, off: usize, l: usize) -> Data {
-        match self {
-            Data::Shared { bytes, offset, len } => {
-                assert!(off + l <= *len);
-                Data::Shared {
-                    bytes: bytes.clone(),
-                    offset: offset + off,
-                    len: l,
-                }
-            },
-            Data::Mmap(mmap) => Data::Mmap(mmap.range(off, l)),
+impl SharedData {
+    pub fn range(&self, offset: usize, len: usize) -> SharedData {
+        assert!(offset + len <= self.len);
+        SharedData {
+            bytes: self.bytes.clone(),
+            offset: self.offset + offset,
+            len: len,
         }
     }
 }
 
-impl Default for Data {
-    fn default() -> Data {
-        Data::Shared {
+impl Default for SharedData {
+    fn default() -> SharedData {
+        SharedData {
             bytes: Arc::default(),
             offset: 0,
             len: 0,
@@ -45,7 +35,7 @@ impl Default for Data {
     }
 }
 
-impl Deref for Data {
+impl Deref for SharedData {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -53,13 +43,8 @@ impl Deref for Data {
     }
 }
 
-impl AsRef<[u8]> for Data {
+impl AsRef<[u8]> for SharedData {
     fn as_ref(&self) -> &[u8] {
-        match self {
-            Data::Shared { bytes, offset, len } => {
-                &bytes[*offset..offset + len]
-            },
-            Data::Mmap(m) => m.as_slice(),
-        }
+        &self.bytes[self.offset..self.offset + self.len]
     }
 }

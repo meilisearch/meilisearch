@@ -1,10 +1,11 @@
+use std::io::{Cursor, BufRead};
 use std::error::Error;
-use std::path::Path;
+use std::sync::Arc;
 use std::fmt;
 
 use sdset::Set;
-use serde::de::{self, Deserialize, Deserializer};
-use serde::ser::{Serialize, Serializer};
+use byteorder::{LittleEndian, ReadBytesExt};
+
 use crate::data::DocIds;
 use crate::DocumentId;
 
@@ -14,16 +15,24 @@ pub struct NegativeBlob {
 }
 
 impl NegativeBlob {
-    pub unsafe fn from_path<P>(doc_ids: P) -> Result<Self, Box<Error>>
-    where P: AsRef<Path>,
-    {
-        let doc_ids = DocIds::from_path(doc_ids)?;
-        Ok(NegativeBlob { doc_ids })
-    }
-
     pub fn from_bytes(doc_ids: Vec<u8>) -> Result<Self, Box<Error>> {
         let doc_ids = DocIds::from_bytes(doc_ids)?;
         Ok(NegativeBlob { doc_ids })
+    }
+
+    pub fn from_shared_bytes(bytes: Arc<Vec<u8>>, offset: usize, len: usize) -> Result<Self, Box<Error>> {
+        let mut cursor = Cursor::new(&bytes.as_slice()[..len]);
+        cursor.consume(offset);
+
+        let len = cursor.read_u64::<LittleEndian>()? as usize;
+        let offset = cursor.position() as usize;
+        let doc_ids = DocIds::from_shared_bytes(bytes, offset, len)?;
+
+        Ok(NegativeBlob::from_raw(doc_ids))
+    }
+
+    pub fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
+        self.doc_ids.write_to_bytes(bytes)
     }
 
     pub fn from_raw(doc_ids: DocIds) -> Self {
@@ -50,18 +59,5 @@ impl fmt::Debug for NegativeBlob {
         write!(f, "NegativeBlob(")?;
         f.debug_list().entries(self.as_ref().as_slice()).finish()?;
         write!(f, ")")
-    }
-}
-
-impl Serialize for NegativeBlob {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.doc_ids.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for NegativeBlob {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<NegativeBlob, D::Error> {
-        let bytes = Vec::deserialize(deserializer)?;
-        NegativeBlob::from_bytes(bytes).map_err(de::Error::custom)
     }
 }

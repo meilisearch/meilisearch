@@ -60,7 +60,7 @@ impl<'a> $name<'a> {
 
     pub fn into_negative_blob(self) -> NegativeBlob {
         let document_ids = sdset::SetOperation::into_set_buf(self.op);
-        let doc_ids = DocIds::from_document_ids(document_ids.into_vec());
+        let doc_ids = DocIds::from_raw(document_ids.into_vec());
         NegativeBlob::from_raw(doc_ids)
     }
 }
