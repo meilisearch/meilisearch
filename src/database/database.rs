@@ -318,3 +318,321 @@ mod tests {
         Ok(dir.close()?)
     }
 }
+
+#[cfg(all(feature = "nightly", test))]
+mod bench {
+    extern crate test;
+
+    use super::*;
+    use std::error::Error;
+    use std::iter::repeat_with;
+    use self::test::Bencher;
+
+    use rand::distributions::Alphanumeric;
+    use rand_xorshift::XorShiftRng;
+    use rand::{Rng, SeedableRng};
+    use rand::seq::SliceRandom;
+    use serde_derive::Serialize;
+
+    use crate::tokenizer::DefaultBuilder;
+    use crate::database::update::UpdateBuilder;
+    use crate::database::schema::*;
+
+    fn random_sentences<R: Rng>(number: usize, rng: &mut R) -> String {
+        let mut words = String::new();
+
+        for i in 0..number {
+            let word_len = rng.gen_range(1, 12);
+            let iter = repeat_with(|| rng.sample(Alphanumeric)).take(word_len);
+            words.extend(iter);
+
+            if i == number - 1 { // last word
+                let final_ = [".", "?", "!", "..."].choose(rng).cloned();
+                words.extend(final_);
+            } else {
+                let middle = [",", ", "].choose(rng).cloned();
+                words.extend(middle);
+            }
+        }
+
+        words
+    }
+
+    #[bench]
+    fn open_little_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
+        let dir = tempfile::tempdir()?;
+
+        let mut builder = SchemaBuilder::with_identifier("id");
+        builder.new_attribute("title", STORED | INDEXED);
+        builder.new_attribute("description", STORED | INDEXED);
+        let schema = builder.build();
+
+        let db_path = dir.path().join("bench.mdb");
+        let database = Database::create(db_path.clone(), schema.clone())?;
+
+        #[derive(Serialize)]
+        struct Document {
+            id: u64,
+            title: String,
+            description: String,
+        }
+
+        let path = dir.path().join("update-000.sst");
+        let tokenizer_builder = DefaultBuilder;
+        let mut builder = UpdateBuilder::new(path, schema.clone());
+        let mut rng = XorShiftRng::seed_from_u64(42);
+
+        for i in 0..300 {
+            let document = Document {
+                id: i,
+                title: random_sentences(rng.gen_range(1, 8), &mut rng),
+                description: random_sentences(rng.gen_range(20, 200), &mut rng),
+            };
+            builder.update_document(&document, &tokenizer_builder)?;
+        }
+
+        let update = builder.build()?;
+        database.ingest_update_file(update)?;
+
+        drop(database);
+
+        bench.iter(|| {
+            let database = Database::open(db_path.clone()).unwrap();
+            test::black_box(|| database);
+        });
+
+        Ok(())
+    }
+
+    #[bench]
+    fn open_medium_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
+        let dir = tempfile::tempdir()?;
+
+        let mut builder = SchemaBuilder::with_identifier("id");
+        builder.new_attribute("title", STORED | INDEXED);
+        builder.new_attribute("description", STORED | INDEXED);
+        let schema = builder.build();
+
+        let db_path = dir.path().join("bench.mdb");
+        let database = Database::create(db_path.clone(), schema.clone())?;
+
+        #[derive(Serialize)]
+        struct Document {
+            id: u64,
+            title: String,
+            description: String,
+        }
+
+        let path = dir.path().join("update-000.sst");
+        let tokenizer_builder = DefaultBuilder;
+        let mut builder = UpdateBuilder::new(path, schema.clone());
+        let mut rng = XorShiftRng::seed_from_u64(42);
+
+        for i in 0..3000 {
+            let document = Document {
+                id: i,
+                title: random_sentences(rng.gen_range(1, 8), &mut rng),
+                description: random_sentences(rng.gen_range(20, 200), &mut rng),
+            };
+            builder.update_document(&document, &tokenizer_builder)?;
+        }
+
+        let update = builder.build()?;
+        database.ingest_update_file(update)?;
+
+        drop(database);
+
+        bench.iter(|| {
+            let database = Database::open(db_path.clone()).unwrap();
+            test::black_box(|| database);
+        });
+
+        Ok(())
+    }
+
+    #[bench]
+    #[ignore]
+    fn open_big_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
+        let dir = tempfile::tempdir()?;
+
+        let mut builder = SchemaBuilder::with_identifier("id");
+        builder.new_attribute("title", STORED | INDEXED);
+        builder.new_attribute("description", STORED | INDEXED);
+        let schema = builder.build();
+
+        let db_path = dir.path().join("bench.mdb");
+        let database = Database::create(db_path.clone(), schema.clone())?;
+
+        #[derive(Serialize)]
+        struct Document {
+            id: u64,
+            title: String,
+            description: String,
+        }
+
+        let path = dir.path().join("update-000.sst");
+        let tokenizer_builder = DefaultBuilder;
+        let mut builder = UpdateBuilder::new(path, schema.clone());
+        let mut rng = XorShiftRng::seed_from_u64(42);
+
+        for i in 0..30_000 {
+            let document = Document {
+                id: i,
+                title: random_sentences(rng.gen_range(1, 8), &mut rng),
+                description: random_sentences(rng.gen_range(20, 200), &mut rng),
+            };
+            builder.update_document(&document, &tokenizer_builder)?;
+        }
+
+        let update = builder.build()?;
+        database.ingest_update_file(update)?;
+
+        drop(database);
+
+        bench.iter(|| {
+            let database = Database::open(db_path.clone()).unwrap();
+            test::black_box(|| database);
+        });
+
+        Ok(())
+    }
+
+    #[bench]
+    fn search_oneletter_little_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
+        let dir = tempfile::tempdir()?;
+
+        let mut builder = SchemaBuilder::with_identifier("id");
+        builder.new_attribute("title", STORED | INDEXED);
+        builder.new_attribute("description", STORED | INDEXED);
+        let schema = builder.build();
+
+        let db_path = dir.path().join("bench.mdb");
+        let database = Database::create(db_path.clone(), schema.clone())?;
+
+        #[derive(Serialize)]
+        struct Document {
+            id: u64,
+            title: String,
+            description: String,
+        }
+
+        let path = dir.path().join("update-000.sst");
+        let tokenizer_builder = DefaultBuilder;
+        let mut builder = UpdateBuilder::new(path, schema.clone());
+        let mut rng = XorShiftRng::seed_from_u64(42);
+
+        for i in 0..300 {
+            let document = Document {
+                id: i,
+                title: random_sentences(rng.gen_range(1, 8), &mut rng),
+                description: random_sentences(rng.gen_range(20, 200), &mut rng),
+            };
+            builder.update_document(&document, &tokenizer_builder)?;
+        }
+
+        let update = builder.build()?;
+        let view = database.ingest_update_file(update)?;
+
+        bench.iter(|| {
+            for q in &["a", "b", "c", "d", "e"] {
+                let documents = view.query_builder().unwrap().query(q, 0..20);
+                test::black_box(|| documents);
+            }
+        });
+
+        Ok(())
+    }
+
+    #[bench]
+    fn search_oneletter_medium_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
+        let dir = tempfile::tempdir()?;
+
+        let mut builder = SchemaBuilder::with_identifier("id");
+        builder.new_attribute("title", STORED | INDEXED);
+        builder.new_attribute("description", STORED | INDEXED);
+        let schema = builder.build();
+
+        let db_path = dir.path().join("bench.mdb");
+        let database = Database::create(db_path.clone(), schema.clone())?;
+
+        #[derive(Serialize)]
+        struct Document {
+            id: u64,
+            title: String,
+            description: String,
+        }
+
+        let path = dir.path().join("update-000.sst");
+        let tokenizer_builder = DefaultBuilder;
+        let mut builder = UpdateBuilder::new(path, schema.clone());
+        let mut rng = XorShiftRng::seed_from_u64(42);
+
+        for i in 0..3000 {
+            let document = Document {
+                id: i,
+                title: random_sentences(rng.gen_range(1, 8), &mut rng),
+                description: random_sentences(rng.gen_range(20, 200), &mut rng),
+            };
+            builder.update_document(&document, &tokenizer_builder)?;
+        }
+
+        let update = builder.build()?;
+        let view = database.ingest_update_file(update)?;
+
+        bench.iter(|| {
+            for q in &["a", "b", "c", "d", "e"] {
+                let documents = view.query_builder().unwrap().query(q, 0..20);
+                test::black_box(|| documents);
+            }
+        });
+
+        Ok(())
+    }
+
+    #[bench]
+    #[ignore]
+    fn search_oneletter_big_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
+        let dir = tempfile::tempdir()?;
+
+        let mut builder = SchemaBuilder::with_identifier("id");
+        builder.new_attribute("title", STORED | INDEXED);
+        builder.new_attribute("description", STORED | INDEXED);
+        let schema = builder.build();
+
+        let db_path = dir.path().join("bench.mdb");
+        let database = Database::create(db_path.clone(), schema.clone())?;
+
+        #[derive(Serialize)]
+        struct Document {
+            id: u64,
+            title: String,
+            description: String,
+        }
+
+        let path = dir.path().join("update-000.sst");
+        let tokenizer_builder = DefaultBuilder;
+        let mut builder = UpdateBuilder::new(path, schema.clone());
+        let mut rng = XorShiftRng::seed_from_u64(42);
+
+        for i in 0..30_000 {
+            let document = Document {
+                id: i,
+                title: random_sentences(rng.gen_range(1, 8), &mut rng),
+                description: random_sentences(rng.gen_range(20, 200), &mut rng),
+            };
+            builder.update_document(&document, &tokenizer_builder)?;
+        }
+
+        let update = builder.build()?;
+        let view = database.ingest_update_file(update)?;
+
+        bench.iter(|| {
+            for q in &["a", "b", "c", "d", "e"] {
+                let documents = view.query_builder().unwrap().query(q, 0..20);
+                test::black_box(|| documents);
+            }
+        });
+
+        Ok(())
+    }
+}
