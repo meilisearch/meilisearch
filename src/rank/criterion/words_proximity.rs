@@ -121,3 +121,42 @@ mod tests {
         assert_eq!(matches_proximity(matches), 3);
     }
 }
+
+#[cfg(all(feature = "nightly", test))]
+mod bench {
+    extern crate test;
+
+    use super::*;
+    use std::error::Error;
+    use self::test::Bencher;
+
+    use rand_xorshift::XorShiftRng;
+    use rand::{Rng, SeedableRng};
+
+    use crate::Attribute;
+
+    #[bench]
+    fn evaluate_proximity(bench: &mut Bencher) -> Result<(), Box<Error>> {
+        let number_matches = 30_000;
+        let mut matches = Vec::with_capacity(number_matches);
+        let mut rng = XorShiftRng::seed_from_u64(42);
+
+        for _ in 0..number_matches {
+            let query_index = rng.gen_range(0, 4);
+
+            let attribute = rng.gen_range(0, 5);
+            let word_index = rng.gen_range(0, 15);
+            let attribute = Attribute::new_faillible(attribute, word_index);
+
+            let match_ = Match { query_index, attribute, ..Match::zero() };
+            matches.push(match_);
+        }
+
+        bench.iter(|| {
+            let proximity = matches_proximity(&matches);
+            test::black_box(move || proximity)
+        });
+
+        Ok(())
+    }
+}
