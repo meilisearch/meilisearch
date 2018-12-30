@@ -1,41 +1,43 @@
 use std::slice::from_raw_parts;
-use std::error::Error;
-use std::path::Path;
 use std::sync::Arc;
 use std::{io, mem};
 
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use sdset::Set;
-use fst::raw::MmapReadOnly;
-use serde::ser::{Serialize, Serializer};
 
 use crate::DocumentId;
-use crate::data::Data;
+use crate::data::SharedData;
 
 #[derive(Default, Clone)]
 pub struct DocIds {
-    data: Data,
+    data: SharedData,
 }
 
 impl DocIds {
-    pub unsafe fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        let mmap = MmapReadOnly::open_path(path)?;
-        let data = Data::Mmap(mmap);
-        Ok(DocIds { data })
-    }
-
-    pub fn from_bytes(vec: Vec<u8>) -> Result<Self, Box<Error>> {
-        // FIXME check if modulo DocumentId
+    pub fn from_bytes(vec: Vec<u8>) -> io::Result<Self> {
         let len = vec.len();
-        let data = Data::Shared {
-            bytes: Arc::new(vec),
-            offset: 0,
-            len: len
-        };
+        DocIds::from_shared_bytes(Arc::new(vec), 0, len)
+    }
+
+    pub fn from_shared_bytes(bytes: Arc<Vec<u8>>, offset: usize, len: usize) -> io::Result<Self> {
+        let data = SharedData { bytes, offset, len };
+        DocIds::from_data(data)
+    }
+
+    fn from_data(data: SharedData) -> io::Result<Self> {
+        let len = data.as_ref().read_u64::<LittleEndian>()?;
+        let data = data.range(mem::size_of::<u64>(), len as usize);
         Ok(DocIds { data })
     }
 
-    pub fn from_document_ids(vec: Vec<DocumentId>) -> Self {
+    pub fn from_raw(vec: Vec<DocumentId>) -> Self {
         DocIds::from_bytes(unsafe { mem::transmute(vec) }).unwrap()
+    }
+
+    pub fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
+        let len = self.data.len() as u64;
+        bytes.write_u64::<LittleEndian>(len).unwrap();
+        bytes.extend_from_slice(&self.data);
     }
 
     pub fn contains(&self, doc: DocumentId) -> bool {
@@ -49,11 +51,5 @@ impl DocIds {
         let len = slice.len() / mem::size_of::<DocumentId>();
         let slice = unsafe { from_raw_parts(ptr, len) };
         Set::new_unchecked(slice)
-    }
-}
-
-impl Serialize for DocIds {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.data.as_ref().serialize(serializer)
     }
 }

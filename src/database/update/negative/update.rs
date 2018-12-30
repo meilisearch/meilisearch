@@ -38,7 +38,8 @@ impl NegativeUpdateBuilder {
         let blob = Blob::Negative(negative_blob);
 
         // write the data-index aka negative blob
-        let bytes = bincode::serialize(&blob)?;
+        let mut bytes = Vec::new();
+        blob.write_to_bytes(&mut bytes);
         file_writer.merge(DATA_INDEX, &bytes)?;
 
         // FIXME remove this ugly thing !

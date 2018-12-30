@@ -2,6 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::error::Error;
 use std::ops::Deref;
+use std::sync::Arc;
 
 use rocksdb::rocksdb::{DB, Snapshot};
 
@@ -55,7 +56,11 @@ fn retrieve_data_index<D>(snapshot: &Snapshot<D>) -> Result<PositiveBlob, Box<Er
 where D: Deref<Target=DB>
 {
     match snapshot.get(DATA_INDEX)? {
-        Some(vector) => Ok(bincode::deserialize(&*vector)?),
+        Some(vector) => {
+            let bytes_len = vector.as_ref().len();
+            let bytes = Arc::new(vector.as_ref().to_vec());
+            Ok(PositiveBlob::from_shared_bytes(bytes, 0, bytes_len)?)
+        },
         None => Ok(PositiveBlob::default()),
     }
 }
