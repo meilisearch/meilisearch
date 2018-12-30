@@ -15,6 +15,14 @@ struct SharedData {
 }
 
 impl SharedData {
+    pub fn empty() -> SharedData {
+        SharedData {
+            bytes: Arc::default(),
+            offset: 0,
+            len: 0,
+        }
+    }
+
     pub fn range(&self, offset: usize, len: usize) -> SharedData {
         assert!(offset + len <= self.len);
         SharedData {
@@ -27,11 +35,7 @@ impl SharedData {
 
 impl Default for SharedData {
     fn default() -> SharedData {
-        SharedData {
-            bytes: Arc::default(),
-            offset: 0,
-            len: 0,
-        }
+        SharedData::empty()
     }
 }
 

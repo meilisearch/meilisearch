@@ -5,7 +5,7 @@ use serde_derive::{Serialize, Deserialize};
 use structopt::StructOpt;
 
 use meilidb::database::schema::{Schema, SchemaBuilder, STORED, INDEXED};
-use meilidb::database::PositiveUpdateBuilder;
+use meilidb::database::UpdateBuilder;
 use meilidb::tokenizer::DefaultBuilder;
 use meilidb::database::Database;
 
@@ -44,7 +44,7 @@ fn index(schema: Schema, database_path: &Path, csv_data_path: &Path) -> Result<D
 
     let tokenizer_builder = DefaultBuilder::new();
     let update_path = tempfile::NamedTempFile::new()?;
-    let mut update = PositiveUpdateBuilder::new(update_path.path(), schema, tokenizer_builder);
+    let mut update = UpdateBuilder::new(update_path.path().to_path_buf(), schema);
 
     let mut rdr = csv::Reader::from_path(csv_data_path)?;
     let mut raw_record = csv::StringRecord::new();
@@ -59,12 +59,10 @@ fn index(schema: Schema, database_path: &Path, csv_data_path: &Path) -> Result<D
             }
         };
 
-        update.update(&document).unwrap();
+        update.update_document(&document).unwrap();
     }
 
     let mut update = update.build()?;
-
-    update.set_move(true);
     database.ingest_update_file(update)?;
 
     Ok(database)

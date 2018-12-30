@@ -14,6 +14,10 @@ pub struct DocIds {
 }
 
 impl DocIds {
+    pub fn empty() -> Self {
+        DocIds { data: SharedData::empty() }
+    }
+
     pub fn from_bytes(vec: Vec<u8>) -> io::Result<Self> {
         let len = vec.len();
         DocIds::from_shared_bytes(Arc::new(vec), 0, len)
@@ -22,6 +26,10 @@ impl DocIds {
     pub fn from_shared_bytes(bytes: Arc<Vec<u8>>, offset: usize, len: usize) -> io::Result<Self> {
         let data = SharedData { bytes, offset, len };
         DocIds::from_data(data)
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.data
     }
 
     fn from_data(data: SharedData) -> io::Result<Self> {

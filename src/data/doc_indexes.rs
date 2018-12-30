@@ -24,17 +24,17 @@ pub struct DocIndexes {
 }
 
 impl DocIndexes {
-    pub fn from_bytes(vec: Vec<u8>) -> io::Result<Self> {
+    pub fn from_bytes(vec: Vec<u8>) -> io::Result<DocIndexes> {
         let len = vec.len();
         DocIndexes::from_shared_bytes(Arc::new(vec), 0, len)
     }
 
-    pub fn from_shared_bytes(bytes: Arc<Vec<u8>>, offset: usize, len: usize) -> io::Result<Self> {
+    pub fn from_shared_bytes(bytes: Arc<Vec<u8>>, offset: usize, len: usize) -> io::Result<DocIndexes> {
         let data = SharedData { bytes, offset, len };
         DocIndexes::from_data(data)
     }
 
-    fn from_data(data: SharedData) -> io::Result<Self> {
+    fn from_data(data: SharedData) -> io::Result<DocIndexes> {
         let ranges_len_offset = data.len() - size_of::<u64>();
         let ranges_len = (&data[ranges_len_offset..]).read_u64::<LittleEndian>()?;
         let ranges_len = ranges_len as usize;
@@ -47,19 +47,21 @@ impl DocIndexes {
         Ok(DocIndexes { ranges, indexes })
     }
 
-    pub fn to_vec(&self) -> Vec<u8> {
-        let capacity = self.indexes.len() + self.ranges.len() + size_of::<u64>();
-        let mut bytes = Vec::with_capacity(capacity);
+    pub fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
+        let ranges_len = self.ranges.len() as u64;
+        let indexes_len = self.indexes.len() as u64;
+        let u64_size = size_of::<u64>() as u64;
+        let len = indexes_len + ranges_len + u64_size;
+
+        let _ = bytes.write_u64::<LittleEndian>(len);
 
         bytes.extend_from_slice(&self.indexes);
         bytes.extend_from_slice(&self.ranges);
-        bytes.write_u64::<LittleEndian>(self.ranges.len() as u64).unwrap();
-
-        bytes
+        let _ = bytes.write_u64::<LittleEndian>(ranges_len);
     }
 
     pub fn get(&self, index: usize) -> Option<&Set<DocIndex>> {
-        self.ranges().get(index as usize).map(|Range { start, end }| {
+        self.ranges().get(index).map(|Range { start, end }| {
             let start = *start as usize;
             let end = *end as usize;
             let slice = &self.indexes()[start..end];
@@ -216,9 +218,12 @@ mod tests {
 
         let builder_bytes = builder.into_inner()?;
         let docs = DocIndexes::from_bytes(builder_bytes.clone())?;
-        let bytes = docs.to_vec();
 
-        assert_eq!(builder_bytes, bytes);
+        let mut bytes = Vec::new();
+        docs.write_to_bytes(&mut bytes);
+        let len = size_of::<u64>();
+
+        assert_eq!(builder_bytes, &bytes[len..]);
 
         Ok(())
     }

@@ -7,7 +7,7 @@ use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::{DB, DBVector, MergeOperands};
 use crossbeam::atomic::ArcCell;
 
-use crate::database::blob::{self, Blob, PositiveBlob};
+use crate::database::index::{self, Index, Positive};
 use crate::database::{DatabaseView, Update, Schema};
 use crate::database::{DATA_INDEX, DATA_SCHEMA};
 
@@ -85,12 +85,9 @@ impl Database {
                 Err(e) => return Err(e.to_string().into()),
             };
 
-            let move_update = update.can_be_moved();
-            let path = update.into_path_buf();
-            let path = path.to_string_lossy();
-
+            let path = update.path().to_string_lossy();
             let mut options = IngestExternalFileOptions::new();
-            options.move_files(move_update);
+            // options.move_files(move_update);
 
             let cf_handle = db.cf_handle("default").expect("\"default\" column family not found");
             db.ingest_external_file_optimized(&cf_handle, &options, &[&path])?;
@@ -124,42 +121,28 @@ impl Database {
     }
 }
 
-fn merge_indexes(key: &[u8], existing_value: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    if key != DATA_INDEX {
-        panic!("The merge operator only supports \"data-index\" merging")
-    }
+fn merge_indexes(key: &[u8], existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
+    assert_eq!(key, DATA_INDEX, "The merge operator only supports \"data-index\" merging");
 
-    let capacity = {
-        let remaining = operands.size_hint().0;
-        let already_exist = usize::from(existing_value.is_some());
-        remaining + already_exist
-    };
+    let mut index: Option<Index> = None;
 
-    let mut op = blob::OpBuilder::with_capacity(capacity);
-    if let Some(bytes) = existing_value {
+    for bytes in existing.into_iter().chain(operands) {
         let bytes_len = bytes.len();
         let bytes = Arc::new(bytes.to_vec());
-        let blob = match PositiveBlob::from_shared_bytes(bytes, 0, bytes_len) {
-            Ok(blob) => blob,
-            Err(e) => panic!("BUG: could not deserialize data-index due to {}", e),
+        let operand = Index::from_shared_bytes(bytes, 0, bytes_len);
+        let operand = operand.expect("BUG: could not deserialize index");
+
+        let merged = match index {
+            Some(ref index) => index.merge(&operand).expect("BUG: could not merge index"),
+            None            => operand,
         };
-        op.push(Blob::Positive(blob));
+
+        index.replace(merged);
     }
 
-    for bytes in operands {
-        let bytes_len = bytes.len();
-        let bytes = Arc::new(bytes.to_vec());
-        let blob = match Blob::from_shared_bytes(bytes, 0, bytes_len) {
-            Ok(blob) => blob,
-            Err(e) => panic!("BUG: could not deserialize blob due to {}", e),
-        };
-        op.push(blob);
-    }
-
-    let blob = op.merge().expect("BUG: could not merge blobs");
-
+    let index = index.unwrap_or_default();
     let mut bytes = Vec::new();
-    blob.write_to_bytes(&mut bytes);
+    index.write_to_bytes(&mut bytes);
     bytes
 }
 
@@ -172,7 +155,7 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::database::schema::{SchemaBuilder, STORED, INDEXED};
-    use crate::database::update::PositiveUpdateBuilder;
+    use crate::database::update::UpdateBuilder;
     use crate::tokenizer::DefaultBuilder;
 
     #[test]
@@ -219,15 +202,14 @@ mod tests {
         let docid0;
         let docid1;
         let mut update = {
-            let mut builder = PositiveUpdateBuilder::new(update_path, schema, tokenizer_builder);
+            let mut builder = UpdateBuilder::new(update_path, schema);
 
-            docid0 = builder.update(&doc0).unwrap();
-            docid1 = builder.update(&doc1).unwrap();
+            docid0 = builder.update_document(&doc0).unwrap();
+            docid1 = builder.update_document(&doc1).unwrap();
 
             builder.build()?
         };
 
-        update.set_move(true);
         database.ingest_update_file(update)?;
         let view = database.view();
 
