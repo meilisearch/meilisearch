@@ -63,10 +63,12 @@ impl Attribute {
         }
     }
 
+    #[inline]
     pub fn attribute(&self) -> u16 {
         (self.0 >> 22) as u16
     }
 
+    #[inline]
     pub fn word_index(&self) -> u32 {
         self.0 & 0b0000_0000_0011_1111_1111_1111_1111
     }
@@ -129,10 +131,12 @@ impl WordArea {
         }
     }
 
+    #[inline]
     pub fn byte_index(&self) -> u32 {
         self.0 >> 10
     }
 
+    #[inline]
     pub fn length(&self) -> u16 {
         (self.0 & 0b0000_0000_0000_0000_0011_1111_1111) as u16
     }

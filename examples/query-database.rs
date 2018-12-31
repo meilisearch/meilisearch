@@ -1,11 +1,14 @@
+use std::collections::btree_map::{BTreeMap, Entry};
+use std::iter::FromIterator;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::error::Error;
 
+use hashbrown::{HashMap, HashSet};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use serde_derive::{Serialize, Deserialize};
 use structopt::StructOpt;
 
+use meilidb::database::schema::SchemaAttr;
 use meilidb::database::Database;
 use meilidb::Match;
 
@@ -15,18 +18,15 @@ pub struct Opt {
     #[structopt(parse(from_os_str))]
     pub database_path: PathBuf,
 
+    /// Fields that must be displayed.
+    pub displayed_fields: Vec<String>,
+
     /// The number of returned results
     #[structopt(short = "n", long = "number-results", default_value = "10")]
     pub number_results: usize,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Document {
-    id: String,
-    title: String,
-    description: String,
-    image: String,
-}
+type Document = HashMap<String, String>;
 
 fn display_highlights(text: &str, ranges: &[usize]) -> io::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
@@ -45,20 +45,30 @@ fn display_highlights(text: &str, ranges: &[usize]) -> io::Result<()> {
     Ok(())
 }
 
-fn create_highlight_areas(text: &str, matches: &[Match], attribute: u16) -> Vec<usize> {
-    let mut title_areas = Vec::new();
+fn create_highlight_areas(text: &str, matches: &[Match], attribute: SchemaAttr) -> Vec<usize> {
+    let mut byte_indexes = BTreeMap::new();
 
-    title_areas.push(0);
     for match_ in matches {
-        if match_.attribute.attribute() == attribute {
+        let match_attribute = match_.attribute.attribute();
+        if SchemaAttr::new(match_attribute) == attribute {
             let word_area = match_.word_area;
             let byte_index = word_area.byte_index() as usize;
             let length = word_area.length() as usize;
-            title_areas.push(byte_index);
-            title_areas.push(byte_index + length);
+            match byte_indexes.entry(byte_index) {
+                Entry::Vacant(entry) => { entry.insert(length); },
+                Entry::Occupied(mut entry) => if *entry.get() < length { entry.insert(length); },
+            }
         }
     }
+
+    let mut title_areas = Vec::new();
+    title_areas.push(0);
+    for (byte_index, length) in byte_indexes {
+        title_areas.push(byte_index);
+        title_areas.push(byte_index + length);
+    }
     title_areas.push(text.len());
+    title_areas.sort_unstable();
     title_areas
 }
 
@@ -80,6 +90,7 @@ fn main() -> Result<(), Box<Error>> {
         let query = buffer.trim_end_matches('\n');
 
         let view = database.view();
+        let schema = view.schema();
 
         let (elapsed, documents) = elapsed::measure_time(|| {
             let builder = view.query_builder().unwrap();
@@ -90,22 +101,39 @@ fn main() -> Result<(), Box<Error>> {
         for doc in documents {
             match view.document_by_id::<Document>(doc.id) {
                 Ok(document) => {
+                    for name in &opt.displayed_fields {
+                        let attr = match schema.attribute(name) {
+                            Some(attr) => attr,
+                            None => continue,
+                        };
+                        let text = match document.get(name) {
+                            Some(text) => text,
+                            None => continue,
+                        };
 
-                    print!("title: ");
-                    let title_areas = create_highlight_areas(&document.title, &doc.matches, 1);
-                    display_highlights(&document.title, &title_areas)?;
-                    println!();
-
-                    print!("description: ");
-                    let description_areas = create_highlight_areas(&document.description, &doc.matches, 2);
-                    display_highlights(&document.description, &description_areas)?;
-                    println!();
+                        print!("{}: ", name);
+                        let areas = create_highlight_areas(&text, &doc.matches, attr);
+                        display_highlights(&text, &areas)?;
+                        println!();
+                    }
                 },
                 Err(e) => eprintln!("{}", e),
             }
+
+            let mut matching_attributes = HashSet::new();
+            for _match in doc.matches {
+                let attr = SchemaAttr::new(_match.attribute.attribute());
+                let name = schema.attribute_name(attr);
+                matching_attributes.insert(name);
+            }
+
+            let matching_attributes = Vec::from_iter(matching_attributes);
+            println!("matching in: {:?}", matching_attributes);
+
+            println!();
         }
 
-        println!("Found {} results in {}", number_of_documents, elapsed);
+        println!("===== Found {} results in {} =====", number_of_documents, elapsed);
         buffer.clear();
     }
 
