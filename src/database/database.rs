@@ -159,7 +159,7 @@ mod tests {
     use crate::tokenizer::DefaultBuilder;
 
     #[test]
-    fn ingest_update_file() -> Result<(), Box<Error>> {
+    fn ingest_one_update_file() -> Result<(), Box<Error>> {
         let dir = tempdir()?;
 
         let rocksdb_path = dir.path().join("rocksdb.rdb");
@@ -218,6 +218,102 @@ mod tests {
 
         assert_eq!(doc0, de_doc0);
         assert_eq!(doc1, de_doc1);
+
+        Ok(dir.close()?)
+    }
+
+    #[test]
+    fn ingest_two_update_files() -> Result<(), Box<Error>> {
+        let dir = tempdir()?;
+
+        let rocksdb_path = dir.path().join("rocksdb.rdb");
+
+        #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+        struct SimpleDoc {
+            id: u64,
+            title: String,
+            description: String,
+            timestamp: u64,
+        }
+
+        let schema = {
+            let mut builder = SchemaBuilder::with_identifier("id");
+            builder.new_attribute("id", STORED);
+            builder.new_attribute("title", STORED | INDEXED);
+            builder.new_attribute("description", STORED | INDEXED);
+            builder.new_attribute("timestamp", STORED);
+            builder.build()
+        };
+
+        let database = Database::create(&rocksdb_path, schema.clone())?;
+
+        let doc0 = SimpleDoc {
+            id: 0,
+            title: String::from("I am a title"),
+            description: String::from("I am a description"),
+            timestamp: 1234567,
+        };
+        let doc1 = SimpleDoc {
+            id: 1,
+            title: String::from("I am the second title"),
+            description: String::from("I am the second description"),
+            timestamp: 7654321,
+        };
+        let doc2 = SimpleDoc {
+            id: 2,
+            title: String::from("I am the third title"),
+            description: String::from("I am the third description"),
+            timestamp: 7654321,
+        };
+        let doc3 = SimpleDoc {
+            id: 3,
+            title: String::from("I am the fourth title"),
+            description: String::from("I am the fourth description"),
+            timestamp: 7654321,
+        };
+
+        let docid0;
+        let docid1;
+        let update1 = {
+            let tokenizer_builder = DefaultBuilder::new();
+            let update_path = dir.path().join("update-000.sst");
+            let mut builder = UpdateBuilder::new(update_path, schema.clone());
+
+            docid0 = builder.update_document(&doc0, &tokenizer_builder)?;
+            docid1 = builder.update_document(&doc1, &tokenizer_builder)?;
+
+            builder.build()?
+        };
+
+        let docid2;
+        let docid3;
+        let update2 = {
+            let tokenizer_builder = DefaultBuilder::new();
+            let update_path = dir.path().join("update-001.sst");
+            let mut builder = UpdateBuilder::new(update_path, schema);
+
+            docid2 = builder.update_document(&doc2, &tokenizer_builder)?;
+            docid3 = builder.update_document(&doc3, &tokenizer_builder)?;
+
+            builder.build()?
+        };
+
+        database.ingest_update_file(update1)?;
+        database.ingest_update_file(update2)?;
+
+        let view = database.view();
+
+        let de_doc0: SimpleDoc = view.document_by_id(docid0)?;
+        let de_doc1: SimpleDoc = view.document_by_id(docid1)?;
+
+        assert_eq!(doc0, de_doc0);
+        assert_eq!(doc1, de_doc1);
+
+        let de_doc2: SimpleDoc = view.document_by_id(docid2)?;
+        let de_doc3: SimpleDoc = view.document_by_id(docid3)?;
+
+        assert_eq!(doc2, de_doc2);
+        assert_eq!(doc3, de_doc3);
 
         Ok(dir.close()?)
     }
