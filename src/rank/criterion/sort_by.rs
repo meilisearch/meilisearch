@@ -46,13 +46,18 @@ use crate::rank::Document;
 /// let criterion = builder.build();
 ///
 /// ```
-#[derive(Default)]
 pub struct SortBy<T> {
     _phantom: marker::PhantomData<T>,
 }
 
 impl<T> SortBy<T> {
     pub fn new() -> Self {
+        SortBy::default()
+    }
+}
+
+impl<T> Default for SortBy<T> {
+    fn default() -> SortBy<T> {
         SortBy { _phantom: marker::PhantomData }
     }
 }
