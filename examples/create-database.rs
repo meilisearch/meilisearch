@@ -59,10 +59,10 @@ fn index(schema: Schema, database_path: &Path, csv_data_path: &Path) -> Result<D
             }
         };
 
-        update.update_document(&document).unwrap();
+        update.update_document(&document, &tokenizer_builder)?;
     }
 
-    let mut update = update.build()?;
+    let update = update.build()?;
     database.ingest_update_file(update)?;
 
     Ok(database)

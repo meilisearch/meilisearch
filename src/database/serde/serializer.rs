@@ -1,24 +1,20 @@
-use std::collections::BTreeMap;
-
 use serde::Serialize;
 use serde::ser;
 
 use crate::database::serde::indexer_serializer::IndexerSerializer;
 use crate::database::serde::key_to_string::KeyToStringSerializer;
-use crate::database::update::UnorderedPositiveBlobBuilder;
 use crate::database::document_key::DocumentKeyAttr;
-use crate::database::update::NewState;
-use crate::database::Schema;
+use crate::database::update::RawUpdateBuilder;
 use crate::database::serde::SerializerError;
 use crate::tokenizer::TokenizerBuilder;
+use crate::database::schema::Schema;
 use crate::DocumentId;
 
 pub struct Serializer<'a, B> {
     pub schema: &'a Schema,
-    pub tokenizer_builder: &'a B,
     pub document_id: DocumentId,
-    pub builder: &'a mut UnorderedPositiveBlobBuilder<Vec<u8>, Vec<u8>>,
-    pub new_states: &'a mut BTreeMap<DocumentKeyAttr, NewState>,
+    pub tokenizer_builder: &'a B,
+    pub builder: &'a mut RawUpdateBuilder,
 }
 
 impl<'a, B> ser::Serializer for Serializer<'a, B>
@@ -145,7 +141,6 @@ where B: TokenizerBuilder
             document_id: self.document_id,
             current_key_name: None,
             builder: self.builder,
-            new_states: self.new_states,
         })
     }
 
@@ -160,7 +155,6 @@ where B: TokenizerBuilder
             tokenizer_builder: self.tokenizer_builder,
             document_id: self.document_id,
             builder: self.builder,
-            new_states: self.new_states,
         })
     }
 
@@ -181,8 +175,7 @@ pub struct MapSerializer<'a, B> {
     pub tokenizer_builder: &'a B,
     pub document_id: DocumentId,
     pub current_key_name: Option<String>,
-    pub builder: &'a mut UnorderedPositiveBlobBuilder<Vec<u8>, Vec<u8>>,
-    pub new_states: &'a mut BTreeMap<DocumentKeyAttr, NewState>,
+    pub builder: &'a mut RawUpdateBuilder,
 }
 
 impl<'a, B> ser::SerializeMap for MapSerializer<'a, B>
@@ -220,7 +213,7 @@ where B: TokenizerBuilder
             if props.is_stored() {
                 let value = bincode::serialize(value).unwrap();
                 let key = DocumentKeyAttr::new(self.document_id, attr);
-                self.new_states.insert(key, NewState::Updated { value });
+                self.builder.insert_attribute_value(key, value);
             }
             if props.is_indexed() {
                 let serializer = IndexerSerializer {
@@ -243,10 +236,9 @@ where B: TokenizerBuilder
 
 pub struct StructSerializer<'a, B> {
     pub schema: &'a Schema,
-    pub tokenizer_builder: &'a B,
     pub document_id: DocumentId,
-    pub builder: &'a mut UnorderedPositiveBlobBuilder<Vec<u8>, Vec<u8>>,
-    pub new_states: &'a mut BTreeMap<DocumentKeyAttr, NewState>,
+    pub tokenizer_builder: &'a B,
+    pub builder: &'a mut RawUpdateBuilder,
 }
 
 impl<'a, B> ser::SerializeStruct for StructSerializer<'a, B>
@@ -267,7 +259,7 @@ where B: TokenizerBuilder
             if props.is_stored() {
                 let value = bincode::serialize(value).unwrap();
                 let key = DocumentKeyAttr::new(self.document_id, attr);
-                self.new_states.insert(key, NewState::Updated { value });
+                self.builder.insert_attribute_value(key, value);
             }
             if props.is_indexed() {
                 let serializer = IndexerSerializer {

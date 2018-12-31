@@ -4,18 +4,16 @@ mod positive;
 pub(crate) use self::negative::Negative;
 pub(crate) use self::positive::{Positive, PositiveBuilder};
 
-use std::sync::Arc;
 use std::error::Error;
-use std::io::{Cursor, BufRead};
+use std::io::Cursor;
+use std::sync::Arc;
 
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use fst::{IntoStreamer, Streamer};
 use sdset::duo::DifferenceByKey;
 use sdset::{Set, SetOperation};
-use fst::raw::Fst;
 use fst::Map;
 
-use crate::data::{DocIds, DocIndexes};
+use crate::data::{SharedData, DocIndexes};
 
 #[derive(Default)]
 pub struct Index {
@@ -35,8 +33,11 @@ impl Index {
         len: usize,
     ) -> Result<Index, Box<Error>>
     {
-        let (negative, neg_offset) = Negative::from_shared_bytes(bytes.clone(), offset, len)?;
-        let (positive, _) = Positive::from_shared_bytes(bytes, offset + neg_offset, len)?;
+        let data = SharedData::new(bytes, offset, len);
+        let mut cursor = Cursor::new(data);
+
+        let negative = Negative::from_cursor(&mut cursor)?;
+        let positive = Positive::from_cursor(&mut cursor)?;
         Ok(Index { negative, positive })
     }
 
@@ -71,7 +72,7 @@ impl Index {
             let (map, indexes) = builder.into_inner()?;
             let map = Map::from_bytes(map)?;
             let indexes = DocIndexes::from_bytes(indexes)?;
-            Positive { map, indexes }
+            Positive::new(map, indexes)
         };
 
         let negative = Negative::default();

@@ -1,7 +1,5 @@
 use std::io::{Write, BufRead, Cursor};
-use std::mem::size_of;
 use std::error::Error;
-use std::sync::Arc;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use fst::{map, Map, Streamer, IntoStreamer};
@@ -10,49 +8,49 @@ use sdset::duo::Union;
 use fst::raw::Fst;
 
 use crate::data::{DocIndexes, DocIndexesBuilder};
+use crate::data::SharedData;
 use crate::DocIndex;
 
 #[derive(Default)]
 pub struct Positive {
-    pub map: Map,
-    pub indexes: DocIndexes,
+    map: Map,
+    indexes: DocIndexes,
 }
 
 impl Positive {
-    pub fn from_shared_bytes(
-        bytes: Arc<Vec<u8>>,
-        offset: usize,
-        len: usize,
-    ) -> Result<(Positive, usize), Box<Error>>
-    {
-        let mut cursor = Cursor::new(&bytes[..len]);
-        cursor.consume(offset);
+    pub fn new(map: Map, indexes: DocIndexes) -> Positive {
+        Positive { map, indexes }
+    }
 
-        let map_len = cursor.read_u64::<LittleEndian>()? as usize;
-        let map_offset = cursor.position() as usize;
-        let fst = Fst::from_shared_bytes(bytes.clone(), map_offset, map_len)?;
+    pub fn from_cursor(cursor: &mut Cursor<SharedData>) -> Result<Positive, Box<Error>> {
+        let len = cursor.read_u64::<LittleEndian>()? as usize;
+        let offset = cursor.position() as usize;
+        let data = cursor.get_ref().range(offset, len);
+
+        let fst = Fst::from_shared_bytes(data.bytes, data.offset, data.len)?;
         let map = Map::from(fst);
+        cursor.consume(len);
 
-        cursor.consume(map_len);
-        let indexes_len = cursor.read_u64::<LittleEndian>()? as usize;
-        let indexes_offset = cursor.position() as usize;
-        let indexes = DocIndexes::from_shared_bytes(bytes, indexes_offset, indexes_len)?;
+        let indexes = DocIndexes::from_cursor(cursor)?;
 
-        let positive = Positive { map, indexes };
-        let len = indexes_offset + indexes_len;
-
-        Ok((positive, len))
+        Ok(Positive { map, indexes})
     }
 
     pub fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
-        // indexes
         let slice = self.map.as_fst().as_bytes();
         let len = slice.len() as u64;
         let _ = bytes.write_u64::<LittleEndian>(len);
         bytes.extend_from_slice(slice);
 
-        // map
         self.indexes.write_to_bytes(bytes);
+    }
+
+    pub fn map(&self) -> &Map {
+        &self.map
+    }
+
+    pub fn indexes(&self) -> &DocIndexes {
+        &self.indexes
     }
 
     pub fn union(&self, other: &Positive) -> Result<Positive, Box<Error>> {
@@ -155,13 +153,9 @@ impl<W: Write, X: Write> PositiveBuilder<W, X> {
     where K: AsRef<[u8]>,
     {
         self.map.insert(key, self.value)?;
-        self.indexes.insert(indexes)?;
+        self.indexes.insert(indexes);
         self.value += 1;
         Ok(())
-    }
-
-    pub fn finish(self) -> Result<(), Box<Error>> {
-        self.into_inner().map(drop)
     }
 
     pub fn into_inner(self) -> Result<(W, X), Box<Error>> {

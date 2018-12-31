@@ -141,10 +141,12 @@ impl Schema {
         attributes
     }
 
-    pub fn document_id<T>(&self, document: &T) -> Result<DocumentId, Box<Error>>
+    pub fn document_id<T>(&self, document: T) -> Result<DocumentId, SerializerError>
     where T: Serialize,
     {
-        unimplemented!()
+        let id_attribute_name = &self.inner.identifier;
+        let serializer = FindDocumentIdSerializer { id_attribute_name };
+        document.serialize(serializer)
     }
 
     pub fn props(&self, attr: SchemaAttr) -> SchemaProps {

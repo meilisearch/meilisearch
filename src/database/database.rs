@@ -7,7 +7,7 @@ use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::{DB, DBVector, MergeOperands};
 use crossbeam::atomic::ArcCell;
 
-use crate::database::index::{self, Index, Positive};
+use crate::database::index::Index;
 use crate::database::{DatabaseView, Update, Schema};
 use crate::database::{DATA_INDEX, DATA_SCHEMA};
 
@@ -86,7 +86,7 @@ impl Database {
             };
 
             let path = update.path().to_string_lossy();
-            let mut options = IngestExternalFileOptions::new();
+            let options = IngestExternalFileOptions::new();
             // options.move_files(move_update);
 
             let cf_handle = db.cf_handle("default").expect("\"default\" column family not found");
@@ -182,7 +182,6 @@ mod tests {
         };
 
         let database = Database::create(&rocksdb_path, schema.clone())?;
-        let tokenizer_builder = DefaultBuilder::new();
 
         let update_path = dir.path().join("update.sst");
 
@@ -201,11 +200,12 @@ mod tests {
 
         let docid0;
         let docid1;
-        let mut update = {
+        let update = {
+            let tokenizer_builder = DefaultBuilder::new();
             let mut builder = UpdateBuilder::new(update_path, schema);
 
-            docid0 = builder.update_document(&doc0).unwrap();
-            docid1 = builder.update_document(&doc1).unwrap();
+            docid0 = builder.update_document(&doc0, &tokenizer_builder)?;
+            docid1 = builder.update_document(&doc1, &tokenizer_builder)?;
 
             builder.build()?
         };
