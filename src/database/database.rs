@@ -7,9 +7,9 @@ use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::{DB, DBVector, MergeOperands};
 use crossbeam::atomic::ArcCell;
 
+use crate::database::index::Index;
 use crate::database::{DatabaseView, Update, Schema};
 use crate::database::{DATA_INDEX, DATA_SCHEMA};
-use crate::database::blob::{self, Blob};
 
 pub struct Database {
     // DB is under a Mutex to sync update ingestions and separate DB update locking
@@ -85,12 +85,9 @@ impl Database {
                 Err(e) => return Err(e.to_string().into()),
             };
 
-            let move_update = update.can_be_moved();
-            let path = update.into_path_buf();
-            let path = path.to_string_lossy();
-
-            let mut options = IngestExternalFileOptions::new();
-            options.move_files(move_update);
+            let path = update.path().to_string_lossy();
+            let options = IngestExternalFileOptions::new();
+            // options.move_files(move_update);
 
             let cf_handle = db.cf_handle("default").expect("\"default\" column family not found");
             db.ingest_external_file_optimized(&cf_handle, &options, &[&path])?;
@@ -124,30 +121,29 @@ impl Database {
     }
 }
 
-fn merge_indexes(key: &[u8], existing_value: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    if key != DATA_INDEX {
-        panic!("The merge operator only supports \"data-index\" merging")
+fn merge_indexes(key: &[u8], existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
+    assert_eq!(key, DATA_INDEX, "The merge operator only supports \"data-index\" merging");
+
+    let mut index: Option<Index> = None;
+
+    for bytes in existing.into_iter().chain(operands) {
+        let bytes_len = bytes.len();
+        let bytes = Arc::new(bytes.to_vec());
+        let operand = Index::from_shared_bytes(bytes, 0, bytes_len);
+        let operand = operand.expect("BUG: could not deserialize index");
+
+        let merged = match index {
+            Some(ref index) => index.merge(&operand).expect("BUG: could not merge index"),
+            None            => operand,
+        };
+
+        index.replace(merged);
     }
 
-    let capacity = {
-        let remaining = operands.size_hint().0;
-        let already_exist = usize::from(existing_value.is_some());
-        remaining + already_exist
-    };
-
-    let mut op = blob::OpBuilder::with_capacity(capacity);
-    if let Some(existing_value) = existing_value {
-        let blob = bincode::deserialize(existing_value).expect("BUG: could not deserialize data-index");
-        op.push(Blob::Positive(blob));
-    }
-
-    for bytes in operands {
-        let blob = bincode::deserialize(bytes).expect("BUG: could not deserialize blob");
-        op.push(blob);
-    }
-
-    let blob = op.merge().expect("BUG: could not merge blobs");
-    bincode::serialize(&blob).expect("BUG: could not serialize merged blob")
+    let index = index.unwrap_or_default();
+    let mut bytes = Vec::new();
+    index.write_to_bytes(&mut bytes);
+    bytes
 }
 
 #[cfg(test)]
@@ -158,12 +154,12 @@ mod tests {
     use serde_derive::{Serialize, Deserialize};
     use tempfile::tempdir;
 
-    use crate::tokenizer::DefaultBuilder;
-    use crate::database::update::PositiveUpdateBuilder;
     use crate::database::schema::{SchemaBuilder, STORED, INDEXED};
+    use crate::database::update::UpdateBuilder;
+    use crate::tokenizer::DefaultBuilder;
 
     #[test]
-    fn ingest_update_file() -> Result<(), Box<Error>> {
+    fn ingest_one_update_file() -> Result<(), Box<Error>> {
         let dir = tempdir()?;
 
         let rocksdb_path = dir.path().join("rocksdb.rdb");
@@ -186,7 +182,6 @@ mod tests {
         };
 
         let database = Database::create(&rocksdb_path, schema.clone())?;
-        let tokenizer_builder = DefaultBuilder::new();
 
         let update_path = dir.path().join("update.sst");
 
@@ -205,16 +200,16 @@ mod tests {
 
         let docid0;
         let docid1;
-        let mut update = {
-            let mut builder = PositiveUpdateBuilder::new(update_path, schema, tokenizer_builder);
+        let update = {
+            let tokenizer_builder = DefaultBuilder::new();
+            let mut builder = UpdateBuilder::new(update_path, schema);
 
-            docid0 = builder.update(&doc0).unwrap();
-            docid1 = builder.update(&doc1).unwrap();
+            docid0 = builder.update_document(&doc0, &tokenizer_builder)?;
+            docid1 = builder.update_document(&doc1, &tokenizer_builder)?;
 
             builder.build()?
         };
 
-        update.set_move(true);
         database.ingest_update_file(update)?;
         let view = database.view();
 
@@ -223,6 +218,102 @@ mod tests {
 
         assert_eq!(doc0, de_doc0);
         assert_eq!(doc1, de_doc1);
+
+        Ok(dir.close()?)
+    }
+
+    #[test]
+    fn ingest_two_update_files() -> Result<(), Box<Error>> {
+        let dir = tempdir()?;
+
+        let rocksdb_path = dir.path().join("rocksdb.rdb");
+
+        #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+        struct SimpleDoc {
+            id: u64,
+            title: String,
+            description: String,
+            timestamp: u64,
+        }
+
+        let schema = {
+            let mut builder = SchemaBuilder::with_identifier("id");
+            builder.new_attribute("id", STORED);
+            builder.new_attribute("title", STORED | INDEXED);
+            builder.new_attribute("description", STORED | INDEXED);
+            builder.new_attribute("timestamp", STORED);
+            builder.build()
+        };
+
+        let database = Database::create(&rocksdb_path, schema.clone())?;
+
+        let doc0 = SimpleDoc {
+            id: 0,
+            title: String::from("I am a title"),
+            description: String::from("I am a description"),
+            timestamp: 1234567,
+        };
+        let doc1 = SimpleDoc {
+            id: 1,
+            title: String::from("I am the second title"),
+            description: String::from("I am the second description"),
+            timestamp: 7654321,
+        };
+        let doc2 = SimpleDoc {
+            id: 2,
+            title: String::from("I am the third title"),
+            description: String::from("I am the third description"),
+            timestamp: 7654321,
+        };
+        let doc3 = SimpleDoc {
+            id: 3,
+            title: String::from("I am the fourth title"),
+            description: String::from("I am the fourth description"),
+            timestamp: 7654321,
+        };
+
+        let docid0;
+        let docid1;
+        let update1 = {
+            let tokenizer_builder = DefaultBuilder::new();
+            let update_path = dir.path().join("update-000.sst");
+            let mut builder = UpdateBuilder::new(update_path, schema.clone());
+
+            docid0 = builder.update_document(&doc0, &tokenizer_builder)?;
+            docid1 = builder.update_document(&doc1, &tokenizer_builder)?;
+
+            builder.build()?
+        };
+
+        let docid2;
+        let docid3;
+        let update2 = {
+            let tokenizer_builder = DefaultBuilder::new();
+            let update_path = dir.path().join("update-001.sst");
+            let mut builder = UpdateBuilder::new(update_path, schema);
+
+            docid2 = builder.update_document(&doc2, &tokenizer_builder)?;
+            docid3 = builder.update_document(&doc3, &tokenizer_builder)?;
+
+            builder.build()?
+        };
+
+        database.ingest_update_file(update1)?;
+        database.ingest_update_file(update2)?;
+
+        let view = database.view();
+
+        let de_doc0: SimpleDoc = view.document_by_id(docid0)?;
+        let de_doc1: SimpleDoc = view.document_by_id(docid1)?;
+
+        assert_eq!(doc0, de_doc0);
+        assert_eq!(doc1, de_doc1);
+
+        let de_doc2: SimpleDoc = view.document_by_id(docid2)?;
+        let de_doc3: SimpleDoc = view.document_by_id(docid3)?;
+
+        assert_eq!(doc2, de_doc2);
+        assert_eq!(doc3, de_doc3);
 
         Ok(dir.close()?)
     }

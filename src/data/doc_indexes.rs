@@ -1,16 +1,15 @@
+use std::io::{self, Write, Cursor, BufRead};
 use std::slice::from_raw_parts;
-use std::io::{self, Write};
 use std::mem::size_of;
 use std::ops::Index;
-use std::path::Path;
 use std::sync::Arc;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use fst::raw::MmapReadOnly;
 use sdset::Set;
 
 use crate::DocIndex;
-use crate::data::Data;
+use crate::data::SharedData;
+use super::into_u8_slice;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -21,52 +20,45 @@ struct Range {
 
 #[derive(Clone, Default)]
 pub struct DocIndexes {
-    ranges: Data,
-    indexes: Data,
+    ranges: SharedData,
+    indexes: SharedData,
 }
 
 impl DocIndexes {
-    pub unsafe fn from_path<P: AsRef<Path>>(path: P) -> io::Result<Self> {
-        let mmap = MmapReadOnly::open_path(path)?;
-        DocIndexes::from_data(Data::Mmap(mmap))
+    pub fn from_bytes(bytes: Vec<u8>) -> io::Result<DocIndexes> {
+        let bytes = Arc::new(bytes);
+        let len = bytes.len();
+        let data = SharedData::new(bytes, 0, len);
+        let mut  cursor = Cursor::new(data);
+        DocIndexes::from_cursor(&mut cursor)
     }
 
-    pub fn from_bytes(vec: Vec<u8>) -> io::Result<Self> {
-        let len = vec.len();
-        DocIndexes::from_shared_bytes(Arc::new(vec), 0, len)
-    }
+    pub fn from_cursor(cursor: &mut Cursor<SharedData>) -> io::Result<DocIndexes> {
+        let len = cursor.read_u64::<LittleEndian>()? as usize;
+        let offset = cursor.position() as usize;
+        let ranges = cursor.get_ref().range(offset, len);
+        cursor.consume(len);
 
-    pub fn from_shared_bytes(bytes: Arc<Vec<u8>>, offset: usize, len: usize) -> io::Result<Self> {
-        let data = Data::Shared { bytes, offset, len };
-        DocIndexes::from_data(data)
-    }
-
-    fn from_data(data: Data) -> io::Result<Self> {
-        let ranges_len_offset = data.len() - size_of::<u64>();
-        let ranges_len = (&data[ranges_len_offset..]).read_u64::<LittleEndian>()?;
-        let ranges_len = ranges_len as usize;
-
-        let ranges_offset = ranges_len_offset - ranges_len;
-        let ranges = data.range(ranges_offset, ranges_len);
-
-        let indexes = data.range(0, ranges_offset);
+        let len = cursor.read_u64::<LittleEndian>()? as usize;
+        let offset = cursor.position() as usize;
+        let indexes = cursor.get_ref().range(offset, len);
+        cursor.consume(len);
 
         Ok(DocIndexes { ranges, indexes })
     }
 
-    pub fn to_vec(&self) -> Vec<u8> {
-        let capacity = self.indexes.len() + self.ranges.len() + size_of::<u64>();
-        let mut bytes = Vec::with_capacity(capacity);
-
-        bytes.extend_from_slice(&self.indexes);
+    pub fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
+        let ranges_len = self.ranges.len() as u64;
+        let _ = bytes.write_u64::<LittleEndian>(ranges_len);
         bytes.extend_from_slice(&self.ranges);
-        bytes.write_u64::<LittleEndian>(self.ranges.len() as u64).unwrap();
 
-        bytes
+        let indexes_len = self.indexes.len() as u64;
+        let _ = bytes.write_u64::<LittleEndian>(indexes_len);
+        bytes.extend_from_slice(&self.indexes);
     }
 
     pub fn get(&self, index: usize) -> Option<&Set<DocIndex>> {
-        self.ranges().get(index as usize).map(|Range { start, end }| {
+        self.ranges().get(index).map(|Range { start, end }| {
             let start = *start as usize;
             let end = *end as usize;
             let slice = &self.indexes()[start..end];
@@ -102,12 +94,17 @@ impl Index<usize> for DocIndexes {
 
 pub struct DocIndexesBuilder<W> {
     ranges: Vec<Range>,
+    indexes: Vec<DocIndex>,
     wtr: W,
 }
 
 impl DocIndexesBuilder<Vec<u8>> {
     pub fn memory() -> Self {
-        DocIndexesBuilder::new(Vec::new())
+        DocIndexesBuilder {
+            ranges: Vec::new(),
+            indexes: Vec::new(),
+            wtr: Vec::new(),
+        }
     }
 }
 
@@ -115,19 +112,18 @@ impl<W: Write> DocIndexesBuilder<W> {
     pub fn new(wtr: W) -> Self {
         DocIndexesBuilder {
             ranges: Vec::new(),
+            indexes: Vec::new(),
             wtr: wtr,
         }
     }
 
-    pub fn insert(&mut self, indexes: &Set<DocIndex>) -> io::Result<()> {
+    pub fn insert(&mut self, indexes: &Set<DocIndex>) {
         let len = indexes.len() as u64;
         let start = self.ranges.last().map(|r| r.end).unwrap_or(0);
         let range = Range { start, end: start + len };
         self.ranges.push(range);
 
-        // write the values
-        let indexes = unsafe { into_u8_slice(indexes) };
-        self.wtr.write_all(indexes)
+        self.indexes.extend_from_slice(indexes);
     }
 
     pub fn finish(self) -> io::Result<()> {
@@ -135,22 +131,18 @@ impl<W: Write> DocIndexesBuilder<W> {
     }
 
     pub fn into_inner(mut self) -> io::Result<W> {
-        // write the ranges
-        let ranges = unsafe { into_u8_slice(self.ranges.as_slice()) };
-        self.wtr.write_all(ranges)?;
-
-        // write the length of the ranges
+        let ranges = unsafe { into_u8_slice(&self.ranges) };
         let len = ranges.len() as u64;
         self.wtr.write_u64::<LittleEndian>(len)?;
+        self.wtr.write_all(ranges)?;
+
+        let indexes = unsafe { into_u8_slice(&self.indexes) };
+        let len = indexes.len() as u64;
+        self.wtr.write_u64::<LittleEndian>(len)?;
+        self.wtr.write_all(indexes)?;
 
         Ok(self.wtr)
     }
-}
-
-unsafe fn into_u8_slice<T>(slice: &[T]) -> &[u8] {
-    let ptr = slice.as_ptr() as *const u8;
-    let len = slice.len() * size_of::<T>();
-    from_raw_parts(ptr, len)
 }
 
 #[cfg(test)]
@@ -182,9 +174,9 @@ mod tests {
 
         let mut builder = DocIndexesBuilder::memory();
 
-        builder.insert(Set::new(&[a])?)?;
-        builder.insert(Set::new(&[a, b, c])?)?;
-        builder.insert(Set::new(&[a, c])?)?;
+        builder.insert(Set::new(&[a])?);
+        builder.insert(Set::new(&[a, b, c])?);
+        builder.insert(Set::new(&[a, c])?);
 
         let bytes = builder.into_inner()?;
         let docs = DocIndexes::from_bytes(bytes)?;
@@ -217,13 +209,15 @@ mod tests {
 
         let mut builder = DocIndexesBuilder::memory();
 
-        builder.insert(Set::new(&[a])?)?;
-        builder.insert(Set::new(&[a, b, c])?)?;
-        builder.insert(Set::new(&[a, c])?)?;
+        builder.insert(Set::new(&[a])?);
+        builder.insert(Set::new(&[a, b, c])?);
+        builder.insert(Set::new(&[a, c])?);
 
         let builder_bytes = builder.into_inner()?;
         let docs = DocIndexes::from_bytes(builder_bytes.clone())?;
-        let bytes = docs.to_vec();
+
+        let mut bytes = Vec::new();
+        docs.write_to_bytes(&mut bytes);
 
         assert_eq!(builder_bytes, bytes);
 

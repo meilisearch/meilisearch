@@ -9,9 +9,9 @@ use serde::de::DeserializeOwned;
 
 use crate::database::{DocumentKey, DocumentKeyAttr};
 use crate::database::{retrieve_data_schema, retrieve_data_index};
-use crate::database::blob::positive::PositiveBlob;
 use crate::database::deserializer::Deserializer;
 use crate::database::schema::Schema;
+use crate::database::index::Index;
 use crate::rank::{QueryBuilder, FilterFunc};
 use crate::DocumentId;
 
@@ -19,7 +19,7 @@ pub struct DatabaseView<D>
 where D: Deref<Target=DB>
 {
     snapshot: Snapshot<D>,
-    blob: PositiveBlob,
+    index: Index,
     schema: Schema,
 }
 
@@ -28,16 +28,16 @@ where D: Deref<Target=DB>
 {
     pub fn new(snapshot: Snapshot<D>) -> Result<DatabaseView<D>, Box<Error>> {
         let schema = retrieve_data_schema(&snapshot)?;
-        let blob = retrieve_data_index(&snapshot)?;
-        Ok(DatabaseView { snapshot, blob, schema })
+        let index = retrieve_data_index(&snapshot)?;
+        Ok(DatabaseView { snapshot, index, schema })
     }
 
     pub fn schema(&self) -> &Schema {
         &self.schema
     }
 
-    pub fn blob(&self) -> &PositiveBlob {
-        &self.blob
+    pub fn index(&self) -> &Index {
+        &self.index
     }
 
     pub fn into_snapshot(self) -> Snapshot<D> {

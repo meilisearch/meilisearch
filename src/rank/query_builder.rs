@@ -86,7 +86,7 @@ where D: Deref<Target=DB>,
         let mut stream = {
             let mut op_builder = fst::map::OpBuilder::new();
             for automaton in &automatons {
-                let stream = self.view.blob().as_map().search(automaton);
+                let stream = self.view.index().positive.map().search(automaton);
                 op_builder.push(stream);
             }
             op_builder.union()
@@ -100,7 +100,7 @@ where D: Deref<Target=DB>,
                 let distance = automaton.eval(input).to_u8();
                 let is_exact = distance == 0 && input.len() == automaton.query_len();
 
-                let doc_indexes = self.view.blob().as_indexes();
+                let doc_indexes = &self.view.index().positive.indexes();
                 let doc_indexes = &doc_indexes[iv.value as usize];
 
                 for doc_index in doc_indexes {
