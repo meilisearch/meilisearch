@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "nightly", feature(test))]
+
 pub mod automaton;
 pub mod database;
 pub mod data;
