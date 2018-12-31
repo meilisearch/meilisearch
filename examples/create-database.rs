@@ -32,7 +32,7 @@ struct Document<'a> (
 );
 
 fn index(schema: Schema, database_path: &Path, csv_data_path: &Path) -> Result<Database, Box<Error>> {
-    let database = Database::create(database_path, schema.clone())?;
+    let database = Database::create(database_path, &schema)?;
 
     println!("start indexing...");
 

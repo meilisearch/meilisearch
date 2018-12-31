@@ -26,11 +26,11 @@ pub struct SchemaProps {
 }
 
 impl SchemaProps {
-    pub fn is_stored(&self) -> bool {
+    pub fn is_stored(self) -> bool {
         self.stored
     }
 
-    pub fn is_indexed(&self) -> bool {
+    pub fn is_indexed(self) -> bool {
         self.indexed
     }
 }

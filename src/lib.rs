@@ -5,7 +5,6 @@ pub mod database;
 pub mod data;
 pub mod rank;
 pub mod tokenizer;
-pub mod vec_read_only;
 mod common_words;
 
 use std::fmt;
@@ -42,7 +41,7 @@ impl Attribute {
             return Err(AttributeError::IndexTooBig)
         }
 
-        let attribute = (attribute as u32) << 22;
+        let attribute = u32::from(attribute) << 22;
         Ok(Attribute(attribute | index))
     }
 
@@ -66,12 +65,12 @@ impl Attribute {
     }
 
     #[inline]
-    pub fn attribute(&self) -> u16 {
+    pub fn attribute(self) -> u16 {
         (self.0 >> 22) as u16
     }
 
     #[inline]
-    pub fn word_index(&self) -> u32 {
+    pub fn word_index(self) -> u32 {
         self.0 & 0b0000_0000_0011_1111_1111_1111_1111
     }
 }
@@ -118,7 +117,7 @@ impl WordArea {
         }
 
         let byte_index = byte_index << 10;
-        Ok(WordArea(byte_index | (length as u32)))
+        Ok(WordArea(byte_index | u32::from(length)))
     }
 
     fn new_faillible(byte_index: u32, length: u16) -> WordArea {
@@ -134,12 +133,12 @@ impl WordArea {
     }
 
     #[inline]
-    pub fn byte_index(&self) -> u32 {
+    pub fn byte_index(self) -> u32 {
         self.0 >> 10
     }
 
     #[inline]
-    pub fn length(&self) -> u16 {
+    pub fn length(self) -> u16 {
         (self.0 & 0b0000_0000_0000_0000_0011_1111_1111) as u16
     }
 }

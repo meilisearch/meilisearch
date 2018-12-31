@@ -29,7 +29,6 @@ pub use self::{
 pub trait Criterion<D>
 where D: Deref<Target=DB>
 {
-    #[inline]
     fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering;
 
     #[inline]
@@ -62,6 +61,7 @@ where D: Deref<Target=DB>
     }
 }
 
+#[derive(Default)]
 pub struct CriteriaBuilder<D>
 where D: Deref<Target=DB>
 {

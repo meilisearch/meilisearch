@@ -50,6 +50,7 @@ impl AutomatonExt for DfaExt {
     }
 }
 
+#[derive(Copy, Clone)]
 enum PrefixSetting {
     Prefix,
     NoPrefix,
