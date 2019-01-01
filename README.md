@@ -32,6 +32,11 @@ We made some tests on remote machines and found that we can handle with a datase
 
 Network is mesured, servers are located in amsterdam and tests are made between two different datacenters.
 
+### Notes
+
+The default Rust allocator has recently been [changed to use the system allocator](https://github.com/rust-lang/rust/pull/51241/).
+We have seen much better performances when [using jemalloc as the global allocator](https://github.com/alexcrichton/jemallocator#documentation).
+
 
 
 ## Usage and examples

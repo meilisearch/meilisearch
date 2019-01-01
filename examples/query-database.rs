@@ -1,3 +1,6 @@
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::iter::FromIterator;
 use std::io::{self, Write};
