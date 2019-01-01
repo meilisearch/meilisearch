@@ -38,29 +38,25 @@ where D: Deref<Target=DB>
 fn retrieve_data_index<D>(snapshot: &Snapshot<D>) -> Result<Index, Box<Error>>
 where D: Deref<Target=DB>
 {
-    match snapshot.get(DATA_INDEX)? {
+    let index = match snapshot.get(DATA_INDEX)? {
         Some(vector) => {
-            let bytes_len = vector.as_ref().len();
-            let bytes = Arc::new(vector.as_ref().to_vec());
-            Ok(Index::from_shared_bytes(bytes, 0, bytes_len)?)
+            let bytes = vector.as_ref().to_vec();
+            Index::from_bytes(bytes)?
         },
-        None => Ok(Index::default()),
-    }
+        None => Index::default(),
+    };
+
+    Ok(index)
 }
 
 fn merge_indexes(key: &[u8], existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
     assert_eq!(key, DATA_INDEX, "The merge operator only supports \"data-index\" merging");
 
     let mut index: Option<Index> = None;
-
     for bytes in existing.into_iter().chain(operands) {
-        let bytes_len = bytes.len();
-        let bytes = Arc::new(bytes.to_vec());
-        let operand = Index::from_shared_bytes(bytes, 0, bytes_len);
-        let operand = operand.expect("BUG: could not deserialize index");
-
+        let operand = Index::from_bytes(bytes.to_vec()).unwrap();
         let merged = match index {
-            Some(ref index) => index.merge(&operand).expect("BUG: could not merge index"),
+            Some(ref index) => index.merge(&operand).unwrap(),
             None            => operand,
         };
 
