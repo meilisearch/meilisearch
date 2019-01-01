@@ -1,13 +1,14 @@
 use std::cmp::{self, Ordering};
 use std::ops::Deref;
 
-use rocksdb::DB;
+use hashbrown::HashMap;
 use group_by::GroupBy;
+use rocksdb::DB;
 
 use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
 use crate::database::DatabaseView;
-use crate::Match;
+use crate::{DocumentId, Match};
 
 const MAX_DISTANCE: u32 = 8;
 
@@ -56,7 +57,7 @@ pub struct WordsProximity {
 impl<D> Criterion<D> for WordsProximity
 where D: Deref<Target=DB>
 {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
+    fn evaluate(&mut self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = matches_proximity(&lhs.matches);
         let rhs = matches_proximity(&rhs.matches);
 

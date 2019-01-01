@@ -9,6 +9,7 @@ mod document_id;
 
 use std::cmp::Ordering;
 use std::ops::Deref;
+use std::vec;
 
 use rocksdb::DB;
 
@@ -29,34 +30,22 @@ pub use self::{
 pub trait Criterion<D>
 where D: Deref<Target=DB>
 {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering;
+    fn evaluate(&mut self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering;
 
     #[inline]
-    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
+    fn eq(&mut self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
         self.evaluate(lhs, rhs, view) == Ordering::Equal
-    }
-}
-
-impl<'a, D, T: Criterion<D> + ?Sized> Criterion<D> for &'a T
-where D: Deref<Target=DB>
-{
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
-        (**self).evaluate(lhs, rhs, view)
-    }
-
-    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
-        (**self).eq(lhs, rhs, view)
     }
 }
 
 impl<D, T: Criterion<D> + ?Sized> Criterion<D> for Box<T>
 where D: Deref<Target=DB>
 {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
+    fn evaluate(&mut self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
         (**self).evaluate(lhs, rhs, view)
     }
 
-    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
+    fn eq(&mut self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
         (**self).eq(lhs, rhs, view)
     }
 }
@@ -123,10 +112,13 @@ where D: Deref<Target=DB>
     }
 }
 
-impl<D> AsRef<[Box<dyn Criterion<D>>]> for Criteria<D>
+impl<D> IntoIterator for Criteria<D>
 where D: Deref<Target=DB>
 {
-    fn as_ref(&self) -> &[Box<dyn Criterion<D>>] {
-        &self.inner
+    type Item = Box<dyn Criterion<D>>;
+    type IntoIter = vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.inner.into_iter()
     }
 }

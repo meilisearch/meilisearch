@@ -13,7 +13,7 @@ pub struct DocumentId;
 impl<D> Criterion<D> for DocumentId
 where D: Deref<Target=DB>
 {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
+    fn evaluate(&mut self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         lhs.id.cmp(&rhs.id)
     }
 }

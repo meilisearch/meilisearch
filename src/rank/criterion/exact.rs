@@ -25,7 +25,7 @@ pub struct Exact;
 impl<D> Criterion<D> for Exact
 where D: Deref<Target=DB>
 {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
+    fn evaluate(&mut self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = number_exact_matches(&lhs.matches);
         let rhs = number_exact_matches(&rhs.matches);
 

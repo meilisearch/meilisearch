@@ -66,7 +66,7 @@ impl<T, D> Criterion<D> for SortBy<T>
 where D: Deref<Target=DB>,
       T: DeserializeOwned + Ord,
 {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
+    fn evaluate(&mut self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
         let lhs = match view.document_by_id::<T>(lhs.id) {
             Ok(doc) => Some(doc),
             Err(e) => { eprintln!("{}", e); None },

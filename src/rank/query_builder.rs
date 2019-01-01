@@ -9,9 +9,9 @@ use hashbrown::HashMap;
 use fst::Streamer;
 use rocksdb::DB;
 
-use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::rank::distinct_map::{DistinctMap, BufferedDistinctMap};
-use crate::rank::criterion::Criteria;
+use crate::rank::criterion::{Criteria, CriteriaBuilder};
+use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::database::DatabaseView;
 use crate::{Match, DocumentId};
 use crate::rank::Document;
@@ -136,7 +136,7 @@ where D: Deref<Target=DB>,
         let mut groups = vec![documents.as_mut_slice()];
         let view = &self.view;
 
-        'criteria: for criterion in self.criteria.as_ref() {
+        'criteria: for mut criterion in self.criteria {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
             let mut documents_seen = 0;
 
@@ -199,7 +199,7 @@ where D: Deref<Target=DB>,
       FD: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
       K: Hash + Eq,
 {
-    pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(mut self, query: &str, range: Range<usize>) -> Vec<Document> {
         let mut documents = self.inner.query_all(query);
         let mut groups = vec![documents.as_mut_slice()];
         let mut key_cache = HashMap::new();
@@ -212,7 +212,9 @@ where D: Deref<Target=DB>,
         let mut distinct_map = DistinctMap::new(self.size);
         let mut distinct_raw_offset = 0;
 
-        'criteria: for criterion in self.inner.criteria.as_ref() {
+        let criteria = mem::replace(&mut self.inner.criteria, CriteriaBuilder::new().build());
+
+        'criteria: for mut criterion in criteria {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
             let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
             let mut documents_seen = 0;

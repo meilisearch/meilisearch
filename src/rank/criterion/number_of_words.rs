@@ -20,7 +20,7 @@ pub struct NumberOfWords;
 impl<D> Criterion<D> for NumberOfWords
 where D: Deref<Target=DB>
 {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
+    fn evaluate(&mut self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = number_of_query_words(&lhs.matches);
         let rhs = number_of_query_words(&rhs.matches);
 

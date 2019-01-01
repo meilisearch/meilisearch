@@ -24,7 +24,7 @@ pub struct SumOfWordsAttribute;
 impl<D> Criterion<D> for SumOfWordsAttribute
 where D: Deref<Target=DB>
 {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
+    fn evaluate(&mut self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
         let lhs = sum_matches_attributes(&lhs.matches);
         let rhs = sum_matches_attributes(&rhs.matches);
 
