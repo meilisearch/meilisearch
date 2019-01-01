@@ -1,3 +1,6 @@
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 use std::path::{Path, PathBuf};
 use std::error::Error;
 use std::borrow::Cow;
