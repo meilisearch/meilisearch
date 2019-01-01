@@ -58,8 +58,8 @@ impl<D> Criterion<D> for WordsProximity
 where D: Deref<Target=DB>
 {
     fn evaluate(&mut self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
-        let lhs = matches_proximity(&lhs.matches);
-        let rhs = matches_proximity(&rhs.matches);
+        let lhs = *self.cache.entry(lhs.id).or_insert_with(|| matches_proximity(&lhs.matches));
+        let rhs = *self.cache.entry(rhs.id).or_insert_with(|| matches_proximity(&rhs.matches));
 
         lhs.cmp(&rhs)
     }
