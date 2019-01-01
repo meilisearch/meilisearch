@@ -48,8 +48,10 @@ fn matches_proximity(matches: &[Match]) -> u32 {
     proximity
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct WordsProximity;
+#[derive(Default, Debug, Clone)]
+pub struct WordsProximity {
+    cache: HashMap<DocumentId, u32>,
+}
 
 impl<D> Criterion<D> for WordsProximity
 where D: Deref<Target=DB>

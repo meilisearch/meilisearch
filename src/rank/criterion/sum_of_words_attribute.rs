@@ -18,7 +18,7 @@ fn sum_matches_attributes(matches: &[Match]) -> u16 {
     }).sum()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct SumOfWordsAttribute;
 
 impl<D> Criterion<D> for SumOfWordsAttribute

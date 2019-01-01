@@ -25,7 +25,7 @@ fn sum_matches_typos(matches: &[Match]) -> i8 {
     sum_typos - number_words
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct SumOfTypos;
 
 impl<D> Criterion<D> for SumOfTypos

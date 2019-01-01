@@ -18,7 +18,7 @@ fn sum_matches_attribute_index(matches: &[Match]) -> u32 {
     }).sum()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct SumOfWordsPosition;
 
 impl<D> Criterion<D> for SumOfWordsPosition

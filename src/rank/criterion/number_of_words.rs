@@ -14,7 +14,7 @@ fn number_of_query_words(matches: &[Match]) -> usize {
     GroupBy::new(matches, match_query_index).count()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct NumberOfWords;
 
 impl<D> Criterion<D> for NumberOfWords

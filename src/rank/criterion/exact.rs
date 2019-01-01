@@ -19,7 +19,7 @@ fn number_exact_matches(matches: &[Match]) -> usize {
     GroupBy::new(matches, match_query_index).map(contains_exact).count()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct Exact;
 
 impl<D> Criterion<D> for Exact

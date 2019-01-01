@@ -112,13 +112,13 @@ where D: Deref<Target=DB>
 {
     fn default() -> Self {
         CriteriaBuilder::with_capacity(7)
-            .add(SumOfTypos)
-            .add(NumberOfWords)
-            .add(WordsProximity)
-            .add(SumOfWordsAttribute)
-            .add(SumOfWordsPosition)
-            .add(Exact)
-            .add(DocumentId)
+            .add(SumOfTypos::default())
+            .add(NumberOfWords::default())
+            .add(WordsProximity::default())
+            .add(SumOfWordsAttribute::default())
+            .add(SumOfWordsPosition::default())
+            .add(Exact::default())
+            .add(DocumentId::default())
             .build()
     }
 }

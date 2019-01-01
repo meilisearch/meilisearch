@@ -7,7 +7,7 @@ use crate::rank::criterion::Criterion;
 use crate::database::DatabaseView;
 use crate::rank::Document;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct DocumentId;
 
 impl<D> Criterion<D> for DocumentId
