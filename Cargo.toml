@@ -34,9 +34,9 @@ rev = "cab857b"
 [features]
 default = ["simd"]
 i128 = ["bincode/i128", "byteorder/i128"]
-simd = ["rocksdb/sse"]
 portable = ["rocksdb/portable"]
-nightly = []
+simd = ["rocksdb/sse"]
+nightly = ["hashbrown/nightly", "group-by/nightly"]
 
 [dev-dependencies]
 csv = "1.0"
