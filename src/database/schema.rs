@@ -176,6 +176,18 @@ impl SchemaAttr {
         SchemaAttr(value)
     }
 
+    pub fn min() -> SchemaAttr {
+        SchemaAttr(0)
+    }
+
+    pub fn next(self) -> Option<SchemaAttr> {
+        self.0.checked_add(1).map(SchemaAttr)
+    }
+
+    pub fn prev(self) -> Option<SchemaAttr> {
+        self.0.checked_sub(1).map(SchemaAttr)
+    }
+
     pub fn max() -> SchemaAttr {
         SchemaAttr(u16::MAX)
     }

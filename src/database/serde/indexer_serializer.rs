@@ -1,6 +1,6 @@
-use crate::database::update::RawUpdateBuilder;
-use crate::database::schema::SchemaAttr;
+use crate::database::update::DocumentUpdate;
 use crate::database::serde::SerializerError;
+use crate::database::schema::SchemaAttr;
 use crate::tokenizer::TokenizerBuilder;
 use crate::tokenizer::Token;
 use crate::{DocumentId, DocIndex, Attribute, WordArea};
@@ -10,7 +10,7 @@ use serde::ser;
 
 pub struct IndexerSerializer<'a, B> {
     pub tokenizer_builder: &'a B,
-    pub builder: &'a mut RawUpdateBuilder,
+    pub update: &'a mut DocumentUpdate,
     pub document_id: DocumentId,
     pub attribute: SchemaAttr,
 }
@@ -72,10 +72,10 @@ where B: TokenizerBuilder
             // and the unidecoded lowercased version
             let word_unidecoded = unidecode::unidecode(word).to_lowercase();
             if word_lower != word_unidecoded {
-                self.builder.insert_doc_index(word_unidecoded.into_bytes(), doc_index);
+                self.update.insert_doc_index(word_unidecoded.into_bytes(), doc_index);
             }
 
-            self.builder.insert_doc_index(word_lower.into_bytes(), doc_index);
+            self.update.insert_doc_index(word_lower.into_bytes(), doc_index);
         }
         Ok(())
     }

@@ -78,6 +78,14 @@ impl DocumentKeyAttr {
         DocumentKeyAttr(buffer)
     }
 
+    pub fn with_attribute_min(id: DocumentId) -> DocumentKeyAttr {
+        DocumentKeyAttr::new(id, SchemaAttr::min())
+    }
+
+    pub fn with_attribute_max(id: DocumentId) -> DocumentKeyAttr {
+        DocumentKeyAttr::new(id, SchemaAttr::max())
+    }
+
     pub fn from_bytes(mut bytes: &[u8]) -> DocumentKeyAttr {
         assert!(bytes.len() >= DOC_KEY_ATTR_LEN);
         assert_eq!(&bytes[..4], b"doc-");
