@@ -8,7 +8,7 @@ use crate::database::schema::SchemaAttr;
 use crate::DocumentId;
 
 const DOC_KEY_LEN:      usize = 4 + size_of::<u64>();
-const DOC_KEY_ATTR_LEN: usize = DOC_KEY_LEN + 1 + size_of::<u32>();
+const DOC_KEY_ATTR_LEN: usize = DOC_KEY_LEN + 1 + size_of::<u16>();
 
 #[derive(Copy, Clone)]
 pub struct DocumentKey([u8; DOC_KEY_LEN]);
@@ -124,5 +124,22 @@ impl fmt::Debug for DocumentKeyAttr {
             .field("document_id", &self.document_id())
             .field("attribute", &self.attribute().0)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keep_as_ref_order() {
+        for (a, b) in (0..).zip(1..).take(u16::max_value() as usize - 1) {
+            let id = DocumentId(0);
+            let a = DocumentKeyAttr::new(id, SchemaAttr(a));
+            let b = DocumentKeyAttr::new(id, SchemaAttr(b));
+
+            assert!(a < b);
+            assert!(a.as_ref() < b.as_ref());
+        }
     }
 }
