@@ -3,8 +3,7 @@ use serde::ser;
 
 use crate::database::serde::indexer_serializer::IndexerSerializer;
 use crate::database::serde::key_to_string::KeyToStringSerializer;
-use crate::database::document_key::DocumentKeyAttr;
-use crate::database::update::RawUpdateBuilder;
+use crate::database::update::DocumentUpdate;
 use crate::database::serde::SerializerError;
 use crate::tokenizer::TokenizerBuilder;
 use crate::database::schema::Schema;
@@ -12,9 +11,9 @@ use crate::DocumentId;
 
 pub struct Serializer<'a, B> {
     pub schema: &'a Schema,
+    pub update: &'a mut DocumentUpdate,
     pub document_id: DocumentId,
     pub tokenizer_builder: &'a B,
-    pub builder: &'a mut RawUpdateBuilder,
 }
 
 impl<'a, B> ser::Serializer for Serializer<'a, B>
@@ -137,10 +136,10 @@ where B: TokenizerBuilder
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         Ok(MapSerializer {
             schema: self.schema,
-            tokenizer_builder: self.tokenizer_builder,
             document_id: self.document_id,
+            update: self.update,
+            tokenizer_builder: self.tokenizer_builder,
             current_key_name: None,
-            builder: self.builder,
         })
     }
 
@@ -152,9 +151,9 @@ where B: TokenizerBuilder
     {
         Ok(StructSerializer {
             schema: self.schema,
-            tokenizer_builder: self.tokenizer_builder,
+            update: self.update,
             document_id: self.document_id,
-            builder: self.builder,
+            tokenizer_builder: self.tokenizer_builder,
         })
     }
 
@@ -172,10 +171,10 @@ where B: TokenizerBuilder
 
 pub struct MapSerializer<'a, B> {
     pub schema: &'a Schema,
-    pub tokenizer_builder: &'a B,
     pub document_id: DocumentId,
+    pub update: &'a mut DocumentUpdate,
+    pub tokenizer_builder: &'a B,
     pub current_key_name: Option<String>,
-    pub builder: &'a mut RawUpdateBuilder,
 }
 
 impl<'a, B> ser::SerializeMap for MapSerializer<'a, B>
@@ -212,12 +211,11 @@ where B: TokenizerBuilder
             let props = self.schema.props(attr);
             if props.is_stored() {
                 let value = bincode::serialize(value).unwrap();
-                let key = DocumentKeyAttr::new(self.document_id, attr);
-                self.builder.insert_attribute_value(key, value);
+                self.update.insert_attribute_value(attr, value);
             }
             if props.is_indexed() {
                 let serializer = IndexerSerializer {
-                    builder: self.builder,
+                    update: self.update,
                     tokenizer_builder: self.tokenizer_builder,
                     document_id: self.document_id,
                     attribute: attr,
@@ -237,8 +235,8 @@ where B: TokenizerBuilder
 pub struct StructSerializer<'a, B> {
     pub schema: &'a Schema,
     pub document_id: DocumentId,
+    pub update: &'a mut DocumentUpdate,
     pub tokenizer_builder: &'a B,
-    pub builder: &'a mut RawUpdateBuilder,
 }
 
 impl<'a, B> ser::SerializeStruct for StructSerializer<'a, B>
@@ -258,12 +256,11 @@ where B: TokenizerBuilder
             let props = self.schema.props(attr);
             if props.is_stored() {
                 let value = bincode::serialize(value).unwrap();
-                let key = DocumentKeyAttr::new(self.document_id, attr);
-                self.builder.insert_attribute_value(key, value);
+                self.update.insert_attribute_value(attr, value);
             }
             if props.is_indexed() {
                 let serializer = IndexerSerializer {
-                    builder: self.builder,
+                    update: self.update,
                     tokenizer_builder: self.tokenizer_builder,
                     document_id: self.document_id,
                     attribute: attr,

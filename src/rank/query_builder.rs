@@ -232,11 +232,11 @@ where D: Deref<Target=DB>,
                     // we must compute the real distinguished len of this sub-group
                     for document in group.iter() {
                         let filter_accepted = match &self.inner.filter {
-                            None => true,
                             Some(filter) => {
                                 let entry = filter_map.entry(document.id);
                                 *entry.or_insert_with(|| (filter)(document.id, view))
                             },
+                            None => true,
                         };
 
                         if filter_accepted {

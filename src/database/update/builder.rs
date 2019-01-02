@@ -33,12 +33,13 @@ impl UpdateBuilder {
           B: TokenizerBuilder,
     {
         let document_id = self.schema.document_id(&document)?;
+        let update = self.raw_builder.document_update(document_id);
 
         let serializer = Serializer {
             schema: &self.schema,
             document_id: document_id,
             tokenizer_builder: tokenizer_builder,
-            builder: &mut self.raw_builder,
+            update: update,
         };
 
         document.serialize(serializer)?;
@@ -50,7 +51,7 @@ impl UpdateBuilder {
     where T: Serialize,
     {
         let document_id = self.schema.document_id(&document)?;
-        self.raw_builder.remove_document(document_id);
+        self.raw_builder.document_update(document_id).remove();
         Ok(document_id)
     }
 

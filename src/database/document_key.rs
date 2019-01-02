@@ -2,7 +2,7 @@ use std::io::{Cursor, Read, Write};
 use std::mem::size_of;
 use std::fmt;
 
-use byteorder::{NativeEndian, WriteBytesExt, ReadBytesExt};
+use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 
 use crate::database::schema::SchemaAttr;
 use crate::DocumentId;
@@ -19,7 +19,7 @@ impl DocumentKey {
 
         let mut wtr = Cursor::new(&mut buffer[..]);
         wtr.write_all(b"doc-").unwrap();
-        wtr.write_u64::<NativeEndian>(id.0).unwrap();
+        wtr.write_u64::<BigEndian>(id.0).unwrap();
 
         DocumentKey(buffer)
     }
@@ -43,7 +43,7 @@ impl DocumentKey {
     }
 
     pub fn document_id(&self) -> DocumentId {
-        let id = (&self.0[4..]).read_u64::<NativeEndian>().unwrap();
+        let id = (&self.0[4..]).read_u64::<BigEndian>().unwrap();
         DocumentId(id)
     }
 }
@@ -73,9 +73,17 @@ impl DocumentKeyAttr {
         let mut wtr = Cursor::new(&mut buffer[..]);
         wtr.write_all(&raw_key).unwrap();
         wtr.write_all(b"-").unwrap();
-        wtr.write_u16::<NativeEndian>(attr.0).unwrap();
+        wtr.write_u16::<BigEndian>(attr.0).unwrap();
 
         DocumentKeyAttr(buffer)
+    }
+
+    pub fn with_attribute_min(id: DocumentId) -> DocumentKeyAttr {
+        DocumentKeyAttr::new(id, SchemaAttr::min())
+    }
+
+    pub fn with_attribute_max(id: DocumentId) -> DocumentKeyAttr {
+        DocumentKeyAttr::new(id, SchemaAttr::max())
     }
 
     pub fn from_bytes(mut bytes: &[u8]) -> DocumentKeyAttr {
@@ -89,13 +97,13 @@ impl DocumentKeyAttr {
     }
 
     pub fn document_id(&self) -> DocumentId {
-        let id = (&self.0[4..]).read_u64::<NativeEndian>().unwrap();
+        let id = (&self.0[4..]).read_u64::<BigEndian>().unwrap();
         DocumentId(id)
     }
 
     pub fn attribute(&self) -> SchemaAttr {
         let offset = 4 + size_of::<u64>() + 1;
-        let value = (&self.0[offset..]).read_u16::<NativeEndian>().unwrap();
+        let value = (&self.0[offset..]).read_u16::<BigEndian>().unwrap();
         SchemaAttr::new(value)
     }
 
