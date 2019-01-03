@@ -37,30 +37,30 @@ fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
 
 pub type FilterFunc<D> = fn(DocumentId, &DatabaseView<D>) -> bool;
 
-pub struct QueryBuilder<'a, D, FI>
+pub struct QueryBuilder<'a, 'h, D, FI>
 where D: Deref<Target=DB>
 {
-    view: &'a DatabaseView<D>,
+    view: &'a DatabaseView<'h, D>,
     criteria: Criteria<D>,
     filter: Option<FI>,
 }
 
-impl<'a, D> QueryBuilder<'a, D, FilterFunc<D>>
+impl<'a, 'h, D> QueryBuilder<'a, 'h, D, FilterFunc<D>>
 where D: Deref<Target=DB>
 {
-    pub fn new(view: &'a DatabaseView<D>) -> Result<Self, Box<Error>> {
+    pub fn new(view: &'a DatabaseView<'h, D>) -> Result<Self, Box<Error>> {
         QueryBuilder::with_criteria(view, Criteria::default())
     }
 }
 
-impl<'a, D, FI> QueryBuilder<'a, D, FI>
+impl<'a, 'h, D, FI> QueryBuilder<'a, 'h, D, FI>
 where D: Deref<Target=DB>,
 {
-    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria<D>) -> Result<Self, Box<Error>> {
+    pub fn with_criteria(view: &'a DatabaseView<'h, D>, criteria: Criteria<D>) -> Result<Self, Box<Error>> {
         Ok(QueryBuilder { view, criteria, filter: None })
     }
 
-    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'a, D, F>
+    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'a, 'h, D, F>
     where F: Fn(DocumentId, &DatabaseView<D>) -> bool,
     {
         QueryBuilder {
@@ -70,7 +70,7 @@ where D: Deref<Target=DB>,
         }
     }
 
-    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, D, FI, F>
+    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, 'h, D, FI, F>
     where F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
           K: Hash + Eq,
     {
@@ -123,7 +123,7 @@ where D: Deref<Target=DB>,
     }
 }
 
-impl<'a, D, FI> QueryBuilder<'a, D, FI>
+impl<'a, 'h, D, FI> QueryBuilder<'a, 'h, D, FI>
 where D: Deref<Target=DB>,
       FI: Fn(DocumentId, &DatabaseView<D>) -> bool,
 {
@@ -174,18 +174,18 @@ where D: Deref<Target=DB>,
     }
 }
 
-pub struct DistinctQueryBuilder<'a, D, FI, FD>
+pub struct DistinctQueryBuilder<'a, 'h, D, FI, FD>
 where D: Deref<Target=DB>
 {
-    inner: QueryBuilder<'a, D, FI>,
+    inner: QueryBuilder<'a, 'h, D, FI>,
     function: FD,
     size: usize,
 }
 
-impl<'a, D, FI, FD> DistinctQueryBuilder<'a, D, FI, FD>
+impl<'a, 'h, D, FI, FD> DistinctQueryBuilder<'a, 'h, D, FI, FD>
 where D: Deref<Target=DB>,
 {
-    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'a, D, F, FD>
+    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'a, 'h, D, F, FD>
     where F: Fn(DocumentId, &DatabaseView<D>) -> bool,
     {
         DistinctQueryBuilder {
@@ -196,7 +196,7 @@ where D: Deref<Target=DB>,
     }
 }
 
-impl<'a, D, FI, FD, K> DistinctQueryBuilder<'a, D, FI, FD>
+impl<'a, 'h, D, FI, FD, K> DistinctQueryBuilder<'a, 'h, D, FI, FD>
 where D: Deref<Target=DB>,
       FI: Fn(DocumentId, &DatabaseView<D>) -> bool,
       FD: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,

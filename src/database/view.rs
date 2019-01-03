@@ -1,13 +1,13 @@
 use std::error::Error;
 use std::path::Path;
 use std::ops::Deref;
-use std::{fmt, marker};
+use std::marker;
 
 use rocksdb::rocksdb_options::{ReadOptions, EnvOptions, ColumnFamilyOptions};
-use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey, SstFileWriter};
+use rocksdb::rocksdb::{DB, Snapshot, SeekKey, SstFileWriter, CFHandle};
 use serde::de::DeserializeOwned;
+use chashmap::ReadGuard;
 
-use crate::database::{DocumentKey, DocumentKeyAttr};
 use crate::database::{retrieve_data_schema, retrieve_data_index};
 use crate::database::deserializer::Deserializer;
 use crate::database::schema::Schema;
@@ -15,21 +15,26 @@ use crate::database::index::Index;
 use crate::rank::{QueryBuilder, FilterFunc};
 use crate::DocumentId;
 
-pub struct DatabaseView<D>
+pub struct DatabaseView<'h, D>
 where D: Deref<Target=DB>
 {
     snapshot: Snapshot<D>,
+    handle: ReadGuard<'h, String, CFHandle>,
     index: Index,
     schema: Schema,
 }
 
-impl<D> DatabaseView<D>
+impl<'h, D> DatabaseView<'h, D>
 where D: Deref<Target=DB>
 {
-    pub fn new(snapshot: Snapshot<D>) -> Result<DatabaseView<D>, Box<Error>> {
-        let schema = retrieve_data_schema(&snapshot)?;
-        let index = retrieve_data_index(&snapshot)?;
-        Ok(DatabaseView { snapshot, index, schema })
+    pub fn new(
+        snapshot: Snapshot<D>,
+        handle: ReadGuard<'h, String, CFHandle>
+    ) -> Result<DatabaseView<D>, Box<Error>>
+    {
+        let schema = retrieve_data_schema(&snapshot, &handle)?;
+        let index = retrieve_data_index(&snapshot, &handle)?;
+        Ok(DatabaseView { snapshot, handle, index, schema })
     }
 
     pub fn schema(&self) -> &Schema {
@@ -48,10 +53,6 @@ where D: Deref<Target=DB>
         &self.snapshot
     }
 
-    pub fn get(&self, key: &[u8]) -> Result<Option<DBVector>, Box<Error>> {
-        Ok(self.snapshot.get(key)?)
-    }
-
     pub fn dump_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<Error>> {
         let path = path.as_ref().to_string_lossy();
 
@@ -60,7 +61,7 @@ where D: Deref<Target=DB>
         let mut file_writer = SstFileWriter::new(env_options, column_family_options);
         file_writer.open(&path)?;
 
-        let mut iter = self.snapshot.iter();
+        let mut iter = self.snapshot.iter_cf(&self.handle, ReadOptions::new());
         iter.seek(SeekKey::Start);
 
         for (key, value) in &mut iter {
@@ -78,7 +79,12 @@ where D: Deref<Target=DB>
     pub fn document_by_id<T>(&self, id: DocumentId) -> Result<T, Box<Error>>
     where T: DeserializeOwned
     {
-        let mut deserializer = Deserializer::new(&self.snapshot, &self.schema, id);
+        let mut deserializer = Deserializer {
+            snapshot: &self.snapshot,
+            handle: &self.handle,
+            schema: &self.schema,
+            document_id: id,
+        };
         Ok(T::deserialize(&mut deserializer)?)
     }
 
@@ -94,48 +100,16 @@ where D: Deref<Target=DB>
     }
 }
 
-impl<D> fmt::Debug for DatabaseView<D>
-where D: Deref<Target=DB>
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut options = ReadOptions::new();
-        let lower = DocumentKey::new(DocumentId(0));
-        options.set_iterate_lower_bound(lower.as_ref());
-
-        let mut iter = self.snapshot.iter_opt(options);
-        iter.seek(SeekKey::Start);
-        let iter = iter.map(|(key, _)| DocumentKeyAttr::from_bytes(&key));
-
-        if f.alternate() {
-            writeln!(f, "DatabaseView(")?;
-        } else {
-            write!(f, "DatabaseView(")?;
-        }
-
-        self.schema.fmt(f)?;
-
-        if f.alternate() {
-            writeln!(f, ",")?;
-        } else {
-            write!(f, ", ")?;
-        }
-
-        f.debug_list().entries(iter).finish()?;
-
-        write!(f, ")")
-    }
-}
-
 // TODO this is just an iter::Map !!!
-pub struct DocumentIter<'a, D, T, I>
+pub struct DocumentIter<'a, 'h, D, T, I>
 where D: Deref<Target=DB>
 {
-    database_view: &'a DatabaseView<D>,
+    database_view: &'a DatabaseView<'h, D>,
     document_ids: I,
     _phantom: marker::PhantomData<T>,
 }
 
-impl<'a, D, T, I> Iterator for DocumentIter<'a, D, T, I>
+impl<'a, 'h, D, T, I> Iterator for DocumentIter<'a, 'h, D, T, I>
 where D: Deref<Target=DB>,
       T: DeserializeOwned,
       I: Iterator<Item=DocumentId>,
@@ -154,13 +128,13 @@ where D: Deref<Target=DB>,
     }
 }
 
-impl<'a, D, T, I> ExactSizeIterator for DocumentIter<'a, D, T, I>
+impl<'a, 'h, D, T, I> ExactSizeIterator for DocumentIter<'a, 'h, D, T, I>
 where D: Deref<Target=DB>,
       T: DeserializeOwned,
       I: ExactSizeIterator + Iterator<Item=DocumentId>,
 { }
 
-impl<'a, D, T, I> DoubleEndedIterator for DocumentIter<'a, D, T, I>
+impl<'a, 'h, D, T, I> DoubleEndedIterator for DocumentIter<'a, 'h, D, T, I>
 where D: Deref<Target=DB>,
       T: DeserializeOwned,
       I: DoubleEndedIterator + Iterator<Item=DocumentId>,

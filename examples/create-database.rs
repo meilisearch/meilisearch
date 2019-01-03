@@ -50,7 +50,10 @@ fn index(
     stop_words: &HashSet<String>,
 ) -> Result<Database, Box<Error>>
 {
-    let database = Database::create(database_path, &schema)?;
+    let database = Database::create(database_path)?;
+    database.create_index("example-index", &schema)?;
+
+    println!("start indexing...");
 
     let mut rdr = csv::Reader::from_path(csv_data_path)?;
     let mut raw_record = csv::StringRecord::new();
@@ -91,7 +94,7 @@ fn index(
         println!("building update...");
         let update = update.build()?;
         println!("ingesting update...");
-        database.ingest_update_file(update)?;
+        database.update_index("example-index", update)?;
     }
 
     Ok(database)
