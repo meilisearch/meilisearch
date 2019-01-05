@@ -25,7 +25,7 @@ rev = "0372ba6"
 
 [dependencies.rocksdb]
 git = "https://github.com/pingcap/rust-rocksdb.git"
-rev = "c2eb140"
+rev = "306e201"
 
 [dependencies.group-by]
 git = "https://github.com/Kerollmops/group-by.git"
