@@ -66,6 +66,7 @@ fn index(schema: Schema, database_path: &Path, csv_data_path: &Path) -> Result<D
 }
 
 fn main() -> Result<(), Box<Error>> {
+    let _ = env_logger::init();
     let opt = Opt::from_args();
 
     let schema = {
