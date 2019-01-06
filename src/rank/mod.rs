@@ -2,6 +2,7 @@ pub mod criterion;
 mod query_builder;
 mod distinct_map;
 
+use std::iter::FusedIterator;
 use std::slice::Windows;
 
 use sdset::SetBuf;
@@ -82,9 +83,10 @@ pub struct QueryIndexGroups<'a, 'b> {
     windows: Windows<'b, usize>,
 }
 
-impl<'a, 'b> Iterator for QueryIndexGroups<'a, 'b> {
+impl<'a> Iterator for QueryIndexGroups<'a, '_> {
     type Item = &'a [Match];
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.windows.next().map(|range| {
             match *range {
@@ -93,10 +95,56 @@ impl<'a, 'b> Iterator for QueryIndexGroups<'a, 'b> {
             }
         })
     }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.windows.size_hint()
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.len()
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.windows.nth(n).map(|range| {
+            match *range {
+                [left, right] => &self.matches[left..right],
+                _             => unreachable!(),
+            }
+        })
+    }
+
+    #[inline]
+    fn last(self) -> Option<Self::Item> {
+        let (matches, windows) = (self.matches, self.windows);
+        windows.last().map(|range| {
+            match *range {
+                [left, right] => &matches[left..right],
+                _             => unreachable!(),
+            }
+        })
+    }
 }
 
-// impl ExactSizeIterator for QueryIndexGroups<'_, '_> {
-//     fn len(&self) -> usize {
-//         self.windows.len() // FIXME (+1) ?
-//     }
-// }
+impl ExactSizeIterator for QueryIndexGroups<'_, '_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.windows.len()
+    }
+}
+
+impl FusedIterator for QueryIndexGroups<'_, '_> { }
+
+impl DoubleEndedIterator for QueryIndexGroups<'_, '_> {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.windows.next_back().map(|range| {
+            match *range {
+                [left, right] => &self.matches[left..right],
+                _             => unreachable!(),
+            }
+        })
+    }
+}
