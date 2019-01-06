@@ -2,9 +2,8 @@ use std::cmp::{self, Ordering};
 use std::ops::Deref;
 
 use rocksdb::DB;
-use group_by::GroupBy;
 
-use crate::rank::{match_query_index, Document};
+use crate::rank::{Document, Matches};
 use crate::rank::criterion::Criterion;
 use crate::database::DatabaseView;
 use crate::Match;
@@ -34,9 +33,9 @@ fn min_proximity(lhs: &[Match], rhs: &[Match]) -> u32 {
     min_prox
 }
 
-fn matches_proximity(matches: &[Match]) -> u32 {
+fn matches_proximity(matches: &Matches) -> u32 {
     let mut proximity = 0;
-    let mut iter = GroupBy::new(matches, match_query_index);
+    let mut iter = matches.query_index_groups();
 
     // iterate over groups by windows of size 2
     let mut last = iter.next();
@@ -91,6 +90,7 @@ mod tests {
         //   soup -> of = 8
         // + of -> the  = 1
         // + the -> day = 8 (not 1)
+        let matches = Matches::from_unsorted_matches(matches.to_vec());
         assert_eq!(matches_proximity(matches), 17);
     }
 
