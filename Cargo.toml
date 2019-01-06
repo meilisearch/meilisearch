@@ -13,6 +13,7 @@ hashbrown = { version = "0.1", features = ["serde"] }
 lazy_static = "1.1"
 levenshtein_automata = { version = "0.1", features = ["fst_automaton"] }
 linked-hash-map = { version = "0.5", features = ["serde_impl"] }
+log = "0.4"
 sdset = "0.3"
 serde = "1.0"
 serde_derive = "1.0"
@@ -41,6 +42,7 @@ nightly = ["hashbrown/nightly", "group-by/nightly"]
 [dev-dependencies]
 csv = "1.0"
 elapsed = "0.1"
+env_logger = "0.6"
 jemallocator = "0.1"
 quickcheck = "0.7"
 rand = "0.6"

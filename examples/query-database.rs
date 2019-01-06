@@ -76,6 +76,7 @@ fn create_highlight_areas(text: &str, matches: &[Match], attribute: SchemaAttr) 
 }
 
 fn main() -> Result<(), Box<Error>> {
+    let _ = env_logger::init();
     let opt = Opt::from_args();
 
     let (elapsed, result) = elapsed::measure_time(|| Database::open(&opt.database_path));
@@ -136,7 +137,7 @@ fn main() -> Result<(), Box<Error>> {
             println!();
         }
 
-        println!("===== Found {} results in {} =====", number_of_documents, elapsed);
+        eprintln!("===== Found {} results in {} =====", number_of_documents, elapsed);
         buffer.clear();
     }
 
