@@ -71,10 +71,6 @@ impl Matches {
             windows: self.slices.windows(2),
         }
     }
-
-    pub fn as_matches(&self) -> &[Match] {
-        &self.matches
-    }
 }
 
 pub struct QueryIndexGroups<'a, 'b> {
