@@ -3,19 +3,22 @@ use std::ops::Deref;
 
 use rocksdb::DB;
 
-use crate::rank::{Document, Matches};
+use group_by::GroupBy;
+
+use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
 use crate::database::DatabaseView;
+use crate::Match;
 
 #[inline]
-fn sum_matches_typos(matches: &Matches) -> i8 {
+fn sum_matches_typos(matches: &[Match]) -> isize {
     let mut sum_typos = 0;
     let mut number_words = 0;
 
     // note that GroupBy will never return an empty group
     // so we can do this assumption safely
-    for group in matches.query_index_groups() {
-        sum_typos += unsafe { group.get_unchecked(0).distance } as i8;
+    for group in GroupBy::new(matches, match_query_index) {
+        sum_typos += unsafe { group.get_unchecked(0).distance } as isize;
         number_words += 1;
     }
 
@@ -41,7 +44,7 @@ where D: Deref<Target=DB>
 mod tests {
     use super::*;
 
-    use crate::{Match, DocumentId, Attribute, WordArea};
+    use crate::{DocumentId, Attribute, WordArea};
 
     // typing: "Geox CEO"
     //
@@ -66,7 +69,10 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document::from_unsorted_matches(DocumentId(0), matches)
+            Document {
+                id: DocumentId(0),
+                matches: matches,
+            }
         };
 
         let doc1 = {
@@ -86,7 +92,10 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document::from_unsorted_matches(DocumentId(1), matches)
+            Document {
+                id: DocumentId(1),
+                matches: matches,
+            }
         };
 
         let lhs = sum_matches_typos(&doc0.matches);
@@ -117,7 +126,10 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document::from_unsorted_matches(DocumentId(0), matches)
+            Document {
+                id: DocumentId(0),
+                matches: matches,
+            }
         };
 
         let doc1 = {
@@ -130,7 +142,10 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document::from_unsorted_matches(DocumentId(1), matches)
+            Document {
+                id: DocumentId(1),
+                matches: matches,
+            }
         };
 
         let lhs = sum_matches_typos(&doc0.matches);
@@ -161,7 +176,10 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document::from_unsorted_matches(DocumentId(0), matches)
+            Document {
+                id: DocumentId(0),
+                matches: matches,
+            }
         };
 
         let doc1 = {
@@ -174,7 +192,10 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document::from_unsorted_matches(DocumentId(1), matches)
+            Document {
+                id: DocumentId(1),
+                matches: matches,
+            }
         };
 
         let lhs = sum_matches_typos(&doc0.matches);
