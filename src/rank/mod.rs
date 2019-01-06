@@ -3,7 +3,8 @@ mod query_builder;
 mod distinct_map;
 
 use std::iter::FusedIterator;
-use std::slice::Windows;
+use std::slice::Iter;
+use std::ops::Range;
 
 use sdset::SetBuf;
 use group_by::GroupBy;
@@ -43,18 +44,19 @@ impl Document {
 #[derive(Debug, Clone)]
 pub struct Matches {
     matches: SetBuf<Match>,
-    slices: Vec<usize>,
+    slices: Vec<Range<usize>>,
 }
 
 impl Matches {
     pub fn new(matches: SetBuf<Match>) -> Matches {
-        let mut last = 0;
-        let mut slices = vec![0];
+        let mut last_end = 0;
+        let mut slices = Vec::new();
 
         for group in GroupBy::new(&matches, match_query_index) {
-            let index = last + group.len();
-            slices.push(index);
-            last = index;
+            let start = last_end;
+            let end = last_end + group.len();
+            slices.push(Range { start, end });
+            last_end = end;
         }
 
         Matches { matches, slices }
@@ -69,7 +71,7 @@ impl Matches {
     pub fn query_index_groups(&self) -> QueryIndexGroups {
         QueryIndexGroups {
             matches: &self.matches,
-            windows: self.slices.windows(2),
+            slices: self.slices.iter(),
         }
     }
 
@@ -80,7 +82,7 @@ impl Matches {
 
 pub struct QueryIndexGroups<'a, 'b> {
     matches: &'a [Match],
-    windows: Windows<'b, usize>,
+    slices: Iter<'b, Range<usize>>,
 }
 
 impl<'a> Iterator for QueryIndexGroups<'a, '_> {
@@ -88,17 +90,14 @@ impl<'a> Iterator for QueryIndexGroups<'a, '_> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.windows.next().map(|range| {
-            match *range {
-                [left, right] => &self.matches[left..right],
-                _             => unreachable!(),
-            }
+        self.slices.next().cloned().map(|range| {
+            unsafe { self.matches.get_unchecked(range) }
         })
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.windows.size_hint()
+        self.slices.size_hint()
     }
 
     #[inline]
@@ -108,22 +107,16 @@ impl<'a> Iterator for QueryIndexGroups<'a, '_> {
 
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.windows.nth(n).map(|range| {
-            match *range {
-                [left, right] => &self.matches[left..right],
-                _             => unreachable!(),
-            }
+        self.slices.nth(n).cloned().map(|range| {
+            unsafe { self.matches.get_unchecked(range) }
         })
     }
 
     #[inline]
     fn last(self) -> Option<Self::Item> {
-        let (matches, windows) = (self.matches, self.windows);
-        windows.last().map(|range| {
-            match *range {
-                [left, right] => &matches[left..right],
-                _             => unreachable!(),
-            }
+        let (matches, slices) = (self.matches, self.slices);
+        slices.last().cloned().map(|range| {
+            unsafe { matches.get_unchecked(range) }
         })
     }
 }
@@ -131,7 +124,7 @@ impl<'a> Iterator for QueryIndexGroups<'a, '_> {
 impl ExactSizeIterator for QueryIndexGroups<'_, '_> {
     #[inline]
     fn len(&self) -> usize {
-        self.windows.len()
+        self.slices.len()
     }
 }
 
@@ -140,11 +133,8 @@ impl FusedIterator for QueryIndexGroups<'_, '_> { }
 impl DoubleEndedIterator for QueryIndexGroups<'_, '_> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.windows.next_back().map(|range| {
-            match *range {
-                [left, right] => &self.matches[left..right],
-                _             => unreachable!(),
-            }
+        self.slices.next_back().cloned().map(|range| {
+            unsafe { self.matches.get_unchecked(range) }
         })
     }
 }

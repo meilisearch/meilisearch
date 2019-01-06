@@ -116,7 +116,7 @@ where D: Deref<Target=DB>,
             }
         }
 
-        matches.into_iter().map(|(id, m)| Document::from_unsorted_matches(id, m)).collect()
+        matches.into_iter().map(|(i, m)| Document::from_unsorted_matches(i, m)).collect()
     }
 }
 
