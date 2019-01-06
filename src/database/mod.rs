@@ -7,6 +7,7 @@ use rocksdb::rocksdb_options::{DBOptions, IngestExternalFileOptions, ColumnFamil
 use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::{DB, DBVector, MergeOperands};
 use crossbeam::atomic::ArcCell;
+use log::debug;
 
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::view::{DatabaseView, DocumentIter};
@@ -147,9 +148,11 @@ impl Database {
             let options = IngestExternalFileOptions::new();
             // options.move_files(move_update);
 
+            debug!("ingest update file");
             let cf_handle = db.cf_handle("default").expect("\"default\" column family not found");
             db.ingest_external_file_optimized(&cf_handle, &options, &[&path])?;
 
+            debug!("compacting index range");
             // Compacting to trigger the merge operator only one time
             // while ingesting the update and not each time searching
             db.compact_range(Some(DATA_INDEX), Some(DATA_INDEX));
