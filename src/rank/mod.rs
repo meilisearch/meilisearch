@@ -23,28 +23,19 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(doc: DocumentId, match_: Match) -> Self {
+    pub fn new(id: DocumentId, match_: Match) -> Self {
         let matches = SetBuf::new_unchecked(vec![match_]);
-        Self::from_matches(doc, matches)
+        Self::from_matches(id, matches)
     }
 
     pub fn from_matches(id: DocumentId, matches: SetBuf<Match>) -> Self {
-        let mut last = 0;
-        let mut slices = vec![0];
-        for group in GroupBy::new(&matches, match_query_index) {
-            let index = last + group.len();
-            slices.push(index);
-            last = index;
-        }
-
-        let matches = Matches { matches, slices };
+        let matches = Matches::new(matches);
         Self { id, matches }
     }
 
-    pub fn from_unsorted_matches(doc: DocumentId, mut matches: Vec<Match>) -> Self {
-        matches.sort_unstable();
-        let matches = SetBuf::new_unchecked(matches);
-        Self::from_matches(doc, matches)
+    pub fn from_unsorted_matches(id: DocumentId, matches: Vec<Match>) -> Self {
+        let matches = Matches::from_unsorted(matches);
+        Self { id, matches }
     }
 }
 
@@ -55,6 +46,25 @@ pub struct Matches {
 }
 
 impl Matches {
+    pub fn new(matches: SetBuf<Match>) -> Matches {
+        let mut last = 0;
+        let mut slices = vec![0];
+
+        for group in GroupBy::new(&matches, match_query_index) {
+            let index = last + group.len();
+            slices.push(index);
+            last = index;
+        }
+
+        Matches { matches, slices }
+    }
+
+    pub fn from_unsorted(mut matches: Vec<Match>) -> Matches {
+        matches.sort_unstable();
+        let matches = SetBuf::new_unchecked(matches);
+        Matches::new(matches)
+    }
+
     pub fn query_index_groups(&self) -> QueryIndexGroups {
         QueryIndexGroups {
             matches: &self.matches,
@@ -75,7 +85,7 @@ impl<'a, 'b> Iterator for QueryIndexGroups<'a, 'b> {
         self.windows.next().map(|range| {
             match *range {
                 [left, right] => &self.matches[left..right],
-                _             => unreachable!()
+                _             => unreachable!(),
             }
         })
     }

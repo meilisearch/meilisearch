@@ -90,8 +90,8 @@ mod tests {
         //   soup -> of = 8
         // + of -> the  = 1
         // + the -> day = 8 (not 1)
-        let matches = Matches::from_unsorted_matches(matches.to_vec());
-        assert_eq!(matches_proximity(matches), 17);
+        let matches = Matches::from_unsorted(matches.to_vec());
+        assert_eq!(matches_proximity(&matches), 17);
     }
 
     #[test]
@@ -118,7 +118,8 @@ mod tests {
         //   soup -> of = 1
         // + of -> the  = 1
         // + the -> day = 1
-        assert_eq!(matches_proximity(matches), 3);
+        let matches = Matches::from_unsorted(matches.to_vec());
+        assert_eq!(matches_proximity(&matches), 3);
     }
 }
 
@@ -151,6 +152,8 @@ mod bench {
             let match_ = Match { query_index, attribute, ..Match::zero() };
             matches.push(match_);
         }
+
+        let matches = Matches::from_unsorted(matches.to_vec());
 
         bench.iter(|| {
             let proximity = matches_proximity(&matches);

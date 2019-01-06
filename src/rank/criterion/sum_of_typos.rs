@@ -66,10 +66,7 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document {
-                id: DocumentId(0),
-                matches: matches,
-            }
+            Document::from_unsorted_matches(DocumentId(0), matches)
         };
 
         let doc1 = {
@@ -89,10 +86,7 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document {
-                id: DocumentId(1),
-                matches: matches,
-            }
+            Document::from_unsorted_matches(DocumentId(1), matches)
         };
 
         let lhs = sum_matches_typos(&doc0.matches);
@@ -123,10 +117,7 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document {
-                id: DocumentId(0),
-                matches: matches,
-            }
+            Document::from_unsorted_matches(DocumentId(0), matches)
         };
 
         let doc1 = {
@@ -139,10 +130,7 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document {
-                id: DocumentId(1),
-                matches: matches,
-            }
+            Document::from_unsorted_matches(DocumentId(1), matches)
         };
 
         let lhs = sum_matches_typos(&doc0.matches);
@@ -173,10 +161,7 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document {
-                id: DocumentId(0),
-                matches: matches,
-            }
+            Document::from_unsorted_matches(DocumentId(0), matches)
         };
 
         let doc1 = {
@@ -189,10 +174,7 @@ mod tests {
                     word_area: WordArea::new_faillible(0, 6)
                 },
             ];
-            Document {
-                id: DocumentId(1),
-                matches: matches,
-            }
+            Document::from_unsorted_matches(DocumentId(1), matches)
         };
 
         let lhs = sum_matches_typos(&doc0.matches);
