@@ -185,6 +185,7 @@ mod tests {
     use std::error::Error;
 
     use serde_derive::{Serialize, Deserialize};
+    use hashbrown::HashSet;
     use tempfile::tempdir;
 
     use crate::database::schema::{SchemaBuilder, STORED, INDEXED};
@@ -194,6 +195,7 @@ mod tests {
     #[test]
     fn ingest_one_update_file() -> Result<(), Box<Error>> {
         let dir = tempdir()?;
+        let stop_words = HashSet::new();
 
         let rocksdb_path = dir.path().join("rocksdb.rdb");
 
@@ -237,8 +239,8 @@ mod tests {
             let tokenizer_builder = DefaultBuilder::new();
             let mut builder = UpdateBuilder::new(update_path, schema);
 
-            docid0 = builder.update_document(&doc0, &tokenizer_builder)?;
-            docid1 = builder.update_document(&doc1, &tokenizer_builder)?;
+            docid0 = builder.update_document(&doc0, &tokenizer_builder, &stop_words)?;
+            docid1 = builder.update_document(&doc1, &tokenizer_builder, &stop_words)?;
 
             builder.build()?
         };
@@ -258,6 +260,7 @@ mod tests {
     #[test]
     fn ingest_two_update_files() -> Result<(), Box<Error>> {
         let dir = tempdir()?;
+        let stop_words = HashSet::new();
 
         let rocksdb_path = dir.path().join("rocksdb.rdb");
 
@@ -312,8 +315,8 @@ mod tests {
             let update_path = dir.path().join("update-000.sst");
             let mut builder = UpdateBuilder::new(update_path, schema.clone());
 
-            docid0 = builder.update_document(&doc0, &tokenizer_builder)?;
-            docid1 = builder.update_document(&doc1, &tokenizer_builder)?;
+            docid0 = builder.update_document(&doc0, &tokenizer_builder, &stop_words)?;
+            docid1 = builder.update_document(&doc1, &tokenizer_builder, &stop_words)?;
 
             builder.build()?
         };
@@ -325,8 +328,8 @@ mod tests {
             let update_path = dir.path().join("update-001.sst");
             let mut builder = UpdateBuilder::new(update_path, schema);
 
-            docid2 = builder.update_document(&doc2, &tokenizer_builder)?;
-            docid3 = builder.update_document(&doc3, &tokenizer_builder)?;
+            docid2 = builder.update_document(&doc2, &tokenizer_builder, &stop_words)?;
+            docid3 = builder.update_document(&doc3, &tokenizer_builder, &stop_words)?;
 
             builder.build()?
         };
@@ -364,8 +367,9 @@ mod bench {
     use rand::distributions::Alphanumeric;
     use rand_xorshift::XorShiftRng;
     use rand::{Rng, SeedableRng};
-    use rand::seq::SliceRandom;
     use serde_derive::Serialize;
+    use rand::seq::SliceRandom;
+    use hashbrown::HashSet;
 
     use crate::tokenizer::DefaultBuilder;
     use crate::database::update::UpdateBuilder;
@@ -394,6 +398,7 @@ mod bench {
     #[bench]
     fn open_little_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
         let dir = tempfile::tempdir()?;
+        let stop_words = HashSet::new();
 
         let mut builder = SchemaBuilder::with_identifier("id");
         builder.new_attribute("title", STORED | INDEXED);
@@ -421,7 +426,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder)?;
+            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
         let update = builder.build()?;
@@ -440,6 +445,7 @@ mod bench {
     #[bench]
     fn open_medium_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
         let dir = tempfile::tempdir()?;
+        let stop_words = HashSet::new();
 
         let mut builder = SchemaBuilder::with_identifier("id");
         builder.new_attribute("title", STORED | INDEXED);
@@ -467,7 +473,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder)?;
+            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
         let update = builder.build()?;
@@ -487,6 +493,7 @@ mod bench {
     #[ignore]
     fn open_big_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
         let dir = tempfile::tempdir()?;
+        let stop_words = HashSet::new();
 
         let mut builder = SchemaBuilder::with_identifier("id");
         builder.new_attribute("title", STORED | INDEXED);
@@ -514,7 +521,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder)?;
+            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
         let update = builder.build()?;
@@ -533,6 +540,7 @@ mod bench {
     #[bench]
     fn search_oneletter_little_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
         let dir = tempfile::tempdir()?;
+        let stop_words = HashSet::new();
 
         let mut builder = SchemaBuilder::with_identifier("id");
         builder.new_attribute("title", STORED | INDEXED);
@@ -560,7 +568,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder)?;
+            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
         let update = builder.build()?;
@@ -579,6 +587,7 @@ mod bench {
     #[bench]
     fn search_oneletter_medium_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
         let dir = tempfile::tempdir()?;
+        let stop_words = HashSet::new();
 
         let mut builder = SchemaBuilder::with_identifier("id");
         builder.new_attribute("title", STORED | INDEXED);
@@ -606,7 +615,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder)?;
+            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
         let update = builder.build()?;
@@ -626,6 +635,7 @@ mod bench {
     #[ignore]
     fn search_oneletter_big_database(bench: &mut Bencher) -> Result<(), Box<Error>> {
         let dir = tempfile::tempdir()?;
+        let stop_words = HashSet::new();
 
         let mut builder = SchemaBuilder::with_identifier("id");
         builder.new_attribute("title", STORED | INDEXED);
@@ -653,7 +663,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder)?;
+            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
         let update = builder.build()?;

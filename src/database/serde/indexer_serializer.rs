@@ -5,6 +5,7 @@ use crate::tokenizer::TokenizerBuilder;
 use crate::tokenizer::Token;
 use crate::{DocumentId, DocIndex, Attribute, WordArea};
 
+use hashbrown::HashSet;
 use serde::Serialize;
 use serde::ser;
 
@@ -13,6 +14,7 @@ pub struct IndexerSerializer<'a, B> {
     pub update: &'a mut DocumentUpdate,
     pub document_id: DocumentId,
     pub attribute: SchemaAttr,
+    pub stop_words: &'a HashSet<String>,
 }
 
 impl<'a, B> ser::Serializer for IndexerSerializer<'a, B>
@@ -48,6 +50,7 @@ where B: TokenizerBuilder
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         for Token { word, word_index, char_index } in self.tokenizer_builder.build(v) {
+
             // FIXME must u32::try_from instead
             let attribute = match Attribute::new(self.attribute.0, word_index as u32) {
                 Ok(attribute) => attribute,
@@ -68,6 +71,8 @@ where B: TokenizerBuilder
 
             // insert the exact representation
             let word_lower = word.to_lowercase();
+
+            if self.stop_words.contains(&word_lower) { continue }
 
             // and the unidecoded lowercased version
             let word_unidecoded = unidecode::unidecode(word).to_lowercase();
