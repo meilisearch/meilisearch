@@ -18,7 +18,7 @@ fn sum_matches_typos(matches: &[Match]) -> isize {
     // note that GroupBy will never return an empty group
     // so we can do this assumption safely
     for group in GroupBy::new(matches, match_query_index) {
-        sum_typos += unsafe { group.get_unchecked(0).distance } as isize;
+        sum_typos += unsafe { group.get_unchecked(0).distance as isize };
         number_words += 1;
     }
 
