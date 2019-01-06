@@ -115,7 +115,7 @@ fn main() -> Result<(), Box<Error>> {
                         };
 
                         print!("{}: ", name);
-                        let areas = create_highlight_areas(&text, &doc.matches, attr);
+                        let areas = create_highlight_areas(&text, doc.matches.as_matches(), attr);
                         display_highlights(&text, &areas)?;
                         println!();
                     }
@@ -124,7 +124,7 @@ fn main() -> Result<(), Box<Error>> {
             }
 
             let mut matching_attributes = HashSet::new();
-            for _match in doc.matches {
+            for _match in doc.matches.as_matches() {
                 let attr = SchemaAttr::new(_match.attribute.attribute());
                 let name = schema.attribute_name(attr);
                 matching_attributes.insert(name);
