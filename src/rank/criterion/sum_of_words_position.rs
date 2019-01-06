@@ -8,11 +8,11 @@ use crate::rank::criterion::Criterion;
 use crate::database::DatabaseView;
 
 #[inline]
-fn sum_matches_attribute_index(matches: &Matches) -> u32 {
+fn sum_matches_attribute_index(matches: &Matches) -> usize {
     // note that GroupBy will never return an empty group
     // so we can do this assumption safely
     matches.query_index_groups().map(|group| {
-        unsafe { group.get_unchecked(0).attribute.word_index() }
+        unsafe { group.get_unchecked(0).attribute.word_index() as usize }
     }).sum()
 }
 
