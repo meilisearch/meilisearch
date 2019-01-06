@@ -8,6 +8,7 @@ use group_by::GroupByMut;
 use hashbrown::HashMap;
 use fst::Streamer;
 use rocksdb::DB;
+use log::info;
 
 use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::rank::distinct_map::{DistinctMap, BufferedDistinctMap};
@@ -115,6 +116,8 @@ where D: Deref<Target=DB>,
                 }
             }
         }
+
+        info!("{} documents to classify", matches.len());
 
         matches.into_iter().map(|(i, m)| Document::from_unsorted_matches(i, m)).collect()
     }
