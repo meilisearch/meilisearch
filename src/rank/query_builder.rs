@@ -119,7 +119,7 @@ where D: Deref<Target=DB>,
 
         info!("{} documents to classify", matches.len());
 
-        matches.into_iter().map(|(i, m)| Document::from_unsorted_matches(i, m)).collect()
+        matches.into_iter().map(|(i, m)| Document::from_matches(i, m)).collect()
     }
 }
 
