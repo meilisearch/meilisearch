@@ -2,9 +2,8 @@ use std::cmp::{self, Ordering};
 use std::ops::Deref;
 
 use rocksdb::DB;
-use group_by::GroupBy;
 
-use crate::rank::{match_query_index, Document};
+use crate::rank::{Document, Matches};
 use crate::rank::criterion::Criterion;
 use crate::database::DatabaseView;
 use crate::Match;
@@ -34,9 +33,9 @@ fn min_proximity(lhs: &[Match], rhs: &[Match]) -> u32 {
     min_prox
 }
 
-fn matches_proximity(matches: &[Match]) -> u32 {
+fn matches_proximity(matches: &Matches) -> u32 {
     let mut proximity = 0;
-    let mut iter = GroupBy::new(matches, match_query_index);
+    let mut iter = matches.query_index_groups();
 
     // iterate over groups by windows of size 2
     let mut last = iter.next();
@@ -91,7 +90,8 @@ mod tests {
         //   soup -> of = 8
         // + of -> the  = 1
         // + the -> day = 8 (not 1)
-        assert_eq!(matches_proximity(matches), 17);
+        let matches = Matches::from_unsorted(matches.to_vec());
+        assert_eq!(matches_proximity(&matches), 17);
     }
 
     #[test]
@@ -118,7 +118,8 @@ mod tests {
         //   soup -> of = 1
         // + of -> the  = 1
         // + the -> day = 1
-        assert_eq!(matches_proximity(matches), 3);
+        let matches = Matches::from_unsorted(matches.to_vec());
+        assert_eq!(matches_proximity(&matches), 3);
     }
 }
 
@@ -151,6 +152,8 @@ mod bench {
             let match_ = Match { query_index, attribute, ..Match::zero() };
             matches.push(match_);
         }
+
+        let matches = Matches::from_unsorted(matches.to_vec());
 
         bench.iter(|| {
             let proximity = matches_proximity(&matches);

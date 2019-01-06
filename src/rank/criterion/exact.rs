@@ -2,21 +2,20 @@ use std::cmp::Ordering;
 use std::ops::Deref;
 
 use rocksdb::DB;
-use group_by::GroupBy;
 
-use crate::rank::{match_query_index, Document};
+use crate::rank::{Document, Matches};
 use crate::rank::criterion::Criterion;
 use crate::database::DatabaseView;
 use crate::Match;
 
 #[inline]
-fn contains_exact(matches: &[Match]) -> bool {
+fn contains_exact(matches: &&[Match]) -> bool {
     matches.iter().any(|m| m.is_exact)
 }
 
 #[inline]
-fn number_exact_matches(matches: &[Match]) -> usize {
-    GroupBy::new(matches, match_query_index).map(contains_exact).count()
+fn number_exact_matches(matches: &Matches) -> usize {
+    matches.query_index_groups().filter(contains_exact).count()
 }
 
 #[derive(Debug, Clone, Copy)]
