@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::error::Error;
 
+use hashbrown::HashSet;
 use serde::Serialize;
 
 use crate::database::serde::serializer::Serializer;
@@ -28,6 +29,7 @@ impl UpdateBuilder {
         &mut self,
         document: T,
         tokenizer_builder: &B,
+        stop_words: &HashSet<String>,
     ) -> Result<DocumentId, SerializerError>
     where T: Serialize,
           B: TokenizerBuilder,
@@ -40,6 +42,7 @@ impl UpdateBuilder {
             document_id: document_id,
             tokenizer_builder: tokenizer_builder,
             update: update,
+            stop_words: stop_words,
         };
 
         document.serialize(serializer)?;

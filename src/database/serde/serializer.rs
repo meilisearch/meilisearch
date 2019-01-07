@@ -1,3 +1,4 @@
+use hashbrown::HashSet;
 use serde::Serialize;
 use serde::ser;
 
@@ -14,6 +15,7 @@ pub struct Serializer<'a, B> {
     pub update: &'a mut DocumentUpdate,
     pub document_id: DocumentId,
     pub tokenizer_builder: &'a B,
+    pub stop_words: &'a HashSet<String>,
 }
 
 impl<'a, B> ser::Serializer for Serializer<'a, B>
@@ -139,6 +141,7 @@ where B: TokenizerBuilder
             document_id: self.document_id,
             update: self.update,
             tokenizer_builder: self.tokenizer_builder,
+            stop_words: self.stop_words,
             current_key_name: None,
         })
     }
@@ -154,6 +157,7 @@ where B: TokenizerBuilder
             update: self.update,
             document_id: self.document_id,
             tokenizer_builder: self.tokenizer_builder,
+            stop_words: self.stop_words,
         })
     }
 
@@ -174,6 +178,7 @@ pub struct MapSerializer<'a, B> {
     pub document_id: DocumentId,
     pub update: &'a mut DocumentUpdate,
     pub tokenizer_builder: &'a B,
+    pub stop_words: &'a HashSet<String>,
     pub current_key_name: Option<String>,
 }
 
@@ -219,6 +224,7 @@ where B: TokenizerBuilder
                     tokenizer_builder: self.tokenizer_builder,
                     document_id: self.document_id,
                     attribute: attr,
+                    stop_words: self.stop_words,
                 };
                 value.serialize(serializer)?;
             }
@@ -237,6 +243,7 @@ pub struct StructSerializer<'a, B> {
     pub document_id: DocumentId,
     pub update: &'a mut DocumentUpdate,
     pub tokenizer_builder: &'a B,
+    pub stop_words: &'a HashSet<String>,
 }
 
 impl<'a, B> ser::SerializeStruct for StructSerializer<'a, B>
@@ -264,6 +271,7 @@ where B: TokenizerBuilder
                     tokenizer_builder: self.tokenizer_builder,
                     document_id: self.document_id,
                     attribute: attr,
+                    stop_words: self.stop_words,
                 };
                 value.serialize(serializer)?;
             }
