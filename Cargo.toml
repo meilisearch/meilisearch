@@ -7,7 +7,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 [dependencies]
 bincode = "1.0"
 byteorder = "1.2"
-crossbeam = "0.6"
+evmap = "4.0"
 fst = "0.3"
 hashbrown = { version = "0.1", features = ["serde"] }
 lazy_static = "1.1"
@@ -25,8 +25,8 @@ features = ["preserve_order"]
 rev = "0372ba6"
 
 [dependencies.rocksdb]
-git = "https://github.com/pingcap/rust-rocksdb.git"
-rev = "306e201"
+git = "https://github.com/Kerollmops/rust-rocksdb.git"
+branch = "evmap"
 
 [dependencies.group-by]
 git = "https://github.com/Kerollmops/group-by.git"

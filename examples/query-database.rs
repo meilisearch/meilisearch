@@ -93,51 +93,63 @@ fn main() -> Result<(), Box<Error>> {
         if input.read_line(&mut buffer)? == 0 { break }
         let query = buffer.trim_end_matches('\n');
 
-        let view = database.view();
-        let schema = view.schema();
+        let index_map = database.index_map();
+        let result = index_map.get_and("example-index", |values| -> Result<(), Box<Error>> {
+            assert_eq!(values.len(), 1);
 
-        let (elapsed, documents) = elapsed::measure_time(|| {
-            let builder = view.query_builder().unwrap();
-            builder.query(query, 0..opt.number_results)
+            let view = &values[0];
+            let schema = view.schema();
+
+            let (elapsed, documents) = elapsed::measure_time(|| {
+                let builder = view.query_builder().unwrap();
+                builder.query(query, 0..opt.number_results)
+            });
+
+            let number_of_documents = documents.len();
+            for doc in documents {
+                match view.document_by_id::<Document>(doc.id) {
+                    Ok(document) => {
+                        for name in &opt.displayed_fields {
+                            let attr = match schema.attribute(name) {
+                                Some(attr) => attr,
+                                None => continue,
+                            };
+                            let text = match document.get(name) {
+                                Some(text) => text,
+                                None => continue,
+                            };
+
+                            print!("{}: ", name);
+                            let areas = create_highlight_areas(&text, &doc.matches, attr);
+                            display_highlights(&text, &areas)?;
+                            println!();
+                        }
+                    },
+                    Err(e) => eprintln!("{}", e),
+                }
+
+                let mut matching_attributes = HashSet::new();
+                for _match in doc.matches {
+                    let attr = SchemaAttr::new(_match.attribute.attribute());
+                    let name = schema.attribute_name(attr);
+                    matching_attributes.insert(name);
+                }
+
+                let matching_attributes = Vec::from_iter(matching_attributes);
+                println!("matching in: {:?}", matching_attributes);
+
+                println!();
+            }
+
+            eprintln!("===== Found {} results in {} =====", number_of_documents, elapsed);
+
+            Ok(())
         });
 
-        let number_of_documents = documents.len();
-        for doc in documents {
-            match view.document_by_id::<Document>(doc.id) {
-                Ok(document) => {
-                    for name in &opt.displayed_fields {
-                        let attr = match schema.attribute(name) {
-                            Some(attr) => attr,
-                            None => continue,
-                        };
-                        let text = match document.get(name) {
-                            Some(text) => text,
-                            None => continue,
-                        };
-
-                        print!("{}: ", name);
-                        let areas = create_highlight_areas(&text, &doc.matches, attr);
-                        display_highlights(&text, &areas)?;
-                        println!();
-                    }
-                },
-                Err(e) => eprintln!("{}", e),
-            }
-
-            let mut matching_attributes = HashSet::new();
-            for _match in doc.matches {
-                let attr = SchemaAttr::new(_match.attribute.attribute());
-                let name = schema.attribute_name(attr);
-                matching_attributes.insert(name);
-            }
-
-            let matching_attributes = Vec::from_iter(matching_attributes);
-            println!("matching in: {:?}", matching_attributes);
-
-            println!();
+        if let Some(Err(e)) = result {
+            eprintln!("{}", e);
         }
 
-        eprintln!("===== Found {} results in {} =====", number_of_documents, elapsed);
         buffer.clear();
     }
 

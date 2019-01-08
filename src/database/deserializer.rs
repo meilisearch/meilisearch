@@ -2,34 +2,27 @@ use std::error::Error;
 use std::ops::Deref;
 use std::fmt;
 
-use rocksdb::rocksdb::{DB, Snapshot, SeekKey};
+use rocksdb::rocksdb::{DB, Snapshot, CFHandle, SeekKey};
+use serde::de::{self, Visitor, IntoDeserializer};
 use rocksdb::rocksdb_options::ReadOptions;
 use serde::forward_to_deserialize_any;
 use serde::de::value::MapDeserializer;
-use serde::de::{self, Visitor, IntoDeserializer};
 
 use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
 use crate::database::schema::Schema;
 use crate::DocumentId;
 
 pub struct Deserializer<'a, D>
-where D: Deref<Target=DB>
+where D: Deref<Target=DB>,
 {
-    snapshot: &'a Snapshot<D>,
-    schema: &'a Schema,
-    document_id: DocumentId,
-}
-
-impl<'a, D> Deserializer<'a, D>
-where D: Deref<Target=DB>
-{
-    pub fn new(snapshot: &'a Snapshot<D>, schema: &'a Schema, doc: DocumentId) -> Self {
-        Deserializer { snapshot, schema, document_id: doc }
-    }
+    pub snapshot: &'a Snapshot<D>,
+    pub handle: &'a CFHandle,
+    pub schema: &'a Schema,
+    pub document_id: DocumentId,
 }
 
 impl<'de, 'a, 'b, D> de::Deserializer<'de> for &'b mut Deserializer<'a, D>
-where D: Deref<Target=DB>
+where D: Deref<Target=DB>,
 {
     type Error = DeserializerError;
 
@@ -54,7 +47,8 @@ where D: Deref<Target=DB>
         options.set_iterate_lower_bound(lower.as_ref());
         options.set_iterate_upper_bound(upper.as_ref());
 
-        let mut iter = self.snapshot.iter_opt(options);
+        let mut iter = self.snapshot.iter_cf(self.handle, options);
+
         iter.seek(SeekKey::Start);
 
         if iter.kv().is_none() {

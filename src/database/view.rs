@@ -1,13 +1,13 @@
 use std::error::Error;
 use std::path::Path;
 use std::ops::Deref;
-use std::{fmt, marker};
+use std::marker;
 
 use rocksdb::rocksdb_options::{ReadOptions, EnvOptions, ColumnFamilyOptions};
-use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey, SstFileWriter};
+use rocksdb::rocksdb::{DB, Snapshot, SeekKey, SstFileWriter, CFValue};
+use evmap::ReadHandle;
 use serde::de::DeserializeOwned;
 
-use crate::database::{DocumentKey, DocumentKeyAttr};
 use crate::database::{retrieve_data_schema, retrieve_data_index};
 use crate::database::deserializer::Deserializer;
 use crate::database::schema::Schema;
@@ -19,6 +19,8 @@ pub struct DatabaseView<D>
 where D: Deref<Target=DB>
 {
     snapshot: Snapshot<D>,
+    cfs_reader: ReadHandle<String, Box<CFValue>>,
+    cf_name: String,
     index: Index,
     schema: Schema,
 }
@@ -26,10 +28,29 @@ where D: Deref<Target=DB>
 impl<D> DatabaseView<D>
 where D: Deref<Target=DB>
 {
-    pub fn new(snapshot: Snapshot<D>) -> Result<DatabaseView<D>, Box<Error>> {
-        let schema = retrieve_data_schema(&snapshot)?;
-        let index = retrieve_data_index(&snapshot)?;
-        Ok(DatabaseView { snapshot, index, schema })
+    pub fn new(
+        snapshot: Snapshot<D>,
+        cfs_reader: ReadHandle<String, Box<CFValue>>,
+        cf_name: String,
+    ) -> Result<DatabaseView<D>, Box<Error>>
+    {
+        let data = cfs_reader.get_and(&cf_name, |values| {
+            assert_eq!(values.len(), 1);
+
+            let handle = &values[0].handle;
+            let schema = retrieve_data_schema(&snapshot, &handle)?;
+            let index = retrieve_data_index(&snapshot, &handle)?;
+
+            Ok((schema, index))
+        });
+
+        match data {
+            Some(Ok((schema, index))) => {
+                Ok(DatabaseView { snapshot, cfs_reader, cf_name, index, schema })
+            },
+            Some(Err(e)) => Err(e),
+            None => Err(format!("Index name {} not found", cf_name).into()),
+        }
     }
 
     pub fn schema(&self) -> &Schema {
@@ -48,10 +69,6 @@ where D: Deref<Target=DB>
         &self.snapshot
     }
 
-    pub fn get(&self, key: &[u8]) -> Result<Option<DBVector>, Box<Error>> {
-        Ok(self.snapshot.get(key)?)
-    }
-
     pub fn dump_all<P: AsRef<Path>>(&self, path: P) -> Result<(), Box<Error>> {
         let path = path.as_ref().to_string_lossy();
 
@@ -60,15 +77,23 @@ where D: Deref<Target=DB>
         let mut file_writer = SstFileWriter::new(env_options, column_family_options);
         file_writer.open(&path)?;
 
-        let mut iter = self.snapshot.iter();
-        iter.seek(SeekKey::Start);
+        let iter = self.cfs_reader.get_and(&self.cf_name, |values| {
+            assert_eq!(values.len(), 1);
+            let handle = &values[0].handle;
+            self.snapshot.iter_cf(&handle, ReadOptions::new())
+        });
 
-        for (key, value) in &mut iter {
-            file_writer.put(&key, &value)?;
+        match iter {
+            Some(mut iter) => {
+                iter.seek(SeekKey::Start);
+                for (key, value) in &mut iter {
+                    file_writer.put(&key, &value)?;
+                }
+                file_writer.finish()?;
+                Ok(())
+            },
+            None => Err("Invalid index name".into())
         }
-
-        file_writer.finish()?;
-        Ok(())
     }
 
     pub fn query_builder(&self) -> Result<QueryBuilder<D, FilterFunc<D>>, Box<Error>> {
@@ -78,8 +103,25 @@ where D: Deref<Target=DB>
     pub fn document_by_id<T>(&self, id: DocumentId) -> Result<T, Box<Error>>
     where T: DeserializeOwned
     {
-        let mut deserializer = Deserializer::new(&self.snapshot, &self.schema, id);
-        Ok(T::deserialize(&mut deserializer)?)
+        let result = self.cfs_reader.get_and(&self.cf_name, |values| {
+            assert_eq!(values.len(), 1);
+
+            let handle = &values[0].handle;
+            let mut deserializer = Deserializer {
+                snapshot: &self.snapshot,
+                handle: &handle,
+                schema: &self.schema,
+                document_id: id,
+            };
+
+            Ok(T::deserialize(&mut deserializer)?)
+        });
+
+        match result {
+            Some(Ok(document)) => Ok(document),
+            Some(Err(e)) => Err(e),
+            None => Err("Invalid index name".into()),
+        }
     }
 
     pub fn documents_by_id<T, I>(&self, ids: I) -> DocumentIter<D, T, I::IntoIter>
@@ -94,41 +136,19 @@ where D: Deref<Target=DB>
     }
 }
 
-impl<D> fmt::Debug for DatabaseView<D>
-where D: Deref<Target=DB>
+impl<D> PartialEq for DatabaseView<D>
+where D: Deref<Target=DB>,
 {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut options = ReadOptions::new();
-        let lower = DocumentKey::new(DocumentId(0));
-        options.set_iterate_lower_bound(lower.as_ref());
-
-        let mut iter = self.snapshot.iter_opt(options);
-        iter.seek(SeekKey::Start);
-        let iter = iter.map(|(key, _)| DocumentKeyAttr::from_bytes(&key));
-
-        if f.alternate() {
-            writeln!(f, "DatabaseView(")?;
-        } else {
-            write!(f, "DatabaseView(")?;
-        }
-
-        self.schema.fmt(f)?;
-
-        if f.alternate() {
-            writeln!(f, ",")?;
-        } else {
-            write!(f, ", ")?;
-        }
-
-        f.debug_list().entries(iter).finish()?;
-
-        write!(f, ")")
+    fn eq(&self, other: &Self) -> bool {
+        self.cf_name == other.cf_name
     }
 }
 
+impl<D> Eq for DatabaseView<D> where D: Deref<Target=DB> { }
+
 // TODO this is just an iter::Map !!!
 pub struct DocumentIter<'a, D, T, I>
-where D: Deref<Target=DB>
+where D: Deref<Target=DB>,
 {
     database_view: &'a DatabaseView<D>,
     document_ids: I,
