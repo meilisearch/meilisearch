@@ -48,6 +48,24 @@ fn display_highlights(text: &str, ranges: &[usize]) -> io::Result<()> {
     Ok(())
 }
 
+fn char_to_byte_range(index: usize, length: usize, text: &str) -> (usize, usize) {
+    let mut byte_index = 0;
+    let mut byte_length = 0;
+
+    for (n, (i, c)) in text.char_indices().enumerate() {
+        if n == index {
+            byte_index = i;
+        }
+
+        if n + 1 == index + length {
+            byte_length = i - byte_index + c.len_utf8();
+            break;
+        }
+    }
+
+    (byte_index, byte_length)
+}
+
 fn create_highlight_areas(text: &str, matches: &[Match], attribute: SchemaAttr) -> Vec<usize> {
     let mut byte_indexes = BTreeMap::new();
 
@@ -55,11 +73,18 @@ fn create_highlight_areas(text: &str, matches: &[Match], attribute: SchemaAttr) 
         let match_attribute = match_.attribute.attribute();
         if SchemaAttr::new(match_attribute) == attribute {
             let word_area = match_.word_area;
-            let byte_index = word_area.byte_index() as usize;
-            let length = word_area.length() as usize;
+
+            let char_index = word_area.char_index() as usize;
+            let char_length = word_area.length() as usize;
+            let (byte_index, byte_length) = char_to_byte_range(char_index, char_length, text);
+
             match byte_indexes.entry(byte_index) {
-                Entry::Vacant(entry) => { entry.insert(length); },
-                Entry::Occupied(mut entry) => if *entry.get() < length { entry.insert(length); },
+                Entry::Vacant(entry) => { entry.insert(byte_length); },
+                Entry::Occupied(mut entry) => {
+                    if *entry.get() < byte_length {
+                        entry.insert(byte_length);
+                    }
+                },
             }
         }
     }

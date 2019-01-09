@@ -96,7 +96,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                         let (spaces, word) = prefix.split_at(start_word);
 
                         self.inner = tail;
-                        self.char_index += spaces.len();
+                        self.char_index += spaces.chars().count();
                         self.word_index += distance.map(Separator::to_usize).unwrap_or(0);
 
                         let token = Token {
@@ -105,7 +105,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                             char_index: self.char_index,
                         };
 
-                        self.char_index += word.len();
+                        self.char_index += word.chars().count();
                         return Some(token)
                     }
 
@@ -122,7 +122,7 @@ impl<'a> Iterator for Tokenizer<'a> {
             let token = Token {
                 word: word,
                 word_index: self.word_index + distance.map(Separator::to_usize).unwrap_or(0),
-                char_index: self.char_index + spaces.len(),
+                char_index: self.char_index + spaces.chars().count(),
             };
             return Some(token)
         }
@@ -173,7 +173,7 @@ mod tests {
 
         assert_eq!(tokenizer.next(), Some(Token { word: "yo", word_index: 0, char_index: 4 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "😂", word_index: 1, char_index: 7 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "aïe", word_index: 9, char_index: 13 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "aïe", word_index: 9, char_index: 10 }));
         assert_eq!(tokenizer.next(), None);
 
         let mut tokenizer = Tokenizer::new("yo ! lolo ? 😱 - lol . 😣 ,");
@@ -181,8 +181,8 @@ mod tests {
         assert_eq!(tokenizer.next(), Some(Token { word: "yo", word_index: 0, char_index: 0 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "lolo", word_index: 8, char_index: 5 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "😱", word_index: 16, char_index: 12 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "lol", word_index: 24, char_index: 19 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "😣", word_index: 32, char_index: 25 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "lol", word_index: 24, char_index: 16 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "😣", word_index: 32, char_index: 22 }));
         assert_eq!(tokenizer.next(), None);
     }
 }
