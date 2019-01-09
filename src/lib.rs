@@ -97,15 +97,15 @@ enum AttributeError {
 pub struct WordArea(u32);
 
 impl WordArea {
-    /// Construct a `WordArea` from a word position in bytes
-    /// and the length of it.
+    /// Construct a `WordArea` from a word position in expresed as
+    /// a number of characters and the length of it.
     ///
     /// # Panics
     ///
-    /// The byte index must not be greater than 2^22
+    /// The char index must not be greater than 2^22
     /// and the length not greater than 1024.
-    fn new(byte_index: u32, length: u16) -> Result<WordArea, WordAreaError> {
-        if byte_index & 0b1111_1111_1100_0000_0000_0000_0000 != 0 {
+    fn new(char_index: u32, length: u16) -> Result<WordArea, WordAreaError> {
+        if char_index & 0b1111_1111_1100_0000_0000_0000_0000 != 0 {
             return Err(WordAreaError::ByteIndexTooBig)
         }
 
@@ -113,12 +113,12 @@ impl WordArea {
             return Err(WordAreaError::LengthTooBig)
         }
 
-        let byte_index = byte_index << 10;
-        Ok(WordArea(byte_index | u32::from(length)))
+        let char_index = char_index << 10;
+        Ok(WordArea(char_index | u32::from(length)))
     }
 
-    fn new_faillible(byte_index: u32, length: u16) -> WordArea {
-        match WordArea::new(byte_index, length) {
+    fn new_faillible(char_index: u32, length: u16) -> WordArea {
+        match WordArea::new(char_index, length) {
             Ok(word_area) => word_area,
             Err(WordAreaError::ByteIndexTooBig) => {
                 panic!("word area byte index must not be greater than 2^22")
@@ -130,7 +130,7 @@ impl WordArea {
     }
 
     #[inline]
-    pub fn byte_index(self) -> u32 {
+    pub fn char_index(self) -> u32 {
         self.0 >> 10
     }
 
@@ -143,7 +143,7 @@ impl WordArea {
 impl fmt::Debug for WordArea {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("WordArea")
-            .field("byte_index", &self.byte_index())
+            .field("char_index", &self.char_index())
             .field("length", &self.length())
             .finish()
     }
@@ -270,26 +270,26 @@ mod tests {
             TestResult::from_bool(a < b)
         }
 
-        fn qc_word_area(gen_byte_index: u32, gen_length: u16) -> TestResult {
-            if gen_byte_index > 2_u32.pow(22) || gen_length > 2_u16.pow(10) {
+        fn qc_word_area(gen_char_index: u32, gen_length: u16) -> TestResult {
+            if gen_char_index > 2_u32.pow(22) || gen_length > 2_u16.pow(10) {
                 return TestResult::discard()
             }
 
-            let word_area = WordArea::new_faillible(gen_byte_index, gen_length);
+            let word_area = WordArea::new_faillible(gen_char_index, gen_length);
 
-            let valid_char_index = word_area.byte_index() == gen_byte_index;
+            let valid_char_index = word_area.char_index() == gen_char_index;
             let valid_length = word_area.length() == gen_length;
 
             TestResult::from_bool(valid_char_index && valid_length)
         }
 
-        fn qc_word_area_ord(gen_byte_index: u32, gen_length: u16) -> TestResult {
-            if gen_byte_index >= 2_u32.pow(22) || gen_length >= 2_u16.pow(10) {
+        fn qc_word_area_ord(gen_char_index: u32, gen_length: u16) -> TestResult {
+            if gen_char_index >= 2_u32.pow(22) || gen_length >= 2_u16.pow(10) {
                 return TestResult::discard()
             }
 
-            let a = WordArea::new_faillible(gen_byte_index, gen_length);
-            let b = WordArea::new_faillible(gen_byte_index + 1, gen_length + 1);
+            let a = WordArea::new_faillible(gen_char_index, gen_length);
+            let b = WordArea::new_faillible(gen_char_index + 1, gen_length + 1);
 
             TestResult::from_bool(a < b)
         }

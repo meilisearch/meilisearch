@@ -51,22 +51,12 @@ where B: TokenizerBuilder
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         for Token { word, word_index, char_index } in self.tokenizer_builder.build(v) {
 
+            let document_id = self.document_id;
+
             // FIXME must u32::try_from instead
             let attribute = match Attribute::new(self.attribute.0, word_index as u32) {
                 Ok(attribute) => attribute,
                 Err(_) => return Ok(()),
-            };
-
-            // FIXME must u16/u32::try_from instead
-            let word_area = match WordArea::new(char_index as u32, word.len() as u16) {
-                Ok(word_area) => word_area,
-                Err(_) => return Ok(()),
-            };
-
-            let doc_index = DocIndex {
-                document_id: self.document_id,
-                attribute,
-                word_area
             };
 
             // insert the exact representation
@@ -77,9 +67,26 @@ where B: TokenizerBuilder
             // and the unidecoded lowercased version
             let word_unidecoded = unidecode::unidecode(word).to_lowercase();
             if word_lower != word_unidecoded {
+
+                // FIXME must u16/u32::try_from instead
+                let length = word_unidecoded.chars().count() as u16;
+                let word_area = match WordArea::new(char_index as u32, length) {
+                    Ok(word_area) => word_area,
+                    Err(_) => return Ok(()),
+                };
+
+                let doc_index = DocIndex { document_id, attribute, word_area };
                 self.update.insert_doc_index(word_unidecoded.into_bytes(), doc_index);
             }
 
+            // FIXME must u16/u32::try_from instead
+            let length = word.chars().count() as u16;
+            let word_area = match WordArea::new(char_index as u32, length) {
+                Ok(word_area) => word_area,
+                Err(_) => return Ok(()),
+            };
+
+            let doc_index = DocIndex { document_id, attribute, word_area };
             self.update.insert_doc_index(word_lower.into_bytes(), doc_index);
         }
         Ok(())
