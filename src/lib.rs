@@ -105,9 +105,6 @@ impl WordArea {
     /// The byte index must not be greater than 2^22
     /// and the length not greater than 1024.
     fn new(byte_index: u32, length: u16) -> Result<WordArea, WordAreaError> {
-        assert!(byte_index & 0b1111_1111_1100_0000_0000_0000_0000 == 0);
-        assert!(length & 0b1111_1100_0000_0000 == 0);
-
         if byte_index & 0b1111_1111_1100_0000_0000_0000_0000 != 0 {
             return Err(WordAreaError::ByteIndexTooBig)
         }
