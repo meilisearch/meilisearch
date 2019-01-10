@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::btree_map::{BTreeMap, Entry};
 use std::path::PathBuf;
 use std::error::Error;
 
@@ -39,6 +39,10 @@ impl DocumentUpdate {
 
     pub fn remove(&mut self) {
         self.cleared = true;
+        self.clear();
+    }
+
+    pub fn clear(&mut self) {
         self.words_indexes.clear();
         self.attributes.clear();
     }
@@ -61,7 +65,13 @@ impl RawUpdateBuilder {
     }
 
     pub fn document_update(&mut self, document_id: DocumentId) -> &mut DocumentUpdate {
-        self.document_updates.entry(document_id).or_insert_with(DocumentUpdate::new)
+        match self.document_updates.entry(document_id) {
+            Entry::Occupied(mut occupied) => {
+                occupied.get_mut().clear();
+                occupied.into_mut()
+            },
+            Entry::Vacant(vacant) => vacant.insert(DocumentUpdate::new()),
+        }
     }
 
     pub fn build(mut self) -> Result<Update, Box<Error>> {
