@@ -30,7 +30,7 @@ rev = "306e201"
 
 [dependencies.group-by]
 git = "https://github.com/Kerollmops/group-by.git"
-rev = "f1f5d8f"
+rev = "5a113fe"
 
 [features]
 default = ["simd"]

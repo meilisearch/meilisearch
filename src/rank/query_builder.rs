@@ -4,7 +4,7 @@ use std::error::Error;
 use std::hash::Hash;
 use std::rc::Rc;
 
-use group_by::GroupByMut;
+use group_by::BinaryGroupByMut;
 use hashbrown::HashMap;
 use fst::Streamer;
 use rocksdb::DB;
@@ -154,7 +154,7 @@ where D: Deref<Target=DB>,
 
                 group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
 
-                for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
+                for group in BinaryGroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
                     documents_seen += group.len();
                     groups.push(group);
 
@@ -231,7 +231,7 @@ where D: Deref<Target=DB>,
 
                 group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
 
-                for group in GroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
+                for group in BinaryGroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
                     // we must compute the real distinguished len of this sub-group
                     for document in group.iter() {
                         let filter_accepted = match &self.inner.filter {
