@@ -22,15 +22,21 @@ MeiliDB will be a binary in a near future so you will be able to use it as a dat
 
 ## Performances
 
-_These information are outdated (October 2018) and will be updated soon_
+With a database composed of _100 353_ documents with _352_ attributes each and _90_ of them indexed.
+So nearly _9 million_ fields indexed for _35 million_ stored we can handle more than _1.2k req/sec_ on an Intel i7-7700 (8) @ 4.2GHz.
 
-We made some tests on remote machines and found that MeiliDB easily handles a dataset of near 280k products, on a $5/month server with a single vCPU and 1GB of RAM, running the same index, with a simple query:
+Requests are made using [wrk](https://github.com/wg/wrk) and scripted to generate real users queries.
 
-- near 190 concurrent users with an average response time of 90ms
-- 150 concurrent users with an average response time of 70ms
-- 100 concurrent users with an average response time of 45ms
-
-Servers were located in Amsterdam and tests were made between two different locations.
+```
+Running 10s test @ http://localhost:2230
+  2 threads and 12 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    18.86ms   49.39ms 614.89ms   95.23%
+    Req/Sec   620.41     59.53   790.00     65.00%
+  12359 requests in 10.00s, 3.26MB read
+Requests/sec:   1235.54
+Transfer/sec:    334.22KB
+```
 
 ### Notes
 
