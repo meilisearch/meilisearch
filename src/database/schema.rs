@@ -113,6 +113,23 @@ impl Schema {
         Ok(())
     }
 
+    pub fn from_json<R: Read>(mut reader: R) -> Result<Schema, Box<Error>> {
+        let mut buffer = Vec::new();
+        reader.read_to_end(&mut buffer)?;
+        let builder: SchemaBuilder = serde_json::from_slice(&buffer)?;
+        Ok(builder.build())
+    }
+
+    pub fn to_json<W: Write>(&self, mut writer: W) -> Result<(), Box<Error>> {
+        let identifier = self.inner.identifier.clone();
+        let attributes = self.attributes_ordered();
+        let builder = SchemaBuilder { identifier, attributes };
+        let string = serde_json::to_string_pretty(&builder)?;
+        writer.write_all(string.as_bytes())?;
+
+        Ok(())
+    }
+
     pub(crate) fn read_from_bin<R: Read>(reader: R) -> bincode::Result<Schema> {
         let builder: SchemaBuilder = bincode::deserialize_from(reader)?;
         Ok(builder.build())
@@ -250,6 +267,42 @@ mod tests {
             indexed = true
         "#;
         let schema2 = Schema::from_toml(data.as_bytes())?;
+        assert_eq!(schema, schema2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn serialize_deserialize_json() -> Result<(), Box<Error>> {
+        let mut builder = SchemaBuilder::with_identifier("id");
+        builder.new_attribute("alpha", STORED);
+        builder.new_attribute("beta", STORED | INDEXED);
+        builder.new_attribute("gamma", INDEXED);
+        let schema = builder.build();
+
+        let mut buffer = Vec::new();
+        schema.to_json(&mut buffer)?;
+
+        let schema2 = Schema::from_json(buffer.as_slice())?;
+        assert_eq!(schema, schema2);
+
+        let data = r#"
+            {
+                "identifier": "id",
+                "attributes": {
+                    "alpha": {
+                        "stored": true
+                    },
+                    "beta": {
+                        "stored": true,
+                        "indexed": true
+                    },
+                    "gamma": {
+                        "indexed": true
+                    }
+                }
+            }"#;
+        let schema2 = Schema::from_json(data.as_bytes())?;
         assert_eq!(schema, schema2);
 
         Ok(())
