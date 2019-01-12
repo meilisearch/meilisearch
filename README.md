@@ -49,7 +49,7 @@ MeiliDB runs with an index like most search engines.
 So to test the library you can create one by indexing a simple csv file.
 
 ```bash
-cargo run --release --example create-database -- test.mdb misc/kaggle.csv --schema schema-example.toml --stop-words misc/fr.stopwords.txt
+cargo run --release --example create-database -- test.mdb misc/kaggle.csv --schema schema-example.toml
 ```
 
 Once the command is executed, the index should be in the `test.mdb` folder. You are now able to run the `query-database` example and play with MeiliDB.
