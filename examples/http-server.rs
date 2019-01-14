@@ -3,12 +3,14 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 use log::{error, info};
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fmt;
+use std::fs::{self, File};
+use std::io::{self, BufRead, BufReader};
+use std::net::SocketAddr;
 use std::path::{PathBuf, Path};
 use std::sync::Arc;
 use std::time::SystemTime;
-use std::fs;
-use std::ffi::OsStr;
 
 use hashbrown::{HashMap, HashSet};
 use chashmap::CHashMap;
@@ -30,9 +32,13 @@ pub struct Opt {
     #[structopt(parse(from_os_str))]
     pub database_path: PathBuf,
 
+    /// The address and port to bind the server to.
+    #[structopt(short = "l", default_value = "127.0.0.1:8080")]
+    pub listen_addr: SocketAddr,
+
     /// The path to the list of stop words (one by line).
     #[structopt(long = "stop-words", parse(from_os_str))]
-    pub stop_words_path: Option<PathBuf>,
+    pub stop_words: PathBuf,
 }
 
 //
@@ -73,14 +79,16 @@ impl From<Box<Error>> for DatabaseError {
 pub struct MultiDatabase {
     databases: CHashMap<String, Database>,
     db_path: PathBuf,
+    stop_words: HashSet<String>,
 }
 
 impl MultiDatabase {
 
-    pub fn new(path: PathBuf) -> MultiDatabase {
+    pub fn new(path: PathBuf, stop_words: HashSet<String>) -> MultiDatabase {
         MultiDatabase {
             databases: CHashMap::new(),
-            db_path: path
+            db_path: path,
+            stop_words: stop_words
         }
     }
 
@@ -178,6 +186,20 @@ fn get_file_name_from_path(path: &str) -> Option<&str> {
     Path::new(path).file_stem().and_then(OsStr::to_str)
 }
 
+fn retrieve_stop_words(path: &Path) -> io::Result<HashSet<String>> {
+    let f = File::open(path)?;
+    let reader = BufReader::new(f);
+    let mut words = HashSet::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        let word = line.trim().to_string();
+        words.insert(word);
+    }
+
+    Ok(words)
+}
+
 //
 // PARAMS & BODY FOR HTTPS HANDLERS
 //
@@ -271,7 +293,7 @@ fn ingest(index_name: String, body: IngestBody, db: Arc<MultiDatabase>) -> Resul
         }
     }
 
-    let stop_words = HashSet::new();
+    let stop_words = &db.stop_words;
     if let Some(documents) = body.insert {
         for doc in documents {
             if let Err(e) = update.update_document(doc, &tokenizer_builder, &stop_words) {
@@ -355,7 +377,7 @@ fn search(index_name: String, query: SearchQuery, db: Arc<MultiDatabase>) -> Res
     Ok(response)
 }
 
-fn start_server(db: Arc<MultiDatabase>) {
+fn start_server(listen_addr: SocketAddr, db: Arc<MultiDatabase>) {
     let index_path = warp::path("index").and(warp::path::param::<String>());
     let db = warp::any().map(move || db.clone());
 
@@ -390,19 +412,24 @@ fn start_server(db: Arc<MultiDatabase>) {
 
     let routes = api.with(logs).with(headers);
 
-    warp::serve(routes)
-        .run(([127, 0, 0, 1], 8080));
+    info!("Server is started on {}", listen_addr);
+    warp::serve(routes).run(listen_addr);
 }
 
 fn main() {
     env_logger::init();
     let opt = Opt::from_args();
 
-    let db = Arc::new(MultiDatabase::new(opt.database_path.clone()));
+    let stop_words = match retrieve_stop_words(&opt.stop_words) {
+        Ok(s) => s,
+        Err(_) => HashSet::new(),
+    };
+
+    let db = Arc::new(MultiDatabase::new(opt.database_path.clone(), stop_words));
 
     db.load_existing();
 
-    start_server(db);
+    start_server(opt.listen_addr, db);
 }
 
 
