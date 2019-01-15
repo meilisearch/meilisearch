@@ -93,6 +93,7 @@ where D: Deref<Target=DB>,
             op_builder.union()
         };
 
+        let mut number_matches = 0;
         let mut matches = HashMap::new();
 
         while let Some((input, indexed_values)) = stream.next() {
@@ -104,6 +105,7 @@ where D: Deref<Target=DB>,
                 let doc_indexes = &self.view.index().positive.indexes();
                 let doc_indexes = &doc_indexes[iv.value as usize];
 
+                number_matches += doc_indexes.len();
                 for doc_index in doc_indexes {
                     let match_ = Match {
                         query_index: iv.index as u32,
@@ -117,7 +119,8 @@ where D: Deref<Target=DB>,
             }
         }
 
-        info!("{} documents to classify", matches.len());
+        info!("{} total documents to classify", matches.len());
+        info!("{} total matches to classify", number_matches);
 
         matches.into_iter().map(|(i, m)| Document::from_matches(i, m)).collect()
     }
@@ -135,15 +138,19 @@ where D: Deref<Target=DB>,
             return builder.query(query, range);
         }
 
-        let mut documents = self.query_all(query);
+        let (elapsed, mut documents) = elapsed::measure_time(|| self.query_all(query));
+        info!("query_all took {}", elapsed);
+
         let mut groups = vec![documents.as_mut_slice()];
         let view = &self.view;
 
-        'criteria: for criterion in self.criteria.as_ref() {
+        'criteria: for (ci, criterion) in self.criteria.as_ref().iter().enumerate() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
             let mut documents_seen = 0;
 
             for group in tmp_groups {
+                info!("criterion {}, documents group of size {}", ci, group.len());
+
                 // if this group does not overlap with the requested range,
                 // push it without sorting and splitting it
                 if documents_seen + group.len() < range.start {
@@ -152,7 +159,11 @@ where D: Deref<Target=DB>,
                     continue;
                 }
 
-                group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
+                let (elapsed, ()) = elapsed::measure_time(|| {
+                    group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
+                });
+
+                info!("criterion {} sort took {}", ci, elapsed);
 
                 for group in BinaryGroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
                     documents_seen += group.len();

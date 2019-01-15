@@ -8,6 +8,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 bincode = "1.0"
 byteorder = "1.2"
 crossbeam = "0.6"
+elapsed = "0.1"
 fst = "0.3"
 hashbrown = { version = "0.1", features = ["serde"] }
 lazy_static = "1.1"
@@ -42,7 +43,6 @@ nightly = ["hashbrown/nightly", "group-by/nightly"]
 
 [dev-dependencies]
 csv = "1.0"
-elapsed = "0.1"
 env_logger = "0.6"
 jemallocator = "0.1"
 quickcheck = "0.8"
