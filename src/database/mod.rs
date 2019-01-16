@@ -7,7 +7,7 @@ use rocksdb::rocksdb_options::{DBOptions, IngestExternalFileOptions, ColumnFamil
 use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::{DB, DBVector, MergeOperands};
 use crossbeam::atomic::ArcCell;
-use log::debug;
+use log::info;
 
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::view::{DatabaseView, DocumentIter};
@@ -148,14 +148,19 @@ impl Database {
             let options = IngestExternalFileOptions::new();
             // options.move_files(move_update);
 
-            debug!("ingest update file");
-            let cf_handle = db.cf_handle("default").expect("\"default\" column family not found");
-            db.ingest_external_file_optimized(&cf_handle, &options, &[&path])?;
+            let (elapsed, result) = elapsed::measure_time(|| {
+                let cf_handle = db.cf_handle("default").expect("\"default\" column family not found");
+                db.ingest_external_file_optimized(&cf_handle, &options, &[&path])
+            });
+            let _ = result?;
+            info!("ingesting update file took {}", elapsed);
 
-            debug!("compacting index range");
-            // Compacting to trigger the merge operator only one time
-            // while ingesting the update and not each time searching
-            db.compact_range(Some(DATA_INDEX), Some(DATA_INDEX));
+            let (elapsed, _) = elapsed::measure_time(|| {
+                // Compacting to trigger the merge operator only one time
+                // while ingesting the update and not each time searching
+                db.compact_range(Some(DATA_INDEX), Some(DATA_INDEX));
+            });
+            info!("compacting index range took {}", elapsed);
 
             Snapshot::new(db.clone())
         };
