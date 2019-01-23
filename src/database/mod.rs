@@ -39,10 +39,18 @@ where D: Deref<Target=DB>
 fn retrieve_data_index<D>(snapshot: &Snapshot<D>) -> Result<Index, Box<Error>>
 where D: Deref<Target=DB>
 {
-    let index = match snapshot.get(DATA_INDEX)? {
+    let (elapsed, vector) = elapsed::measure_time(|| snapshot.get(DATA_INDEX));
+    info!("loading index from kv-store took {}", elapsed);
+
+    let index = match vector? {
         Some(vector) => {
             let bytes = vector.as_ref().to_vec();
-            Index::from_bytes(bytes)?
+            info!("index size if {} MiB", bytes.len() / 1024 / 1024);
+
+            let (elapsed, index) = elapsed::measure_time(|| Index::from_bytes(bytes));
+            info!("loading index from bytes took {}", elapsed);
+            index?
+
         },
         None => Index::default(),
     };

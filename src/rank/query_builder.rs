@@ -162,7 +162,6 @@ where D: Deref<Target=DB>,
                 let (elapsed, ()) = elapsed::measure_time(|| {
                     group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
                 });
-
                 info!("criterion {} sort took {}", ci, elapsed);
 
                 for group in BinaryGroupByMut::new(group, |a, b| criterion.eq(a, b, view)) {
