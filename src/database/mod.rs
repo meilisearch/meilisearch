@@ -163,13 +163,6 @@ impl Database {
             let _ = result?;
             info!("ingesting update file took {}", elapsed);
 
-            let (elapsed, _) = elapsed::measure_time(|| {
-                // Compacting to trigger the merge operator only one time
-                // while ingesting the update and not each time searching
-                db.compact_range(Some(DATA_INDEX), Some(DATA_INDEX));
-            });
-            info!("compacting index range took {}", elapsed);
-
             Snapshot::new(db.clone())
         };
 
