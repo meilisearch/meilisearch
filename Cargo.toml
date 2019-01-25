@@ -1,7 +1,7 @@
 [package]
 edition = "2018"
 name = "meilidb"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
