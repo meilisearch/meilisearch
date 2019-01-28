@@ -6,6 +6,7 @@ use rocksdb::rocksdb_options;
 use hashbrown::HashMap;
 use fst::map::Map;
 use sdset::Set;
+use log::warn;
 
 use crate::database::index::{Index, Positive, PositiveBuilder, Negative};
 use crate::database::{DATA_INDEX, DocumentKeyAttr};
@@ -67,6 +68,7 @@ impl RawUpdateBuilder {
     pub fn document_update(&mut self, document_id: DocumentId) -> &mut DocumentUpdate {
         match self.document_updates.entry(document_id) {
             Entry::Occupied(mut occupied) => {
+                warn!("Already updated document {:?}, clearing it", document_id);
                 occupied.get_mut().clear();
                 occupied.into_mut()
             },
