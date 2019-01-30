@@ -2,7 +2,7 @@ use std::cmp::{self, Ordering};
 use std::ops::Deref;
 
 use rocksdb::DB;
-use group_by::GroupBy;
+use slice_group_by::GroupBy;
 
 use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
@@ -36,7 +36,7 @@ fn min_proximity(lhs: &[Match], rhs: &[Match]) -> u32 {
 
 fn matches_proximity(matches: &[Match]) -> u32 {
     let mut proximity = 0;
-    let mut iter = GroupBy::new(matches, match_query_index);
+    let mut iter = matches.linear_group_by(match_query_index);
 
     // iterate over groups by windows of size 2
     let mut last = iter.next();

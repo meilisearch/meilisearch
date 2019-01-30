@@ -2,8 +2,7 @@ use std::cmp::Ordering;
 use std::ops::Deref;
 
 use rocksdb::DB;
-
-use group_by::GroupBy;
+use slice_group_by::GroupBy;
 
 use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
@@ -17,7 +16,7 @@ fn sum_matches_typos(matches: &[Match]) -> isize {
 
     // note that GroupBy will never return an empty group
     // so we can do this assumption safely
-    for group in GroupBy::new(matches, match_query_index) {
+    for group in matches.linear_group_by(match_query_index) {
         sum_typos += unsafe { group.get_unchecked(0).distance as isize };
         number_words += 1;
     }
