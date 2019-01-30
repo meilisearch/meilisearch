@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::ops::Deref;
 
 use rocksdb::DB;
-use group_by::GroupBy;
+use slice_group_by::GroupBy;
 
 use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
@@ -11,7 +11,7 @@ use crate::Match;
 
 #[inline]
 fn number_of_query_words(matches: &[Match]) -> usize {
-    GroupBy::new(matches, match_query_index).count()
+    matches.linear_group_by(match_query_index).count()
 }
 
 #[derive(Debug, Clone, Copy)]

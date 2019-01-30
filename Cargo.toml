@@ -19,6 +19,7 @@ sdset = "0.3"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = { version = "1.0", features = ["preserve_order"] }
+slice-group-by = "0.2"
 unidecode = "0.3"
 
 [dependencies.toml]
@@ -30,16 +31,12 @@ rev = "0372ba6"
 git = "https://github.com/pingcap/rust-rocksdb.git"
 rev = "306e201"
 
-[dependencies.group-by]
-git = "https://github.com/Kerollmops/group-by.git"
-rev = "5a113fe"
-
 [features]
 default = ["simd"]
 i128 = ["bincode/i128", "byteorder/i128"]
 portable = ["rocksdb/portable"]
 simd = ["rocksdb/sse"]
-nightly = ["hashbrown/nightly", "group-by/nightly"]
+nightly = ["hashbrown/nightly", "slice-group-by/nightly"]
 
 [dev-dependencies]
 csv = "1.0"

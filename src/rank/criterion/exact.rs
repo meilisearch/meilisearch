@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::ops::Deref;
 
 use rocksdb::DB;
-use group_by::GroupBy;
+use slice_group_by::GroupBy;
 
 use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
@@ -16,7 +16,7 @@ fn contains_exact(matches: &&[Match]) -> bool {
 
 #[inline]
 fn number_exact_matches(matches: &[Match]) -> usize {
-    GroupBy::new(matches, match_query_index).filter(contains_exact).count()
+    matches.linear_group_by(match_query_index).filter(contains_exact).count()
 }
 
 #[derive(Debug, Clone, Copy)]

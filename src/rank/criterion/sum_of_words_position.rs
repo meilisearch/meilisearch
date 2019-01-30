@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::ops::Deref;
 
 use rocksdb::DB;
-use group_by::GroupBy;
+use slice_group_by::GroupBy;
 
 use crate::database::DatabaseView;
 use crate::rank::{match_query_index, Document};
@@ -13,7 +13,7 @@ use crate::Match;
 fn sum_matches_attribute_index(matches: &[Match]) -> usize {
     // note that GroupBy will never return an empty group
     // so we can do this assumption safely
-    GroupBy::new(matches, match_query_index).map(|group| {
+    matches.linear_group_by(match_query_index).map(|group| {
         unsafe { group.get_unchecked(0).attribute.word_index() as usize }
     }).sum()
 }
