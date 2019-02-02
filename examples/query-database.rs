@@ -70,12 +70,10 @@ fn create_highlight_areas(text: &str, matches: &[Match], attribute: SchemaAttr) 
     let mut byte_indexes = BTreeMap::new();
 
     for match_ in matches {
-        let match_attribute = match_.attribute.attribute();
+        let match_attribute = match_.attribute;
         if SchemaAttr::new(match_attribute) == attribute {
-            let word_area = match_.word_area;
-
-            let char_index = word_area.char_index() as usize;
-            let char_length = word_area.length() as usize;
+            let char_index = match_.char_index as usize;
+            let char_length = match_.char_length as usize;
             let (byte_index, byte_length) = char_to_byte_range(char_index, char_length, text);
 
             match byte_indexes.entry(byte_index) {
@@ -151,7 +149,7 @@ fn main() -> Result<(), Box<Error>> {
 
             let mut matching_attributes = HashSet::new();
             for _match in doc.matches {
-                let attr = SchemaAttr::new(_match.attribute.attribute());
+                let attr = SchemaAttr::new(_match.attribute);
                 let name = schema.attribute_name(attr);
                 matching_attributes.insert(name);
             }

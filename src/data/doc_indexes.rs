@@ -158,18 +158,24 @@ mod tests {
     fn builder_serialize_deserialize() -> Result<(), Box<Error>> {
         let a = DocIndex {
             document_id: DocumentId(0),
-            attribute: Attribute::new_faillible(3, 11),
-            word_area: WordArea::new_faillible(30, 4)
+            attribute: 3,
+            word_index: 11,
+            char_index: 30,
+            char_length: 4,
         };
         let b = DocIndex {
             document_id: DocumentId(1),
-            attribute: Attribute::new_faillible(4, 21),
-            word_area: WordArea::new_faillible(35, 6)
+            attribute: 4,
+            word_index: 21,
+            char_index: 35,
+            char_length: 6,
         };
         let c = DocIndex {
             document_id: DocumentId(2),
-            attribute: Attribute::new_faillible(8, 2),
-            word_area: WordArea::new_faillible(89, 6)
+            attribute: 8,
+            word_index: 2,
+            char_index: 89,
+            char_length: 6,
         };
 
         let mut builder = DocIndexesBuilder::memory();
@@ -193,18 +199,24 @@ mod tests {
     fn serialize_deserialize() -> Result<(), Box<Error>> {
         let a = DocIndex {
             document_id: DocumentId(0),
-            attribute: Attribute::new_faillible(3, 11),
-            word_area: WordArea::new_faillible(30, 4)
+            attribute: 3,
+            word_index: 11,
+            char_index: 30,
+            char_length: 4,
         };
         let b = DocIndex {
             document_id: DocumentId(1),
-            attribute: Attribute::new_faillible(4, 21),
-            word_area: WordArea::new_faillible(35, 6)
+            attribute: 4,
+            word_index: 21,
+            char_index: 35,
+            char_length: 6,
         };
         let c = DocIndex {
             document_id: DocumentId(2),
-            attribute: Attribute::new_faillible(8, 2),
-            word_area: WordArea::new_faillible(89, 6)
+            attribute: 8,
+            word_index: 2,
+            char_index: 89,
+            char_length: 6,
         };
 
         let mut builder = DocIndexesBuilder::memory();

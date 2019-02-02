@@ -36,14 +36,16 @@ pub struct DocIndex {
 
     /// The attribute in the document where the word was found
     /// along with the index in it.
-    pub attribute: Attribute,
+    pub attribute: u16,
+    pub word_index: u32,
 
     /// The position in bytes where the word was found
     /// along with the length of it.
     ///
     /// It informs on the original word area in the text indexed
     /// without needing to run the tokenizer again.
-    pub word_area: WordArea,
+    pub char_index: u32,
+    pub char_length: u16,
 }
 
 /// This structure represent a matching word with informations
@@ -68,7 +70,8 @@ pub struct Match {
 
     /// The attribute in the document where the word was found
     /// along with the index in it.
-    pub attribute: Attribute,
+    pub attribute: u16,
+    pub word_index: u32,
 
     /// Whether the word that match is an exact match or a prefix.
     pub is_exact: bool,
@@ -78,7 +81,8 @@ pub struct Match {
     ///
     /// It informs on the original word area in the text indexed
     /// without needing to run the tokenizer again.
-    pub word_area: WordArea,
+    pub char_index: u32,
+    pub char_length: u16,
 }
 
 impl Match {
@@ -86,9 +90,11 @@ impl Match {
         Match {
             query_index: 0,
             distance: 0,
-            attribute: Attribute::new_faillible(0, 0),
+            attribute: 0,
+            word_index: 0,
             is_exact: false,
-            word_area: WordArea::new_faillible(0, 0),
+            char_index: 0,
+            char_length: 0,
         }
     }
 
@@ -96,9 +102,11 @@ impl Match {
         Match {
             query_index: u32::max_value(),
             distance: u8::max_value(),
-            attribute: Attribute::max_value(),
+            attribute: u16::max_value(),
+            word_index: u32::max_value(),
             is_exact: true,
-            word_area: WordArea::max_value(),
+            char_index: u32::max_value(),
+            char_length: u16::max_value(),
         }
     }
 }
@@ -110,6 +118,6 @@ mod tests {
 
     #[test]
     fn docindex_mem_size() {
-        assert_eq!(mem::size_of::<DocIndex>(), 16);
+        assert_eq!(mem::size_of::<DocIndex>(), 24);
     }
 }

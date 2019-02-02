@@ -54,10 +54,8 @@ where B: TokenizerBuilder
             let document_id = self.document_id;
 
             // FIXME must u32::try_from instead
-            let attribute = match Attribute::new(self.attribute.0, word_index as u32) {
-                Ok(attribute) => attribute,
-                Err(_) => return Ok(()),
-            };
+            let attribute = self.attribute.0;
+            let word_index = word_index as u32;
 
             // insert the exact representation
             let word_lower = word.to_lowercase();
@@ -68,21 +66,17 @@ where B: TokenizerBuilder
             // and the unidecoded lowercased version
             let word_unidecoded = unidecode::unidecode(word).to_lowercase();
             if word_lower != word_unidecoded {
-                let word_area = match WordArea::new(char_index as u32, length) {
-                    Ok(word_area) => word_area,
-                    Err(_) => return Ok(()),
-                };
+                let char_index = char_index as u32;
+                let char_length = length;
 
-                let doc_index = DocIndex { document_id, attribute, word_area };
+                let doc_index = DocIndex { document_id, attribute, word_index, char_index, char_length };
                 self.update.insert_doc_index(word_unidecoded.into_bytes(), doc_index);
             }
 
-            let word_area = match WordArea::new(char_index as u32, length) {
-                Ok(word_area) => word_area,
-                Err(_) => return Ok(()),
-            };
+            let char_index = char_index as u32;
+            let char_length = length;
 
-            let doc_index = DocIndex { document_id, attribute, word_area };
+            let doc_index = DocIndex { document_id, attribute, word_index, char_index, char_length };
             self.update.insert_doc_index(word_lower.into_bytes(), doc_index);
         }
         Ok(())
