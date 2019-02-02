@@ -5,16 +5,12 @@ pub mod database;
 pub mod data;
 pub mod rank;
 pub mod tokenizer;
-mod attribute;
-mod word_area;
 mod common_words;
 
 pub use rocksdb;
 
 pub use self::tokenizer::Tokenizer;
 pub use self::common_words::CommonWords;
-pub use self::attribute::{Attribute, AttributeError};
-pub use self::word_area::{WordArea, WordAreaError};
 
 /// Represent an internally generated document unique identifier.
 ///

@@ -8,8 +8,6 @@ mod exact;
 mod document_id;
 
 use std::cmp::Ordering;
-
-use crate::database::DatabaseView;
 use crate::rank::RawDocument;
 
 pub use self::{

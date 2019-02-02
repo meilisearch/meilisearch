@@ -147,12 +147,9 @@ impl<W: Write> DocIndexesBuilder<W> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use std::error::Error;
-    use crate::{Attribute, WordArea};
-
     use crate::DocumentId;
+    use super::*;
 
     #[test]
     fn builder_serialize_deserialize() -> Result<(), Box<Error>> {

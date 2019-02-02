@@ -95,7 +95,6 @@ where D: Deref<Target=DB>,
             op_builder.union()
         };
 
-        let mut number_matches = 0;
         let mut matches = Vec::new();
 
         while let Some((input, indexed_values)) = stream.next() {
@@ -148,7 +147,6 @@ where D: Deref<Target=DB>,
         info!("query_all took {}", elapsed);
 
         let mut groups = vec![documents.as_mut_slice()];
-        let view = &self.view;
 
         'criteria: for (ci, criterion) in self.criteria.as_ref().iter().enumerate() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());

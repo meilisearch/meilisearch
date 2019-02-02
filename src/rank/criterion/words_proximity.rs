@@ -94,8 +94,6 @@ impl Criterion for WordsProximity {
 mod tests {
     use super::*;
 
-    use crate::Attribute;
-
     #[test]
     fn three_different_attributes() {
 

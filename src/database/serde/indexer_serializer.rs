@@ -3,7 +3,7 @@ use crate::database::serde::SerializerError;
 use crate::database::schema::SchemaAttr;
 use crate::tokenizer::TokenizerBuilder;
 use crate::tokenizer::Token;
-use crate::{DocumentId, DocIndex, Attribute, WordArea};
+use crate::{DocumentId, DocIndex};
 
 use hashbrown::HashSet;
 use serde::Serialize;
