@@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
 
 use crate::rank::criterion::Criterion;
 use crate::database::DatabaseView;
-use crate::rank::Document;
+use crate::rank::RawDocument;
 
 /// An helper struct that permit to sort documents by
 /// some of their stored attributes.

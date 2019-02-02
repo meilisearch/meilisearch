@@ -1,33 +1,40 @@
 use std::cmp::Ordering;
-use std::ops::Deref;
 
-use rocksdb::DB;
 use slice_group_by::GroupBy;
 
-use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
-use crate::database::DatabaseView;
-use crate::Match;
+use crate::rank::RawDocument;
 
 #[inline]
-fn contains_exact(matches: &&[Match]) -> bool {
-    matches.iter().any(|m| m.is_exact)
-}
+fn number_exact_matches(query_index: &[u32], is_exact: &[bool]) -> usize {
+    let mut count = 0;
+    let mut index = 0;
 
-#[inline]
-fn number_exact_matches(matches: &[Match]) -> usize {
-    matches.linear_group_by(match_query_index).filter(contains_exact).count()
+    for group in query_index.linear_group_by(PartialEq::eq) {
+        let len = group.len();
+        count += is_exact[index..index + len].contains(&true) as usize;
+        index += len;
+    }
+
+    count
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Exact;
 
-impl<D> Criterion<D> for Exact
-where D: Deref<Target=DB>
-{
-    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
-        let lhs = number_exact_matches(&lhs.matches);
-        let rhs = number_exact_matches(&rhs.matches);
+impl Criterion for Exact {
+    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
+        let lhs = {
+            let query_index = lhs.query_index();
+            let is_exact = lhs.is_exact();
+            number_exact_matches(query_index, is_exact)
+        };
+
+        let rhs = {
+            let query_index = rhs.query_index();
+            let is_exact = rhs.is_exact();
+            number_exact_matches(query_index, is_exact)
+        };
 
         lhs.cmp(&rhs).reverse()
     }

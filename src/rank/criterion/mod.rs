@@ -4,16 +4,13 @@ mod words_proximity;
 mod sum_of_words_attribute;
 mod sum_of_words_position;
 mod exact;
-mod sort_by;
+// mod sort_by;
 mod document_id;
 
 use std::cmp::Ordering;
-use std::ops::Deref;
-
-use rocksdb::DB;
 
 use crate::database::DatabaseView;
-use crate::rank::Document;
+use crate::rank::RawDocument;
 
 pub use self::{
     sum_of_typos::SumOfTypos,
