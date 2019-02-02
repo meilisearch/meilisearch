@@ -4,7 +4,9 @@ use std::error::Error;
 use std::hash::Hash;
 use std::rc::Rc;
 
+use rayon::slice::ParallelSliceMut;
 use slice_group_by::GroupByMut;
+use elapsed::measure_time;
 use hashbrown::HashMap;
 use fst::Streamer;
 use rocksdb::DB;
@@ -15,7 +17,7 @@ use crate::rank::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::rank::criterion::Criteria;
 use crate::database::DatabaseView;
 use crate::{Match, DocumentId};
-use crate::rank::Document;
+use crate::rank::{raw_documents_from_matches, RawDocument, Document};
 
 fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
@@ -41,7 +43,7 @@ pub struct QueryBuilder<'a, D, FI>
 where D: Deref<Target=DB>
 {
     view: &'a DatabaseView<D>,
-    criteria: Criteria<D>,
+    criteria: Criteria,
     filter: Option<FI>,
 }
 
@@ -56,7 +58,7 @@ where D: Deref<Target=DB>
 impl<'a, D, FI> QueryBuilder<'a, D, FI>
 where D: Deref<Target=DB>,
 {
-    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria<D>) -> Result<Self, Box<Error>> {
+    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria) -> Result<Self, Box<Error>> {
         Ok(QueryBuilder { view, criteria, filter: None })
     }
 
@@ -81,7 +83,7 @@ where D: Deref<Target=DB>,
         }
     }
 
-    fn query_all(&self, query: &str) -> Vec<Document> {
+    fn query_all(&self, query: &str) -> Vec<RawDocument> {
         let automatons = split_whitespace_automatons(query);
 
         let mut stream = {
@@ -93,8 +95,7 @@ where D: Deref<Target=DB>,
             op_builder.union()
         };
 
-        let mut number_matches = 0;
-        let mut matches = HashMap::new();
+        let mut matches = Vec::new();
 
         while let Some((input, indexed_values)) = stream.next() {
             for iv in indexed_values {
@@ -105,24 +106,28 @@ where D: Deref<Target=DB>,
                 let doc_indexes = &self.view.index().positive.indexes();
                 let doc_indexes = &doc_indexes[iv.value as usize];
 
-                number_matches += doc_indexes.len();
                 for doc_index in doc_indexes {
                     let match_ = Match {
                         query_index: iv.index as u32,
                         distance: distance,
                         attribute: doc_index.attribute,
+                        word_index: doc_index.word_index,
                         is_exact: is_exact,
-                        word_area: doc_index.word_area,
+                        char_index: doc_index.char_index,
+                        char_length: doc_index.char_length,
                     };
-                    matches.entry(doc_index.document_id).or_insert_with(Vec::new).push(match_);
+                    matches.push((doc_index.document_id, match_));
                 }
             }
         }
 
-        info!("{} total documents to classify", matches.len());
-        info!("{} total matches to classify", number_matches);
+        let total_matches = matches.len();
+        let raw_documents = raw_documents_from_matches(matches);
 
-        matches.into_iter().map(|(i, m)| Document::from_matches(i, m)).collect()
+        info!("{} total documents to classify", raw_documents.len());
+        info!("{} total matches to classify", total_matches);
+
+        raw_documents
     }
 }
 
@@ -138,11 +143,10 @@ where D: Deref<Target=DB>,
             return builder.query(query, range);
         }
 
-        let (elapsed, mut documents) = elapsed::measure_time(|| self.query_all(query));
+        let (elapsed, mut documents) = measure_time(|| self.query_all(query));
         info!("query_all took {}", elapsed);
 
         let mut groups = vec![documents.as_mut_slice()];
-        let view = &self.view;
 
         'criteria: for (ci, criterion) in self.criteria.as_ref().iter().enumerate() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
@@ -159,12 +163,12 @@ where D: Deref<Target=DB>,
                     continue;
                 }
 
-                let (elapsed, ()) = elapsed::measure_time(|| {
-                    group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
+                let (elapsed, _) = measure_time(|| {
+                    group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
                 });
                 info!("criterion {} sort took {}", ci, elapsed);
 
-                for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b, view)) {
+                for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
                     documents_seen += group.len();
                     groups.push(group);
 
@@ -175,12 +179,9 @@ where D: Deref<Target=DB>,
             }
         }
 
-        // `drain` removes the documents efficiently using `ptr::copy`
-        // TODO it could be more efficient to have a custom iterator
         let offset = cmp::min(documents.len(), range.start);
-        documents.drain(0..offset);
-        documents.truncate(range.len());
-        documents
+        let iter = documents.into_iter().skip(offset).take(range.len());
+        iter.map(|d| Document::from_raw(&d)).collect()
     }
 }
 
@@ -213,7 +214,9 @@ where D: Deref<Target=DB>,
       K: Hash + Eq,
 {
     pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
-        let mut documents = self.inner.query_all(query);
+        let (elapsed, mut documents) = measure_time(|| self.inner.query_all(query));
+        info!("query_all took {}", elapsed);
+
         let mut groups = vec![documents.as_mut_slice()];
         let mut key_cache = HashMap::new();
         let view = &self.inner.view;
@@ -225,12 +228,14 @@ where D: Deref<Target=DB>,
         let mut distinct_map = DistinctMap::new(self.size);
         let mut distinct_raw_offset = 0;
 
-        'criteria: for criterion in self.inner.criteria.as_ref() {
+        'criteria: for (ci, criterion) in self.inner.criteria.as_ref().iter().enumerate() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
             let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
             let mut documents_seen = 0;
 
             for group in tmp_groups {
+                info!("criterion {}, documents group of size {}", ci, group.len());
+
                 // if this group does not overlap with the requested range,
                 // push it without sorting and splitting it
                 if documents_seen + group.len() < distinct_raw_offset {
@@ -239,9 +244,12 @@ where D: Deref<Target=DB>,
                     continue;
                 }
 
-                group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
+                let (elapsed, _) = measure_time(|| {
+                    group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
+                });
+                info!("criterion {} sort took {}", ci, elapsed);
 
-                for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b, view)) {
+                for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
                     // we must compute the real distinguished len of this sub-group
                     for document in group.iter() {
                         let filter_accepted = match &self.inner.filter {
@@ -300,7 +308,7 @@ where D: Deref<Target=DB>,
                 };
 
                 if distinct_accepted && seen.len() > range.start {
-                    out_documents.push(document);
+                    out_documents.push(Document::from_raw(&document));
                     if out_documents.len() == range.len() { break }
                 }
             }

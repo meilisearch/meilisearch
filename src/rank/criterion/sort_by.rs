@@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
 
 use crate::rank::criterion::Criterion;
 use crate::database::DatabaseView;
-use crate::rank::Document;
+use crate::rank::RawDocument;
 
 /// An helper struct that permit to sort documents by
 /// some of their stored attributes.
@@ -24,7 +24,7 @@ use crate::rank::Document;
 ///
 /// # Example
 ///
-/// ```no-test
+/// ```ignore
 /// use serde_derive::Deserialize;
 /// use meilidb::rank::criterion::*;
 ///
@@ -40,39 +40,40 @@ use crate::rank::Document;
 ///        .add(SumOfWordsAttribute)
 ///        .add(SumOfWordsPosition)
 ///        .add(Exact)
-///        .add(SortBy::<TimeOnly>::new())
+///        .add(SortBy::<TimeOnly>::new(&view))
 ///        .add(DocumentId);
 ///
 /// let criterion = builder.build();
 ///
 /// ```
-pub struct SortBy<T> {
+pub struct SortBy<'a, T, D>
+where D: Deref<Target=DB> + Send + Sync,
+      T: Send + Sync
+{
+    view: &'a DatabaseView<D>,
     _phantom: marker::PhantomData<T>,
 }
 
-impl<T> SortBy<T> {
-    pub fn new() -> Self {
-        SortBy::default()
-    }
-}
-
-impl<T> Default for SortBy<T> {
-    fn default() -> SortBy<T> {
-        SortBy { _phantom: marker::PhantomData }
-    }
-}
-
-impl<T, D> Criterion<D> for SortBy<T>
-where D: Deref<Target=DB>,
-      T: DeserializeOwned + Ord,
+impl<'a, T, D> SortBy<'a, T, D>
+where D: Deref<Target=DB> + Send + Sync,
+      T: Send + Sync
 {
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
-        let lhs = match view.document_by_id::<T>(lhs.id) {
+    pub fn new(view: &'a DatabaseView<D>) -> Self {
+        SortBy { view, _phantom: marker::PhantomData }
+    }
+}
+
+impl<'a, T, D> Criterion for SortBy<'a, T, D>
+where D: Deref<Target=DB> + Send + Sync,
+      T: DeserializeOwned + Ord + Send + Sync,
+{
+    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
+        let lhs = match self.view.document_by_id::<T>(lhs.id) {
             Ok(doc) => Some(doc),
             Err(e) => { eprintln!("{}", e); None },
         };
 
-        let rhs = match view.document_by_id::<T>(rhs.id) {
+        let rhs = match self.view.document_by_id::<T>(rhs.id) {
             Ok(doc) => Some(doc),
             Err(e) => { eprintln!("{}", e); None },
         };

@@ -1,32 +1,39 @@
 use std::cmp::Ordering;
-use std::ops::Deref;
 
-use rocksdb::DB;
 use slice_group_by::GroupBy;
 
-use crate::database::DatabaseView;
-use crate::rank::{match_query_index, Document};
 use crate::rank::criterion::Criterion;
-use crate::Match;
+use crate::rank::RawDocument;
 
 #[inline]
-fn sum_matches_attribute_index(matches: &[Match]) -> usize {
-    // note that GroupBy will never return an empty group
-    // so we can do this assumption safely
-    matches.linear_group_by(match_query_index).map(|group| {
-        unsafe { group.get_unchecked(0).attribute.word_index() as usize }
-    }).sum()
+fn sum_matches_attribute_index(query_index: &[u32], word_index: &[u32]) -> usize {
+    let mut sum_word_index = 0;
+    let mut index = 0;
+
+    for group in query_index.linear_group_by(PartialEq::eq) {
+        sum_word_index += word_index[index] as usize;
+        index += group.len();
+    }
+
+    sum_word_index
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct SumOfWordsPosition;
 
-impl<D> Criterion<D> for SumOfWordsPosition
-where D: Deref<Target=DB>
-{
-    fn evaluate(&self, lhs: &Document, rhs: &Document, _: &DatabaseView<D>) -> Ordering {
-        let lhs = sum_matches_attribute_index(&lhs.matches);
-        let rhs = sum_matches_attribute_index(&rhs.matches);
+impl Criterion for SumOfWordsPosition {
+    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
+        let lhs = {
+            let query_index = lhs.query_index();
+            let word_index = lhs.word_index();
+            sum_matches_attribute_index(query_index, word_index)
+        };
+
+        let rhs = {
+            let query_index = rhs.query_index();
+            let word_index = rhs.word_index();
+            sum_matches_attribute_index(query_index, word_index)
+        };
 
         lhs.cmp(&rhs)
     }
