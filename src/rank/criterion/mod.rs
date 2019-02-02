@@ -19,60 +19,51 @@ pub use self::{
     sum_of_words_attribute::SumOfWordsAttribute,
     sum_of_words_position::SumOfWordsPosition,
     exact::Exact,
-    sort_by::SortBy,
+    // sort_by::SortBy,
     document_id::DocumentId,
 };
 
-pub trait Criterion<D>
-where D: Deref<Target=DB>
-{
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering;
+pub trait Criterion: Send + Sync {
+    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering;
 
     #[inline]
-    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
-        self.evaluate(lhs, rhs, view) == Ordering::Equal
+    fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
+        self.evaluate(lhs, rhs) == Ordering::Equal
     }
 }
 
-impl<'a, D, T: Criterion<D> + ?Sized> Criterion<D> for &'a T
-where D: Deref<Target=DB>
-{
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
-        (**self).evaluate(lhs, rhs, view)
+impl<'a, T: Criterion + ?Sized + Send + Sync> Criterion for &'a T {
+    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
+        (**self).evaluate(lhs, rhs)
     }
 
-    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
-        (**self).eq(lhs, rhs, view)
+    fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
+        (**self).eq(lhs, rhs)
     }
 }
 
-impl<D, T: Criterion<D> + ?Sized> Criterion<D> for Box<T>
-where D: Deref<Target=DB>
-{
-    fn evaluate(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> Ordering {
-        (**self).evaluate(lhs, rhs, view)
+impl<T: Criterion + ?Sized> Criterion for Box<T> {
+    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
+        (**self).evaluate(lhs, rhs)
     }
 
-    fn eq(&self, lhs: &Document, rhs: &Document, view: &DatabaseView<D>) -> bool {
-        (**self).eq(lhs, rhs, view)
+    fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
+        (**self).eq(lhs, rhs)
     }
 }
 
 #[derive(Default)]
-pub struct CriteriaBuilder<D>
-where D: Deref<Target=DB>
-{
-    inner: Vec<Box<dyn Criterion<D>>>
+pub struct CriteriaBuilder {
+    inner: Vec<Box<dyn Criterion>>
 }
 
-impl<D> CriteriaBuilder<D>
-where D: Deref<Target=DB>
+impl CriteriaBuilder
 {
-    pub fn new() -> CriteriaBuilder<D> {
+    pub fn new() -> CriteriaBuilder {
         CriteriaBuilder { inner: Vec::new() }
     }
 
-    pub fn with_capacity(capacity: usize) -> CriteriaBuilder<D> {
+    pub fn with_capacity(capacity: usize) -> CriteriaBuilder {
         CriteriaBuilder { inner: Vec::with_capacity(capacity) }
     }
 
@@ -80,33 +71,29 @@ where D: Deref<Target=DB>
         self.inner.reserve(additional)
     }
 
-    pub fn add<C>(mut self, criterion: C) -> CriteriaBuilder<D>
-    where C: 'static + Criterion<D>,
+    pub fn add<C>(mut self, criterion: C) -> CriteriaBuilder
+    where C: 'static + Criterion,
     {
         self.push(criterion);
         self
     }
 
     pub fn push<C>(&mut self, criterion: C)
-    where C: 'static + Criterion<D>,
+    where C: 'static + Criterion,
     {
         self.inner.push(Box::new(criterion));
     }
 
-    pub fn build(self) -> Criteria<D> {
+    pub fn build(self) -> Criteria {
         Criteria { inner: self.inner }
     }
 }
 
-pub struct Criteria<D>
-where D: Deref<Target=DB>
-{
-    inner: Vec<Box<dyn Criterion<D>>>,
+pub struct Criteria {
+    inner: Vec<Box<dyn Criterion>>,
 }
 
-impl<D> Default for Criteria<D>
-where D: Deref<Target=DB>
-{
+impl Default for Criteria {
     fn default() -> Self {
         CriteriaBuilder::with_capacity(7)
             .add(SumOfTypos)
@@ -120,10 +107,8 @@ where D: Deref<Target=DB>
     }
 }
 
-impl<D> AsRef<[Box<dyn Criterion<D>>]> for Criteria<D>
-where D: Deref<Target=DB>
-{
-    fn as_ref(&self) -> &[Box<dyn Criterion<D>>] {
+impl AsRef<[Box<dyn Criterion>]> for Criteria {
+    fn as_ref(&self) -> &[Box<dyn Criterion>] {
         &self.inner
     }
 }

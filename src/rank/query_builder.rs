@@ -43,7 +43,7 @@ pub struct QueryBuilder<'a, D, FI>
 where D: Deref<Target=DB>
 {
     view: &'a DatabaseView<D>,
-    criteria: Criteria<D>,
+    criteria: Criteria,
     filter: Option<FI>,
 }
 
@@ -58,7 +58,7 @@ where D: Deref<Target=DB>
 impl<'a, D, FI> QueryBuilder<'a, D, FI>
 where D: Deref<Target=DB>,
 {
-    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria<D>) -> Result<Self, Box<Error>> {
+    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria) -> Result<Self, Box<Error>> {
         Ok(QueryBuilder { view, criteria, filter: None })
     }
 
@@ -165,12 +165,12 @@ where D: Deref<Target=DB>,
                     continue;
                 }
 
-                let (elapsed, ()) = elapsed::measure_time(|| {
-                    group.sort_unstable_by(|a, b| criterion.evaluate(a, b, view));
+                let (elapsed, _) = measure_time(|| {
+                    group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
                 });
                 info!("criterion {} sort took {}", ci, elapsed);
 
-                for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b, view)) {
+                for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
                     documents_seen += group.len();
                     groups.push(group);
 
