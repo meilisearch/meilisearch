@@ -1,4 +1,5 @@
-use hashbrown::HashSet;
+use std::collections::HashSet;
+
 use serde::Serialize;
 use serde::ser;
 

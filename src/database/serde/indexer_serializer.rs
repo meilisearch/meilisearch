@@ -1,13 +1,14 @@
+use std::collections::HashSet;
+
+use serde::Serialize;
+use serde::ser;
+
 use crate::database::update::DocumentUpdate;
 use crate::database::serde::SerializerError;
 use crate::database::schema::SchemaAttr;
 use crate::tokenizer::TokenizerBuilder;
 use crate::tokenizer::Token;
 use crate::{DocumentId, DocIndex};
-
-use hashbrown::HashSet;
-use serde::Serialize;
-use serde::ser;
 
 pub struct IndexerSerializer<'a, B> {
     pub tokenizer_builder: &'a B,
