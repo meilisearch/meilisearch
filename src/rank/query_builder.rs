@@ -136,7 +136,7 @@ where D: Deref<Target=DB>,
       FI: Fn(DocumentId, &DatabaseView<D>) -> bool,
 {
     pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
-        // We give the filtering work to the query distinct builder,
+        // We delegate the filter work to the distinct query builder,
         // specifying a distinct rule that has no effect.
         if self.filter.is_some() {
             let builder = self.with_distinct(|_, _| None as Option<()>, 1);
