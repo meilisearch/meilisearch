@@ -53,15 +53,15 @@ where D: Deref<Target=DB>
     pub fn new(view: &'a DatabaseView<D>) -> Result<Self, Box<Error>> {
         QueryBuilder::with_criteria(view, Criteria::default())
     }
+
+    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria) -> Result<Self, Box<Error>> {
+        Ok(QueryBuilder { view, criteria, filter: None })
+    }
 }
 
 impl<'a, D, FI> QueryBuilder<'a, D, FI>
 where D: Deref<Target=DB>,
 {
-    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria) -> Result<Self, Box<Error>> {
-        Ok(QueryBuilder { view, criteria, filter: None })
-    }
-
     pub fn with_filter<F>(self, function: F) -> QueryBuilder<'a, D, F>
     where F: Fn(DocumentId, &DatabaseView<D>) -> bool,
     {
