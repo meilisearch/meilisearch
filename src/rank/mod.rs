@@ -18,7 +18,7 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn from_raw(raw: &RawDocument) -> Document {
+    fn from_raw(raw: &RawDocument) -> Document {
         let len = raw.matches.range.len();
         let mut matches = Vec::with_capacity(len);
 
