@@ -1,7 +1,7 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::error::Error;
 
-use hashbrown::HashSet;
 use serde::Serialize;
 
 use crate::database::serde::serializer::Serializer;

@@ -189,16 +189,17 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::HashSet;
     use std::error::Error;
 
     use serde_derive::{Serialize, Deserialize};
-    use hashbrown::HashSet;
     use tempfile::tempdir;
 
     use crate::database::schema::{SchemaBuilder, STORED, INDEXED};
     use crate::database::update::UpdateBuilder;
     use crate::tokenizer::DefaultBuilder;
+
+    use super::*;
 
     #[test]
     fn ingest_one_update_file() -> Result<(), Box<Error>> {
@@ -367,7 +368,7 @@ mod tests {
 mod bench {
     extern crate test;
 
-    use super::*;
+    use std::collections::HashSet;
     use std::error::Error;
     use std::iter::repeat_with;
     use self::test::Bencher;
@@ -377,11 +378,12 @@ mod bench {
     use rand::{Rng, SeedableRng};
     use serde_derive::Serialize;
     use rand::seq::SliceRandom;
-    use hashbrown::HashSet;
 
     use crate::tokenizer::DefaultBuilder;
     use crate::database::update::UpdateBuilder;
     use crate::database::schema::*;
+
+    use super::*;
 
     fn random_sentences<R: Rng>(number: usize, rng: &mut R) -> String {
         let mut words = String::new();

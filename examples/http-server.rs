@@ -1,7 +1,7 @@
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-use log::{error, info};
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt;
@@ -12,19 +12,15 @@ use std::path::{PathBuf, Path};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use hashbrown::{HashMap, HashSet};
-use chashmap::CHashMap;
-use chashmap::ReadGuard;
+use chashmap::{CHashMap, ReadGuard};
 use elapsed::measure_time;
-use meilidb::database::Database;
-use meilidb::database::UpdateBuilder;
-use meilidb::database::schema::Schema;
-use meilidb::database::schema::SchemaBuilder;
+use meilidb::database::{Database, UpdateBuilder};
+use meilidb::database::schema::{Schema, SchemaBuilder};
 use meilidb::tokenizer::DefaultBuilder;
-use serde_derive::Deserialize;
-use serde_derive::Serialize;
+use serde_derive::{Serialize, Deserialize};
 use structopt::StructOpt;
 use warp::{Rejection, Filter};
+use log::{error, info};
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {

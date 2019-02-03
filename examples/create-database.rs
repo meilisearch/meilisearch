@@ -1,13 +1,13 @@
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::error::Error;
 use std::borrow::Cow;
 use std::fs::File;
 
-use hashbrown::{HashMap, HashSet};
 use serde_derive::{Serialize, Deserialize};
 use structopt::StructOpt;
 
