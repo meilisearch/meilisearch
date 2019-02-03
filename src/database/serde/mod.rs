@@ -19,6 +19,7 @@ pub mod find_id;
 pub mod key_to_string;
 pub mod serializer;
 pub mod indexer_serializer;
+pub mod deserializer;
 
 pub fn calculate_hash<T: Hash>(t: &T) -> u64 {
     let mut s = DefaultHasher::new();

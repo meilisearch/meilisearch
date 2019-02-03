@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 
 use crate::database::{DocumentKey, DocumentKeyAttr};
 use crate::database::{retrieve_data_schema, retrieve_data_index};
-use crate::database::deserializer::Deserializer;
+use crate::database::serde::deserializer::Deserializer;
 use crate::database::schema::Schema;
 use crate::database::index::Index;
 use crate::rank::{QueryBuilder, FilterFunc};

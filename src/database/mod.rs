@@ -21,7 +21,6 @@ const DATA_SCHEMA: &[u8] = b"data-schema";
 
 pub mod schema;
 pub(crate) mod index;
-mod deserializer;
 mod document_key;
 mod serde;
 mod update;
