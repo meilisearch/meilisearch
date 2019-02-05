@@ -11,15 +11,15 @@ use crate::tokenizer::TokenizerBuilder;
 use crate::database::schema::Schema;
 use crate::DocumentId;
 
-pub struct Serializer<'a, B> {
+pub struct Serializer<'a, 'b, B> {
     pub schema: &'a Schema,
-    pub update: &'a mut DocumentUpdate,
+    pub update: &'a mut DocumentUpdate<'b>,
     pub document_id: DocumentId,
     pub tokenizer_builder: &'a B,
     pub stop_words: &'a HashSet<String>,
 }
 
-impl<'a, B> ser::Serializer for Serializer<'a, B>
+impl<'a, 'b, B> ser::Serializer for Serializer<'a, 'b, B>
 where B: TokenizerBuilder
 {
     type Ok = ();
@@ -28,8 +28,8 @@ where B: TokenizerBuilder
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeMap = MapSerializer<'a, B>;
-    type SerializeStruct = StructSerializer<'a, B>;
+    type SerializeMap = MapSerializer<'a, 'b, B>;
+    type SerializeStruct = StructSerializer<'a, 'b, B>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
     forward_to_unserializable_type! {
@@ -174,16 +174,16 @@ where B: TokenizerBuilder
     }
 }
 
-pub struct MapSerializer<'a, B> {
+pub struct MapSerializer<'a, 'b, B> {
     pub schema: &'a Schema,
     pub document_id: DocumentId,
-    pub update: &'a mut DocumentUpdate,
+    pub update: &'a mut DocumentUpdate<'b>,
     pub tokenizer_builder: &'a B,
     pub stop_words: &'a HashSet<String>,
     pub current_key_name: Option<String>,
 }
 
-impl<'a, B> ser::SerializeMap for MapSerializer<'a, B>
+impl<'a, 'b, B> ser::SerializeMap for MapSerializer<'a, 'b, B>
 where B: TokenizerBuilder
 {
     type Ok = ();
@@ -207,7 +207,7 @@ where B: TokenizerBuilder
     fn serialize_entry<K: ?Sized, V: ?Sized>(
         &mut self,
         key: &K,
-        value: &V
+        value: &V,
     ) -> Result<(), Self::Error>
     where K: Serialize, V: Serialize,
     {
@@ -217,7 +217,7 @@ where B: TokenizerBuilder
             let props = self.schema.props(attr);
             if props.is_stored() {
                 let value = bincode::serialize(value).unwrap();
-                self.update.insert_attribute_value(attr, value);
+                self.update.insert_attribute_value(attr, &value)?;
             }
             if props.is_indexed() {
                 let serializer = IndexerSerializer {
@@ -239,15 +239,15 @@ where B: TokenizerBuilder
     }
 }
 
-pub struct StructSerializer<'a, B> {
+pub struct StructSerializer<'a, 'b, B> {
     pub schema: &'a Schema,
     pub document_id: DocumentId,
-    pub update: &'a mut DocumentUpdate,
+    pub update: &'a mut DocumentUpdate<'b>,
     pub tokenizer_builder: &'a B,
     pub stop_words: &'a HashSet<String>,
 }
 
-impl<'a, B> ser::SerializeStruct for StructSerializer<'a, B>
+impl<'a, 'b, B> ser::SerializeStruct for StructSerializer<'a, 'b, B>
 where B: TokenizerBuilder
 {
     type Ok = ();
@@ -264,7 +264,7 @@ where B: TokenizerBuilder
             let props = self.schema.props(attr);
             if props.is_stored() {
                 let value = bincode::serialize(value).unwrap();
-                self.update.insert_attribute_value(attr, value);
+                self.update.insert_attribute_value(attr, &value)?;
             }
             if props.is_indexed() {
                 let serializer = IndexerSerializer {

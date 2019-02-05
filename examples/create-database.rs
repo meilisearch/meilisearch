@@ -11,7 +11,7 @@ use std::fs::File;
 use serde_derive::{Serialize, Deserialize};
 use structopt::StructOpt;
 
-use meilidb::database::{Database, Schema, UpdateBuilder};
+use meilidb::database::{Database, Schema};
 use meilidb::tokenizer::DefaultBuilder;
 
 #[derive(Debug, StructOpt)]
@@ -61,8 +61,7 @@ fn index(
 
     while !end_of_file {
         let tokenizer_builder = DefaultBuilder::new();
-        let update_path = tempfile::NamedTempFile::new()?;
-        let mut update = UpdateBuilder::new(update_path.path().to_path_buf(), schema.clone());
+        let mut update = database.update()?;
 
         loop {
             end_of_file = !rdr.read_record(&mut raw_record)?;
@@ -88,10 +87,8 @@ fn index(
 
         println!();
 
-        println!("building update...");
-        let update = update.build()?;
-        println!("ingesting update...");
-        database.ingest_update_file(update)?;
+        println!("committing update...");
+        update.commit()?;
     }
 
     Ok(database)

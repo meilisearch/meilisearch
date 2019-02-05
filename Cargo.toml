@@ -49,11 +49,6 @@ rand_xorshift = "0.1"
 structopt = "0.2"
 tempfile = "3.0"
 termcolor = "1.0"
-warp = "0.1"
-
-[dev-dependencies.chashmap]
-git = "https://gitlab.redox-os.org/redox-os/tfs.git"
-rev = "b3e7cae1"
 
 [profile.release]
 debug = true

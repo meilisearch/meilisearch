@@ -10,15 +10,15 @@ use crate::tokenizer::TokenizerBuilder;
 use crate::tokenizer::Token;
 use crate::{DocumentId, DocIndex};
 
-pub struct IndexerSerializer<'a, B> {
+pub struct IndexerSerializer<'a, 'b, B> {
     pub tokenizer_builder: &'a B,
-    pub update: &'a mut DocumentUpdate,
+    pub update: &'a mut DocumentUpdate<'b>,
     pub document_id: DocumentId,
     pub attribute: SchemaAttr,
     pub stop_words: &'a HashSet<String>,
 }
 
-impl<'a, B> ser::Serializer for IndexerSerializer<'a, B>
+impl<'a, 'b, B> ser::Serializer for IndexerSerializer<'a, 'b, B>
 where B: TokenizerBuilder
 {
     type Ok = ();
@@ -71,14 +71,14 @@ where B: TokenizerBuilder
                 let char_length = length;
 
                 let doc_index = DocIndex { document_id, attribute, word_index, char_index, char_length };
-                self.update.insert_doc_index(word_unidecoded.into_bytes(), doc_index);
+                self.update.insert_doc_index(word_unidecoded.into_bytes(), doc_index)?;
             }
 
             let char_index = char_index as u32;
             let char_length = length;
 
             let doc_index = DocIndex { document_id, attribute, word_index, char_index, char_length };
-            self.update.insert_doc_index(word_lower.into_bytes(), doc_index);
+            self.update.insert_doc_index(word_lower.into_bytes(), doc_index)?;
         }
         Ok(())
     }

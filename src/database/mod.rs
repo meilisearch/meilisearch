@@ -1,17 +1,17 @@
-use std::sync::{Arc, Mutex};
 use std::error::Error;
-use std::ops::Deref;
 use std::path::Path;
+use std::ops::Deref;
+use std::sync::Arc;
 
-use rocksdb::rocksdb_options::{DBOptions, IngestExternalFileOptions, ColumnFamilyOptions};
+use rocksdb::rocksdb_options::{DBOptions, ColumnFamilyOptions};
 use rocksdb::rocksdb::{Writable, Snapshot};
-use rocksdb::{DB, DBVector, MergeOperands};
+use rocksdb::{DB, MergeOperands};
 use crossbeam::atomic::ArcCell;
 use log::info;
 
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::view::{DatabaseView, DocumentIter};
-pub use self::update::{Update, UpdateBuilder};
+pub use self::update::Update;
 pub use self::serde::SerializerError;
 pub use self::schema::Schema;
 pub use self::index::Index;
@@ -78,11 +78,7 @@ fn merge_indexes(key: &[u8], existing: Option<&[u8]>, operands: &mut MergeOperan
 }
 
 pub struct Database {
-    // DB is under a Mutex to sync update ingestions and separate DB update locking
-    // and DatabaseView acquiring locking in other words:
-    // "Block readers the minimum possible amount of time"
-    db: Mutex<Arc<DB>>,
-
+    db: Arc<DB>,
     // This view is updated each time the DB ingests an update
     view: ArcCell<DatabaseView<Arc<DB>>>,
 }
@@ -113,7 +109,7 @@ impl Database {
         let snapshot = Snapshot::new(db.clone());
         let view = ArcCell::new(Arc::new(DatabaseView::new(snapshot)?));
 
-        Ok(Database { db: Mutex::new(db), view })
+        Ok(Database { db, view })
     }
 
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Database, Box<Error>> {
@@ -137,49 +133,16 @@ impl Database {
         let snapshot = Snapshot::new(db.clone());
         let view = ArcCell::new(Arc::new(DatabaseView::new(snapshot)?));
 
-        Ok(Database { db: Mutex::new(db), view })
+        Ok(Database { db, view })
     }
 
-    pub fn ingest_update_file(&self, update: Update) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>> {
-        let snapshot = {
-            // We must have a mutex here to ensure that update ingestions and compactions
-            // are done atomatically and in the right order.
-            // This way update ingestions will block other update ingestions without blocking view
-            // creations while doing the "data-index" compaction
-            let db = match self.db.lock() {
-                Ok(db) => db,
-                Err(e) => return Err(e.to_string().into()),
-            };
-
-            let path = update.path().to_string_lossy();
-            let options = IngestExternalFileOptions::new();
-            // options.move_files(move_update);
-
-            let (elapsed, result) = elapsed::measure_time(|| {
-                let cf_handle = db.cf_handle("default").expect("\"default\" column family not found");
-                db.ingest_external_file_optimized(&cf_handle, &options, &[&path])
-            });
-            let _ = result?;
-            info!("ingesting update file took {}", elapsed);
-
-            Snapshot::new(db.clone())
+    pub fn update(&self) -> Result<Update, Box<Error>> {
+        let schema = match self.db.get(DATA_SCHEMA)? {
+            Some(value) => Schema::read_from_bin(&*value)?,
+            None => panic!("Database does not contain a schema"),
         };
 
-        let view = Arc::new(DatabaseView::new(snapshot)?);
-        self.view.set(view.clone());
-
-        Ok(view)
-    }
-
-    pub fn get(&self, key: &[u8]) -> Result<Option<DBVector>, Box<Error>> {
-        self.view().get(key)
-    }
-
-    pub fn flush(&self) -> Result<(), Box<Error>> {
-        match self.db.lock() {
-            Ok(db) => Ok(db.flush(true)?),
-            Err(e) => Err(e.to_string().into()),
-        }
+        Ok(Update::new(self, schema))
     }
 
     pub fn view(&self) -> Arc<DatabaseView<Arc<DB>>> {
@@ -193,20 +156,18 @@ mod tests {
     use std::error::Error;
 
     use serde_derive::{Serialize, Deserialize};
-    use tempfile::tempdir;
 
     use crate::database::schema::{SchemaBuilder, STORED, INDEXED};
-    use crate::database::update::UpdateBuilder;
     use crate::tokenizer::DefaultBuilder;
 
     use super::*;
 
     #[test]
-    fn ingest_one_update_file() -> Result<(), Box<Error>> {
-        let dir = tempdir()?;
+    fn ingest_one_easy_update() -> Result<(), Box<Error>> {
+        let dir = tempfile::tempdir()?;
         let stop_words = HashSet::new();
 
-        let rocksdb_path = dir.path().join("rocksdb.rdb");
+        let meilidb_path = dir.path().join("meilidb.mdb");
 
         #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
         struct SimpleDoc {
@@ -225,9 +186,7 @@ mod tests {
             builder.build()
         };
 
-        let database = Database::create(&rocksdb_path, &schema)?;
-
-        let update_path = dir.path().join("update.sst");
+        let database = Database::create(&meilidb_path, &schema)?;
 
         let doc0 = SimpleDoc {
             id: 0,
@@ -242,20 +201,13 @@ mod tests {
             timestamp: 7654321,
         };
 
-        let docid0;
-        let docid1;
-        let update = {
-            let tokenizer_builder = DefaultBuilder::new();
-            let mut builder = UpdateBuilder::new(update_path, schema);
+        let tokenizer_builder = DefaultBuilder::new();
+        let mut builder = database.update()?;
 
-            docid0 = builder.update_document(&doc0, &tokenizer_builder, &stop_words)?;
-            docid1 = builder.update_document(&doc1, &tokenizer_builder, &stop_words)?;
+        let docid0 = builder.update_document(&doc0, &tokenizer_builder, &stop_words)?;
+        let docid1 = builder.update_document(&doc1, &tokenizer_builder, &stop_words)?;
 
-            builder.build()?
-        };
-
-        database.ingest_update_file(update)?;
-        let view = database.view();
+        let view = builder.commit()?;
 
         let de_doc0: SimpleDoc = view.document_by_id(docid0)?;
         let de_doc1: SimpleDoc = view.document_by_id(docid1)?;
@@ -267,11 +219,11 @@ mod tests {
     }
 
     #[test]
-    fn ingest_two_update_files() -> Result<(), Box<Error>> {
-        let dir = tempdir()?;
+    fn ingest_two_easy_updates() -> Result<(), Box<Error>> {
+        let dir = tempfile::tempdir()?;
         let stop_words = HashSet::new();
 
-        let rocksdb_path = dir.path().join("rocksdb.rdb");
+        let meilidb_path = dir.path().join("meilidb.mdb");
 
         #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
         struct SimpleDoc {
@@ -290,7 +242,7 @@ mod tests {
             builder.build()
         };
 
-        let database = Database::create(&rocksdb_path, &schema)?;
+        let database = Database::create(&meilidb_path, &schema)?;
 
         let doc0 = SimpleDoc {
             id: 0,
@@ -317,36 +269,17 @@ mod tests {
             timestamp: 7654321,
         };
 
-        let docid0;
-        let docid1;
-        let update1 = {
-            let tokenizer_builder = DefaultBuilder::new();
-            let update_path = dir.path().join("update-000.sst");
-            let mut builder = UpdateBuilder::new(update_path, schema.clone());
+        let tokenizer_builder = DefaultBuilder::new();
 
-            docid0 = builder.update_document(&doc0, &tokenizer_builder, &stop_words)?;
-            docid1 = builder.update_document(&doc1, &tokenizer_builder, &stop_words)?;
+        let mut builder = database.update()?;
+        let docid0 = builder.update_document(&doc0, &tokenizer_builder, &stop_words)?;
+        let docid1 = builder.update_document(&doc1, &tokenizer_builder, &stop_words)?;
+        builder.commit()?;
 
-            builder.build()?
-        };
-
-        let docid2;
-        let docid3;
-        let update2 = {
-            let tokenizer_builder = DefaultBuilder::new();
-            let update_path = dir.path().join("update-001.sst");
-            let mut builder = UpdateBuilder::new(update_path, schema);
-
-            docid2 = builder.update_document(&doc2, &tokenizer_builder, &stop_words)?;
-            docid3 = builder.update_document(&doc3, &tokenizer_builder, &stop_words)?;
-
-            builder.build()?
-        };
-
-        database.ingest_update_file(update1)?;
-        database.ingest_update_file(update2)?;
-
-        let view = database.view();
+        let mut builder = database.update()?;
+        let docid2 = builder.update_document(&doc2, &tokenizer_builder, &stop_words)?;
+        let docid3 = builder.update_document(&doc3, &tokenizer_builder, &stop_words)?;
+        let view = builder.commit()?;
 
         let de_doc0: SimpleDoc = view.document_by_id(docid0)?;
         let de_doc1: SimpleDoc = view.document_by_id(docid1)?;
@@ -380,7 +313,6 @@ mod bench {
     use rand::seq::SliceRandom;
 
     use crate::tokenizer::DefaultBuilder;
-    use crate::database::update::UpdateBuilder;
     use crate::database::schema::*;
 
     use super::*;
@@ -425,9 +357,8 @@ mod bench {
             description: String,
         }
 
-        let path = dir.path().join("update-000.sst");
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = UpdateBuilder::new(path, schema);
+        let mut builder = database.update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..300 {
@@ -439,8 +370,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        let update = builder.build()?;
-        database.ingest_update_file(update)?;
+        builder.commit()?;
 
         drop(database);
 
@@ -472,9 +402,8 @@ mod bench {
             description: String,
         }
 
-        let path = dir.path().join("update-000.sst");
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = UpdateBuilder::new(path, schema);
+        let mut builder = database.update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..3000 {
@@ -486,8 +415,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        let update = builder.build()?;
-        database.ingest_update_file(update)?;
+        builder.commit()?;
 
         drop(database);
 
@@ -520,9 +448,8 @@ mod bench {
             description: String,
         }
 
-        let path = dir.path().join("update-000.sst");
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = UpdateBuilder::new(path, schema);
+        let mut builder = database.update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..30_000 {
@@ -534,8 +461,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        let update = builder.build()?;
-        database.ingest_update_file(update)?;
+        builder.commit()?;
 
         drop(database);
 
@@ -567,9 +493,8 @@ mod bench {
             description: String,
         }
 
-        let path = dir.path().join("update-000.sst");
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = UpdateBuilder::new(path, schema);
+        let mut builder = database.update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..300 {
@@ -581,8 +506,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        let update = builder.build()?;
-        let view = database.ingest_update_file(update)?;
+        let view = builder.commit()?;
 
         bench.iter(|| {
             for q in &["a", "b", "c", "d", "e"] {
@@ -614,9 +538,8 @@ mod bench {
             description: String,
         }
 
-        let path = dir.path().join("update-000.sst");
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = UpdateBuilder::new(path, schema);
+        let mut builder = database.update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..3000 {
@@ -628,8 +551,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        let update = builder.build()?;
-        let view = database.ingest_update_file(update)?;
+        let view = builder.commit()?;
 
         bench.iter(|| {
             for q in &["a", "b", "c", "d", "e"] {
@@ -662,9 +584,8 @@ mod bench {
             description: String,
         }
 
-        let path = dir.path().join("update-000.sst");
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = UpdateBuilder::new(path, schema);
+        let mut builder = database.update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..30_000 {
@@ -676,8 +597,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        let update = builder.build()?;
-        let view = database.ingest_update_file(update)?;
+        let view = builder.commit()?;
 
         bench.iter(|| {
             for q in &["a", "b", "c", "d", "e"] {

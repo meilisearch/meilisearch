@@ -56,3 +56,9 @@ impl fmt::Display for SerializerError {
 }
 
 impl Error for SerializerError {}
+
+impl From<String> for SerializerError {
+    fn from(value: String) -> SerializerError {
+        SerializerError::Custom(value)
+    }
+}
