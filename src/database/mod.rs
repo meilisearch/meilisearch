@@ -136,13 +136,24 @@ impl Database {
         Ok(Database { db, view })
     }
 
-    pub fn update(&self) -> Result<Update, Box<Error>> {
+    pub fn start_update(&self) -> Result<Update, Box<Error>> {
         let schema = match self.db.get(DATA_SCHEMA)? {
             Some(value) => Schema::read_from_bin(&*value)?,
             None => panic!("Database does not contain a schema"),
         };
 
-        Ok(Update::new(self, schema))
+        Ok(Update::new(schema))
+    }
+
+    pub fn commit_update(&self, update: Update) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>> {
+        let batch = update.build()?;
+        self.db.write(batch)?;
+
+        let snapshot = Snapshot::new(self.db.clone());
+        let view = Arc::new(DatabaseView::new(snapshot)?);
+        self.view.set(view.clone());
+
+        Ok(view)
     }
 
     pub fn view(&self) -> Arc<DatabaseView<Arc<DB>>> {
@@ -202,12 +213,12 @@ mod tests {
         };
 
         let tokenizer_builder = DefaultBuilder::new();
-        let mut builder = database.update()?;
+        let mut builder = database.start_update()?;
 
         let docid0 = builder.update_document(&doc0, &tokenizer_builder, &stop_words)?;
         let docid1 = builder.update_document(&doc1, &tokenizer_builder, &stop_words)?;
 
-        let view = builder.commit()?;
+        let view = database.commit_update(builder)?;
 
         let de_doc0: SimpleDoc = view.document_by_id(docid0)?;
         let de_doc1: SimpleDoc = view.document_by_id(docid1)?;
@@ -271,15 +282,15 @@ mod tests {
 
         let tokenizer_builder = DefaultBuilder::new();
 
-        let mut builder = database.update()?;
+        let mut builder = database.start_update()?;
         let docid0 = builder.update_document(&doc0, &tokenizer_builder, &stop_words)?;
         let docid1 = builder.update_document(&doc1, &tokenizer_builder, &stop_words)?;
-        builder.commit()?;
+        database.commit_update(builder)?;
 
-        let mut builder = database.update()?;
+        let mut builder = database.start_update()?;
         let docid2 = builder.update_document(&doc2, &tokenizer_builder, &stop_words)?;
         let docid3 = builder.update_document(&doc3, &tokenizer_builder, &stop_words)?;
-        let view = builder.commit()?;
+        let view = database.commit_update(builder)?;
 
         let de_doc0: SimpleDoc = view.document_by_id(docid0)?;
         let de_doc1: SimpleDoc = view.document_by_id(docid1)?;
@@ -358,7 +369,7 @@ mod bench {
         }
 
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = database.update()?;
+        let mut builder = database.start_update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..300 {
@@ -370,7 +381,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        builder.commit()?;
+        database.commit_update(builder)?;
 
         drop(database);
 
@@ -403,7 +414,7 @@ mod bench {
         }
 
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = database.update()?;
+        let mut builder = database.start_update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..3000 {
@@ -415,7 +426,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        builder.commit()?;
+        database.commit_update(builder)?;
 
         drop(database);
 
@@ -449,7 +460,7 @@ mod bench {
         }
 
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = database.update()?;
+        let mut builder = database.start_update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..30_000 {
@@ -461,7 +472,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        builder.commit()?;
+        database.commit_update(builder)?;
 
         drop(database);
 
@@ -494,7 +505,7 @@ mod bench {
         }
 
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = database.update()?;
+        let mut builder = database.start_update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..300 {
@@ -506,7 +517,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        let view = builder.commit()?;
+        let view = database.commit_update(builder)?;
 
         bench.iter(|| {
             for q in &["a", "b", "c", "d", "e"] {
@@ -539,7 +550,7 @@ mod bench {
         }
 
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = database.update()?;
+        let mut builder = database.start_update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..3000 {
@@ -551,7 +562,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        let view = builder.commit()?;
+        let view = database.commit_update(builder)?;
 
         bench.iter(|| {
             for q in &["a", "b", "c", "d", "e"] {
@@ -585,7 +596,7 @@ mod bench {
         }
 
         let tokenizer_builder = DefaultBuilder;
-        let mut builder = database.update()?;
+        let mut builder = database.start_update()?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
         for i in 0..30_000 {
@@ -597,7 +608,7 @@ mod bench {
             builder.update_document(&document, &tokenizer_builder, &stop_words)?;
         }
 
-        let view = builder.commit()?;
+        let view = database.commit_update(builder)?;
 
         bench.iter(|| {
             for q in &["a", "b", "c", "d", "e"] {
