@@ -61,7 +61,7 @@ fn index(
 
     while !end_of_file {
         let tokenizer_builder = DefaultBuilder::new();
-        let mut update = database.update()?;
+        let mut update = database.start_update()?;
 
         loop {
             end_of_file = !rdr.read_record(&mut raw_record)?;
@@ -88,7 +88,7 @@ fn index(
         println!();
 
         println!("committing update...");
-        update.commit()?;
+        database.commit_update(update)?;
     }
 
     Ok(database)

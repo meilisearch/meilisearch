@@ -1,14 +1,12 @@
 use std::collections::{HashSet, BTreeMap};
 use std::error::Error;
-use std::sync::Arc;
 
-use rocksdb::rocksdb::{DB, Writable, Snapshot, WriteBatch};
+use rocksdb::rocksdb::{Writable, WriteBatch};
 use hashbrown::hash_map::HashMap;
 use serde::Serialize;
 use fst::map::Map;
 use sdset::Set;
 
-use crate::database::{DATA_INDEX, Database, DatabaseView};
 use crate::database::index::{Positive, PositiveBuilder, Negative};
 use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
 use crate::database::serde::serializer::Serializer;
@@ -17,20 +15,20 @@ use crate::database::schema::SchemaAttr;
 use crate::tokenizer::TokenizerBuilder;
 use crate::data::{DocIds, DocIndexes};
 use crate::database::schema::Schema;
-use crate::{DocumentId, DocIndex};
 use crate::database::index::Index;
+use crate::{DocumentId, DocIndex};
+use crate::database::DATA_INDEX;
 
 pub type Token = Vec<u8>; // TODO could be replaced by a SmallVec
 
-pub struct Update<'a> {
-    database: &'a Database,
+pub struct Update {
     schema: Schema,
     raw_builder: RawUpdateBuilder,
 }
 
-impl<'a> Update<'a> {
-    pub(crate) fn new(database: &'a Database, schema: Schema) -> Update<'a> {
-        Update { database, schema, raw_builder: RawUpdateBuilder::new() }
+impl Update {
+    pub(crate) fn new(schema: Schema) -> Update {
+        Update { schema, raw_builder: RawUpdateBuilder::new() }
     }
 
     pub fn update_document<T, B>(
@@ -65,18 +63,9 @@ impl<'a> Update<'a> {
         Ok(document_id)
     }
 
-    pub fn commit(self) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>> {
-        let batch = self.raw_builder.build()?;
-        self.database.db.write(batch)?;
-
-        let snapshot = Snapshot::new(self.database.db.clone());
-        let view = Arc::new(DatabaseView::new(snapshot)?);
-        self.database.view.set(view.clone());
-
-        Ok(view)
+    pub(crate) fn build(self) -> Result<WriteBatch, Box<Error>> {
+        self.raw_builder.build()
     }
-
-    pub fn abort(self) { }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
