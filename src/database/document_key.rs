@@ -38,6 +38,10 @@ impl DocumentKey {
         DocumentKeyAttr::new(self.document_id(), attr)
     }
 
+    pub fn with_attribute_min(&self) -> DocumentKeyAttr {
+        DocumentKeyAttr::new(self.document_id(), SchemaAttr::min())
+    }
+
     pub fn with_attribute_max(&self) -> DocumentKeyAttr {
         DocumentKeyAttr::new(self.document_id(), SchemaAttr::max())
     }
