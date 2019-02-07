@@ -50,7 +50,9 @@ fn index(
     stop_words: &HashSet<String>,
 ) -> Result<Database, Box<Error>>
 {
-    let database = Database::create(database_path, &schema)?;
+    let database = Database::create(database_path)?;
+
+    database.create_index("default", &schema)?;
 
     let mut rdr = csv::Reader::from_path(csv_data_path)?;
     let mut raw_record = csv::StringRecord::new();
@@ -61,7 +63,7 @@ fn index(
 
     while !end_of_file {
         let tokenizer_builder = DefaultBuilder::new();
-        let mut update = database.start_update()?;
+        let mut update = database.start_update("default")?;
 
         loop {
             end_of_file = !rdr.read_record(&mut raw_record)?;
