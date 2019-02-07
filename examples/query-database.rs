@@ -116,7 +116,7 @@ fn main() -> Result<(), Box<Error>> {
         if input.read_line(&mut buffer)? == 0 { break }
         let query = buffer.trim_end_matches('\n');
 
-        let view = database.view();
+        let view = database.view("default")?;
         let schema = view.schema();
 
         let (elapsed, documents) = elapsed::measure_time(|| {
