@@ -58,3 +58,8 @@ Once the command is executed, the index should be in the `test.mdb` folder. You 
 cargo run --release --example query-database -- test.mdb -n 10 id title
 ```
 
+## MeiliDB Clients
+
+- HTTP[meili-http](https://github.com/meilisearch/meili-http)
+
+If you have a specific need for your company or if you want to contribute by making a client, don't hesitate to talk with us [contact](contact@meilisearch.com)
