@@ -17,7 +17,7 @@ use crate::data::{DocIds, DocIndexes};
 use crate::database::schema::Schema;
 use crate::database::index::Index;
 use crate::{DocumentId, DocIndex};
-use crate::database::DATA_INDEX;
+use crate::database::{DATA_INDEX, DATA_RANKED_MAP};
 
 pub type Token = Vec<u8>; // TODO could be replaced by a SmallVec
 
@@ -78,6 +78,7 @@ use UpdateType::{Updated, Deleted};
 
 pub struct RawUpdateBuilder {
     documents_update: HashMap<DocumentId, UpdateType>,
+    documents_ranked_fields: HashMap<(DocumentId, SchemaAttr), i64>,
     indexed_words: BTreeMap<Token, Vec<DocIndex>>,
     batch: WriteBatch,
 }
@@ -86,6 +87,7 @@ impl RawUpdateBuilder {
     pub fn new() -> RawUpdateBuilder {
         RawUpdateBuilder {
             documents_update: HashMap::new(),
+            documents_ranked_fields: HashMap::new(),
             indexed_words: BTreeMap::new(),
             batch: WriteBatch::new(),
         }
@@ -137,9 +139,12 @@ impl RawUpdateBuilder {
         let index = Index { negative, positive };
 
         // write the data-index
-        let mut bytes = Vec::new();
-        index.write_to_bytes(&mut bytes);
-        self.batch.merge(DATA_INDEX, &bytes)?;
+        let mut bytes_index = Vec::new();
+        index.write_to_bytes(&mut bytes_index);
+        self.batch.merge(DATA_INDEX, &bytes_index)?;
+
+        let bytes_ranked_map = bincode::serialize(&self.documents_ranked_fields).unwrap();
+        self.batch.merge(DATA_RANKED_MAP, &bytes_ranked_map)?;
 
         Ok(self.batch)
     }
@@ -192,6 +197,25 @@ impl<'a> DocumentUpdate<'a> {
         }
 
         self.inner.indexed_words.entry(token).or_insert_with(Vec::new).push(doc_index);
+
+        Ok(())
+    }
+
+    pub fn register_ranked_attribute(
+        &mut self,
+        attr: SchemaAttr,
+        integer: i64,
+    ) -> Result<(), SerializerError>
+    {
+        use serde::ser::Error;
+
+        if let Deleted = self.inner.documents_update.entry(self.document_id).or_insert(Updated) {
+            return Err(SerializerError::custom(
+                "This document has already been deleted, ranked attributes cannot be added in the same update"
+            ));
+        }
+
+        self.inner.documents_ranked_fields.insert((self.document_id, attr), integer);
 
         Ok(())
     }

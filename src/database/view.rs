@@ -1,3 +1,4 @@
+use hashbrown::HashMap;
 use std::error::Error;
 use std::path::Path;
 use std::ops::Deref;
@@ -7,12 +8,13 @@ use rocksdb::rocksdb_options::{ReadOptions, EnvOptions, ColumnFamilyOptions};
 use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey, SstFileWriter};
 use serde::de::DeserializeOwned;
 
-use crate::database::{DocumentKey, DocumentKeyAttr};
-use crate::database::{retrieve_data_schema, retrieve_data_index};
+use crate::database::{retrieve_data_schema, retrieve_data_index, retrieve_data_ranked_map};
 use crate::database::serde::deserializer::Deserializer;
+use crate::database::{DocumentKey, DocumentKeyAttr};
+use crate::rank::{QueryBuilder, FilterFunc};
+use crate::database::schema::SchemaAttr;
 use crate::database::schema::Schema;
 use crate::database::index::Index;
-use crate::rank::{QueryBuilder, FilterFunc};
 use crate::DocumentId;
 
 pub struct DatabaseView<D>
@@ -20,6 +22,7 @@ where D: Deref<Target=DB>
 {
     snapshot: Snapshot<D>,
     index: Index,
+    ranked_map: HashMap<(DocumentId, SchemaAttr), i64>,
     schema: Schema,
 }
 
@@ -29,7 +32,8 @@ where D: Deref<Target=DB>
     pub fn new(snapshot: Snapshot<D>) -> Result<DatabaseView<D>, Box<Error>> {
         let schema = retrieve_data_schema(&snapshot)?;
         let index = retrieve_data_index(&snapshot)?;
-        Ok(DatabaseView { snapshot, index, schema })
+        let ranked_map = retrieve_data_ranked_map(&snapshot)?;
+        Ok(DatabaseView { snapshot, index, ranked_map, schema })
     }
 
     pub fn schema(&self) -> &Schema {
@@ -38,6 +42,10 @@ where D: Deref<Target=DB>
 
     pub fn index(&self) -> &Index {
         &self.index
+    }
+
+    pub fn ranked_map(&self) -> &HashMap<(DocumentId, SchemaAttr), i64> {
+        &self.ranked_map
     }
 
     pub fn into_snapshot(self) -> Snapshot<D> {

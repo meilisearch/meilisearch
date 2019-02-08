@@ -5,6 +5,7 @@ use serde::ser;
 
 use crate::database::serde::indexer_serializer::IndexerSerializer;
 use crate::database::serde::key_to_string::KeyToStringSerializer;
+use crate::database::serde::value_to_i64::ValueToI64Serializer;
 use crate::database::update::DocumentUpdate;
 use crate::database::serde::SerializerError;
 use crate::tokenizer::TokenizerBuilder;
@@ -155,8 +156,8 @@ where B: TokenizerBuilder
     {
         Ok(StructSerializer {
             schema: self.schema,
-            update: self.update,
             document_id: self.document_id,
+            update: self.update,
             tokenizer_builder: self.tokenizer_builder,
             stop_words: self.stop_words,
         })
@@ -229,6 +230,10 @@ where B: TokenizerBuilder
                 };
                 value.serialize(serializer)?;
             }
+            if props.is_ranked() {
+                let integer = value.serialize(ValueToI64Serializer)?;
+                self.update.register_ranked_attribute(attr, integer)?;
+            }
         }
 
         Ok(())
@@ -275,6 +280,10 @@ where B: TokenizerBuilder
                     stop_words: self.stop_words,
                 };
                 value.serialize(serializer)?;
+            }
+            if props.is_ranked() {
+                let integer = value.serialize(ValueToI64Serializer)?;
+                self.update.register_ranked_attribute(attr, integer)?;
             }
         }
 
