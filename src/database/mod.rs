@@ -23,6 +23,8 @@ pub use self::serde::SerializerError;
 pub use self::schema::Schema;
 pub use self::index::Index;
 
+pub type RankedMap = HashMap<(DocumentId, SchemaAttr), i64>;
+
 const DATA_INDEX:      &[u8] = b"data-index";
 const DATA_RANKED_MAP: &[u8] = b"data-ranked-map";
 const DATA_SCHEMA:     &[u8] = b"data-schema";
@@ -65,9 +67,8 @@ where D: Deref<Target=DB>
     Ok(index)
 }
 
-fn retrieve_data_ranked_map<D>(snapshot: &Snapshot<D>)
--> Result<HashMap<(DocumentId, SchemaAttr), i64>, Box<Error>>
-where D: Deref<Target=DB>
+fn retrieve_data_ranked_map<D>(snapshot: &Snapshot<D>) -> Result<RankedMap, Box<Error>>
+where D: Deref<Target=DB>,
 {
     match snapshot.get(DATA_RANKED_MAP)? {
         Some(vector) => Ok(bincode::deserialize(&*vector)?),
@@ -94,9 +95,9 @@ fn merge_indexes(existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u
 }
 
 fn merge_ranked_maps(existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    let mut ranked_map: Option<HashMap<_, _>> = None;
+    let mut ranked_map: Option<RankedMap> = None;
     for bytes in existing.into_iter().chain(operands) {
-        let operand: HashMap<(DocumentId, SchemaAttr), i64> = bincode::deserialize(bytes).unwrap();
+        let operand: RankedMap = bincode::deserialize(bytes).unwrap();
         match ranked_map {
             Some(ref mut ranked_map) => ranked_map.extend(operand),
             None => { ranked_map.replace(operand); },
@@ -173,7 +174,6 @@ impl DatabaseIndex {
         let db = Arc::new(db);
         let snapshot = Snapshot::new(db.clone());
         let view = ArcCell::new(Arc::new(DatabaseView::new(snapshot)?));
-
 
         Ok(DatabaseIndex {
             db: db,

@@ -16,8 +16,9 @@ use crate::tokenizer::TokenizerBuilder;
 use crate::data::{DocIds, DocIndexes};
 use crate::database::schema::Schema;
 use crate::database::index::Index;
-use crate::{DocumentId, DocIndex};
+use crate::database::RankedMap;
 use crate::database::{DATA_INDEX, DATA_RANKED_MAP};
+use crate::{DocumentId, DocIndex};
 
 pub type Token = Vec<u8>; // TODO could be replaced by a SmallVec
 
@@ -78,7 +79,7 @@ use UpdateType::{Updated, Deleted};
 
 pub struct RawUpdateBuilder {
     documents_update: HashMap<DocumentId, UpdateType>,
-    documents_ranked_fields: HashMap<(DocumentId, SchemaAttr), i64>,
+    documents_ranked_fields: RankedMap,
     indexed_words: BTreeMap<Token, Vec<DocIndex>>,
     batch: WriteBatch,
 }

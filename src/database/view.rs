@@ -1,4 +1,3 @@
-use hashbrown::HashMap;
 use std::error::Error;
 use std::path::Path;
 use std::ops::Deref;
@@ -15,6 +14,7 @@ use crate::rank::{QueryBuilder, FilterFunc};
 use crate::database::schema::SchemaAttr;
 use crate::database::schema::Schema;
 use crate::database::index::Index;
+use crate::database::RankedMap;
 use crate::DocumentId;
 
 pub struct DatabaseView<D>
@@ -22,7 +22,7 @@ where D: Deref<Target=DB>
 {
     snapshot: Snapshot<D>,
     index: Index,
-    ranked_map: HashMap<(DocumentId, SchemaAttr), i64>,
+    ranked_map: RankedMap,
     schema: Schema,
 }
 
@@ -44,7 +44,7 @@ where D: Deref<Target=DB>
         &self.index
     }
 
-    pub fn ranked_map(&self) -> &HashMap<(DocumentId, SchemaAttr), i64> {
+    pub fn ranked_map(&self) -> &RankedMap {
         &self.ranked_map
     }
 
