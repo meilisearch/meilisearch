@@ -22,20 +22,20 @@ MeiliDB will be a binary in a near future so you will be able to use it as a dat
 
 ## Performances
 
-With a database composed of _100 353_ documents with _352_ attributes each and _90_ of them indexed.
-So nearly _9 million_ fields indexed for _35 million_ stored we can handle more than _1.2k req/sec_ on an Intel i7-7700 (8) @ 4.2GHz.
+With a database composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed.
+So more than _300 000_ fields indexed for _35 million_ stored we can handle more than _2.8k req/sec_ with an average response time of _9 ms_ on an Intel i7-7700 (8) @ 4.2GHz.
 
-Requests are made using [wrk](https://github.com/wg/wrk) and scripted to generate real users queries.
+Requests are made using [wrk](https://github.com/wg/wrk) and scripted to simulate real users queries.
 
 ```
 Running 10s test @ http://localhost:2230
-  2 threads and 12 connections
+  2 threads and 25 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency    18.86ms   49.39ms 614.89ms   95.23%
-    Req/Sec   620.41     59.53   790.00     65.00%
-  12359 requests in 10.00s, 3.26MB read
-Requests/sec:   1235.54
-Transfer/sec:    334.22KB
+    Latency     9.52ms    7.61ms  99.25ms   84.58%
+    Req/Sec     1.41k   119.11     1.78k    64.50%
+  28080 requests in 10.01s, 7.42MB read
+Requests/sec:   2806.46
+Transfer/sec:    759.17KB
 ```
 
 ### Notes
