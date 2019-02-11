@@ -13,8 +13,9 @@ use crate::database::serde::find_id::FindDocumentIdSerializer;
 use crate::database::serde::SerializerError;
 use crate::DocumentId;
 
-pub const STORED: SchemaProps = SchemaProps { stored: true, indexed: false };
-pub const INDEXED: SchemaProps = SchemaProps { stored: false, indexed: true };
+pub const STORED: SchemaProps  = SchemaProps { stored: true,  indexed: false, ranked: false };
+pub const INDEXED: SchemaProps = SchemaProps { stored: false, indexed: true,  ranked: false };
+pub const RANKED: SchemaProps  = SchemaProps { stored: false, indexed: false, ranked: true  };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaProps {
@@ -23,6 +24,9 @@ pub struct SchemaProps {
 
     #[serde(default)]
     indexed: bool,
+
+    #[serde(default)]
+    ranked: bool,
 }
 
 impl SchemaProps {
@@ -33,6 +37,10 @@ impl SchemaProps {
     pub fn is_indexed(self) -> bool {
         self.indexed
     }
+
+    pub fn is_ranked(self) -> bool {
+        self.ranked
+    }
 }
 
 impl BitOr for SchemaProps {
@@ -42,6 +50,7 @@ impl BitOr for SchemaProps {
         SchemaProps {
             stored: self.stored | other.stored,
             indexed: self.indexed | other.indexed,
+            ranked: self.ranked | other.ranked,
         }
     }
 }
@@ -185,7 +194,8 @@ impl Schema {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct SchemaAttr(pub(crate) u16);
 
 impl SchemaAttr {

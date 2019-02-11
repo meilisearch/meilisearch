@@ -7,6 +7,8 @@ pub mod rank;
 pub mod tokenizer;
 mod common_words;
 
+use serde_derive::{Serialize, Deserialize};
+
 pub use rocksdb;
 
 pub use self::tokenizer::Tokenizer;
@@ -16,6 +18,7 @@ pub use self::common_words::CommonWords;
 ///
 /// It is used to inform the database the document you want to deserialize.
 /// Helpful for custom ranking.
+#[derive(Serialize, Deserialize)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct DocumentId(u64);
 

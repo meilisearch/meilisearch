@@ -1,3 +1,5 @@
+use crate::DocumentId;
+use crate::database::schema::SchemaAttr;
 use std::sync::Arc;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -6,12 +8,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::ops::{Deref, DerefMut};
 
-use crossbeam::atomic::ArcCell;
-use log::{info, error, warn};
-use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::rocksdb_options::{DBOptions, ColumnFamilyOptions};
+use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::{DB, MergeOperands};
+use crossbeam::atomic::ArcCell;
 use lockfree::map::Map;
+use hashbrown::HashMap;
+use log::{info, error, warn};
 
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::view::{DatabaseView, DocumentIter};
@@ -19,12 +22,17 @@ pub use self::update::Update;
 pub use self::serde::SerializerError;
 pub use self::schema::Schema;
 pub use self::index::Index;
+pub use self::number::{Number, ParseNumberError};
 
-const DATA_INDEX:  &[u8] = b"data-index";
-const DATA_SCHEMA: &[u8] = b"data-schema";
+pub type RankedMap = HashMap<(DocumentId, SchemaAttr), Number>;
+
+const DATA_INDEX:      &[u8] = b"data-index";
+const DATA_RANKED_MAP: &[u8] = b"data-ranked-map";
+const DATA_SCHEMA:     &[u8] = b"data-schema";
 
 pub mod schema;
 pub(crate) mod index;
+mod number;
 mod document_key;
 mod serde;
 mod update;
@@ -61,9 +69,16 @@ where D: Deref<Target=DB>
     Ok(index)
 }
 
-fn merge_indexes(key: &[u8], existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    assert_eq!(key, DATA_INDEX, "The merge operator only supports \"data-index\" merging");
+fn retrieve_data_ranked_map<D>(snapshot: &Snapshot<D>) -> Result<RankedMap, Box<Error>>
+where D: Deref<Target=DB>,
+{
+    match snapshot.get(DATA_RANKED_MAP)? {
+        Some(vector) => Ok(bincode::deserialize(&*vector)?),
+        None => Ok(HashMap::new()),
+    }
+}
 
+fn merge_indexes(existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
     let mut index: Option<Index> = None;
     for bytes in existing.into_iter().chain(operands) {
         let operand = Index::from_bytes(bytes.to_vec()).unwrap();
@@ -79,6 +94,28 @@ fn merge_indexes(key: &[u8], existing: Option<&[u8]>, operands: &mut MergeOperan
     let mut bytes = Vec::new();
     index.write_to_bytes(&mut bytes);
     bytes
+}
+
+fn merge_ranked_maps(existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
+    let mut ranked_map: Option<RankedMap> = None;
+    for bytes in existing.into_iter().chain(operands) {
+        let operand: RankedMap = bincode::deserialize(bytes).unwrap();
+        match ranked_map {
+            Some(ref mut ranked_map) => ranked_map.extend(operand),
+            None => { ranked_map.replace(operand); },
+        };
+    }
+
+    let ranked_map = ranked_map.unwrap_or_default();
+    bincode::serialize(&ranked_map).unwrap()
+}
+
+fn merge_operator(key: &[u8], existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
+    match key {
+        DATA_INDEX      => merge_indexes(existing, operands),
+        DATA_RANKED_MAP => merge_ranked_maps(existing, operands),
+        key             => panic!("The merge operator does not support merging {:?}", key),
+    }
 }
 
 pub struct IndexUpdate {
@@ -103,14 +140,14 @@ impl DerefMut for IndexUpdate {
 struct DatabaseIndex {
     db: Arc<DB>,
 
-    // This view is updated each time the DB ingests an update
+    // This view is updated each time the DB ingests an update.
     view: ArcCell<DatabaseView<Arc<DB>>>,
 
-    // This path is the path to the mdb folder stored on disk
+    // The path of the mdb folder stored on disk.
     path: PathBuf,
 
     // must_die false by default, must be set as true when the Index is dropped.
-    // It's used to erase the folder saved on disk when the user request to delete an index
+    // It is used to erase the folder saved on disk when the user request to delete an index.
     must_die: AtomicBool,
 }
 
@@ -128,7 +165,7 @@ impl DatabaseIndex {
         // opts.error_if_exists(true); // FIXME pull request that
 
         let mut cf_opts = ColumnFamilyOptions::new();
-        cf_opts.add_merge_operator("data-index merge operator", merge_indexes);
+        cf_opts.add_merge_operator("data merge operator", merge_operator);
 
         let db = DB::open_cf(opts, &path_lossy, vec![("default", cf_opts)])?;
 
@@ -139,7 +176,6 @@ impl DatabaseIndex {
         let db = Arc::new(db);
         let snapshot = Snapshot::new(db.clone());
         let view = ArcCell::new(Arc::new(DatabaseView::new(snapshot)?));
-
 
         Ok(DatabaseIndex {
             db: db,
@@ -156,7 +192,7 @@ impl DatabaseIndex {
         opts.create_if_missing(false);
 
         let mut cf_opts = ColumnFamilyOptions::new();
-        cf_opts.add_merge_operator("data-index merge operator", merge_indexes);
+        cf_opts.add_merge_operator("data merge operator", merge_operator);
 
         let db = DB::open_cf(opts, &path_lossy, vec![("default", cf_opts)])?;
 
