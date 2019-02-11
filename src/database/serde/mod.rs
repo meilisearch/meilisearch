@@ -17,7 +17,7 @@ macro_rules! forward_to_unserializable_type {
 
 pub mod find_id;
 pub mod key_to_string;
-pub mod value_to_i64;
+pub mod value_to_number;
 pub mod serializer;
 pub mod indexer_serializer;
 pub mod deserializer;

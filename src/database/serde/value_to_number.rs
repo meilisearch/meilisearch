@@ -1,12 +1,15 @@
+use std::str::FromStr;
+
 use serde::Serialize;
 use serde::{ser, ser::Error};
 
 use crate::database::serde::SerializerError;
+use crate::database::Number;
 
-pub struct ValueToI64Serializer;
+pub struct ValueToNumberSerializer;
 
-impl ser::Serializer for ValueToI64Serializer {
-    type Ok = i64;
+impl ser::Serializer for ValueToNumberSerializer {
+    type Ok = Number;
     type Error = SerializerError;
     type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
@@ -19,46 +22,50 @@ impl ser::Serializer for ValueToI64Serializer {
     forward_to_unserializable_type! {
         bool => serialize_bool,
         char => serialize_char,
-
-        f32 => serialize_f32,
-        f64 => serialize_f64,
     }
 
     fn serialize_i8(self, value: i8) -> Result<Self::Ok, Self::Error> {
-        Ok(i64::from(value))
+        Ok(Number::Signed(value as i64))
     }
 
     fn serialize_i16(self, value: i16) -> Result<Self::Ok, Self::Error> {
-        Ok(i64::from(value))
+        Ok(Number::Signed(value as i64))
     }
 
     fn serialize_i32(self, value: i32) -> Result<Self::Ok, Self::Error> {
-        Ok(i64::from(value))
+        Ok(Number::Signed(value as i64))
     }
 
     fn serialize_i64(self, value: i64) -> Result<Self::Ok, Self::Error> {
-        Ok(i64::from(value))
+        Ok(Number::Signed(value as i64))
     }
 
     fn serialize_u8(self, value: u8) -> Result<Self::Ok, Self::Error> {
-        Ok(i64::from(value))
+        Ok(Number::Unsigned(value as u64))
     }
 
     fn serialize_u16(self, value: u16) -> Result<Self::Ok, Self::Error> {
-        Ok(i64::from(value))
+        Ok(Number::Unsigned(value as u64))
     }
 
     fn serialize_u32(self, value: u32) -> Result<Self::Ok, Self::Error> {
-        Ok(i64::from(value))
+        Ok(Number::Unsigned(value as u64))
     }
 
     fn serialize_u64(self, value: u64) -> Result<Self::Ok, Self::Error> {
-        // Ok(i64::from(value))
-        unimplemented!()
+        Ok(Number::Unsigned(value as u64))
+    }
+
+    fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
+        Ok(Number::Float(value as f64))
+    }
+
+    fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
+        Ok(Number::Float(value))
     }
 
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
-        i64::from_str_radix(value, 10).map_err(SerializerError::custom)
+        Number::from_str(value).map_err(SerializerError::custom)
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {

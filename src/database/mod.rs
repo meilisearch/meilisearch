@@ -8,13 +8,13 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::ops::{Deref, DerefMut};
 
-use crossbeam::atomic::ArcCell;
-use log::{info, error, warn};
-use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::rocksdb_options::{DBOptions, ColumnFamilyOptions};
+use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::{DB, MergeOperands};
+use crossbeam::atomic::ArcCell;
 use lockfree::map::Map;
 use hashbrown::HashMap;
+use log::{info, error, warn};
 
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::view::{DatabaseView, DocumentIter};
@@ -22,8 +22,9 @@ pub use self::update::Update;
 pub use self::serde::SerializerError;
 pub use self::schema::Schema;
 pub use self::index::Index;
+pub use self::number::{Number, ParseNumberError};
 
-pub type RankedMap = HashMap<(DocumentId, SchemaAttr), i64>;
+pub type RankedMap = HashMap<(DocumentId, SchemaAttr), Number>;
 
 const DATA_INDEX:      &[u8] = b"data-index";
 const DATA_RANKED_MAP: &[u8] = b"data-ranked-map";
@@ -31,6 +32,7 @@ const DATA_SCHEMA:     &[u8] = b"data-schema";
 
 pub mod schema;
 pub(crate) mod index;
+mod number;
 mod document_key;
 mod serde;
 mod update;

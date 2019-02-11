@@ -11,7 +11,6 @@ use crate::database::{retrieve_data_schema, retrieve_data_index, retrieve_data_r
 use crate::database::serde::deserializer::Deserializer;
 use crate::database::{DocumentKey, DocumentKeyAttr};
 use crate::rank::{QueryBuilder, FilterFunc};
-use crate::database::schema::SchemaAttr;
 use crate::database::schema::Schema;
 use crate::database::index::Index;
 use crate::database::RankedMap;

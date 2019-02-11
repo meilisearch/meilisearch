@@ -16,8 +16,8 @@ use crate::tokenizer::TokenizerBuilder;
 use crate::data::{DocIds, DocIndexes};
 use crate::database::schema::Schema;
 use crate::database::index::Index;
-use crate::database::RankedMap;
 use crate::database::{DATA_INDEX, DATA_RANKED_MAP};
+use crate::database::{RankedMap, Number};
 use crate::{DocumentId, DocIndex};
 
 pub type Token = Vec<u8>; // TODO could be replaced by a SmallVec
@@ -205,7 +205,7 @@ impl<'a> DocumentUpdate<'a> {
     pub fn register_ranked_attribute(
         &mut self,
         attr: SchemaAttr,
-        integer: i64,
+        number: Number,
     ) -> Result<(), SerializerError>
     {
         use serde::ser::Error;
@@ -216,7 +216,7 @@ impl<'a> DocumentUpdate<'a> {
             ));
         }
 
-        self.inner.documents_ranked_fields.insert((self.document_id, attr), integer);
+        self.inner.documents_ranked_fields.insert((self.document_id, attr), number);
 
         Ok(())
     }
