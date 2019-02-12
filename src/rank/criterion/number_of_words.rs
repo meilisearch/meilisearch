@@ -7,7 +7,7 @@ use crate::rank::RawDocument;
 
 #[inline]
 fn number_of_query_words(query_index: &[u32]) -> usize {
-    query_index.linear_group_by(PartialEq::eq).count()
+    query_index.linear_group().count()
 }
 
 #[derive(Debug, Clone, Copy)]

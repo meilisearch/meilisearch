@@ -10,7 +10,7 @@ fn sum_matches_attribute_index(query_index: &[u32], word_index: &[u32]) -> usize
     let mut sum_word_index = 0;
     let mut index = 0;
 
-    for group in query_index.linear_group_by(PartialEq::eq) {
+    for group in query_index.linear_group() {
         sum_word_index += word_index[index] as usize;
         index += group.len();
     }

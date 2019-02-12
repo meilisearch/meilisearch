@@ -11,7 +11,7 @@ fn sum_matches_typos(query_index: &[u32], distance: &[u8]) -> isize {
     let mut sum_typos = 0.0;
     let mut index = 0;
 
-    for group in query_index.linear_group_by(PartialEq::eq) {
+    for group in query_index.linear_group() {
         let typo = distance[index] as f32;
         sum_typos += (typo + 1.0).log10();
         number_words += 1.0_f32;
