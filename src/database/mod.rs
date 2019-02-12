@@ -16,6 +16,7 @@ use lockfree::map::Map;
 use hashbrown::HashMap;
 use log::{info, error, warn};
 
+pub use self::config::Config;
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::view::{DatabaseView, DocumentIter};
 pub use self::update::Update;
@@ -24,12 +25,15 @@ pub use self::schema::Schema;
 pub use self::index::Index;
 pub use self::number::{Number, ParseNumberError};
 
+
 pub type RankedMap = HashMap<(DocumentId, SchemaAttr), Number>;
 
 const DATA_INDEX:      &[u8] = b"data-index";
 const DATA_RANKED_MAP: &[u8] = b"data-ranked-map";
 const DATA_SCHEMA:     &[u8] = b"data-schema";
+const CONFIG:          &[u8] = b"config";
 
+pub mod config;
 pub mod schema;
 pub(crate) mod index;
 mod number;
@@ -75,6 +79,15 @@ where D: Deref<Target=DB>,
     match snapshot.get(DATA_RANKED_MAP)? {
         Some(vector) => Ok(bincode::deserialize(&*vector)?),
         None => Ok(HashMap::new()),
+    }
+}
+
+fn retrieve_config<D>(snapshot: &Snapshot<D>) -> Result<Config, Box<Error>>
+where D: Deref<Target=DB>,
+{
+    match snapshot.get(CONFIG)? {
+        Some(vector) => Ok(bincode::deserialize(&*vector)?),
+        None => Ok(Config::default()),
     }
 }
 
@@ -241,6 +254,17 @@ impl DatabaseIndex {
     fn view(&self) -> Arc<DatabaseView<Arc<DB>>> {
         self.view.get()
     }
+
+    fn update_config(&self, config: Config) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>>{
+        let data = bincode::serialize(&config)?;
+        self.db.put(CONFIG, &data)?;
+
+        let snapshot = Snapshot::new(self.db.clone());
+        let view = Arc::new(DatabaseView::new(snapshot)?);
+        self.view.set(view.clone());
+
+        Ok(view)
+    }
 }
 
 impl Drop for DatabaseIndex {
@@ -343,6 +367,12 @@ impl Database {
         let index_guard = self.indexes.get(index).ok_or("Index not found")?;
 
         Ok(index_guard.val().view())
+    }
+
+    pub fn update_config(&self, index: &str, config: Config) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>>{
+        let index_guard = self.indexes.get(index).ok_or("Index not found")?;
+
+        Ok(index_guard.val().update_config(config)?)
     }
 
 }
