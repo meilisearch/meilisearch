@@ -10,10 +10,10 @@ pub enum RankingOrdering {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
-    stop_words: Option<HashSet<String>>,
-    ranking_order: Option<Vec<String>>,
-    distinct_field: Option<String>,
-    ranking_rules: Option<HashMap<String, RankingOrdering>>,
+    pub stop_words: Option<HashSet<String>>,
+    pub ranking_order: Option<Vec<String>>,
+    pub distinct_field: Option<String>,
+    pub ranking_rules: Option<HashMap<String, RankingOrdering>>,
 }
 
 
