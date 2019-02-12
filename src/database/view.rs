@@ -58,6 +58,10 @@ where D: Deref<Target=DB>
         &self.snapshot
     }
 
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
     pub fn get(&self, key: &[u8]) -> Result<Option<DBVector>, Box<Error>> {
         Ok(self.snapshot.get(key)?)
     }
