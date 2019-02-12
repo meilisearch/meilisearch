@@ -279,6 +279,13 @@ impl DatabaseIndex {
         self.view.load()
     }
 
+    fn get_config(&self) -> Result<Config, Box<Error>> {
+        match self.db.get(CONFIG)? {
+            Some(vector) => Ok(bincode::deserialize(&*vector)?),
+            None => Ok(Config::default()),
+        }
+    }
+
     fn update_config(&self, config: Config) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>>{
         let data = bincode::serialize(&config)?;
         self.db.put(CONFIG, &data)?;
@@ -391,6 +398,12 @@ impl Database {
         let index_guard = self.indexes.get(index).ok_or("Index not found")?;
 
         Ok(index_guard.val().view())
+    }
+
+    pub fn get_config(&self, index: &str) -> Result<Config, Box<Error>> {
+        let index_guard = self.indexes.get(index).ok_or("Index not found")?;
+
+        Ok(index_guard.val().get_config()?)
     }
 
     pub fn update_config(&self, index: &str, config: Config) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>>{
