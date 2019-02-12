@@ -10,7 +10,7 @@ fn sum_matches_attributes(query_index: &[u32], attribute: &[u16]) -> usize {
     let mut sum_attributes = 0;
     let mut index = 0;
 
-    for group in query_index.linear_group_by(PartialEq::eq) {
+    for group in query_index.linear_group() {
         sum_attributes += attribute[index] as usize;
         index += group.len();
     }

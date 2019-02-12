@@ -27,6 +27,7 @@ fn attribute_proximity((lattr, lwi): (u16, u32), (rattr, rwi): (u16, u32)) -> u3
 
 fn min_proximity((lattr, lwi): (&[u16], &[u32]), (rattr, rwi): (&[u16], &[u32])) -> u32 {
     let mut min_prox = u32::max_value();
+
     for a in lattr.iter().zip(lwi) {
         for b in rattr.iter().zip(rwi) {
             let a = clone_tuple(a);
@@ -34,34 +35,43 @@ fn min_proximity((lattr, lwi): (&[u16], &[u32]), (rattr, rwi): (&[u16], &[u32]))
             min_prox = cmp::min(min_prox, attribute_proximity(a, b));
         }
     }
+
     min_prox
 }
 
-fn matches_proximity(query_index: &[u32], attribute: &[u16], word_index: &[u32]) -> u32 {
+fn matches_proximity(
+    query_index: &[u32],
+    distance: &[u8],
+    attribute: &[u16],
+    word_index: &[u32],
+) -> u32
+{
+    let mut query_index_groups = query_index.linear_group();
     let mut proximity = 0;
-
     let mut index = 0;
-    let mut iter = query_index.linear_group_by(PartialEq::eq);
-    let mut last = iter.next().map(|group| {
-        let len = group.len();
+
+    let get_attr_wi = |index: usize, group_len: usize| {
+        // retrieve the first distance group (with the lowest values)
+        let len = distance[index..index + group_len].linear_group().next().unwrap().len();
 
         let rattr = &attribute[index..index + len];
         let rwi = &word_index[index..index + len];
-        index += len;
 
         (rattr, rwi)
+    };
+
+    let mut last = query_index_groups.next().map(|group| {
+        let attr_wi = get_attr_wi(index, group.len());
+        index += group.len();
+        attr_wi
     });
 
-    while let (Some(lhs), Some(rhs)) = (last, iter.next()) {
-        let len = rhs.len();
-
-        let rattr = &attribute[index..index + len];
-        let rwi = &word_index[index..index + len];
-        let rhs = (rattr, rwi);
-
-        proximity += min_proximity(lhs, rhs);
-        last = Some(rhs);
-        index += len;
+    // iter by windows of size 2
+    while let (Some(lhs), Some(rhs)) = (last, query_index_groups.next()) {
+        let attr_wi = get_attr_wi(index, rhs.len());
+        proximity += min_proximity(lhs, attr_wi);
+        last = Some(attr_wi);
+        index += rhs.len();
     }
 
     proximity
@@ -74,16 +84,18 @@ impl Criterion for WordsProximity {
     fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
         let lhs = {
             let query_index = lhs.query_index();
+            let distance = lhs.distance();
             let attribute = lhs.attribute();
             let word_index = lhs.word_index();
-            matches_proximity(query_index, attribute, word_index)
+            matches_proximity(query_index, distance, attribute, word_index)
         };
 
         let rhs = {
             let query_index = rhs.query_index();
+            let distance = rhs.distance();
             let attribute = rhs.attribute();
             let word_index = rhs.word_index();
-            matches_proximity(query_index, attribute, word_index)
+            matches_proximity(query_index, distance, attribute, word_index)
         };
 
         lhs.cmp(&rhs)
@@ -106,13 +118,14 @@ mod tests {
         // { id: 3, attr: 3, attr_index: 1 }
 
         let query_index = &[0, 1, 2, 2, 3];
-        let attribute = &[0, 1, 1, 2, 3];
-        let word_index = &[0, 0, 1, 0, 1];
+        let distance    = &[0, 0, 0, 0, 0];
+        let attribute   = &[0, 1, 1, 2, 3];
+        let word_index  = &[0, 0, 1, 0, 1];
 
         //   soup -> of = 8
         // + of -> the  = 1
         // + the -> day = 8 (not 1)
-        assert_eq!(matches_proximity(query_index, attribute, word_index), 17);
+        assert_eq!(matches_proximity(query_index, distance, attribute, word_index), 17);
     }
 
     #[test]
@@ -128,12 +141,13 @@ mod tests {
         // { id: 3, attr: 1, attr_index: 3 }
 
         let query_index = &[0, 0, 1, 2, 3, 3];
-        let attribute = &[0, 1, 1, 1, 0, 1];
-        let word_index = &[0, 0, 1, 2, 1, 3];
+        let distance    = &[0, 0, 0, 0, 0, 0];
+        let attribute   = &[0, 1, 1, 1, 0, 1];
+        let word_index  = &[0, 0, 1, 2, 1, 3];
 
         //   soup -> of = 1
         // + of -> the  = 1
         // + the -> day = 1
-        assert_eq!(matches_proximity(query_index, attribute, word_index), 3);
+        assert_eq!(matches_proximity(query_index, distance, attribute, word_index), 3);
     }
 }

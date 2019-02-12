@@ -10,7 +10,7 @@ fn number_exact_matches(query_index: &[u32], is_exact: &[bool]) -> usize {
     let mut count = 0;
     let mut index = 0;
 
-    for group in query_index.linear_group_by(PartialEq::eq) {
+    for group in query_index.linear_group() {
         let len = group.len();
         count += is_exact[index..index + len].contains(&true) as usize;
         index += len;
