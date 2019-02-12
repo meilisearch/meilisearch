@@ -279,13 +279,17 @@ impl DatabaseIndex {
         self.view.load()
     }
 
+    fn get_config(&self) -> Config {
+        self.view().config().clone()
+    }
+
     fn update_config(&self, config: Config) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>>{
         let data = bincode::serialize(&config)?;
         self.db.put(CONFIG, &data)?;
 
         let snapshot = Snapshot::new(self.db.clone());
         let view = Arc::new(DatabaseView::new(snapshot)?);
-        self.view.set(view.clone());
+        self.view.store(view.clone());
 
         Ok(view)
     }
@@ -391,6 +395,12 @@ impl Database {
         let index_guard = self.indexes.get(index).ok_or("Index not found")?;
 
         Ok(index_guard.val().view())
+    }
+
+    pub fn get_config(&self, index: &str) -> Result<Config, Box<Error>> {
+        let index_guard = self.indexes.get(index).ok_or("Index not found")?;
+
+        Ok(index_guard.val().get_config())
     }
 
     pub fn update_config(&self, index: &str, config: Config) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>>{
