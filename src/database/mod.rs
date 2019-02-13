@@ -11,7 +11,7 @@ use std::ops::{Deref, DerefMut};
 use rocksdb::rocksdb_options::{DBOptions, ColumnFamilyOptions};
 use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::{DB, MergeOperands};
-use crossbeam::atomic::ArcCell;
+use arc_swap::ArcSwap;
 use lockfree::map::Map;
 use hashbrown::HashMap;
 use log::{info, error, warn};
@@ -141,7 +141,7 @@ struct DatabaseIndex {
     db: Arc<DB>,
 
     // This view is updated each time the DB ingests an update.
-    view: ArcCell<DatabaseView<Arc<DB>>>,
+    view: ArcSwap<DatabaseView<Arc<DB>>>,
 
     // The path of the mdb folder stored on disk.
     path: PathBuf,
@@ -175,7 +175,7 @@ impl DatabaseIndex {
 
         let db = Arc::new(db);
         let snapshot = Snapshot::new(db.clone());
-        let view = ArcCell::new(Arc::new(DatabaseView::new(snapshot)?));
+        let view = ArcSwap::new(Arc::new(DatabaseView::new(snapshot)?));
 
         Ok(DatabaseIndex {
             db: db,
@@ -204,7 +204,7 @@ impl DatabaseIndex {
 
         let db = Arc::new(db);
         let snapshot = Snapshot::new(db.clone());
-        let view = ArcCell::new(Arc::new(DatabaseView::new(snapshot)?));
+        let view = ArcSwap::new(Arc::new(DatabaseView::new(snapshot)?));
 
         Ok(DatabaseIndex {
             db: db,
@@ -233,13 +233,13 @@ impl DatabaseIndex {
 
         let snapshot = Snapshot::new(self.db.clone());
         let view = Arc::new(DatabaseView::new(snapshot)?);
-        self.view.set(view.clone());
+        self.view.store(view.clone());
 
         Ok(view)
     }
 
     fn view(&self) -> Arc<DatabaseView<Arc<DB>>> {
-        self.view.get()
+        self.view.load()
     }
 }
 

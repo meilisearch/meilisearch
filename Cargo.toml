@@ -7,7 +7,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 [dependencies]
 bincode = "1.0"
 byteorder = "1.2"
-crossbeam = "0.6"
+arc-swap = "0.3"
 elapsed = "0.1"
 fst = "0.3"
 hashbrown = { version = "0.1", features = ["serde"] }
