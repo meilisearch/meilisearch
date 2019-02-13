@@ -7,7 +7,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 [dependencies]
 bincode = "1.0"
 byteorder = "1.2"
-crossbeam = "0.6"
+arc-swap = "0.3"
 elapsed = "0.1"
 fst = "0.3"
 hashbrown = { version = "0.1", features = ["serde"] }
@@ -19,7 +19,7 @@ sdset = "0.3"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = { version = "1.0", features = ["preserve_order"] }
-slice-group-by = "0.2.3-alpha"
+slice-group-by = "0.2"
 unidecode = "0.3"
 rayon = "1.0"
 lockfree = "0.5.1"
