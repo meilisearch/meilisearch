@@ -5,24 +5,25 @@ version = "0.3.0"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
+arc-swap = "0.3"
 bincode = "1.0"
 byteorder = "1.2"
-arc-swap = "0.3"
 elapsed = "0.1"
 fst = "0.3"
 hashbrown = { version = "0.1", features = ["serde"] }
 lazy_static = "1.1"
 levenshtein_automata = { version = "0.1", features = ["fst_automaton"] }
 linked-hash-map = { version = "0.5", features = ["serde_impl"] }
+lockfree = "0.5"
 log = "0.4"
+rayon = "1.0"
 sdset = "0.3"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = { version = "1.0", features = ["preserve_order"] }
+size_format = "1.0"
 slice-group-by = "0.2"
 unidecode = "0.3"
-rayon = "1.0"
-lockfree = "0.5.1"
 
 [dependencies.toml]
 git = "https://github.com/Kerollmops/toml-rs.git"

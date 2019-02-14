@@ -1,28 +1,41 @@
-use std::io::{Write, BufRead, Cursor};
+use std::io::{Cursor, BufRead};
 use std::error::Error;
+use std::sync::Arc;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use fst::{map, Map, Streamer, IntoStreamer};
-use sdset::{Set, SetOperation};
-use sdset::duo::Union;
+use fst::{map, Map, IntoStreamer, Streamer};
 use fst::raw::Fst;
+use sdset::duo::{Union, DifferenceByKey};
+use sdset::{Set, SetOperation};
 
-use crate::data::{DocIndexes, DocIndexesBuilder};
-use crate::data::SharedData;
-use crate::DocIndex;
+use crate::data::{SharedData, DocIndexes, DocIndexesBuilder};
+use crate::{DocumentId, DocIndex};
 
 #[derive(Default)]
-pub struct Positive {
-    map: Map,
-    indexes: DocIndexes,
+pub struct Index {
+    pub map: Map,
+    pub indexes: DocIndexes,
 }
 
-impl Positive {
-    pub fn new(map: Map, indexes: DocIndexes) -> Positive {
-        Positive { map, indexes }
+impl Index {
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Index, Box<Error>> {
+        let len = bytes.len();
+        Index::from_shared_bytes(Arc::from(bytes), 0, len)
     }
 
-    pub fn from_cursor(cursor: &mut Cursor<SharedData>) -> Result<Positive, Box<Error>> {
+    pub fn from_shared_bytes(
+        bytes: Arc<Vec<u8>>,
+        offset: usize,
+        len: usize,
+    ) -> Result<Index, Box<Error>>
+    {
+        let data = SharedData::new(bytes, offset, len);
+        let mut cursor = Cursor::new(data);
+
+        Index::from_cursor(&mut cursor)
+    }
+
+    pub fn from_cursor(cursor: &mut Cursor<SharedData>) -> Result<Index, Box<Error>> {
         let len = cursor.read_u64::<LittleEndian>()? as usize;
         let offset = cursor.position() as usize;
         let data = cursor.get_ref().range(offset, len);
@@ -33,7 +46,7 @@ impl Positive {
 
         let indexes = DocIndexes::from_cursor(cursor)?;
 
-        Ok(Positive { map, indexes})
+        Ok(Index { map, indexes})
     }
 
     pub fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
@@ -45,16 +58,28 @@ impl Positive {
         self.indexes.write_to_bytes(bytes);
     }
 
-    pub fn map(&self) -> &Map {
-        &self.map
+    pub fn remove_documents(&self, documents: &Set<DocumentId>) -> Index {
+        let mut buffer = Vec::new();
+        let mut builder = IndexBuilder::new();
+        let mut stream = self.into_stream();
+
+        while let Some((key, indexes)) = stream.next() {
+            buffer.clear();
+
+            let op = DifferenceByKey::new(indexes, documents, |x| x.document_id, |x| *x);
+            op.extend_vec(&mut buffer);
+
+            if !buffer.is_empty() {
+                let indexes = Set::new_unchecked(&buffer);
+                builder.insert(key, indexes).unwrap();
+            }
+        }
+
+        builder.build()
     }
 
-    pub fn indexes(&self) -> &DocIndexes {
-        &self.indexes
-    }
-
-    pub fn union(&self, other: &Positive) -> Result<Positive, Box<Error>> {
-        let mut builder = PositiveBuilder::memory();
+    pub fn union(&self, other: &Index) -> Index {
+        let mut builder = IndexBuilder::new();
         let mut stream = map::OpBuilder::new().add(&self.map).add(&other.map).union();
 
         let mut buffer = Vec::new();
@@ -63,19 +88,19 @@ impl Positive {
             match ivalues {
                 [a, b] => {
                     let indexes = if a.index == 0 { &self.indexes } else { &other.indexes };
-                    let indexes = indexes.get(a.value as usize).ok_or(format!("index not found"))?;
+                    let indexes = &indexes[a.value as usize];
                     let a = Set::new_unchecked(indexes);
 
                     let indexes = if b.index == 0 { &self.indexes } else { &other.indexes };
-                    let indexes = indexes.get(b.value as usize).ok_or(format!("index not found"))?;
+                    let indexes = &indexes[b.value as usize];
                     let b = Set::new_unchecked(indexes);
 
                     let op = Union::new(a, b);
                     op.extend_vec(&mut buffer);
                 },
-                [a] => {
-                    let indexes = if a.index == 0 { &self.indexes } else { &other.indexes };
-                    let indexes = indexes.get(a.value as usize).ok_or(format!("index not found"))?;
+                [x] => {
+                    let indexes = if x.index == 0 { &self.indexes } else { &other.indexes };
+                    let indexes = &indexes[x.value as usize];
                     buffer.extend_from_slice(indexes)
                 },
                 _ => continue,
@@ -83,23 +108,18 @@ impl Positive {
 
             if !buffer.is_empty() {
                 let indexes = Set::new_unchecked(&buffer);
-                builder.insert(key, indexes)?;
+                builder.insert(key, indexes).unwrap();
             }
         }
 
-        let (map, indexes) = builder.into_inner()?;
-        let map = Map::from_bytes(map)?;
-        let indexes = DocIndexes::from_bytes(indexes)?;
-        Ok(Positive { map, indexes })
+        builder.build()
     }
 }
 
-impl<'m, 'a> IntoStreamer<'a> for &'m Positive {
+impl<'m, 'a> IntoStreamer<'a> for &'m Index {
     type Item = (&'a [u8], &'a Set<DocIndex>);
-    /// The type of the stream to be constructed.
     type Into = Stream<'m>;
 
-    /// Construct a stream from `Self`.
     fn into_stream(self) -> Self::Into {
         Stream {
             map_stream: self.map.into_stream(),
@@ -128,28 +148,26 @@ impl<'m, 'a> Streamer<'a> for Stream<'m> {
     }
 }
 
-pub struct PositiveBuilder<W, X> {
-    map: fst::MapBuilder<W>,
-    indexes: DocIndexesBuilder<X>,
+pub struct IndexBuilder {
+    map: fst::MapBuilder<Vec<u8>>,
+    indexes: DocIndexesBuilder<Vec<u8>>,
     value: u64,
 }
 
-impl PositiveBuilder<Vec<u8>, Vec<u8>> {
-    pub fn memory() -> Self {
-        PositiveBuilder {
+impl IndexBuilder {
+    pub fn new() -> Self {
+        IndexBuilder {
             map: fst::MapBuilder::memory(),
             indexes: DocIndexesBuilder::memory(),
             value: 0,
         }
     }
-}
 
-impl<W: Write, X: Write> PositiveBuilder<W, X> {
     /// If a key is inserted that is less than or equal to any previous key added,
     /// then an error is returned. Similarly, if there was a problem writing
     /// to the underlying writer, an error is returned.
     // FIXME what if one write doesn't work but the other do ?
-    pub fn insert<K>(&mut self, key: K, indexes: &Set<DocIndex>) -> Result<(), Box<Error>>
+    pub fn insert<K>(&mut self, key: K, indexes: &Set<DocIndex>) -> fst::Result<()>
     where K: AsRef<[u8]>,
     {
         self.map.insert(key, self.value)?;
@@ -158,9 +176,13 @@ impl<W: Write, X: Write> PositiveBuilder<W, X> {
         Ok(())
     }
 
-    pub fn into_inner(self) -> Result<(W, X), Box<Error>> {
-        let map = self.map.into_inner()?;
-        let indexes = self.indexes.into_inner()?;
-        Ok((map, indexes))
+    pub fn build(self) -> Index {
+        let map = self.map.into_inner().unwrap();
+        let indexes = self.indexes.into_inner().unwrap();
+
+        let map = Map::from_bytes(map).unwrap();
+        let indexes = DocIndexes::from_bytes(indexes).unwrap();
+
+        Index { map, indexes }
     }
 }

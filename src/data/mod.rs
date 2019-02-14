@@ -9,7 +9,7 @@ use std::sync::Arc;
 pub use self::doc_ids::DocIds;
 pub use self::doc_indexes::{DocIndexes, DocIndexesBuilder};
 
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct SharedData {
     pub bytes: Arc<Vec<u8>>,
     pub offset: usize,
@@ -19,7 +19,7 @@ pub struct SharedData {
 impl SharedData {
     pub fn from_bytes(vec: Vec<u8>) -> SharedData {
         let len = vec.len();
-        let bytes = Arc::new(vec);
+        let bytes = Arc::from(vec);
         SharedData::new(bytes, 0, len)
     }
 

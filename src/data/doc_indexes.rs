@@ -26,8 +26,8 @@ pub struct DocIndexes {
 
 impl DocIndexes {
     pub fn from_bytes(bytes: Vec<u8>) -> io::Result<DocIndexes> {
-        let bytes = Arc::new(bytes);
         let len = bytes.len();
+        let bytes = Arc::from(bytes);
         let data = SharedData::new(bytes, 0, len);
         let mut  cursor = Cursor::new(data);
         DocIndexes::from_cursor(&mut cursor)
