@@ -9,11 +9,19 @@ pub enum RankingOrdering {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccessToken {
+    pub token: String,
+    pub secret_key: String,
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub stop_words: Option<HashSet<String>>,
     pub ranking_order: Option<Vec<String>>,
     pub distinct_field: Option<String>,
     pub ranking_rules: Option<HashMap<String, RankingOrdering>>,
+    pub access_token: Option<AccessToken>,
 }
 
 
@@ -24,6 +32,7 @@ impl Config {
             ranking_order: None,
             distinct_field: None,
             ranking_rules: None,
+            access_token: None,
         }
     }
 }
