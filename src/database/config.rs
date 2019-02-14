@@ -10,8 +10,9 @@ pub enum RankingOrdering {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccessToken {
-    pub token: String,
-    pub secret_key: String,
+    pub read_key: String,
+    pub write_key: String,
+    pub admin_key: String,
 }
 
 
