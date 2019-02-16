@@ -4,6 +4,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 use std::error::Error;
 use std::borrow::Cow;
 use std::fs::File;
@@ -124,14 +125,13 @@ fn main() -> Result<(), Box<Error>> {
         None           => HashSet::new(),
     };
 
-    let (elapsed, result) = elapsed::measure_time(|| {
-        index(schema, &opt.database_path, &opt.csv_data_path, opt.update_group_size, &stop_words)
-    });
+    let start = Instant::now();
+    let result = index(schema, &opt.database_path, &opt.csv_data_path, opt.update_group_size, &stop_words);
 
     if let Err(e) = result {
         return Err(e.into())
     }
 
-    println!("database created in {} at: {:?}", elapsed, opt.database_path);
+    println!("database created in {:.2?} at: {:?}", start.elapsed(), opt.database_path);
     Ok(())
 }

@@ -4,8 +4,6 @@ mod shared_data;
 
 use std::slice::from_raw_parts;
 use std::mem::size_of;
-use std::ops::Deref;
-use std::sync::Arc;
 
 pub use self::doc_ids::DocIds;
 pub use self::doc_indexes::{DocIndexes, DocIndexesBuilder};

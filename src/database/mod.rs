@@ -1,8 +1,7 @@
-use crate::DocumentId;
-use crate::database::schema::SchemaAttr;
-use std::sync::Arc;
+use std::time::Instant;
 use std::error::Error;
 use std::ffi::OsStr;
+use std::sync::Arc;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,8 +16,10 @@ use lockfree::map::Map;
 use hashbrown::HashMap;
 use log::{info, error, warn};
 
+use crate::database::schema::SchemaAttr;
 use crate::shared_data_cursor::FromSharedDataCursor;
 use crate::write_to_bytes::WriteToBytes;
+use crate::DocumentId;
 
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::view::{DatabaseView, DocumentIter};
@@ -56,25 +57,25 @@ where D: Deref<Target=DB>
 {
     use self::update::ReadIndexEvent::{self, *};
 
-    let (elapsed, vector) = elapsed::measure_time(|| snapshot.get(DATA_INDEX));
-    info!("loading index from kv-store took {}", elapsed);
+    let start = Instant::now();
+    let vector = snapshot.get(DATA_INDEX)?;
+    info!("loading index from kv-store took {:.2?}", start.elapsed());
 
-    match vector? {
+    match vector {
         Some(vector) => {
+            let start = Instant::now();
+
             let bytes = vector.as_ref().to_vec();
-            let size = SizeFormatterBinary::new(bytes.len() as u64);
-            info!("index size is {}B", size);
+            info!("index size is {}B", SizeFormatterBinary::new(bytes.len() as u64));
 
-            let (elapsed, result) = elapsed::measure_time(|| {
-                match ReadIndexEvent::from_bytes(bytes.to_vec())? {
-                    RemovedDocuments(_) => unreachable!("BUG: Must not extract a RemovedDocuments"),
-                    UpdatedDocuments(index) => Ok(index),
-                }
-            });
+            let index = match ReadIndexEvent::from_bytes(bytes)? {
+                RemovedDocuments(_) => panic!("BUG: RemovedDocument event retrieved"),
+                UpdatedDocuments(index) => index,
+            };
 
-            info!("loading index from bytes took {}", elapsed);
+            info!("loading index from bytes took {:.2?}", start.elapsed());
 
-            result
+            Ok(index)
         },
         None => Ok(Index::default()),
     }
@@ -85,25 +86,25 @@ where D: Deref<Target=DB>,
 {
     use self::update::ReadRankedMapEvent::{self, *};
 
-    let (elapsed, vector) = elapsed::measure_time(|| snapshot.get(DATA_RANKED_MAP));
-    info!("loading ranked map from kv-store took {}", elapsed);
+    let start = Instant::now();
+    let vector = snapshot.get(DATA_RANKED_MAP)?;
+    info!("loading ranked map from kv-store took {:.2?}", start.elapsed());
 
-    match vector? {
+    match vector {
         Some(vector) => {
+            let start = Instant::now();
+
             let bytes = vector.as_ref().to_vec();
-            let size = SizeFormatterBinary::new(bytes.len() as u64);
-            info!("ranked map size is {}B", size);
+            info!("ranked map size is {}B", SizeFormatterBinary::new(bytes.len() as u64));
 
-            let (elapsed, result) = elapsed::measure_time(|| {
-                match ReadRankedMapEvent::from_bytes(bytes.to_vec())? {
-                    RemovedDocuments(_) => unreachable!("BUG: Must not extract a RemovedDocuments"),
-                    UpdatedDocuments(ranked_map) => Ok(ranked_map),
-                }
-            });
+            let ranked_map = match ReadRankedMapEvent::from_bytes(bytes)? {
+                RemovedDocuments(_) => panic!("BUG: RemovedDocument event retrieved"),
+                UpdatedDocuments(ranked_map) => ranked_map,
+            };
 
-            info!("loading ranked map from bytes took {}", elapsed);
+            info!("loading ranked map from bytes took {:.2?}", start.elapsed());
 
-            result
+            Ok(ranked_map)
         },
         None => Ok(RankedMap::new()),
     }

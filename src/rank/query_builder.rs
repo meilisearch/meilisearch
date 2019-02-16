@@ -1,12 +1,12 @@
 use std::{cmp, mem, vec, str, char};
 use std::ops::{Deref, Range};
+use std::time::Instant;
 use std::error::Error;
 use std::hash::Hash;
 use std::rc::Rc;
 
 use rayon::slice::ParallelSliceMut;
 use slice_group_by::GroupByMut;
-use elapsed::measure_time;
 use hashbrown::HashMap;
 use fst::Streamer;
 use rocksdb::DB;
@@ -143,8 +143,9 @@ where D: Deref<Target=DB>,
             return builder.query(query, range);
         }
 
-        let (elapsed, mut documents) = measure_time(|| self.query_all(query));
-        info!("query_all took {}", elapsed);
+        let start = Instant::now();
+        let mut documents = self.query_all(query);
+        info!("query_all took {:.2?}", start.elapsed());
 
         let mut groups = vec![documents.as_mut_slice()];
 
@@ -163,10 +164,9 @@ where D: Deref<Target=DB>,
                     continue;
                 }
 
-                let (elapsed, _) = measure_time(|| {
-                    group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                });
-                info!("criterion {} sort took {}", ci, elapsed);
+                let start = Instant::now();
+                group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
+                info!("criterion {} sort took {:.2?}", ci, start.elapsed());
 
                 for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
                     documents_seen += group.len();
@@ -214,8 +214,9 @@ where D: Deref<Target=DB>,
       K: Hash + Eq,
 {
     pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
-        let (elapsed, mut documents) = measure_time(|| self.inner.query_all(query));
-        info!("query_all took {}", elapsed);
+        let start = Instant::now();
+        let mut documents = self.inner.query_all(query);
+        info!("query_all took {:.2?}", start.elapsed());
 
         let mut groups = vec![documents.as_mut_slice()];
         let mut key_cache = HashMap::new();
@@ -244,10 +245,9 @@ where D: Deref<Target=DB>,
                     continue;
                 }
 
-                let (elapsed, _) = measure_time(|| {
-                    group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                });
-                info!("criterion {} sort took {}", ci, elapsed);
+                let start = Instant::now();
+                group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
+                info!("criterion {} sort took {:.2?}", ci, start.elapsed());
 
                 for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
                     // we must compute the real distinguished len of this sub-group
