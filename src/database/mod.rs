@@ -131,7 +131,7 @@ fn merge_ranked_maps(existing: Option<&[u8]>, operands: &mut MergeOperands) -> V
     let mut ranked_map = RankedMap::default();
     for bytes in existing.into_iter().chain(operands) {
         match ReadRankedMapEvent::from_bytes(bytes.to_vec()).unwrap() {
-            RemovedDocuments(d) => ranked_map.retain(|(k, _), _| !d.as_ref().contains(k)),
+            RemovedDocuments(d) => ranked_map.retain(|(k, _), _| !d.as_ref().binary_search(k).is_ok()),
             UpdatedDocuments(i) => ranked_map.extend(i),
         }
     }
