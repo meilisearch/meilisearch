@@ -45,7 +45,12 @@ impl BufRead for SharedDataCursor {
 }
 
 pub trait FromSharedDataCursor: Sized {
-    type Err;
+    type Error;
 
-    fn from_shared_data_cursor(data: &mut SharedDataCursor) -> Result<Self, Self::Err>;
+    fn from_shared_data_cursor(cursor: &mut SharedDataCursor) -> Result<Self, Self::Error>;
+
+    fn from_bytes(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        let mut cursor = SharedDataCursor::from_bytes(bytes);
+        Self::from_shared_data_cursor(&mut cursor)
+    }
 }

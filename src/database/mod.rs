@@ -17,6 +17,9 @@ use lockfree::map::Map;
 use hashbrown::HashMap;
 use log::{info, error, warn};
 
+use crate::shared_data_cursor::FromSharedDataCursor;
+use crate::write_to_bytes::WriteToBytes;
+
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::view::{DatabaseView, DocumentIter};
 pub use self::update::Update;
@@ -51,7 +54,7 @@ where D: Deref<Target=DB>
 fn retrieve_data_index<D>(snapshot: &Snapshot<D>) -> Result<Index, Box<Error>>
 where D: Deref<Target=DB>
 {
-    use self::update::ReadIndexEvent::*;
+    use self::update::ReadIndexEvent::{self, *};
 
     let (elapsed, vector) = elapsed::measure_time(|| snapshot.get(DATA_INDEX));
     info!("loading index from kv-store took {}", elapsed);
@@ -63,7 +66,7 @@ where D: Deref<Target=DB>
             info!("index size is {}B", size);
 
             let (elapsed, result) = elapsed::measure_time(|| {
-                match bincode::deserialize(&bytes)? {
+                match ReadIndexEvent::from_bytes(bytes.to_vec())? {
                     RemovedDocuments(_) => unreachable!("BUG: Must not extract a RemovedDocuments"),
                     UpdatedDocuments(index) => Ok(index),
                 }
@@ -80,7 +83,7 @@ where D: Deref<Target=DB>
 fn retrieve_data_ranked_map<D>(snapshot: &Snapshot<D>) -> Result<RankedMap, Box<Error>>
 where D: Deref<Target=DB>,
 {
-    use self::update::ReadRankedMapEvent::*;
+    use self::update::ReadRankedMapEvent::{self, *};
 
     let (elapsed, vector) = elapsed::measure_time(|| snapshot.get(DATA_RANKED_MAP));
     info!("loading ranked map from kv-store took {}", elapsed);
@@ -92,7 +95,7 @@ where D: Deref<Target=DB>,
             info!("ranked map size is {}B", size);
 
             let (elapsed, result) = elapsed::measure_time(|| {
-                match bincode::deserialize(&bytes)? {
+                match ReadRankedMapEvent::from_bytes(bytes.to_vec())? {
                     RemovedDocuments(_) => unreachable!("BUG: Must not extract a RemovedDocuments"),
                     UpdatedDocuments(ranked_map) => Ok(ranked_map),
                 }
@@ -102,40 +105,38 @@ where D: Deref<Target=DB>,
 
             result
         },
-        None => Ok(HashMap::new()),
+        None => Ok(RankedMap::new()),
     }
 }
 
 fn merge_indexes(existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    use self::update::ReadIndexEvent::*;
+    use self::update::ReadIndexEvent::{self, *};
     use self::update::WriteIndexEvent;
 
     let mut index = Index::default();
     for bytes in existing.into_iter().chain(operands) {
-        match bincode::deserialize(bytes).unwrap() {
-            RemovedDocuments(d) => index = index.remove_documents(&d),
+        match ReadIndexEvent::from_bytes(bytes.to_vec()).unwrap() {
+            RemovedDocuments(d) => index = index.remove_documents(d.as_ref()),
             UpdatedDocuments(i) => index = index.union(&i),
         }
     }
 
-    let event = WriteIndexEvent::UpdatedDocuments(&index);
-    bincode::serialize(&event).unwrap()
+    WriteIndexEvent::UpdatedDocuments(&index).into_bytes()
 }
 
 fn merge_ranked_maps(existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    use self::update::ReadRankedMapEvent::*;
+    use self::update::ReadRankedMapEvent::{self, *};
     use self::update::WriteRankedMapEvent;
 
     let mut ranked_map = RankedMap::default();
     for bytes in existing.into_iter().chain(operands) {
-        match bincode::deserialize(bytes).unwrap() {
-            RemovedDocuments(d) => ranked_map.retain(|(k, _), _| !d.contains(k)),
+        match ReadRankedMapEvent::from_bytes(bytes.to_vec()).unwrap() {
+            RemovedDocuments(d) => ranked_map.retain(|(k, _), _| !d.as_ref().contains(k)),
             UpdatedDocuments(i) => ranked_map.extend(i),
         }
     }
 
-    let event = WriteRankedMapEvent::UpdatedDocuments(&ranked_map);
-    bincode::serialize(&event).unwrap()
+    WriteRankedMapEvent::UpdatedDocuments(&ranked_map).into_bytes()
 }
 
 fn merge_operator(key: &[u8], existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {

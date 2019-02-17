@@ -1,6 +1,4 @@
-use std::io::{Cursor, BufRead};
 use std::error::Error;
-use std::sync::Arc;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use fst::{map, Map, IntoStreamer, Streamer};
@@ -8,7 +6,9 @@ use fst::raw::Fst;
 use sdset::duo::{Union, DifferenceByKey};
 use sdset::{Set, SetOperation};
 
-use crate::data::{SharedData, DocIndexes, DocIndexesBuilder};
+use crate::shared_data_cursor::{SharedDataCursor, FromSharedDataCursor};
+use crate::write_to_bytes::WriteToBytes;
+use crate::data::{DocIndexes, DocIndexesBuilder};
 use crate::{DocumentId, DocIndex};
 
 #[derive(Default)]
@@ -18,46 +18,6 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Index, Box<Error>> {
-        let len = bytes.len();
-        Index::from_shared_bytes(Arc::from(bytes), 0, len)
-    }
-
-    pub fn from_shared_bytes(
-        bytes: Arc<Vec<u8>>,
-        offset: usize,
-        len: usize,
-    ) -> Result<Index, Box<Error>>
-    {
-        let data = SharedData::new(bytes, offset, len);
-        let mut cursor = Cursor::new(data);
-
-        Index::from_cursor(&mut cursor)
-    }
-
-    pub fn from_cursor(cursor: &mut Cursor<SharedData>) -> Result<Index, Box<Error>> {
-        let len = cursor.read_u64::<LittleEndian>()? as usize;
-        let offset = cursor.position() as usize;
-        let data = cursor.get_ref().range(offset, len);
-
-        let fst = Fst::from_shared_bytes(data.bytes, data.offset, data.len)?;
-        let map = Map::from(fst);
-        cursor.consume(len);
-
-        let indexes = DocIndexes::from_cursor(cursor)?;
-
-        Ok(Index { map, indexes})
-    }
-
-    pub fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
-        let slice = self.map.as_fst().as_bytes();
-        let len = slice.len() as u64;
-        let _ = bytes.write_u64::<LittleEndian>(len);
-        bytes.extend_from_slice(slice);
-
-        self.indexes.write_to_bytes(bytes);
-    }
-
     pub fn remove_documents(&self, documents: &Set<DocumentId>) -> Index {
         let mut buffer = Vec::new();
         let mut builder = IndexBuilder::new();
@@ -113,6 +73,33 @@ impl Index {
         }
 
         builder.build()
+    }
+}
+
+impl FromSharedDataCursor for Index {
+    type Error = Box<Error>;
+
+    fn from_shared_data_cursor(cursor: &mut SharedDataCursor) -> Result<Index, Self::Error> {
+        let len = cursor.read_u64::<LittleEndian>()? as usize;
+        let data = cursor.extract(len);
+
+        let fst = Fst::from_shared_bytes(data.bytes, data.offset, data.len)?;
+        let map = Map::from(fst);
+
+        let indexes = DocIndexes::from_shared_data_cursor(cursor)?;
+
+        Ok(Index { map, indexes})
+    }
+}
+
+impl WriteToBytes for Index {
+    fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
+        let slice = self.map.as_fst().as_bytes();
+        let len = slice.len() as u64;
+        let _ = bytes.write_u64::<LittleEndian>(len);
+        bytes.extend_from_slice(slice);
+
+        self.indexes.write_to_bytes(bytes);
     }
 }
 

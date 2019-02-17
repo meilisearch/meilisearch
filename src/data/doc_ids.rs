@@ -1,12 +1,15 @@
-use std::io::{self, Cursor, BufRead};
 use std::slice::from_raw_parts;
 use std::mem::size_of;
+use std::error::Error;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use sdset::Set;
 
-use crate::DocumentId;
+use crate::shared_data_cursor::{SharedDataCursor, FromSharedDataCursor};
+use crate::write_to_bytes::WriteToBytes;
 use crate::data::SharedData;
+use crate::DocumentId;
+
 use super::into_u8_slice;
 
 #[derive(Default, Clone)]
@@ -17,21 +20,6 @@ impl DocIds {
         let bytes = unsafe { into_u8_slice(ids.as_slice()) };
         let data = SharedData::from_bytes(bytes.to_vec());
         DocIds(data)
-    }
-
-    pub fn from_cursor(cursor: &mut Cursor<SharedData>) -> io::Result<DocIds> {
-        let len = cursor.read_u64::<LittleEndian>()? as usize;
-        let offset = cursor.position() as usize;
-        let doc_ids = cursor.get_ref().range(offset, len);
-        cursor.consume(len);
-
-        Ok(DocIds(doc_ids))
-    }
-
-    pub fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
-        let len = self.0.len() as u64;
-        bytes.write_u64::<LittleEndian>(len).unwrap();
-        bytes.extend_from_slice(&self.0);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -50,5 +38,24 @@ impl AsRef<Set<DocumentId>> for DocIds {
         let len = slice.len() / size_of::<DocumentId>();
         let slice = unsafe { from_raw_parts(ptr, len) };
         Set::new_unchecked(slice)
+    }
+}
+
+impl FromSharedDataCursor for DocIds {
+    type Error = Box<Error>;
+
+    fn from_shared_data_cursor(cursor: &mut SharedDataCursor) -> Result<DocIds, Self::Error> {
+        let len = cursor.read_u64::<LittleEndian>()? as usize;
+        let data = cursor.extract(len);
+
+        Ok(DocIds(data))
+    }
+}
+
+impl WriteToBytes for DocIds {
+    fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
+        let len = self.0.len() as u64;
+        bytes.write_u64::<LittleEndian>(len).unwrap();
+        bytes.extend_from_slice(&self.0);
     }
 }

@@ -10,11 +10,13 @@ use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
 use crate::database::serde::serializer::Serializer;
 use crate::database::serde::SerializerError;
 use crate::database::schema::SchemaAttr;
-use crate::tokenizer::TokenizerBuilder;
 use crate::database::schema::Schema;
 use crate::database::index::IndexBuilder;
 use crate::database::{DATA_INDEX, DATA_RANKED_MAP};
 use crate::database::{RankedMap, Number};
+use crate::tokenizer::TokenizerBuilder;
+use crate::write_to_bytes::WriteToBytes;
+use crate::data::DocIds;
 use crate::{DocumentId, DocIndex};
 
 pub use self::index_event::{ReadIndexEvent, WriteIndexEvent};
@@ -119,7 +121,8 @@ impl RawUpdateBuilder {
             }
 
             document_ids.sort_unstable();
-            SetBuf::new_unchecked(document_ids)
+            let setbuf = SetBuf::new_unchecked(document_ids);
+            DocIds::new(&setbuf)
         };
 
         // create the Index of all the document updates
@@ -140,28 +143,24 @@ impl RawUpdateBuilder {
 
         if !removed_documents.is_empty() {
             // remove the documents using the appropriate IndexEvent
-            let event = WriteIndexEvent::RemovedDocuments(&removed_documents);
-            let event_bytes = bincode::serialize(&event).unwrap();
+            let event_bytes = WriteIndexEvent::RemovedDocuments(&removed_documents).into_bytes();
             self.batch.merge(DATA_INDEX, &event_bytes)?;
         }
 
         // update the documents using the appropriate IndexEvent
-        let event = WriteIndexEvent::UpdatedDocuments(&index);
-        let event_bytes = bincode::serialize(&event).unwrap();
+        let event_bytes = WriteIndexEvent::UpdatedDocuments(&index).into_bytes();
         self.batch.merge(DATA_INDEX, &event_bytes)?;
 
         // === ranked map ===
 
         if !removed_documents.is_empty() {
             // update the ranked map using the appropriate RankedMapEvent
-            let event = WriteRankedMapEvent::RemovedDocuments(&removed_documents);
-            let event_bytes = bincode::serialize(&event).unwrap();
+            let event_bytes = WriteRankedMapEvent::RemovedDocuments(&removed_documents).into_bytes();
             self.batch.merge(DATA_RANKED_MAP, &event_bytes)?;
         }
 
         // update the documents using the appropriate IndexEvent
-        let event = WriteRankedMapEvent::UpdatedDocuments(&self.documents_ranked_fields);
-        let event_bytes = bincode::serialize(&event).unwrap();
+        let event_bytes = WriteRankedMapEvent::UpdatedDocuments(&self.documents_ranked_fields).into_bytes();
         self.batch.merge(DATA_RANKED_MAP, &event_bytes)?;
 
         Ok(self.batch)
