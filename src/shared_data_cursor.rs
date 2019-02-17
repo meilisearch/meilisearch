@@ -43,3 +43,9 @@ impl BufRead for SharedDataCursor {
         self.0.consume(amt)
     }
 }
+
+pub trait FromSharedDataCursor: Sized {
+    type Err;
+
+    fn from_shared_data_cursor(data: &mut SharedDataCursor) -> Result<Self, Self::Err>;
+}
