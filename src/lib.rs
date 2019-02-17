@@ -6,6 +6,8 @@ pub mod data;
 pub mod rank;
 pub mod tokenizer;
 mod common_words;
+mod shared_data_cursor;
+mod write_to_bytes;
 
 use serde_derive::{Serialize, Deserialize};
 
