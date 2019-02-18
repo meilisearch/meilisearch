@@ -28,6 +28,10 @@ pub struct Opt {
     /// The number of returned results
     #[structopt(short = "n", long = "number-results", default_value = "10")]
     pub number_results: usize,
+
+    /// The number of characters before and after the first match
+    #[structopt(short = "C", long = "context", default_value = "35")]
+    pub char_context: usize,
 }
 
 type Document = HashMap<String, String>;
@@ -67,24 +71,21 @@ fn char_to_byte_range(index: usize, length: usize, text: &str) -> (usize, usize)
     (byte_index, byte_length)
 }
 
-fn create_highlight_areas(text: &str, matches: &[Match], attribute: SchemaAttr) -> Vec<usize> {
+fn create_highlight_areas(text: &str, matches: &[Match]) -> Vec<usize> {
     let mut byte_indexes = BTreeMap::new();
 
     for match_ in matches {
-        let match_attribute = match_.attribute;
-        if SchemaAttr::new(match_attribute) == attribute {
-            let char_index = match_.char_index as usize;
-            let char_length = match_.char_length as usize;
-            let (byte_index, byte_length) = char_to_byte_range(char_index, char_length, text);
+        let char_index = match_.char_index as usize;
+        let char_length = match_.char_length as usize;
+        let (byte_index, byte_length) = char_to_byte_range(char_index, char_length, text);
 
-            match byte_indexes.entry(byte_index) {
-                Entry::Vacant(entry) => { entry.insert(byte_length); },
-                Entry::Occupied(mut entry) => {
-                    if *entry.get() < byte_length {
-                        entry.insert(byte_length);
-                    }
-                },
-            }
+        match byte_indexes.entry(byte_index) {
+            Entry::Vacant(entry) => { entry.insert(byte_length); },
+            Entry::Occupied(mut entry) => {
+                if *entry.get() < byte_length {
+                    entry.insert(byte_length);
+                }
+            },
         }
     }
 
@@ -97,6 +98,39 @@ fn create_highlight_areas(text: &str, matches: &[Match], attribute: SchemaAttr) 
     title_areas.push(text.len());
     title_areas.sort_unstable();
     title_areas
+}
+
+/// note: matches must have been sorted by `char_index` and `char_length` before being passed.
+///
+/// ```no_run
+/// matches.sort_unstable_by_key(|m| (m.char_index, m.char_length));
+///
+/// let matches = matches.matches.iter().filter(|m| SchemaAttr::new(m.attribute) == attr).cloned();
+///
+/// let (text, matches) = crop_text(&text, matches, 35);
+/// ```
+fn crop_text(
+    text: &str,
+    matches: impl IntoIterator<Item=Match>,
+    context: usize,
+) -> (String, Vec<Match>)
+{
+    let mut matches = matches.into_iter().peekable();
+
+    let char_index = matches.peek().map(|m| m.char_index as usize).unwrap_or(0);
+    let start = char_index.saturating_sub(context);
+    let text = text.chars().skip(start).take(context * 2).collect();
+
+    let matches = matches
+        .take_while(|m| {
+            (m.char_index as usize) + (m.char_length as usize) <= start + (context * 2)
+        })
+        .map(|match_| {
+            Match { char_index: match_.char_index - start as u32, ..match_ }
+        })
+        .collect();
+
+    (text, matches)
 }
 
 fn main() -> Result<(), Box<Error>> {
@@ -126,7 +160,10 @@ fn main() -> Result<(), Box<Error>> {
         let documents = builder.query(query, 0..opt.number_results);
 
         let number_of_documents = documents.len();
-        for doc in documents {
+        for mut doc in documents {
+
+            doc.matches.sort_unstable_by_key(|m| (m.char_index, m.char_index));
+
             match view.document_by_id::<Document>(doc.id) {
                 Ok(document) => {
                     for name in &opt.displayed_fields {
@@ -140,7 +177,11 @@ fn main() -> Result<(), Box<Error>> {
                         };
 
                         print!("{}: ", name);
-                        let areas = create_highlight_areas(&text, &doc.matches, attr);
+                        let matches = doc.matches.iter()
+                                        .filter(|m| SchemaAttr::new(m.attribute) == attr)
+                                        .cloned();
+                        let (text, matches) = crop_text(&text, matches, opt.char_context);
+                        let areas = create_highlight_areas(&text, &matches);
                         display_highlights(&text, &areas)?;
                         println!();
                     }
