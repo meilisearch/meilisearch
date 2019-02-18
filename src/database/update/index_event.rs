@@ -32,6 +32,16 @@ pub enum ReadIndexEvent {
     UpdatedDocuments(Index),
 }
 
+impl ReadIndexEvent {
+    pub fn updated_documents(self) -> Option<Index> {
+        use ReadIndexEvent::*;
+        match self {
+            RemovedDocuments(_) => None,
+            UpdatedDocuments(index) => Some(index),
+        }
+    }
+}
+
 impl FromSharedDataCursor for ReadIndexEvent {
     type Error = Box<Error>;
 

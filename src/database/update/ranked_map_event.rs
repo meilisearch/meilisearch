@@ -32,6 +32,16 @@ pub enum ReadRankedMapEvent {
     UpdatedDocuments(RankedMap),
 }
 
+impl ReadRankedMapEvent {
+    pub fn updated_documents(self) -> Option<RankedMap> {
+        use ReadRankedMapEvent::*;
+        match self {
+            RemovedDocuments(_) => None,
+            UpdatedDocuments(ranked_map) => Some(ranked_map),
+        }
+    }
+}
+
 impl FromSharedDataCursor for ReadRankedMapEvent {
     type Error = Box<Error>;
 

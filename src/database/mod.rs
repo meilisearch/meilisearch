@@ -21,6 +21,8 @@ use crate::shared_data_cursor::FromSharedDataCursor;
 use crate::write_to_bytes::WriteToBytes;
 use crate::DocumentId;
 
+use self::update::{ReadIndexEvent, ReadRankedMapEvent};
+
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::view::{DatabaseView, DocumentIter};
 pub use self::update::Update;
@@ -55,8 +57,6 @@ where D: Deref<Target=DB>
 fn retrieve_data_index<D>(snapshot: &Snapshot<D>) -> Result<Index, Box<Error>>
 where D: Deref<Target=DB>
 {
-    use self::update::ReadIndexEvent::{self, *};
-
     let start = Instant::now();
     let vector = snapshot.get(DATA_INDEX)?;
     info!("loading index from kv-store took {:.2?}", start.elapsed());
@@ -68,10 +68,8 @@ where D: Deref<Target=DB>
             let bytes = vector.as_ref().to_vec();
             info!("index size is {}B", SizeFormatterBinary::new(bytes.len() as u64));
 
-            let index = match ReadIndexEvent::from_bytes(bytes)? {
-                RemovedDocuments(_) => panic!("BUG: RemovedDocument event retrieved"),
-                UpdatedDocuments(index) => index,
-            };
+            let event = ReadIndexEvent::from_bytes(bytes)?;
+            let index = event.updated_documents().expect("BUG: invalid event deserialized");
 
             info!("loading index from bytes took {:.2?}", start.elapsed());
 
@@ -84,8 +82,6 @@ where D: Deref<Target=DB>
 fn retrieve_data_ranked_map<D>(snapshot: &Snapshot<D>) -> Result<RankedMap, Box<Error>>
 where D: Deref<Target=DB>,
 {
-    use self::update::ReadRankedMapEvent::{self, *};
-
     let start = Instant::now();
     let vector = snapshot.get(DATA_RANKED_MAP)?;
     info!("loading ranked map from kv-store took {:.2?}", start.elapsed());
@@ -97,10 +93,8 @@ where D: Deref<Target=DB>,
             let bytes = vector.as_ref().to_vec();
             info!("ranked map size is {}B", SizeFormatterBinary::new(bytes.len() as u64));
 
-            let ranked_map = match ReadRankedMapEvent::from_bytes(bytes)? {
-                RemovedDocuments(_) => panic!("BUG: RemovedDocument event retrieved"),
-                UpdatedDocuments(ranked_map) => ranked_map,
-            };
+            let event = ReadRankedMapEvent::from_bytes(bytes)?;
+            let ranked_map = event.updated_documents().expect("BUG: invalid event deserialized");
 
             info!("loading ranked map from bytes took {:.2?}", start.elapsed());
 
