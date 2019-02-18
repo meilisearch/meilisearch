@@ -3,22 +3,27 @@ use std::error::Error;
 
 use rocksdb::rocksdb::{Writable, WriteBatch};
 use hashbrown::hash_map::HashMap;
+use sdset::{Set, SetBuf};
 use serde::Serialize;
-use fst::map::Map;
-use sdset::Set;
 
-use crate::database::index::{Positive, PositiveBuilder, Negative};
 use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
 use crate::database::serde::serializer::Serializer;
 use crate::database::serde::SerializerError;
 use crate::database::schema::SchemaAttr;
-use crate::tokenizer::TokenizerBuilder;
-use crate::data::{DocIds, DocIndexes};
 use crate::database::schema::Schema;
-use crate::database::index::Index;
+use crate::database::index::IndexBuilder;
 use crate::database::{DATA_INDEX, DATA_RANKED_MAP};
 use crate::database::{RankedMap, Number};
+use crate::tokenizer::TokenizerBuilder;
+use crate::write_to_bytes::WriteToBytes;
+use crate::data::DocIds;
 use crate::{DocumentId, DocIndex};
+
+pub use self::index_event::{ReadIndexEvent, WriteIndexEvent};
+pub use self::ranked_map_event::{ReadRankedMapEvent, WriteRankedMapEvent};
+
+mod index_event;
+mod ranked_map_event;
 
 pub type Token = Vec<u8>; // TODO could be replaced by a SmallVec
 
@@ -106,46 +111,57 @@ impl RawUpdateBuilder {
     }
 
     pub fn build(self) -> Result<WriteBatch, Box<Error>> {
-        let negative = {
-            let mut removed_document_ids = Vec::new();
+        // create the list of all the removed documents
+        let removed_documents = {
+            let mut document_ids = Vec::new();
             for (id, update_type) in self.documents_update {
                 if update_type == Deleted {
-                    removed_document_ids.push(id);
+                    document_ids.push(id);
                 }
             }
 
-            removed_document_ids.sort_unstable();
-            let removed_document_ids = Set::new_unchecked(&removed_document_ids);
-            let doc_ids = DocIds::new(removed_document_ids);
-
-            Negative::new(doc_ids)
+            document_ids.sort_unstable();
+            let setbuf = SetBuf::new_unchecked(document_ids);
+            DocIds::new(&setbuf)
         };
 
-        let positive = {
-            let mut positive_builder = PositiveBuilder::memory();
-
+        // create the Index of all the document updates
+        let index = {
+            let mut builder = IndexBuilder::new();
             for (key, mut indexes) in self.indexed_words {
                 indexes.sort_unstable();
                 let indexes = Set::new_unchecked(&indexes);
-                positive_builder.insert(key, indexes)?;
+                builder.insert(key, indexes).unwrap();
             }
-
-            let (map, indexes) = positive_builder.into_inner()?;
-            let map = Map::from_bytes(map)?;
-            let indexes = DocIndexes::from_bytes(indexes)?;
-
-            Positive::new(map, indexes)
+            builder.build()
         };
 
-        let index = Index { negative, positive };
+        // WARN: removed documents must absolutely
+        //       be merged *before* document updates
 
-        // write the data-index
-        let mut bytes_index = Vec::new();
-        index.write_to_bytes(&mut bytes_index);
-        self.batch.merge(DATA_INDEX, &bytes_index)?;
+        // === index ===
 
-        let bytes_ranked_map = bincode::serialize(&self.documents_ranked_fields).unwrap();
-        self.batch.merge(DATA_RANKED_MAP, &bytes_ranked_map)?;
+        if !removed_documents.is_empty() {
+            // remove the documents using the appropriate IndexEvent
+            let event_bytes = WriteIndexEvent::RemovedDocuments(&removed_documents).into_bytes();
+            self.batch.merge(DATA_INDEX, &event_bytes)?;
+        }
+
+        // update the documents using the appropriate IndexEvent
+        let event_bytes = WriteIndexEvent::UpdatedDocuments(&index).into_bytes();
+        self.batch.merge(DATA_INDEX, &event_bytes)?;
+
+        // === ranked map ===
+
+        if !removed_documents.is_empty() {
+            // update the ranked map using the appropriate RankedMapEvent
+            let event_bytes = WriteRankedMapEvent::RemovedDocuments(&removed_documents).into_bytes();
+            self.batch.merge(DATA_RANKED_MAP, &event_bytes)?;
+        }
+
+        // update the documents using the appropriate IndexEvent
+        let event_bytes = WriteRankedMapEvent::UpdatedDocuments(&self.documents_ranked_fields).into_bytes();
+        self.batch.merge(DATA_RANKED_MAP, &event_bytes)?;
 
         Ok(self.batch)
     }

@@ -1,8 +1,7 @@
-use crate::DocumentId;
-use crate::database::schema::SchemaAttr;
-use std::sync::Arc;
+use std::time::Instant;
 use std::error::Error;
 use std::ffi::OsStr;
+use std::sync::Arc;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,10 +10,18 @@ use std::ops::{Deref, DerefMut};
 use rocksdb::rocksdb_options::{DBOptions, ColumnFamilyOptions};
 use rocksdb::rocksdb::{Writable, Snapshot};
 use rocksdb::{DB, MergeOperands};
+use size_format::SizeFormatterBinary;
 use arc_swap::ArcSwap;
 use lockfree::map::Map;
 use hashbrown::HashMap;
 use log::{info, error, warn};
+
+use crate::database::schema::SchemaAttr;
+use crate::shared_data_cursor::FromSharedDataCursor;
+use crate::write_to_bytes::WriteToBytes;
+use crate::DocumentId;
+
+use self::update::{ReadIndexEvent, ReadRankedMapEvent};
 
 pub use self::document_key::{DocumentKey, DocumentKeyAttr};
 pub use self::view::{DatabaseView, DocumentIter};
@@ -50,64 +57,81 @@ where D: Deref<Target=DB>
 fn retrieve_data_index<D>(snapshot: &Snapshot<D>) -> Result<Index, Box<Error>>
 where D: Deref<Target=DB>
 {
-    let (elapsed, vector) = elapsed::measure_time(|| snapshot.get(DATA_INDEX));
-    info!("loading index from kv-store took {}", elapsed);
+    let start = Instant::now();
+    let vector = snapshot.get(DATA_INDEX)?;
+    info!("loading index from kv-store took {:.2?}", start.elapsed());
 
-    let index = match vector? {
+    match vector {
         Some(vector) => {
+            let start = Instant::now();
+
             let bytes = vector.as_ref().to_vec();
-            info!("index size if {} MiB", bytes.len() / 1024 / 1024);
+            info!("index size is {}B", SizeFormatterBinary::new(bytes.len() as u64));
 
-            let (elapsed, index) = elapsed::measure_time(|| Index::from_bytes(bytes));
-            info!("loading index from bytes took {}", elapsed);
-            index?
+            let event = ReadIndexEvent::from_bytes(bytes)?;
+            let index = event.updated_documents().expect("BUG: invalid event deserialized");
 
+            info!("loading index from bytes took {:.2?}", start.elapsed());
+
+            Ok(index)
         },
-        None => Index::default(),
-    };
-
-    Ok(index)
+        None => Ok(Index::default()),
+    }
 }
 
 fn retrieve_data_ranked_map<D>(snapshot: &Snapshot<D>) -> Result<RankedMap, Box<Error>>
 where D: Deref<Target=DB>,
 {
-    match snapshot.get(DATA_RANKED_MAP)? {
-        Some(vector) => Ok(bincode::deserialize(&*vector)?),
-        None => Ok(HashMap::new()),
+    let start = Instant::now();
+    let vector = snapshot.get(DATA_RANKED_MAP)?;
+    info!("loading ranked map from kv-store took {:.2?}", start.elapsed());
+
+    match vector {
+        Some(vector) => {
+            let start = Instant::now();
+
+            let bytes = vector.as_ref().to_vec();
+            info!("ranked map size is {}B", SizeFormatterBinary::new(bytes.len() as u64));
+
+            let event = ReadRankedMapEvent::from_bytes(bytes)?;
+            let ranked_map = event.updated_documents().expect("BUG: invalid event deserialized");
+
+            info!("loading ranked map from bytes took {:.2?}", start.elapsed());
+
+            Ok(ranked_map)
+        },
+        None => Ok(RankedMap::new()),
     }
 }
 
 fn merge_indexes(existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    let mut index: Option<Index> = None;
-    for bytes in existing.into_iter().chain(operands) {
-        let operand = Index::from_bytes(bytes.to_vec()).unwrap();
-        let merged = match index {
-            Some(ref index) => index.merge(&operand).unwrap(),
-            None            => operand,
-        };
+    use self::update::ReadIndexEvent::{self, *};
+    use self::update::WriteIndexEvent;
 
-        index.replace(merged);
+    let mut index = Index::default();
+    for bytes in existing.into_iter().chain(operands) {
+        match ReadIndexEvent::from_bytes(bytes.to_vec()).unwrap() {
+            RemovedDocuments(d) => index = index.remove_documents(d.as_ref()),
+            UpdatedDocuments(i) => index = index.union(&i),
+        }
     }
 
-    let index = index.unwrap_or_default();
-    let mut bytes = Vec::new();
-    index.write_to_bytes(&mut bytes);
-    bytes
+    WriteIndexEvent::UpdatedDocuments(&index).into_bytes()
 }
 
 fn merge_ranked_maps(existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
-    let mut ranked_map: Option<RankedMap> = None;
+    use self::update::ReadRankedMapEvent::{self, *};
+    use self::update::WriteRankedMapEvent;
+
+    let mut ranked_map = RankedMap::default();
     for bytes in existing.into_iter().chain(operands) {
-        let operand: RankedMap = bincode::deserialize(bytes).unwrap();
-        match ranked_map {
-            Some(ref mut ranked_map) => ranked_map.extend(operand),
-            None => { ranked_map.replace(operand); },
-        };
+        match ReadRankedMapEvent::from_bytes(bytes.to_vec()).unwrap() {
+            RemovedDocuments(d) => ranked_map.retain(|(k, _), _| !d.as_ref().binary_search(k).is_ok()),
+            UpdatedDocuments(i) => ranked_map.extend(i),
+        }
     }
 
-    let ranked_map = ranked_map.unwrap_or_default();
-    bincode::serialize(&ranked_map).unwrap()
+    WriteRankedMapEvent::UpdatedDocuments(&ranked_map).into_bytes()
 }
 
 fn merge_operator(key: &[u8], existing: Option<&[u8]>, operands: &mut MergeOperands) -> Vec<u8> {
@@ -247,7 +271,7 @@ impl Drop for DatabaseIndex {
     fn drop(&mut self) {
         if self.must_die.load(Ordering::Relaxed) {
             if let Err(err) = fs::remove_dir_all(&self.path) {
-                error!("Impossible to remove mdb when Database id dropped; {}", err);
+                error!("Impossible to remove mdb when Database is dropped; {}", err);
             }
         }
     }

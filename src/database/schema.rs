@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use serde_derive::{Serialize, Deserialize};
 use linked_hash_map::LinkedHashMap;
-use serde::Serialize;
 
 use crate::database::serde::find_id::FindDocumentIdSerializer;
 use crate::database::serde::SerializerError;
@@ -168,7 +167,7 @@ impl Schema {
     }
 
     pub fn document_id<T>(&self, document: T) -> Result<DocumentId, SerializerError>
-    where T: Serialize,
+    where T: serde::Serialize,
     {
         let id_attribute_name = &self.inner.identifier;
         let serializer = FindDocumentIdSerializer { id_attribute_name };

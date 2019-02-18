@@ -1,14 +1,16 @@
-use std::io::{self, Write, Cursor, BufRead};
+use std::io::{self, Write};
 use std::slice::from_raw_parts;
 use std::mem::size_of;
 use std::ops::Index;
-use std::sync::Arc;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use sdset::Set;
 
-use crate::DocIndex;
+use crate::shared_data_cursor::{SharedDataCursor, FromSharedDataCursor};
+use crate::write_to_bytes::WriteToBytes;
 use crate::data::SharedData;
+use crate::DocIndex;
+
 use super::into_u8_slice;
 
 #[derive(Debug)]
@@ -25,38 +27,6 @@ pub struct DocIndexes {
 }
 
 impl DocIndexes {
-    pub fn from_bytes(bytes: Vec<u8>) -> io::Result<DocIndexes> {
-        let bytes = Arc::new(bytes);
-        let len = bytes.len();
-        let data = SharedData::new(bytes, 0, len);
-        let mut  cursor = Cursor::new(data);
-        DocIndexes::from_cursor(&mut cursor)
-    }
-
-    pub fn from_cursor(cursor: &mut Cursor<SharedData>) -> io::Result<DocIndexes> {
-        let len = cursor.read_u64::<LittleEndian>()? as usize;
-        let offset = cursor.position() as usize;
-        let ranges = cursor.get_ref().range(offset, len);
-        cursor.consume(len);
-
-        let len = cursor.read_u64::<LittleEndian>()? as usize;
-        let offset = cursor.position() as usize;
-        let indexes = cursor.get_ref().range(offset, len);
-        cursor.consume(len);
-
-        Ok(DocIndexes { ranges, indexes })
-    }
-
-    pub fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
-        let ranges_len = self.ranges.len() as u64;
-        let _ = bytes.write_u64::<LittleEndian>(ranges_len);
-        bytes.extend_from_slice(&self.ranges);
-
-        let indexes_len = self.indexes.len() as u64;
-        let _ = bytes.write_u64::<LittleEndian>(indexes_len);
-        bytes.extend_from_slice(&self.indexes);
-    }
-
     pub fn get(&self, index: usize) -> Option<&Set<DocIndex>> {
         self.ranges().get(index).map(|Range { start, end }| {
             let start = *start as usize;
@@ -89,6 +59,32 @@ impl Index<usize> for DocIndexes {
             Some(indexes) => indexes,
             None => panic!("index {} out of range for a maximum of {} ranges", index, self.ranges().len()),
         }
+    }
+}
+
+impl FromSharedDataCursor for DocIndexes {
+    type Error = io::Error;
+
+    fn from_shared_data_cursor(cursor: &mut SharedDataCursor) -> Result<DocIndexes, Self::Error> {
+        let len = cursor.read_u64::<LittleEndian>()? as usize;
+        let ranges = cursor.extract(len);
+
+        let len = cursor.read_u64::<LittleEndian>()? as usize;
+        let indexes = cursor.extract(len);
+
+        Ok(DocIndexes { ranges, indexes })
+    }
+}
+
+impl WriteToBytes for DocIndexes {
+    fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
+        let ranges_len = self.ranges.len() as u64;
+        let _ = bytes.write_u64::<LittleEndian>(ranges_len);
+        bytes.extend_from_slice(&self.ranges);
+
+        let indexes_len = self.indexes.len() as u64;
+        let _ = bytes.write_u64::<LittleEndian>(indexes_len);
+        bytes.extend_from_slice(&self.indexes);
     }
 }
 
