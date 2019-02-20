@@ -1,11 +1,40 @@
+
 use std::collections::{HashSet, HashMap};
 
 use serde_derive::{Serialize, Deserialize};
+use serde::Serialize;
+use serde::Serializer;
+use serde::Deserialize;
+use serde::Deserializer;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum RankingOrdering {
     Asc,
     Dsc
+}
+
+impl Serialize for RankingOrdering {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        serializer.serialize_str(match *self {
+            RankingOrdering::Asc => "asc",
+            RankingOrdering::Dsc => "dsc",
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for RankingOrdering {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.as_str() {
+            "asc" => RankingOrdering::Asc,
+            "dsc" => RankingOrdering::Dsc,
+            _ => RankingOrdering::Dsc
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
