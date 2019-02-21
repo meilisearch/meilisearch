@@ -78,7 +78,7 @@ impl<'a> SortByAttr<'a> {
             None => return Err(SortByAttrError::AttributeNotFound),
         };
 
-        if schema.props(attr).is_ranked() {
+        if !schema.props(attr).is_ranked() {
             return Err(SortByAttrError::AttributeNotRegisteredForRanking);
         }
 
