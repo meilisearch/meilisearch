@@ -16,7 +16,7 @@ pub struct AccessToken {
 }
 
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub stop_words: Option<HashSet<String>>,
     pub ranking_order: Option<Vec<String>>,
@@ -26,16 +26,6 @@ pub struct Config {
 }
 
 impl Config {
-    pub(crate) fn default() -> Config {
-        Config {
-            stop_words: None,
-            ranking_order: None,
-            distinct_field: None,
-            ranking_rules: None,
-            access_token: None,
-        }
-    }
-
     pub fn update_with(&mut self, new: Config) {
         if let Some(stop_words) = new.stop_words {
             self.stop_words = Some(stop_words);
