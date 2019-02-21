@@ -1,8 +1,8 @@
 use std::collections::{HashSet, HashMap};
-
 use serde_derive::{Serialize, Deserialize};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum RankingOrdering {
     Asc,
     Dsc
