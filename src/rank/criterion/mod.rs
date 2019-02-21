@@ -51,17 +51,17 @@ impl<T: Criterion + ?Sized> Criterion for Box<T> {
 }
 
 #[derive(Default)]
-pub struct CriteriaBuilder {
-    inner: Vec<Box<dyn Criterion>>
+pub struct CriteriaBuilder<'a> {
+    inner: Vec<Box<dyn Criterion + 'a>>
 }
 
-impl CriteriaBuilder
+impl<'a> CriteriaBuilder<'a>
 {
-    pub fn new() -> CriteriaBuilder {
+    pub fn new() -> CriteriaBuilder<'a> {
         CriteriaBuilder { inner: Vec::new() }
     }
 
-    pub fn with_capacity(capacity: usize) -> CriteriaBuilder {
+    pub fn with_capacity(capacity: usize) -> CriteriaBuilder<'a> {
         CriteriaBuilder { inner: Vec::with_capacity(capacity) }
     }
 
@@ -69,29 +69,29 @@ impl CriteriaBuilder
         self.inner.reserve(additional)
     }
 
-    pub fn add<C>(mut self, criterion: C) -> CriteriaBuilder
-    where C: 'static + Criterion,
+    pub fn add<C: 'a>(mut self, criterion: C) -> CriteriaBuilder<'a>
+    where C: Criterion,
     {
         self.push(criterion);
         self
     }
 
-    pub fn push<C>(&mut self, criterion: C)
-    where C: 'static + Criterion,
+    pub fn push<C: 'a>(&mut self, criterion: C)
+    where C: Criterion,
     {
         self.inner.push(Box::new(criterion));
     }
 
-    pub fn build(self) -> Criteria {
+    pub fn build(self) -> Criteria<'a> {
         Criteria { inner: self.inner }
     }
 }
 
-pub struct Criteria {
-    inner: Vec<Box<dyn Criterion>>,
+pub struct Criteria<'a> {
+    inner: Vec<Box<dyn Criterion + 'a>>,
 }
 
-impl Default for Criteria {
+impl<'a> Default for Criteria<'a> {
     fn default() -> Self {
         CriteriaBuilder::with_capacity(7)
             .add(SumOfTypos)
@@ -105,8 +105,8 @@ impl Default for Criteria {
     }
 }
 
-impl AsRef<[Box<dyn Criterion>]> for Criteria {
-    fn as_ref(&self) -> &[Box<dyn Criterion>] {
+impl<'a> AsRef<[Box<Criterion + 'a>]> for Criteria<'a> {
+    fn as_ref(&self) -> &[Box<dyn Criterion + 'a>] {
         &self.inner
     }
 }
