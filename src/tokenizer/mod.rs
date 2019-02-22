@@ -105,13 +105,79 @@ impl<'a> Iterator for Tokenizer<'a> {
                             char_index: self.char_index,
                         };
 
+                        println!("no-cjk with start_word returns: {:?}", token);
+
                         self.char_index += word.chars().count();
                         return Some(token)
                     }
 
-                    distance.replace(distance.map_or(sep, |s| s.add(sep)));
+                    distance = Some(distance.map_or(sep, |s| s.add(sep)));
                 },
-                None => { start_word.get_or_insert(i); },
+                None => {
+                    // if this is a Chinese, a Japanese or a Korean character
+                    // See <http://unicode-table.com>
+                    if (c >= '\u{2e80}' && c <= '\u{2eff}') ||
+                       (c >= '\u{2f00}' && c <= '\u{2fdf}') ||
+                       (c >= '\u{3040}' && c <= '\u{309f}') ||
+                       (c >= '\u{30a0}' && c <= '\u{30ff}') ||
+                       (c >= '\u{3100}' && c <= '\u{312f}') ||
+                       (c >= '\u{3200}' && c <= '\u{32ff}') ||
+                       (c >= '\u{3400}' && c <= '\u{4dbf}') ||
+                       (c >= '\u{4e00}' && c <= '\u{9fff}') ||
+                       (c >= '\u{f900}' && c <= '\u{faff}')
+                    {
+                        let char_len = c.len_utf8();
+
+                        match start_word {
+                            Some(start_word) => {
+                                let (prefix, tail) = self.inner.split_at(i);
+                                let (spaces, word) = prefix.split_at(start_word);
+
+                                self.inner = tail;
+                                self.char_index += spaces.chars().count();
+                                self.word_index += distance.map(Separator::to_usize).unwrap_or(0);
+
+                                let token = Token {
+                                    word: word,
+                                    word_index: self.word_index,
+                                    char_index: self.char_index,
+                                };
+
+                                println!("cjk with start_word returns: {:?}", token);
+
+                                self.word_index += 1;
+                                self.char_index += word.chars().count();
+
+                                return Some(token)
+                            },
+                            None => {
+                                let (prefix, tail) = self.inner.split_at(i + char_len);
+                                let (spaces, word) = prefix.split_at(i);
+
+                                self.inner = tail;
+                                self.char_index += spaces.chars().count();
+                                self.word_index += distance.map(Separator::to_usize).unwrap_or(0);
+
+                                let token = Token {
+                                    word: word,
+                                    word_index: self.word_index,
+                                    char_index: self.char_index,
+                                };
+
+                                println!("cjk without start_word returns: {:?}", token);
+
+                                if tail.chars().next().and_then(detect_separator).is_none() {
+                                    self.word_index += 1;
+                                }
+                                self.char_index += char_len;
+
+                                return Some(token)
+                            }
+                        }
+                    }
+
+                    if start_word.is_none() { start_word = Some(i) }
+                },
             }
         }
 
@@ -184,6 +250,26 @@ mod tests {
         assert_eq!(tokenizer.next(), Some(Token { word: "😱", word_index: 16, char_index: 12 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "lol", word_index: 24, char_index: 16 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "😣", word_index: 32, char_index: 22 }));
+        assert_eq!(tokenizer.next(), None);
+    }
+
+    #[test]
+    fn hard_kanjis() {
+        let mut tokenizer = Tokenizer::new("\u{2ec4}lolilol\u{2ec7}");
+
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec4}", word_index: 0, char_index: 0 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "lolilol", word_index: 1, char_index: 3 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec7}", word_index: 2, char_index: 10 }));
+        assert_eq!(tokenizer.next(), None);
+
+        let mut tokenizer = Tokenizer::new("\u{2ec4}\u{2ed3}\u{2ef2} lolilol - hello    \u{2ec7}");
+
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec4}", word_index: 0, char_index: 0 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ed3}", word_index: 1, char_index: 3 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ef2}", word_index: 2, char_index: 6 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "lolilol", word_index: 3, char_index: 10 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "hello", word_index: 11, char_index: 20 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec7}", word_index: 12, char_index: 29 }));
         assert_eq!(tokenizer.next(), None);
     }
 }
