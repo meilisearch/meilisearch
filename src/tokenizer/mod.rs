@@ -124,8 +124,6 @@ impl<'a> Iterator for Tokenizer<'a> {
                        (c >= '\u{4e00}' && c <= '\u{9fff}') ||
                        (c >= '\u{f900}' && c <= '\u{faff}')
                     {
-                        let char_len = c.len_utf8();
-
                         match start_word {
                             Some(start_word) => {
                                 let (prefix, tail) = self.inner.split_at(i);
@@ -147,7 +145,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                                 return Some(token)
                             },
                             None => {
-                                let (prefix, tail) = self.inner.split_at(i + char_len);
+                                let (prefix, tail) = self.inner.split_at(i + c.len_utf8());
                                 let (spaces, word) = prefix.split_at(i);
 
                                 self.inner = tail;
@@ -163,7 +161,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                                 if tail.chars().next().and_then(detect_separator).is_none() {
                                     self.word_index += 1;
                                 }
-                                self.char_index += char_len;
+                                self.char_index += 1;
 
                                 return Some(token)
                             }
@@ -252,18 +250,18 @@ mod tests {
         let mut tokenizer = Tokenizer::new("\u{2ec4}lolilol\u{2ec7}");
 
         assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec4}", word_index: 0, char_index: 0 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "lolilol", word_index: 1, char_index: 3 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec7}", word_index: 2, char_index: 10 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "lolilol", word_index: 1, char_index: 1 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec7}", word_index: 2, char_index: 8 }));
         assert_eq!(tokenizer.next(), None);
 
         let mut tokenizer = Tokenizer::new("\u{2ec4}\u{2ed3}\u{2ef2} lolilol - hello    \u{2ec7}");
 
         assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec4}", word_index: 0, char_index: 0 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ed3}", word_index: 1, char_index: 3 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ef2}", word_index: 2, char_index: 6 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "lolilol", word_index: 3, char_index: 10 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "hello", word_index: 11, char_index: 20 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec7}", word_index: 12, char_index: 29 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ed3}", word_index: 1, char_index: 1 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ef2}", word_index: 2, char_index: 2 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "lolilol", word_index: 3, char_index: 4 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "hello", word_index: 11, char_index: 14 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec7}", word_index: 12, char_index: 23 }));
         assert_eq!(tokenizer.next(), None);
     }
 }
