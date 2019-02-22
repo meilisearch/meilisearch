@@ -75,9 +75,9 @@ impl Separator {
 
 fn detect_separator(c: char) -> Option<Separator> {
     match c {
-        '.' | ';' | ',' | '!' | '?' | '-' => Some(Long),
-        ' ' | '\'' | '"'                  => Some(Short),
-        _                                 => None,
+        '.' | ';' | ',' | '!' | '?' | '-' | '(' | ')' => Some(Long),
+        ' ' | '\'' | '"' => Some(Short),
+        _                => None,
     }
 }
 
@@ -150,11 +150,12 @@ mod tests {
 
     #[test]
     fn hard() {
-        let mut tokenizer = Tokenizer::new(" .? yo lolo. aïe");
+        let mut tokenizer = Tokenizer::new(" .? yo lolo. aïe (ouch)");
 
         assert_eq!(tokenizer.next(), Some(Token { word: "yo", word_index: 0, char_index: 4 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "lolo", word_index: 1, char_index: 7 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "aïe", word_index: 9, char_index: 13 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "ouch", word_index: 17, char_index: 18 }));
         assert_eq!(tokenizer.next(), None);
 
         let mut tokenizer = Tokenizer::new("yo ! lolo ? wtf - lol . aïe ,");
