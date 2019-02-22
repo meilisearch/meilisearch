@@ -293,6 +293,10 @@ impl DatabaseIndex {
 
         Ok(view)
     }
+
+    fn path(&self) -> &Path {
+        self.path.as_path()
+    }
 }
 
 impl Drop for DatabaseIndex {
@@ -407,6 +411,16 @@ impl Database {
         let index_guard = self.indexes.get(index).ok_or("Index not found")?;
 
         Ok(index_guard.val().update_config(config)?)
+    }
+
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
+    }
+
+    pub fn index_path(&self, index: &str) -> Result<PathBuf, Box<Error>> {
+        let index_guard = self.indexes.get(index).ok_or("Index not found")?;
+        let path = index_guard.val().path();
+        Ok(path.to_path_buf())
     }
 
 }
