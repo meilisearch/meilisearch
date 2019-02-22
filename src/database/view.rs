@@ -89,8 +89,21 @@ where D: Deref<Target=DB>
         QueryBuilder::new(self)
     }
 
+    pub fn raw_field_by_document_id(
+        &self,
+        name: &str,
+        id: DocumentId
+    ) -> Result<Option<Vec<u8>>, Box<Error>>
+    {
+        let attr = self.schema.attribute(name).ok_or("field not found")?;
+        let key = DocumentKeyAttr::new(id, attr);
+        let vector = self.snapshot.get(key.as_ref())?;
+
+        Ok(vector.map(|v| v.to_vec()))
+    }
+
     pub fn document_by_id<T>(&self, id: DocumentId) -> Result<T, Box<Error>>
-    where T: DeserializeOwned
+    where T: DeserializeOwned,
     {
         let mut deserializer = Deserializer::new(&self.snapshot, &self.schema, id);
         Ok(T::deserialize(&mut deserializer)?)
