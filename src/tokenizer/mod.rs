@@ -105,8 +105,6 @@ impl<'a> Iterator for Tokenizer<'a> {
                             char_index: self.char_index,
                         };
 
-                        println!("no-cjk with start_word returns: {:?}", token);
-
                         self.char_index += word.chars().count();
                         return Some(token)
                     }
@@ -143,8 +141,6 @@ impl<'a> Iterator for Tokenizer<'a> {
                                     char_index: self.char_index,
                                 };
 
-                                println!("cjk with start_word returns: {:?}", token);
-
                                 self.word_index += 1;
                                 self.char_index += word.chars().count();
 
@@ -163,8 +159,6 @@ impl<'a> Iterator for Tokenizer<'a> {
                                     word_index: self.word_index,
                                     char_index: self.char_index,
                                 };
-
-                                println!("cjk without start_word returns: {:?}", token);
 
                                 if tail.chars().next().and_then(detect_separator).is_none() {
                                     self.word_index += 1;
