@@ -8,7 +8,7 @@ use crate::database::serde::SerializerError;
 use crate::database::schema::SchemaAttr;
 use crate::tokenizer::TokenizerBuilder;
 use crate::tokenizer::Token;
-use crate::{DocumentId, DocIndex};
+use crate::{is_cjk, DocumentId, DocIndex};
 
 pub struct IndexerSerializer<'a, 'b, B> {
     pub tokenizer_builder: &'a B,
@@ -65,13 +65,16 @@ where B: TokenizerBuilder
             if self.stop_words.contains(&word_lower) { continue }
 
             // and the unidecoded lowercased version
-            let word_unidecoded = unidecode::unidecode(word).to_lowercase();
-            if word_lower != word_unidecoded {
-                let char_index = char_index as u32;
-                let char_length = length;
+            if !word_lower.chars().any(is_cjk) {
+                let word_unidecoded = unidecode::unidecode(word).to_lowercase();
+                let word_unidecoded = word_unidecoded.trim();
+                if word_lower != word_unidecoded {
+                    let char_index = char_index as u32;
+                    let char_length = length;
 
-                let doc_index = DocIndex { document_id, attribute, word_index, char_index, char_length };
-                self.update.insert_doc_index(word_unidecoded.into_bytes(), doc_index)?;
+                    let doc_index = DocIndex { document_id, attribute, word_index, char_index, char_length };
+                    self.update.insert_doc_index(word_unidecoded.as_bytes().to_vec(), doc_index)?;
+                }
             }
 
             let char_index = char_index as u32;
