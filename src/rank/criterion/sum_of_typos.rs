@@ -5,22 +5,33 @@ use slice_group_by::GroupBy;
 use crate::rank::criterion::Criterion;
 use crate::rank::RawDocument;
 
+// This function is a wrong logarithmic 10 function.
+// It is safe to panic on input number higher than 3,
+// the number of typos is never bigger than that.
 #[inline]
-fn sum_matches_typos(query_index: &[u32], distance: &[u8]) -> isize {
-    let mut number_words = 0.0;
+fn custom_log10(n: u8) -> f32 {
+    match n {
+        0 => 0.0,       // log(1)
+        1 => 0.30102,   // log(2)
+        2 => 0.47712,   // log(3)
+        3 => 0.60205,   // log(4)
+        _ => panic!("invalid number"),
+    }
+}
+
+#[inline]
+fn sum_matches_typos(query_index: &[u32], distance: &[u8]) -> usize {
+    let mut number_words = 0;
     let mut sum_typos = 0.0;
     let mut index = 0;
 
     for group in query_index.linear_group() {
-        let typo = distance[index] as f32;
-        sum_typos += (typo + 1.0).log10();
-        number_words += 1.0_f32;
+        sum_typos += custom_log10(distance[index]);
+        number_words += 1;
         index += group.len();
     }
 
-    let out = number_words / (sum_typos + 1.0);
-
-    (out * 1000.0) as isize
+    (number_words as f32 / (sum_typos + 1.0) * 1000.0) as usize
 }
 
 #[derive(Debug, Clone, Copy)]
