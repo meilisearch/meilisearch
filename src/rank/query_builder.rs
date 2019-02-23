@@ -6,7 +6,7 @@ use std::hash::Hash;
 use std::rc::Rc;
 
 use rayon::slice::ParallelSliceMut;
-use slice_group_by::GroupByMut;
+use slice_group_by::{GroupByMut, LinearStrGroupBy};
 use hashbrown::HashMap;
 use fst::Streamer;
 use rocksdb::DB;
@@ -16,17 +16,43 @@ use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::rank::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::rank::criterion::Criteria;
 use crate::database::DatabaseView;
-use crate::{Match, DocumentId};
 use crate::rank::{raw_documents_from_matches, RawDocument, Document};
+use crate::{is_cjk, Match, DocumentId};
+
+#[derive(Debug, PartialEq, Eq)]
+enum CharCategory {
+    Space,
+    Cjk,
+    Other,
+}
+
+fn classify_char(c: char) -> CharCategory {
+    if c.is_whitespace() { CharCategory::Space }
+    else if is_cjk(c) { CharCategory::Cjk }
+    else { CharCategory::Other }
+}
+
+fn is_word(s: &&str) -> bool {
+    !s.chars().any(char::is_whitespace)
+}
+
+fn same_group_category(a: char, b: char) -> bool {
+    let ca = classify_char(a);
+    let cb = classify_char(b);
+    if ca == CharCategory::Cjk || cb == CharCategory::Cjk { false } else { ca == cb }
+}
 
 fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
-    let mut automatons = Vec::new();
-    let mut words = query.split_whitespace().map(str::to_lowercase).peekable();
+    let mut groups = LinearStrGroupBy::new(query, same_group_category)
+                        .filter(is_word)
+                        .map(str::to_lowercase)
+                        .peekable();
 
-    while let Some(word) = words.next() {
-        let has_following_word = words.peek().is_some();
-        let lev = if has_following_word || has_end_whitespace {
+    let mut automatons = Vec::new();
+    while let Some(word) = groups.next() {
+        let has_following_word = groups.peek().is_some();
+        let lev = if has_following_word || has_end_whitespace || word.chars().all(is_cjk) {
             automaton::build_dfa(&word)
         } else {
             automaton::build_prefix_dfa(&word)

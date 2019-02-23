@@ -21,8 +21,11 @@ serde = "1.0"
 serde_derive = "1.0"
 serde_json = { version = "1.0", features = ["preserve_order"] }
 size_format = "1.0"
-slice-group-by = "0.2"
 unidecode = "0.3"
+
+[dependencies.slice-group-by]
+git = "https://github.com/Kerollmops/slice-group-by.git"
+tag = "v0.2.3-alpha.1"
 
 [dependencies.toml]
 git = "https://github.com/Kerollmops/toml-rs.git"

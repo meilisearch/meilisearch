@@ -1,4 +1,5 @@
 use std::mem;
+use crate::is_cjk;
 use self::Separator::*;
 
 pub trait TokenizerBuilder {
@@ -114,16 +115,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                 None => {
                     // if this is a Chinese, a Japanese or a Korean character
                     // See <http://unicode-table.com>
-                    if (c >= '\u{2e80}' && c <= '\u{2eff}') ||
-                       (c >= '\u{2f00}' && c <= '\u{2fdf}') ||
-                       (c >= '\u{3040}' && c <= '\u{309f}') ||
-                       (c >= '\u{30a0}' && c <= '\u{30ff}') ||
-                       (c >= '\u{3100}' && c <= '\u{312f}') ||
-                       (c >= '\u{3200}' && c <= '\u{32ff}') ||
-                       (c >= '\u{3400}' && c <= '\u{4dbf}') ||
-                       (c >= '\u{4e00}' && c <= '\u{9fff}') ||
-                       (c >= '\u{f900}' && c <= '\u{faff}')
-                    {
+                    if is_cjk(c) {
                         match start_word {
                             Some(start_word) => {
                                 let (prefix, tail) = self.inner.split_at(i);
