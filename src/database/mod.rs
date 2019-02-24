@@ -32,7 +32,6 @@ pub use self::schema::Schema;
 pub use self::index::Index;
 pub use self::number::{Number, ParseNumberError};
 
-
 pub type RankedMap = HashMap<(DocumentId, SchemaAttr), Number>;
 
 const DATA_INDEX:      &[u8] = b"data-index";
@@ -803,7 +802,7 @@ mod bench {
 
         bench.iter(|| {
             for q in &["a", "b", "c", "d", "e"] {
-                let documents = view.query_builder().unwrap().query(q, 0..20);
+                let documents = view.query_builder().query(q, 0..20);
                 test::black_box(|| documents);
             }
         });
@@ -851,7 +850,7 @@ mod bench {
 
         bench.iter(|| {
             for q in &["a", "b", "c", "d", "e"] {
-                let documents = view.query_builder().unwrap().query(q, 0..20);
+                let documents = view.query_builder().query(q, 0..20);
                 test::black_box(|| documents);
             }
         });
@@ -900,7 +899,7 @@ mod bench {
 
         bench.iter(|| {
             for q in &["a", "b", "c", "d", "e"] {
-                let documents = view.query_builder().unwrap().query(q, 0..20);
+                let documents = view.query_builder().query(q, 0..20);
                 test::black_box(|| documents);
             }
         });
