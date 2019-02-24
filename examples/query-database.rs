@@ -156,7 +156,7 @@ fn main() -> Result<(), Box<Error>> {
 
         let start = Instant::now();
 
-        let builder = view.query_builder().unwrap();
+        let builder = view.query_builder();
         let documents = builder.query(query, 0..opt.number_results);
 
         let number_of_documents = documents.len();

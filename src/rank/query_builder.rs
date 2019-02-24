@@ -1,7 +1,6 @@
-use std::{cmp, mem, vec, str, char};
-use std::ops::{Deref, Range};
+use std::{cmp, mem};
+use std::ops::Range;
 use std::time::Instant;
-use std::error::Error;
 use std::hash::Hash;
 use std::rc::Rc;
 
@@ -9,13 +8,12 @@ use rayon::slice::ParallelSliceMut;
 use slice_group_by::{GroupByMut, LinearStrGroupBy};
 use hashbrown::HashMap;
 use fst::Streamer;
-use rocksdb::DB;
 use log::info;
 
 use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::rank::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::rank::criterion::Criteria;
-use crate::database::DatabaseView;
+use crate::database::Index;
 use crate::rank::{raw_documents_from_matches, RawDocument, Document};
 use crate::{is_cjk, Match, DocumentId};
 
@@ -63,43 +61,38 @@ fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
     automatons
 }
 
-pub type FilterFunc<D> = fn(DocumentId, &DatabaseView<D>) -> bool;
+pub type FilterFunc = fn(DocumentId) -> bool;
 
-pub struct QueryBuilder<'a, 'b, D, FI>
-where D: Deref<Target=DB>
-{
-    view: &'a DatabaseView<D>,
-    criteria: Criteria<'b>,
+pub struct QueryBuilder<'i, 'c, FI> {
+    index: &'i Index,
+    criteria: Criteria<'c>,
     filter: Option<FI>,
 }
 
-impl<'a, 'b, D> QueryBuilder<'a, 'b, D, FilterFunc<D>>
-where D: Deref<Target=DB>
-{
-    pub fn new(view: &'a DatabaseView<D>) -> Result<Self, Box<Error>> {
-        QueryBuilder::with_criteria(view, Criteria::default())
+impl<'i, 'c> QueryBuilder<'i, 'c, FilterFunc> {
+    pub fn new(index: &'i Index) -> Self {
+        QueryBuilder::with_criteria(index, Criteria::default())
     }
 
-    pub fn with_criteria(view: &'a DatabaseView<D>, criteria: Criteria<'b>) -> Result<Self, Box<Error>> {
-        Ok(QueryBuilder { view, criteria, filter: None })
+    pub fn with_criteria(index: &'i Index, criteria: Criteria<'c>) -> Self {
+        QueryBuilder { index, criteria, filter: None }
     }
 }
 
-impl<'a, 'b, D, FI> QueryBuilder<'a, 'b, D, FI>
-where D: Deref<Target=DB>,
+impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
 {
-    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'a, 'b, D, F>
-    where F: Fn(DocumentId, &DatabaseView<D>) -> bool,
+    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'i, 'c, F>
+    where F: Fn(DocumentId) -> bool,
     {
         QueryBuilder {
-            view: self.view,
+            index: self.index,
             criteria: self.criteria,
             filter: Some(function)
         }
     }
 
-    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'a, 'b, D, FI, F>
-    where F: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
+    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'i, 'c, FI, F>
+    where F: Fn(DocumentId) -> Option<K>,
           K: Hash + Eq,
     {
         DistinctQueryBuilder {
@@ -115,7 +108,7 @@ where D: Deref<Target=DB>,
         let mut stream = {
             let mut op_builder = fst::map::OpBuilder::new();
             for automaton in &automatons {
-                let stream = self.view.index().map.search(automaton);
+                let stream = self.index.map.search(automaton);
                 op_builder.push(stream);
             }
             op_builder.union()
@@ -129,7 +122,7 @@ where D: Deref<Target=DB>,
                 let distance = automaton.eval(input).to_u8();
                 let is_exact = distance == 0 && input.len() == automaton.query_len();
 
-                let doc_indexes = &self.view.index().indexes;
+                let doc_indexes = &self.index.indexes;
                 let doc_indexes = &doc_indexes[iv.value as usize];
 
                 for doc_index in doc_indexes {
@@ -157,15 +150,14 @@ where D: Deref<Target=DB>,
     }
 }
 
-impl<'a, 'b, D, FI> QueryBuilder<'a, 'b, D, FI>
-where D: Deref<Target=DB>,
-      FI: Fn(DocumentId, &DatabaseView<D>) -> bool,
+impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
+where FI: Fn(DocumentId) -> bool,
 {
     pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
         // We delegate the filter work to the distinct query builder,
         // specifying a distinct rule that has no effect.
         if self.filter.is_some() {
-            let builder = self.with_distinct(|_, _| None as Option<()>, 1);
+            let builder = self.with_distinct(|_| None as Option<()>, 1);
             return builder.query(query, range);
         }
 
@@ -211,19 +203,16 @@ where D: Deref<Target=DB>,
     }
 }
 
-pub struct DistinctQueryBuilder<'a, 'b, D, FI, FD>
-where D: Deref<Target=DB>
-{
-    inner: QueryBuilder<'a, 'b, D, FI>,
+pub struct DistinctQueryBuilder<'i, 'c, FI, FD> {
+    inner: QueryBuilder<'i, 'c, FI>,
     function: FD,
     size: usize,
 }
 
-impl<'a, 'b, D, FI, FD> DistinctQueryBuilder<'a, 'b, D, FI, FD>
-where D: Deref<Target=DB>,
+impl<'i, 'c, FI, FD> DistinctQueryBuilder<'i, 'c, FI, FD>
 {
-    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'a, 'b, D, F, FD>
-    where F: Fn(DocumentId, &DatabaseView<D>) -> bool,
+    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'i, 'c, F, FD>
+    where F: Fn(DocumentId) -> bool,
     {
         DistinctQueryBuilder {
             inner: self.inner.with_filter(function),
@@ -233,10 +222,9 @@ where D: Deref<Target=DB>,
     }
 }
 
-impl<'a, 'b, D, FI, FD, K> DistinctQueryBuilder<'a, 'b, D, FI, FD>
-where D: Deref<Target=DB>,
-      FI: Fn(DocumentId, &DatabaseView<D>) -> bool,
-      FD: Fn(DocumentId, &DatabaseView<D>) -> Option<K>,
+impl<'i, 'c, FI, FD, K> DistinctQueryBuilder<'i, 'c, FI, FD>
+where FI: Fn(DocumentId) -> bool,
+      FD: Fn(DocumentId) -> Option<K>,
       K: Hash + Eq,
 {
     pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
@@ -246,7 +234,6 @@ where D: Deref<Target=DB>,
 
         let mut groups = vec![documents.as_mut_slice()];
         let mut key_cache = HashMap::new();
-        let view = &self.inner.view;
 
         let mut filter_map = HashMap::new();
         // these two variables informs on the current distinct map and
@@ -281,14 +268,14 @@ where D: Deref<Target=DB>,
                         let filter_accepted = match &self.inner.filter {
                             Some(filter) => {
                                 let entry = filter_map.entry(document.id);
-                                *entry.or_insert_with(|| (filter)(document.id, view))
+                                *entry.or_insert_with(|| (filter)(document.id))
                             },
                             None => true,
                         };
 
                         if filter_accepted {
                             let entry = key_cache.entry(document.id);
-                            let key = entry.or_insert_with(|| (self.function)(document.id, view).map(Rc::new));
+                            let key = entry.or_insert_with(|| (self.function)(document.id).map(Rc::new));
 
                             match key.clone() {
                                 Some(key) => buf_distinct.register(key),

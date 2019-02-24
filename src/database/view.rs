@@ -85,8 +85,8 @@ where D: Deref<Target=DB>
         Ok(())
     }
 
-    pub fn query_builder(&self) -> Result<QueryBuilder<D, FilterFunc<D>>, Box<Error>> {
-        QueryBuilder::new(self)
+    pub fn query_builder(&self) -> QueryBuilder<FilterFunc> {
+        QueryBuilder::new(self.index())
     }
 
     pub fn raw_field_by_document_id(
