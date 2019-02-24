@@ -3,9 +3,9 @@ use std::error::Error;
 use std::fmt;
 
 use crate::database::schema::{Schema, SchemaAttr};
-use crate::rank::criterion::Criterion;
+use crate::criterion::Criterion;
 use crate::database::RankedMap;
-use crate::rank::RawDocument;
+use crate::RawDocument;
 
 /// An helper struct that permit to sort documents by
 /// some of their stored attributes.

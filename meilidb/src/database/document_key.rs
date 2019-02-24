@@ -5,7 +5,7 @@ use std::fmt;
 use byteorder::{BigEndian, WriteBytesExt, ReadBytesExt};
 
 use crate::database::schema::SchemaAttr;
-use crate::DocumentId;
+use meilidb_core::DocumentId;
 
 const DOC_KEY_LEN:      usize = 4 + size_of::<u64>();
 const DOC_KEY_ATTR_LEN: usize = DOC_KEY_LEN + 1 + size_of::<u16>();

@@ -1,9 +1,7 @@
 use std::cmp::{self, Ordering};
-
 use slice_group_by::GroupBy;
-
-use crate::rank::criterion::Criterion;
-use crate::rank::RawDocument;
+use crate::criterion::Criterion;
+use crate::RawDocument;
 
 const MAX_DISTANCE: u16 = 8;
 

@@ -10,7 +10,7 @@ use linked_hash_map::LinkedHashMap;
 
 use crate::database::serde::find_id::FindDocumentIdSerializer;
 use crate::database::serde::SerializerError;
-use crate::DocumentId;
+use meilidb_core::DocumentId;
 
 pub const STORED: SchemaProps  = SchemaProps { stored: true,  indexed: false, ranked: false };
 pub const INDEXED: SchemaProps = SchemaProps { stored: false, indexed: true,  ranked: false };

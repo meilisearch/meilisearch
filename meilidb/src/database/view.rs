@@ -6,16 +6,15 @@ use std::{fmt, marker};
 use rocksdb::rocksdb_options::{ReadOptions, EnvOptions, ColumnFamilyOptions};
 use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey, SstFileWriter};
 use serde::de::DeserializeOwned;
+use meilidb_core::{Index, QueryBuilder, FilterFunc};
+use meilidb_core::DocumentId;
 
 use crate::database::{retrieve_data_schema, retrieve_data_index, retrieve_data_ranked_map, retrieve_config};
 use crate::database::serde::deserializer::Deserializer;
 use crate::database::{DocumentKey, DocumentKeyAttr};
-use crate::rank::{QueryBuilder, FilterFunc};
 use crate::database::schema::Schema;
-use crate::database::index::Index;
 use crate::database::RankedMap;
 use crate::database::Config;
-use crate::DocumentId;
 
 pub struct DatabaseView<D>
 where D: Deref<Target=DB>
