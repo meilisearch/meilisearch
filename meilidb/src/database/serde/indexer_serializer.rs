@@ -1,23 +1,35 @@
+use std::collections::HashSet;
+
 use serde::Serialize;
 use serde::ser;
+use meilidb_core::{DocumentId, DocIndex};
 
-use crate::database::serde::key_to_string::KeyToStringSerializer;
-use crate::database::serde::{SerializerError, calculate_hash};
-use crate::DocumentId;
+use crate::database::update::DocumentUpdate;
+use crate::database::serde::SerializerError;
+use crate::database::schema::SchemaAttr;
+use crate::tokenizer::TokenizerBuilder;
+use crate::tokenizer::Token;
+use crate::is_cjk;
 
-pub struct FindDocumentIdSerializer<'a> {
-    pub id_attribute_name: &'a str,
+pub struct IndexerSerializer<'a, 'b, B> {
+    pub tokenizer_builder: &'a B,
+    pub update: &'a mut DocumentUpdate<'b>,
+    pub document_id: DocumentId,
+    pub attribute: SchemaAttr,
+    pub stop_words: &'a HashSet<String>,
 }
 
-impl<'a> ser::Serializer for FindDocumentIdSerializer<'a> {
-    type Ok = DocumentId;
+impl<'a, 'b, B> ser::Serializer for IndexerSerializer<'a, 'b, B>
+where B: TokenizerBuilder
+{
+    type Ok = ();
     type Error = SerializerError;
     type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeMap = FindDocumentIdMapSerializer<'a>;
-    type SerializeStruct = FindDocumentIdStructSerializer<'a>;
+    type SerializeMap = ser::Impossible<Self::Ok, Self::Error>;
+    type SerializeStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
     forward_to_unserializable_type! {
@@ -38,8 +50,41 @@ impl<'a> ser::Serializer for FindDocumentIdSerializer<'a> {
         f64 => serialize_f64,
     }
 
-    fn serialize_str(self, _v: &str) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "str" })
+    fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
+        for token in self.tokenizer_builder.build(v) {
+            let Token { word, word_index, char_index } = token;
+            let document_id = self.document_id;
+
+            // FIXME must u32::try_from instead
+            let attribute = self.attribute.0;
+            let word_index = word_index as u16;
+
+            // insert the exact representation
+            let word_lower = word.to_lowercase();
+            let length = word.chars().count() as u16;
+
+            if self.stop_words.contains(&word_lower) { continue }
+
+            // and the unidecoded lowercased version
+            if !word_lower.chars().any(is_cjk) {
+                let word_unidecoded = unidecode::unidecode(word).to_lowercase();
+                let word_unidecoded = word_unidecoded.trim();
+                if word_lower != word_unidecoded {
+                    let char_index = char_index as u16;
+                    let char_length = length;
+
+                    let doc_index = DocIndex { document_id, attribute, word_index, char_index, char_length };
+                    self.update.insert_doc_index(word_unidecoded.as_bytes().to_vec(), doc_index)?;
+                }
+            }
+
+            let char_index = char_index as u16;
+            let char_length = length;
+
+            let doc_index = DocIndex { document_id, attribute, word_index, char_index, char_length };
+            self.update.insert_doc_index(word_lower.into_bytes(), doc_index)?;
+        }
+        Ok(())
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
@@ -97,7 +142,7 @@ impl<'a> ser::Serializer for FindDocumentIdSerializer<'a> {
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "sequence" })
+        Err(SerializerError::UnserializableType { name: "seq" })
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
@@ -125,11 +170,7 @@ impl<'a> ser::Serializer for FindDocumentIdSerializer<'a> {
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        Ok(FindDocumentIdMapSerializer {
-            id_attribute_name: self.id_attribute_name,
-            document_id: None,
-            current_key_name: None,
-        })
+        Err(SerializerError::UnserializableType { name: "map" })
     }
 
     fn serialize_struct(
@@ -138,10 +179,7 @@ impl<'a> ser::Serializer for FindDocumentIdSerializer<'a> {
         _len: usize
     ) -> Result<Self::SerializeStruct, Self::Error>
     {
-        Ok(FindDocumentIdStructSerializer {
-            id_attribute_name: self.id_attribute_name,
-            document_id: None,
-        })
+        Err(SerializerError::UnserializableType { name: "struct" })
     }
 
     fn serialize_struct_variant(
@@ -153,91 +191,5 @@ impl<'a> ser::Serializer for FindDocumentIdSerializer<'a> {
     ) -> Result<Self::SerializeStructVariant, Self::Error>
     {
         Err(SerializerError::UnserializableType { name: "struct variant" })
-    }
-}
-
-pub struct FindDocumentIdMapSerializer<'a> {
-    id_attribute_name: &'a str,
-    document_id: Option<DocumentId>,
-    current_key_name: Option<String>,
-}
-
-impl<'a> ser::SerializeMap for FindDocumentIdMapSerializer<'a> {
-    type Ok = DocumentId;
-    type Error = SerializerError;
-
-    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
-    where T: Serialize,
-    {
-        let key = key.serialize(KeyToStringSerializer)?;
-        self.current_key_name = Some(key);
-        Ok(())
-    }
-
-    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
-    where T: Serialize,
-    {
-        let key = self.current_key_name.take().unwrap();
-        self.serialize_entry(&key, value)
-    }
-
-    fn serialize_entry<K: ?Sized, V: ?Sized>(
-        &mut self,
-        key: &K,
-        value: &V
-    ) -> Result<(), Self::Error>
-    where K: Serialize, V: Serialize,
-    {
-        let key = key.serialize(KeyToStringSerializer)?;
-
-        if self.id_attribute_name == key {
-            // TODO is it possible to have multiple ids?
-            let id = bincode::serialize(value).unwrap();
-            let hash = calculate_hash(&id);
-            self.document_id = Some(DocumentId(hash));
-        }
-
-        Ok(())
-    }
-
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        match self.document_id {
-            Some(document_id) => Ok(document_id),
-            None => Err(SerializerError::DocumentIdNotFound)
-        }
-    }
-}
-
-pub struct FindDocumentIdStructSerializer<'a> {
-    id_attribute_name: &'a str,
-    document_id: Option<DocumentId>,
-}
-
-impl<'a> ser::SerializeStruct for FindDocumentIdStructSerializer<'a> {
-    type Ok = DocumentId;
-    type Error = SerializerError;
-
-    fn serialize_field<T: ?Sized>(
-        &mut self,
-        key: &'static str,
-        value: &T
-    ) -> Result<(), Self::Error>
-    where T: Serialize,
-    {
-        if self.id_attribute_name == key {
-            // TODO can it be possible to have multiple ids?
-            let id = bincode::serialize(value).unwrap();
-            let hash = calculate_hash(&id);
-            self.document_id = Some(DocumentId(hash));
-        }
-
-        Ok(())
-    }
-
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        match self.document_id {
-            Some(document_id) => Ok(document_id),
-            None => Err(SerializerError::DocumentIdNotFound)
-        }
     }
 }

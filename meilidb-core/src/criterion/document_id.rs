@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
-
-use crate::rank::criterion::Criterion;
-use crate::rank::RawDocument;
+use crate::criterion::Criterion;
+use crate::RawDocument;
 
 #[derive(Debug, Clone, Copy)]
 pub struct DocumentId;

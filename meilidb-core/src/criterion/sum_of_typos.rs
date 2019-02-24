@@ -2,8 +2,8 @@ use std::cmp::Ordering;
 
 use slice_group_by::GroupBy;
 
-use crate::rank::criterion::Criterion;
-use crate::rank::RawDocument;
+use crate::criterion::Criterion;
+use crate::RawDocument;
 
 // This function is a wrong logarithmic 10 function.
 // It is safe to panic on input number higher than 3,

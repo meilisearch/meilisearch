@@ -1,11 +1,11 @@
 use std::error::Error;
 
 use byteorder::{ReadBytesExt, WriteBytesExt};
+use meilidb_core::shared_data_cursor::{SharedDataCursor, FromSharedDataCursor};
+use meilidb_core::write_to_bytes::WriteToBytes;
+use meilidb_core::data::DocIds;
 
-use crate::shared_data_cursor::{SharedDataCursor, FromSharedDataCursor};
-use crate::write_to_bytes::WriteToBytes;
 use crate::database::Index;
-use crate::data::DocIds;
 
 pub enum WriteIndexEvent<'a> {
     RemovedDocuments(&'a DocIds),

@@ -1,36 +1,23 @@
-use std::collections::HashSet;
-
 use serde::Serialize;
 use serde::ser;
 
-use crate::database::serde::indexer_serializer::IndexerSerializer;
 use crate::database::serde::key_to_string::KeyToStringSerializer;
-use crate::database::serde::value_to_number::ValueToNumberSerializer;
-use crate::database::update::DocumentUpdate;
-use crate::database::serde::SerializerError;
-use crate::tokenizer::TokenizerBuilder;
-use crate::database::schema::Schema;
-use crate::DocumentId;
+use crate::database::serde::{SerializerError, calculate_hash};
+use meilidb_core::DocumentId;
 
-pub struct Serializer<'a, 'b, B> {
-    pub schema: &'a Schema,
-    pub update: &'a mut DocumentUpdate<'b>,
-    pub document_id: DocumentId,
-    pub tokenizer_builder: &'a B,
-    pub stop_words: &'a HashSet<String>,
+pub struct FindDocumentIdSerializer<'a> {
+    pub id_attribute_name: &'a str,
 }
 
-impl<'a, 'b, B> ser::Serializer for Serializer<'a, 'b, B>
-where B: TokenizerBuilder
-{
-    type Ok = ();
+impl<'a> ser::Serializer for FindDocumentIdSerializer<'a> {
+    type Ok = DocumentId;
     type Error = SerializerError;
     type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeMap = MapSerializer<'a, 'b, B>;
-    type SerializeStruct = StructSerializer<'a, 'b, B>;
+    type SerializeMap = FindDocumentIdMapSerializer<'a>;
+    type SerializeStruct = FindDocumentIdStructSerializer<'a>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
     forward_to_unserializable_type! {
@@ -138,12 +125,9 @@ where B: TokenizerBuilder
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        Ok(MapSerializer {
-            schema: self.schema,
-            document_id: self.document_id,
-            update: self.update,
-            tokenizer_builder: self.tokenizer_builder,
-            stop_words: self.stop_words,
+        Ok(FindDocumentIdMapSerializer {
+            id_attribute_name: self.id_attribute_name,
+            document_id: None,
             current_key_name: None,
         })
     }
@@ -154,12 +138,9 @@ where B: TokenizerBuilder
         _len: usize
     ) -> Result<Self::SerializeStruct, Self::Error>
     {
-        Ok(StructSerializer {
-            schema: self.schema,
-            document_id: self.document_id,
-            update: self.update,
-            tokenizer_builder: self.tokenizer_builder,
-            stop_words: self.stop_words,
+        Ok(FindDocumentIdStructSerializer {
+            id_attribute_name: self.id_attribute_name,
+            document_id: None,
         })
     }
 
@@ -175,19 +156,14 @@ where B: TokenizerBuilder
     }
 }
 
-pub struct MapSerializer<'a, 'b, B> {
-    pub schema: &'a Schema,
-    pub document_id: DocumentId,
-    pub update: &'a mut DocumentUpdate<'b>,
-    pub tokenizer_builder: &'a B,
-    pub stop_words: &'a HashSet<String>,
-    pub current_key_name: Option<String>,
+pub struct FindDocumentIdMapSerializer<'a> {
+    id_attribute_name: &'a str,
+    document_id: Option<DocumentId>,
+    current_key_name: Option<String>,
 }
 
-impl<'a, 'b, B> ser::SerializeMap for MapSerializer<'a, 'b, B>
-where B: TokenizerBuilder
-{
-    type Ok = ();
+impl<'a> ser::SerializeMap for FindDocumentIdMapSerializer<'a> {
+    type Ok = DocumentId;
     type Error = SerializerError;
 
     fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
@@ -208,54 +184,37 @@ where B: TokenizerBuilder
     fn serialize_entry<K: ?Sized, V: ?Sized>(
         &mut self,
         key: &K,
-        value: &V,
+        value: &V
     ) -> Result<(), Self::Error>
     where K: Serialize, V: Serialize,
     {
         let key = key.serialize(KeyToStringSerializer)?;
 
-        if let Some(attr) = self.schema.attribute(key) {
-            let props = self.schema.props(attr);
-            if props.is_stored() {
-                let value = bincode::serialize(value).unwrap();
-                self.update.insert_attribute_value(attr, &value)?;
-            }
-            if props.is_indexed() {
-                let serializer = IndexerSerializer {
-                    update: self.update,
-                    tokenizer_builder: self.tokenizer_builder,
-                    document_id: self.document_id,
-                    attribute: attr,
-                    stop_words: self.stop_words,
-                };
-                value.serialize(serializer)?;
-            }
-            if props.is_ranked() {
-                let number = value.serialize(ValueToNumberSerializer)?;
-                self.update.register_ranked_attribute(attr, number)?;
-            }
+        if self.id_attribute_name == key {
+            // TODO is it possible to have multiple ids?
+            let id = bincode::serialize(value).unwrap();
+            let hash = calculate_hash(&id);
+            self.document_id = Some(DocumentId(hash));
         }
 
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(())
+        match self.document_id {
+            Some(document_id) => Ok(document_id),
+            None => Err(SerializerError::DocumentIdNotFound)
+        }
     }
 }
 
-pub struct StructSerializer<'a, 'b, B> {
-    pub schema: &'a Schema,
-    pub document_id: DocumentId,
-    pub update: &'a mut DocumentUpdate<'b>,
-    pub tokenizer_builder: &'a B,
-    pub stop_words: &'a HashSet<String>,
+pub struct FindDocumentIdStructSerializer<'a> {
+    id_attribute_name: &'a str,
+    document_id: Option<DocumentId>,
 }
 
-impl<'a, 'b, B> ser::SerializeStruct for StructSerializer<'a, 'b, B>
-where B: TokenizerBuilder
-{
-    type Ok = ();
+impl<'a> ser::SerializeStruct for FindDocumentIdStructSerializer<'a> {
+    type Ok = DocumentId;
     type Error = SerializerError;
 
     fn serialize_field<T: ?Sized>(
@@ -265,32 +224,20 @@ where B: TokenizerBuilder
     ) -> Result<(), Self::Error>
     where T: Serialize,
     {
-        if let Some(attr) = self.schema.attribute(key) {
-            let props = self.schema.props(attr);
-            if props.is_stored() {
-                let value = bincode::serialize(value).unwrap();
-                self.update.insert_attribute_value(attr, &value)?;
-            }
-            if props.is_indexed() {
-                let serializer = IndexerSerializer {
-                    update: self.update,
-                    tokenizer_builder: self.tokenizer_builder,
-                    document_id: self.document_id,
-                    attribute: attr,
-                    stop_words: self.stop_words,
-                };
-                value.serialize(serializer)?;
-            }
-            if props.is_ranked() {
-                let integer = value.serialize(ValueToNumberSerializer)?;
-                self.update.register_ranked_attribute(attr, integer)?;
-            }
+        if self.id_attribute_name == key {
+            // TODO can it be possible to have multiple ids?
+            let id = bincode::serialize(value).unwrap();
+            let hash = calculate_hash(&id);
+            self.document_id = Some(DocumentId(hash));
         }
 
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(())
+        match self.document_id {
+            Some(document_id) => Ok(document_id),
+            None => Err(SerializerError::DocumentIdNotFound)
+        }
     }
 }

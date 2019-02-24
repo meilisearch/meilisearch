@@ -10,7 +10,7 @@ use serde::de::{self, Visitor, IntoDeserializer};
 
 use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
 use crate::database::schema::Schema;
-use crate::DocumentId;
+use meilidb_core::DocumentId;
 
 pub struct Deserializer<'a, D>
 where D: Deref<Target=DB>

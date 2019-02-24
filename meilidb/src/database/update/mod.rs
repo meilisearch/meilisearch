@@ -5,19 +5,18 @@ use rocksdb::rocksdb::{Writable, WriteBatch};
 use hashbrown::hash_map::HashMap;
 use sdset::{Set, SetBuf};
 use serde::Serialize;
+use meilidb_core::write_to_bytes::WriteToBytes;
+use meilidb_core::data::DocIds;
+use meilidb_core::{IndexBuilder, DocumentId, DocIndex};
 
 use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
 use crate::database::serde::serializer::Serializer;
 use crate::database::serde::SerializerError;
 use crate::database::schema::SchemaAttr;
 use crate::database::schema::Schema;
-use crate::database::index::IndexBuilder;
 use crate::database::{DATA_INDEX, DATA_RANKED_MAP};
 use crate::database::{RankedMap, Number};
 use crate::tokenizer::TokenizerBuilder;
-use crate::write_to_bytes::WriteToBytes;
-use crate::data::DocIds;
-use crate::{DocumentId, DocIndex};
 
 pub use self::index_event::{ReadIndexEvent, WriteIndexEvent};
 pub use self::ranked_map_event::{ReadRankedMapEvent, WriteRankedMapEvent};

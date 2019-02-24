@@ -17,9 +17,9 @@ use hashbrown::HashMap;
 use log::{info, error, warn};
 
 use crate::database::schema::SchemaAttr;
-use crate::shared_data_cursor::FromSharedDataCursor;
-use crate::write_to_bytes::WriteToBytes;
-use crate::DocumentId;
+use meilidb_core::shared_data_cursor::FromSharedDataCursor;
+use meilidb_core::write_to_bytes::WriteToBytes;
+use meilidb_core::{Index, DocumentId};
 
 use self::update::{ReadIndexEvent, ReadRankedMapEvent};
 
@@ -29,7 +29,6 @@ pub use self::view::{DatabaseView, DocumentIter};
 pub use self::update::Update;
 pub use self::serde::SerializerError;
 pub use self::schema::Schema;
-pub use self::index::Index;
 pub use self::number::{Number, ParseNumberError};
 
 pub type RankedMap = HashMap<(DocumentId, SchemaAttr), Number>;
@@ -41,7 +40,6 @@ const CONFIG:          &[u8] = b"config";
 
 pub mod config;
 pub mod schema;
-pub(crate) mod index;
 mod number;
 mod document_key;
 mod serde;
