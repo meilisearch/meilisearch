@@ -1,6 +1,7 @@
-/rocksdb
 /target
 /Cargo.lock
+meilidb/Cargo.lock
+meilidb-core/Cargo.lock
 **/*.rs.bk
 **/*.csv
 **/*.json_lines
