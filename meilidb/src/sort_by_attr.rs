@@ -2,10 +2,11 @@ use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 
+use meilidb_core::criterion::Criterion;
+use meilidb_core::RawDocument;
+
 use crate::database::schema::{Schema, SchemaAttr};
-use crate::criterion::Criterion;
 use crate::database::RankedMap;
-use crate::RawDocument;
 
 /// An helper struct that permit to sort documents by
 /// some of their stored attributes.
