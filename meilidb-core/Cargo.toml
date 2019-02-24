@@ -19,3 +19,4 @@ slice-group-by = "0.2.4"
 
 [features]
 i128 = ["byteorder/i128"]
+nightly = ["hashbrown/nightly", "slice-group-by/nightly"]
