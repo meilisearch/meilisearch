@@ -36,7 +36,11 @@ default = ["simd"]
 i128 = ["bincode/i128", "meilidb-core/i128"]
 portable = ["rocksdb/portable"]
 simd = ["rocksdb/sse"]
-nightly = ["hashbrown/nightly", "slice-group-by/nightly"]
+nightly = [
+    "hashbrown/nightly",
+    "slice-group-by/nightly",
+    "meilidb-core/nightly"
+]
 
 [dev-dependencies]
 csv = "1.0.5"
