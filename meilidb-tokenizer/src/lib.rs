@@ -1,4 +1,5 @@
 use std::mem;
+use slice_group_by::LinearStrGroupBy;
 use self::Separator::*;
 
 pub fn is_cjk(c: char) -> bool {
@@ -11,6 +12,33 @@ pub fn is_cjk(c: char) -> bool {
     (c >= '\u{3400}' && c <= '\u{4dbf}') ||
     (c >= '\u{4e00}' && c <= '\u{9fff}') ||
     (c >= '\u{f900}' && c <= '\u{faff}')
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum CharCategory {
+    Space,
+    Cjk,
+    Other,
+}
+
+fn classify_char(c: char) -> CharCategory {
+    if c.is_whitespace() { CharCategory::Space }
+    else if is_cjk(c) { CharCategory::Cjk }
+    else { CharCategory::Other }
+}
+
+fn is_word(s: &&str) -> bool {
+    !s.chars().any(char::is_whitespace)
+}
+
+fn same_group_category(a: char, b: char) -> bool {
+    let ca = classify_char(a);
+    let cb = classify_char(b);
+    if ca == CharCategory::Cjk || cb == CharCategory::Cjk { false } else { ca == cb }
+}
+
+pub fn split_query_string(query: &str) -> impl Iterator<Item=&str> {
+    LinearStrGroupBy::new(query, same_group_category).filter(is_word)
 }
 
 pub trait TokenizerBuilder {

@@ -5,4 +5,4 @@ authors = ["Clément Renault <renault.cle@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-
+slice-group-by = "0.2.4"
