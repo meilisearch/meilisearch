@@ -5,7 +5,8 @@ use std::hash::Hash;
 use std::rc::Rc;
 
 use rayon::slice::ParallelSliceMut;
-use slice_group_by::{GroupByMut, LinearStrGroupBy};
+use slice_group_by::GroupByMut;
+use meilidb_tokenizer::{is_cjk, split_query_string};
 use hashbrown::{HashMap, HashSet};
 use fst::Streamer;
 use log::info;
@@ -16,50 +17,11 @@ use crate::criterion::Criteria;
 use crate::{raw_documents_from_matches, RawDocument, Document};
 use crate::{Index, Match, DocumentId};
 
-// query splitting must move out of this crate
-pub fn is_cjk(c: char) -> bool {
-    (c >= '\u{2e80}' && c <= '\u{2eff}') ||
-    (c >= '\u{2f00}' && c <= '\u{2fdf}') ||
-    (c >= '\u{3040}' && c <= '\u{309f}') ||
-    (c >= '\u{30a0}' && c <= '\u{30ff}') ||
-    (c >= '\u{3100}' && c <= '\u{312f}') ||
-    (c >= '\u{3200}' && c <= '\u{32ff}') ||
-    (c >= '\u{3400}' && c <= '\u{4dbf}') ||
-    (c >= '\u{4e00}' && c <= '\u{9fff}') ||
-    (c >= '\u{f900}' && c <= '\u{faff}')
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum CharCategory {
-    Space,
-    Cjk,
-    Other,
-}
-
-fn classify_char(c: char) -> CharCategory {
-    if c.is_whitespace() { CharCategory::Space }
-    else if is_cjk(c) { CharCategory::Cjk }
-    else { CharCategory::Other }
-}
-
-fn is_word(s: &&str) -> bool {
-    !s.chars().any(char::is_whitespace)
-}
-
-fn same_group_category(a: char, b: char) -> bool {
-    let ca = classify_char(a);
-    let cb = classify_char(b);
-    if ca == CharCategory::Cjk || cb == CharCategory::Cjk { false } else { ca == cb }
-}
-
-fn split_whitespace_automatons(query: &str) -> Vec<DfaExt> {
+fn generate_automatons(query: &str) -> Vec<DfaExt> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
-    let mut groups = LinearStrGroupBy::new(query, same_group_category)
-                        .filter(is_word)
-                        .map(str::to_lowercase)
-                        .peekable();
-
+    let mut groups = split_query_string(query).map(str::to_lowercase).peekable();
     let mut automatons = Vec::new();
+
     while let Some(word) = groups.next() {
         let has_following_word = groups.peek().is_some();
         let lev = if has_following_word || has_end_whitespace || word.chars().all(is_cjk) {
@@ -122,7 +84,7 @@ impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
     }
 
     fn query_all(&self, query: &str) -> Vec<RawDocument> {
-        let automatons = split_whitespace_automatons(query);
+        let automatons = generate_automatons(query);
 
         let mut stream = {
             let mut op_builder = fst::map::OpBuilder::new();
