@@ -15,7 +15,7 @@ use slice_group_by::GroupBy;
 use rayon::slice::ParallelSliceMut;
 
 pub use self::index::{Index, IndexBuilder};
-pub use self::query_builder::{FilterFunc, QueryBuilder, DistinctQueryBuilder};
+pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder};
 
 /// Represent an internally generated document unique identifier.
 ///
