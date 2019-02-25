@@ -11,6 +11,7 @@ hashbrown = "0.1.8"
 lazy_static = "1.2.0"
 levenshtein_automata = { version = "0.1.1", features = ["fst_automaton"] }
 log = "0.4.6"
+meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
 rayon = "1.0.3"
 sdset = "0.3.1"
 serde = "1.0.88"
