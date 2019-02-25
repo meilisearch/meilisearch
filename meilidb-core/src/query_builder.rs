@@ -35,16 +35,14 @@ fn generate_automatons(query: &str) -> Vec<DfaExt> {
     automatons
 }
 
-pub type FilterFunc = fn(DocumentId) -> bool;
-
-pub struct QueryBuilder<'i, 'c, FI> {
+pub struct QueryBuilder<'i, 'c, FI = fn(DocumentId) -> bool> {
     index: &'i Index,
     criteria: Criteria<'c>,
     searchable_attrs: Option<HashSet<u16>>,
     filter: Option<FI>,
 }
 
-impl<'i, 'c> QueryBuilder<'i, 'c, FilterFunc> {
+impl<'i, 'c> QueryBuilder<'i, 'c, fn(DocumentId) -> bool> {
     pub fn new(index: &'i Index) -> Self {
         QueryBuilder::with_criteria(index, Criteria::default())
     }

@@ -6,8 +6,7 @@ use std::{fmt, marker};
 use rocksdb::rocksdb_options::{ReadOptions, EnvOptions, ColumnFamilyOptions};
 use rocksdb::rocksdb::{DB, DBVector, Snapshot, SeekKey, SstFileWriter};
 use serde::de::DeserializeOwned;
-use meilidb_core::{Index, QueryBuilder, FilterFunc};
-use meilidb_core::DocumentId;
+use meilidb_core::{Index, QueryBuilder, DocumentId};
 
 use crate::database::{retrieve_data_schema, retrieve_data_index, retrieve_data_ranked_map, retrieve_config};
 use crate::database::serde::deserializer::Deserializer;
@@ -84,7 +83,7 @@ where D: Deref<Target=DB>
         Ok(())
     }
 
-    pub fn query_builder(&self) -> QueryBuilder<FilterFunc> {
+    pub fn query_builder(&self) -> QueryBuilder {
         QueryBuilder::new(self.index())
     }
 
