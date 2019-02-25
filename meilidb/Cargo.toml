@@ -13,6 +13,8 @@ hashbrown = { version = "0.1.8", features = ["serde"] }
 linked-hash-map = { version = "0.5.1", features = ["serde_impl"] }
 lockfree = "0.5.1"
 log = "0.4.6"
+meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
+meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
 sdset = "0.3.1"
 serde = "1.0.88"
 serde_derive = "1.0.88"
@@ -20,7 +22,6 @@ serde_json = { version = "1.0.38", features = ["preserve_order"] }
 size_format = "1.0.2"
 slice-group-by = "0.2.4"
 unidecode = "0.3.0"
-meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
 
 [dependencies.toml]
 git = "https://github.com/Kerollmops/toml-rs.git"

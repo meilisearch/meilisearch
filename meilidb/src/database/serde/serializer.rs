@@ -2,13 +2,13 @@ use std::collections::HashSet;
 
 use serde::Serialize;
 use serde::ser;
+use meilidb_tokenizer::TokenizerBuilder;
 
 use crate::database::serde::indexer_serializer::IndexerSerializer;
 use crate::database::serde::key_to_string::KeyToStringSerializer;
 use crate::database::serde::value_to_number::ValueToNumberSerializer;
 use crate::database::update::DocumentUpdate;
 use crate::database::serde::SerializerError;
-use crate::tokenizer::TokenizerBuilder;
 use crate::database::schema::Schema;
 use meilidb_core::DocumentId;
 

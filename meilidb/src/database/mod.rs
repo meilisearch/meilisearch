@@ -430,9 +430,9 @@ mod tests {
     use std::error::Error;
 
     use serde_derive::{Serialize, Deserialize};
+    use meilidb_tokenizer::DefaultBuilder;
 
     use crate::database::schema::{SchemaBuilder, STORED, INDEXED};
-    use crate::tokenizer::DefaultBuilder;
 
     use super::*;
 

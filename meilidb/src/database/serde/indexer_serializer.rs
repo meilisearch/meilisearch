@@ -3,13 +3,11 @@ use std::collections::HashSet;
 use serde::Serialize;
 use serde::ser;
 use meilidb_core::{DocumentId, DocIndex};
+use meilidb_tokenizer::{TokenizerBuilder, Token, is_cjk};
 
 use crate::database::update::DocumentUpdate;
 use crate::database::serde::SerializerError;
 use crate::database::schema::SchemaAttr;
-use crate::tokenizer::TokenizerBuilder;
-use crate::tokenizer::Token;
-use crate::is_cjk;
 
 pub struct IndexerSerializer<'a, 'b, B> {
     pub tokenizer_builder: &'a B,
