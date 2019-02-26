@@ -8,7 +8,6 @@ use serde::Serialize;
 use meilidb_core::write_to_bytes::WriteToBytes;
 use meilidb_core::data::DocIds;
 use meilidb_core::{IndexBuilder, DocumentId, DocIndex};
-use meilidb_tokenizer::TokenizerBuilder;
 
 use crate::database::document_key::{DocumentKey, DocumentKeyAttr};
 use crate::database::serde::serializer::Serializer;
@@ -36,21 +35,18 @@ impl Update {
         Update { schema, raw_builder: RawUpdateBuilder::new() }
     }
 
-    pub fn update_document<T, B>(
+    pub fn update_document<T>(
         &mut self,
         document: T,
-        tokenizer_builder: &B,
         stop_words: &HashSet<String>,
     ) -> Result<DocumentId, SerializerError>
     where T: Serialize,
-          B: TokenizerBuilder,
     {
         let document_id = self.schema.document_id(&document)?;
 
         let serializer = Serializer {
             schema: &self.schema,
             document_id: document_id,
-            tokenizer_builder: tokenizer_builder,
             update: &mut self.raw_builder.document_update(document_id)?,
             stop_words: stop_words,
         };

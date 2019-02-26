@@ -3,23 +3,20 @@ use std::collections::HashSet;
 use serde::Serialize;
 use serde::ser;
 use meilidb_core::{DocumentId, DocIndex};
-use meilidb_tokenizer::{TokenizerBuilder, Token, is_cjk};
+use meilidb_tokenizer::{Tokenizer, Token, is_cjk};
 
 use crate::database::update::DocumentUpdate;
 use crate::database::serde::SerializerError;
 use crate::database::schema::SchemaAttr;
 
-pub struct IndexerSerializer<'a, 'b, B> {
-    pub tokenizer_builder: &'a B,
+pub struct IndexerSerializer<'a, 'b> {
     pub update: &'a mut DocumentUpdate<'b>,
     pub document_id: DocumentId,
     pub attribute: SchemaAttr,
     pub stop_words: &'a HashSet<String>,
 }
 
-impl<'a, 'b, B> ser::Serializer for IndexerSerializer<'a, 'b, B>
-where B: TokenizerBuilder
-{
+impl<'a, 'b> ser::Serializer for IndexerSerializer<'a, 'b> {
     type Ok = ();
     type Error = SerializerError;
     type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
@@ -49,7 +46,7 @@ where B: TokenizerBuilder
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        for token in self.tokenizer_builder.build(v) {
+        for token in Tokenizer::new(v) {
             let Token { word, word_index, char_index } = token;
             let document_id = self.document_id;
 
