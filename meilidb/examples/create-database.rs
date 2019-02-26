@@ -13,7 +13,6 @@ use serde_derive::{Serialize, Deserialize};
 use structopt::StructOpt;
 
 use meilidb::database::{Database, Schema};
-use meilidb::tokenizer::DefaultBuilder;
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {
@@ -63,7 +62,6 @@ fn index(
     let mut end_of_file = false;
 
     while !end_of_file {
-        let tokenizer_builder = DefaultBuilder::new();
         let mut update = database.start_update("default")?;
 
         loop {
@@ -78,7 +76,7 @@ fn index(
                 }
             };
 
-            update.update_document(&document, &tokenizer_builder, &stop_words)?;
+            update.update_document(&document, &stop_words)?;
 
             print!("\rindexing document {}", i);
             i += 1;
