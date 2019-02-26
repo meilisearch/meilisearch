@@ -430,7 +430,6 @@ mod tests {
     use std::error::Error;
 
     use serde_derive::{Serialize, Deserialize};
-    use meilidb_tokenizer::DefaultBuilder;
 
     use crate::database::schema::{SchemaBuilder, STORED, INDEXED};
 
@@ -478,11 +477,10 @@ mod tests {
             timestamp: 7654321,
         };
 
-        let tokenizer_builder = DefaultBuilder::new();
         let mut builder = database.start_update(meilidb_index_name)?;
 
-        let docid0 = builder.update_document(&doc0, &tokenizer_builder, &stop_words)?;
-        let docid1 = builder.update_document(&doc1, &tokenizer_builder, &stop_words)?;
+        let docid0 = builder.update_document(&doc0, &stop_words)?;
+        let docid1 = builder.update_document(&doc1, &stop_words)?;
 
         let view = database.commit_update(builder)?;
 
@@ -549,16 +547,14 @@ mod tests {
             timestamp: 7654321,
         };
 
-        let tokenizer_builder = DefaultBuilder::new();
-
         let mut builder = database.start_update(meilidb_index_name)?;
-        let docid0 = builder.update_document(&doc0, &tokenizer_builder, &stop_words)?;
-        let docid1 = builder.update_document(&doc1, &tokenizer_builder, &stop_words)?;
+        let docid0 = builder.update_document(&doc0, &stop_words)?;
+        let docid1 = builder.update_document(&doc1, &stop_words)?;
         database.commit_update(builder)?;
 
         let mut builder = database.start_update(meilidb_index_name)?;
-        let docid2 = builder.update_document(&doc2, &tokenizer_builder, &stop_words)?;
-        let docid3 = builder.update_document(&doc3, &tokenizer_builder, &stop_words)?;
+        let docid2 = builder.update_document(&doc2, &stop_words)?;
+        let docid3 = builder.update_document(&doc3, &stop_words)?;
         let view = database.commit_update(builder)?;
 
         let de_doc0: SimpleDoc = view.document_by_id(docid0)?;
@@ -640,7 +636,6 @@ mod bench {
             description: String,
         }
 
-        let tokenizer_builder = DefaultBuilder;
         let mut builder = database.start_update(index_name)?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
@@ -650,7 +645,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
+            builder.update_document(&document, &stop_words)?;
         }
 
         database.commit_update(builder)?;
@@ -688,7 +683,6 @@ mod bench {
             description: String,
         }
 
-        let tokenizer_builder = DefaultBuilder;
         let mut builder = database.start_update(index_name)?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
@@ -698,7 +692,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
+            builder.update_document(&document, &stop_words)?;
         }
 
         database.commit_update(builder)?;
@@ -737,7 +731,6 @@ mod bench {
             description: String,
         }
 
-        let tokenizer_builder = DefaultBuilder;
         let mut builder = database.start_update(index_name)?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
@@ -747,7 +740,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
+            builder.update_document(&document, &stop_words)?;
         }
 
         database.commit_update(builder)?;
@@ -785,7 +778,6 @@ mod bench {
             description: String,
         }
 
-        let tokenizer_builder = DefaultBuilder;
         let mut builder = database.start_update(index_name)?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
@@ -795,7 +787,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
+            builder.update_document(&document, &stop_words)?;
         }
 
         let view = database.commit_update(builder)?;
@@ -833,7 +825,6 @@ mod bench {
             description: String,
         }
 
-        let tokenizer_builder = DefaultBuilder;
         let mut builder = database.start_update(index_name)?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
@@ -843,7 +834,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
+            builder.update_document(&document, &stop_words)?;
         }
 
         let view = database.commit_update(builder)?;
@@ -882,7 +873,6 @@ mod bench {
             description: String,
         }
 
-        let tokenizer_builder = DefaultBuilder;
         let mut builder = database.start_update(index_name)?;
         let mut rng = XorShiftRng::seed_from_u64(42);
 
@@ -892,7 +882,7 @@ mod bench {
                 title: random_sentences(rng.gen_range(1, 8), &mut rng),
                 description: random_sentences(rng.gen_range(20, 200), &mut rng),
             };
-            builder.update_document(&document, &tokenizer_builder, &stop_words)?;
+            builder.update_document(&document, &stop_words)?;
         }
 
         let view = database.commit_update(builder)?;

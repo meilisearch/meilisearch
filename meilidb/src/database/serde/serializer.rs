@@ -2,7 +2,6 @@ use std::collections::HashSet;
 
 use serde::Serialize;
 use serde::ser;
-use meilidb_tokenizer::TokenizerBuilder;
 
 use crate::database::serde::indexer_serializer::IndexerSerializer;
 use crate::database::serde::key_to_string::KeyToStringSerializer;
@@ -12,25 +11,22 @@ use crate::database::serde::SerializerError;
 use crate::database::schema::Schema;
 use meilidb_core::DocumentId;
 
-pub struct Serializer<'a, 'b, B> {
+pub struct Serializer<'a, 'b> {
     pub schema: &'a Schema,
     pub update: &'a mut DocumentUpdate<'b>,
     pub document_id: DocumentId,
-    pub tokenizer_builder: &'a B,
     pub stop_words: &'a HashSet<String>,
 }
 
-impl<'a, 'b, B> ser::Serializer for Serializer<'a, 'b, B>
-where B: TokenizerBuilder
-{
+impl<'a, 'b> ser::Serializer for Serializer<'a, 'b> {
     type Ok = ();
     type Error = SerializerError;
     type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeMap = MapSerializer<'a, 'b, B>;
-    type SerializeStruct = StructSerializer<'a, 'b, B>;
+    type SerializeMap = MapSerializer<'a, 'b>;
+    type SerializeStruct = StructSerializer<'a, 'b>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
     forward_to_unserializable_type! {
@@ -142,7 +138,6 @@ where B: TokenizerBuilder
             schema: self.schema,
             document_id: self.document_id,
             update: self.update,
-            tokenizer_builder: self.tokenizer_builder,
             stop_words: self.stop_words,
             current_key_name: None,
         })
@@ -158,7 +153,6 @@ where B: TokenizerBuilder
             schema: self.schema,
             document_id: self.document_id,
             update: self.update,
-            tokenizer_builder: self.tokenizer_builder,
             stop_words: self.stop_words,
         })
     }
@@ -175,18 +169,15 @@ where B: TokenizerBuilder
     }
 }
 
-pub struct MapSerializer<'a, 'b, B> {
+pub struct MapSerializer<'a, 'b> {
     pub schema: &'a Schema,
     pub document_id: DocumentId,
     pub update: &'a mut DocumentUpdate<'b>,
-    pub tokenizer_builder: &'a B,
     pub stop_words: &'a HashSet<String>,
     pub current_key_name: Option<String>,
 }
 
-impl<'a, 'b, B> ser::SerializeMap for MapSerializer<'a, 'b, B>
-where B: TokenizerBuilder
-{
+impl<'a, 'b> ser::SerializeMap for MapSerializer<'a, 'b> {
     type Ok = ();
     type Error = SerializerError;
 
@@ -223,7 +214,6 @@ where B: TokenizerBuilder
             if props.is_indexed() {
                 let serializer = IndexerSerializer {
                     update: self.update,
-                    tokenizer_builder: self.tokenizer_builder,
                     document_id: self.document_id,
                     attribute: attr,
                     stop_words: self.stop_words,
@@ -244,17 +234,14 @@ where B: TokenizerBuilder
     }
 }
 
-pub struct StructSerializer<'a, 'b, B> {
+pub struct StructSerializer<'a, 'b> {
     pub schema: &'a Schema,
     pub document_id: DocumentId,
     pub update: &'a mut DocumentUpdate<'b>,
-    pub tokenizer_builder: &'a B,
     pub stop_words: &'a HashSet<String>,
 }
 
-impl<'a, 'b, B> ser::SerializeStruct for StructSerializer<'a, 'b, B>
-where B: TokenizerBuilder
-{
+impl<'a, 'b> ser::SerializeStruct for StructSerializer<'a, 'b> {
     type Ok = ();
     type Error = SerializerError;
 
@@ -274,7 +261,6 @@ where B: TokenizerBuilder
             if props.is_indexed() {
                 let serializer = IndexerSerializer {
                     update: self.update,
-                    tokenizer_builder: self.tokenizer_builder,
                     document_id: self.document_id,
                     attribute: attr,
                     stop_words: self.stop_words,
