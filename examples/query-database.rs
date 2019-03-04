@@ -126,7 +126,7 @@ fn crop_text(
             (m.char_index as usize) + (m.char_length as usize) <= start + (context * 2)
         })
         .map(|match_| {
-            Match { char_index: match_.char_index - start as u32, ..match_ }
+            Match { char_index: match_.char_index - start as u16, ..match_ }
         })
         .collect();
 

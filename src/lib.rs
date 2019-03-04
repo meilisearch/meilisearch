@@ -50,14 +50,14 @@ pub struct DocIndex {
     /// The attribute in the document where the word was found
     /// along with the index in it.
     pub attribute: u16,
-    pub word_index: u32,
+    pub word_index: u16,
 
     /// The position in bytes where the word was found
     /// along with the length of it.
     ///
     /// It informs on the original word area in the text indexed
     /// without needing to run the tokenizer again.
-    pub char_index: u32,
+    pub char_index: u16,
     pub char_length: u16,
 }
 
@@ -84,7 +84,7 @@ pub struct Match {
     /// The attribute in the document where the word was found
     /// along with the index in it.
     pub attribute: u16,
-    pub word_index: u32,
+    pub word_index: u16,
 
     /// Whether the word that match is an exact match or a prefix.
     pub is_exact: bool,
@@ -94,7 +94,7 @@ pub struct Match {
     ///
     /// It informs on the original word area in the text indexed
     /// without needing to run the tokenizer again.
-    pub char_index: u32,
+    pub char_index: u16,
     pub char_length: u16,
 }
 
@@ -116,9 +116,9 @@ impl Match {
             query_index: u32::max_value(),
             distance: u8::max_value(),
             attribute: u16::max_value(),
-            word_index: u32::max_value(),
+            word_index: u16::max_value(),
             is_exact: true,
-            char_index: u32::max_value(),
+            char_index: u16::max_value(),
             char_length: u16::max_value(),
         }
     }
@@ -131,6 +131,6 @@ mod tests {
 
     #[test]
     fn docindex_mem_size() {
-        assert_eq!(mem::size_of::<DocIndex>(), 24);
+        assert_eq!(mem::size_of::<DocIndex>(), 16);
     }
 }
