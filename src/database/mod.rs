@@ -267,6 +267,7 @@ impl DatabaseIndex {
         let batch = update.build()?;
         self.db.write(batch)?;
         self.db.compact_range(None, None);
+        self.db.flush(true)?;
 
         let snapshot = Snapshot::new(self.db.clone());
         let view = Arc::new(DatabaseView::new(snapshot)?);
