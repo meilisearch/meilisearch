@@ -266,6 +266,7 @@ impl DatabaseIndex {
     fn commit_update(&self, update: Update) -> Result<Arc<DatabaseView<Arc<DB>>>, Box<Error>> {
         let batch = update.build()?;
         self.db.write(batch)?;
+        self.db.compact_range(None, None);
 
         let snapshot = Snapshot::new(self.db.clone());
         let view = Arc::new(DatabaseView::new(snapshot)?);
