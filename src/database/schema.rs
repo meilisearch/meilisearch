@@ -195,7 +195,7 @@ impl Schema {
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub struct SchemaAttr(pub(crate) u16);
+pub struct SchemaAttr(pub u16);
 
 impl SchemaAttr {
     pub fn new(value: u16) -> SchemaAttr {

@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use rayon::slice::ParallelSliceMut;
 use slice_group_by::{GroupByMut, LinearStrGroupBy};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use fst::Streamer;
 use log::info;
 
@@ -66,6 +66,7 @@ pub type FilterFunc = fn(DocumentId) -> bool;
 pub struct QueryBuilder<'i, 'c, FI> {
     index: &'i Index,
     criteria: Criteria<'c>,
+    searchable_attrs: Option<HashSet<u16>>,
     filter: Option<FI>,
 }
 
@@ -75,7 +76,7 @@ impl<'i, 'c> QueryBuilder<'i, 'c, FilterFunc> {
     }
 
     pub fn with_criteria(index: &'i Index, criteria: Criteria<'c>) -> Self {
-        QueryBuilder { index, criteria, filter: None }
+        QueryBuilder { index, criteria, searchable_attrs: None, filter: None }
     }
 }
 
@@ -87,6 +88,7 @@ impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
         QueryBuilder {
             index: self.index,
             criteria: self.criteria,
+            searchable_attrs: self.searchable_attrs,
             filter: Some(function)
         }
     }
@@ -100,6 +102,11 @@ impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
             function: function,
             size: size
         }
+    }
+
+    pub fn add_searchable_attribute(&mut self, attribute: u16) {
+        let attributes = self.searchable_attrs.get_or_insert_with(HashSet::new);
+        attributes.insert(attribute);
     }
 
     fn query_all(&self, query: &str) -> Vec<RawDocument> {
@@ -125,17 +132,19 @@ impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
                 let doc_indexes = &self.index.indexes;
                 let doc_indexes = &doc_indexes[iv.value as usize];
 
-                for doc_index in doc_indexes {
-                    let match_ = Match {
-                        query_index: iv.index as u32,
-                        distance: distance,
-                        attribute: doc_index.attribute,
-                        word_index: doc_index.word_index,
-                        is_exact: is_exact,
-                        char_index: doc_index.char_index,
-                        char_length: doc_index.char_length,
-                    };
-                    matches.push((doc_index.document_id, match_));
+                for di in doc_indexes {
+                    if self.searchable_attrs.as_ref().map_or(true, |r| r.contains(&di.attribute)) {
+                        let match_ = Match {
+                            query_index: iv.index as u32,
+                            distance: distance,
+                            attribute: di.attribute,
+                            word_index: di.word_index,
+                            is_exact: is_exact,
+                            char_index: di.char_index,
+                            char_length: di.char_length,
+                        };
+                        matches.push((di.document_id, match_));
+                    }
                 }
             }
         }
@@ -219,6 +228,10 @@ impl<'i, 'c, FI, FD> DistinctQueryBuilder<'i, 'c, FI, FD>
             function: self.function,
             size: self.size
         }
+    }
+
+    pub fn add_searchable_attribute(&mut self, attribute: u16) {
+        self.inner.add_searchable_attribute(attribute);
     }
 }
 
