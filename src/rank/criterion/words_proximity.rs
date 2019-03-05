@@ -5,14 +5,14 @@ use slice_group_by::GroupBy;
 use crate::rank::criterion::Criterion;
 use crate::rank::RawDocument;
 
-const MAX_DISTANCE: u32 = 8;
+const MAX_DISTANCE: u16 = 8;
 
 #[inline]
 fn clone_tuple<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
     (a.clone(), b.clone())
 }
 
-fn index_proximity(lhs: u32, rhs: u32) -> u32 {
+fn index_proximity(lhs: u16, rhs: u16) -> u16 {
     if lhs < rhs {
         cmp::min(rhs - lhs, MAX_DISTANCE)
     } else {
@@ -20,13 +20,13 @@ fn index_proximity(lhs: u32, rhs: u32) -> u32 {
     }
 }
 
-fn attribute_proximity((lattr, lwi): (u16, u32), (rattr, rwi): (u16, u32)) -> u32 {
+fn attribute_proximity((lattr, lwi): (u16, u16), (rattr, rwi): (u16, u16)) -> u16 {
     if lattr != rattr { return MAX_DISTANCE }
     index_proximity(lwi, rwi)
 }
 
-fn min_proximity((lattr, lwi): (&[u16], &[u32]), (rattr, rwi): (&[u16], &[u32])) -> u32 {
-    let mut min_prox = u32::max_value();
+fn min_proximity((lattr, lwi): (&[u16], &[u16]), (rattr, rwi): (&[u16], &[u16])) -> u16 {
+    let mut min_prox = u16::max_value();
 
     for a in lattr.iter().zip(lwi) {
         for b in rattr.iter().zip(rwi) {
@@ -43,8 +43,8 @@ fn matches_proximity(
     query_index: &[u32],
     distance: &[u8],
     attribute: &[u16],
-    word_index: &[u32],
-) -> u32
+    word_index: &[u16],
+) -> u16
 {
     let mut query_index_groups = query_index.linear_group();
     let mut proximity = 0;

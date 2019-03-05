@@ -56,7 +56,7 @@ where B: TokenizerBuilder
 
             // FIXME must u32::try_from instead
             let attribute = self.attribute.0;
-            let word_index = word_index as u32;
+            let word_index = word_index as u16;
 
             // insert the exact representation
             let word_lower = word.to_lowercase();
@@ -69,7 +69,7 @@ where B: TokenizerBuilder
                 let word_unidecoded = unidecode::unidecode(word).to_lowercase();
                 let word_unidecoded = word_unidecoded.trim();
                 if word_lower != word_unidecoded {
-                    let char_index = char_index as u32;
+                    let char_index = char_index as u16;
                     let char_length = length;
 
                     let doc_index = DocIndex { document_id, attribute, word_index, char_index, char_length };
@@ -77,7 +77,7 @@ where B: TokenizerBuilder
                 }
             }
 
-            let char_index = char_index as u32;
+            let char_index = char_index as u16;
             let char_length = length;
 
             let doc_index = DocIndex { document_id, attribute, word_index, char_index, char_length };

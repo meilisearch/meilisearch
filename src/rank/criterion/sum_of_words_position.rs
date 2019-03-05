@@ -6,7 +6,7 @@ use crate::rank::criterion::Criterion;
 use crate::rank::RawDocument;
 
 #[inline]
-fn sum_matches_attribute_index(query_index: &[u32], word_index: &[u32]) -> usize {
+fn sum_matches_attribute_index(query_index: &[u32], word_index: &[u16]) -> usize {
     let mut sum_word_index = 0;
     let mut index = 0;
 

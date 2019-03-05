@@ -79,7 +79,7 @@ impl RawDocument {
         unsafe { &self.matches.matches.attribute.get_unchecked(r.start..r.end) }
     }
 
-    pub fn word_index(&self) -> &[u32] {
+    pub fn word_index(&self) -> &[u16] {
         let r = self.matches.range;
         // it is safe because construction/modifications
         // can only be done in this module
@@ -93,7 +93,7 @@ impl RawDocument {
         unsafe { &self.matches.matches.is_exact.get_unchecked(r.start..r.end) }
     }
 
-    pub fn char_index(&self) -> &[u32] {
+    pub fn char_index(&self) -> &[u16] {
         let r = self.matches.range;
         // it is safe because construction/modifications
         // can only be done in this module
@@ -150,9 +150,9 @@ struct Matches {
     query_index: Vec<u32>,
     distance: Vec<u8>,
     attribute: Vec<u16>,
-    word_index: Vec<u32>,
+    word_index: Vec<u16>,
     is_exact: Vec<bool>,
-    char_index: Vec<u32>,
+    char_index: Vec<u16>,
     char_length: Vec<u16>,
 }
 
