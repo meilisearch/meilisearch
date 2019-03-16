@@ -21,12 +21,8 @@ serde_derive = "1.0.88"
 serde_json = { version = "1.0.38", features = ["preserve_order"] }
 size_format = "1.0.2"
 slice-group-by = "0.2.4"
+toml = { version = "0.5.0", features = ["preserve_order"] }
 unidecode = "0.3.0"
-
-[dependencies.toml]
-git = "https://github.com/Kerollmops/toml-rs.git"
-features = ["preserve_order"]
-rev = "0372ba6"
 
 [dependencies.rocksdb]
 git = "https://github.com/pingcap/rust-rocksdb.git"
