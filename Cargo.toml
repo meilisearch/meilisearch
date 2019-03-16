@@ -4,3 +4,6 @@ members = [
     "meilidb-core",
     "meilidb-tokenizer",
 ]
+
+[profile.release]
+debug = true
