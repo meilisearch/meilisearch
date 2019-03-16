@@ -292,6 +292,6 @@ mod tests {
 
     #[test]
     fn docindex_mem_size() {
-        assert_eq!(mem::size_of::<DocIndex>(), 24);
+        assert_eq!(mem::size_of::<DocIndex>(), 16);
     }
 }
