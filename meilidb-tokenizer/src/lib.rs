@@ -1,3 +1,4 @@
+use std::iter::Peekable;
 use slice_group_by::StrGroupBy;
 use self::SeparatorCategory::*;
 
@@ -148,6 +149,71 @@ impl<'a> Iterator for Tokenizer<'a> {
 
         self.inner = "";
         None
+    }
+}
+
+pub struct SeqTokenizer<'a, I>
+where I: Iterator<Item=&'a str>,
+{
+    inner: I,
+    current: Option<Peekable<Tokenizer<'a>>>,
+    word_offset: usize,
+    char_offset: usize,
+}
+
+impl<'a, I> SeqTokenizer<'a, I>
+where I: Iterator<Item=&'a str>,
+{
+    pub fn new(mut iter: I) -> SeqTokenizer<'a, I> {
+        let current = iter.next().map(|s| Tokenizer::new(s).peekable());
+        SeqTokenizer {
+            inner: iter,
+            current: current,
+            word_offset: 0,
+            char_offset: 0,
+        }
+    }
+}
+
+impl<'a, I> Iterator for SeqTokenizer<'a, I>
+where I: Iterator<Item=&'a str>,
+{
+    type Item = Token<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.current {
+            Some(current) => {
+                match current.next() {
+                    Some(token) => {
+                        // we must apply the word and char offsets
+                        // to the token before returning it
+                        let token = Token {
+                            word: token.word,
+                            word_index: token.word_index + self.word_offset,
+                            char_index: token.char_index + self.char_offset,
+                        };
+
+                        // if this is the last iteration on this text
+                        // we must save the offsets for next texts
+                        if current.peek().is_none() {
+                            let hard_space = SeparatorCategory::Hard.to_usize();
+                            self.word_offset = token.word_index + hard_space;
+                            self.char_offset = token.char_index + hard_space;
+                        }
+
+                        Some(token)
+                    },
+                    None => {
+                        // no more words in this text we must
+                        // start tokenizing the next text
+                        self.current = self.inner.next().map(|s| Tokenizer::new(s).peekable());
+                        self.next()
+                    },
+                }
+            },
+            // no more texts available
+            None => None,
+        }
     }
 }
 
