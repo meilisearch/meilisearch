@@ -8,8 +8,6 @@ use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 use linked_hash_map::LinkedHashMap;
 
-use meilidb_core::DocumentId;
-
 pub const STORED: SchemaProps  = SchemaProps { stored: true,  indexed: false, ranked: false };
 pub const INDEXED: SchemaProps = SchemaProps { stored: false, indexed: true,  ranked: false };
 pub const RANKED: SchemaProps  = SchemaProps { stored: false, indexed: false, ranked: true  };
