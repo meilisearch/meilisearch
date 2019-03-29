@@ -9,7 +9,7 @@ pub mod shared_data_cursor;
 pub mod write_to_bytes;
 
 use std::sync::Arc;
-use serde_derive::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize};
 
 use slice_group_by::GroupBy;
 use rayon::slice::ParallelSliceMut;

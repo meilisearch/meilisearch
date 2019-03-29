@@ -5,4 +5,10 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+bincode = "1.1.2"
+linked-hash-map = { version = "0.5.2", features = ["serde_impl"] }
+meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
+serde = { version = "1.0.88", features = ["derive"] }
+serde_json = { version = "1.0.39", features = ["preserve_order"] }
 sled = "0.20.0"
+toml = { version = "0.5.0", features = ["preserve_order"] }

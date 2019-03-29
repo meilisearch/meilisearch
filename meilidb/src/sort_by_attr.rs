@@ -5,8 +5,8 @@ use std::fmt;
 use meilidb_core::criterion::Criterion;
 use meilidb_core::RawDocument;
 
-use crate::database::schema::{Schema, SchemaAttr};
-use crate::database::RankedMap;
+use meilidb_data::{Schema, SchemaAttr};
+use meilidb_data::RankedMap;
 
 /// An helper struct that permit to sort documents by
 /// some of their stored attributes.

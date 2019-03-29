@@ -6,6 +6,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 
 [dependencies]
 meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
+meilidb-data = { path = "../meilidb-data", version = "0.1.0" }
 meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
 
 [features]
