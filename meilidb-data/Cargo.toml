@@ -1,0 +1,8 @@
+[package]
+name = "meilidb-data"
+version = "0.1.0"
+authors = ["Kerollmops <renault.cle@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+sled = "0.20.0"

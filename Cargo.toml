@@ -2,6 +2,7 @@
 members = [
     "meilidb",
     "meilidb-core",
+    "meilidb-data",
     "meilidb-tokenizer",
 ]
 
