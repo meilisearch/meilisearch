@@ -12,5 +12,5 @@ meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
 ordered-float = { version = "1.0.2", features = ["serde"] }
 serde = { version = "1.0.88", features = ["derive"] }
 serde_json = { version = "1.0.39", features = ["preserve_order"] }
-sled = "0.21.3"
+sled = "0.22.1"
 toml = { version = "0.5.0", features = ["preserve_order"] }
