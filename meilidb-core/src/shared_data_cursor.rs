@@ -7,12 +7,12 @@ pub struct SharedDataCursor(Cursor<SharedData>);
 impl SharedDataCursor {
     pub fn from_bytes(bytes: Vec<u8>) -> SharedDataCursor {
         let len = bytes.len();
-        let bytes = Arc::new(bytes);
+        let bytes = Arc::from(bytes);
 
         SharedDataCursor::from_shared_bytes(bytes, 0, len)
     }
 
-    pub fn from_shared_bytes(bytes: Arc<Vec<u8>>, offset: usize, len: usize) -> SharedDataCursor {
+    pub fn from_shared_bytes(bytes: Arc<[u8]>, offset: usize, len: usize) -> SharedDataCursor {
         let data = SharedData::new(bytes, offset, len);
         let cursor = Cursor::new(data);
 

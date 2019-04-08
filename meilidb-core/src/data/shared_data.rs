@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use std::ops::Deref;
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct SharedData {
-    pub bytes: Arc<Vec<u8>>,
+    pub bytes: Arc<[u8]>,
     pub offset: usize,
     pub len: usize,
 }
@@ -15,7 +15,7 @@ impl SharedData {
         SharedData::new(bytes, 0, len)
     }
 
-    pub fn new(bytes: Arc<Vec<u8>>, offset: usize, len: usize) -> SharedData {
+    pub fn new(bytes: Arc<[u8]>, offset: usize, len: usize) -> SharedData {
         SharedData { bytes, offset, len }
     }
 
@@ -29,6 +29,16 @@ impl SharedData {
             bytes: self.bytes.clone(),
             offset: self.offset + offset,
             len: len,
+        }
+    }
+}
+
+impl Default for SharedData {
+    fn default() -> SharedData {
+        SharedData {
+            bytes: Arc::from(Vec::new()),
+            offset: 0,
+            len: 0,
         }
     }
 }
