@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use std::path::Path;
 
-use meilidb_core::Index as WordIndex;
+use meilidb_core::{DocumentId, Index as WordIndex};
 use meilidb_core::shared_data_cursor::{FromSharedDataCursor, SharedDataCursor};
 use meilidb_core::write_to_bytes::WriteToBytes;
 use sled::IVec;
 
-use crate::Schema;
+use crate::{Schema, SchemaAttr};
 
 #[derive(Debug)]
 pub enum Error {
@@ -30,6 +30,17 @@ impl From<bincode::Error> for Error {
 
 fn index_name(name: &str) -> Vec<u8> {
     format!("index-{}", name).into_bytes()
+}
+
+fn document_key(id: DocumentId, attr: SchemaAttr) -> Vec<u8> {
+    let DocumentId(document_id) = id;
+    let SchemaAttr(schema_attr) = attr;
+
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"document-");
+    bytes.extend_from_slice(&document_id.to_be_bytes()[..]);
+    bytes.extend_from_slice(&schema_attr.to_be_bytes()[..]);
+    bytes
 }
 
 fn ivec_into_arc(ivec: IVec) -> Arc<[u8]> {
@@ -122,5 +133,37 @@ impl Index {
 
     pub fn word_index(&self) -> &WordIndex {
         &self.word_index
+    }
+
+    pub fn set_document_attribute<V>(
+        &self,
+        id: DocumentId,
+        attr: SchemaAttr,
+        value: V,
+    ) -> Result<Option<IVec>, Error>
+    where IVec: From<V>,
+    {
+        let key = document_key(id, attr);
+        Ok(self.inner.set(key, value)?)
+    }
+
+    pub fn get_document_attribute(
+        &self,
+        id: DocumentId,
+        attr: SchemaAttr
+    ) -> Result<Option<IVec>, Error>
+    {
+        let key = document_key(id, attr);
+        Ok(self.inner.get(key)?)
+    }
+
+    pub fn del_document_attribute(
+        &self,
+        id: DocumentId,
+        attr: SchemaAttr
+    ) -> Result<Option<IVec>, Error>
+    {
+        let key = document_key(id, attr);
+        Ok(self.inner.del(key)?)
     }
 }
