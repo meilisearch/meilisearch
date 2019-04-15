@@ -1,0 +1,21 @@
+# This schema has been generated ...
+# The order in which the attributes are declared is important,
+# it specify the attribute xxx...
+identifier = "id"
+
+[attributes.id]
+stored = true
+
+[attributes.title]
+stored = true
+indexed = true
+
+[attributes.overview]
+stored = true
+indexed = true
+
+[attributes.release_date]
+stored = true
+
+[attributes.poster]
+stored = true
