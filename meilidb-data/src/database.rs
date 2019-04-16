@@ -8,7 +8,7 @@ use meilidb_core::write_to_bytes::WriteToBytes;
 use meilidb_core::{DocumentId, Index as WordIndex};
 use sled::IVec;
 
-use crate::{Schema, SchemaAttr};
+use crate::{Schema, SchemaAttr, RankedMap};
 
 #[derive(Debug)]
 pub enum Error {
@@ -119,14 +119,17 @@ impl Database {
 pub struct Index {
     schema: Schema,
     word_index: Arc<ArcSwap<WordIndex>>,
+    ranked_map: Arc<ArcSwap<RankedMap>>,
     inner: Arc<sled::Tree>,
 }
 
 impl Index {
     fn from_raw(inner: Arc<sled::Tree>) -> Result<Index, Error> {
-        let bytes = inner.get("schema")?;
-        let bytes = bytes.ok_or(Error::SchemaMissing)?;
-        let schema = Schema::read_from_bin(bytes.as_ref())?;
+        let schema = {
+            let bytes = inner.get("schema")?;
+            let bytes = bytes.ok_or(Error::SchemaMissing)?;
+            Schema::read_from_bin(bytes.as_ref())?
+        };
 
         let bytes = inner.get("word-index")?;
         let bytes = bytes.ok_or(Error::WordIndexMissing)?;
@@ -141,7 +144,16 @@ impl Index {
             Arc::new(ArcSwap::new(Arc::new(word_index)))
         };
 
-        Ok(Index { schema, word_index, inner })
+        let ranked_map = {
+            let map = match inner.get("ranked-map")? {
+                Some(bytes) => bincode::deserialize(bytes.as_ref())?,
+                None => RankedMap::default(),
+            };
+
+            Arc::new(ArcSwap::new(Arc::new(map)))
+        };
+
+        Ok(Index { schema, word_index, ranked_map, inner })
     }
 
     fn new_from_raw(inner: Arc<sled::Tree>, schema: Schema) -> Result<Index, Error> {
@@ -153,7 +165,9 @@ impl Index {
         inner.set("word-index", word_index.into_bytes())?;
         let word_index = Arc::new(ArcSwap::new(Arc::new(word_index)));
 
-        Ok(Index { schema, word_index, inner })
+        let ranked_map = Arc::new(ArcSwap::new(Arc::new(RankedMap::default())));
+
+        Ok(Index { schema, word_index, ranked_map, inner })
     }
 
     pub fn schema(&self) -> &Schema {
@@ -164,8 +178,16 @@ impl Index {
         self.word_index.lease()
     }
 
+    pub fn ranked_map(&self) -> Lease<Arc<RankedMap>> {
+        self.ranked_map.lease()
+    }
+
     fn update_word_index(&self, word_index: Arc<WordIndex>) {
         self.word_index.store(word_index)
+    }
+
+    fn update_ranked_map(&self, ranked_map: Arc<RankedMap>) {
+        self.ranked_map.store(ranked_map)
     }
 
     pub fn set_document_attribute<V>(
