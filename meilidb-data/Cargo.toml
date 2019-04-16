@@ -5,6 +5,7 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+arc-swap = "0.3.11"
 bincode = "1.1.2"
 byteorder = "1.3.1"
 hashbrown = { version = "0.1.8", features = ["serde"] }

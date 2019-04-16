@@ -1,15 +1,18 @@
-use std::sync::Arc;
 use std::path::Path;
+use std::sync::Arc;
 
-use meilidb_core::{DocumentId, Index as WordIndex};
+use arc_swap::{ArcSwap, Lease};
+use hashbrown::HashMap;
 use meilidb_core::shared_data_cursor::{FromSharedDataCursor, SharedDataCursor};
 use meilidb_core::write_to_bytes::WriteToBytes;
+use meilidb_core::{DocumentId, Index as WordIndex};
 use sled::IVec;
 
 use crate::{Schema, SchemaAttr};
 
 #[derive(Debug)]
 pub enum Error {
+    SchemaDiffer,
     SchemaMissing,
     WordIndexMissing,
     SledError(sled::Error),
@@ -51,35 +54,61 @@ fn ivec_into_arc(ivec: IVec) -> Arc<[u8]> {
 }
 
 #[derive(Clone)]
-pub struct Database(sled::Db);
+pub struct Database {
+    opened: Arc<ArcSwap<HashMap<String, Index>>>,
+    inner: sled::Db,
+}
 
 impl Database {
     pub fn start_default<P: AsRef<Path>>(path: P) -> Result<Database, Error> {
-        sled::Db::start_default(path).map(Database).map_err(Into::into)
+        let inner = sled::Db::start_default(path)?;
+        let opened = Arc::new(ArcSwap::new(Arc::new(HashMap::new())));
+        Ok(Database { opened, inner })
     }
 
     pub fn open_index(&self, name: &str) -> Result<Option<Index>, Error> {
-        let name = index_name(name);
+        // check if the index was already opened
+        if let Some(index) = self.opened.lease().get(name) {
+            return Ok(Some(index.clone()))
+        }
 
-        if self.0.tree_names().into_iter().any(|tn| tn == name) {
-            let tree = self.0.open_tree(name)?;
+        let raw_name = index_name(name);
+        if self.inner.tree_names().into_iter().any(|tn| tn == raw_name) {
+            let tree = self.inner.open_tree(raw_name)?;
             let index = Index::from_raw(tree)?;
+
+            self.opened.rcu(|opened| {
+                let mut opened = HashMap::clone(opened);
+                opened.insert(name.to_string(), index.clone());
+                opened
+            });
+
             return Ok(Some(index))
         }
 
         Ok(None)
     }
 
-    pub fn create_index(&self, name: &str, schema: Schema) -> Result<Index, Error> {
-        match self.open_index(name)? {
+    pub fn create_index(&self, name: String, schema: Schema) -> Result<Index, Error> {
+        match self.open_index(&name)? {
             Some(index) => {
-                // TODO check if the schema is the same
+                if index.schema != schema {
+                    return Err(Error::SchemaDiffer);
+                }
+
                 Ok(index)
             },
             None => {
-                let name = index_name(name);
-                let tree = self.0.open_tree(name)?;
+                let raw_name = index_name(&name);
+                let tree = self.inner.open_tree(raw_name)?;
                 let index = Index::new_from_raw(tree, schema)?;
+
+                self.opened.rcu(|opened| {
+                    let mut opened = HashMap::clone(opened);
+                    opened.insert(name.clone(), index.clone());
+                    opened
+                });
+
                 Ok(index)
             },
         }
@@ -89,7 +118,7 @@ impl Database {
 #[derive(Clone)]
 pub struct Index {
     schema: Schema,
-    word_index: Arc<WordIndex>,
+    word_index: Arc<ArcSwap<WordIndex>>,
     inner: Arc<sled::Tree>,
 }
 
@@ -109,7 +138,7 @@ impl Index {
             // TODO must handle this error
             let word_index = WordIndex::from_shared_data_cursor(&mut cursor).unwrap();
 
-            Arc::new(word_index)
+            Arc::new(ArcSwap::new(Arc::new(word_index)))
         };
 
         Ok(Index { schema, word_index, inner })
@@ -122,7 +151,7 @@ impl Index {
 
         let word_index = WordIndex::default();
         inner.set("word-index", word_index.into_bytes())?;
-        let word_index = Arc::new(word_index);
+        let word_index = Arc::new(ArcSwap::new(Arc::new(word_index)));
 
         Ok(Index { schema, word_index, inner })
     }
@@ -131,8 +160,12 @@ impl Index {
         &self.schema
     }
 
-    pub fn word_index(&self) -> &WordIndex {
-        &self.word_index
+    pub fn word_index(&self) -> Lease<Arc<WordIndex>> {
+        self.word_index.lease()
+    }
+
+    fn update_word_index(&self, word_index: Arc<WordIndex>) {
+        self.word_index.store(word_index)
     }
 
     pub fn set_document_attribute<V>(
