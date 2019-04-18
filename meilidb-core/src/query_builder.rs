@@ -1,8 +1,8 @@
-use std::{cmp, mem};
-use std::ops::Range;
-use std::time::Instant;
 use std::hash::Hash;
+use std::ops::{Range, Deref};
 use std::rc::Rc;
+use std::time::Instant;
+use std::{cmp, mem};
 
 use rayon::slice::ParallelSliceMut;
 use slice_group_by::GroupByMut;
@@ -35,26 +35,26 @@ fn generate_automatons(query: &str) -> Vec<DfaExt> {
     automatons
 }
 
-pub struct QueryBuilder<'i, 'c, FI = fn(DocumentId) -> bool> {
-    index: &'i Index,
+pub struct QueryBuilder<'c, I, FI = fn(DocumentId) -> bool> {
+    index: I,
     criteria: Criteria<'c>,
     searchable_attrs: Option<HashSet<u16>>,
     filter: Option<FI>,
 }
 
-impl<'i, 'c> QueryBuilder<'i, 'c, fn(DocumentId) -> bool> {
-    pub fn new(index: &'i Index) -> Self {
+impl<'c, I> QueryBuilder<'c, I, fn(DocumentId) -> bool> {
+    pub fn new(index: I) -> Self {
         QueryBuilder::with_criteria(index, Criteria::default())
     }
 
-    pub fn with_criteria(index: &'i Index, criteria: Criteria<'c>) -> Self {
+    pub fn with_criteria(index: I, criteria: Criteria<'c>) -> Self {
         QueryBuilder { index, criteria, searchable_attrs: None, filter: None }
     }
 }
 
-impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
+impl<'c, I, FI> QueryBuilder<'c, I, FI>
 {
-    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'i, 'c, F>
+    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'c, I, F>
     where F: Fn(DocumentId) -> bool,
     {
         QueryBuilder {
@@ -65,7 +65,7 @@ impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
         }
     }
 
-    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'i, 'c, FI, F>
+    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'c, I, FI, F>
     where F: Fn(DocumentId) -> Option<K>,
           K: Hash + Eq,
     {
@@ -80,7 +80,11 @@ impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
         let attributes = self.searchable_attrs.get_or_insert_with(HashSet::new);
         attributes.insert(attribute);
     }
+}
 
+impl<'c, I, FI> QueryBuilder<'c, I, FI>
+where I: Deref<Target=Index>,
+{
     fn query_all(&self, query: &str) -> Vec<RawDocument> {
         let automatons = generate_automatons(query);
 
@@ -131,8 +135,9 @@ impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
     }
 }
 
-impl<'i, 'c, FI> QueryBuilder<'i, 'c, FI>
-where FI: Fn(DocumentId) -> bool,
+impl<'c, I, FI> QueryBuilder<'c, I, FI>
+where I: Deref<Target=Index>,
+      FI: Fn(DocumentId) -> bool,
 {
     pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
         // We delegate the filter work to the distinct query builder,
@@ -184,15 +189,15 @@ where FI: Fn(DocumentId) -> bool,
     }
 }
 
-pub struct DistinctQueryBuilder<'i, 'c, FI, FD> {
-    inner: QueryBuilder<'i, 'c, FI>,
+pub struct DistinctQueryBuilder<'c, I, FI, FD> {
+    inner: QueryBuilder<'c, I, FI>,
     function: FD,
     size: usize,
 }
 
-impl<'i, 'c, FI, FD> DistinctQueryBuilder<'i, 'c, FI, FD>
+impl<'c, I, FI, FD> DistinctQueryBuilder<'c, I, FI, FD>
 {
-    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'i, 'c, F, FD>
+    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'c, I, F, FD>
     where F: Fn(DocumentId) -> bool,
     {
         DistinctQueryBuilder {
@@ -207,8 +212,9 @@ impl<'i, 'c, FI, FD> DistinctQueryBuilder<'i, 'c, FI, FD>
     }
 }
 
-impl<'i, 'c, FI, FD, K> DistinctQueryBuilder<'i, 'c, FI, FD>
-where FI: Fn(DocumentId) -> bool,
+impl<'c, I, FI, FD, K> DistinctQueryBuilder<'c, I, FI, FD>
+where I: Deref<Target=Index>,
+      FI: Fn(DocumentId) -> bool,
       FD: Fn(DocumentId) -> Option<K>,
       K: Hash + Eq,
 {

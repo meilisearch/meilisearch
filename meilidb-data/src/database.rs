@@ -6,6 +6,8 @@ use std::sync::Arc;
 
 use arc_swap::{ArcSwap, Lease};
 use hashbrown::HashMap;
+use meilidb_core::criterion::Criteria;
+use meilidb_core::QueryBuilder;
 use meilidb_core::shared_data_cursor::{FromSharedDataCursor, SharedDataCursor};
 use meilidb_core::write_to_bytes::WriteToBytes;
 use meilidb_core::{DocumentId, Index as WordIndex};
@@ -288,6 +290,20 @@ impl<'a> Iterator for DocumentFieldsIter<'a> {
 pub struct Index(RawIndex);
 
 impl Index {
+    pub fn query_builder(&self) -> QueryBuilder<Lease<Arc<WordIndex>>> {
+        let word_index = self.word_index();
+        QueryBuilder::new(word_index)
+    }
+
+    pub fn query_builder_with_criteria<'c>(
+        &self,
+        criteria: Criteria<'c>,
+    ) -> QueryBuilder<'c, Lease<Arc<WordIndex>>>
+    {
+        let word_index = self.word_index();
+        QueryBuilder::with_criteria(word_index, criteria)
+    }
+
     pub fn schema(&self) -> &Schema {
         self.0.schema()
     }
