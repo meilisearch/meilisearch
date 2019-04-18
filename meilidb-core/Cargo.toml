@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 byteorder = "1.3.1"
-hashbrown = "0.1.8"
+hashbrown = "0.2.2"
 lazy_static = "1.2.0"
 log = "0.4.6"
 meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
