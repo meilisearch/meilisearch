@@ -3,6 +3,7 @@ mod index_event;
 mod indexer;
 mod number;
 mod ranked_map;
+mod serde;
 pub mod schema;
 
 pub use self::database::{Database, Index};
