@@ -1,13 +1,15 @@
 use meilidb_core::DocumentId;
 use serde::ser;
 
-use crate::schema::Schema;
 use crate::database::RawIndex;
-use super::{SerializerError, ExtractString};
+use crate::indexer::Indexer as RawIndexer;
+use crate::schema::{Schema, SchemaAttr};
+use super::{SerializerError, ConvertToString, Indexer};
 
 pub struct Serializer<'a> {
     pub schema: &'a Schema,
     pub index: &'a RawIndex,
+    pub indexer: &'a mut RawIndexer,
     pub document_id: DocumentId,
 }
 
@@ -41,29 +43,29 @@ impl<'a> ser::Serializer for Serializer<'a> {
     }
 
     fn serialize_str(self, _v: &str) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "str" })
+        Err(SerializerError::UnserializableType { type_name: "str" })
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "&[u8]" })
+        Err(SerializerError::UnserializableType { type_name: "&[u8]" })
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "Option" })
+        Err(SerializerError::UnserializableType { type_name: "Option" })
     }
 
     fn serialize_some<T: ?Sized>(self, _value: &T) -> Result<Self::Ok, Self::Error>
     where T: ser::Serialize,
     {
-        Err(SerializerError::UnserializableType { name: "Option" })
+        Err(SerializerError::UnserializableType { type_name: "Option" })
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "()" })
+        Err(SerializerError::UnserializableType { type_name: "()" })
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "unit struct" })
+        Err(SerializerError::UnserializableType { type_name: "unit struct" })
     }
 
     fn serialize_unit_variant(
@@ -73,7 +75,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
         _variant: &'static str
     ) -> Result<Self::Ok, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "unit variant" })
+        Err(SerializerError::UnserializableType { type_name: "unit variant" })
     }
 
     fn serialize_newtype_struct<T: ?Sized>(
@@ -95,15 +97,15 @@ impl<'a> ser::Serializer for Serializer<'a> {
     ) -> Result<Self::Ok, Self::Error>
     where T: ser::Serialize,
     {
-        Err(SerializerError::UnserializableType { name: "newtype variant" })
+        Err(SerializerError::UnserializableType { type_name: "newtype variant" })
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "sequence" })
+        Err(SerializerError::UnserializableType { type_name: "sequence" })
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "tuple" })
+        Err(SerializerError::UnserializableType { type_name: "tuple" })
     }
 
     fn serialize_tuple_struct(
@@ -112,7 +114,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
         _len: usize
     ) -> Result<Self::SerializeTupleStruct, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "tuple struct" })
+        Err(SerializerError::UnserializableType { type_name: "tuple struct" })
     }
 
     fn serialize_tuple_variant(
@@ -123,7 +125,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
         _len: usize
     ) -> Result<Self::SerializeTupleVariant, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "tuple variant" })
+        Err(SerializerError::UnserializableType { type_name: "tuple variant" })
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
@@ -131,6 +133,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
             schema: self.schema,
             document_id: self.document_id,
             index: self.index,
+            indexer: self.indexer,
             current_key_name: None,
         })
     }
@@ -145,6 +148,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
             schema: self.schema,
             document_id: self.document_id,
             index: self.index,
+            indexer: self.indexer,
         })
     }
 
@@ -156,7 +160,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
         _len: usize
     ) -> Result<Self::SerializeStructVariant, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "struct variant" })
+        Err(SerializerError::UnserializableType { type_name: "struct variant" })
     }
 }
 
@@ -164,6 +168,7 @@ pub struct MapSerializer<'a> {
     pub schema: &'a Schema,
     pub document_id: DocumentId,
     pub index: &'a RawIndex,
+    pub indexer: &'a mut RawIndexer,
     pub current_key_name: Option<String>,
 }
 
@@ -174,7 +179,7 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
     where T: ser::Serialize,
     {
-        let key = key.serialize(ExtractString)?;
+        let key = key.serialize(ConvertToString)?;
         self.current_key_name = Some(key);
         Ok(())
     }
@@ -193,12 +198,13 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     ) -> Result<(), Self::Error>
     where K: ser::Serialize, V: ser::Serialize,
     {
-        let key = key.serialize(ExtractString)?;
+        let key = key.serialize(ConvertToString)?;
 
         serialize_value(
             self.schema,
             self.document_id,
             self.index,
+            self.indexer,
             &key,
             value,
         )
@@ -213,6 +219,7 @@ pub struct StructSerializer<'a> {
     pub schema: &'a Schema,
     pub document_id: DocumentId,
     pub index: &'a RawIndex,
+    pub indexer: &'a mut RawIndexer,
 }
 
 impl<'a> ser::SerializeStruct for StructSerializer<'a> {
@@ -230,6 +237,7 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
             self.schema,
             self.document_id,
             self.index,
+            self.indexer,
             key,
             value,
         )
@@ -244,6 +252,7 @@ fn serialize_value<T: ?Sized>(
     schema: &Schema,
     document_id: DocumentId,
     index: &RawIndex,
+    indexer: &mut RawIndexer,
     key: &str,
     value: &T,
 ) -> Result<(), SerializerError>
@@ -255,6 +264,19 @@ where T: ser::Serialize,
         if props.is_stored() {
             let value = rmp_serde::to_vec_named(value)?;
             index.set_document_attribute(document_id, attr, value)?;
+        }
+
+        if props.is_indexed() {
+            let indexer = Indexer {
+                attribute: attr,
+                indexer: indexer,
+                document_id: document_id,
+            };
+            value.serialize(indexer)?;
+        }
+
+        if props.is_ranked() {
+            unimplemented!()
         }
     }
 

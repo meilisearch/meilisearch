@@ -3,9 +3,9 @@ use serde::ser;
 
 use super::SerializerError;
 
-pub struct ExtractString;
+pub struct ConvertToString;
 
-impl ser::Serializer for ExtractString {
+impl ser::Serializer for ConvertToString {
     type Ok = String;
     type Error = SerializerError;
     type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
@@ -16,22 +16,52 @@ impl ser::Serializer for ExtractString {
     type SerializeStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
-    forward_to_unserializable_type! {
-        bool => serialize_bool,
-        char => serialize_char,
+    fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
+        Err(SerializerError::UnserializableType { type_name: "boolean" })
+    }
 
-        i8  => serialize_i8,
-        i16 => serialize_i16,
-        i32 => serialize_i32,
-        i64 => serialize_i64,
+    fn serialize_char(self, value: char) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
+    }
 
-        u8  => serialize_u8,
-        u16 => serialize_u16,
-        u32 => serialize_u32,
-        u64 => serialize_u64,
+    fn serialize_i8(self, value: i8) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
+    }
 
-        f32 => serialize_f32,
-        f64 => serialize_f64,
+    fn serialize_i16(self, value: i16) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
+    }
+
+    fn serialize_i32(self, value: i32) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
+    }
+
+    fn serialize_i64(self, value: i64) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
+    }
+
+    fn serialize_u8(self, value: u8) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
+    }
+
+    fn serialize_u16(self, value: u16) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
+    }
+
+    fn serialize_u32(self, value: u32) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
+    }
+
+    fn serialize_u64(self, value: u64) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
+    }
+
+    fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
+    }
+
+    fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
     }
 
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
@@ -39,25 +69,25 @@ impl ser::Serializer for ExtractString {
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "&[u8]" })
+        Err(SerializerError::UnserializableType { type_name: "&[u8]" })
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "Option" })
+        Err(SerializerError::UnserializableType { type_name: "Option" })
     }
 
     fn serialize_some<T: ?Sized>(self, _value: &T) -> Result<Self::Ok, Self::Error>
     where T: Serialize,
     {
-        Err(SerializerError::UnserializableType { name: "Option" })
+        Err(SerializerError::UnserializableType { type_name: "Option" })
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "()" })
+        Err(SerializerError::UnserializableType { type_name: "()" })
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "unit struct" })
+        Err(SerializerError::UnserializableType { type_name: "unit struct" })
     }
 
     fn serialize_unit_variant(
@@ -67,7 +97,7 @@ impl ser::Serializer for ExtractString {
         _variant: &'static str
     ) -> Result<Self::Ok, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "unit variant" })
+        Err(SerializerError::UnserializableType { type_name: "unit variant" })
     }
 
     fn serialize_newtype_struct<T: ?Sized>(
@@ -89,15 +119,15 @@ impl ser::Serializer for ExtractString {
     ) -> Result<Self::Ok, Self::Error>
     where T: Serialize,
     {
-        Err(SerializerError::UnserializableType { name: "newtype variant" })
+        Err(SerializerError::UnserializableType { type_name: "newtype variant" })
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "sequence" })
+        Err(SerializerError::UnserializableType { type_name: "sequence" })
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "tuple" })
+        Err(SerializerError::UnserializableType { type_name: "tuple" })
     }
 
     fn serialize_tuple_struct(
@@ -106,7 +136,7 @@ impl ser::Serializer for ExtractString {
         _len: usize
     ) -> Result<Self::SerializeTupleStruct, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "tuple struct" })
+        Err(SerializerError::UnserializableType { type_name: "tuple struct" })
     }
 
     fn serialize_tuple_variant(
@@ -117,11 +147,11 @@ impl ser::Serializer for ExtractString {
         _len: usize
     ) -> Result<Self::SerializeTupleVariant, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "tuple variant" })
+        Err(SerializerError::UnserializableType { type_name: "tuple variant" })
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "map" })
+        Err(SerializerError::UnserializableType { type_name: "map" })
     }
 
     fn serialize_struct(
@@ -130,7 +160,7 @@ impl ser::Serializer for ExtractString {
         _len: usize
     ) -> Result<Self::SerializeStruct, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "struct" })
+        Err(SerializerError::UnserializableType { type_name: "struct" })
     }
 
     fn serialize_struct_variant(
@@ -141,6 +171,6 @@ impl ser::Serializer for ExtractString {
         _len: usize
     ) -> Result<Self::SerializeStructVariant, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "struct variant" })
+        Err(SerializerError::UnserializableType { type_name: "struct variant" })
     }
 }

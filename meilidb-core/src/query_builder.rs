@@ -94,7 +94,7 @@ where I: Deref<Target=Index>,
                 let stream = self.index.map.search(automaton);
                 op_builder.push(stream);
             }
-            op_builder.union()
+            op_builder.r#union()
         };
 
         let mut matches = Vec::new();

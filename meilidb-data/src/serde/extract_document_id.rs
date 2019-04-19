@@ -5,7 +5,7 @@ use meilidb_core::DocumentId;
 use serde::Serialize;
 use serde::ser;
 
-use super::{SerializerError, ExtractString};
+use super::{SerializerError, ConvertToString};
 
 pub fn extract_document_id<D>(
     identifier: &str,
@@ -57,29 +57,29 @@ impl<'a> ser::Serializer for ExtractDocumentId<'a> {
     }
 
     fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "str" })
+        Err(SerializerError::UnserializableType { type_name: "str" })
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "&[u8]" })
+        Err(SerializerError::UnserializableType { type_name: "&[u8]" })
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "Option" })
+        Err(SerializerError::UnserializableType { type_name: "Option" })
     }
 
     fn serialize_some<T: ?Sized>(self, _value: &T) -> Result<Self::Ok, Self::Error>
     where T: Serialize,
     {
-        Err(SerializerError::UnserializableType { name: "Option" })
+        Err(SerializerError::UnserializableType { type_name: "Option" })
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "()" })
+        Err(SerializerError::UnserializableType { type_name: "()" })
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "unit struct" })
+        Err(SerializerError::UnserializableType { type_name: "unit struct" })
     }
 
     fn serialize_unit_variant(
@@ -89,7 +89,7 @@ impl<'a> ser::Serializer for ExtractDocumentId<'a> {
         _variant: &'static str
     ) -> Result<Self::Ok, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "unit variant" })
+        Err(SerializerError::UnserializableType { type_name: "unit variant" })
     }
 
     fn serialize_newtype_struct<T: ?Sized>(
@@ -111,15 +111,15 @@ impl<'a> ser::Serializer for ExtractDocumentId<'a> {
     ) -> Result<Self::Ok, Self::Error>
     where T: Serialize,
     {
-        Err(SerializerError::UnserializableType { name: "newtype variant" })
+        Err(SerializerError::UnserializableType { type_name: "newtype variant" })
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "sequence" })
+        Err(SerializerError::UnserializableType { type_name: "sequence" })
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        Err(SerializerError::UnserializableType { name: "tuple" })
+        Err(SerializerError::UnserializableType { type_name: "tuple" })
     }
 
     fn serialize_tuple_struct(
@@ -128,7 +128,7 @@ impl<'a> ser::Serializer for ExtractDocumentId<'a> {
         _len: usize
     ) -> Result<Self::SerializeTupleStruct, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "tuple struct" })
+        Err(SerializerError::UnserializableType { type_name: "tuple struct" })
     }
 
     fn serialize_tuple_variant(
@@ -139,7 +139,7 @@ impl<'a> ser::Serializer for ExtractDocumentId<'a> {
         _len: usize
     ) -> Result<Self::SerializeTupleVariant, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "tuple variant" })
+        Err(SerializerError::UnserializableType { type_name: "tuple variant" })
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
@@ -174,7 +174,7 @@ impl<'a> ser::Serializer for ExtractDocumentId<'a> {
         _len: usize
     ) -> Result<Self::SerializeStructVariant, Self::Error>
     {
-        Err(SerializerError::UnserializableType { name: "struct variant" })
+        Err(SerializerError::UnserializableType { type_name: "struct variant" })
     }
 }
 
@@ -191,7 +191,7 @@ impl<'a> ser::SerializeMap for ExtractDocumentIdMapSerializer<'a> {
     fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
     where T: Serialize,
     {
-        let key = key.serialize(ExtractString)?;
+        let key = key.serialize(ConvertToString)?;
         self.current_key_name = Some(key);
         Ok(())
     }
@@ -210,7 +210,7 @@ impl<'a> ser::SerializeMap for ExtractDocumentIdMapSerializer<'a> {
     ) -> Result<(), Self::Error>
     where K: Serialize, V: Serialize,
     {
-        let key = key.serialize(ExtractString)?;
+        let key = key.serialize(ConvertToString)?;
 
         if self.identifier == key {
             // TODO is it possible to have multiple ids?
