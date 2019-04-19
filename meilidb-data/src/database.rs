@@ -19,6 +19,7 @@ use sled::IVec;
 
 use crate::{Schema, SchemaAttr, RankedMap};
 use crate::serde::Deserializer;
+use crate::indexer::Indexer;
 
 #[derive(Debug)]
 pub enum Error {
@@ -240,7 +241,7 @@ impl RawIndex {
         id: DocumentId,
         attr: SchemaAttr,
         value: V,
-    ) -> Result<Option<IVec>, Error>
+    ) -> Result<Option<IVec>, sled::Error>
     where IVec: From<V>,
     {
         let key = document_key(id, attr);
@@ -251,7 +252,7 @@ impl RawIndex {
         &self,
         id: DocumentId,
         attr: SchemaAttr
-    ) -> Result<Option<IVec>, Error>
+    ) -> Result<Option<IVec>, sled::Error>
     {
         let key = document_key(id, attr);
         Ok(self.inner.get(key)?)
@@ -267,7 +268,7 @@ impl RawIndex {
         &self,
         id: DocumentId,
         attr: SchemaAttr
-    ) -> Result<Option<IVec>, Error>
+    ) -> Result<Option<IVec>, sled::Error>
     {
         let key = document_key(id, attr);
         Ok(self.inner.del(key)?)
@@ -358,10 +359,23 @@ impl Index {
     }
 }
 
-pub struct DocumentsAddition(RawIndex);
+pub struct DocumentsAddition {
+    inner: RawIndex,
+    indexer: Indexer,
+}
 
 impl DocumentsAddition {
     pub fn from_raw(inner: RawIndex) -> DocumentsAddition {
+        DocumentsAddition { inner, indexer: Indexer::new() }
+    }
+
+    pub fn update_document<D>(&mut self, document: D) -> Result<(), Error>
+    where D: serde::Serialize,
+    {
+        unimplemented!()
+    }
+
+    pub fn finalize(self) -> sled::Result<()> {
         unimplemented!()
     }
 }
@@ -380,7 +394,7 @@ impl DocumentsDeletion {
         self.documents.push(id);
     }
 
-    pub fn commit(mut self) -> Result<(), Error> {
+    pub fn finalize(mut self) -> Result<(), Error> {
         self.documents.sort_unstable();
         self.documents.dedup();
 

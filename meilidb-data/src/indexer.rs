@@ -23,6 +23,13 @@ impl Indexer {
         }
     }
 
+    pub fn with_word_limit(limit: usize) -> Indexer {
+        Indexer {
+            word_limit: limit,
+            indexed: BTreeMap::new(),
+        }
+    }
+
     pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) {
         for token in Tokenizer::new(text) {
             if token.word_index >= self.word_limit { break }
