@@ -11,10 +11,12 @@ macro_rules! forward_to_unserializable_type {
 mod deserializer;
 mod serializer;
 mod extract_string;
+mod extract_document_id;
 
 pub use self::deserializer::Deserializer;
 pub use self::serializer::Serializer;
 pub use self::extract_string::ExtractString;
+pub use self::extract_document_id::extract_document_id;
 
 use std::{fmt, error::Error};
 use rmp_serde::encode::Error as RmpError;
