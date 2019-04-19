@@ -12,7 +12,7 @@ use meilidb_core::criterion::Criteria;
 use meilidb_core::QueryBuilder;
 use meilidb_core::shared_data_cursor::{FromSharedDataCursor, SharedDataCursor};
 use meilidb_core::write_to_bytes::WriteToBytes;
-use meilidb_core::{DocumentId, Index as WordIndex};
+use meilidb_core::DocumentId;
 use rmp_serde::decode::{Error as RmpError};
 use sdset::SetBuf;
 use serde::de;
@@ -20,7 +20,9 @@ use sled::IVec;
 
 use crate::{Schema, SchemaAttr, RankedMap};
 use crate::serde::{extract_document_id, Serializer, Deserializer, SerializerError};
-use crate::indexer::Indexer;
+use crate::indexer::{Indexer, WordIndexTree};
+
+pub type WordIndex = meilidb_core::Index<WordIndexTree>;
 
 #[derive(Debug)]
 pub enum Error {
@@ -70,6 +72,10 @@ impl error::Error for Error { }
 
 fn index_name(name: &str) -> Vec<u8> {
     format!("index-{}", name).into_bytes()
+}
+
+fn word_index_name(name: &str) -> Vec<u8> {
+    format!("word-index-{}", name).into_bytes()
 }
 
 fn document_key(id: DocumentId, attr: SchemaAttr) -> Vec<u8> {
@@ -136,7 +142,8 @@ impl Database {
         let raw_name = index_name(name);
         if self.inner.tree_names().into_iter().any(|tn| tn == raw_name) {
             let tree = self.inner.open_tree(raw_name)?;
-            let raw_index = RawIndex::from_raw(tree)?;
+            let word_index_tree = self.inner.open_tree(word_index_name(name))?;
+            let raw_index = RawIndex::from_raw(tree, word_index_tree)?;
 
             self.opened.rcu(|opened| {
                 let mut opened = HashMap::clone(opened);
@@ -162,7 +169,8 @@ impl Database {
             None => {
                 let raw_name = index_name(&name);
                 let tree = self.inner.open_tree(raw_name)?;
-                let raw_index = RawIndex::new_from_raw(tree, schema)?;
+                let word_index_tree = self.inner.open_tree(word_index_name(&name))?;
+                let raw_index = RawIndex::new_from_raw(tree, word_index_tree, schema)?;
 
                 self.opened.rcu(|opened| {
                     let mut opened = HashMap::clone(opened);
@@ -185,25 +193,16 @@ pub struct RawIndex {
 }
 
 impl RawIndex {
-    fn from_raw(inner: Arc<sled::Tree>) -> Result<RawIndex, Error> {
+    fn from_raw(inner: Arc<sled::Tree>, word_index: Arc<sled::Tree>) -> Result<RawIndex, Error> {
         let schema = {
             let bytes = inner.get("schema")?;
             let bytes = bytes.ok_or(Error::SchemaMissing)?;
             Schema::read_from_bin(bytes.as_ref())?
         };
 
-        let bytes = inner.get("word-index")?;
-        let bytes = bytes.ok_or(Error::WordIndexMissing)?;
-        let word_index = {
-            let len = bytes.len();
-            let bytes: Arc<[u8]> = Into::into(bytes);
-            let mut cursor = SharedDataCursor::from_shared_bytes(bytes, 0, len);
-
-            // TODO must handle this error
-            let word_index = WordIndex::from_shared_data_cursor(&mut cursor).unwrap();
-
-            Arc::new(ArcSwap::new(Arc::new(word_index)))
-        };
+        let store = WordIndexTree(word_index);
+        let word_index = WordIndex::from_store(store)?;
+        let word_index = Arc::new(ArcSwap::new(Arc::new(word_index)));
 
         let ranked_map = {
             let map = match inner.get("ranked-map")? {
@@ -217,13 +216,18 @@ impl RawIndex {
         Ok(RawIndex { schema, word_index, ranked_map, inner })
     }
 
-    fn new_from_raw(inner: Arc<sled::Tree>, schema: Schema) -> Result<RawIndex, Error> {
+    fn new_from_raw(
+        inner: Arc<sled::Tree>,
+        word_index: Arc<sled::Tree>,
+        schema: Schema,
+    ) -> Result<RawIndex, Error>
+    {
         let mut schema_bytes = Vec::new();
         schema.write_to_bin(&mut schema_bytes)?;
         inner.set("schema", schema_bytes)?;
 
-        let word_index = WordIndex::default();
-        inner.set("word-index", word_index.into_bytes())?;
+        let store = WordIndexTree(word_index);
+        let word_index = WordIndex::from_store(store)?;
         let word_index = Arc::new(ArcSwap::new(Arc::new(word_index)));
 
         let ranked_map = Arc::new(ArcSwap::new(Arc::new(RankedMap::default())));
@@ -243,12 +247,8 @@ impl RawIndex {
         self.ranked_map.lease()
     }
 
-    pub fn update_word_index(&self, word_index: Arc<WordIndex>) -> sled::Result<()> {
-        let data = word_index.into_bytes();
-        self.inner.set("word-index", data).map(drop)?;
-        self.word_index.store(word_index);
-
-        Ok(())
+    pub fn update_word_index(&self, word_index: Arc<WordIndex>) {
+        self.word_index.store(word_index)
     }
 
     pub fn update_ranked_map(&self, ranked_map: Arc<RankedMap>) -> sled::Result<()> {
@@ -417,14 +417,15 @@ impl DocumentsAddition {
 
         Ok(())
     }
+
     pub fn finalize(self) -> sled::Result<()> {
         let delta_index = self.indexer.build();
 
         let index = self.inner.word_index();
-        let new_index = index.r#union(&delta_index);
+        let new_index = index.insert_indexes(delta_index)?;
 
         let new_index = Arc::from(new_index);
-        self.inner.update_word_index(new_index)?;
+        self.inner.update_word_index(new_index);
 
         Ok(())
     }
@@ -454,10 +455,10 @@ impl DocumentsDeletion {
         let idset = SetBuf::new_unchecked(self.documents);
         let index = self.inner.word_index();
 
-        let new_index = index.remove_documents(&idset);
+        let new_index = index.remove_documents(&idset)?;
         let new_index = Arc::from(new_index);
 
-        self.inner.update_word_index(new_index)?;
+        self.inner.update_word_index(new_index);
 
         Ok(())
     }

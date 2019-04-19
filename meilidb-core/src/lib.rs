@@ -13,16 +13,19 @@ use serde::{Serialize, Deserialize};
 
 use slice_group_by::GroupBy;
 use rayon::slice::ParallelSliceMut;
+use zerocopy::{AsBytes, FromBytes};
 
-pub use self::index::{Index, IndexBuilder};
+pub use self::index::{Index, Store};
 pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder};
 
 /// Represent an internally generated document unique identifier.
 ///
 /// It is used to inform the database the document you want to deserialize.
 /// Helpful for custom ranking.
-#[derive(Serialize, Deserialize)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize)]
+#[derive(AsBytes, FromBytes)]
+#[repr(C)]
 pub struct DocumentId(pub u64);
 
 /// This structure represent the position of a word
@@ -31,6 +34,7 @@ pub struct DocumentId(pub u64);
 /// This is stored in the map, generated at index time,
 /// extracted and interpreted at search time.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(AsBytes, FromBytes)]
 #[repr(C)]
 pub struct DocIndex {
     /// The document identifier where the word was found.

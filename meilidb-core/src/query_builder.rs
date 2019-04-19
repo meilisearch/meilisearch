@@ -14,8 +14,8 @@ use log::info;
 use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::criterion::Criteria;
-use crate::{raw_documents_from_matches, RawDocument, Document};
-use crate::{Index, Match, DocumentId};
+use crate::raw_documents_from_matches;
+use crate::{Match, DocumentId, Index, Store, RawDocument, Document};
 
 fn generate_automatons(query: &str) -> Vec<DfaExt> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
@@ -82,16 +82,18 @@ impl<'c, I, FI> QueryBuilder<'c, I, FI>
     }
 }
 
-impl<'c, I, FI> QueryBuilder<'c, I, FI>
-where I: Deref<Target=Index>,
+impl<'c, I, FI, S> QueryBuilder<'c, I, FI>
+where I: Deref<Target=Index<S>>,
+      S: Store,
 {
     fn query_all(&self, query: &str) -> Vec<RawDocument> {
         let automatons = generate_automatons(query);
+        let fst = self.index.set.as_fst();
 
         let mut stream = {
-            let mut op_builder = fst::map::OpBuilder::new();
+            let mut op_builder = fst::raw::OpBuilder::new();
             for automaton in &automatons {
-                let stream = self.index.map.search(automaton);
+                let stream = fst.search(automaton);
                 op_builder.push(stream);
             }
             op_builder.r#union()
@@ -105,10 +107,12 @@ where I: Deref<Target=Index>,
                 let distance = automaton.eval(input).to_u8();
                 let is_exact = distance == 0 && input.len() == automaton.query_len();
 
-                let doc_indexes = &self.index.indexes;
-                let doc_indexes = &doc_indexes[iv.value as usize];
+                // let doc_indexes = &self.index.indexes;
+                // let doc_indexes = &doc_indexes[iv.value as usize];
 
-                for di in doc_indexes {
+                let doc_indexes = self.index.store.get_indexes(input).unwrap().unwrap();
+
+                for di in doc_indexes.as_slice() {
                     if self.searchable_attrs.as_ref().map_or(true, |r| r.contains(&di.attribute)) {
                         let match_ = Match {
                             query_index: iv.index as u32,
@@ -135,9 +139,10 @@ where I: Deref<Target=Index>,
     }
 }
 
-impl<'c, I, FI> QueryBuilder<'c, I, FI>
-where I: Deref<Target=Index>,
+impl<'c, I, FI, S> QueryBuilder<'c, I, FI>
+where I: Deref<Target=Index<S>>,
       FI: Fn(DocumentId) -> bool,
+      S: Store,
 {
     pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
         // We delegate the filter work to the distinct query builder,
@@ -212,11 +217,12 @@ impl<'c, I, FI, FD> DistinctQueryBuilder<'c, I, FI, FD>
     }
 }
 
-impl<'c, I, FI, FD, K> DistinctQueryBuilder<'c, I, FI, FD>
-where I: Deref<Target=Index>,
+impl<'c, I, FI, FD, K, S> DistinctQueryBuilder<'c, I, FI, FD>
+where I: Deref<Target=Index<S>>,
       FI: Fn(DocumentId) -> bool,
       FD: Fn(DocumentId) -> Option<K>,
       K: Hash + Eq,
+      S: Store,
 {
     pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
         let start = Instant::now();

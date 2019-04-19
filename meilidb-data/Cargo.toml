@@ -8,6 +8,7 @@ edition = "2018"
 arc-swap = "0.3.11"
 bincode = "1.1.2"
 byteorder = "1.3.1"
+deunicode = "1.0.0"
 hashbrown = { version = "0.2.2", features = ["serde"] }
 linked-hash-map = { version = "0.5.2", features = ["serde_impl"] }
 meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
@@ -18,8 +19,12 @@ serde = { version = "1.0.90", features = ["derive"] }
 serde_json = { version = "1.0.39", features = ["preserve_order"] }
 sled = "0.23.0"
 toml = { version = "0.5.0", features = ["preserve_order"] }
-deunicode = "1.0.0"
+zerocopy = "0.2.2"
 
 [dependencies.rmp-serde]
 git = "https://github.com/3Hren/msgpack-rust.git"
 rev = "40b3d48"
+
+[dependencies.fst]
+git = "https://github.com/Kerollmops/fst.git"
+branch = "arc-byte-slice"

@@ -1,175 +1,134 @@
-use std::error::Error;
-
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use fst::{map, Map, IntoStreamer, Streamer};
-use fst::raw::Fst;
+use std::collections::BTreeMap;
+use fst::{set, IntoStreamer, Streamer};
+use sdset::{Set, SetBuf, SetOperation};
 use sdset::duo::{Union, DifferenceByKey};
-use sdset::{Set, SetOperation};
+use crate::{DocIndex, DocumentId};
 
-use crate::shared_data_cursor::{SharedDataCursor, FromSharedDataCursor};
-use crate::write_to_bytes::WriteToBytes;
-use crate::data::{DocIndexes, DocIndexesBuilder};
-use crate::{DocumentId, DocIndex};
+pub type Word = Vec<u8>; // TODO should be a smallvec
 
-#[derive(Default)]
-pub struct Index {
-    pub map: Map,
-    pub indexes: DocIndexes,
+pub trait Store: Clone {
+    type Error: std::error::Error;
+
+    fn get_fst(&self) -> Result<fst::Set, Self::Error>;
+    fn set_fst(&self, set: &fst::Set) -> Result<(), Self::Error>;
+
+    fn get_indexes(&self, word: &[u8]) -> Result<Option<SetBuf<DocIndex>>, Self::Error>;
+    fn set_indexes(&self, word: &[u8], indexes: &Set<DocIndex>) -> Result<(), Self::Error>;
+    fn del_indexes(&self, word: &[u8]) -> Result<(), Self::Error>;
 }
 
-impl Index {
-    pub fn remove_documents(&self, documents: &Set<DocumentId>) -> Index {
+pub struct Index<S> {
+    pub set: fst::Set,
+    pub store: S,
+}
+
+impl<S> Index<S>
+where S: Store,
+{
+    pub fn from_store(store: S) -> Result<Index<S>, S::Error> {
+        let set = store.get_fst()?;
+        Ok(Index { set, store })
+    }
+
+    pub fn remove_documents(&self, documents: &Set<DocumentId>) -> Result<Index<S>, S::Error> {
         let mut buffer = Vec::new();
-        let mut builder = IndexBuilder::new();
+        let mut builder = fst::SetBuilder::memory();
         let mut stream = self.into_stream();
 
-        while let Some((key, indexes)) = stream.next() {
-            buffer.clear();
+        while let Some((input, result)) = stream.next() {
+            let indexes = match result? {
+                Some(indexes) => indexes,
+                None => continue,
+            };
 
-            let op = DifferenceByKey::new(indexes, documents, |x| x.document_id, |x| *x);
+            let op = DifferenceByKey::new(&indexes, documents, |x| x.document_id, |x| *x);
+            buffer.clear();
             op.extend_vec(&mut buffer);
 
-            if !buffer.is_empty() {
+            if buffer.is_empty() {
+                self.store.del_indexes(input)?;
+            } else {
+                builder.insert(input).unwrap();
                 let indexes = Set::new_unchecked(&buffer);
-                builder.insert(key, indexes).unwrap();
+                self.store.set_indexes(input, indexes)?;
             }
         }
 
-        builder.build()
+        let set = builder.into_inner().and_then(fst::Set::from_bytes).unwrap();
+        self.store.set_fst(&set)?;
+
+        Ok(Index { set, store: self.store.clone() })
     }
 
-    pub fn union(&self, other: &Index) -> Index {
-        let mut builder = IndexBuilder::new();
-        let mut stream = map::OpBuilder::new().add(&self.map).add(&other.map).union();
-
+    pub fn insert_indexes(&self, map: BTreeMap<Word, SetBuf<DocIndex>>) -> Result<Index<S>, S::Error> {
         let mut buffer = Vec::new();
-        while let Some((key, ivalues)) = stream.next() {
-            buffer.clear();
-            match ivalues {
-                [a, b] => {
-                    let indexes = if a.index == 0 { &self.indexes } else { &other.indexes };
-                    let indexes = &indexes[a.value as usize];
-                    let a = Set::new_unchecked(indexes);
+        let mut builder = fst::SetBuilder::memory();
+        let set = fst::Set::from_iter(map.keys()).unwrap();
+        let mut union_ = self.set.op().add(&set).r#union();
 
-                    let indexes = if b.index == 0 { &self.indexes } else { &other.indexes };
-                    let indexes = &indexes[b.value as usize];
-                    let b = Set::new_unchecked(indexes);
+        while let Some(input) = union_.next() {
+            let remote = self.store.get_indexes(input)?;
+            let locale = map.get(input);
 
-                    let op = Union::new(a, b);
-                    op.extend_vec(&mut buffer);
+            match (remote, locale) {
+                (Some(remote), Some(locale)) => {
+                    buffer.clear();
+                    Union::new(&remote, &locale).extend_vec(&mut buffer);
+                    let indexes = Set::new_unchecked(&buffer);
+
+                    if !indexes.is_empty() {
+                        self.store.set_indexes(input, indexes)?;
+                        builder.insert(input).unwrap();
+                    } else {
+                        self.store.del_indexes(input)?;
+                    }
                 },
-                [x] => {
-                    let indexes = if x.index == 0 { &self.indexes } else { &other.indexes };
-                    let indexes = &indexes[x.value as usize];
-                    buffer.extend_from_slice(indexes)
+                (None, Some(locale)) => {
+                    self.store.set_indexes(input, &locale)?;
+                    builder.insert(input).unwrap();
                 },
-                _ => continue,
-            }
-
-            if !buffer.is_empty() {
-                let indexes = Set::new_unchecked(&buffer);
-                builder.insert(key, indexes).unwrap();
+                (Some(_), None) => {
+                    builder.insert(input).unwrap();
+                },
+                (None, None) => unreachable!(),
             }
         }
 
-        builder.build()
+        let set = builder.into_inner().and_then(fst::Set::from_bytes).unwrap();
+        self.store.set_fst(&set)?;
+
+        Ok(Index { set, store: self.store.clone() })
     }
 }
 
-impl FromSharedDataCursor for Index {
-    type Error = Box<Error>;
-
-    fn from_shared_data_cursor(cursor: &mut SharedDataCursor) -> Result<Index, Self::Error> {
-        let len = cursor.read_u64::<LittleEndian>()? as usize;
-        let data = cursor.extract(len);
-
-        let fst = Fst::from_shared_bytes(data.bytes, data.offset, data.len)?;
-        let map = Map::from(fst);
-
-        let indexes = DocIndexes::from_shared_data_cursor(cursor)?;
-
-        Ok(Index { map, indexes})
-    }
+pub struct Stream<'m, S> {
+    set_stream: set::Stream<'m>,
+    store: &'m S,
 }
 
-impl WriteToBytes for Index {
-    fn write_to_bytes(&self, bytes: &mut Vec<u8>) {
-        let slice = self.map.as_fst().as_bytes();
-        let len = slice.len() as u64;
-        let _ = bytes.write_u64::<LittleEndian>(len);
-        bytes.extend_from_slice(slice);
-
-        self.indexes.write_to_bytes(bytes);
-    }
-}
-
-impl<'m, 'a> IntoStreamer<'a> for &'m Index {
-    type Item = (&'a [u8], &'a Set<DocIndex>);
-    type Into = Stream<'m>;
-
-    fn into_stream(self) -> Self::Into {
-        Stream {
-            map_stream: self.map.into_stream(),
-            indexes: &self.indexes,
-        }
-    }
-}
-
-pub struct Stream<'m> {
-    map_stream: map::Stream<'m>,
-    indexes: &'m DocIndexes,
-}
-
-impl<'m, 'a> Streamer<'a> for Stream<'m> {
-    type Item = (&'a [u8], &'a Set<DocIndex>);
+impl<'m, 'a, S> Streamer<'a> for Stream<'m, S>
+where S: 'a + Store,
+{
+    type Item = (&'a [u8], Result<Option<SetBuf<DocIndex>>, S::Error>);
 
     fn next(&'a mut self) -> Option<Self::Item> {
-        match self.map_stream.next() {
-            Some((input, index)) => {
-                let indexes = &self.indexes[index as usize];
-                let indexes = Set::new_unchecked(indexes);
-                Some((input, indexes))
-            },
+        match self.set_stream.next() {
+            Some(input) => Some((input, self.store.get_indexes(input))),
             None => None,
         }
     }
 }
 
-pub struct IndexBuilder {
-    map: fst::MapBuilder<Vec<u8>>,
-    indexes: DocIndexesBuilder<Vec<u8>>,
-    value: u64,
-}
+impl<'m, 'a, S> IntoStreamer<'a> for &'m Index<S>
+where S: 'a + Store,
+{
+    type Item = (&'a [u8], Result<Option<SetBuf<DocIndex>>, S::Error>);
+    type Into = Stream<'m, S>;
 
-impl IndexBuilder {
-    pub fn new() -> Self {
-        IndexBuilder {
-            map: fst::MapBuilder::memory(),
-            indexes: DocIndexesBuilder::memory(),
-            value: 0,
+    fn into_stream(self) -> Self::Into {
+        Stream {
+            set_stream: self.set.into_stream(),
+            store: &self.store,
         }
-    }
-
-    /// If a key is inserted that is less than or equal to any previous key added,
-    /// then an error is returned. Similarly, if there was a problem writing
-    /// to the underlying writer, an error is returned.
-    // FIXME what if one write doesn't work but the other do ?
-    pub fn insert<K>(&mut self, key: K, indexes: &Set<DocIndex>) -> fst::Result<()>
-    where K: AsRef<[u8]>,
-    {
-        self.map.insert(key, self.value)?;
-        self.indexes.insert(indexes);
-        self.value += 1;
-        Ok(())
-    }
-
-    pub fn build(self) -> Index {
-        let map = self.map.into_inner().unwrap();
-        let indexes = self.indexes.into_inner().unwrap();
-
-        let map = Map::from_bytes(map).unwrap();
-        let indexes = DocIndexes::from_bytes(indexes).unwrap();
-
-        Index { map, indexes }
     }
 }

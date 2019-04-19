@@ -1,13 +1,77 @@
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 use deunicode::deunicode_with_tofu;
-use meilidb_core::{DocumentId, DocIndex};
-use meilidb_core::{Index as WordIndex, IndexBuilder as WordIndexBuilder};
+use meilidb_core::{DocumentId, DocIndex, Store};
 use meilidb_tokenizer::{is_cjk, Tokenizer, SeqTokenizer, Token};
-use sdset::Set;
+use sdset::{Set, SetBuf};
+use sled::Tree;
+use zerocopy::{AsBytes, LayoutVerified};
 
 use crate::SchemaAttr;
+
+#[derive(Clone)]
+pub struct WordIndexTree(pub Arc<Tree>);
+
+impl Store for WordIndexTree {
+    type Error = sled::Error;
+
+    fn get_fst(&self) -> Result<fst::Set, Self::Error> {
+        match self.0.get("fst")? {
+            Some(bytes) => {
+                let bytes: Arc<[u8]> = bytes.into();
+                let len = bytes.len();
+                let raw = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
+                Ok(fst::Set::from(raw))
+            },
+            None => Ok(fst::Set::default()),
+        }
+    }
+
+    fn set_fst(&self, set: &fst::Set) -> Result<(), Self::Error> {
+        let bytes = set.as_fst().to_vec();
+        self.0.set("fst", bytes)?;
+        Ok(())
+    }
+
+    fn get_indexes(&self, word: &[u8]) -> Result<Option<SetBuf<DocIndex>>, Self::Error> {
+        let mut word_bytes = Vec::from("word-");
+        word_bytes.extend_from_slice(word);
+
+        match self.0.get(word_bytes)? {
+            Some(bytes) => {
+                let layout = LayoutVerified::new_slice(bytes.as_ref()).unwrap();
+                let slice = layout.into_slice();
+                let setbuf = SetBuf::new_unchecked(slice.to_vec());
+                Ok(Some(setbuf))
+            },
+            None => Ok(None),
+        }
+    }
+
+    fn set_indexes(&self, word: &[u8], indexes: &Set<DocIndex>) -> Result<(), Self::Error> {
+        let mut word_bytes = Vec::from("word-");
+        word_bytes.extend_from_slice(word);
+
+        let slice = indexes.as_slice();
+        let bytes = slice.as_bytes();
+
+        self.0.set(word_bytes, bytes)?;
+
+        Ok(())
+    }
+
+    fn del_indexes(&self, word: &[u8]) -> Result<(), Self::Error> {
+        let mut word_bytes = Vec::from("word-");
+        word_bytes.extend_from_slice(word);
+
+        self.0.del(word_bytes)?;
+
+        Ok(())
+    }
+
+}
 
 type Word = Vec<u8>; // TODO make it be a SmallVec
 
@@ -48,18 +112,11 @@ impl Indexer {
         }
     }
 
-    pub fn build(self) -> WordIndex {
-        let mut builder = WordIndexBuilder::new();
-
-        for (key, mut indexes) in self.indexed {
+    pub fn build(self) -> BTreeMap<Word, SetBuf<DocIndex>> {
+        self.indexed.into_iter().map(|(word, mut indexes)| {
             indexes.sort_unstable();
-            indexes.dedup();
-
-            let indexes = Set::new_unchecked(&indexes);
-            builder.insert(key, indexes).unwrap();
-        }
-
-        builder.build()
+            (word, SetBuf::new_unchecked(indexes))
+        }).collect()
     }
 }
 
