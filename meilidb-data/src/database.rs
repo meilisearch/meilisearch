@@ -13,6 +13,7 @@ use meilidb_core::shared_data_cursor::{FromSharedDataCursor, SharedDataCursor};
 use meilidb_core::write_to_bytes::WriteToBytes;
 use meilidb_core::{DocumentId, Index as WordIndex};
 use rmp_serde::decode::{Error as RmpError};
+use sdset::SetBuf;
 use serde::de;
 use sled::IVec;
 
@@ -222,8 +223,12 @@ impl RawIndex {
         self.ranked_map.lease()
     }
 
-    pub fn update_word_index(&self, word_index: Arc<WordIndex>) {
-        self.word_index.store(word_index)
+    pub fn update_word_index(&self, word_index: Arc<WordIndex>) -> sled::Result<()> {
+        let data = word_index.into_bytes();
+        self.inner.set("word-index", data).map(drop)?;
+        self.word_index.store(word_index);
+
+        Ok(())
     }
 
     pub fn update_ranked_map(&self, ranked_map: Arc<RankedMap>) {
@@ -316,6 +321,16 @@ impl Index {
         self.0.ranked_map()
     }
 
+    pub fn documents_addition(&self) -> DocumentsAddition {
+        let index = self.0.clone();
+        DocumentsAddition::from_raw(index)
+    }
+
+    pub fn documents_deletion(&self) -> DocumentsDeletion {
+        let index = self.0.clone();
+        DocumentsDeletion::from_raw(index)
+    }
+
     pub fn document<T>(
         &self,
         fields: Option<&HashSet<&str>>,
@@ -340,5 +355,43 @@ impl Index {
         // TODO: currently we return an error if all document fields are missing,
         //       returning None would have been better
         T::deserialize(&mut deserializer).map(Some)
+    }
+}
+
+pub struct DocumentsAddition(RawIndex);
+
+impl DocumentsAddition {
+    pub fn from_raw(inner: RawIndex) -> DocumentsAddition {
+        unimplemented!()
+    }
+}
+
+pub struct DocumentsDeletion {
+    inner: RawIndex,
+    documents: Vec<DocumentId>,
+}
+
+impl DocumentsDeletion {
+    pub fn from_raw(inner: RawIndex) -> DocumentsDeletion {
+        DocumentsDeletion { inner, documents: Vec::new() }
+    }
+
+    pub fn delete_document(&mut self, id: DocumentId) {
+        self.documents.push(id);
+    }
+
+    pub fn commit(mut self) -> Result<(), Error> {
+        self.documents.sort_unstable();
+        self.documents.dedup();
+
+        let idset = SetBuf::new_unchecked(self.documents);
+        let index = self.inner.word_index();
+
+        let new_index = index.remove_documents(&idset);
+        let new_index = Arc::from(new_index);
+
+        self.inner.update_word_index(new_index)?;
+
+        Ok(())
     }
 }
