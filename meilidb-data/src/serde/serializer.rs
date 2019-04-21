@@ -165,11 +165,11 @@ impl<'a> ser::Serializer for Serializer<'a> {
 }
 
 pub struct MapSerializer<'a> {
-    pub schema: &'a Schema,
-    pub document_id: DocumentId,
-    pub index: &'a RawIndex,
-    pub indexer: &'a mut RawIndexer,
-    pub current_key_name: Option<String>,
+    schema: &'a Schema,
+    document_id: DocumentId,
+    index: &'a RawIndex,
+    indexer: &'a mut RawIndexer,
+    current_key_name: Option<String>,
 }
 
 impl<'a> ser::SerializeMap for MapSerializer<'a> {
@@ -216,10 +216,10 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
 }
 
 pub struct StructSerializer<'a> {
-    pub schema: &'a Schema,
-    pub document_id: DocumentId,
-    pub index: &'a RawIndex,
-    pub indexer: &'a mut RawIndexer,
+    schema: &'a Schema,
+    document_id: DocumentId,
+    index: &'a RawIndex,
+    indexer: &'a mut RawIndexer,
 }
 
 impl<'a> ser::SerializeStruct for StructSerializer<'a> {

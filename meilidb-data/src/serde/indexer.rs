@@ -17,11 +17,11 @@ impl<'a> ser::Serializer for Indexer<'a> {
     type Ok = ();
     type Error = SerializerError;
     type SerializeSeq = SeqIndexer<'a>;
-    type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
+    type SerializeTuple = TupleIndexer<'a>;
     type SerializeTupleStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeMap = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeStruct = ser::Impossible<Self::Ok, Self::Error>;
+    type SerializeMap = MapIndexer<'a>;
+    type SerializeStruct = StructSerializer<'a>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
     fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
@@ -156,7 +156,14 @@ impl<'a> ser::Serializer for Indexer<'a> {
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        Err(SerializerError::UnindexableType { type_name: "tuple" })
+        let indexer = TupleIndexer {
+            attribute: self.attribute,
+            document_id: self.document_id,
+            indexer: self.indexer,
+            texts: Vec::new(),
+        };
+
+        Ok(indexer)
     }
 
     fn serialize_tuple_struct(
@@ -180,7 +187,14 @@ impl<'a> ser::Serializer for Indexer<'a> {
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        Err(SerializerError::UnindexableType { type_name: "map" })
+        let indexer = MapIndexer {
+            attribute: self.attribute,
+            document_id: self.document_id,
+            indexer: self.indexer,
+            texts: Vec::new(),
+        };
+
+        Ok(indexer)
     }
 
     fn serialize_struct(
@@ -220,14 +234,104 @@ impl<'a> ser::SerializeSeq for SeqIndexer<'a> {
     {
         let text = value.serialize(ConvertToString)?;
         self.texts.push(text);
-
         Ok(())
     }
 
     fn end(mut self) -> Result<Self::Ok, Self::Error> {
         let texts = self.texts.iter().map(String::as_str);
         self.indexer.index_text_seq(self.document_id, self.attribute, texts);
+        Ok(())
+    }
+}
 
+pub struct MapIndexer<'a> {
+    attribute: SchemaAttr,
+    document_id: DocumentId,
+    indexer: &'a mut RawIndexer,
+    texts: Vec<String>,
+}
+
+impl<'a> ser::SerializeMap for MapIndexer<'a> {
+    type Ok = ();
+    type Error = SerializerError;
+
+    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
+    where T: ser::Serialize,
+    {
+        let text = key.serialize(ConvertToString)?;
+        self.texts.push(text);
+        Ok(())
+    }
+
+    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where T: ser::Serialize,
+    {
+        let text = value.serialize(ConvertToString)?;
+        self.texts.push(text);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        let texts = self.texts.iter().map(String::as_str);
+        self.indexer.index_text_seq(self.document_id, self.attribute, texts);
+        Ok(())
+    }
+}
+
+pub struct StructSerializer<'a> {
+    attribute: SchemaAttr,
+    document_id: DocumentId,
+    indexer: &'a mut RawIndexer,
+    texts: Vec<String>,
+}
+
+impl<'a> ser::SerializeStruct for StructSerializer<'a> {
+    type Ok = ();
+    type Error = SerializerError;
+
+    fn serialize_field<T: ?Sized>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error>
+    where T: ser::Serialize,
+    {
+        let key_text = key.to_owned();
+        let value_text = value.serialize(ConvertToString)?;
+        self.texts.push(key_text);
+        self.texts.push(value_text);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        let texts = self.texts.iter().map(String::as_str);
+        self.indexer.index_text_seq(self.document_id, self.attribute, texts);
+        Ok(())
+    }
+}
+
+pub struct TupleIndexer<'a> {
+    attribute: SchemaAttr,
+    document_id: DocumentId,
+    indexer: &'a mut RawIndexer,
+    texts: Vec<String>,
+}
+
+impl<'a> ser::SerializeTuple for TupleIndexer<'a> {
+    type Ok = ();
+    type Error = SerializerError;
+
+    fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where T: Serialize
+    {
+        let text = value.serialize(ConvertToString)?;
+        self.texts.push(text);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        let texts = self.texts.iter().map(String::as_str);
+        self.indexer.index_text_seq(self.document_id, self.attribute, texts);
         Ok(())
     }
 }
