@@ -18,7 +18,7 @@ use serde::de;
 use sled::IVec;
 
 use crate::{Schema, SchemaAttr, RankedMap};
-use crate::serde::Deserializer;
+use crate::serde::{extract_document_id, Serializer, Deserializer, SerializerError};
 use crate::indexer::Indexer;
 
 #[derive(Debug)]
@@ -26,8 +26,10 @@ pub enum Error {
     SchemaDiffer,
     SchemaMissing,
     WordIndexMissing,
+    MissingDocumentId,
     SledError(sled::Error),
     BincodeError(bincode::Error),
+    SerializerError(SerializerError),
 }
 
 impl From<sled::Error> for Error {
@@ -39,6 +41,12 @@ impl From<sled::Error> for Error {
 impl From<bincode::Error> for Error {
     fn from(error: bincode::Error) -> Error {
         Error::BincodeError(error)
+    }
+}
+
+impl From<SerializerError> for Error {
+    fn from(error: SerializerError) -> Error {
+        Error::SerializerError(error)
     }
 }
 
@@ -372,11 +380,36 @@ impl DocumentsAddition {
     pub fn update_document<D>(&mut self, document: D) -> Result<(), Error>
     where D: serde::Serialize,
     {
-        unimplemented!()
+        let schema = self.inner.schema();
+        let identifier = schema.identifier_name();
+
+        let document_id = match extract_document_id(identifier, &document)? {
+            Some(id) => id,
+            None => return Err(Error::MissingDocumentId),
+        };
+
+        let serializer = Serializer {
+            schema,
+            index: &self.inner,
+            indexer: &mut self.indexer,
+            document_id,
+        };
+
+        document.serialize(serializer)?;
+
+        Ok(())
     }
 
     pub fn finalize(self) -> sled::Result<()> {
-        unimplemented!()
+        let delta_index = self.indexer.build();
+
+        let index = self.inner.word_index();
+        let new_index = index.r#union(&delta_index);
+
+        let new_index = Arc::from(new_index);
+        self.inner.update_word_index(new_index)?;
+
+        Ok(())
     }
 }
 
