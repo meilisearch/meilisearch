@@ -33,6 +33,10 @@ impl Indexer {
     pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) {
         for token in Tokenizer::new(text) {
             if token.word_index >= self.word_limit { break }
+
+            let lower = token.word.to_lowercase();
+            let token = Token { word: &lower, ..token };
+
             let docindex = match token_to_docindex(id, attr, token) {
                 Some(docindex) => docindex,
                 None => break,
@@ -49,6 +53,10 @@ impl Indexer {
         let iter = iter.into_iter();
         for token in SeqTokenizer::new(iter) {
             if token.word_index >= self.word_limit { break }
+
+            let lower = token.word.to_lowercase();
+            let token = Token { word: &lower, ..token };
+
             let docindex = match token_to_docindex(id, attr, token) {
                 Some(docindex) => docindex,
                 None => break,
