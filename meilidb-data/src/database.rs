@@ -3,6 +3,7 @@ use std::io::{self, Cursor, BufRead};
 use std::iter::FromIterator;
 use std::path::Path;
 use std::sync::Arc;
+use std::{error, fmt};
 
 use arc_swap::{ArcSwap, Lease};
 use byteorder::{ReadBytesExt, BigEndian};
@@ -50,6 +51,23 @@ impl From<SerializerError> for Error {
     }
 }
 
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::Error::*;
+        match self {
+            SchemaDiffer => write!(f, "schemas differ"),
+            SchemaMissing => write!(f, "this index does not have a schema"),
+            WordIndexMissing => write!(f, "this index does not have a word index"),
+            MissingDocumentId => write!(f, "document id is missing"),
+            SledError(e) => write!(f, "sled error; {}", e),
+            BincodeError(e) => write!(f, "bincode error; {}", e),
+            SerializerError(e) => write!(f, "serializer error; {}", e),
+        }
+    }
+}
+
+impl error::Error for Error { }
+
 fn index_name(name: &str) -> Vec<u8> {
     format!("index-{}", name).into_bytes()
 }
@@ -94,13 +112,6 @@ fn extract_document_key(key: Vec<u8>) -> io::Result<(DocumentId, SchemaAttr)> {
     let schema_attr = key.read_u16::<BigEndian>().map(SchemaAttr)?;
 
     Ok((document_id, schema_attr))
-}
-
-fn ivec_into_arc(ivec: IVec) -> Arc<[u8]> {
-    match ivec {
-        IVec::Inline(len, bytes) => Arc::from(&bytes[..len as usize]),
-        IVec::Remote { buf } => buf,
-    }
 }
 
 #[derive(Clone)]
@@ -185,7 +196,7 @@ impl RawIndex {
         let bytes = bytes.ok_or(Error::WordIndexMissing)?;
         let word_index = {
             let len = bytes.len();
-            let bytes = ivec_into_arc(bytes);
+            let bytes: Arc<[u8]> = Into::into(bytes);
             let mut cursor = SharedDataCursor::from_shared_bytes(bytes, 0, len);
 
             // TODO must handle this error
@@ -399,7 +410,6 @@ impl DocumentsAddition {
 
         Ok(())
     }
-
     pub fn finalize(self) -> sled::Result<()> {
         let delta_index = self.indexer.build();
 

@@ -16,7 +16,7 @@ ordered-float = { version = "1.0.2", features = ["serde"] }
 sdset = "0.3.1"
 serde = { version = "1.0.90", features = ["derive"] }
 serde_json = { version = "1.0.39", features = ["preserve_order"] }
-sled = "0.22.1"
+sled = "0.23.0"
 toml = { version = "0.5.0", features = ["preserve_order"] }
 
 [dependencies.rmp-serde]

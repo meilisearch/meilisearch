@@ -237,7 +237,7 @@ impl<'a> ser::SerializeSeq for SeqIndexer<'a> {
         Ok(())
     }
 
-    fn end(mut self) -> Result<Self::Ok, Self::Error> {
+    fn end(self) -> Result<Self::Ok, Self::Error> {
         let texts = self.texts.iter().map(String::as_str);
         self.indexer.index_text_seq(self.document_id, self.attribute, texts);
         Ok(())

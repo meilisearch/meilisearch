@@ -9,10 +9,10 @@ use std::error::Error;
 use std::borrow::Cow;
 use std::fs::File;
 
-use serde_derive::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
 
-use meilidb::database::{Database, Schema};
+use meilidb_data::{Database, Schema};
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {
@@ -50,9 +50,9 @@ fn index(
     stop_words: &HashSet<String>,
 ) -> Result<Database, Box<Error>>
 {
-    let database = Database::create(database_path)?;
+    let database = Database::start_default(database_path)?;
 
-    database.create_index("default", &schema)?;
+    let index = database.create_index("default".to_string(), schema.clone())?;
 
     let mut rdr = csv::Reader::from_path(csv_data_path)?;
     let mut raw_record = csv::StringRecord::new();
@@ -62,7 +62,7 @@ fn index(
     let mut end_of_file = false;
 
     while !end_of_file {
-        let mut update = database.start_update("default")?;
+        let mut update = index.documents_addition();
 
         loop {
             end_of_file = !rdr.read_record(&mut raw_record)?;
@@ -76,7 +76,7 @@ fn index(
                 }
             };
 
-            update.update_document(&document, &stop_words)?;
+            update.update_document(&document)?;
 
             print!("\rindexing document {}", i);
             i += 1;
@@ -89,7 +89,7 @@ fn index(
         println!();
 
         println!("committing update...");
-        database.commit_update(update)?;
+        update.finalize()?;
     }
 
     Ok(database)

@@ -2,19 +2,19 @@
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 use std::collections::btree_map::{BTreeMap, Entry};
+use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::io::{self, Write};
 use std::time::Instant;
 use std::path::PathBuf;
 use std::error::Error;
 
-use hashbrown::{HashMap, HashSet};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use structopt::StructOpt;
 use meilidb_core::Match;
 
-use meilidb::database::schema::SchemaAttr;
-use meilidb::database::Database;
+use meilidb_data::schema::SchemaAttr;
+use meilidb_data::Database;
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {
@@ -138,11 +138,18 @@ fn main() -> Result<(), Box<Error>> {
     let opt = Opt::from_args();
 
     let start = Instant::now();
-    let database = Database::open(&opt.database_path)?;
-    println!("database prepared for you in {:.2?}", start.elapsed());
+    let database = Database::start_default(&opt.database_path)?;
 
     let mut buffer = String::new();
     let input = io::stdin();
+
+    let index = database.open_index("default")?.unwrap();
+    let schema = index.schema();
+
+    println!("database prepared for you in {:.2?}", start.elapsed());
+
+    let fields = opt.displayed_fields.iter().map(String::as_str);
+    let fields = HashSet::from_iter(fields);
 
     loop {
         print!("Searching for: ");
@@ -151,12 +158,9 @@ fn main() -> Result<(), Box<Error>> {
         if input.read_line(&mut buffer)? == 0 { break }
         let query = buffer.trim_end_matches('\n');
 
-        let view = database.view("default")?;
-        let schema = view.schema();
-
         let start = Instant::now();
 
-        let builder = view.query_builder();
+        let builder = index.query_builder();
         let documents = builder.query(query, 0..opt.number_results);
 
         let number_of_documents = documents.len();
@@ -164,19 +168,12 @@ fn main() -> Result<(), Box<Error>> {
 
             doc.matches.sort_unstable_by_key(|m| (m.char_index, m.char_index));
 
-            match view.document_by_id::<Document>(doc.id) {
-                Ok(document) => {
-                    for name in &opt.displayed_fields {
-                        let attr = match schema.attribute(name) {
-                            Some(attr) => attr,
-                            None => continue,
-                        };
-                        let text = match document.get(name) {
-                            Some(text) => text,
-                            None => continue,
-                        };
-
+            match index.document::<Document>(Some(&fields), doc.id) {
+                Ok(Some(document)) => {
+                    for (name, text) in document {
                         print!("{}: ", name);
+
+                        let attr = schema.attribute(&name).unwrap();
                         let matches = doc.matches.iter()
                                         .filter(|m| SchemaAttr::new(m.attribute) == attr)
                                         .cloned();
@@ -186,6 +183,7 @@ fn main() -> Result<(), Box<Error>> {
                         println!();
                     }
                 },
+                Ok(None) => eprintln!("missing document"),
                 Err(e) => eprintln!("{}", e),
             }
 
