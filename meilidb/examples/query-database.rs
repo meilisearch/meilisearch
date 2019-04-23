@@ -5,7 +5,7 @@ use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::io::{self, Write};
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use std::path::PathBuf;
 use std::error::Error;
 
@@ -158,17 +158,23 @@ fn main() -> Result<(), Box<Error>> {
         if input.read_line(&mut buffer)? == 0 { break }
         let query = buffer.trim_end_matches('\n');
 
-        let start = Instant::now();
+        let start_total = Instant::now();
 
         let builder = index.query_builder();
         let documents = builder.query(query, 0..opt.number_results);
+
+        let mut retrieve_duration = Duration::default();
 
         let number_of_documents = documents.len();
         for mut doc in documents {
 
             doc.matches.sort_unstable_by_key(|m| (m.char_index, m.char_index));
 
-            match index.document::<Document>(Some(&fields), doc.id) {
+            let start_retrieve = Instant::now();
+            let result = index.document::<Document>(Some(&fields), doc.id);
+            retrieve_duration += start_retrieve.elapsed();
+
+            match result {
                 Ok(Some(document)) => {
                     for (name, text) in document {
                         print!("{}: ", name);
@@ -200,7 +206,8 @@ fn main() -> Result<(), Box<Error>> {
             println!();
         }
 
-        eprintln!("===== Found {} results in {:.2?} =====", number_of_documents, start.elapsed());
+        eprintln!("document field retrieve took {:.2?}", retrieve_duration);
+        eprintln!("===== Found {} results in {:.2?} =====", number_of_documents, start_total.elapsed());
         buffer.clear();
     }
 
