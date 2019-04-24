@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
+use deunicode::deunicode_with_tofu;
 use meilidb_core::{DocumentId, DocIndex};
 use meilidb_core::{Index as WordIndex, IndexBuilder as WordIndexBuilder};
-use meilidb_tokenizer::{Tokenizer, SeqTokenizer, Token};
-use crate::SchemaAttr;
-
+use meilidb_tokenizer::{is_cjk, Tokenizer, SeqTokenizer, Token};
 use sdset::Set;
+
+use crate::SchemaAttr;
 
 type Word = Vec<u8>; // TODO make it be a SmallVec
 
@@ -32,18 +33,8 @@ impl Indexer {
 
     pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) {
         for token in Tokenizer::new(text) {
-            if token.word_index >= self.word_limit { break }
-
-            let lower = token.word.to_lowercase();
-            let token = Token { word: &lower, ..token };
-
-            let docindex = match token_to_docindex(id, attr, token) {
-                Some(docindex) => docindex,
-                None => break,
-            };
-
-            let word = Vec::from(token.word);
-            self.indexed.entry(word).or_insert_with(Vec::new).push(docindex);
+            let must_continue = index_token(token, id, attr, self.word_limit, &mut self.indexed);
+            if !must_continue { break }
         }
     }
 
@@ -52,18 +43,8 @@ impl Indexer {
     {
         let iter = iter.into_iter();
         for token in SeqTokenizer::new(iter) {
-            if token.word_index >= self.word_limit { break }
-
-            let lower = token.word.to_lowercase();
-            let token = Token { word: &lower, ..token };
-
-            let docindex = match token_to_docindex(id, attr, token) {
-                Some(docindex) => docindex,
-                None => break,
-            };
-
-            let word = Vec::from(token.word);
-            self.indexed.entry(word).or_insert_with(Vec::new).push(docindex);
+            let must_continue = index_token(token, id, attr, self.word_limit, &mut self.indexed);
+            if !must_continue { break }
         }
     }
 
@@ -82,7 +63,44 @@ impl Indexer {
     }
 }
 
-fn token_to_docindex<'a>(id: DocumentId, attr: SchemaAttr, token: Token<'a>) -> Option<DocIndex> {
+fn index_token(
+    token: Token,
+    id: DocumentId,
+    attr: SchemaAttr,
+    word_limit: usize,
+    indexed: &mut BTreeMap<Word, Vec<DocIndex>>,
+) -> bool
+{
+    if token.word_index >= word_limit { return false }
+
+    let lower = token.word.to_lowercase();
+    let token = Token { word: &lower, ..token };
+    match token_to_docindex(id, attr, token) {
+        Some(docindex) => {
+            let word = Vec::from(token.word);
+            indexed.entry(word).or_insert_with(Vec::new).push(docindex);
+        },
+        None => return false,
+    }
+
+    if !lower.contains(is_cjk) {
+        let unidecoded = deunicode_with_tofu(&lower, "");
+        if unidecoded != lower {
+            let token = Token { word: &unidecoded, ..token };
+            match token_to_docindex(id, attr, token) {
+                Some(docindex) => {
+                    let word = Vec::from(token.word);
+                    indexed.entry(word).or_insert_with(Vec::new).push(docindex);
+                },
+                None => return false,
+            }
+        }
+    }
+
+    true
+}
+
+fn token_to_docindex(id: DocumentId, attr: SchemaAttr, token: Token) -> Option<DocIndex> {
     let word_index = u16::try_from(token.word_index).ok()?;
     let char_index = u16::try_from(token.char_index).ok()?;
     let char_length = u16::try_from(token.word.chars().count()).ok()?;

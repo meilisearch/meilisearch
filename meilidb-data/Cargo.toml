@@ -18,6 +18,7 @@ serde = { version = "1.0.90", features = ["derive"] }
 serde_json = { version = "1.0.39", features = ["preserve_order"] }
 sled = "0.23.0"
 toml = { version = "0.5.0", features = ["preserve_order"] }
+deunicode = "1.0.0"
 
 [dependencies.rmp-serde]
 git = "https://github.com/3Hren/msgpack-rust.git"
