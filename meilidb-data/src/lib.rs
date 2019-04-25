@@ -1,5 +1,4 @@
 mod database;
-mod index_event;
 mod indexer;
 mod number;
 mod ranked_map;
