@@ -1,11 +1,9 @@
-mod doc_ids;
 mod doc_indexes;
 mod shared_data;
 
 use std::slice::from_raw_parts;
 use std::mem::size_of;
 
-pub use self::doc_ids::DocIds;
 pub use self::doc_indexes::{DocIndexes, DocIndexesBuilder};
 pub use self::shared_data::SharedData;
 
