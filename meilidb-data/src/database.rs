@@ -251,8 +251,12 @@ impl RawIndex {
         Ok(())
     }
 
-    pub fn update_ranked_map(&self, ranked_map: Arc<RankedMap>) {
-        self.ranked_map.store(ranked_map)
+    pub fn update_ranked_map(&self, ranked_map: Arc<RankedMap>) -> sled::Result<()> {
+        let data = bincode::serialize(ranked_map.as_ref()).unwrap();
+        self.inner.set("ranked-map", data).map(drop)?;
+        self.ranked_map.store(ranked_map);
+
+        Ok(())
     }
 
     pub fn set_document_attribute<V>(
@@ -343,7 +347,8 @@ impl Index {
 
     pub fn documents_addition(&self) -> DocumentsAddition {
         let index = self.0.clone();
-        DocumentsAddition::from_raw(index)
+        let ranked_map = self.0.ranked_map().clone();
+        DocumentsAddition::from_raw(index, ranked_map)
     }
 
     pub fn documents_deletion(&self) -> DocumentsDeletion {
@@ -381,11 +386,12 @@ impl Index {
 pub struct DocumentsAddition {
     inner: RawIndex,
     indexer: Indexer,
+    ranked_map: RankedMap,
 }
 
 impl DocumentsAddition {
-    pub fn from_raw(inner: RawIndex) -> DocumentsAddition {
-        DocumentsAddition { inner, indexer: Indexer::new() }
+    pub fn from_raw(inner: RawIndex, ranked_map: RankedMap) -> DocumentsAddition {
+        DocumentsAddition { inner, indexer: Indexer::new(), ranked_map }
     }
 
     pub fn update_document<D>(&mut self, document: D) -> Result<(), Error>
@@ -403,6 +409,7 @@ impl DocumentsAddition {
             schema,
             index: &self.inner,
             indexer: &mut self.indexer,
+            ranked_map: &mut self.ranked_map,
             document_id,
         };
 
@@ -430,7 +437,10 @@ pub struct DocumentsDeletion {
 
 impl DocumentsDeletion {
     pub fn from_raw(inner: RawIndex) -> DocumentsDeletion {
-        DocumentsDeletion { inner, documents: Vec::new() }
+        DocumentsDeletion {
+            inner,
+            documents: Vec::new(),
+        }
     }
 
     pub fn delete_document(&mut self, id: DocumentId) {

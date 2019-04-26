@@ -36,7 +36,7 @@ impl FromStr for Number {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseNumberError {
     uint_error: ParseIntError,
     int_error: ParseIntError,

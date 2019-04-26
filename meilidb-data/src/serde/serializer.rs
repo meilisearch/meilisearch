@@ -2,14 +2,16 @@ use meilidb_core::DocumentId;
 use serde::ser;
 
 use crate::database::RawIndex;
+use crate::ranked_map::RankedMap;
 use crate::indexer::Indexer as RawIndexer;
 use crate::schema::{Schema, SchemaAttr};
-use super::{SerializerError, ConvertToString, Indexer};
+use super::{SerializerError, ConvertToString, ConvertToNumber, Indexer};
 
 pub struct Serializer<'a> {
     pub schema: &'a Schema,
     pub index: &'a RawIndex,
     pub indexer: &'a mut RawIndexer,
+    pub ranked_map: &'a mut RankedMap,
     pub document_id: DocumentId,
 }
 
@@ -134,6 +136,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
             document_id: self.document_id,
             index: self.index,
             indexer: self.indexer,
+            ranked_map: self.ranked_map,
             current_key_name: None,
         })
     }
@@ -149,6 +152,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
             document_id: self.document_id,
             index: self.index,
             indexer: self.indexer,
+            ranked_map: self.ranked_map,
         })
     }
 
@@ -169,6 +173,7 @@ pub struct MapSerializer<'a> {
     document_id: DocumentId,
     index: &'a RawIndex,
     indexer: &'a mut RawIndexer,
+    ranked_map: &'a mut RankedMap,
     current_key_name: Option<String>,
 }
 
@@ -205,6 +210,7 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
             self.document_id,
             self.index,
             self.indexer,
+            self.ranked_map,
             &key,
             value,
         )
@@ -220,6 +226,7 @@ pub struct StructSerializer<'a> {
     document_id: DocumentId,
     index: &'a RawIndex,
     indexer: &'a mut RawIndexer,
+    ranked_map: &'a mut RankedMap,
 }
 
 impl<'a> ser::SerializeStruct for StructSerializer<'a> {
@@ -238,6 +245,7 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
             self.document_id,
             self.index,
             self.indexer,
+            self.ranked_map,
             key,
             value,
         )
@@ -253,6 +261,7 @@ fn serialize_value<T: ?Sized>(
     document_id: DocumentId,
     index: &RawIndex,
     indexer: &mut RawIndexer,
+    ranked_map: &mut RankedMap,
     key: &str,
     value: &T,
 ) -> Result<(), SerializerError>
@@ -276,7 +285,9 @@ where T: ser::Serialize,
         }
 
         if props.is_ranked() {
-            unimplemented!()
+            let key = (document_id, attr);
+            let number = value.serialize(ConvertToNumber)?;
+            ranked_map.insert(key, number);
         }
     }
 
