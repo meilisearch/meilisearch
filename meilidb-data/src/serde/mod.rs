@@ -35,6 +35,7 @@ pub enum SerializerError {
     ParseNumberError(ParseNumberError),
     UnserializableType { type_name: &'static str },
     UnindexableType { type_name: &'static str },
+    UnrankableType { type_name: &'static str },
     Custom(String),
 }
 
@@ -60,6 +61,9 @@ impl fmt::Display for SerializerError {
             },
             SerializerError::UnindexableType { type_name } => {
                 write!(f, "{} are not an indexable type", type_name)
+            },
+            SerializerError::UnrankableType { type_name } => {
+                write!(f, "{} types can not be used for ranking", type_name)
             },
             SerializerError::Custom(s) => f.write_str(s),
         }
