@@ -4,7 +4,7 @@ use serde::ser;
 use crate::database::RawIndex;
 use crate::ranked_map::RankedMap;
 use crate::indexer::Indexer as RawIndexer;
-use crate::schema::{Schema, SchemaAttr};
+use crate::schema::Schema;
 use super::{SerializerError, ConvertToString, ConvertToNumber, Indexer};
 
 pub struct Serializer<'a> {
