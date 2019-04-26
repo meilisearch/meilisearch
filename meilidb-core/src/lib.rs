@@ -1,11 +1,9 @@
 pub mod criterion;
-pub mod data;
 mod index;
 mod automaton;
 mod query_builder;
 mod distinct_map;
 
-pub mod shared_data_cursor;
 pub mod write_to_bytes;
 
 use std::sync::Arc;
