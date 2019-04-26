@@ -4,8 +4,6 @@ mod automaton;
 mod query_builder;
 mod distinct_map;
 
-pub mod write_to_bytes;
-
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 
