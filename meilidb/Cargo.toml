@@ -1,0 +1,27 @@
+[package]
+edition = "2018"
+name = "meilidb"
+version = "0.3.1"
+authors = ["Kerollmops <renault.cle@gmail.com>"]
+
+[dependencies]
+meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
+meilidb-data = { path = "../meilidb-data", version = "0.1.0" }
+meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
+
+[features]
+default = []
+i128 = ["meilidb-core/i128"]
+nightly = ["meilidb-core/nightly"]
+
+[dev-dependencies]
+csv = "1.0.7"
+env_logger = "0.6.1"
+jemallocator = "0.1.9"
+quickcheck = "0.8.2"
+rand = "0.6.5"
+rand_xorshift = "0.1.1"
+serde = { version = "1.0.90", features = ["derive"] }
+structopt = "0.2.15"
+tempfile = "3.0.7"
+termcolor = "1.0.4"
