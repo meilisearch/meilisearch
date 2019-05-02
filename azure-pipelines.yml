@@ -1,11 +1,4 @@
 ---
-resources:
-  containers:
-    - container: stable
-      image: rust
-    - container: nightly
-      image: rustlang/rust:nightly
-
 trigger:
   branches:
     include: [ master ]
@@ -19,7 +12,7 @@ jobs:
     container: tpayet/chiquitita:latest
     steps:
       - script: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
         displayName: 'Install rustc'
       - script: |
           $HOME/.cargo/bin/cargo check
@@ -37,7 +30,7 @@ jobs:
     container: tpayet/chiquitita:latest
     steps:
       - script: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
         displayName: 'Install rustc'
       - script: |
           $HOME/.cargo/bin/cargo build --release
