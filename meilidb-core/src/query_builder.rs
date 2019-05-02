@@ -86,7 +86,7 @@ impl<'c, I, FI, S> QueryBuilder<'c, I, FI>
 where I: Deref<Target=Index<S>>,
       S: Store,
 {
-    fn query_all(&self, query: &str) -> Vec<RawDocument> {
+    fn query_all(&self, query: &str) -> Result<Vec<RawDocument>, S::Error> {
         let automatons = generate_automatons(query);
         let fst = self.index.set.as_fst();
 
@@ -107,10 +107,8 @@ where I: Deref<Target=Index<S>>,
                 let distance = automaton.eval(input).to_u8();
                 let is_exact = distance == 0 && input.len() == automaton.query_len();
 
-                // let doc_indexes = &self.index.indexes;
-                // let doc_indexes = &doc_indexes[iv.value as usize];
-
-                let doc_indexes = self.index.store.get_indexes(input).unwrap().unwrap();
+                let doc_indexes = self.index.store.get_indexes(input)?;
+                let doc_indexes = doc_indexes.expect("word doc-indexes not found");
 
                 for di in doc_indexes.as_slice() {
                     if self.searchable_attrs.as_ref().map_or(true, |r| r.contains(&di.attribute)) {
@@ -135,7 +133,7 @@ where I: Deref<Target=Index<S>>,
         info!("{} total documents to classify", raw_documents.len());
         info!("{} total matches to classify", total_matches);
 
-        raw_documents
+        Ok(raw_documents)
     }
 }
 
@@ -144,7 +142,7 @@ where I: Deref<Target=Index<S>>,
       FI: Fn(DocumentId) -> bool,
       S: Store,
 {
-    pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(self, query: &str, range: Range<usize>) -> Result<Vec<Document>, S::Error> {
         // We delegate the filter work to the distinct query builder,
         // specifying a distinct rule that has no effect.
         if self.filter.is_some() {
@@ -153,7 +151,7 @@ where I: Deref<Target=Index<S>>,
         }
 
         let start = Instant::now();
-        let mut documents = self.query_all(query);
+        let mut documents = self.query_all(query)?;
         info!("query_all took {:.2?}", start.elapsed());
 
         let mut groups = vec![documents.as_mut_slice()];
@@ -190,7 +188,7 @@ where I: Deref<Target=Index<S>>,
 
         let offset = cmp::min(documents.len(), range.start);
         let iter = documents.into_iter().skip(offset).take(range.len());
-        iter.map(|d| Document::from_raw(&d)).collect()
+        Ok(iter.map(|d| Document::from_raw(&d)).collect())
     }
 }
 
@@ -224,9 +222,9 @@ where I: Deref<Target=Index<S>>,
       K: Hash + Eq,
       S: Store,
 {
-    pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(self, query: &str, range: Range<usize>) -> Result<Vec<Document>, S::Error> {
         let start = Instant::now();
-        let mut documents = self.inner.query_all(query);
+        let mut documents = self.inner.query_all(query)?;
         info!("query_all took {:.2?}", start.elapsed());
 
         let mut groups = vec![documents.as_mut_slice()];
@@ -324,6 +322,6 @@ where I: Deref<Target=Index<S>>,
             }
         }
 
-        out_documents
+        Ok(out_documents)
     }
 }
