@@ -1,0 +1,47 @@
+---
+trigger:
+  branches:
+    include: [ master ]
+
+pr: [ master ]
+
+jobs:
+  - job: test
+    pool:
+      vmImage: 'Ubuntu 16.04'
+    container: tpayet/chiquitita:latest
+    steps:
+      - script: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
+        displayName: 'Install rustc'
+      - script: |
+          $HOME/.cargo/bin/cargo check
+        displayName: 'Check MeiliDB'
+      - script: |
+          $HOME/.cargo/bin/cargo test
+        displayName: 'Test MeiliDB'
+
+  - job: build
+    dependsOn:
+      - test
+    condition: succeeded()
+    pool:
+      vmImage: 'Ubuntu 16.04'
+    container: tpayet/chiquitita:latest
+    steps:
+      - script: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
+        displayName: 'Install rustc'
+      - script: |
+          $HOME/.cargo/bin/cargo build --release
+        displayName: 'Build MeiliDB'
+      - task: CopyFiles@2
+        inputs:
+          contents: '$(System.DefaultWorkingDirectory)/target/release/libmeilidb.rlib'
+          targetFolder: $(Build.ArtifactStagingDirectory)
+        displayName: 'Copy build'
+      - task: PublishBuildArtifacts@1
+        inputs:
+          artifactName: libmeilidb.rlib
+        displayName: 'Upload artifacts'
+
