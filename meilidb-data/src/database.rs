@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::convert::TryInto;
 use std::io::{self, Cursor, BufRead};
 use std::iter::FromIterator;
 use std::path::Path;
@@ -8,15 +9,17 @@ use std::{error, fmt};
 use arc_swap::{ArcSwap, Lease};
 use byteorder::{ReadBytesExt, BigEndian};
 use hashbrown::HashMap;
-use meilidb_core::{criterion::Criteria, QueryBuilder, DocumentId};
+use meilidb_core::{criterion::Criteria, QueryBuilder, DocumentId, DocIndex};
 use rmp_serde::decode::{Error as RmpError};
 use sdset::SetBuf;
 use serde::de;
 use sled::IVec;
+use zerocopy::{AsBytes, LayoutVerified};
 
 use crate::{Schema, SchemaAttr, RankedMap};
 use crate::serde::{extract_document_id, Serializer, Deserializer, SerializerError};
 use crate::indexer::{Indexer, WordIndexTree};
+use crate::document_attr_key::DocumentAttrKey;
 
 pub type WordIndex = meilidb_core::Index<WordIndexTree>;
 
@@ -27,6 +30,7 @@ pub enum Error {
     WordIndexMissing,
     MissingDocumentId,
     SledError(sled::Error),
+    FstError(fst::Error),
     BincodeError(bincode::Error),
     SerializerError(SerializerError),
 }
@@ -34,6 +38,12 @@ pub enum Error {
 impl From<sled::Error> for Error {
     fn from(error: sled::Error) -> Error {
         Error::SledError(error)
+    }
+}
+
+impl From<fst::Error> for Error {
+    fn from(error: fst::Error) -> Error {
+        Error::FstError(error)
     }
 }
 
@@ -58,6 +68,7 @@ impl fmt::Display for Error {
             WordIndexMissing => write!(f, "this index does not have a word index"),
             MissingDocumentId => write!(f, "document id is missing"),
             SledError(e) => write!(f, "sled error; {}", e),
+            FstError(e) => write!(f, "fst error; {}", e),
             BincodeError(e) => write!(f, "bincode error; {}", e),
             SerializerError(e) => write!(f, "serializer error; {}", e),
         }
@@ -180,6 +191,102 @@ impl Database {
     }
 }
 
+struct RawIndex2 {
+    main: MainIndex,
+    words: WordsIndex,
+    documents: DocumentsIndex,
+}
+
+struct MainIndex(Arc<sled::Tree>);
+
+impl MainIndex {
+    fn schema(&self) -> Result<Option<Schema>, Error> {
+        match self.0.get("schema")? {
+            Some(bytes) => {
+                let schema = Schema::read_from_bin(bytes.as_ref())?;
+                Ok(Some(schema))
+            },
+            None => Ok(None),
+        }
+    }
+
+    fn words_set(&self) -> Result<Option<fst::Set>, Error> {
+        match self.0.get("words")? {
+            Some(bytes) => {
+                let len = bytes.len();
+                let value = bytes.into();
+                let fst = fst::raw::Fst::from_shared_bytes(value, 0, len)?;
+                Ok(Some(fst::Set::from(fst)))
+            },
+            None => Ok(None),
+        }
+    }
+
+    fn ranked_map(&self) -> Result<Option<RankedMap>, Error> {
+        match self.0.get("ranked-map")? {
+            Some(bytes) => {
+                let ranked_map = bincode::deserialize(bytes.as_ref())?;
+                Ok(Some(ranked_map))
+            },
+            None => Ok(None),
+        }
+    }
+}
+
+struct WordsIndex(Arc<sled::Tree>);
+
+impl WordsIndex {
+    fn doc_indexes(&self, word: &[u8]) -> Result<Option<SetBuf<DocIndex>>, Error> {
+        match self.0.get(word)? {
+            Some(bytes) => {
+                let layout = LayoutVerified::new_slice(bytes.as_ref()).expect("invalid layout");
+                let slice = layout.into_slice();
+                let setbuf = SetBuf::new_unchecked(slice.to_vec());
+                Ok(Some(setbuf))
+            },
+            None => Ok(None),
+        }
+    }
+}
+
+struct DocumentsIndex(Arc<sled::Tree>);
+
+impl DocumentsIndex {
+    fn document_field(&self, id: DocumentId, attr: SchemaAttr) -> Result<Option<IVec>, Error> {
+        let key = DocumentAttrKey::new(id, attr).to_be_bytes();
+        self.0.get(key).map_err(Into::into)
+    }
+
+    fn document_fields(&self, id: DocumentId) -> DocumentFieldsIter {
+        let start = DocumentAttrKey::new(id, SchemaAttr::min());
+        let start = start.to_be_bytes();
+
+        let end = DocumentAttrKey::new(id, SchemaAttr::max());
+        let end = end.to_be_bytes();
+
+        DocumentFieldsIter(self.0.range(start..=end))
+    }
+}
+
+pub struct DocumentFieldsIter<'a>(sled::Iter<'a>);
+
+impl<'a> Iterator for DocumentFieldsIter<'a> {
+    type Item = Result<(SchemaAttr, IVec), Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.next() {
+            Some(Ok((key, value))) => {
+                let slice: &[u8] = key.as_ref();
+                let array = slice.try_into().unwrap();
+                let key = DocumentAttrKey::from_be_bytes(array);
+                Some(Ok((key.attribute, value)))
+            },
+            Some(Err(e)) => Some(Err(Error::SledError(e))),
+            None => None,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct RawIndex {
     schema: Schema,
@@ -291,23 +398,6 @@ impl RawIndex {
     {
         let key = document_key(id, attr);
         Ok(self.inner.del(key)?)
-    }
-}
-
-pub struct DocumentFieldsIter<'a>(sled::Iter<'a>);
-
-impl<'a> Iterator for DocumentFieldsIter<'a> {
-    type Item = Result<(DocumentId, SchemaAttr, IVec), Error>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next() {
-            Some(Ok((key, value))) => {
-                let (id, attr) = extract_document_key(key).unwrap();
-                Some(Ok((id, attr, value)))
-            },
-            Some(Err(e)) => Some(Err(Error::SledError(e))),
-            None => None,
-        }
     }
 }
 

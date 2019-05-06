@@ -45,7 +45,7 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a>
                 },
             }
         });
-        let iter = document_attributes.filter_map(|(_, attr, value)| {
+        let iter = document_attributes.filter_map(|(attr, value)| {
             if self.fields.map_or(true, |f| f.contains(&attr)) {
                 let attribute_name = self.raw_index.schema().attribute_name(attr);
                 Some((attribute_name, Value::new(value)))

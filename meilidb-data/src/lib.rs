@@ -1,4 +1,5 @@
 mod database;
+mod document_attr_key;
 mod indexer;
 mod number;
 mod ranked_map;

@@ -186,12 +186,16 @@ impl Schema {
 pub struct SchemaAttr(pub u16);
 
 impl SchemaAttr {
-    pub fn new(value: u16) -> SchemaAttr {
+    pub const fn new(value: u16) -> SchemaAttr {
         SchemaAttr(value)
     }
 
-    pub fn min() -> SchemaAttr {
-        SchemaAttr(0)
+    pub const fn min() -> SchemaAttr {
+        SchemaAttr(u16::min_value())
+    }
+
+    pub const fn max() -> SchemaAttr {
+        SchemaAttr(u16::max_value())
     }
 
     pub fn next(self) -> Option<SchemaAttr> {
@@ -200,10 +204,6 @@ impl SchemaAttr {
 
     pub fn prev(self) -> Option<SchemaAttr> {
         self.0.checked_sub(1).map(SchemaAttr)
-    }
-
-    pub fn max() -> SchemaAttr {
-        SchemaAttr(u16::MAX)
     }
 }
 
