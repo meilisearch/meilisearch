@@ -225,7 +225,7 @@ impl MainIndex {
     fn ranked_map(&self) -> Result<Option<RankedMap>, Error> {
         match self.0.get("ranked-map")? {
             Some(bytes) => {
-                let ranked_map = bincode::deserialize(bytes.as_ref())?;
+                let ranked_map = RankedMap::read_from_bin(bytes.as_ref())?;
                 Ok(Some(ranked_map))
             },
             None => Ok(None),
@@ -309,7 +309,7 @@ impl RawIndex {
 
         let ranked_map = {
             let map = match inner.get("ranked-map")? {
-                Some(bytes) => bincode::deserialize(bytes.as_ref())?,
+                Some(bytes) => RankedMap::read_from_bin(bytes.as_ref())?,
                 None => RankedMap::default(),
             };
 
@@ -355,8 +355,10 @@ impl RawIndex {
     }
 
     pub fn update_ranked_map(&self, ranked_map: Arc<RankedMap>) -> sled::Result<()> {
-        let data = bincode::serialize(ranked_map.as_ref()).unwrap();
-        self.inner.set("ranked-map", data).map(drop)?;
+        let mut bytes = Vec::new();
+        ranked_map.as_ref().write_to_bin(&mut bytes).unwrap();
+
+        self.inner.set("ranked-map", bytes).map(drop)?;
         self.ranked_map.store(ranked_map);
 
         Ok(())

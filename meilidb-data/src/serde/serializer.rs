@@ -285,9 +285,8 @@ where T: ser::Serialize,
         }
 
         if props.is_ranked() {
-            let key = (document_id, attr);
             let number = value.serialize(ConvertToNumber)?;
-            ranked_map.insert(key, number);
+            ranked_map.insert(document_id, attr, number);
         }
     }
 
