@@ -54,7 +54,7 @@ This is the first entry point of the engine, you can read more about how it work
 
 To make it short it is a powerful way to store all the words that are present in the indexed documents. You construct it by giving it all the words you want to index associated with a value that, for the moment, can only be an `u64`. When you want to search in it you can provide any automaton you want, in MeiliDB [a custom levenshtein automaton](https://github.com/tantivy-search/levenshtein-automata/) is used.
 
-Note that the number under each word is auto-incremental, each new word have a new number that is greater than the prevous one.
+Note that the number under each word is auto-incremental, each new word have a new number that is greater than the previous one.
 
 Another powerful feature of `fst` is that it can nearly avoid using RAM and be streamed to disk for example, the problem is that the keys must be always added in lexicographic order, so you must sort them before, for the moment MeiliDB uses a [BTreeMap](https://github.com/Kerollmops/raptor-rs/blob/8abdb0a228e2808fe1814a6a0641a4b72d158579/src/metadata/doc_indexes.rs#L107-L112).
 
@@ -72,7 +72,7 @@ When a blob represent a negative update it only contains this simple slice of de
 
 ### The schema
 
-The schema is a data struture that represents which documents attributes should be stored and which should be indexed. It is stored under the "_data-schema_" entry and given to MeiliDB only at the creation.
+The schema is a data structure that represents which documents attributes should be stored and which should be indexed. It is stored under the "_data-schema_" entry and given to MeiliDB only at the creation.
 
 Each document attribute is associated to a unique 32 bit number named `SchemaAttr`.
 
