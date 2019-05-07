@@ -1,5 +1,5 @@
 use std::hash::Hash;
-use std::ops::{Range, Deref};
+use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
 use std::{cmp, mem};
@@ -15,7 +15,7 @@ use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::criterion::Criteria;
 use crate::raw_documents_from_matches;
-use crate::{Match, DocumentId, Index, Store, RawDocument, Document};
+use crate::{Match, DocumentId, Store, RawDocument, Document};
 
 fn generate_automatons(query: &str) -> Vec<DfaExt> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
@@ -35,37 +35,37 @@ fn generate_automatons(query: &str) -> Vec<DfaExt> {
     automatons
 }
 
-pub struct QueryBuilder<'c, I, FI = fn(DocumentId) -> bool> {
-    index: I,
+pub struct QueryBuilder<'c, S, FI = fn(DocumentId) -> bool> {
+    store: S,
     criteria: Criteria<'c>,
     searchable_attrs: Option<HashSet<u16>>,
     filter: Option<FI>,
 }
 
-impl<'c, I> QueryBuilder<'c, I, fn(DocumentId) -> bool> {
-    pub fn new(index: I) -> Self {
-        QueryBuilder::with_criteria(index, Criteria::default())
+impl<'c, S> QueryBuilder<'c, S, fn(DocumentId) -> bool> {
+    pub fn new(store: S) -> Self {
+        QueryBuilder::with_criteria(store, Criteria::default())
     }
 
-    pub fn with_criteria(index: I, criteria: Criteria<'c>) -> Self {
-        QueryBuilder { index, criteria, searchable_attrs: None, filter: None }
+    pub fn with_criteria(store: S, criteria: Criteria<'c>) -> Self {
+        QueryBuilder { store, criteria, searchable_attrs: None, filter: None }
     }
 }
 
-impl<'c, I, FI> QueryBuilder<'c, I, FI>
+impl<'c, S, FI> QueryBuilder<'c, S, FI>
 {
-    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'c, I, F>
+    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'c, S, F>
     where F: Fn(DocumentId) -> bool,
     {
         QueryBuilder {
-            index: self.index,
+            store: self.store,
             criteria: self.criteria,
             searchable_attrs: self.searchable_attrs,
             filter: Some(function)
         }
     }
 
-    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'c, I, FI, F>
+    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'c, S, FI, F>
     where F: Fn(DocumentId) -> Option<K>,
           K: Hash + Eq,
     {
@@ -82,18 +82,18 @@ impl<'c, I, FI> QueryBuilder<'c, I, FI>
     }
 }
 
-impl<'c, I, FI, S> QueryBuilder<'c, I, FI>
-where I: Deref<Target=Index<S>>,
-      S: Store,
+impl<'c, S, FI> QueryBuilder<'c, S, FI>
+where S: Store,
 {
     fn query_all(&self, query: &str) -> Result<Vec<RawDocument>, S::Error> {
         let automatons = generate_automatons(query);
-        let fst = self.index.set.as_fst();
+        let words = self.store.words()?;
+        let words = words.as_fst();
 
         let mut stream = {
             let mut op_builder = fst::raw::OpBuilder::new();
             for automaton in &automatons {
-                let stream = fst.search(automaton);
+                let stream = words.search(automaton);
                 op_builder.push(stream);
             }
             op_builder.r#union()
@@ -107,7 +107,7 @@ where I: Deref<Target=Index<S>>,
                 let distance = automaton.eval(input).to_u8();
                 let is_exact = distance == 0 && input.len() == automaton.query_len();
 
-                let doc_indexes = self.index.store.get_indexes(input)?;
+                let doc_indexes = self.store.word_indexes(input)?;
                 let doc_indexes = doc_indexes.expect("word doc-indexes not found");
 
                 for di in doc_indexes.as_slice() {
@@ -137,10 +137,9 @@ where I: Deref<Target=Index<S>>,
     }
 }
 
-impl<'c, I, FI, S> QueryBuilder<'c, I, FI>
-where I: Deref<Target=Index<S>>,
+impl<'c, S, FI> QueryBuilder<'c, S, FI>
+where S: Store,
       FI: Fn(DocumentId) -> bool,
-      S: Store,
 {
     pub fn query(self, query: &str, range: Range<usize>) -> Result<Vec<Document>, S::Error> {
         // We delegate the filter work to the distinct query builder,
@@ -215,12 +214,11 @@ impl<'c, I, FI, FD> DistinctQueryBuilder<'c, I, FI, FD>
     }
 }
 
-impl<'c, I, FI, FD, K, S> DistinctQueryBuilder<'c, I, FI, FD>
-where I: Deref<Target=Index<S>>,
+impl<'c, S, FI, FD, K> DistinctQueryBuilder<'c, S, FI, FD>
+where S: Store,
       FI: Fn(DocumentId) -> bool,
       FD: Fn(DocumentId) -> Option<K>,
       K: Hash + Eq,
-      S: Store,
 {
     pub fn query(self, query: &str, range: Range<usize>) -> Result<Vec<Document>, S::Error> {
         let start = Instant::now();

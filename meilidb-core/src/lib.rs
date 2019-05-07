@@ -1,18 +1,18 @@
-pub mod criterion;
-mod index;
 mod automaton;
-mod query_builder;
 mod distinct_map;
+mod query_builder;
+mod store;
+pub mod criterion;
 
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
 
-use slice_group_by::GroupBy;
 use rayon::slice::ParallelSliceMut;
+use serde::{Serialize, Deserialize};
+use slice_group_by::GroupBy;
 use zerocopy::{AsBytes, FromBytes};
 
-pub use self::index::{Index, Store};
 pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder};
+pub use self::store::Store;
 
 /// Represent an internally generated document unique identifier.
 ///
