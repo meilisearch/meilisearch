@@ -87,8 +87,7 @@ where S: Store,
 {
     fn query_all(&self, query: &str) -> Result<Vec<RawDocument>, S::Error> {
         let automatons = generate_automatons(query);
-        let words = self.store.words()?;
-        let words = words.as_fst();
+        let words = self.store.words()?.as_fst();
 
         let mut stream = {
             let mut op_builder = fst::raw::OpBuilder::new();
