@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 
 use deunicode::deunicode_with_tofu;
-use meilidb_core::{DocumentId, DocIndex, Store};
+use meilidb_core::{DocumentId, DocIndex};
 use meilidb_tokenizer::{is_cjk, Tokenizer, SeqTokenizer, Token};
 use sdset::SetBuf;
 
@@ -12,27 +12,39 @@ type Word = Vec<u8>; // TODO make it be a SmallVec
 
 pub struct Indexer {
     word_limit: usize, // the maximum number of indexed words
-    indexed: BTreeMap<Word, Vec<DocIndex>>,
+    words_doc_indexes: BTreeMap<Word, Vec<DocIndex>>,
+    docs_attrs_words: HashMap<(DocumentId, SchemaAttr), Vec<Word>>,
+}
+
+pub struct Indexed {
+    pub words_doc_indexes: BTreeMap<Word, SetBuf<DocIndex>>,
+    pub docs_attrs_words: HashMap<(DocumentId, SchemaAttr), fst::Set>,
 }
 
 impl Indexer {
     pub fn new() -> Indexer {
-        Indexer {
-            word_limit: 1000,
-            indexed: BTreeMap::new(),
-        }
+        Indexer::with_word_limit(1000)
     }
 
     pub fn with_word_limit(limit: usize) -> Indexer {
         Indexer {
             word_limit: limit,
-            indexed: BTreeMap::new(),
+            words_doc_indexes: BTreeMap::new(),
+            docs_attrs_words: HashMap::new(),
         }
     }
 
     pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) {
         for token in Tokenizer::new(text) {
-            let must_continue = index_token(token, id, attr, self.word_limit, &mut self.indexed);
+            let must_continue = index_token(
+                token,
+                id,
+                attr,
+                self.word_limit,
+                &mut self.words_doc_indexes,
+                &mut self.docs_attrs_words,
+            );
+
             if !must_continue { break }
         }
     }
@@ -42,17 +54,38 @@ impl Indexer {
     {
         let iter = iter.into_iter();
         for token in SeqTokenizer::new(iter) {
-            let must_continue = index_token(token, id, attr, self.word_limit, &mut self.indexed);
+            let must_continue = index_token(
+                token,
+                id,
+                attr,
+                self.word_limit,
+                &mut self.words_doc_indexes,
+                &mut self.docs_attrs_words,
+            );
+
             if !must_continue { break }
         }
     }
 
-    pub fn build(self) -> BTreeMap<Word, SetBuf<DocIndex>> {
-        self.indexed.into_iter().map(|(word, mut indexes)| {
-            indexes.sort_unstable();
-            indexes.dedup();
-            (word, SetBuf::new_unchecked(indexes))
-        }).collect()
+    pub fn build(self) -> Indexed {
+        let words_doc_indexes = self.words_doc_indexes
+            .into_iter()
+            .map(|(word, mut indexes)| {
+                indexes.sort_unstable();
+                indexes.dedup();
+                (word, SetBuf::new_unchecked(indexes))
+            }).collect();
+
+        let docs_attrs_words = self.docs_attrs_words
+            .into_iter()
+            .map(|((id, attr), mut words)| {
+                words.sort_unstable();
+                words.dedup();
+                ((id, attr), fst::Set::from_iter(words).unwrap())
+            })
+            .collect();
+
+        Indexed { words_doc_indexes, docs_attrs_words }
     }
 }
 
@@ -61,7 +94,8 @@ fn index_token(
     id: DocumentId,
     attr: SchemaAttr,
     word_limit: usize,
-    indexed: &mut BTreeMap<Word, Vec<DocIndex>>,
+    words_doc_indexes: &mut BTreeMap<Word, Vec<DocIndex>>,
+    docs_attrs_words: &mut HashMap<(DocumentId, SchemaAttr), Vec<Word>>,
 ) -> bool
 {
     if token.word_index >= word_limit { return false }
@@ -71,7 +105,8 @@ fn index_token(
     match token_to_docindex(id, attr, token) {
         Some(docindex) => {
             let word = Vec::from(token.word);
-            indexed.entry(word).or_insert_with(Vec::new).push(docindex);
+            words_doc_indexes.entry(word.clone()).or_insert_with(Vec::new).push(docindex);
+            docs_attrs_words.entry((id, attr)).or_insert_with(Vec::new).push(word);
         },
         None => return false,
     }
@@ -83,7 +118,8 @@ fn index_token(
             match token_to_docindex(id, attr, token) {
                 Some(docindex) => {
                     let word = Vec::from(token.word);
-                    indexed.entry(word).or_insert_with(Vec::new).push(docindex);
+                    words_doc_indexes.entry(word.clone()).or_insert_with(Vec::new).push(docindex);
+                    docs_attrs_words.entry((id, attr)).or_insert_with(Vec::new).push(word);
                 },
                 None => return false,
             }

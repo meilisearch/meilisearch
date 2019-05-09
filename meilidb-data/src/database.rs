@@ -1,25 +1,22 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{BTreeSet, HashSet, HashMap};
 use std::collections::hash_map::Entry;
 use std::convert::TryInto;
-use std::io::{self, Cursor, BufRead};
-use std::iter::FromIterator;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::{error, fmt};
 
 use arc_swap::{ArcSwap, Lease};
-use byteorder::{ReadBytesExt, BigEndian};
 use meilidb_core::{criterion::Criteria, QueryBuilder, Store, DocumentId, DocIndex};
 use rmp_serde::decode::{Error as RmpError};
-use sdset::{Set, SetBuf, SetOperation, duo::Union};
+use sdset::{Set, SetBuf, SetOperation, duo::{Union, DifferenceByKey}};
 use serde::de;
 use sled::IVec;
 use zerocopy::{AsBytes, LayoutVerified};
-use fst::{SetBuilder, set::OpBuilder};
+use fst::{SetBuilder, set::OpBuilder, Streamer};
 
 use crate::{Schema, SchemaAttr, RankedMap};
 use crate::serde::{extract_document_id, Serializer, Deserializer, SerializerError};
-use crate::indexer::Indexer;
+use crate::indexer::{Indexer, Indexed};
 use crate::document_attr_key::DocumentAttrKey;
 
 #[derive(Debug)]
@@ -88,6 +85,22 @@ impl Database {
         Ok(Database { cache, inner })
     }
 
+    pub fn indexes(&self) -> Result<Option<HashSet<String>>, Error> {
+        let bytes = match self.inner.get("indexes")? {
+            Some(bytes) => bytes,
+            None => return Ok(None),
+        };
+
+        let indexes = bincode::deserialize(&bytes)?;
+        Ok(Some(indexes))
+    }
+
+    pub fn set_indexes(&self, value: &HashSet<String>) -> Result<(), Error> {
+        let bytes = bincode::serialize(value)?;
+        self.inner.set("indexes", bytes)?;
+        Ok(())
+    }
+
     pub fn open_index(&self, name: &str) -> Result<Option<Arc<Index>>, Error> {
         {
             let cache = self.cache.read().unwrap();
@@ -102,14 +115,8 @@ impl Database {
                 occupied.get().clone()
             },
             Entry::Vacant(vacant) => {
-                let bytes = match self.inner.get("indexes")? {
-                    Some(bytes) => bytes,
-                    None => return Ok(None),
-                };
-
-                let indexes: HashSet<&str> = bincode::deserialize(&bytes)?;
-                if indexes.get(name).is_none() {
-                    return Ok(None);
+                if !self.indexes()?.map_or(false, |x| !x.contains(name)) {
+                    return Ok(None)
                 }
 
                 let main = {
@@ -123,13 +130,19 @@ impl Database {
                     WordsIndex(tree)
                 };
 
+                let attrs_words = {
+                    let tree_name = format!("{}-attrs-words", name);
+                    let tree = self.inner.open_tree(tree_name)?;
+                    AttrsWords(tree)
+                };
+
                 let documents = {
                     let tree_name = format!("{}-documents", name);
                     let tree = self.inner.open_tree(tree_name)?;
                     DocumentsIndex(tree)
                 };
 
-                let raw_index = RawIndex { main, words, documents };
+                let raw_index = RawIndex { main, words, attrs_words, documents };
                 let index = Index::from_raw(raw_index)?;
 
                 vacant.insert(Arc::new(index)).clone()
@@ -147,16 +160,6 @@ impl Database {
                 occupied.get().clone()
             },
             Entry::Vacant(vacant) => {
-                let bytes = self.inner.get("indexes")?;
-                let bytes = bytes.as_ref();
-
-                let mut indexes: HashSet<&str> = match bytes {
-                    Some(bytes) => bincode::deserialize(bytes)?,
-                    None => HashSet::new(),
-                };
-
-                let new_insertion = indexes.insert(name);
-
                 let main = {
                     let tree = self.inner.open_tree(name)?;
                     MainIndex(tree)
@@ -168,10 +171,18 @@ impl Database {
                     }
                 }
 
+                main.set_schema(&schema)?;
+
                 let words = {
                     let tree_name = format!("{}-words", name);
                     let tree = self.inner.open_tree(tree_name)?;
                     WordsIndex(tree)
+                };
+
+                let attrs_words = {
+                    let tree_name = format!("{}-attrs-words", name);
+                    let tree = self.inner.open_tree(tree_name)?;
+                    AttrsWords(tree)
                 };
 
                 let documents = {
@@ -180,7 +191,11 @@ impl Database {
                     DocumentsIndex(tree)
                 };
 
-                let raw_index = RawIndex { main, words, documents };
+                let mut indexes = self.indexes()?.unwrap_or_else(HashSet::new);
+                indexes.insert(name.to_string());
+                self.set_indexes(&indexes)?;
+
+                let raw_index = RawIndex { main, words, attrs_words, documents };
                 let index = Index::from_raw(raw_index)?;
 
                 vacant.insert(Arc::new(index)).clone()
@@ -195,6 +210,7 @@ impl Database {
 pub struct RawIndex {
     pub main: MainIndex,
     pub words: WordsIndex,
+    pub attrs_words: AttrsWords,
     pub documents: DocumentsIndex,
 }
 
@@ -210,6 +226,13 @@ impl MainIndex {
             },
             None => Ok(None),
         }
+    }
+
+    pub fn set_schema(&self, schema: &Schema) -> Result<(), Error> {
+        let mut bytes = Vec::new();
+        schema.write_to_bin(&mut bytes)?;
+        self.0.set("schema", bytes)?;
+        Ok(())
     }
 
     pub fn words_set(&self) -> Result<Option<fst::Set>, Error> {
@@ -263,13 +286,84 @@ impl WordsIndex {
         }
     }
 
-    pub fn set_doc_indexes(&self, word: &[u8], set: Option<&Set<DocIndex>>) -> sled::Result<()> {
-        match set {
-            Some(set) => self.0.set(word, set.as_bytes())?,
-            None => self.0.del(word)?,
+    pub fn set_doc_indexes(&self, word: &[u8], set: &Set<DocIndex>) -> sled::Result<()> {
+        self.0.set(word, set.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn del_doc_indexes(&self, word: &[u8]) -> sled::Result<()> {
+        self.0.del(word)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct AttrsWords(Arc<sled::Tree>);
+
+impl AttrsWords {
+    pub fn attr_words(&self, id: DocumentId, attr: SchemaAttr) -> Result<Option<fst::Set>, Error> {
+        let key = DocumentAttrKey::new(id, attr).to_be_bytes();
+        match self.0.get(key)? {
+            Some(bytes) => {
+                let len = bytes.len();
+                let value = bytes.into();
+                let fst = fst::raw::Fst::from_shared_bytes(value, 0, len)?;
+                Ok(Some(fst::Set::from(fst)))
+            },
+            None => Ok(None)
+        }
+    }
+
+    pub fn attrs_words(&self, id: DocumentId) -> DocumentAttrsWordsIter {
+        let start = DocumentAttrKey::new(id, SchemaAttr::min());
+        let start = start.to_be_bytes();
+
+        let end = DocumentAttrKey::new(id, SchemaAttr::max());
+        let end = end.to_be_bytes();
+
+        DocumentAttrsWordsIter(self.0.range(start..=end))
+    }
+
+    pub fn set_attr_words(
+        &self,
+        id: DocumentId,
+        attr: SchemaAttr,
+        words: Option<&fst::Set>,
+    ) -> Result<(), Error>
+    {
+        let key = DocumentAttrKey::new(id, attr).to_be_bytes();
+
+        match words {
+            Some(words) => self.0.set(key, words.as_fst().as_bytes())?,
+            None => self.0.del(key)?,
         };
 
         Ok(())
+    }
+}
+
+pub struct DocumentAttrsWordsIter<'a>(sled::Iter<'a>);
+
+impl<'a> Iterator for DocumentAttrsWordsIter<'a> {
+    type Item = sled::Result<(SchemaAttr, fst::Set)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.next() {
+            Some(Ok((key, bytes))) => {
+                let slice: &[u8] = key.as_ref();
+                let array = slice.try_into().unwrap();
+                let key = DocumentAttrKey::from_be_bytes(array);
+
+                let len = bytes.len();
+                let value = bytes.into();
+                let fst = fst::raw::Fst::from_shared_bytes(value, 0, len).unwrap();
+                let set = fst::Set::from(fst);
+
+                Some(Ok((key.attribute, set)))
+            },
+            Some(Err(e)) => Some(Err(e.into())),
+            None => None,
+        }
     }
 }
 
@@ -285,6 +379,12 @@ impl DocumentsIndex {
     pub fn set_document_field(&self, id: DocumentId, attr: SchemaAttr, value: Vec<u8>) -> sled::Result<()> {
         let key = DocumentAttrKey::new(id, attr).to_be_bytes();
         self.0.set(key, value)?;
+        Ok(())
+    }
+
+    pub fn del_document_field(&self, id: DocumentId, attr: SchemaAttr) -> sled::Result<()> {
+        let key = DocumentAttrKey::new(id, attr).to_be_bytes();
+        self.0.del(key)?;
         Ok(())
     }
 
@@ -375,9 +475,7 @@ impl Index {
     }
 
     pub fn documents_deletion(&self) -> DocumentsDeletion {
-        // let index = self.0.clone();
-        // DocumentsDeletion::from_raw(index)
-        unimplemented!()
+        DocumentsDeletion::new(self)
     }
 
     pub fn document<T>(
@@ -467,11 +565,12 @@ impl<'a> DocumentsAddition<'a> {
         let lease_inner = self.inner.lease_inner();
         let main = &lease_inner.raw.main;
         let words = &lease_inner.raw.words;
+        let attrs_words = &lease_inner.raw.attrs_words;
 
-        let delta_index = self.indexer.build();
+        let Indexed { words_doc_indexes, docs_attrs_words } = self.indexer.build();
         let mut delta_words_builder = SetBuilder::memory();
 
-        for (word, delta_set) in delta_index {
+        for (word, delta_set) in words_doc_indexes {
             delta_words_builder.insert(&word).unwrap();
 
             let set = match words.doc_indexes(&word)? {
@@ -479,7 +578,11 @@ impl<'a> DocumentsAddition<'a> {
                 None => delta_set,
             };
 
-            words.set_doc_indexes(&word, Some(&set))?;
+            words.set_doc_indexes(&word, &set)?;
+        }
+
+        for ((id, attr), words) in docs_attrs_words {
+            attrs_words.set_attr_words(id, attr, Some(&words))?;
         }
 
         let delta_words = delta_words_builder
@@ -534,20 +637,83 @@ impl<'a> DocumentsDeletion<'a> {
     }
 
     pub fn finalize(mut self) -> Result<(), Error> {
-        self.documents.sort_unstable();
-        self.documents.dedup();
+        let lease_inner = self.inner.lease_inner();
+        let main = &lease_inner.raw.main;
+        let attrs_words = &lease_inner.raw.attrs_words;
+        let words = &lease_inner.raw.words;
+        let documents = &lease_inner.raw.documents;
 
-        let idset = SetBuf::new_unchecked(self.documents);
+        let idset = {
+            self.documents.sort_unstable();
+            self.documents.dedup();
+            SetBuf::new_unchecked(self.documents)
+        };
 
-        // let index = self.inner.word_index();
+        let mut words_attrs = HashMap::new();
+        for id in idset.into_vec() {
+            for result in attrs_words.attrs_words(id) {
+                let (attr, words) = result?;
+                let mut stream = words.stream();
+                while let Some(word) = stream.next() {
+                    let word = word.to_vec();
+                    words_attrs.entry(word).or_insert_with(Vec::new).push((id, attr));
+                }
+            }
+        }
 
-        // let new_index = index.remove_documents(&idset)?;
-        // let new_index = Arc::from(new_index);
+        let mut removed_words = BTreeSet::new();
+        for (word, mut attrs) in words_attrs {
+            attrs.sort_unstable();
+            attrs.dedup();
+            let attrs = SetBuf::new_unchecked(attrs);
 
-        // self.inner.update_word_index(new_index);
+            if let Some(doc_indexes) = words.doc_indexes(&word)? {
+                let op = DifferenceByKey::new(&doc_indexes, &attrs, |d| d.document_id, |(id, _)| *id);
+                let doc_indexes = op.into_set_buf();
 
-        // Ok(())
+                if !doc_indexes.is_empty() {
+                    words.set_doc_indexes(&word, &doc_indexes)?;
+                } else {
+                    words.del_doc_indexes(&word)?;
+                    removed_words.insert(word);
+                }
+            }
 
-        unimplemented!("documents deletion finalize")
+            for (id, attr) in attrs.into_vec() {
+                documents.del_document_field(id, attr)?;
+            }
+        }
+
+        let removed_words = fst::Set::from_iter(removed_words).unwrap();
+        let words = match main.words_set()? {
+            Some(words_set) => {
+                let op = fst::set::OpBuilder::new()
+                    .add(words_set.stream())
+                    .add(removed_words.stream())
+                    .difference();
+
+                let mut words_builder = SetBuilder::memory();
+                words_builder.extend_stream(op).unwrap();
+                words_builder
+                    .into_inner()
+                    .and_then(fst::Set::from_bytes)
+                    .unwrap()
+            },
+            None => fst::Set::default(),
+        };
+
+        main.set_words_set(&words)?;
+
+        // TODO must update the ranked_map too!
+
+        // update the "consistent" view of the Index
+        let ranked_map = lease_inner.ranked_map.clone();
+        let schema = lease_inner.schema.clone();
+        let raw = lease_inner.raw.clone();
+
+        let inner = InnerIndex { words, schema, ranked_map, raw };
+        self.inner.0.store(Arc::new(inner));
+
+        Ok(())
     }
 }

@@ -107,7 +107,10 @@ where S: Store,
                 let is_exact = distance == 0 && input.len() == automaton.query_len();
 
                 let doc_indexes = self.store.word_indexes(input)?;
-                let doc_indexes = doc_indexes.expect("word doc-indexes not found");
+                let doc_indexes = match doc_indexes {
+                    Some(doc_indexes) => doc_indexes,
+                    None => continue,
+                };
 
                 for di in doc_indexes.as_slice() {
                     if self.searchable_attrs.as_ref().map_or(true, |r| r.contains(&di.attribute)) {
