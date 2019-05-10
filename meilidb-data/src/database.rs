@@ -324,20 +324,15 @@ impl AttrsWords {
         DocumentAttrsWordsIter(self.0.range(start..=end))
     }
 
-    pub fn set_attr_words(
-        &self,
-        id: DocumentId,
-        attr: SchemaAttr,
-        words: Option<&fst::Set>,
-    ) -> Result<(), Error>
-    {
+    pub fn set_attr_words(&self, id: DocumentId, attr: SchemaAttr, words: &fst::Set) -> Result<(), Error> {
         let key = DocumentAttrKey::new(id, attr).to_be_bytes();
+        self.0.set(key, words.as_fst().as_bytes())?;
+        Ok(())
+    }
 
-        match words {
-            Some(words) => self.0.set(key, words.as_fst().as_bytes())?,
-            None => self.0.del(key)?,
-        };
-
+    pub fn del_attr_words(&self, id: DocumentId, attr: SchemaAttr) -> Result<(), Error> {
+        let key = DocumentAttrKey::new(id, attr).to_be_bytes();
+        self.0.del(key)?;
         Ok(())
     }
 }
@@ -582,7 +577,7 @@ impl<'a> DocumentsAddition<'a> {
         }
 
         for ((id, attr), words) in docs_attrs_words {
-            attrs_words.set_attr_words(id, attr, Some(&words))?;
+            attrs_words.set_attr_words(id, attr, &words)?;
         }
 
         let delta_words = delta_words_builder
@@ -681,6 +676,7 @@ impl<'a> DocumentsDeletion<'a> {
 
             for (id, attr) in attrs.into_vec() {
                 documents.del_document_field(id, attr)?;
+                attrs_words.del_attr_words(id, attr)?;
             }
         }
 
