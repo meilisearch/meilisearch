@@ -115,7 +115,7 @@ impl Database {
                 occupied.get().clone()
             },
             Entry::Vacant(vacant) => {
-                if !self.indexes()?.map_or(false, |x| !x.contains(name)) {
+                if !self.indexes()?.map_or(false, |x| x.contains(name)) {
                     return Ok(None)
                 }
 
