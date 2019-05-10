@@ -464,6 +464,10 @@ impl Index {
         self.0.lease()
     }
 
+    pub fn schema(&self) -> Schema {
+        self.0.lease().schema.clone()
+    }
+
     pub fn documents_addition(&self) -> DocumentsAddition {
         let ranked_map = self.0.lease().ranked_map.clone();
         DocumentsAddition::new(self, ranked_map)
