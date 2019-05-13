@@ -1,15 +1,14 @@
 use meilidb_core::DocumentId;
 use serde::ser;
 
-use crate::database::Index;
-use crate::ranked_map::RankedMap;
 use crate::indexer::Indexer as RawIndexer;
+use crate::ranked_map::RankedMap;
 use crate::schema::Schema;
-use super::{SerializerError, ConvertToString, ConvertToNumber, Indexer};
+use super::{RamDocumentStore, SerializerError, ConvertToString, ConvertToNumber, Indexer};
 
 pub struct Serializer<'a> {
     pub schema: &'a Schema,
-    pub index: &'a Index,
+    pub document_store: &'a mut RamDocumentStore,
     pub indexer: &'a mut RawIndexer,
     pub ranked_map: &'a mut RankedMap,
     pub document_id: DocumentId,
@@ -134,7 +133,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
         Ok(MapSerializer {
             schema: self.schema,
             document_id: self.document_id,
-            index: self.index,
+            document_store: self.document_store,
             indexer: self.indexer,
             ranked_map: self.ranked_map,
             current_key_name: None,
@@ -150,7 +149,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
         Ok(StructSerializer {
             schema: self.schema,
             document_id: self.document_id,
-            index: self.index,
+            document_store: self.document_store,
             indexer: self.indexer,
             ranked_map: self.ranked_map,
         })
@@ -171,7 +170,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
 pub struct MapSerializer<'a> {
     schema: &'a Schema,
     document_id: DocumentId,
-    index: &'a Index,
+    document_store: &'a mut RamDocumentStore,
     indexer: &'a mut RawIndexer,
     ranked_map: &'a mut RankedMap,
     current_key_name: Option<String>,
@@ -208,7 +207,7 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
         serialize_value(
             self.schema,
             self.document_id,
-            self.index,
+            self.document_store,
             self.indexer,
             self.ranked_map,
             &key,
@@ -224,7 +223,7 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
 pub struct StructSerializer<'a> {
     schema: &'a Schema,
     document_id: DocumentId,
-    index: &'a Index,
+    document_store: &'a mut RamDocumentStore,
     indexer: &'a mut RawIndexer,
     ranked_map: &'a mut RankedMap,
 }
@@ -243,7 +242,7 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
         serialize_value(
             self.schema,
             self.document_id,
-            self.index,
+            self.document_store,
             self.indexer,
             self.ranked_map,
             key,
@@ -259,7 +258,7 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
 fn serialize_value<T: ?Sized>(
     schema: &Schema,
     document_id: DocumentId,
-    index: &Index,
+    document_store: &mut RamDocumentStore,
     indexer: &mut RawIndexer,
     ranked_map: &mut RankedMap,
     key: &str,
@@ -272,7 +271,7 @@ where T: ser::Serialize,
 
         if props.is_stored() {
             let value = rmp_serde::to_vec_named(value)?;
-            index.lease_inner().raw.documents.set_document_field(document_id, attr, value)?;
+            document_store.set_document_field(document_id, attr, value);
         }
 
         if props.is_indexed() {

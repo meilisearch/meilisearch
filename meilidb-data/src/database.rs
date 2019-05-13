@@ -1,5 +1,5 @@
-use std::collections::{BTreeSet, HashSet, HashMap};
 use std::collections::hash_map::Entry;
+use std::collections::{BTreeSet, HashSet, HashMap};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -14,10 +14,11 @@ use sled::IVec;
 use zerocopy::{AsBytes, LayoutVerified};
 use fst::{SetBuilder, set::OpBuilder, Streamer};
 
-use crate::{Schema, SchemaAttr, RankedMap};
-use crate::serde::{extract_document_id, Serializer, Deserializer, SerializerError};
-use crate::indexer::{Indexer, Indexed};
 use crate::document_attr_key::DocumentAttrKey;
+use crate::indexer::{Indexer, Indexed};
+use crate::serde::extract_document_id;
+use crate::serde::{Serializer, RamDocumentStore, Deserializer, SerializerError};
+use crate::{Schema, SchemaAttr, RankedMap};
 
 #[derive(Debug)]
 pub enum Error {
@@ -521,13 +522,21 @@ impl Store for IndexLease {
 
 pub struct DocumentsAddition<'a> {
     inner: &'a Index,
+    document_ids: HashSet<DocumentId>,
+    document_store: RamDocumentStore,
     indexer: Indexer,
     ranked_map: RankedMap,
 }
 
 impl<'a> DocumentsAddition<'a> {
     fn new(inner: &'a Index, ranked_map: RankedMap) -> DocumentsAddition<'a> {
-        DocumentsAddition { inner, indexer: Indexer::new(), ranked_map }
+        DocumentsAddition {
+            inner,
+            document_ids: HashSet::new(),
+            document_store: RamDocumentStore::new(),
+            indexer: Indexer::new(),
+            ranked_map,
+        }
     }
 
     pub fn update_document<D>(&mut self, document: D) -> Result<(), Error>
@@ -541,15 +550,13 @@ impl<'a> DocumentsAddition<'a> {
             None => return Err(Error::MissingDocumentId),
         };
 
-        // 1. remove the previous document match indexes
-        let mut documents_deletion = DocumentsDeletion::new(self.inner);
-        documents_deletion.delete_document(document_id);
-        documents_deletion.finalize()?;
+        // 1. store the document id for future deletion
+        self.document_ids.insert(document_id);
 
-        // 2. index the document fields
+        // 2. index the document fields in ram stores
         let serializer = Serializer {
             schema,
-            index: &self.inner,
+            document_store: &mut self.document_store,
             indexer: &mut self.indexer,
             ranked_map: &mut self.ranked_map,
             document_id,
@@ -565,6 +572,17 @@ impl<'a> DocumentsAddition<'a> {
         let main = &lease_inner.raw.main;
         let words = &lease_inner.raw.words;
         let attrs_words = &lease_inner.raw.attrs_words;
+        let documents = &lease_inner.raw.documents;
+
+        // 1. remove the previous documents match indexes
+        let mut documents_deletion = DocumentsDeletion::new(self.inner);
+        documents_deletion.extend(self.document_ids);
+        documents_deletion.finalize()?;
+
+        // 2. insert new document attributes in the database
+        for ((id, attr), value) in self.document_store.into_inner() {
+            documents.set_document_field(id, attr, value)?;
+        }
 
         let Indexed { words_doc_indexes, docs_attrs_words } = self.indexer.build();
         let mut delta_words_builder = SetBuilder::memory();
@@ -715,5 +733,11 @@ impl<'a> DocumentsDeletion<'a> {
         self.inner.0.store(Arc::new(inner));
 
         Ok(())
+    }
+}
+
+impl<'a> Extend<DocumentId> for DocumentsDeletion<'a> {
+    fn extend<T: IntoIterator<Item=DocumentId>>(&mut self, iter: T) {
+        self.documents.extend(iter)
     }
 }
