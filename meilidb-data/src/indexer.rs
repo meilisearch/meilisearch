@@ -13,12 +13,12 @@ type Word = Vec<u8>; // TODO make it be a SmallVec
 pub struct Indexer {
     word_limit: usize, // the maximum number of indexed words
     words_doc_indexes: BTreeMap<Word, Vec<DocIndex>>,
-    docs_attrs_words: HashMap<(DocumentId, SchemaAttr), Vec<Word>>,
+    docs_words: HashMap<DocumentId, Vec<Word>>,
 }
 
 pub struct Indexed {
     pub words_doc_indexes: BTreeMap<Word, SetBuf<DocIndex>>,
-    pub docs_attrs_words: HashMap<(DocumentId, SchemaAttr), fst::Set>,
+    pub docs_words: HashMap<DocumentId, fst::Set>,
 }
 
 impl Indexer {
@@ -30,7 +30,7 @@ impl Indexer {
         Indexer {
             word_limit: limit,
             words_doc_indexes: BTreeMap::new(),
-            docs_attrs_words: HashMap::new(),
+            docs_words: HashMap::new(),
         }
     }
 
@@ -42,7 +42,7 @@ impl Indexer {
                 attr,
                 self.word_limit,
                 &mut self.words_doc_indexes,
-                &mut self.docs_attrs_words,
+                &mut self.docs_words,
             );
 
             if !must_continue { break }
@@ -60,7 +60,7 @@ impl Indexer {
                 attr,
                 self.word_limit,
                 &mut self.words_doc_indexes,
-                &mut self.docs_attrs_words,
+                &mut self.docs_words,
             );
 
             if !must_continue { break }
@@ -76,16 +76,16 @@ impl Indexer {
                 (word, SetBuf::new_unchecked(indexes))
             }).collect();
 
-        let docs_attrs_words = self.docs_attrs_words
+        let docs_words = self.docs_words
             .into_iter()
-            .map(|((id, attr), mut words)| {
+            .map(|(id, mut words)| {
                 words.sort_unstable();
                 words.dedup();
-                ((id, attr), fst::Set::from_iter(words).unwrap())
+                (id, fst::Set::from_iter(words).unwrap())
             })
             .collect();
 
-        Indexed { words_doc_indexes, docs_attrs_words }
+        Indexed { words_doc_indexes, docs_words }
     }
 }
 
@@ -95,7 +95,7 @@ fn index_token(
     attr: SchemaAttr,
     word_limit: usize,
     words_doc_indexes: &mut BTreeMap<Word, Vec<DocIndex>>,
-    docs_attrs_words: &mut HashMap<(DocumentId, SchemaAttr), Vec<Word>>,
+    docs_words: &mut HashMap<DocumentId, Vec<Word>>,
 ) -> bool
 {
     if token.word_index >= word_limit { return false }
@@ -106,7 +106,7 @@ fn index_token(
         Some(docindex) => {
             let word = Vec::from(token.word);
             words_doc_indexes.entry(word.clone()).or_insert_with(Vec::new).push(docindex);
-            docs_attrs_words.entry((id, attr)).or_insert_with(Vec::new).push(word);
+            docs_words.entry(id).or_insert_with(Vec::new).push(word);
         },
         None => return false,
     }
@@ -119,7 +119,7 @@ fn index_token(
                 Some(docindex) => {
                     let word = Vec::from(token.word);
                     words_doc_indexes.entry(word.clone()).or_insert_with(Vec::new).push(docindex);
-                    docs_attrs_words.entry((id, attr)).or_insert_with(Vec::new).push(word);
+                    docs_words.entry(id).or_insert_with(Vec::new).push(word);
                 },
                 None => return false,
             }

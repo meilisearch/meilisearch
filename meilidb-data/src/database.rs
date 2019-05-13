@@ -15,7 +15,7 @@ use zerocopy::{AsBytes, LayoutVerified};
 use fst::{SetBuilder, set::OpBuilder, Streamer};
 
 use crate::document_attr_key::DocumentAttrKey;
-use crate::indexer::{Indexer, Indexed};
+use crate::indexer::Indexer;
 use crate::serde::extract_document_id;
 use crate::serde::{Serializer, RamDocumentStore, Deserializer, SerializerError};
 use crate::{Schema, SchemaAttr, RankedMap};
@@ -131,10 +131,10 @@ impl Database {
                     WordsIndex(tree)
                 };
 
-                let attrs_words = {
-                    let tree_name = format!("{}-attrs-words", name);
+                let docs_words = {
+                    let tree_name = format!("{}-docs-words", name);
                     let tree = self.inner.open_tree(tree_name)?;
-                    AttrsWords(tree)
+                    DocsWords(tree)
                 };
 
                 let documents = {
@@ -143,7 +143,7 @@ impl Database {
                     DocumentsIndex(tree)
                 };
 
-                let raw_index = RawIndex { main, words, attrs_words, documents };
+                let raw_index = RawIndex { main, words, docs_words, documents };
                 let index = Index::from_raw(raw_index)?;
 
                 vacant.insert(Arc::new(index)).clone()
@@ -180,10 +180,10 @@ impl Database {
                     WordsIndex(tree)
                 };
 
-                let attrs_words = {
-                    let tree_name = format!("{}-attrs-words", name);
+                let docs_words = {
+                    let tree_name = format!("{}-docs-words", name);
                     let tree = self.inner.open_tree(tree_name)?;
-                    AttrsWords(tree)
+                    DocsWords(tree)
                 };
 
                 let documents = {
@@ -196,7 +196,7 @@ impl Database {
                 indexes.insert(name.to_string());
                 self.set_indexes(&indexes)?;
 
-                let raw_index = RawIndex { main, words, attrs_words, documents };
+                let raw_index = RawIndex { main, words, docs_words, documents };
                 let index = Index::from_raw(raw_index)?;
 
                 vacant.insert(Arc::new(index)).clone()
@@ -211,7 +211,7 @@ impl Database {
 pub struct RawIndex {
     pub main: MainIndex,
     pub words: WordsIndex,
-    pub attrs_words: AttrsWords,
+    pub docs_words: DocsWords,
     pub documents: DocumentsIndex,
 }
 
@@ -299,11 +299,11 @@ impl WordsIndex {
 }
 
 #[derive(Clone)]
-pub struct AttrsWords(Arc<sled::Tree>);
+pub struct DocsWords(Arc<sled::Tree>);
 
-impl AttrsWords {
-    pub fn attr_words(&self, id: DocumentId, attr: SchemaAttr) -> Result<Option<fst::Set>, Error> {
-        let key = DocumentAttrKey::new(id, attr).to_be_bytes();
+impl DocsWords {
+    pub fn doc_words(&self, id: DocumentId) -> Result<Option<fst::Set>, Error> {
+        let key = id.0.to_be_bytes();
         match self.0.get(key)? {
             Some(bytes) => {
                 let len = bytes.len();
@@ -315,51 +315,16 @@ impl AttrsWords {
         }
     }
 
-    pub fn attrs_words(&self, id: DocumentId) -> DocumentAttrsWordsIter {
-        let start = DocumentAttrKey::new(id, SchemaAttr::min());
-        let start = start.to_be_bytes();
-
-        let end = DocumentAttrKey::new(id, SchemaAttr::max());
-        let end = end.to_be_bytes();
-
-        DocumentAttrsWordsIter(self.0.range(start..=end))
-    }
-
-    pub fn set_attr_words(&self, id: DocumentId, attr: SchemaAttr, words: &fst::Set) -> Result<(), Error> {
-        let key = DocumentAttrKey::new(id, attr).to_be_bytes();
+    pub fn set_doc_words(&self, id: DocumentId, words: &fst::Set) -> Result<(), Error> {
+        let key = id.0.to_be_bytes();
         self.0.set(key, words.as_fst().as_bytes())?;
         Ok(())
     }
 
-    pub fn del_attr_words(&self, id: DocumentId, attr: SchemaAttr) -> Result<(), Error> {
-        let key = DocumentAttrKey::new(id, attr).to_be_bytes();
+    pub fn del_doc_words(&self, id: DocumentId) -> Result<(), Error> {
+        let key = id.0.to_be_bytes();
         self.0.del(key)?;
         Ok(())
-    }
-}
-
-pub struct DocumentAttrsWordsIter<'a>(sled::Iter<'a>);
-
-impl<'a> Iterator for DocumentAttrsWordsIter<'a> {
-    type Item = sled::Result<(SchemaAttr, fst::Set)>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next() {
-            Some(Ok((key, bytes))) => {
-                let slice: &[u8] = key.as_ref();
-                let array = slice.try_into().unwrap();
-                let key = DocumentAttrKey::from_be_bytes(array);
-
-                let len = bytes.len();
-                let value = bytes.into();
-                let fst = fst::raw::Fst::from_shared_bytes(value, 0, len).unwrap();
-                let set = fst::Set::from(fst);
-
-                Some(Ok((key.attribute, set)))
-            },
-            Some(Err(e)) => Some(Err(e.into())),
-            None => None,
-        }
     }
 }
 
@@ -381,6 +346,18 @@ impl DocumentsIndex {
     pub fn del_document_field(&self, id: DocumentId, attr: SchemaAttr) -> sled::Result<()> {
         let key = DocumentAttrKey::new(id, attr).to_be_bytes();
         self.0.del(key)?;
+        Ok(())
+    }
+
+    pub fn del_all_document_fields(&self, id: DocumentId) -> sled::Result<()> {
+        let start = DocumentAttrKey::new(id, SchemaAttr::min()).to_be_bytes();
+        let end = DocumentAttrKey::new(id, SchemaAttr::max()).to_be_bytes();
+        let document_attrs = self.0.range(start..=end).keys();
+
+        for key in document_attrs {
+            self.0.del(key?)?;
+        }
+
         Ok(())
     }
 
@@ -571,7 +548,7 @@ impl<'a> DocumentsAddition<'a> {
         let lease_inner = self.inner.lease_inner();
         let main = &lease_inner.raw.main;
         let words = &lease_inner.raw.words;
-        let attrs_words = &lease_inner.raw.attrs_words;
+        let docs_words = &lease_inner.raw.docs_words;
         let documents = &lease_inner.raw.documents;
 
         // 1. remove the previous documents match indexes
@@ -584,10 +561,10 @@ impl<'a> DocumentsAddition<'a> {
             documents.set_document_field(id, attr, value)?;
         }
 
-        let Indexed { words_doc_indexes, docs_attrs_words } = self.indexer.build();
+        let indexed = self.indexer.build();
         let mut delta_words_builder = SetBuilder::memory();
 
-        for (word, delta_set) in words_doc_indexes {
+        for (word, delta_set) in indexed.words_doc_indexes {
             delta_words_builder.insert(&word).unwrap();
 
             let set = match words.doc_indexes(&word)? {
@@ -598,8 +575,8 @@ impl<'a> DocumentsAddition<'a> {
             words.set_doc_indexes(&word, &set)?;
         }
 
-        for ((id, attr), words) in docs_attrs_words {
-            attrs_words.set_attr_words(id, attr, &words)?;
+        for (id, words) in indexed.docs_words {
+            docs_words.set_doc_words(id, &words)?;
         }
 
         let delta_words = delta_words_builder
@@ -656,7 +633,7 @@ impl<'a> DocumentsDeletion<'a> {
     pub fn finalize(mut self) -> Result<(), Error> {
         let lease_inner = self.inner.lease_inner();
         let main = &lease_inner.raw.main;
-        let attrs_words = &lease_inner.raw.attrs_words;
+        let docs_words = &lease_inner.raw.docs_words;
         let words = &lease_inner.raw.words;
         let documents = &lease_inner.raw.documents;
 
@@ -666,26 +643,25 @@ impl<'a> DocumentsDeletion<'a> {
             SetBuf::new_unchecked(self.documents)
         };
 
-        let mut words_attrs = HashMap::new();
+        let mut words_document_ids = HashMap::new();
         for id in idset.into_vec() {
-            for result in attrs_words.attrs_words(id) {
-                let (attr, words) = result?;
+            if let Some(words) = docs_words.doc_words(id)? {
                 let mut stream = words.stream();
                 while let Some(word) = stream.next() {
                     let word = word.to_vec();
-                    words_attrs.entry(word).or_insert_with(Vec::new).push((id, attr));
+                    words_document_ids.entry(word).or_insert_with(Vec::new).push(id);
                 }
             }
         }
 
         let mut removed_words = BTreeSet::new();
-        for (word, mut attrs) in words_attrs {
-            attrs.sort_unstable();
-            attrs.dedup();
-            let attrs = SetBuf::new_unchecked(attrs);
+        for (word, mut document_ids) in words_document_ids {
+            document_ids.sort_unstable();
+            document_ids.dedup();
+            let document_ids = SetBuf::new_unchecked(document_ids);
 
             if let Some(doc_indexes) = words.doc_indexes(&word)? {
-                let op = DifferenceByKey::new(&doc_indexes, &attrs, |d| d.document_id, |(id, _)| *id);
+                let op = DifferenceByKey::new(&doc_indexes, &document_ids, |d| d.document_id, |id| *id);
                 let doc_indexes = op.into_set_buf();
 
                 if !doc_indexes.is_empty() {
@@ -696,9 +672,9 @@ impl<'a> DocumentsDeletion<'a> {
                 }
             }
 
-            for (id, attr) in attrs.into_vec() {
-                documents.del_document_field(id, attr)?;
-                attrs_words.del_attr_words(id, attr)?;
+            for id in document_ids.into_vec() {
+                documents.del_all_document_fields(id)?;
+                docs_words.del_doc_words(id)?;
             }
         }
 
