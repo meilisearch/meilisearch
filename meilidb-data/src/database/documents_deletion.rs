@@ -13,7 +13,7 @@ pub struct DocumentsDeletion<'a> {
 }
 
 impl<'a> DocumentsDeletion<'a> {
-    pub(crate) fn new(inner: &'a Index) -> DocumentsDeletion {
+    pub fn new(inner: &'a Index) -> DocumentsDeletion {
         DocumentsDeletion { inner, documents: Vec::new() }
     }
 

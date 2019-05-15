@@ -134,12 +134,12 @@ impl Schema {
         Ok(())
     }
 
-    pub(crate) fn read_from_bin<R: Read>(reader: R) -> bincode::Result<Schema> {
+    pub fn read_from_bin<R: Read>(reader: R) -> bincode::Result<Schema> {
         let builder: SchemaBuilder = bincode::deserialize_from(reader)?;
         Ok(builder.build())
     }
 
-    pub(crate) fn write_to_bin<W: Write>(&self, writer: W) -> bincode::Result<()> {
+    pub fn write_to_bin<W: Write>(&self, writer: W) -> bincode::Result<()> {
         let identifier = self.inner.identifier.clone();
         let attributes = self.attributes_ordered();
         let builder = SchemaBuilder { identifier, attributes };

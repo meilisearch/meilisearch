@@ -20,7 +20,7 @@ pub struct DocumentsAddition<'a> {
 }
 
 impl<'a> DocumentsAddition<'a> {
-    pub(crate) fn new(inner: &'a Index, ranked_map: RankedMap) -> DocumentsAddition<'a> {
+    pub fn new(inner: &'a Index, ranked_map: RankedMap) -> DocumentsAddition<'a> {
         DocumentsAddition {
             inner,
             document_ids: HashSet::new(),

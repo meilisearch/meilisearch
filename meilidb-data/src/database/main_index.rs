@@ -6,7 +6,7 @@ use crate::schema::Schema;
 use super::Error;
 
 #[derive(Clone)]
-pub struct MainIndex(pub(crate) Arc<sled::Tree>);
+pub struct MainIndex(pub Arc<sled::Tree>);
 
 impl MainIndex {
     pub fn schema(&self) -> Result<Option<Schema>, Error> {

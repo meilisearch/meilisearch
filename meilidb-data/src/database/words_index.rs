@@ -5,7 +5,7 @@ use sdset::{Set, SetBuf};
 use zerocopy::{LayoutVerified, AsBytes};
 
 #[derive(Clone)]
-pub struct WordsIndex(pub(crate) Arc<sled::Tree>);
+pub struct WordsIndex(pub Arc<sled::Tree>);
 
 impl WordsIndex {
     pub fn doc_indexes(&self, word: &[u8]) -> sled::Result<Option<SetBuf<DocIndex>>> {

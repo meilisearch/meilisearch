@@ -8,7 +8,7 @@ use crate::document_attr_key::DocumentAttrKey;
 use crate::schema::SchemaAttr;
 
 #[derive(Clone)]
-pub struct DocumentsIndex(pub(crate) Arc<sled::Tree>);
+pub struct DocumentsIndex(pub Arc<sled::Tree>);
 
 impl DocumentsIndex {
     pub fn document_field(&self, id: DocumentId, attr: SchemaAttr) -> sled::Result<Option<IVec>> {

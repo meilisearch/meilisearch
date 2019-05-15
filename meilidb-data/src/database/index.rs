@@ -15,7 +15,7 @@ use crate::serde::Deserializer;
 use super::{Error, RawIndex, DocumentsAddition, DocumentsDeletion};
 
 #[derive(Clone)]
-pub struct Index(pub(crate) ArcSwap<InnerIndex>);
+pub struct Index(pub ArcSwap<InnerIndex>);
 
 pub struct InnerIndex {
     pub words: fst::Set,
@@ -25,7 +25,7 @@ pub struct InnerIndex {
 }
 
 impl Index {
-    pub(crate) fn from_raw(raw: RawIndex) -> Result<Index, Error> {
+    pub fn from_raw(raw: RawIndex) -> Result<Index, Error> {
         let words = match raw.main.words_set()? {
             Some(words) => words,
             None => fst::Set::default(),
