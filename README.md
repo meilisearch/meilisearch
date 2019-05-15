@@ -10,19 +10,19 @@ A _full-text search database_ using a key-value store internally.
 
 ## Features
 
-- Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliDB/blob/e0b759839d552f02e3dd0064948f4d8022415ed7/src/rank/criterion/mod.rs#L94-L105) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
-- Accepts [custom criteria](https://github.com/meilisearch/MeiliDB/blob/e0b759839d552f02e3dd0064948f4d8022415ed7/src/rank/criterion/mod.rs#L24-L31) and can apply them in any custom order
-- Support [ranged queries](https://github.com/meilisearch/MeiliDB/blob/e0b759839d552f02e3dd0064948f4d8022415ed7/src/rank/query_builder.rs#L165), useful for paginating results
-- Can [distinct](https://github.com/meilisearch/MeiliDB/blob/e0b759839d552f02e3dd0064948f4d8022415ed7/src/rank/query_builder.rs#L96) and [filter](https://github.com/meilisearch/MeiliDB/blob/e0b759839d552f02e3dd0064948f4d8022415ed7/src/rank/query_builder.rs#L85) returned documents based on context defined rules
-- Can store complete documents or only [user schema specified fields](https://github.com/meilisearch/MeiliDB/blob/20b5a6a06e4b897313e83e24fe1e1e47c660bfe8/examples/schema-example.toml)
-- The [default tokenizer](https://github.com/meilisearch/MeiliDB/blob/a960c325f30f38be6a63634b3bd621daf82912a8/src/tokenizer/mod.rs) can index latin and kanji based languages
-- Returns [the matching text areas](https://github.com/meilisearch/MeiliDB/blob/e0b759839d552f02e3dd0064948f4d8022415ed7/src/rank/mod.rs#L15-L18), useful to highlight matched words in results
-- Accepts query time search config like the [searchable fields](https://github.com/meilisearch/MeiliDB/blob/e0b759839d552f02e3dd0064948f4d8022415ed7/src/rank/query_builder.rs#L107)
+- Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/criterion/mod.rs#L95-L101) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
+- Accepts [custom criteria](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/criterion/mod.rs#L22-L29) and can apply them in any custom order
+- Support [ranged queries](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/query_builder.rs#L146), useful for paginating results
+- Can [distinct](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/query_builder.rs#L68) and [filter](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/query_builder.rs#L57) returned documents based on context defined rules
+- Can store complete documents or only [user schema specified fields](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/examples/movies/schema-movies.toml)
+- The [default tokenizer](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-tokenizer/src/lib.rs#L99) can index latin and kanji based languages
+- Returns [the matching text areas](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/lib.rs#L117-L120), useful to highlight matched words in results
+- Accepts query time search config like the [searchable fields](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/query_builder.rs#L79)
 - Supports run time indexing  (incremental indexing)
 
 
 
-It uses [RocksDB](https://github.com/facebook/rocksdb) as the internal key-value store. The key-value store allows us to handle updates and queries with small memory and CPU overheads. The whole ranking system is [data oriented](https://github.com/meilisearch/MeiliDB/issues/82) and provides great performances.
+It uses [sled](https://github.com/spacejam/sled) as the internal key-value store. The key-value store allows us to handle updates and queries with small memory and CPU overheads. The whole ranking system is [data oriented](https://github.com/meilisearch/MeiliDB/issues/82) and provides great performances.
 
 You can [read the deep dive](deep-dive.md) if you want more information on the engine, it describes the whole process of generating updates and handling queries or you can take a look at the [typos and ranking rules](typos-ranking-rules.md) if you want to know the default rules used to sort the documents.
 
