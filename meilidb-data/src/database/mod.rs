@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use crate::Schema;
 
+mod custom_settings;
 mod docs_words_index;
 mod documents_addition;
 mod documents_deletion;
@@ -17,6 +18,7 @@ mod words_index;
 
 pub use self::error::Error;
 pub use self::index::Index;
+pub use self::custom_settings::CustomSettings;
 
 use self::docs_words_index::DocsWordsIndex;
 use self::documents_addition::DocumentsAddition;
@@ -96,7 +98,13 @@ impl Database {
                     DocumentsIndex(tree)
                 };
 
-                let raw_index = RawIndex { main, words, docs_words, documents };
+                let custom = {
+                    let tree_name = format!("{}-custom", name);
+                    let tree = self.inner.open_tree(tree_name)?;
+                    CustomSettings(tree)
+                };
+
+                let raw_index = RawIndex { main, words, docs_words, documents, custom };
                 let index = Index::from_raw(raw_index)?;
 
                 vacant.insert(Arc::new(index)).clone()
@@ -145,11 +153,17 @@ impl Database {
                     DocumentsIndex(tree)
                 };
 
+                let custom = {
+                    let tree_name = format!("{}-custom", name);
+                    let tree = self.inner.open_tree(tree_name)?;
+                    CustomSettings(tree)
+                };
+
                 let mut indexes = self.indexes()?.unwrap_or_else(HashSet::new);
                 indexes.insert(name.to_string());
                 self.set_indexes(&indexes)?;
 
-                let raw_index = RawIndex { main, words, docs_words, documents };
+                let raw_index = RawIndex { main, words, docs_words, documents, custom };
                 let index = Index::from_raw(raw_index)?;
 
                 vacant.insert(Arc::new(index)).clone()

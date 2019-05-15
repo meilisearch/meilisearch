@@ -12,7 +12,8 @@ use crate::ranked_map::RankedMap;
 use crate::schema::Schema;
 use crate::serde::Deserializer;
 
-use super::{Error, RawIndex, DocumentsAddition, DocumentsDeletion};
+use super::{Error, CustomSettings};
+use super::{RawIndex, DocumentsAddition, DocumentsDeletion};
 
 #[derive(Clone)]
 pub struct Index(pub ArcSwap<InnerIndex>);
@@ -67,6 +68,10 @@ impl Index {
 
     pub fn schema(&self) -> Schema {
         self.0.lease().schema.clone()
+    }
+
+    pub fn custom_settings(&self) -> CustomSettings {
+        self.0.lease().raw.custom.clone()
     }
 
     pub fn documents_addition(&self) -> DocumentsAddition {
