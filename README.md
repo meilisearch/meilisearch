@@ -59,15 +59,34 @@ We have seen much better performances when [using jemalloc as the global allocat
 
 ## Usage and examples
 
-MeiliDB runs with an index like most search engines.
-So to test the library you can create one by indexing a simple csv file.
+You can test a little part of MeiliDB by using this command, it create an index named _movies_ and initialize it with to great Tarantino movies.
 
 ```bash
-cargo run --release --example create-database -- test.mdb examples/movies/movies.csv --schema examples/movies/schema-movies.toml
+cargo run --release
+
+curl -XPOST 'http://127.0.0.1:8000/movies' \
+    -d '
+identifier = "id"
+
+[attributes.id]
+stored = true
+
+[attributes.title]
+stored = true
+indexed = true
+'
+
+curl -H 'Content-Type: application/json' \
+     -XPUT 'http://127.0.0.1:8000/movies' \
+     -d '{ "id": 123, "title": "Inglorious Bastards" }'
+
+curl -H 'Content-Type: application/json' \
+     -XPUT 'http://127.0.0.1:8000/movies' \
+     -d '{ "id": 456, "title": "Django Unchained" }'
 ```
 
-Once the command is executed, the index should be in the `test.mdb` folder. You are now able to run the `query-database` example and play with MeiliDB.
+Once the database is initialized you can query it by using the following command:
 
 ```bash
-cargo run --release --example query-database -- test.mdb -n 10 id title overview release_date
+curl -XGET 'http://127.0.0.1:8000/movies/search?q=inglo'
 ```
