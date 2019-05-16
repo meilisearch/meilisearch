@@ -6,6 +6,7 @@ mod ranked_map;
 mod serde;
 pub mod schema;
 
+pub use sled;
 pub use self::database::{Database, Index, CustomSettings};
 pub use self::number::Number;
 pub use self::ranked_map::RankedMap;
