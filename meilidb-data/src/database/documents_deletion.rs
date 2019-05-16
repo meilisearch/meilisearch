@@ -4,6 +4,7 @@ use std::sync::Arc;
 use sdset::{SetBuf, SetOperation, duo::DifferenceByKey};
 use fst::{SetBuilder, Streamer};
 use meilidb_core::DocumentId;
+use crate::serde::extract_document_id;
 
 use super::{Index, Error, InnerIndex};
 
@@ -17,8 +18,24 @@ impl<'a> DocumentsDeletion<'a> {
         DocumentsDeletion { inner, documents: Vec::new() }
     }
 
-    pub fn delete_document(&mut self, id: DocumentId) {
+    fn delete_document_by_id(&mut self, id: DocumentId) {
         self.documents.push(id);
+    }
+
+    pub fn delete_document<D>(&mut self, document: D) -> Result<(), Error>
+    where D: serde::Serialize,
+    {
+        let schema = &self.inner.lease_inner().schema;
+        let identifier = schema.identifier_name();
+
+        let document_id = match extract_document_id(identifier, &document)? {
+            Some(id) => id,
+            None => return Err(Error::MissingDocumentId),
+        };
+
+        self.delete_document_by_id(document_id);
+
+        Ok(())
     }
 
     pub fn finalize(mut self) -> Result<(), Error> {
