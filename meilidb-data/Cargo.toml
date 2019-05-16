@@ -27,3 +27,6 @@ rev = "40b3d48"
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
 branch = "arc-byte-slice"
+
+[dev-dependencies]
+tempfile = "3.0.7"
