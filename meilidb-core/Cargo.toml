@@ -14,6 +14,7 @@ rayon = "1.0.3"
 sdset = "0.3.1"
 serde = { version = "1.0.88", features = ["derive"] }
 slice-group-by = "0.2.4"
+zerocopy = "0.2.2"
 
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"

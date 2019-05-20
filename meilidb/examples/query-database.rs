@@ -161,7 +161,7 @@ fn main() -> Result<(), Box<Error>> {
         let start_total = Instant::now();
 
         let builder = index.query_builder();
-        let documents = builder.query(query, 0..opt.number_results);
+        let documents = builder.query(query, 0..opt.number_results)?;
 
         let mut retrieve_duration = Duration::default();
 

@@ -24,7 +24,7 @@ impl ser::Serializer for ConvertToNumber {
         Ok(Number::Unsigned(u64::from(value)))
     }
 
-    fn serialize_char(self, value: char) -> Result<Self::Ok, Self::Error> {
+    fn serialize_char(self, _value: char) -> Result<Self::Ok, Self::Error> {
         Err(SerializerError::UnrankableType { type_name: "char" })
     }
 

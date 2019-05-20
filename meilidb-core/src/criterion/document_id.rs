@@ -9,4 +9,8 @@ impl Criterion for DocumentId {
     fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
         lhs.id.cmp(&rhs.id)
     }
+
+    fn name(&self) -> &'static str {
+        "DocumentId"
+    }
 }

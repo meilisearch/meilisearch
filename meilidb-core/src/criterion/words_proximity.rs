@@ -98,6 +98,10 @@ impl Criterion for WordsProximity {
 
         lhs.cmp(&rhs)
     }
+
+    fn name(&self) -> &'static str {
+        "WordsProximity"
+    }
 }
 
 #[cfg(test)]

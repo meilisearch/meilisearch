@@ -2,7 +2,6 @@ use meilidb_core::DocumentId;
 use serde::ser;
 use serde::Serialize;
 
-use crate::database::RawIndex;
 use crate::indexer::Indexer as RawIndexer;
 use crate::schema::SchemaAttr;
 use super::{SerializerError, ConvertToString};
@@ -24,7 +23,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
     type SerializeStruct = StructSerializer<'a>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
-    fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
+    fn serialize_bool(self, _value: bool) -> Result<Self::Ok, Self::Error> {
         Err(SerializerError::UnindexableType { type_name: "boolean" })
     }
 

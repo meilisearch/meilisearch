@@ -6,12 +6,12 @@ use rmp_serde::decode::{Deserializer as RmpDeserializer, ReadReader};
 use rmp_serde::decode::{Error as RmpError};
 use serde::{de, forward_to_deserialize_any};
 
-use crate::database::RawIndex;
+use crate::database::Index;
 use crate::SchemaAttr;
 
 pub struct Deserializer<'a> {
     pub document_id: DocumentId,
-    pub raw_index: &'a RawIndex,
+    pub index: &'a Index,
     pub fields: Option<&'a HashSet<SchemaAttr>>,
 }
 
@@ -26,15 +26,18 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a>
     }
 
     forward_to_deserialize_any! {
-        bool u8 u16 u32 u64 i8 i16 i32 i64 f32 f64 char str string unit seq
-        bytes byte_buf unit_struct tuple_struct
-        identifier tuple ignored_any option newtype_struct enum struct
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct struct enum identifier ignored_any
     }
 
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: de::Visitor<'de>
     {
-        let document_attributes = self.raw_index.get_document_fields(self.document_id);
+        let schema = &self.index.lease_inner().schema;
+        let documents = &self.index.lease_inner().raw.documents;
+
+        let document_attributes = documents.document_fields(self.document_id);
         let document_attributes = document_attributes.filter_map(|result| {
             match result {
                 Ok(value) => Some(value),
@@ -45,9 +48,10 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a>
                 },
             }
         });
-        let iter = document_attributes.filter_map(|(_, attr, value)| {
+
+        let iter = document_attributes.filter_map(|(attr, value)| {
             if self.fields.map_or(true, |f| f.contains(&attr)) {
-                let attribute_name = self.raw_index.schema().attribute_name(attr);
+                let attribute_name = schema.attribute_name(attr);
                 Some((attribute_name, Value::new(value)))
             } else {
                 None

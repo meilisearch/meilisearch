@@ -56,11 +56,11 @@ impl<'a> ser::Serializer for ExtractDocumentId<'a> {
         f64 => serialize_f64,
     }
 
-    fn serialize_str(self, value: &str) -> Result<Self::Ok, Self::Error> {
+    fn serialize_str(self, _value: &str) -> Result<Self::Ok, Self::Error> {
         Err(SerializerError::UnserializableType { type_name: "str" })
     }
 
-    fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
+    fn serialize_bytes(self, _value: &[u8]) -> Result<Self::Ok, Self::Error> {
         Err(SerializerError::UnserializableType { type_name: "&[u8]" })
     }
 

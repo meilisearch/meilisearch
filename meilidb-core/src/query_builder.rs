@@ -1,5 +1,5 @@
 use std::hash::Hash;
-use std::ops::{Range, Deref};
+use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
 use std::{cmp, mem};
@@ -14,8 +14,8 @@ use log::info;
 use crate::automaton::{self, DfaExt, AutomatonExt};
 use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::criterion::Criteria;
-use crate::{raw_documents_from_matches, RawDocument, Document};
-use crate::{Index, Match, DocumentId};
+use crate::raw_documents_from_matches;
+use crate::{Match, DocumentId, Store, RawDocument, Document};
 
 fn generate_automatons(query: &str) -> Vec<DfaExt> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
@@ -35,37 +35,37 @@ fn generate_automatons(query: &str) -> Vec<DfaExt> {
     automatons
 }
 
-pub struct QueryBuilder<'c, I, FI = fn(DocumentId) -> bool> {
-    index: I,
+pub struct QueryBuilder<'c, S, FI = fn(DocumentId) -> bool> {
+    store: S,
     criteria: Criteria<'c>,
     searchable_attrs: Option<HashSet<u16>>,
     filter: Option<FI>,
 }
 
-impl<'c, I> QueryBuilder<'c, I, fn(DocumentId) -> bool> {
-    pub fn new(index: I) -> Self {
-        QueryBuilder::with_criteria(index, Criteria::default())
+impl<'c, S> QueryBuilder<'c, S, fn(DocumentId) -> bool> {
+    pub fn new(store: S) -> Self {
+        QueryBuilder::with_criteria(store, Criteria::default())
     }
 
-    pub fn with_criteria(index: I, criteria: Criteria<'c>) -> Self {
-        QueryBuilder { index, criteria, searchable_attrs: None, filter: None }
+    pub fn with_criteria(store: S, criteria: Criteria<'c>) -> Self {
+        QueryBuilder { store, criteria, searchable_attrs: None, filter: None }
     }
 }
 
-impl<'c, I, FI> QueryBuilder<'c, I, FI>
+impl<'c, S, FI> QueryBuilder<'c, S, FI>
 {
-    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'c, I, F>
+    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'c, S, F>
     where F: Fn(DocumentId) -> bool,
     {
         QueryBuilder {
-            index: self.index,
+            store: self.store,
             criteria: self.criteria,
             searchable_attrs: self.searchable_attrs,
             filter: Some(function)
         }
     }
 
-    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'c, I, FI, F>
+    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'c, S, FI, F>
     where F: Fn(DocumentId) -> Option<K>,
           K: Hash + Eq,
     {
@@ -82,16 +82,17 @@ impl<'c, I, FI> QueryBuilder<'c, I, FI>
     }
 }
 
-impl<'c, I, FI> QueryBuilder<'c, I, FI>
-where I: Deref<Target=Index>,
+impl<'c, S, FI> QueryBuilder<'c, S, FI>
+where S: Store,
 {
-    fn query_all(&self, query: &str) -> Vec<RawDocument> {
+    fn query_all(&self, query: &str) -> Result<Vec<RawDocument>, S::Error> {
         let automatons = generate_automatons(query);
+        let words = self.store.words()?.as_fst();
 
         let mut stream = {
-            let mut op_builder = fst::map::OpBuilder::new();
+            let mut op_builder = fst::raw::OpBuilder::new();
             for automaton in &automatons {
-                let stream = self.index.map.search(automaton);
+                let stream = words.search(automaton);
                 op_builder.push(stream);
             }
             op_builder.r#union()
@@ -105,10 +106,13 @@ where I: Deref<Target=Index>,
                 let distance = automaton.eval(input).to_u8();
                 let is_exact = distance == 0 && input.len() == automaton.query_len();
 
-                let doc_indexes = &self.index.indexes;
-                let doc_indexes = &doc_indexes[iv.value as usize];
+                let doc_indexes = self.store.word_indexes(input)?;
+                let doc_indexes = match doc_indexes {
+                    Some(doc_indexes) => doc_indexes,
+                    None => continue,
+                };
 
-                for di in doc_indexes {
+                for di in doc_indexes.as_slice() {
                     if self.searchable_attrs.as_ref().map_or(true, |r| r.contains(&di.attribute)) {
                         let match_ = Match {
                             query_index: iv.index as u32,
@@ -131,15 +135,15 @@ where I: Deref<Target=Index>,
         info!("{} total documents to classify", raw_documents.len());
         info!("{} total matches to classify", total_matches);
 
-        raw_documents
+        Ok(raw_documents)
     }
 }
 
-impl<'c, I, FI> QueryBuilder<'c, I, FI>
-where I: Deref<Target=Index>,
+impl<'c, S, FI> QueryBuilder<'c, S, FI>
+where S: Store,
       FI: Fn(DocumentId) -> bool,
 {
-    pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(self, query: &str, range: Range<usize>) -> Result<Vec<Document>, S::Error> {
         // We delegate the filter work to the distinct query builder,
         // specifying a distinct rule that has no effect.
         if self.filter.is_some() {
@@ -148,18 +152,16 @@ where I: Deref<Target=Index>,
         }
 
         let start = Instant::now();
-        let mut documents = self.query_all(query);
+        let mut documents = self.query_all(query)?;
         info!("query_all took {:.2?}", start.elapsed());
 
         let mut groups = vec![documents.as_mut_slice()];
 
-        'criteria: for (ci, criterion) in self.criteria.as_ref().iter().enumerate() {
+        'criteria: for criterion in self.criteria.as_ref() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
             let mut documents_seen = 0;
 
             for group in tmp_groups {
-                info!("criterion {}, documents group of size {}", ci, group.len());
-
                 // if this group does not overlap with the requested range,
                 // push it without sorting and splitting it
                 if documents_seen + group.len() < range.start {
@@ -170,9 +172,11 @@ where I: Deref<Target=Index>,
 
                 let start = Instant::now();
                 group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                info!("criterion {} sort took {:.2?}", ci, start.elapsed());
+                info!("criterion {} sort took {:.2?}", criterion.name(), start.elapsed());
 
                 for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
+                    info!("criterion {} produced a group of size {}", criterion.name(), group.len());
+
                     documents_seen += group.len();
                     groups.push(group);
 
@@ -185,7 +189,7 @@ where I: Deref<Target=Index>,
 
         let offset = cmp::min(documents.len(), range.start);
         let iter = documents.into_iter().skip(offset).take(range.len());
-        iter.map(|d| Document::from_raw(&d)).collect()
+        Ok(iter.map(|d| Document::from_raw(&d)).collect())
     }
 }
 
@@ -212,15 +216,15 @@ impl<'c, I, FI, FD> DistinctQueryBuilder<'c, I, FI, FD>
     }
 }
 
-impl<'c, I, FI, FD, K> DistinctQueryBuilder<'c, I, FI, FD>
-where I: Deref<Target=Index>,
+impl<'c, S, FI, FD, K> DistinctQueryBuilder<'c, S, FI, FD>
+where S: Store,
       FI: Fn(DocumentId) -> bool,
       FD: Fn(DocumentId) -> Option<K>,
       K: Hash + Eq,
 {
-    pub fn query(self, query: &str, range: Range<usize>) -> Vec<Document> {
+    pub fn query(self, query: &str, range: Range<usize>) -> Result<Vec<Document>, S::Error> {
         let start = Instant::now();
-        let mut documents = self.inner.query_all(query);
+        let mut documents = self.inner.query_all(query)?;
         info!("query_all took {:.2?}", start.elapsed());
 
         let mut groups = vec![documents.as_mut_slice()];
@@ -233,14 +237,12 @@ where I: Deref<Target=Index>,
         let mut distinct_map = DistinctMap::new(self.size);
         let mut distinct_raw_offset = 0;
 
-        'criteria: for (ci, criterion) in self.inner.criteria.as_ref().iter().enumerate() {
+        'criteria: for criterion in self.inner.criteria.as_ref() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
             let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
             let mut documents_seen = 0;
 
             for group in tmp_groups {
-                info!("criterion {}, documents group of size {}", ci, group.len());
-
                 // if this group does not overlap with the requested range,
                 // push it without sorting and splitting it
                 if documents_seen + group.len() < distinct_raw_offset {
@@ -251,7 +253,7 @@ where I: Deref<Target=Index>,
 
                 let start = Instant::now();
                 group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                info!("criterion {} sort took {:.2?}", ci, start.elapsed());
+                info!("criterion {} sort took {:.2?}", criterion.name(), start.elapsed());
 
                 for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
                     // we must compute the real distinguished len of this sub-group
@@ -277,6 +279,8 @@ where I: Deref<Target=Index>,
                         // the requested range end is reached: stop computing distinct
                         if buf_distinct.len() >= range.end { break }
                     }
+
+                    info!("criterion {} produced a group of size {}", criterion.name(), group.len());
 
                     documents_seen += group.len();
                     groups.push(group);
@@ -318,6 +322,6 @@ where I: Deref<Target=Index>,
             }
         }
 
-        out_documents
+        Ok(out_documents)
     }
 }

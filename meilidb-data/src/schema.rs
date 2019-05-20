@@ -134,12 +134,12 @@ impl Schema {
         Ok(())
     }
 
-    pub(crate) fn read_from_bin<R: Read>(reader: R) -> bincode::Result<Schema> {
+    pub fn read_from_bin<R: Read>(reader: R) -> bincode::Result<Schema> {
         let builder: SchemaBuilder = bincode::deserialize_from(reader)?;
         Ok(builder.build())
     }
 
-    pub(crate) fn write_to_bin<W: Write>(&self, writer: W) -> bincode::Result<()> {
+    pub fn write_to_bin<W: Write>(&self, writer: W) -> bincode::Result<()> {
         let identifier = self.inner.identifier.clone();
         let attributes = self.attributes_ordered();
         let builder = SchemaBuilder { identifier, attributes };
@@ -186,12 +186,16 @@ impl Schema {
 pub struct SchemaAttr(pub u16);
 
 impl SchemaAttr {
-    pub fn new(value: u16) -> SchemaAttr {
+    pub const fn new(value: u16) -> SchemaAttr {
         SchemaAttr(value)
     }
 
-    pub fn min() -> SchemaAttr {
-        SchemaAttr(0)
+    pub const fn min() -> SchemaAttr {
+        SchemaAttr(u16::min_value())
+    }
+
+    pub const fn max() -> SchemaAttr {
+        SchemaAttr(u16::max_value())
     }
 
     pub fn next(self) -> Option<SchemaAttr> {
@@ -200,10 +204,6 @@ impl SchemaAttr {
 
     pub fn prev(self) -> Option<SchemaAttr> {
         self.0.checked_sub(1).map(SchemaAttr)
-    }
-
-    pub fn max() -> SchemaAttr {
-        SchemaAttr(u16::MAX)
     }
 }
 

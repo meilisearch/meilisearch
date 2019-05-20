@@ -22,10 +22,15 @@ pub use self::convert_to_number::ConvertToNumber;
 pub use self::indexer::Indexer;
 pub use self::serializer::Serializer;
 
+use std::collections::BTreeMap;
 use std::{fmt, error::Error};
+
+use meilidb_core::DocumentId;
 use rmp_serde::encode::Error as RmpError;
 use serde::ser;
+
 use crate::number::ParseNumberError;
+use crate::schema::SchemaAttr;
 
 #[derive(Debug)]
 pub enum SerializerError {
@@ -93,5 +98,21 @@ impl From<sled::Error> for SerializerError {
 impl From<ParseNumberError> for SerializerError {
     fn from(error: ParseNumberError) -> SerializerError {
         SerializerError::ParseNumberError(error)
+    }
+}
+
+pub struct RamDocumentStore(BTreeMap<(DocumentId, SchemaAttr), Vec<u8>>);
+
+impl RamDocumentStore {
+    pub fn new() -> RamDocumentStore {
+        RamDocumentStore(BTreeMap::new())
+    }
+
+    pub fn set_document_field(&mut self, id: DocumentId, attr: SchemaAttr, value: Vec<u8>) {
+        self.0.insert((id, attr), value);
+    }
+
+    pub fn into_inner(self) -> BTreeMap<(DocumentId, SchemaAttr), Vec<u8>> {
+        self.0
     }
 }

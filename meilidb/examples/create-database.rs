@@ -52,7 +52,7 @@ fn index(
 {
     let database = Database::start_default(database_path)?;
 
-    let index = database.create_index("default".to_string(), schema.clone())?;
+    let index = database.create_index("default", schema.clone())?;
 
     let mut rdr = csv::Reader::from_path(csv_data_path)?;
     let mut raw_record = csv::StringRecord::new();

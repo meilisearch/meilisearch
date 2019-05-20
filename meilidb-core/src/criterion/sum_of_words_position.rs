@@ -35,4 +35,30 @@ impl Criterion for SumOfWordsPosition {
 
         lhs.cmp(&rhs)
     }
+
+    fn name(&self) -> &'static str {
+        "SumOfWordsPosition"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // typing: "soulier"
+    //
+    // doc0: "Soulier bleu"
+    // doc1: "Botte rouge et soulier noir"
+    #[test]
+    fn easy_case() {
+        let query_index0 = &[0];
+        let word_index0 = &[0];
+
+        let query_index1 = &[0];
+        let word_index1 = &[3];
+
+        let doc0 = sum_matches_attribute_index(query_index0, word_index0);
+        let doc1 = sum_matches_attribute_index(query_index1, word_index1);
+        assert_eq!(doc0.cmp(&doc1), Ordering::Less);
+    }
 }
