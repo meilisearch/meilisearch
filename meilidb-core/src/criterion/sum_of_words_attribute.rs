@@ -40,3 +40,25 @@ impl Criterion for SumOfWordsAttribute {
         "SumOfWordsAttribute"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // typing: "soulier"
+    //
+    // doc0: { 0. "Soulier bleu", 1. "bla bla bla" }
+    // doc1: { 0. "Botte rouge", 1. "Soulier en cuir" }
+    #[test]
+    fn title_vs_description() {
+        let query_index0 = &[0];
+        let attribute0 = &[0];
+
+        let query_index1 = &[0];
+        let attribute1 = &[1];
+
+        let doc0 = sum_matches_attributes(query_index0, attribute0);
+        let doc1 = sum_matches_attributes(query_index1, attribute1);
+        assert_eq!(doc0.cmp(&doc1), Ordering::Less);
+    }
+}
