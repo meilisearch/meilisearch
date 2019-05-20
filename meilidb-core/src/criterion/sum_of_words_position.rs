@@ -35,4 +35,8 @@ impl Criterion for SumOfWordsPosition {
 
         lhs.cmp(&rhs)
     }
+
+    fn name(&self) -> &'static str {
+        "SumOfWordsPosition"
+    }
 }

@@ -53,6 +53,10 @@ impl Criterion for SumOfTypos {
 
         lhs.cmp(&rhs).reverse()
     }
+
+    fn name(&self) -> &'static str {
+        "SumOfTypos"
+    }
 }
 
 #[cfg(test)]

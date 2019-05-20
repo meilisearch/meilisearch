@@ -24,4 +24,8 @@ impl Criterion for NumberOfWords {
 
         lhs.cmp(&rhs).reverse()
     }
+
+    fn name(&self) -> &'static str {
+        "NumberOfWords"
+    }
 }

@@ -157,13 +157,11 @@ where S: Store,
 
         let mut groups = vec![documents.as_mut_slice()];
 
-        'criteria: for (ci, criterion) in self.criteria.as_ref().iter().enumerate() {
+        'criteria: for criterion in self.criteria.as_ref() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
             let mut documents_seen = 0;
 
             for group in tmp_groups {
-                info!("criterion {}, documents group of size {}", ci, group.len());
-
                 // if this group does not overlap with the requested range,
                 // push it without sorting and splitting it
                 if documents_seen + group.len() < range.start {
@@ -174,9 +172,11 @@ where S: Store,
 
                 let start = Instant::now();
                 group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                info!("criterion {} sort took {:.2?}", ci, start.elapsed());
+                info!("criterion {} sort took {:.2?}", criterion.name(), start.elapsed());
 
                 for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
+                    info!("criterion {} produced a group of size {}", criterion.name(), group.len());
+
                     documents_seen += group.len();
                     groups.push(group);
 
@@ -237,14 +237,12 @@ where S: Store,
         let mut distinct_map = DistinctMap::new(self.size);
         let mut distinct_raw_offset = 0;
 
-        'criteria: for (ci, criterion) in self.inner.criteria.as_ref().iter().enumerate() {
+        'criteria: for criterion in self.inner.criteria.as_ref() {
             let tmp_groups = mem::replace(&mut groups, Vec::new());
             let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
             let mut documents_seen = 0;
 
             for group in tmp_groups {
-                info!("criterion {}, documents group of size {}", ci, group.len());
-
                 // if this group does not overlap with the requested range,
                 // push it without sorting and splitting it
                 if documents_seen + group.len() < distinct_raw_offset {
@@ -255,7 +253,7 @@ where S: Store,
 
                 let start = Instant::now();
                 group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                info!("criterion {} sort took {:.2?}", ci, start.elapsed());
+                info!("criterion {} sort took {:.2?}", criterion.name(), start.elapsed());
 
                 for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
                     // we must compute the real distinguished len of this sub-group
@@ -281,6 +279,8 @@ where S: Store,
                         // the requested range end is reached: stop computing distinct
                         if buf_distinct.len() >= range.end { break }
                     }
+
+                    info!("criterion {} produced a group of size {}", criterion.name(), group.len());
 
                     documents_seen += group.len();
                     groups.push(group);

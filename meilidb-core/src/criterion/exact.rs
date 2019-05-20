@@ -36,4 +36,8 @@ impl Criterion for Exact {
 
         lhs.cmp(&rhs).reverse()
     }
+
+    fn name(&self) -> &'static str {
+        "Exact"
+    }
 }

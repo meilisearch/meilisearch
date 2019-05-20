@@ -35,4 +35,8 @@ impl Criterion for SumOfWordsAttribute {
 
         lhs.cmp(&rhs)
     }
+
+    fn name(&self) -> &'static str {
+        "SumOfWordsAttribute"
+    }
 }

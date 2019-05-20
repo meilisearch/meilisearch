@@ -23,6 +23,9 @@ pub trait Criterion: Send + Sync {
     fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering;
 
     #[inline]
+    fn name(&self) -> &'static str;
+
+    #[inline]
     fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
         self.evaluate(lhs, rhs) == Ordering::Equal
     }
@@ -33,6 +36,10 @@ impl<'a, T: Criterion + ?Sized + Send + Sync> Criterion for &'a T {
         (**self).evaluate(lhs, rhs)
     }
 
+    fn name(&self) -> &'static str {
+        (**self).name()
+    }
+
     fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
         (**self).eq(lhs, rhs)
     }
@@ -41,6 +48,10 @@ impl<'a, T: Criterion + ?Sized + Send + Sync> Criterion for &'a T {
 impl<T: Criterion + ?Sized> Criterion for Box<T> {
     fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
         (**self).evaluate(lhs, rhs)
+    }
+
+    fn name(&self) -> &'static str {
+        (**self).name()
     }
 
     fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
