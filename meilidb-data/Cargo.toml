@@ -28,5 +28,9 @@ rev = "40b3d48"
 git = "https://github.com/Kerollmops/fst.git"
 branch = "arc-byte-slice"
 
+[features]
+default = []
+compression = ["sled/compression"]
+
 [dev-dependencies]
 tempfile = "3.0.7"

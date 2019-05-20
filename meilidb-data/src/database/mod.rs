@@ -41,6 +41,18 @@ impl Database {
         Ok(Database { cache, inner })
     }
 
+    pub fn start_with_compression<P: AsRef<Path>>(path: P, factor: i32) -> Result<Database, Error> {
+        let config = sled::ConfigBuilder::default()
+            .use_compression(true)
+            .compression_factor(factor)
+            .path(path)
+            .build();
+
+        let cache = RwLock::new(HashMap::new());
+        let inner = sled::Db::start(config)?;
+        Ok(Database { cache, inner })
+    }
+
     pub fn indexes(&self) -> Result<Option<HashSet<String>>, Error> {
         let bytes = match self.inner.get("indexes")? {
             Some(bytes) => bytes,
