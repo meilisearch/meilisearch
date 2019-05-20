@@ -4,6 +4,7 @@ mod query_builder;
 mod store;
 pub mod criterion;
 
+use std::fmt;
 use std::sync::Arc;
 
 use rayon::slice::ParallelSliceMut;
@@ -207,6 +208,21 @@ impl RawDocument {
         // it is safe because construction/modifications
         // can only be done in this module
         unsafe { &self.matches.matches.char_length.get_unchecked(r.start..r.end) }
+    }
+}
+
+impl fmt::Debug for RawDocument {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("RawDocument")
+            .field("id", &self.id)
+            .field("query_index", &self.query_index())
+            .field("distance", &self.distance())
+            .field("attribute", &self.attribute())
+            .field("word_index", &self.word_index())
+            .field("is_exact", &self.is_exact())
+            .field("char_index", &self.char_index())
+            .field("char_length", &self.char_length())
+            .finish()
     }
 }
 
