@@ -13,6 +13,10 @@ impl RankedMap {
         self.0.insert((document, attribute), number);
     }
 
+    pub fn remove(&mut self, document: DocumentId, attribute: SchemaAttr) {
+        self.0.remove(&(document, attribute));
+    }
+
     pub fn get(&self, document: DocumentId, attribute: SchemaAttr) -> Option<Number> {
         self.0.get(&(document, attribute)).cloned()
     }

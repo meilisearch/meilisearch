@@ -60,13 +60,13 @@ impl<'a> DocumentsAddition<'a> {
 
     pub fn finalize(self) -> Result<(), Error> {
         let lease_inner = self.inner.lease_inner();
-        let main = &lease_inner.raw.main;
-        let words = &lease_inner.raw.words;
         let docs_words = &lease_inner.raw.docs_words;
         let documents = &lease_inner.raw.documents;
+        let main = &lease_inner.raw.main;
+        let words = &lease_inner.raw.words;
 
         // 1. remove the previous documents match indexes
-        let mut documents_deletion = DocumentsDeletion::new(self.inner);
+        let mut documents_deletion = DocumentsDeletion::new(self.inner, self.ranked_map.clone());
         documents_deletion.extend(self.document_ids);
         documents_deletion.finalize()?;
 
