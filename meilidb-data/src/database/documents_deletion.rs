@@ -49,11 +49,7 @@ impl<'a> DocumentsDeletion<'a> {
         let schema = &lease_inner.schema;
         let words = &lease_inner.raw.words;
 
-        let idset = {
-            self.documents.sort_unstable();
-            self.documents.dedup();
-            SetBuf::new_unchecked(self.documents)
-        };
+        let idset = SetBuf::from_dirty(self.documents);
 
         // collect the ranked attributes according to the schema
         let ranked_attrs: Vec<_> = schema.iter()
@@ -63,7 +59,7 @@ impl<'a> DocumentsDeletion<'a> {
             .collect();
 
         let mut words_document_ids = HashMap::new();
-        for id in idset.into_vec() {
+        for id in idset {
             // remove all the ranked attributes from the ranked_map
             for ranked_attr in &ranked_attrs {
                 self.ranked_map.remove(id, *ranked_attr);
@@ -79,10 +75,8 @@ impl<'a> DocumentsDeletion<'a> {
         }
 
         let mut removed_words = BTreeSet::new();
-        for (word, mut document_ids) in words_document_ids {
-            document_ids.sort_unstable();
-            document_ids.dedup();
-            let document_ids = SetBuf::new_unchecked(document_ids);
+        for (word, document_ids) in words_document_ids {
+            let document_ids = SetBuf::from_dirty(document_ids);
 
             if let Some(doc_indexes) = words.doc_indexes(&word)? {
                 let op = DifferenceByKey::new(&doc_indexes, &document_ids, |d| d.document_id, |id| *id);
@@ -96,7 +90,7 @@ impl<'a> DocumentsDeletion<'a> {
                 }
             }
 
-            for id in document_ids.into_vec() {
+            for id in document_ids {
                 documents.del_all_document_fields(id)?;
                 docs_words.del_doc_words(id)?;
             }
