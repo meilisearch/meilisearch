@@ -2,13 +2,15 @@
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 use std::collections::{HashMap, HashSet};
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, Write, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::error::Error;
 use std::borrow::Cow;
 use std::fs::File;
 
+use diskus::Walk;
+use sysinfo::{SystemExt, ProcessExt};
 use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
 
@@ -52,6 +54,11 @@ fn index(
 {
     let database = Database::start_default(database_path)?;
 
+    let mut wtr = csv::Writer::from_path("./stats.csv").unwrap();
+    wtr.write_record(&["NumberOfDocuments", "DiskUsed", "MemoryUsed"])?;
+
+    let mut system = sysinfo::System::new();
+
     let index = database.create_index("default", schema.clone())?;
 
     let mut rdr = csv::Reader::from_path(csv_data_path)?;
@@ -90,6 +97,13 @@ fn index(
 
         println!("committing update...");
         update.finalize()?;
+
+        // write stats
+        let directory_size = Walk::new(&[database_path.to_owned()], 4).run();
+        system.refresh_all();
+        let memory = system.get_process(sysinfo::get_current_pid()).unwrap().memory(); // in kb
+        wtr.write_record(&[i.to_string(), directory_size.to_string(), memory.to_string()])?;
+        wtr.flush()?;
     }
 
     Ok(database)

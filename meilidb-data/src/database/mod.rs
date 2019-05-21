@@ -37,7 +37,8 @@ pub struct Database {
 impl Database {
     pub fn start_default<P: AsRef<Path>>(path: P) -> Result<Database, Error> {
         let cache = RwLock::new(HashMap::new());
-        let inner = sled::Db::start_default(path)?;
+        let config = sled::ConfigBuilder::new().path(path).print_profile_on_drop(true).build();
+        let inner = sled::Db::start(config)?;
         Ok(Database { cache, inner })
     }
 
