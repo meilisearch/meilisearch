@@ -70,11 +70,8 @@ impl Indexer {
     pub fn build(self) -> Indexed {
         let words_doc_indexes = self.words_doc_indexes
             .into_iter()
-            .map(|(word, mut indexes)| {
-                indexes.sort_unstable();
-                indexes.dedup();
-                (word, SetBuf::new_unchecked(indexes))
-            }).collect();
+            .map(|(word, indexes)| (word, SetBuf::from_dirty(indexes)))
+            .collect();
 
         let docs_words = self.docs_words
             .into_iter()
