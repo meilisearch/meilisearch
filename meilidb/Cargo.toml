@@ -14,10 +14,13 @@ tide = "0.2.0"
 
 [dev-dependencies]
 csv = "1.0.7"
+diskus = "0.5.0"
 env_logger = "0.6.1"
 jemallocator = "0.1.9"
+meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
 quickcheck = "0.8.2"
 rand = "0.6.5"
 rand_xorshift = "0.1.1"
 structopt = "0.2.15"
+sysinfo = "0.8.4"
 termcolor = "1.0.4"
