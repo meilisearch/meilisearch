@@ -1,9 +1,11 @@
 use std::collections::{HashMap, BTreeSet};
 use std::sync::Arc;
 
-use sdset::{SetBuf, SetOperation, duo::DifferenceByKey};
 use fst::{SetBuilder, Streamer};
 use meilidb_core::DocumentId;
+use sdset::{SetBuf, SetOperation, duo::DifferenceByKey};
+
+use crate::RankedMap;
 use crate::serde::extract_document_id;
 
 use super::{Index, Error, InnerIndex};
@@ -11,11 +13,12 @@ use super::{Index, Error, InnerIndex};
 pub struct DocumentsDeletion<'a> {
     inner: &'a Index,
     documents: Vec<DocumentId>,
+    ranked_map: RankedMap,
 }
 
 impl<'a> DocumentsDeletion<'a> {
-    pub fn new(inner: &'a Index) -> DocumentsDeletion {
-        DocumentsDeletion { inner, documents: Vec::new() }
+    pub fn new(inner: &'a Index, ranked_map: RankedMap) -> DocumentsDeletion {
+        DocumentsDeletion { inner, documents: Vec::new(), ranked_map }
     }
 
     fn delete_document_by_id(&mut self, id: DocumentId) {
@@ -40,10 +43,11 @@ impl<'a> DocumentsDeletion<'a> {
 
     pub fn finalize(mut self) -> Result<(), Error> {
         let lease_inner = self.inner.lease_inner();
-        let main = &lease_inner.raw.main;
         let docs_words = &lease_inner.raw.docs_words;
-        let words = &lease_inner.raw.words;
         let documents = &lease_inner.raw.documents;
+        let main = &lease_inner.raw.main;
+        let schema = &lease_inner.schema;
+        let words = &lease_inner.raw.words;
 
         let idset = {
             self.documents.sort_unstable();
@@ -51,8 +55,20 @@ impl<'a> DocumentsDeletion<'a> {
             SetBuf::new_unchecked(self.documents)
         };
 
+        // collect the ranked attributes according to the schema
+        let ranked_attrs: Vec<_> = schema.iter()
+            .filter_map(|(_, attr, prop)| {
+                if prop.is_ranked() { Some(attr) } else { None }
+            })
+            .collect();
+
         let mut words_document_ids = HashMap::new();
         for id in idset.into_vec() {
+            // remove all the ranked attributes from the ranked_map
+            for ranked_attr in &ranked_attrs {
+                self.ranked_map.remove(id, *ranked_attr);
+            }
+
             if let Some(words) = docs_words.doc_words(id)? {
                 let mut stream = words.stream();
                 while let Some(word) = stream.next() {
@@ -105,8 +121,7 @@ impl<'a> DocumentsDeletion<'a> {
         };
 
         main.set_words_set(&words)?;
-
-        // TODO must update the ranked_map too!
+        main.set_ranked_map(&self.ranked_map)?;
 
         // update the "consistent" view of the Index
         let ranked_map = lease_inner.ranked_map.clone();

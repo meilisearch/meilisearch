@@ -80,7 +80,8 @@ impl Index {
     }
 
     pub fn documents_deletion(&self) -> DocumentsDeletion {
-        DocumentsDeletion::new(self)
+        let ranked_map = self.0.lease().ranked_map.clone();
+        DocumentsDeletion::new(self, ranked_map)
     }
 
     pub fn document<T>(

@@ -179,6 +179,14 @@ impl Schema {
         let (name, _) = &self.inner.props[attr.0 as usize];
         name
     }
+
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item=(&str, SchemaAttr, SchemaProps)> + 'a {
+        self.inner.props.iter()
+            .map(move |(name, prop)| {
+                let attr = self.inner.attrs.get(name).unwrap();
+                (name.as_str(), *attr, *prop)
+            })
+    }
 }
 
 #[derive(Serialize, Deserialize)]
