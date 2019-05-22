@@ -12,7 +12,7 @@ impl<K: Hash + Eq> DistinctMap<K> {
     pub fn new(limit: usize) -> Self {
         DistinctMap {
             inner: HashMap::new(),
-            limit: limit,
+            limit,
             len: 0,
         }
     }
@@ -31,7 +31,7 @@ pub struct BufferedDistinctMap<'a, K> {
 impl<'a, K: Hash + Eq> BufferedDistinctMap<'a, K> {
     pub fn new(internal: &'a mut DistinctMap<K>) -> BufferedDistinctMap<'a, K> {
         BufferedDistinctMap {
-            internal: internal,
+            internal,
             inner: HashMap::new(),
             len: 0,
         }

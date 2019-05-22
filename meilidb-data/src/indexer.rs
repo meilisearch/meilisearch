@@ -134,9 +134,9 @@ fn token_to_docindex(id: DocumentId, attr: SchemaAttr, token: Token) -> Option<D
     let docindex = DocIndex {
         document_id: id,
         attribute: attr.0,
-        word_index: word_index,
-        char_index: char_index,
-        char_length: char_length,
+        word_index,
+        char_index,
+        char_length,
     };
 
     Some(docindex)

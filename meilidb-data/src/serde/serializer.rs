@@ -266,26 +266,22 @@ fn serialize_value<T: ?Sized>(
 ) -> Result<(), SerializerError>
 where T: ser::Serialize,
 {
-    if let Some(attr) = schema.attribute(key) {
-        let props = schema.props(attr);
+    if let Some(attribute) = schema.attribute(key) {
+        let props = schema.props(attribute);
 
         if props.is_stored() {
             let value = rmp_serde::to_vec_named(value)?;
-            document_store.set_document_field(document_id, attr, value);
+            document_store.set_document_field(document_id, attribute, value);
         }
 
         if props.is_indexed() {
-            let indexer = Indexer {
-                attribute: attr,
-                indexer: indexer,
-                document_id: document_id,
-            };
+            let indexer = Indexer { attribute, indexer, document_id };
             value.serialize(indexer)?;
         }
 
         if props.is_ranked() {
             let number = value.serialize(ConvertToNumber)?;
-            ranked_map.insert(document_id, attr, number);
+            ranked_map.insert(document_id, attribute, number);
         }
     }
 
