@@ -61,7 +61,7 @@ impl ser::Serializer for ConvertToNumber {
     }
 
     fn serialize_f32(self, value: f32) -> Result<Self::Ok, Self::Error> {
-        Ok(Number::Float(OrderedFloat(value as f64)))
+        Ok(Number::Float(OrderedFloat(f64::from(value))))
     }
 
     fn serialize_f64(self, value: f64) -> Result<Self::Ok, Self::Error> {

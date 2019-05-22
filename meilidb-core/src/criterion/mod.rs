@@ -22,7 +22,6 @@ pub use self::{
 pub trait Criterion: Send + Sync {
     fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering;
 
-    #[inline]
     fn name(&self) -> &'static str;
 
     #[inline]

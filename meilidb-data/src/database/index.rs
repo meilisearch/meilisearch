@@ -95,7 +95,7 @@ impl Index {
         let fields = fields
             .map(|fields| {
                 fields
-                    .into_iter()
+                    .iter()
                     .filter_map(|name| schema.attribute(name))
                     .collect()
             });

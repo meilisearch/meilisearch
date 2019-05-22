@@ -69,11 +69,7 @@ impl<'c, S, FI> QueryBuilder<'c, S, FI>
     where F: Fn(DocumentId) -> Option<K>,
           K: Hash + Eq,
     {
-        DistinctQueryBuilder {
-            inner: self,
-            function: function,
-            size: size
-        }
+        DistinctQueryBuilder { inner: self, function, size }
     }
 
     pub fn add_searchable_attribute(&mut self, attribute: u16) {
@@ -116,10 +112,10 @@ where S: Store,
                     if self.searchable_attrs.as_ref().map_or(true, |r| r.contains(&di.attribute)) {
                         let match_ = Match {
                             query_index: iv.index as u32,
-                            distance: distance,
+                            distance,
                             attribute: di.attribute,
                             word_index: di.word_index,
-                            is_exact: is_exact,
+                            is_exact,
                             char_index: di.char_index,
                             char_length: di.char_length,
                         };
