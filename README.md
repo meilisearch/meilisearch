@@ -59,7 +59,8 @@ We have seen much better performances when [using jemalloc as the global allocat
 
 ## Usage and examples
 
-You can test a little part of MeiliDB by using this command, it create an index named _movies_ and initialize it with to great Tarantino movies.
+You can try a little part of MeiliDB with the following commands.
+It creates an index named _movies_ and insert two great Tarantino movies in it.
 
 ```bash
 cargo run --release
