@@ -5,11 +5,12 @@ use sdset::{Set, SetBuf};
 use zerocopy::{LayoutVerified, AsBytes};
 
 #[derive(Clone)]
-pub struct WordsIndex(pub Arc<sled::Tree>);
+pub struct WordsIndex(pub Arc<rocksdb::DB>, pub String);
 
 impl WordsIndex {
-    pub fn doc_indexes(&self, word: &[u8]) -> sled::Result<Option<SetBuf<DocIndex>>> {
-        match self.0.get(word)? {
+    pub fn doc_indexes(&self, word: &[u8]) -> Result<Option<SetBuf<DocIndex>>, rocksdb::Error> {
+        let cf = self.0.cf_handle(&self.1).unwrap();
+        match self.0.get_cf(cf, word)? {
             Some(bytes) => {
                 let layout = LayoutVerified::new_slice(bytes.as_ref()).expect("invalid layout");
                 let slice = layout.into_slice();
@@ -20,13 +21,15 @@ impl WordsIndex {
         }
     }
 
-    pub fn set_doc_indexes(&self, word: &[u8], set: &Set<DocIndex>) -> sled::Result<()> {
-        self.0.set(word, set.as_bytes())?;
+    pub fn set_doc_indexes(&self, word: &[u8], set: &Set<DocIndex>) -> Result<(), rocksdb::Error> {
+        let cf = self.0.cf_handle(&self.1).unwrap();
+        self.0.put_cf(cf, word, set.as_bytes())?;
         Ok(())
     }
 
-    pub fn del_doc_indexes(&self, word: &[u8]) -> sled::Result<()> {
-        self.0.del(word)?;
+    pub fn del_doc_indexes(&self, word: &[u8]) -> Result<(), rocksdb::Error> {
+        let cf = self.0.cf_handle(&self.1).unwrap();
+        self.0.delete_cf(cf, word)?;
         Ok(())
     }
 }

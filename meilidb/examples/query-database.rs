@@ -143,7 +143,7 @@ fn main() -> Result<(), Box<Error>> {
     let mut buffer = String::new();
     let input = io::stdin();
 
-    let index = database.open_index("default")?.unwrap();
+    let index = database.open_index("test")?.unwrap();
     let schema = index.schema();
 
     println!("database prepared for you in {:.2?}", start.elapsed());

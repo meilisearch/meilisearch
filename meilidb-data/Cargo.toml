@@ -16,7 +16,7 @@ ordered-float = { version = "1.0.2", features = ["serde"] }
 sdset = "0.3.2"
 serde = { version = "1.0.91", features = ["derive"] }
 serde_json = { version = "1.0.39", features = ["preserve_order"] }
-sled = "0.23.0"
+rocksdb = "0.12.2"
 toml = { version = "0.5.0", features = ["preserve_order"] }
 zerocopy = "0.2.2"
 
@@ -27,10 +27,6 @@ rev = "40b3d48"
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
 branch = "arc-byte-slice"
-
-[features]
-default = []
-compression = ["sled/compression"]
 
 [dev-dependencies]
 tempfile = "3.0.7"

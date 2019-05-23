@@ -31,26 +31,24 @@ use self::words_index::WordsIndex;
 
 pub struct Database {
     cache: RwLock<HashMap<String, Arc<Index>>>,
-    inner: sled::Db,
+    inner: Arc<rocksdb::DB>,
 }
 
 impl Database {
     pub fn start_default<P: AsRef<Path>>(path: P) -> Result<Database, Error> {
+        let path = path.as_ref();
         let cache = RwLock::new(HashMap::new());
-        let config = sled::ConfigBuilder::new().path(path).print_profile_on_drop(true).build();
-        let inner = sled::Db::start(config)?;
-        Ok(Database { cache, inner })
-    }
 
-    pub fn start_with_compression<P: AsRef<Path>>(path: P, factor: i32) -> Result<Database, Error> {
-        let config = sled::ConfigBuilder::default()
-            .use_compression(true)
-            .compression_factor(factor)
-            .path(path)
-            .build();
+        let inner = {
+            let options = {
+                let mut options = rocksdb::Options::default();
+                options.create_if_missing(true);
+                options
+            };
+            let cfs = rocksdb::DB::list_cf(&options, path).unwrap_or(Vec::new());
+            Arc::new(rocksdb::DB::open_cf(&options, path, cfs)?)
+        };
 
-        let cache = RwLock::new(HashMap::new());
-        let inner = sled::Db::start(config)?;
         Ok(Database { cache, inner })
     }
 
@@ -66,7 +64,7 @@ impl Database {
 
     fn set_indexes(&self, value: &HashSet<String>) -> Result<(), Error> {
         let bytes = bincode::serialize(value)?;
-        self.inner.set("indexes", bytes)?;
+        self.inner.put("indexes", bytes)?;
         Ok(())
     }
 
@@ -89,32 +87,32 @@ impl Database {
                 }
 
                 let main = {
-                    let tree = self.inner.open_tree(name)?;
-                    MainIndex(tree)
+                    self.inner.cf_handle(name).expect("cf not found");
+                    MainIndex(self.inner.clone(), name.to_owned())
                 };
 
                 let words = {
-                    let tree_name = format!("{}-words", name);
-                    let tree = self.inner.open_tree(tree_name)?;
-                    WordsIndex(tree)
+                    let cf_name = format!("{}-words", name);
+                    self.inner.cf_handle(&cf_name).expect("cf not found");
+                    WordsIndex(self.inner.clone(), cf_name)
                 };
 
                 let docs_words = {
-                    let tree_name = format!("{}-docs-words", name);
-                    let tree = self.inner.open_tree(tree_name)?;
-                    DocsWordsIndex(tree)
+                    let cf_name = format!("{}-docs-words", name);
+                    self.inner.cf_handle(&cf_name).expect("cf not found");
+                    DocsWordsIndex(self.inner.clone(), cf_name)
                 };
 
                 let documents = {
-                    let tree_name = format!("{}-documents", name);
-                    let tree = self.inner.open_tree(tree_name)?;
-                    DocumentsIndex(tree)
+                    let cf_name = format!("{}-documents", name);
+                    self.inner.cf_handle(&cf_name).expect("cf not found");
+                    DocumentsIndex(self.inner.clone(), cf_name)
                 };
 
                 let custom = {
-                    let tree_name = format!("{}-custom", name);
-                    let tree = self.inner.open_tree(tree_name)?;
-                    CustomSettings(tree)
+                    let cf_name = format!("{}-custom", name);
+                    self.inner.cf_handle(&cf_name).expect("cf not found");
+                    CustomSettings(self.inner.clone(), cf_name)
                 };
 
                 let raw_index = RawIndex { main, words, docs_words, documents, custom };
@@ -136,8 +134,8 @@ impl Database {
             },
             Entry::Vacant(vacant) => {
                 let main = {
-                    let tree = self.inner.open_tree(name)?;
-                    MainIndex(tree)
+                    self.inner.create_cf(name, &rocksdb::Options::default())?;
+                    MainIndex(self.inner.clone(), name.to_owned())
                 };
 
                 if let Some(prev_schema) = main.schema()? {
@@ -149,27 +147,27 @@ impl Database {
                 main.set_schema(&schema)?;
 
                 let words = {
-                    let tree_name = format!("{}-words", name);
-                    let tree = self.inner.open_tree(tree_name)?;
-                    WordsIndex(tree)
+                    let cf_name = format!("{}-words", name);
+                    self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
+                    WordsIndex(self.inner.clone(), cf_name)
                 };
 
                 let docs_words = {
-                    let tree_name = format!("{}-docs-words", name);
-                    let tree = self.inner.open_tree(tree_name)?;
-                    DocsWordsIndex(tree)
+                    let cf_name = format!("{}-docs-words", name);
+                    self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
+                    DocsWordsIndex(self.inner.clone(), cf_name)
                 };
 
                 let documents = {
-                    let tree_name = format!("{}-documents", name);
-                    let tree = self.inner.open_tree(tree_name)?;
-                    DocumentsIndex(tree)
+                    let cf_name = format!("{}-documents", name);
+                    self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
+                    DocumentsIndex(self.inner.clone(), cf_name)
                 };
 
                 let custom = {
-                    let tree_name = format!("{}-custom", name);
-                    let tree = self.inner.open_tree(tree_name)?;
-                    CustomSettings(tree)
+                    let cf_name = format!("{}-custom", name);
+                    self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
+                    CustomSettings(self.inner.clone(), cf_name)
                 };
 
                 let mut indexes = self.indexes()?.unwrap_or_else(HashSet::new);
