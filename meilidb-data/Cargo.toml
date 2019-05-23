@@ -16,7 +16,7 @@ ordered-float = { version = "1.0.2", features = ["serde"] }
 sdset = "0.3.2"
 serde = { version = "1.0.91", features = ["derive"] }
 serde_json = { version = "1.0.39", features = ["preserve_order"] }
-rocksdb = "0.12.2"
+rocksdb = { version = "0.12.2", default-features = false }
 toml = { version = "0.5.0", features = ["preserve_order"] }
 zerocopy = "0.2.2"
 
