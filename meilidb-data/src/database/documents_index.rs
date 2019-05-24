@@ -1,45 +1,37 @@
-use std::sync::Arc;
 use std::convert::TryInto;
 
 use meilidb_core::DocumentId;
 use rocksdb::DBVector;
 
+use crate::database::raw_index::InnerRawIndex;
 use crate::document_attr_key::DocumentAttrKey;
 use crate::schema::SchemaAttr;
 
 #[derive(Clone)]
-pub struct DocumentsIndex(pub Arc<rocksdb::DB>, pub String);
+pub struct DocumentsIndex(pub(crate) InnerRawIndex);
 
 impl DocumentsIndex {
     pub fn document_field(&self, id: DocumentId, attr: SchemaAttr) -> Result<Option<DBVector>, rocksdb::Error> {
         let key = DocumentAttrKey::new(id, attr).to_be_bytes();
-        let cf = self.0.cf_handle(&self.1).unwrap();
-        self.0.get_cf(cf, key)
+        self.0.get(key)
     }
 
     pub fn set_document_field(&self, id: DocumentId, attr: SchemaAttr, value: Vec<u8>) -> Result<(), rocksdb::Error> {
         let key = DocumentAttrKey::new(id, attr).to_be_bytes();
-        let cf = self.0.cf_handle(&self.1).unwrap();
-        self.0.put_cf(cf, key, value)?;
+        self.0.set(key, value)?;
         Ok(())
     }
 
     pub fn del_document_field(&self, id: DocumentId, attr: SchemaAttr) -> Result<(), rocksdb::Error> {
         let key = DocumentAttrKey::new(id, attr).to_be_bytes();
-        let cf = self.0.cf_handle(&self.1).unwrap();
-        self.0.delete_cf(cf, key)?;
+        self.0.delete(key)?;
         Ok(())
     }
 
     pub fn del_all_document_fields(&self, id: DocumentId) -> Result<(), rocksdb::Error> {
         let start = DocumentAttrKey::new(id, SchemaAttr::min()).to_be_bytes();
         let end = DocumentAttrKey::new(id, SchemaAttr::max()).to_be_bytes();
-
-        let cf = self.0.cf_handle(&self.1).unwrap();
-        let mut batch = rocksdb::WriteBatch::default();
-        batch.delete_range_cf(cf, start, end)?;
-        self.0.write(batch)?;
-
+        self.0.delete_range(start, end)?;
         Ok(())
     }
 
@@ -47,9 +39,8 @@ impl DocumentsIndex {
         let start = DocumentAttrKey::new(id, SchemaAttr::min()).to_be_bytes();
         let end = DocumentAttrKey::new(id, SchemaAttr::max()).to_be_bytes();
 
-        let cf = self.0.cf_handle(&self.1).unwrap();
         let from = rocksdb::IteratorMode::From(&start[..], rocksdb::Direction::Forward);
-        let iter = self.0.iterator_cf(cf, from).unwrap();
+        let iter = self.0.iterator(from).unwrap();
 
         DocumentFieldsIter(iter, end.to_vec())
     }

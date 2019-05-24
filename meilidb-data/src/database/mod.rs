@@ -26,7 +26,7 @@ use self::documents_deletion::DocumentsDeletion;
 use self::documents_index::DocumentsIndex;
 use self::index::InnerIndex;
 use self::main_index::MainIndex;
-use self::raw_index::RawIndex;
+use self::raw_index::{RawIndex, InnerRawIndex};
 use self::words_index::WordsIndex;
 
 pub struct Database {
@@ -88,31 +88,31 @@ impl Database {
 
                 let main = {
                     self.inner.cf_handle(name).expect("cf not found");
-                    MainIndex(self.inner.clone(), name.to_owned())
+                    MainIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(name)))
                 };
 
                 let words = {
                     let cf_name = format!("{}-words", name);
                     self.inner.cf_handle(&cf_name).expect("cf not found");
-                    WordsIndex(self.inner.clone(), cf_name)
+                    WordsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
                 };
 
                 let docs_words = {
                     let cf_name = format!("{}-docs-words", name);
                     self.inner.cf_handle(&cf_name).expect("cf not found");
-                    DocsWordsIndex(self.inner.clone(), cf_name)
+                    DocsWordsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
                 };
 
                 let documents = {
                     let cf_name = format!("{}-documents", name);
                     self.inner.cf_handle(&cf_name).expect("cf not found");
-                    DocumentsIndex(self.inner.clone(), cf_name)
+                    DocumentsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
                 };
 
                 let custom = {
                     let cf_name = format!("{}-custom", name);
                     self.inner.cf_handle(&cf_name).expect("cf not found");
-                    CustomSettings(self.inner.clone(), cf_name)
+                    CustomSettings(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
                 };
 
                 let raw_index = RawIndex { main, words, docs_words, documents, custom };
@@ -135,7 +135,7 @@ impl Database {
             Entry::Vacant(vacant) => {
                 let main = {
                     self.inner.create_cf(name, &rocksdb::Options::default())?;
-                    MainIndex(self.inner.clone(), name.to_owned())
+                    MainIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(name)))
                 };
 
                 if let Some(prev_schema) = main.schema()? {
@@ -149,25 +149,25 @@ impl Database {
                 let words = {
                     let cf_name = format!("{}-words", name);
                     self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
-                    WordsIndex(self.inner.clone(), cf_name)
+                    WordsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
                 };
 
                 let docs_words = {
                     let cf_name = format!("{}-docs-words", name);
                     self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
-                    DocsWordsIndex(self.inner.clone(), cf_name)
+                    DocsWordsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
                 };
 
                 let documents = {
                     let cf_name = format!("{}-documents", name);
                     self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
-                    DocumentsIndex(self.inner.clone(), cf_name)
+                    DocumentsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
                 };
 
                 let custom = {
                     let cf_name = format!("{}-custom", name);
                     self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
-                    CustomSettings(self.inner.clone(), cf_name)
+                    CustomSettings(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
                 };
 
                 let mut indexes = self.indexes()?.unwrap_or_else(HashSet::new);
