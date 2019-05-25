@@ -44,6 +44,26 @@ impl DocumentsIndex {
 
         DocumentFieldsIter(iter, end.to_vec())
     }
+
+    pub fn len(&self) -> Result<usize, rocksdb::Error> {
+        let mut last_document_id = None;
+        let mut count = 0;
+
+        let from = rocksdb::IteratorMode::Start;
+        let iterator = self.0.iterator(from)?;
+
+        for (key, value) in iterator {
+            let slice = key.as_ref().try_into().unwrap();
+            let document_id = DocumentAttrKey::from_be_bytes(slice).document_id;
+
+            if Some(document_id) != last_document_id {
+                last_document_id = Some(document_id);
+                count += 1;
+            }
+        }
+
+        Ok(count)
+    }
 }
 
 pub struct DocumentFieldsIter<'a>(rocksdb::DBIterator<'a>, Vec<u8>);

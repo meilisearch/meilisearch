@@ -15,6 +15,13 @@ use crate::serde::Deserializer;
 use super::{Error, CustomSettings};
 use super::{RawIndex, DocumentsAddition, DocumentsDeletion};
 
+#[derive(Copy, Clone)]
+pub struct IndexStats {
+    pub number_of_words: usize,
+    pub number_of_documents: usize,
+    pub number_attrs_in_ranked_map: usize,
+}
+
 #[derive(Clone)]
 pub struct Index(pub ArcSwap<InnerIndex>);
 
@@ -46,6 +53,16 @@ impl Index {
         let index = Index(ArcSwap::new(Arc::new(inner)));
 
         Ok(index)
+    }
+
+    pub fn stats(&self) -> Result<IndexStats, rocksdb::Error> {
+        let lease = self.0.lease();
+
+        Ok(IndexStats {
+            number_of_words: lease.words.len(),
+            number_of_documents: lease.raw.documents.len()?,
+            number_attrs_in_ranked_map: lease.ranked_map.len(),
+        })
     }
 
     pub fn query_builder(&self) -> QueryBuilder<IndexLease> {
