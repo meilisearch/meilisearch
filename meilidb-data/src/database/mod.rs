@@ -39,17 +39,26 @@ impl Database {
         let path = path.as_ref();
         let cache = RwLock::new(HashMap::new());
 
-        let inner = {
-            let options = {
-                let mut options = rocksdb::Options::default();
-                options.create_if_missing(true);
-                options
-            };
-            let cfs = rocksdb::DB::list_cf(&options, path).unwrap_or(Vec::new());
-            Arc::new(rocksdb::DB::open_cf(&options, path, cfs)?)
+        let options = {
+            let mut options = rocksdb::Options::default();
+            options.create_if_missing(true);
+            options
         };
+        let cfs = rocksdb::DB::list_cf(&options, path).unwrap_or(Vec::new());
+        let inner = Arc::new(rocksdb::DB::open_cf(&options, path, &cfs)?);
+        let database = Database { cache, inner };
 
-        Ok(Database { cache, inner })
+        let mut indexes: Vec<_> = cfs.iter()
+            .filter_map(|c| c.split('-').nth(0).filter(|&c| c != "default"))
+            .collect();
+        indexes.sort_unstable();
+        indexes.dedup();
+
+        for index in indexes {
+            database.open_index(index)?;
+        }
+
+        Ok(database)
     }
 
     pub fn indexes(&self) -> Result<Option<HashSet<String>>, Error> {
