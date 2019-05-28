@@ -121,6 +121,7 @@ impl<'a> DocumentsDeletion<'a> {
         let ranked_map = lease_inner.ranked_map.clone();
         let schema = lease_inner.schema.clone();
         let raw = lease_inner.raw.clone();
+        lease_inner.raw.compact();
 
         let inner = InnerIndex { words, schema, ranked_map, raw };
         self.inner.0.store(Arc::new(inner));

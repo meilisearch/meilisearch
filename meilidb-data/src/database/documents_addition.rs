@@ -122,6 +122,7 @@ impl<'a> DocumentsAddition<'a> {
         let ranked_map = self.ranked_map;
         let schema = lease_inner.schema.clone();
         let raw = lease_inner.raw.clone();
+        lease_inner.raw.compact();
 
         let inner = InnerIndex { words, schema, ranked_map, raw };
         self.inner.0.store(Arc::new(inner));

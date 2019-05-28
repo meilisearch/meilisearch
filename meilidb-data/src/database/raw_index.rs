@@ -10,6 +10,16 @@ pub struct RawIndex {
     pub custom: CustomSettings,
 }
 
+impl RawIndex {
+    pub(crate) fn compact(&self) {
+        self.main.0.compact_range(None::<&[u8]>, None::<&[u8]>);
+        self.words.0.compact_range(None::<&[u8]>, None::<&[u8]>);
+        self.docs_words.0.compact_range(None::<&[u8]>, None::<&[u8]>);
+        self.documents.0.compact_range(None::<&[u8]>, None::<&[u8]>);
+        self.custom.0.compact_range(None::<&[u8]>, None::<&[u8]>);
+    }
+}
+
 #[derive(Clone)]
 pub struct InnerRawIndex {
     database: Arc<rocksdb::DB>,
@@ -64,5 +74,13 @@ impl InnerRawIndex {
         batch.delete_range_cf(cf, start, end)?;
 
         self.database.write(batch)
+    }
+
+    pub fn compact_range<S, E>(&self, start: Option<S>, end: Option<E>)
+    where S: AsRef<[u8]>,
+          E: AsRef<[u8]>,
+    {
+        let cf = self.database.cf_handle(&self.name).expect("cf not found");
+        self.database.compact_range_cf(cf, start, end)
     }
 }
