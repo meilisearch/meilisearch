@@ -2,9 +2,9 @@ use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 
-use meilidb_core::criterion::Criterion;
-use meilidb_core::RawDocument;
-use meilidb_data::{Schema, SchemaAttr, RankedMap};
+use meilidb_core::{criterion::Criterion, RawDocument};
+use meilidb_data::RankedMap;
+use meilidb_schema::{Schema, SchemaAttr};
 
 /// An helper struct that permit to sort documents by
 /// some of their stored attributes.

@@ -3,10 +3,9 @@ use std::convert::TryFrom;
 
 use deunicode::deunicode_with_tofu;
 use meilidb_core::{DocumentId, DocIndex};
+use meilidb_schema::SchemaAttr;
 use meilidb_tokenizer::{is_cjk, Tokenizer, SeqTokenizer, Token};
 use sdset::SetBuf;
-
-use crate::SchemaAttr;
 
 type Word = Vec<u8>; // TODO make it be a SmallVec
 

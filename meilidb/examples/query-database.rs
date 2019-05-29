@@ -13,8 +13,8 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use structopt::StructOpt;
 use meilidb_core::Match;
 
-use meilidb_data::schema::SchemaAttr;
 use meilidb_data::Database;
+use meilidb_schema::SchemaAttr;
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {

@@ -1,9 +1,9 @@
 use meilidb_core::DocumentId;
+use meilidb_schema::SchemaAttr;
 use serde::ser;
 use serde::Serialize;
 
 use crate::indexer::Indexer as RawIndexer;
-use crate::schema::SchemaAttr;
 use super::{SerializerError, ConvertToString};
 
 pub struct Indexer<'a> {

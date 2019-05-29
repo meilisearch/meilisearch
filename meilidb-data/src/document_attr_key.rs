@@ -1,5 +1,5 @@
 use meilidb_core::DocumentId;
-use crate::schema::SchemaAttr;
+use meilidb_schema::SchemaAttr;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DocumentAttrKey {

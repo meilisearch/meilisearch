@@ -9,15 +9,13 @@ arc-swap = "0.3.11"
 bincode = "1.1.2"
 deunicode = "1.0.0"
 hashbrown = { version = "0.2.2", features = ["serde"] }
-linked-hash-map = { version = "0.5.2", features = ["serde_impl"] }
 meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
 meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
+meilidb-schema = { path = "../meilidb-schema", version = "0.1.0" }
 ordered-float = { version = "1.0.2", features = ["serde"] }
 sdset = "0.3.2"
 serde = { version = "1.0.91", features = ["derive"] }
-serde_json = { version = "1.0.39", features = ["preserve_order"] }
 rocksdb = { version = "0.12.2", default-features = false }
-toml = { version = "0.5.0", features = ["preserve_order"] }
 zerocopy = "0.2.2"
 
 [dependencies.rmp-serde]
@@ -30,3 +28,4 @@ branch = "arc-byte-slice"
 
 [dev-dependencies]
 tempfile = "3.0.7"
+serde_json = "1.0.39"

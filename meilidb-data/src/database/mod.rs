@@ -2,8 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashSet, HashMap};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-
-use crate::Schema;
+use meilidb_schema::Schema;
 
 mod custom_settings;
 mod docs_words_index;
