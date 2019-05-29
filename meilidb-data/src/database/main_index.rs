@@ -1,16 +1,17 @@
 use std::sync::Arc;
 
+use crate::database::raw_index::InnerRawIndex;
 use crate::ranked_map::RankedMap;
 use crate::schema::Schema;
 
 use super::Error;
 
 #[derive(Clone)]
-pub struct MainIndex(pub Arc<sled::Tree>);
+pub struct MainIndex(pub(crate) InnerRawIndex);
 
 impl MainIndex {
     pub fn schema(&self) -> Result<Option<Schema>, Error> {
-        match self.0.get("schema")? {
+        match self.0.get_pinned("schema")? {
             Some(bytes) => {
                 let schema = Schema::read_from_bin(bytes.as_ref())?;
                 Ok(Some(schema))
@@ -27,10 +28,10 @@ impl MainIndex {
     }
 
     pub fn words_set(&self) -> Result<Option<fst::Set>, Error> {
-        match self.0.get("words")? {
+        match self.0.get_pinned("words")? {
             Some(bytes) => {
                 let len = bytes.len();
-                let value = bytes.into();
+                let value = Arc::from(bytes.as_ref());
                 let fst = fst::raw::Fst::from_shared_bytes(value, 0, len)?;
                 Ok(Some(fst::Set::from(fst)))
             },
@@ -39,12 +40,11 @@ impl MainIndex {
     }
 
     pub fn set_words_set(&self, value: &fst::Set) -> Result<(), Error> {
-        self.0.set("words", value.as_fst().as_bytes())?;
-        Ok(())
+        self.0.set("words", value.as_fst().as_bytes()).map_err(Into::into)
     }
 
     pub fn ranked_map(&self) -> Result<Option<RankedMap>, Error> {
-        match self.0.get("ranked-map")? {
+        match self.0.get_pinned("ranked-map")? {
             Some(bytes) => {
                 let ranked_map = RankedMap::read_from_bin(bytes.as_ref())?;
                 Ok(Some(ranked_map))

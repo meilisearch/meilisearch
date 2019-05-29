@@ -36,7 +36,7 @@ use crate::schema::SchemaAttr;
 pub enum SerializerError {
     DocumentIdNotFound,
     RmpError(RmpError),
-    SledError(sled::Error),
+    RocksdbError(rocksdb::Error),
     ParseNumberError(ParseNumberError),
     UnserializableType { type_name: &'static str },
     UnindexableType { type_name: &'static str },
@@ -57,7 +57,7 @@ impl fmt::Display for SerializerError {
                 write!(f, "serialized document does not have an id according to the schema")
             }
             SerializerError::RmpError(e) => write!(f, "rmp serde related error: {}", e),
-            SerializerError::SledError(e) => write!(f, "sled related error: {}", e),
+            SerializerError::RocksdbError(e) => write!(f, "RocksDB related error: {}", e),
             SerializerError::ParseNumberError(e) => {
                 write!(f, "error while trying to parse a number: {}", e)
             },
@@ -89,9 +89,9 @@ impl From<RmpError> for SerializerError {
     }
 }
 
-impl From<sled::Error> for SerializerError {
-    fn from(error: sled::Error) -> SerializerError {
-        SerializerError::SledError(error)
+impl From<rocksdb::Error> for SerializerError {
+    fn from(error: rocksdb::Error) -> SerializerError {
+        SerializerError::RocksdbError(error)
     }
 }
 

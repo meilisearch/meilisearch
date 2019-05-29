@@ -9,6 +9,10 @@ use crate::{SchemaAttr, Number};
 pub struct RankedMap(HashMap<(DocumentId, SchemaAttr), Number>);
 
 impl RankedMap {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn insert(&mut self, document: DocumentId, attribute: SchemaAttr, number: Number) {
         self.0.insert((document, attribute), number);
     }

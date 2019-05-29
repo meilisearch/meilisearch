@@ -59,7 +59,7 @@ fn index(
 
     let mut system = sysinfo::System::new();
 
-    let index = database.create_index("default", schema.clone())?;
+    let index = database.create_index("test", schema.clone())?;
 
     let mut rdr = csv::Reader::from_path(csv_data_path)?;
     let mut raw_record = csv::StringRecord::new();
