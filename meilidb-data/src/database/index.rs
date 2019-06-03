@@ -5,11 +5,11 @@ use std::sync::Arc;
 use arc_swap::{ArcSwap, Lease};
 use meilidb_core::criterion::Criteria;
 use meilidb_core::{DocIndex, Store, DocumentId, QueryBuilder};
+use meilidb_schema::Schema;
 use rmp_serde::decode::Error as RmpError;
 use serde::de;
 
 use crate::ranked_map::RankedMap;
-use crate::schema::Schema;
 use crate::serde::Deserializer;
 
 use super::{Error, CustomSettings};

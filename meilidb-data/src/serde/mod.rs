@@ -26,11 +26,11 @@ use std::collections::BTreeMap;
 use std::{fmt, error::Error};
 
 use meilidb_core::DocumentId;
+use meilidb_schema::SchemaAttr;
 use rmp_serde::encode::Error as RmpError;
 use serde::ser;
 
 use crate::number::ParseNumberError;
-use crate::schema::SchemaAttr;
 
 #[derive(Debug)]
 pub enum SerializerError {

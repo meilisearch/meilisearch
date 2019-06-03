@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
+use meilidb_schema::Schema;
+
 use crate::database::raw_index::InnerRawIndex;
 use crate::ranked_map::RankedMap;
-use crate::schema::Schema;
 
 use super::Error;
 

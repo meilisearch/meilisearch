@@ -2,12 +2,13 @@
 
 use std::collections::HashMap;
 
+use meilidb_data::Database;
+use meilidb_schema::Schema;
 use serde::{Deserialize, Serialize};
-use tide::querystring::ExtractQuery;
-use tide::http::status::StatusCode;
-use tide::{error::ResultExt, response, App, Context, EndpointResult};
 use serde_json::Value;
-use meilidb_data::{Database, Schema};
+use tide::http::status::StatusCode;
+use tide::querystring::ExtractQuery;
+use tide::{error::ResultExt, response, App, Context, EndpointResult};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct SearchQuery {

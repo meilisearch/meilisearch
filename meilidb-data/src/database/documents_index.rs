@@ -1,11 +1,11 @@
 use std::convert::TryInto;
 
 use meilidb_core::DocumentId;
+use meilidb_schema::SchemaAttr;
 use rocksdb::DBVector;
 
 use crate::database::raw_index::InnerRawIndex;
 use crate::document_attr_key::DocumentAttrKey;
-use crate::schema::SchemaAttr;
 
 #[derive(Clone)]
 pub struct DocumentsIndex(pub(crate) InnerRawIndex);
@@ -52,7 +52,7 @@ impl DocumentsIndex {
         let from = rocksdb::IteratorMode::Start;
         let iterator = self.0.iterator(from)?;
 
-        for (key, value) in iterator {
+        for (key, _) in iterator {
             let slice = key.as_ref().try_into().unwrap();
             let document_id = DocumentAttrKey::from_be_bytes(slice).document_id;
 

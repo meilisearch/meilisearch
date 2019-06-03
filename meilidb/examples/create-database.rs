@@ -14,7 +14,8 @@ use sysinfo::{SystemExt, ProcessExt};
 use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
 
-use meilidb_data::{Database, Schema};
+use meilidb_data::Database;
+use meilidb_schema::Schema;
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {

@@ -1,9 +1,9 @@
 use meilidb_core::DocumentId;
+use meilidb_schema::Schema;
 use serde::ser;
 
 use crate::indexer::Indexer as RawIndexer;
 use crate::ranked_map::RankedMap;
-use crate::schema::Schema;
 use super::{RamDocumentStore, SerializerError, ConvertToString, ConvertToNumber, Indexer};
 
 pub struct Serializer<'a> {

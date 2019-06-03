@@ -2,12 +2,12 @@ use std::collections::HashSet;
 use std::io::Cursor;
 
 use meilidb_core::DocumentId;
+use meilidb_schema::SchemaAttr;
 use rmp_serde::decode::{Deserializer as RmpDeserializer, ReadReader};
 use rmp_serde::decode::{Error as RmpError};
 use serde::{de, forward_to_deserialize_any};
 
 use crate::database::Index;
-use crate::SchemaAttr;
 
 pub struct Deserializer<'a> {
     pub document_id: DocumentId,

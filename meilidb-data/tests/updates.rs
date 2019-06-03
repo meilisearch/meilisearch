@@ -1,6 +1,6 @@
 use serde_json::json;
-use meilidb_data::{Database, Schema};
-use meilidb_data::schema::{SchemaBuilder, STORED, INDEXED};
+use meilidb_data::Database;
+use meilidb_schema::{Schema, SchemaBuilder, STORED, INDEXED};
 
 fn simple_schema() -> Schema {
     let mut builder = SchemaBuilder::with_identifier("objectId");

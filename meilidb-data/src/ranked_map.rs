@@ -2,8 +2,9 @@ use std::io::{Read, Write};
 
 use hashbrown::HashMap;
 use meilidb_core::DocumentId;
+use meilidb_schema::SchemaAttr;
 
-use crate::{SchemaAttr, Number};
+use crate::Number;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct RankedMap(HashMap<(DocumentId, SchemaAttr), Number>);
