@@ -349,7 +349,7 @@ mod tests {
     use std::iter::FromIterator;
 
     use sdset::SetBuf;
-    use fst::Set;
+    use fst::{Set, IntoStreamer};
 
     use crate::DocIndex;
     use crate::store::Store;
@@ -357,18 +357,46 @@ mod tests {
     #[derive(Default)]
     struct InMemorySetStore {
         set: Set,
+        synonyms: Set,
         indexes: HashMap<Vec<u8>, SetBuf<DocIndex>>,
+        alternatives: HashMap<Vec<u8>, Set>,
     }
 
-    impl Store for InMemorySetStore {
-        type Error = std::io::Error;
+    fn set_from_stream<'f, I, S>(stream: I) -> Set
+    where
+        I: for<'a> fst::IntoStreamer<'a, Into=S, Item=&'a [u8]>,
+        S: 'f + for<'a> fst::Streamer<'a, Item=&'a [u8]>,
+    {
+        let mut builder = fst::SetBuilder::memory();
+        builder.extend_stream(stream);
+        builder.into_inner().and_then(Set::from_bytes).unwrap()
+    }
 
-        fn words(&self) -> Result<&Set, Self::Error> {
-            Ok(&self.set)
-        }
+    fn insert_key(set: &Set, key: &[u8]) -> Set {
+        let unique_key = {
+            let mut builder = fst::SetBuilder::memory();
+            builder.insert(key);
+            builder.into_inner().and_then(Set::from_bytes).unwrap()
+        };
 
-        fn word_indexes(&self, word: &[u8]) -> Result<Option<SetBuf<DocIndex>>, Self::Error> {
-            Ok(self.indexes.get(word).cloned())
+        let union_ = set.op().add(unique_key.into_stream()).r#union();
+
+        set_from_stream(union_)
+    }
+
+    fn sdset_into_fstset(set: &sdset::Set<&str>) -> Set {
+        let mut builder = fst::SetBuilder::memory();
+        builder.extend_iter(set.into_iter());
+        builder.into_inner().and_then(Set::from_bytes).unwrap()
+    }
+
+    impl InMemorySetStore {
+        pub fn add_synonym(&mut self, word: &str, new: SetBuf<&str>) {
+            let alternatives = self.alternatives.entry(word.as_bytes().to_vec()).or_default();
+            let new = sdset_into_fstset(&new);
+            *alternatives = set_from_stream(alternatives.op().add(new.into_stream()).r#union());
+
+            self.synonyms = insert_key(&self.synonyms, word.as_bytes());
         }
     }
 
@@ -384,8 +412,30 @@ mod tests {
 
             InMemorySetStore {
                 set: Set::from_iter(tree).unwrap(),
+                synonyms: Set::default(),
                 indexes: map,
+                alternatives: HashMap::new(),
             }
+        }
+    }
+
+    impl Store for InMemorySetStore {
+        type Error = std::io::Error;
+
+        fn words(&self) -> Result<&Set, Self::Error> {
+            Ok(&self.set)
+        }
+
+        fn word_indexes(&self, word: &[u8]) -> Result<Option<SetBuf<DocIndex>>, Self::Error> {
+            Ok(self.indexes.get(word).cloned())
+        }
+
+        fn synonyms(&self) -> Result<&Set, Self::Error> {
+            Ok(&self.synonyms)
+        }
+
+        fn alternatives_to(&self, word: &[u8]) -> Result<Option<Set>, Self::Error> {
+            Ok(self.alternatives.get(word).map(|s| Set::from_bytes(s.as_fst().to_vec()).unwrap()))
         }
     }
 
