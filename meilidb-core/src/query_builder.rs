@@ -11,7 +11,7 @@ use hashbrown::{HashMap, HashSet};
 use fst::{Streamer, IntoStreamer};
 use log::info;
 
-use crate::automaton::{self, DfaExt, AutomatonExt, build_dfa, build_prefix_dfa};
+use crate::automaton::{DfaExt, AutomatonExt, build_dfa, build_prefix_dfa};
 use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::criterion::Criteria;
 use crate::raw_documents_from_matches;
@@ -364,14 +364,14 @@ mod tests {
         S: 'f + for<'a> fst::Streamer<'a, Item=&'a [u8]>,
     {
         let mut builder = fst::SetBuilder::memory();
-        builder.extend_stream(stream);
+        builder.extend_stream(stream).unwrap();
         builder.into_inner().and_then(Set::from_bytes).unwrap()
     }
 
     fn insert_key(set: &Set, key: &[u8]) -> Set {
         let unique_key = {
             let mut builder = fst::SetBuilder::memory();
-            builder.insert(key);
+            builder.insert(key).unwrap();
             builder.into_inner().and_then(Set::from_bytes).unwrap()
         };
 
@@ -382,7 +382,7 @@ mod tests {
 
     fn sdset_into_fstset(set: &sdset::Set<&str>) -> Set {
         let mut builder = fst::SetBuilder::memory();
-        builder.extend_iter(set.into_iter());
+        builder.extend_iter(set.into_iter()).unwrap();
         builder.into_inner().and_then(Set::from_bytes).unwrap()
     }
 
@@ -467,6 +467,85 @@ mod tests {
 
         let builder = QueryBuilder::new(&store);
         let results = builder.query("bonjour", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
+        assert_matches!(iter.next(), None);
+    }
+
+    #[test]
+    fn prefix_synonyms() {
+        let mut store = InMemorySetStore::from_iter(vec![
+            (&b"hello"[..], &[doc_index(0, 0)][..]),
+        ]);
+
+        store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello"]));
+        store.add_synonym("salut", SetBuf::from_dirty(vec!["hello"]));
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("sal", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("bonj", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("sal blabla", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("bonj blabla", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), None);
+    }
+
+    #[test]
+    fn levenshtein_synonyms() {
+        let mut store = InMemorySetStore::from_iter(vec![
+            (&b"hello"[..], &[doc_index(0, 0)][..]),
+        ]);
+
+        store.add_synonym("salutation", SetBuf::from_dirty(vec!["hello"]));
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("salutution", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("saluttion", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
