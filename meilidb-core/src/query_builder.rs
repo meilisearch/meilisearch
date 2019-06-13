@@ -8,40 +8,46 @@ use rayon::slice::ParallelSliceMut;
 use slice_group_by::GroupByMut;
 use meilidb_tokenizer::{is_cjk, split_query_string};
 use hashbrown::{HashMap, HashSet};
-use fst::Streamer;
+use fst::{Streamer, IntoStreamer};
 use log::info;
 
-use crate::automaton::{self, DfaExt, AutomatonExt};
+use crate::automaton::{self, DfaExt, AutomatonExt, build_dfa, build_prefix_dfa};
 use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::criterion::Criteria;
 use crate::raw_documents_from_matches;
 use crate::{Match, DocumentId, Store, RawDocument, Document};
 
-fn generate_automatons(query: &str, synonyms: &HashMap<&str, &[&str]>) -> Vec<(usize, DfaExt)> {
+fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<(usize, DfaExt)>, S::Error> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
     let mut groups = split_query_string(query).map(str::to_lowercase).peekable();
     let mut automatons = Vec::new();
     let mut index = 0;
 
+    let synonyms = store.synonyms()?;
+
     while let Some(word) = groups.next() {
         let word = word.as_str();
         let has_following_word = groups.peek().is_some();
-        let is_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
-        let words = synonyms.get(word).cloned().unwrap_or_default().iter().chain(Some(&word));
+        let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
 
-        for word in words {
-            let lev = if is_prefix_dfa {
-                automaton::build_dfa(word)
-            } else {
-                automaton::build_prefix_dfa(word)
-            };
-            automatons.push((index, lev));
+        let lev = if not_prefix_dfa { build_dfa(word) } else { build_prefix_dfa(word) };
+        let mut stream = synonyms.search(&lev).into_stream();
+        while let Some(synonym) = stream.next() {
+            if let Some(words) = store.alternatives_to(synonym)? {
+                let mut stream = words.into_stream();
+                while let Some(word) = stream.next() {
+                    let word = std::str::from_utf8(word).unwrap();
+                    let lev = if not_prefix_dfa { build_dfa(word) } else { build_prefix_dfa(word) };
+                    automatons.push((index, lev));
+                }
+            }
         }
+        automatons.push((index, lev));
 
         index += 1;
     }
 
-    automatons
+    Ok(automatons)
 }
 
 pub struct QueryBuilder<'c, S, FI = fn(DocumentId) -> bool> {
@@ -91,17 +97,7 @@ impl<'c, S, FI> QueryBuilder<'c, S, FI>
 where S: Store,
 {
     fn query_all(&self, query: &str) -> Result<Vec<RawDocument>, S::Error> {
-        let map = {
-            let mut map = HashMap::new();
-
-            map.insert("hello", &["bonjour", "salut"][..]);
-            map.insert("bonjour", &["hello", "salut"]);
-            map.insert("salut", &["hello", "bonjour"]);
-
-            map
-        };
-
-        let automatons = generate_automatons(query, &map);
+        let automatons = generate_automatons(query, &self.store)?;
         let words = self.store.words()?.as_fst();
 
         let mut stream = {
@@ -450,10 +446,12 @@ mod tests {
     }
 
     #[test]
-    fn simple_synonymes() {
-        let store = InMemorySetStore::from_iter(vec![
+    fn simple_synonyms() {
+        let mut store = InMemorySetStore::from_iter(vec![
             (&b"hello"[..], &[doc_index(0, 0)][..]),
         ]);
+
+        store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello"]));
 
         let builder = QueryBuilder::new(&store);
         let results = builder.query("hello", 0..20).unwrap();
@@ -481,12 +479,16 @@ mod tests {
     }
 
     #[test]
-    fn harder_synonymes() {
-        let store = InMemorySetStore::from_iter(vec![
+    fn harder_synonyms() {
+        let mut store = InMemorySetStore::from_iter(vec![
             (&b"hello"[..],     &[doc_index(0, 0)][..]),
             (&b"bonjour"[..],   &[doc_index(1, 3)]),
             (&b"salut"[..],     &[doc_index(2, 5)]),
         ]);
+
+        store.add_synonym("hello", SetBuf::from_dirty(vec!["bonjour", "salut"]));
+        store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello", "salut"]));
+        store.add_synonym("salut", SetBuf::from_dirty(vec!["hello", "bonjour"]));
 
         let builder = QueryBuilder::new(&store);
         let results = builder.query("hello", 0..20).unwrap();
