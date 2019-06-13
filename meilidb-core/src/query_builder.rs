@@ -17,19 +17,28 @@ use crate::criterion::Criteria;
 use crate::raw_documents_from_matches;
 use crate::{Match, DocumentId, Store, RawDocument, Document};
 
-fn generate_automatons(query: &str) -> Vec<DfaExt> {
+fn generate_automatons(query: &str, synonyms: &HashMap<&str, &[&str]>) -> Vec<(usize, DfaExt)> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
     let mut groups = split_query_string(query).map(str::to_lowercase).peekable();
     let mut automatons = Vec::new();
+    let mut index = 0;
 
     while let Some(word) = groups.next() {
+        let word = word.as_str();
         let has_following_word = groups.peek().is_some();
-        let lev = if has_following_word || has_end_whitespace || word.chars().all(is_cjk) {
-            automaton::build_dfa(&word)
-        } else {
-            automaton::build_prefix_dfa(&word)
-        };
-        automatons.push(lev);
+        let is_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
+        let words = synonyms.get(word).cloned().unwrap_or_default().iter().chain(Some(&word));
+
+        for word in words {
+            let lev = if is_prefix_dfa {
+                automaton::build_dfa(word)
+            } else {
+                automaton::build_prefix_dfa(word)
+            };
+            automatons.push((index, lev));
+        }
+
+        index += 1;
     }
 
     automatons
@@ -82,12 +91,22 @@ impl<'c, S, FI> QueryBuilder<'c, S, FI>
 where S: Store,
 {
     fn query_all(&self, query: &str) -> Result<Vec<RawDocument>, S::Error> {
-        let automatons = generate_automatons(query);
+        let map = {
+            let mut map = HashMap::new();
+
+            map.insert("hello", &["bonjour", "salut"][..]);
+            map.insert("bonjour", &["hello", "salut"]);
+            map.insert("salut", &["hello", "bonjour"]);
+
+            map
+        };
+
+        let automatons = generate_automatons(query, &map);
         let words = self.store.words()?.as_fst();
 
         let mut stream = {
             let mut op_builder = fst::raw::OpBuilder::new();
-            for automaton in &automatons {
+            for (_index, automaton) in &automatons {
                 let stream = words.search(automaton);
                 op_builder.push(stream);
             }
@@ -98,7 +117,7 @@ where S: Store,
 
         while let Some((input, indexed_values)) = stream.next() {
             for iv in indexed_values {
-                let automaton = &automatons[iv.index];
+                let (index, automaton) = &automatons[iv.index];
                 let distance = automaton.eval(input).to_u8();
                 let is_exact = distance == 0 && input.len() == automaton.query_len();
 
@@ -111,7 +130,7 @@ where S: Store,
                 for di in doc_indexes.as_slice() {
                     if self.searchable_attrs.as_ref().map_or(true, |r| r.contains(&di.attribute)) {
                         let match_ = Match {
-                            query_index: iv.index as u32,
+                            query_index: *index as u32,
                             distance,
                             attribute: di.attribute,
                             word_index: di.word_index,
@@ -319,5 +338,176 @@ where S: Store,
         }
 
         Ok(out_documents)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::collections::{BTreeSet, HashMap};
+    use std::iter::FromIterator;
+
+    use sdset::SetBuf;
+    use fst::Set;
+
+    use crate::DocIndex;
+    use crate::store::Store;
+
+    #[derive(Default)]
+    struct InMemorySetStore {
+        set: Set,
+        indexes: HashMap<Vec<u8>, SetBuf<DocIndex>>,
+    }
+
+    impl Store for InMemorySetStore {
+        type Error = std::io::Error;
+
+        fn words(&self) -> Result<&Set, Self::Error> {
+            Ok(&self.set)
+        }
+
+        fn word_indexes(&self, word: &[u8]) -> Result<Option<SetBuf<DocIndex>>, Self::Error> {
+            Ok(self.indexes.get(word).cloned())
+        }
+    }
+
+    impl<'a> FromIterator<(&'a [u8], &'a [DocIndex])> for InMemorySetStore {
+        fn from_iter<I: IntoIterator<Item=(&'a [u8], &'a [DocIndex])>>(iter: I) -> Self {
+            let mut tree = BTreeSet::new();
+            let mut map = HashMap::new();
+
+            for (word, indexes) in iter {
+                tree.insert(word);
+                map.insert(word.to_vec(), SetBuf::from_dirty(indexes.to_vec()));
+            }
+
+            InMemorySetStore {
+                set: Set::from_iter(tree).unwrap(),
+                indexes: map,
+            }
+        }
+    }
+
+    const fn doc_index(document_id: u64, word_index: u16) -> DocIndex {
+        DocIndex {
+            document_id: DocumentId(document_id),
+            attribute: 0,
+            word_index,
+            char_index: 0,
+            char_length: 0,
+        }
+    }
+
+    #[test]
+    fn simple_synonymes() {
+        let store = InMemorySetStore::from_iter(vec![
+            (&b"hello"[..], &[doc_index(0, 0)][..]),
+        ]);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("hello", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("bonjour", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
+        assert_matches!(iter.next(), None);
+    }
+
+    #[test]
+    fn harder_synonymes() {
+        let store = InMemorySetStore::from_iter(vec![
+            (&b"hello"[..],     &[doc_index(0, 0)][..]),
+            (&b"bonjour"[..],   &[doc_index(1, 3)]),
+            (&b"salut"[..],     &[doc_index(2, 5)]),
+        ]);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("hello", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 3);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 5);
+        });
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("bonjour", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 3);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 5);
+        });
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("salut", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 3);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 5);
+        });
+        assert_matches!(iter.next(), None);
     }
 }

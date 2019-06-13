@@ -1,3 +1,6 @@
+#[cfg(test)]
+#[macro_use] extern crate assert_matches;
+
 mod automaton;
 mod distinct_map;
 mod query_builder;

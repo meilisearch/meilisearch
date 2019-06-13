@@ -25,6 +25,9 @@ git = "https://github.com/Kerollmops/levenshtein-automata.git"
 branch = "arc-byte-slice"
 features = ["fst_automaton"]
 
+[dev-dependencies]
+assert_matches = "1.3"
+
 [features]
 i128 = ["byteorder/i128"]
 nightly = ["hashbrown/nightly", "slice-group-by/nightly"]
