@@ -389,6 +389,7 @@ mod tests {
 
     fn sdset_into_fstset(set: &sdset::Set<&str>) -> Set {
         let mut builder = fst::SetBuilder::memory();
+        let set = SetBuf::from_dirty(set.into_iter().map(|s| s.to_lowercase()).collect());
         builder.extend_iter(set.into_iter()).unwrap();
         builder.into_inner().and_then(Set::from_bytes).unwrap()
     }
@@ -404,20 +405,21 @@ mod tests {
         }
     }
 
-    impl<'a> FromIterator<(&'a [u8], &'a [DocIndex])> for InMemorySetStore {
-        fn from_iter<I: IntoIterator<Item=(&'a [u8], &'a [DocIndex])>>(iter: I) -> Self {
+    impl<'a> FromIterator<(&'a str, &'a [DocIndex])> for InMemorySetStore {
+        fn from_iter<I: IntoIterator<Item=(&'a str, &'a [DocIndex])>>(iter: I) -> Self {
             let mut tree = BTreeSet::new();
             let mut map = HashMap::new();
 
             for (word, indexes) in iter {
-                tree.insert(word);
-                map.insert(word.to_vec(), SetBuf::from_dirty(indexes.to_vec()));
+                let word = word.to_lowercase().into_bytes();
+                tree.insert(word.clone());
+                map.entry(word).or_insert_with(Vec::new).extend_from_slice(indexes);
             }
 
             InMemorySetStore {
                 set: Set::from_iter(tree).unwrap(),
                 synonyms: Set::default(),
-                indexes: map,
+                indexes: map.into_iter().map(|(k, v)| (k, SetBuf::from_dirty(v))).collect(),
                 alternatives: HashMap::new(),
             }
         }
@@ -456,7 +458,7 @@ mod tests {
     #[test]
     fn simple_synonyms() {
         let mut store = InMemorySetStore::from_iter(vec![
-            (&b"hello"[..], &[doc_index(0, 0)][..]),
+            ("hello", &[doc_index(0, 0)][..]),
         ]);
 
         store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello"]));
@@ -489,7 +491,7 @@ mod tests {
     #[test]
     fn prefix_synonyms() {
         let mut store = InMemorySetStore::from_iter(vec![
-            (&b"hello"[..], &[doc_index(0, 0)][..]),
+            ("hello", &[doc_index(0, 0)][..]),
         ]);
 
         store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello"]));
@@ -535,7 +537,7 @@ mod tests {
     #[test]
     fn levenshtein_synonyms() {
         let mut store = InMemorySetStore::from_iter(vec![
-            (&b"hello"[..], &[doc_index(0, 0)][..]),
+            ("hello", &[doc_index(0, 0)][..]),
         ]);
 
         store.add_synonym("salutation", SetBuf::from_dirty(vec!["hello"]));
@@ -568,9 +570,9 @@ mod tests {
     #[test]
     fn harder_synonyms() {
         let mut store = InMemorySetStore::from_iter(vec![
-            (&b"hello"[..],     &[doc_index(0, 0)][..]),
-            (&b"bonjour"[..],   &[doc_index(1, 3)]),
-            (&b"salut"[..],     &[doc_index(2, 5)]),
+            ("hello",     &[doc_index(0, 0)][..]),
+            ("bonjour",   &[doc_index(1, 3)]),
+            ("salut",     &[doc_index(2, 5)]),
         ]);
 
         store.add_synonym("hello", SetBuf::from_dirty(vec!["bonjour", "salut"]));
@@ -654,9 +656,12 @@ mod tests {
     #[test]
     fn multiword_synonyms() {
         let mut store = InMemorySetStore::from_iter(vec![
-            (&b"new"[..], &[doc_index(0, 0)][..]),
-            (&b"york"[..], &[doc_index(0, 1)][..]),
-            (&b"subway"[..], &[doc_index(0, 2)][..]),
+            ("new", &[doc_index(0, 0)][..]),
+            ("york", &[doc_index(0, 1)][..]),
+            ("subway", &[doc_index(0, 2)][..]),
+
+            ("NY", &[doc_index(1, 0)][..]),
+            ("subway", &[doc_index(1, 1)][..]),
         ]);
 
         store.add_synonym("NY", SetBuf::from_dirty(vec!["NYC", "new york", "new york city"]));
@@ -666,6 +671,12 @@ mod tests {
         let results = builder.query("NY subway", 0..20).unwrap();
         let mut iter = results.into_iter();
 
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // NY
+            assert_matches!(iter.next(), Some(Match { query_index: 1, word_index: 1, .. })); // subway
+            assert_matches!(iter.next(), None);
+        });
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
             let mut iter = matches.into_iter();
             assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // new
@@ -679,6 +690,12 @@ mod tests {
         let results = builder.query("NYC subway", 0..20).unwrap();
         let mut iter = results.into_iter();
 
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // NY
+            assert_matches!(iter.next(), Some(Match { query_index: 1, word_index: 1, .. })); // subway
+            assert_matches!(iter.next(), None);
+        });
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
             let mut iter = matches.into_iter();
             assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // new
