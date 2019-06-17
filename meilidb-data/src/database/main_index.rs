@@ -44,6 +44,22 @@ impl MainIndex {
         self.0.set("words", value.as_fst().as_bytes()).map_err(Into::into)
     }
 
+    pub fn synonyms_set(&self) -> Result<Option<fst::Set>, Error> {
+        match self.0.get_pinned("synonyms")? {
+            Some(bytes) => {
+                let len = bytes.len();
+                let value = Arc::from(bytes.as_ref());
+                let fst = fst::raw::Fst::from_shared_bytes(value, 0, len)?;
+                Ok(Some(fst::Set::from(fst)))
+            },
+            None => Ok(None),
+        }
+    }
+
+    pub fn set_synonyms_set(&self, value: &fst::Set) -> Result<(), Error> {
+        self.0.set("synonyms", value.as_fst().as_bytes()).map_err(Into::into)
+    }
+
     pub fn ranked_map(&self) -> Result<Option<RankedMap>, Error> {
         match self.0.get_pinned("ranked-map")? {
             Some(bytes) => {

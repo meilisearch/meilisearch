@@ -13,7 +13,11 @@ use crate::ranked_map::RankedMap;
 use crate::serde::Deserializer;
 
 use super::{Error, CustomSettings};
-use super::{RawIndex, DocumentsAddition, DocumentsDeletion};
+use super::{
+    RawIndex,
+    DocumentsAddition, DocumentsDeletion,
+    SynonymsAddition, SynonymsDeletion,
+};
 
 #[derive(Copy, Clone)]
 pub struct IndexStats {
@@ -27,6 +31,7 @@ pub struct Index(pub ArcSwap<InnerIndex>);
 
 pub struct InnerIndex {
     pub words: fst::Set,
+    pub synonyms: fst::Set,
     pub schema: Schema,
     pub ranked_map: RankedMap,
     pub raw: RawIndex, // TODO this will be a snapshot in the future
@@ -36,6 +41,11 @@ impl Index {
     pub fn from_raw(raw: RawIndex) -> Result<Index, Error> {
         let words = match raw.main.words_set()? {
             Some(words) => words,
+            None => fst::Set::default(),
+        };
+
+        let synonyms = match raw.main.synonyms_set()? {
+            Some(synonyms) => synonyms,
             None => fst::Set::default(),
         };
 
@@ -49,7 +59,7 @@ impl Index {
             None => RankedMap::default(),
         };
 
-        let inner = InnerIndex { words, schema, ranked_map, raw };
+        let inner = InnerIndex { words, synonyms, schema, ranked_map, raw };
         let index = Index(ArcSwap::new(Arc::new(inner)));
 
         Ok(index)
@@ -101,6 +111,14 @@ impl Index {
         DocumentsDeletion::new(self, ranked_map)
     }
 
+    pub fn synonyms_addition(&self) -> SynonymsAddition {
+        SynonymsAddition::new(self)
+    }
+
+    pub fn synonyms_deletion(&self) -> SynonymsDeletion {
+        SynonymsDeletion::new(self)
+    }
+
     pub fn document<T>(
         &self,
         fields: Option<&HashSet<&str>>,
@@ -140,5 +158,13 @@ impl Store for IndexLease {
 
     fn word_indexes(&self, word: &[u8]) -> Result<Option<SetBuf<DocIndex>>, Self::Error> {
         Ok(self.0.raw.words.doc_indexes(word)?)
+    }
+
+    fn synonyms(&self) -> Result<&fst::Set, Self::Error> {
+        Ok(&self.0.synonyms)
+    }
+
+    fn alternatives_to(&self, word: &[u8]) -> Result<Option<fst::Set>, Self::Error> {
+        Ok(self.0.raw.synonyms.alternatives_to(word)?)
     }
 }

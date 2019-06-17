@@ -13,6 +13,9 @@ mod error;
 mod index;
 mod main_index;
 mod raw_index;
+mod synonyms_addition;
+mod synonyms_deletion;
+mod synonyms_index;
 mod words_index;
 
 pub use self::error::Error;
@@ -22,11 +25,14 @@ pub use self::custom_settings::CustomSettings;
 use self::docs_words_index::DocsWordsIndex;
 use self::documents_addition::DocumentsAddition;
 use self::documents_deletion::DocumentsDeletion;
+use self::synonyms_addition::SynonymsAddition;
+use self::synonyms_deletion::SynonymsDeletion;
 use self::documents_index::DocumentsIndex;
 use self::index::InnerIndex;
 use self::main_index::MainIndex;
 use self::raw_index::{RawIndex, InnerRawIndex};
 use self::words_index::WordsIndex;
+use self::synonyms_index::SynonymsIndex;
 
 pub struct Database {
     cache: RwLock<HashMap<String, Arc<Index>>>,
@@ -99,6 +105,12 @@ impl Database {
                     MainIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(name)))
                 };
 
+                let synonyms = {
+                    let cf_name = format!("{}-synonyms", name);
+                    self.inner.cf_handle(&cf_name).expect("cf not found");
+                    SynonymsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
+                };
+
                 let words = {
                     let cf_name = format!("{}-words", name);
                     self.inner.cf_handle(&cf_name).expect("cf not found");
@@ -123,7 +135,7 @@ impl Database {
                     CustomSettings(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
                 };
 
-                let raw_index = RawIndex { main, words, docs_words, documents, custom };
+                let raw_index = RawIndex { main, synonyms, words, docs_words, documents, custom };
                 let index = Index::from_raw(raw_index)?;
 
                 vacant.insert(Arc::new(index)).clone()
@@ -154,6 +166,12 @@ impl Database {
 
                 main.set_schema(&schema)?;
 
+                let synonyms = {
+                    let cf_name = format!("{}-synonyms", name);
+                    self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
+                    SynonymsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
+                };
+
                 let words = {
                     let cf_name = format!("{}-words", name);
                     self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
@@ -182,7 +200,7 @@ impl Database {
                 indexes.insert(name.to_string());
                 self.set_indexes(&indexes)?;
 
-                let raw_index = RawIndex { main, words, docs_words, documents, custom };
+                let raw_index = RawIndex { main, synonyms, words, docs_words, documents, custom };
                 let index = Index::from_raw(raw_index)?;
 
                 vacant.insert(Arc::new(index)).clone()
