@@ -10,7 +10,7 @@ pub mod criterion;
 use std::fmt;
 use std::sync::Arc;
 
-use rayon::slice::ParallelSliceMut;
+use sdset::SetBuf;
 use serde::{Serialize, Deserialize};
 use slice_group_by::GroupBy;
 use zerocopy::{AsBytes, FromBytes};
@@ -229,11 +229,9 @@ impl fmt::Debug for RawDocument {
     }
 }
 
-pub fn raw_documents_from_matches(mut matches: Vec<(DocumentId, Match)>) -> Vec<RawDocument> {
-    let mut docs_ranges = Vec::<(DocumentId, Range)>::new();
+pub fn raw_documents_from_matches(matches: SetBuf<(DocumentId, Match)>) -> Vec<RawDocument> {
+    let mut docs_ranges = Vec::<(_, Range)>::new();
     let mut matches2 = Matches::with_capacity(matches.len());
-
-    matches.par_sort_unstable();
 
     for group in matches.linear_group_by(|(a, _), (b, _)| a == b) {
         let id = group[0].0;
