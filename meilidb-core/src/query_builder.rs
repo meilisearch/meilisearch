@@ -18,36 +18,46 @@ use crate::criterion::Criteria;
 use crate::raw_documents_from_matches;
 use crate::{Match, DocumentId, Store, RawDocument, Document};
 
+const NGRAMS: usize = 3;
+
 fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<(usize, DfaExt)>, S::Error> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
-    let mut groups = split_query_string(query).map(str::to_lowercase).peekable();
+    let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
     let mut automatons = Vec::new();
-    let mut index = 0;
 
     let synonyms = store.synonyms()?;
 
-    while let Some(query_word) = groups.next() {
-        let query_word_str = query_word.as_str();
-        let has_following_word = groups.peek().is_some();
-        let not_prefix_dfa = has_following_word || has_end_whitespace || query_word_str.chars().all(is_cjk);
+    for n in 1..=NGRAMS {
+        let mut index = 0;
+        let mut ngrams = query_words.windows(n).peekable();
 
-        let lev = if not_prefix_dfa { build_dfa(query_word_str) } else { build_prefix_dfa(query_word_str) };
-        let mut stream = synonyms.search(&lev).into_stream();
-        while let Some(word) = stream.next() {
-            if let Some(synonyms) = store.alternatives_to(word)? {
-                let mut stream = synonyms.into_stream();
-                while let Some(synonyms) = stream.next() {
-                    let synonyms = std::str::from_utf8(synonyms).unwrap();
-                    for synonym in split_query_string(synonyms) {
-                        let lev = if not_prefix_dfa { build_dfa(synonym) } else { build_prefix_dfa(synonym) };
-                        automatons.push((index, synonym.to_owned(), lev));
+        while let Some(ngram) = ngrams.next() {
+            let ngram = ngram.join(" ");
+
+            let has_following_word = ngrams.peek().is_some();
+            let not_prefix_dfa = has_following_word || has_end_whitespace || ngram.chars().all(is_cjk);
+
+            let lev = if not_prefix_dfa { build_dfa(&ngram) } else { build_prefix_dfa(&ngram) };
+            let mut stream = synonyms.search(&lev).into_stream();
+            while let Some(word) = stream.next() {
+                if let Some(synonyms) = store.alternatives_to(word)? {
+                    let mut stream = synonyms.into_stream();
+                    while let Some(synonyms) = stream.next() {
+                        let synonyms = std::str::from_utf8(synonyms).unwrap();
+                        for synonym in split_query_string(synonyms) {
+                            let lev = if not_prefix_dfa { build_dfa(synonym) } else { build_prefix_dfa(synonym) };
+                            automatons.push((index, synonym.to_owned(), lev));
+                        }
                     }
                 }
             }
-        }
 
-        automatons.push((index, query_word, lev));
-        index += 1;
+            if n == 1 {
+                automatons.push((index, ngram, lev));
+            }
+
+            index += 1;
+        }
     }
 
     automatons.sort_unstable_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
@@ -859,24 +869,56 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     /// Multi-word has multi-word synonyms
     fn multiword_to_multiword_synonyms() {
         let mut store = InMemorySetStore::from_iter(vec![
-            ("NY", &[doc_index(0, 0)][..]),
-            ("subway", &[doc_index(0, 1)][..]),
+            ("NY",      &[doc_char_index(0, 0, 0)][..]),
+            ("subway",  &[doc_char_index(0, 1, 1)][..]),
+
+            ("NYC",     &[doc_char_index(1, 0, 0)][..]),
+            ("blue",    &[doc_char_index(1, 1, 1)][..]),
+            ("subway",  &[doc_char_index(1, 2, 2)][..]),
+            ("broken",  &[doc_char_index(1, 3, 3)][..]),
         ]);
 
         store.add_synonym("new york", SetBuf::from_dirty(vec!["NYC", "NY", "new york city"]));
+        store.add_synonym("new york city", SetBuf::from_dirty(vec!["NYC", "NY", "new york"]));
+        store.add_synonym("underground train", SetBuf::from_dirty(vec!["subway"]));
 
         let builder = QueryBuilder::new(&store);
-        let results = builder.query("new york subway", 0..20).unwrap();
+        let results = builder.query("new york underground train broken", 0..20).unwrap();
         let mut iter = results.into_iter();
 
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // NYC    = new york
+            assert_matches!(iter.next(), Some(Match { query_index: 2, word_index: 2, .. })); // subway = underground train
+            assert_matches!(iter.next(), Some(Match { query_index: 4, word_index: 3, .. })); // broken
+            assert_matches!(iter.next(), None);
+        });
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
             let mut iter = matches.into_iter();
-            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // NY
-            assert_matches!(iter.next(), Some(Match { query_index: 2, word_index: 1, .. })); // subway
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // NY     = new york
+            assert_matches!(iter.next(), Some(Match { query_index: 2, word_index: 1, .. })); // subway = underground train
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("new york city underground train broken", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // NYC    = new york city
+            assert_matches!(iter.next(), Some(Match { query_index: 3, word_index: 2, .. })); // subway = underground train
+            assert_matches!(iter.next(), Some(Match { query_index: 5, word_index: 3, .. })); // broken
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // NY     = new york city
+            assert_matches!(iter.next(), Some(Match { query_index: 3, word_index: 1, .. })); // subway = underground train
             assert_matches!(iter.next(), None);
         });
         assert_matches!(iter.next(), None);
