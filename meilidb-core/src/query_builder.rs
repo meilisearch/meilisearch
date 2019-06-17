@@ -37,8 +37,10 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<(usize, D
                 let mut stream = words.into_stream();
                 while let Some(word) = stream.next() {
                     let word = std::str::from_utf8(word).unwrap();
-                    let lev = if not_prefix_dfa { build_dfa(word) } else { build_prefix_dfa(word) };
-                    automatons.push((index, lev));
+                    for word in split_query_string(word) {
+                        let lev = if not_prefix_dfa { build_dfa(word) } else { build_prefix_dfa(word) };
+                        automatons.push((index, lev));
+                    }
                 }
             }
         }
@@ -388,6 +390,7 @@ mod tests {
 
     impl InMemorySetStore {
         pub fn add_synonym(&mut self, word: &str, new: SetBuf<&str>) {
+            let word = word.to_lowercase();
             let alternatives = self.alternatives.entry(word.as_bytes().to_vec()).or_default();
             let new = sdset_into_fstset(&new);
             *alternatives = set_from_stream(alternatives.op().add(new.into_stream()).r#union());
@@ -638,6 +641,49 @@ mod tests {
             let match_ = matches[0];
             assert_eq!(match_.query_index, 0);
             assert_eq!(match_.word_index, 5);
+        });
+        assert_matches!(iter.next(), None);
+    }
+
+    /// Unique word has multi-word synonyms
+    #[test]
+    fn multiword_synonyms() {
+        let mut store = InMemorySetStore::from_iter(vec![
+            (&b"new"[..], &[doc_index(0, 0)][..]),
+            (&b"york"[..], &[doc_index(0, 1)][..]),
+            (&b"subway"[..], &[doc_index(0, 2)][..]),
+        ]);
+
+        store.add_synonym("NY", SetBuf::from_dirty(vec!["NYC", "new york", "new york city"]));
+        store.add_synonym("NYC", SetBuf::from_dirty(vec!["NY", "new york", "new york city"]));
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("NY subway", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // new
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // new
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 1, .. })); // york
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 1, .. })); // york
+            assert_matches!(iter.next(), Some(Match { query_index: 1, word_index: 2, .. })); // subway
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("NYC subway", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // new
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // new
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 1, .. })); // york
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 1, .. })); // york
+            assert_matches!(iter.next(), Some(Match { query_index: 1, word_index: 2, .. })); // subway
+            assert_matches!(iter.next(), None);
         });
         assert_matches!(iter.next(), None);
     }

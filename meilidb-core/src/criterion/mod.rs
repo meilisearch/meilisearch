@@ -113,7 +113,7 @@ impl<'a> Default for Criteria<'a> {
     }
 }
 
-impl<'a> AsRef<[Box<Criterion + 'a>]> for Criteria<'a> {
+impl<'a> AsRef<[Box<dyn Criterion + 'a>]> for Criteria<'a> {
     fn as_ref(&self) -> &[Box<dyn Criterion + 'a>] {
         &self.inner
     }
