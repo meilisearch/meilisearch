@@ -25,29 +25,34 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<(usize, D
 
     let synonyms = store.synonyms()?;
 
-    while let Some(word) = groups.next() {
-        let word = word.as_str();
+    while let Some(query_word) = groups.next() {
+        let query_word_str = query_word.as_str();
         let has_following_word = groups.peek().is_some();
-        let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
+        let not_prefix_dfa = has_following_word || has_end_whitespace || query_word_str.chars().all(is_cjk);
 
-        let lev = if not_prefix_dfa { build_dfa(word) } else { build_prefix_dfa(word) };
+        let lev = if not_prefix_dfa { build_dfa(query_word_str) } else { build_prefix_dfa(query_word_str) };
         let mut stream = synonyms.search(&lev).into_stream();
-        while let Some(synonym) = stream.next() {
-            if let Some(words) = store.alternatives_to(synonym)? {
-                let mut stream = words.into_stream();
-                while let Some(word) = stream.next() {
-                    let word = std::str::from_utf8(word).unwrap();
-                    for word in split_query_string(word) {
-                        let lev = if not_prefix_dfa { build_dfa(word) } else { build_prefix_dfa(word) };
-                        automatons.push((index, lev));
+        while let Some(word) = stream.next() {
+            if let Some(synonyms) = store.alternatives_to(word)? {
+                let mut stream = synonyms.into_stream();
+                while let Some(synonyms) = stream.next() {
+                    let synonyms = std::str::from_utf8(synonyms).unwrap();
+                    for synonym in split_query_string(synonyms) {
+                        let lev = if not_prefix_dfa { build_dfa(synonym) } else { build_prefix_dfa(synonym) };
+                        automatons.push((index, synonym.to_owned(), lev));
                     }
                 }
             }
         }
-        automatons.push((index, lev));
+
+        automatons.push((index, query_word, lev));
+        automatons.sort_unstable_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
+        automatons.dedup_by(|a, b| (a.0, &a.1) == (b.0, &b.1));
 
         index += 1;
     }
+
+    let automatons = automatons.into_iter().map(|(i, _, a)| (i, a)).collect();
 
     Ok(automatons)
 }
@@ -664,8 +669,6 @@ mod tests {
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
             let mut iter = matches.into_iter();
             assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // new
-            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // new
-            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 1, .. })); // york
             assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 1, .. })); // york
             assert_matches!(iter.next(), Some(Match { query_index: 1, word_index: 2, .. })); // subway
             assert_matches!(iter.next(), None);
@@ -679,8 +682,6 @@ mod tests {
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
             let mut iter = matches.into_iter();
             assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // new
-            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // new
-            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 1, .. })); // york
             assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 1, .. })); // york
             assert_matches!(iter.next(), Some(Match { query_index: 1, word_index: 2, .. })); // subway
             assert_matches!(iter.next(), None);
