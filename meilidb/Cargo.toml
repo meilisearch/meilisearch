@@ -8,10 +8,6 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
 meilidb-data = { path = "../meilidb-data", version = "0.1.0" }
 meilidb-schema = { path = "../meilidb-schema", version = "0.1.0" }
-serde = { version = "1.0.91" , features = ["derive"] }
-serde_json = "1.0.39"
-tempfile = "3.0.7"
-tide = "0.2.0"
 
 [dev-dependencies]
 csv = "1.0.7"
@@ -22,6 +18,9 @@ meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
 quickcheck = "0.8.2"
 rand = "0.6.5"
 rand_xorshift = "0.1.1"
+serde = { version = "1.0.91" , features = ["derive"] }
+serde_json = "1.0.39"
 structopt = "0.2.15"
 sysinfo = "0.8.4"
+tempfile = "3.0.7"
 termcolor = "1.0.4"

@@ -133,7 +133,7 @@ fn crop_text(
     (text, matches)
 }
 
-fn main() -> Result<(), Box<Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let _ = env_logger::init();
     let opt = Opt::from_args();
 

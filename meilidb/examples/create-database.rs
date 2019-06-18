@@ -2,7 +2,7 @@
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 use std::collections::{HashMap, HashSet};
-use std::io::{self, Write, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::error::Error;
@@ -51,7 +51,7 @@ fn index(
     csv_data_path: &Path,
     update_group_size: Option<usize>,
     stop_words: &HashSet<String>,
-) -> Result<Database, Box<Error>>
+) -> Result<Database, Box<dyn Error>>
 {
     let database = Database::start_default(database_path)?;
 
@@ -124,7 +124,7 @@ fn retrieve_stop_words(path: &Path) -> io::Result<HashSet<String>> {
     Ok(words)
 }
 
-fn main() -> Result<(), Box<Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let _ = env_logger::init();
     let opt = Opt::from_args();
 
