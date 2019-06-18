@@ -45,7 +45,7 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<(usize, D
                     while let Some(synonyms) = stream.next() {
                         let synonyms = std::str::from_utf8(synonyms).unwrap();
                         for synonym in split_query_string(synonyms) {
-                            let lev = if not_prefix_dfa { build_dfa(synonym) } else { build_prefix_dfa(synonym) };
+                            let lev = build_dfa(synonym);
                             automatons.push((index, synonym.to_owned(), lev));
                         }
                     }
