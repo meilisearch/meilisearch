@@ -31,18 +31,25 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<(usize, D
         let mut index = 0;
         let mut ngrams = query_words.windows(n).peekable();
 
-        while let Some(ngram) = ngrams.next() {
-            let ngram = ngram.join(" ");
+        while let Some(ngram_slice) = ngrams.next() {
+            let ngram = ngram_slice.join(" ");
+            let ngram_nb_words = ngram_slice.len();
 
-            let has_following_word = ngrams.peek().is_some();
-            let not_prefix_dfa = has_following_word || has_end_whitespace || ngram.chars().all(is_cjk);
-
-            let lev = if not_prefix_dfa { build_dfa(&ngram) } else { build_prefix_dfa(&ngram) };
+            let lev = build_prefix_dfa(&ngram);
             let mut stream = synonyms.search(&lev).into_stream();
-            while let Some(word) = stream.next() {
-                if let Some(synonyms) = store.alternatives_to(word)? {
+            while let Some(base) = stream.next() {
+
+                // only trigger alternatives when the last word has been typed
+                // i.e. "new " do not but "new yo" triggers alternatives to "new york"
+                let base = std::str::from_utf8(base).unwrap();
+                let base_nb_words = split_query_string(base).count();
+                if ngram_nb_words != base_nb_words { continue }
+
+                if let Some(synonyms) = store.alternatives_to(base.as_bytes())? {
+
                     let mut stream = synonyms.into_stream();
                     while let Some(synonyms) = stream.next() {
+
                         let synonyms = std::str::from_utf8(synonyms).unwrap();
                         for synonym in split_query_string(synonyms) {
                             let lev = build_dfa(synonym);
@@ -53,6 +60,11 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<(usize, D
             }
 
             if n == 1 {
+                let has_following_word = ngrams.peek().is_some();
+                let not_prefix_dfa = has_following_word || has_end_whitespace || ngram.chars().all(is_cjk);
+
+                let lev = if not_prefix_dfa { build_dfa(&ngram) } else { build_prefix_dfa(&ngram) };
+
                 automatons.push((index, ngram, lev));
             }
 
@@ -559,12 +571,24 @@ mod tests {
         let results = builder.query("sal blabla", 0..20).unwrap();
         let mut iter = results.into_iter();
 
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
         assert_matches!(iter.next(), None);
 
         let builder = QueryBuilder::new(&store);
         let results = builder.query("bonj blabla", 0..20).unwrap();
         let mut iter = results.into_iter();
 
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            assert_eq!(matches.len(), 1);
+            let match_ = matches[0];
+            assert_eq!(match_.query_index, 0);
+            assert_eq!(match_.word_index, 0);
+        });
         assert_matches!(iter.next(), None);
     }
 
