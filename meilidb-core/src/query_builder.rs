@@ -31,11 +31,14 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<(usize, D
         let mut index = 0;
         let mut ngrams = query_words.windows(n).peekable();
 
-        while let Some(ngram_slice) = ngrams.next() {
-            let ngram = ngram_slice.join(" ");
-            let ngram_nb_words = ngram_slice.len();
+        while let Some(ngram) = ngrams.next() {
+            let ngram_nb_words = ngram.len();
+            let ngram = ngram.join(" ");
 
-            let lev = build_prefix_dfa(&ngram);
+            let has_following_word = ngrams.peek().is_some();
+            let not_prefix_dfa = has_following_word || has_end_whitespace || ngram.chars().all(is_cjk);
+
+            let lev = if not_prefix_dfa { build_dfa(&ngram) } else { build_prefix_dfa(&ngram) };
             let mut stream = synonyms.search(&lev).into_stream();
             while let Some(base) = stream.next() {
 
@@ -60,11 +63,6 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<(usize, D
             }
 
             if n == 1 {
-                let has_following_word = ngrams.peek().is_some();
-                let not_prefix_dfa = has_following_word || has_end_whitespace || ngram.chars().all(is_cjk);
-
-                let lev = if not_prefix_dfa { build_dfa(&ngram) } else { build_prefix_dfa(&ngram) };
-
                 automatons.push((index, ngram, lev));
             }
 
@@ -571,24 +569,12 @@ mod tests {
         let results = builder.query("sal blabla", 0..20).unwrap();
         let mut iter = results.into_iter();
 
-        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
-        });
         assert_matches!(iter.next(), None);
 
         let builder = QueryBuilder::new(&store);
         let results = builder.query("bonj blabla", 0..20).unwrap();
         let mut iter = results.into_iter();
 
-        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
-        });
         assert_matches!(iter.next(), None);
     }
 
