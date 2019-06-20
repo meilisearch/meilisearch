@@ -15,7 +15,7 @@ use serde::{Serialize, Deserialize};
 use slice_group_by::GroupBy;
 use zerocopy::{AsBytes, FromBytes};
 
-pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder};
+pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder, normalize_str};
 pub use self::store::Store;
 
 /// Represent an internally generated document unique identifier.

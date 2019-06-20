@@ -37,6 +37,16 @@ impl Automaton {
     }
 }
 
+pub fn normalize_str(string: &str) -> String {
+    let mut string = string.to_lowercase();
+
+    if !string.contains(is_cjk) {
+        string = deunicode::deunicode_with_tofu(&string, "");
+    }
+
+    string
+}
+
 fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton>, S::Error> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
     let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
@@ -55,7 +65,10 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
             let has_following_word = ngrams.peek().is_some();
             let not_prefix_dfa = has_following_word || has_end_whitespace || ngram.chars().all(is_cjk);
 
-            let lev = if not_prefix_dfa { build_dfa(&ngram) } else { build_prefix_dfa(&ngram) };
+            let lev = {
+                let normalized = normalize_str(&ngram);
+                if not_prefix_dfa { build_dfa(&normalized) } else { build_prefix_dfa(&normalized) }
+            };
             let mut stream = synonyms.search(&lev).into_stream();
             while let Some(base) = stream.next() {
 
@@ -82,6 +95,7 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
             }
 
             if n == 1 {
+                let lev = if not_prefix_dfa { build_dfa(&ngram) } else { build_prefix_dfa(&ngram) };
                 let automaton = Automaton::original(index, ngram_nb_words, lev);
                 automatons.push((automaton, ngram));
             }
@@ -443,7 +457,7 @@ mod tests {
 
     fn sdset_into_fstset(set: &sdset::Set<&str>) -> Set {
         let mut builder = fst::SetBuilder::memory();
-        let set = SetBuf::from_dirty(set.into_iter().map(|s| s.to_lowercase()).collect());
+        let set = SetBuf::from_dirty(set.into_iter().map(|s| normalize_str(s)).collect());
         builder.extend_iter(set.into_iter()).unwrap();
         builder.into_inner().and_then(Set::from_bytes).unwrap()
     }
@@ -949,6 +963,67 @@ mod tests {
             let mut iter = matches.into_iter();
             assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, .. })); // NY     = new york city
             assert_matches!(iter.next(), Some(Match { query_index: 3, word_index: 1, .. })); // subway = underground train
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), None);
+    }
+
+    #[test]
+    fn deunicoded_synonyms() {
+        let mut store = InMemorySetStore::from_iter(vec![
+            ("iPhone",    &[doc_index(0, 0)][..]),
+            ("telephone", &[doc_index(1, 0)][..]), // meilidb-data indexes the unidecoded
+            ("téléphone", &[doc_index(1, 0)][..]), // and the original words with the same DocIndex
+        ]);
+
+        store.add_synonym("téléphone", SetBuf::from_dirty(vec!["iPhone"]));
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("telephone", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, .. }));
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, .. }));
+            assert_matches!(iter.next(), Some(Match { query_index: 0, .. }));
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("téléphone", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, .. }));
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, .. }));
+            assert_matches!(iter.next(), Some(Match { query_index: 0, .. }));
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), None);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("télephone", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, .. }));
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, .. }));
             assert_matches!(iter.next(), None);
         });
         assert_matches!(iter.next(), None);

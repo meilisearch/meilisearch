@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fst::{SetBuilder, set::OpBuilder};
+use meilidb_tokenizer::is_cjk;
+use meilidb_core::normalize_str;
 use sdset::SetBuf;
 
 use crate::database::index::InnerIndex;
@@ -20,6 +22,8 @@ impl<'a> SynonymsAddition<'a> {
     pub fn add_synonym<I>(&mut self, synonym: String, alternatives: I)
     where I: Iterator<Item=String>,
     {
+        let mut synonym = normalize_str(&synonym);
+        let alternatives = alternatives.map(|s| s.to_lowercase());
         self.synonyms.entry(synonym).or_insert_with(Vec::new).extend(alternatives);
     }
 
@@ -30,13 +34,11 @@ impl<'a> SynonymsAddition<'a> {
 
         let mut synonyms_builder = SetBuilder::memory();
 
-        for (synonym, mut alternatives) in self.synonyms {
+        for (synonym, alternatives) in self.synonyms {
             synonyms_builder.insert(&synonym).unwrap();
 
             let alternatives = {
-                alternatives.iter_mut().for_each(|s| *s = s.to_lowercase());
                 let alternatives = SetBuf::from_dirty(alternatives);
-
                 let mut alternatives_builder = SetBuilder::memory();
                 alternatives_builder.extend_iter(alternatives).unwrap();
                 alternatives_builder.into_inner().unwrap()
