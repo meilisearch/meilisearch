@@ -1,9 +1,8 @@
-use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use meilidb_core::DocumentId;
-use serde::Serialize;
-use serde::ser;
+use serde::{ser, Serialize};
+use siphasher::sip::SipHasher;
 
 use super::{SerializerError, ConvertToString};
 
@@ -18,7 +17,7 @@ where D: serde::Serialize,
 }
 
 fn calculate_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
+    let mut s = SipHasher::new();
     t.hash(&mut s);
     s.finish()
 }

@@ -10,12 +10,13 @@ bincode = "1.1.2"
 deunicode = "1.0.0"
 hashbrown = { version = "0.2.2", features = ["serde"] }
 meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
-meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
 meilidb-schema = { path = "../meilidb-schema", version = "0.1.0" }
+meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
 ordered-float = { version = "1.0.2", features = ["serde"] }
+rocksdb = { version = "0.12.2", default-features = false }
 sdset = "0.3.2"
 serde = { version = "1.0.91", features = ["derive"] }
-rocksdb = { version = "0.12.2", default-features = false }
+siphasher = "0.3.0"
 zerocopy = "0.2.2"
 
 [dependencies.rmp-serde]
