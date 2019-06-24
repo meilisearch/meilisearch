@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fst::{SetBuilder, set::OpBuilder};
-use meilidb_tokenizer::is_cjk;
 use meilidb_core::normalize_str;
 use sdset::SetBuf;
 
@@ -19,11 +18,13 @@ impl<'a> SynonymsAddition<'a> {
         SynonymsAddition { inner, synonyms: BTreeMap::new() }
     }
 
-    pub fn add_synonym<I>(&mut self, synonym: String, alternatives: I)
-    where I: Iterator<Item=String>,
+    pub fn add_synonym<S, T, I>(&mut self, synonym: S, alternatives: I)
+    where S: AsRef<str>,
+          T: AsRef<str>,
+          I: Iterator<Item=T>,
     {
-        let mut synonym = normalize_str(&synonym);
-        let alternatives = alternatives.map(|s| s.to_lowercase());
+        let synonym = normalize_str(synonym.as_ref());
+        let alternatives = alternatives.map(|s| s.as_ref().to_lowercase());
         self.synonyms.entry(synonym).or_insert_with(Vec::new).extend(alternatives);
     }
 
