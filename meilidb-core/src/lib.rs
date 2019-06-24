@@ -4,6 +4,7 @@
 mod automaton;
 mod distinct_map;
 mod query_builder;
+mod reordered_attrs;
 mod store;
 pub mod criterion;
 

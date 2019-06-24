@@ -17,6 +17,7 @@ use crate::automaton::{build_dfa, build_prefix_dfa};
 use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::criterion::Criteria;
 use crate::raw_documents_from_matches;
+use crate::reordered_attrs::ReorderedAttrs;
 use crate::{Match, DocumentId, Store, RawDocument, Document};
 
 const NGRAMS: usize = 3;
@@ -193,7 +194,7 @@ fn rewrite_matched_positions(matches: &mut [(DocumentId, Match)]) {
 pub struct QueryBuilder<'c, S, FI = fn(DocumentId) -> bool> {
     store: S,
     criteria: Criteria<'c>,
-    searchable_attrs: Option<HashSet<u16>>,
+    searchable_attrs: Option<ReorderedAttrs>,
     filter: Option<FI>,
 }
 
@@ -228,8 +229,8 @@ impl<'c, S, FI> QueryBuilder<'c, S, FI>
     }
 
     pub fn add_searchable_attribute(&mut self, attribute: u16) {
-        let attributes = self.searchable_attrs.get_or_insert_with(HashSet::new);
-        attributes.insert(attribute);
+        let reorders = self.searchable_attrs.get_or_insert_with(Default::default);
+        reorders.insert_attribute(attribute);
     }
 }
 
@@ -239,6 +240,7 @@ where S: Store,
     fn query_all(&self, query: &str) -> Result<Vec<RawDocument>, S::Error> {
         let automatons = generate_automatons(query, &self.store)?;
         let words = self.store.words()?.as_fst();
+        let searchables = self.searchable_attrs.as_ref();
 
         let mut stream = {
             let mut op_builder = fst::raw::OpBuilder::new();
@@ -264,11 +266,12 @@ where S: Store,
                 };
 
                 for di in doc_indexes.as_slice() {
-                    if self.searchable_attrs.as_ref().map_or(true, |r| r.contains(&di.attribute)) {
+                    let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
+                    if let Some(attribute) = attribute {
                         let match_ = Match {
                             query_index: query_index as u32,
                             distance,
-                            attribute: di.attribute,
+                            attribute,
                             word_index: di.word_index,
                             is_exact,
                             char_index: di.char_index,
