@@ -5,7 +5,7 @@ use std::time::Instant;
 use std::{cmp, mem};
 
 use fst::{Streamer, IntoStreamer};
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 use log::info;
 use meilidb_tokenizer::{is_cjk, split_query_string};
 use rayon::slice::ParallelSliceMut;
@@ -18,7 +18,7 @@ use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::criterion::Criteria;
 use crate::raw_documents_from_matches;
 use crate::reordered_attrs::ReorderedAttrs;
-use crate::{Match, DocumentId, Store, RawDocument, Document};
+use crate::{TmpMatch, Highlight, DocumentId, Store, RawDocument, Document};
 
 const NGRAMS: usize = 3;
 
@@ -178,12 +178,12 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
     Ok(automatons)
 }
 
-fn rewrite_matched_positions(matches: &mut [(DocumentId, Match)]) {
-    for document_matches in matches.linear_group_by_mut(|(a, _), (b, _)| a == b) {
+fn rewrite_matched_positions(matches: &mut [(DocumentId, TmpMatch, Highlight)]) {
+    for document_matches in matches.linear_group_by_mut(|(a, _, _), (b, _, _)| a == b) {
         let mut offset = 0;
-        for query_indexes in document_matches.linear_group_by_mut(|(_, a), (_, b)| a.query_index == b.query_index) {
+        for query_indexes in document_matches.linear_group_by_mut(|(_, a, _), (_, b, _)| a.query_index == b.query_index) {
             let word_index = query_indexes[0].1.word_index - offset as u16;
-            for (_, match_) in query_indexes.iter_mut() {
+            for (_, match_, _) in query_indexes.iter_mut() {
                 match_.word_index = word_index;
             }
             offset += query_indexes.len() - 1;
@@ -268,17 +268,19 @@ where S: Store,
                 for di in doc_indexes.as_slice() {
                     let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
                     if let Some(attribute) = attribute {
-                        let match_ = Match {
+                        let match_ = TmpMatch {
                             query_index: query_index as u32,
                             distance,
                             attribute,
                             word_index: di.word_index,
                             is_exact,
+                        };
+                        let highlight = Highlight {
+                            attribute: di.attribute,
                             char_index: di.char_index,
                             char_length: di.char_length,
                         };
-                        matches.push((di.document_id, match_));
-
+                        matches.push((di.document_id, match_, highlight));
                     }
                 }
             }
@@ -289,7 +291,11 @@ where S: Store,
         rewrite_matched_positions(&mut matches);
 
         let total_matches = matches.len();
-        let padded_matches = SetBuf::from_dirty(matches);
+        let padded_matches = {
+            matches.par_sort_unstable();
+            matches.dedup();
+            SetBuf::new_unchecked(matches)
+        };
         let raw_documents = raw_documents_from_matches(padded_matches);
 
         info!("{} total documents to classify", raw_documents.len());
@@ -349,7 +355,7 @@ where S: Store,
 
         let offset = cmp::min(documents.len(), range.start);
         let iter = documents.into_iter().skip(offset).take(range.len());
-        Ok(iter.map(|d| Document::from_raw(&d)).collect())
+        Ok(iter.map(|d| Document::from_raw(d)).collect())
     }
 }
 
@@ -476,7 +482,7 @@ where S: Store,
                 };
 
                 if distinct_accepted && seen.len() > range.start {
-                    out_documents.push(Document::from_raw(&document));
+                    out_documents.push(Document::from_raw(document));
                     if out_documents.len() == range.len() { break }
                 }
             }
