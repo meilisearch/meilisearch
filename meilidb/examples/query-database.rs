@@ -11,7 +11,7 @@ use std::error::Error;
 
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use structopt::StructOpt;
-use meilidb_core::Match;
+use meilidb_core::Highlight;
 
 use meilidb_data::Database;
 use meilidb_schema::SchemaAttr;
@@ -71,12 +71,12 @@ fn char_to_byte_range(index: usize, length: usize, text: &str) -> (usize, usize)
     (byte_index, byte_length)
 }
 
-fn create_highlight_areas(text: &str, matches: &[Match]) -> Vec<usize> {
+fn create_highlight_areas(text: &str, highlights: &[Highlight]) -> Vec<usize> {
     let mut byte_indexes = BTreeMap::new();
 
-    for match_ in matches {
-        let char_index = match_.char_index as usize;
-        let char_length = match_.char_length as usize;
+    for highlight in highlights {
+        let char_index = highlight.char_index as usize;
+        let char_length = highlight.char_length as usize;
         let (byte_index, byte_length) = char_to_byte_range(char_index, char_length, text);
 
         match byte_indexes.entry(byte_index) {
@@ -111,26 +111,26 @@ fn create_highlight_areas(text: &str, matches: &[Match]) -> Vec<usize> {
 /// ```
 fn crop_text(
     text: &str,
-    matches: impl IntoIterator<Item=Match>,
+    highlights: impl IntoIterator<Item=Highlight>,
     context: usize,
-) -> (String, Vec<Match>)
+) -> (String, Vec<Highlight>)
 {
-    let mut matches = matches.into_iter().peekable();
+    let mut highlights = highlights.into_iter().peekable();
 
-    let char_index = matches.peek().map(|m| m.char_index as usize).unwrap_or(0);
+    let char_index = highlights.peek().map(|m| m.char_index as usize).unwrap_or(0);
     let start = char_index.saturating_sub(context);
     let text = text.chars().skip(start).take(context * 2).collect();
 
-    let matches = matches
+    let highlights = highlights
         .take_while(|m| {
             (m.char_index as usize) + (m.char_length as usize) <= start + (context * 2)
         })
-        .map(|match_| {
-            Match { char_index: match_.char_index - start as u16, ..match_ }
+        .map(|highlight| {
+            Highlight { char_index: highlight.char_index - start as u16, ..highlight }
         })
         .collect();
 
-    (text, matches)
+    (text, highlights)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -168,7 +168,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let number_of_documents = documents.len();
         for mut doc in documents {
 
-            doc.matches.sort_unstable_by_key(|m| (m.char_index, m.char_index));
+            doc.highlights.sort_unstable_by_key(|m| (m.char_index, m.char_length));
 
             let start_retrieve = Instant::now();
             let result = index.document::<Document>(Some(&fields), doc.id);
@@ -180,11 +180,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                         print!("{}: ", name);
 
                         let attr = schema.attribute(&name).unwrap();
-                        let matches = doc.matches.iter()
+                        let highlights = doc.highlights.iter()
                                         .filter(|m| SchemaAttr::new(m.attribute) == attr)
                                         .cloned();
-                        let (text, matches) = crop_text(&text, matches, opt.char_context);
-                        let areas = create_highlight_areas(&text, &matches);
+                        let (text, highlights) = crop_text(&text, highlights, opt.char_context);
+                        let areas = create_highlight_areas(&text, &highlights);
                         display_highlights(&text, &areas)?;
                         println!();
                     }
@@ -194,8 +194,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             let mut matching_attributes = HashSet::new();
-            for _match in doc.matches {
-                let attr = SchemaAttr::new(_match.attribute);
+            for highlight in doc.highlights {
+                let attr = SchemaAttr::new(highlight.attribute);
                 let name = schema.attribute_name(attr);
                 matching_attributes.insert(name);
             }
