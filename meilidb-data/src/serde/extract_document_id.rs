@@ -16,10 +16,11 @@ where D: serde::Serialize,
     document.serialize(serializer)
 }
 
-fn calculate_hash<T: Hash>(t: &T) -> u64 {
+pub fn compute_document_id<T: Hash>(t: &T) -> DocumentId {
     let mut s = SipHasher::new();
     t.hash(&mut s);
-    s.finish()
+    let hash = s.finish();
+    DocumentId(hash)
 }
 
 struct ExtractDocumentId<'a> {
@@ -214,8 +215,8 @@ impl<'a> ser::SerializeMap for ExtractDocumentIdMapSerializer<'a> {
         if self.identifier == key {
             // TODO is it possible to have multiple ids?
             let id = bincode::serialize(value).unwrap();
-            let hash = calculate_hash(&id);
-            self.document_id = Some(DocumentId(hash));
+            let document_id = compute_document_id(&id);
+            self.document_id = Some(document_id);
         }
 
         Ok(())
@@ -245,8 +246,8 @@ impl<'a> ser::SerializeStruct for ExtractDocumentIdStructSerializer<'a> {
         if self.identifier == key {
             // TODO can it be possible to have multiple ids?
             let id = bincode::serialize(value).unwrap();
-            let hash = calculate_hash(&id);
-            self.document_id = Some(DocumentId(hash));
+            let document_id = compute_document_id(&id);
+            self.document_id = Some(document_id);
         }
 
         Ok(())

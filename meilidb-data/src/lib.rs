@@ -9,3 +9,4 @@ pub use rocksdb;
 pub use self::database::{Database, Index, CustomSettings};
 pub use self::number::Number;
 pub use self::ranked_map::RankedMap;
+pub use self::serde::compute_document_id;
