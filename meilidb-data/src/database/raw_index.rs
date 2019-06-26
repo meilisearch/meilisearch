@@ -1,9 +1,10 @@
 use std::sync::Arc;
-use super::{MainIndex, WordsIndex, DocsWordsIndex, DocumentsIndex, CustomSettings};
+use super::{MainIndex, SynonymsIndex, WordsIndex, DocsWordsIndex, DocumentsIndex, CustomSettings};
 
 #[derive(Clone)]
 pub struct RawIndex {
     pub main: MainIndex,
+    pub synonyms: SynonymsIndex,
     pub words: WordsIndex,
     pub docs_words: DocsWordsIndex,
     pub documents: DocumentsIndex,
@@ -13,6 +14,7 @@ pub struct RawIndex {
 impl RawIndex {
     pub(crate) fn compact(&self) {
         self.main.0.compact_range(None::<&[u8]>, None::<&[u8]>);
+        self.synonyms.0.compact_range(None::<&[u8]>, None::<&[u8]>);
         self.words.0.compact_range(None::<&[u8]>, None::<&[u8]>);
         self.docs_words.0.compact_range(None::<&[u8]>, None::<&[u8]>);
         self.documents.0.compact_range(None::<&[u8]>, None::<&[u8]>);

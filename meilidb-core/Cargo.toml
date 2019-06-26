@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 byteorder = "1.3.1"
+deunicode = "1.0.0"
 hashbrown = "0.2.2"
 lazy_static = "1.2.0"
 log = "0.4.6"
@@ -24,6 +25,9 @@ branch = "arc-byte-slice"
 git = "https://github.com/Kerollmops/levenshtein-automata.git"
 branch = "arc-byte-slice"
 features = ["fst_automaton"]
+
+[dev-dependencies]
+assert_matches = "1.3"
 
 [features]
 i128 = ["byteorder/i128"]

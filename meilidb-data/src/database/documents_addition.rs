@@ -120,11 +120,12 @@ impl<'a> DocumentsAddition<'a> {
 
         // update the "consistent" view of the Index
         let ranked_map = self.ranked_map;
+        let synonyms = fst::Set::from_bytes(lease_inner.synonyms.as_fst().to_vec()).unwrap(); // clone()
         let schema = lease_inner.schema.clone();
         let raw = lease_inner.raw.clone();
         lease_inner.raw.compact();
 
-        let inner = InnerIndex { words, schema, ranked_map, raw };
+        let inner = InnerIndex { words, synonyms, schema, ranked_map, raw };
         self.inner.0.store(Arc::new(inner));
 
         Ok(())

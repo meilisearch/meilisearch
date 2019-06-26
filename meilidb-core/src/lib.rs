@@ -1,3 +1,6 @@
+#[cfg(test)]
+#[macro_use] extern crate assert_matches;
+
 mod automaton;
 mod distinct_map;
 mod query_builder;
@@ -7,12 +10,12 @@ pub mod criterion;
 use std::fmt;
 use std::sync::Arc;
 
-use rayon::slice::ParallelSliceMut;
+use sdset::SetBuf;
 use serde::{Serialize, Deserialize};
 use slice_group_by::GroupBy;
 use zerocopy::{AsBytes, FromBytes};
 
-pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder};
+pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder, normalize_str};
 pub use self::store::Store;
 
 /// Represent an internally generated document unique identifier.
@@ -226,11 +229,9 @@ impl fmt::Debug for RawDocument {
     }
 }
 
-pub fn raw_documents_from_matches(mut matches: Vec<(DocumentId, Match)>) -> Vec<RawDocument> {
-    let mut docs_ranges = Vec::<(DocumentId, Range)>::new();
+pub fn raw_documents_from_matches(matches: SetBuf<(DocumentId, Match)>) -> Vec<RawDocument> {
+    let mut docs_ranges = Vec::<(_, Range)>::new();
     let mut matches2 = Matches::with_capacity(matches.len());
-
-    matches.par_sort_unstable();
 
     for group in matches.linear_group_by(|(a, _), (b, _)| a == b) {
         let id = group[0].0;
