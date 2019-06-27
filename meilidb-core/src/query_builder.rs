@@ -11,8 +11,9 @@ use meilidb_tokenizer::{is_cjk, split_query_string};
 use rayon::slice::ParallelSliceMut;
 use sdset::SetBuf;
 use slice_group_by::GroupByMut;
+use levenshtein_automata::DFA;
 
-use crate::automaton::{DfaExt, AutomatonExt, build_dfa, build_prefix_dfa};
+use crate::automaton::{build_dfa, build_prefix_dfa};
 use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::criterion::Criteria;
 use crate::raw_documents_from_matches;
@@ -21,18 +22,38 @@ use crate::{Match, DocumentId, Store, RawDocument, Document};
 const NGRAMS: usize = 3;
 
 struct Automaton {
-    index: usize,
+    query_index: usize,
+    query_len: usize,
     is_exact: bool,
-    dfa: DfaExt,
+    dfa: DFA,
 }
 
 impl Automaton {
-    fn exact(index: usize, dfa: DfaExt) -> Automaton {
-        Automaton { index, is_exact: true, dfa }
+    fn exact(query_index: usize, query: &str) -> Automaton {
+        Automaton {
+            query_index,
+            query_len: query.len(),
+            is_exact: true,
+            dfa: build_dfa(query),
+        }
     }
 
-    fn non_exact(index: usize, dfa: DfaExt) -> Automaton {
-        Automaton { index, is_exact: false, dfa }
+    fn prefix_exact(query_index: usize, query: &str) -> Automaton {
+        Automaton {
+            query_index,
+            query_len: query.len(),
+            is_exact: true,
+            dfa: build_prefix_dfa(query),
+        }
+    }
+
+    fn non_exact(query_index: usize, query: &str) -> Automaton {
+        Automaton {
+            query_index,
+            query_len: query.len(),
+            is_exact: false,
+            dfa: build_dfa(query),
+        }
     }
 }
 
@@ -54,7 +75,7 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
     let synonyms = store.synonyms()?;
 
     for n in 1..=NGRAMS {
-        let mut index = 0;
+        let mut query_index = 0;
         let mut ngrams = query_words.windows(n).peekable();
 
         while let Some(ngram_slice) = ngrams.next() {
@@ -65,7 +86,7 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
             // automaton of concatenation of query words
             let normalized = normalize_str(&concat);
             let lev = build_dfa(&normalized);
-            let automaton = Automaton::exact(index, lev);
+            let automaton = Automaton::exact(query_index, lev);
             automatons.push((automaton, normalized));
 
             let has_following_word = ngrams.peek().is_some();
@@ -92,11 +113,10 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
                         let nb_synonym_words = split_query_string(synonyms).count();
 
                         for synonym in split_query_string(synonyms) {
-                            let lev = build_dfa(synonym);
                             let automaton = if nb_synonym_words == 1 {
-                                Automaton::exact(index, lev)
+                                Automaton::exact(query_index, synonym)
                             } else {
-                                Automaton::non_exact(index, lev)
+                                Automaton::non_exact(query_index, synonym)
                             };
                             automatons.push((automaton, synonym.to_owned()));
                         }
@@ -106,19 +126,32 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
 
             if n == 1 {
                 let lev = if not_prefix_dfa { build_dfa(&ngram) } else { build_prefix_dfa(&ngram) };
-                let automaton = Automaton::exact(index, lev);
+                let automaton = Automaton::exact(query_index, lev);
                 automatons.push((automaton, ngram));
             }
 
-            index += 1;
+            query_index += 1;
         }
     }
 
-    automatons.sort_unstable_by(|a, b| (a.0.index, &a.1).cmp(&(b.0.index, &b.1)));
-    automatons.dedup_by(|a, b| (a.0.index, &a.1) == (b.0.index, &b.1));
+    automatons.sort_unstable_by(|a, b| (a.0.query_index, &a.1).cmp(&(b.0.query_index, &b.1)));
+    automatons.dedup_by(|a, b| (a.0.query_index, &a.1) == (b.0.query_index, &b.1));
     let automatons = automatons.into_iter().map(|(a, _)| a).collect();
 
     Ok(automatons)
+}
+
+fn rewrite_matched_positions(matches: &mut [(DocumentId, Match)]) {
+    for document_matches in matches.linear_group_by_mut(|(a, _), (b, _)| a == b) {
+        let mut offset = 0;
+        for query_indexes in document_matches.linear_group_by_mut(|(_, a), (_, b)| a.query_index == b.query_index) {
+            let word_index = query_indexes[0].1.word_index - offset as u16;
+            for (_, match_) in query_indexes.iter_mut() {
+                match_.word_index = word_index;
+            }
+            offset += query_indexes.len() - 1;
+        }
+    }
 }
 
 pub struct QueryBuilder<'c, S, FI = fn(DocumentId) -> bool> {
@@ -184,9 +217,9 @@ where S: Store,
 
         while let Some((input, indexed_values)) = stream.next() {
             for iv in indexed_values {
-                let Automaton { index, is_exact, ref dfa } = automatons[iv.index];
+                let Automaton { query_index, is_exact, query_len, ref dfa } = automatons[iv.index];
                 let distance = dfa.eval(input).to_u8();
-                let is_exact = is_exact && distance == 0 && input.len() == dfa.query_len();
+                let is_exact = is_exact && distance == 0 && input.len() == query_len;
 
                 let doc_indexes = self.store.word_indexes(input)?;
                 let doc_indexes = match doc_indexes {
@@ -197,8 +230,8 @@ where S: Store,
                 for di in doc_indexes.as_slice() {
                     if self.searchable_attrs.as_ref().map_or(true, |r| r.contains(&di.attribute)) {
                         let match_ = Match {
-                            query_index: index as u32,
-                            distance: distance,
+                            query_index: query_index as u32,
+                            distance,
                             attribute: di.attribute,
                             word_index: di.word_index,
                             is_exact,
@@ -206,23 +239,15 @@ where S: Store,
                             char_length: di.char_length,
                         };
                         matches.push((di.document_id, match_));
+
                     }
                 }
             }
         }
 
+        // rewrite the matched positions for next criteria evaluations
         matches.par_sort_unstable();
-
-        for document_matches in matches.linear_group_by_mut(|(a, _), (b, _)| a == b) {
-            let mut offset = 0;
-            for query_indexes in document_matches.linear_group_by_mut(|(_, a), (_, b)| a.query_index == b.query_index) {
-                let word_index = query_indexes[0].1.word_index - offset as u16;
-                for (_, match_) in query_indexes.iter_mut() {
-                    match_.word_index = word_index;
-                }
-                offset += query_indexes.len() - 1;
-            }
-        }
+        rewrite_matched_positions(&mut matches);
 
         let total_matches = matches.len();
         let padded_matches = SetBuf::from_dirty(matches);
