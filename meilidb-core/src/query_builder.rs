@@ -581,10 +581,9 @@ mod tests {
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 0, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), None);
 
@@ -593,10 +592,9 @@ mod tests {
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 0, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), None);
     }
@@ -615,10 +613,9 @@ mod tests {
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 0, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), None);
 
@@ -627,10 +624,9 @@ mod tests {
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 0, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), None);
 
@@ -660,10 +656,9 @@ mod tests {
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 0, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), None);
 
@@ -672,10 +667,9 @@ mod tests {
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 0, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), None);
     }
@@ -683,9 +677,9 @@ mod tests {
     #[test]
     fn harder_synonyms() {
         let mut store = InMemorySetStore::from_iter(vec![
-            ("hello",     &[doc_index(0, 0)][..]),
-            ("bonjour",   &[doc_index(1, 3)]),
-            ("salut",     &[doc_index(2, 5)]),
+            ("hello",   &[doc_index(0, 0)][..]),
+            ("bonjour", &[doc_index(1, 3)]),
+            ("salut",   &[doc_index(2, 5)]),
         ]);
 
         store.add_synonym("hello", SetBuf::from_dirty(vec!["bonjour", "salut"]));
@@ -697,22 +691,19 @@ mod tests {
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 0, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 3);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 3, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 5);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 5, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), None);
 
@@ -721,22 +712,19 @@ mod tests {
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 0, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 3);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 3, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 5);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 5, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), None);
 
@@ -745,22 +733,19 @@ mod tests {
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 0);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 0, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 3);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 3, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches }) => {
-            assert_eq!(matches.len(), 1);
-            let match_ = matches[0];
-            assert_eq!(match_.query_index, 0);
-            assert_eq!(match_.word_index, 5);
+            let mut matches = matches.into_iter();
+            assert_matches!(matches.next(), Some(Match { query_index: 0, word_index: 5, .. }));
+            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), None);
     }
