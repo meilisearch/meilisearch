@@ -22,18 +22,17 @@ const NGRAMS: usize = 3;
 
 struct Automaton {
     index: usize,
-    is_synonym: bool,
-    number_words: usize,
+    is_exact: bool,
     dfa: DfaExt,
 }
 
 impl Automaton {
-    fn synonym(index: usize, number_words: usize, dfa: DfaExt) -> Automaton {
-        Automaton { index, is_synonym: true, number_words, dfa }
+    fn exact(index: usize, dfa: DfaExt) -> Automaton {
+        Automaton { index, is_exact: true, dfa }
     }
 
-    fn original(index: usize, number_words: usize, dfa: DfaExt) -> Automaton {
-        Automaton { index, is_synonym: false, number_words, dfa }
+    fn non_exact(index: usize, dfa: DfaExt) -> Automaton {
+        Automaton { index, is_exact: false, dfa }
     }
 }
 
@@ -58,17 +57,24 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
         let mut index = 0;
         let mut ngrams = query_words.windows(n).peekable();
 
-        while let Some(ngram) = ngrams.next() {
-            let ngram_nb_words = ngram.len();
-            let ngram = ngram.join(" ");
+        while let Some(ngram_slice) = ngrams.next() {
+            let ngram_nb_words = ngram_slice.len();
+            let ngram = ngram_slice.join(" ");
+            let concat = ngram_slice.concat();
+
+            // automaton of concatenation of query words
+            let normalized = normalize_str(&concat);
+            let lev = build_dfa(&normalized);
+            let automaton = Automaton::exact(index, lev);
+            automatons.push((automaton, normalized));
 
             let has_following_word = ngrams.peek().is_some();
             let not_prefix_dfa = has_following_word || has_end_whitespace || ngram.chars().all(is_cjk);
 
-            let lev = {
-                let normalized = normalize_str(&ngram);
-                if not_prefix_dfa { build_dfa(&normalized) } else { build_prefix_dfa(&normalized) }
-            };
+            // automaton of synonyms of the ngrams
+            let normalized = normalize_str(&ngram);
+            let lev = if not_prefix_dfa { build_dfa(&normalized) } else { build_prefix_dfa(&normalized) };
+
             let mut stream = synonyms.search(&lev).into_stream();
             while let Some(base) = stream.next() {
 
@@ -82,12 +88,16 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
 
                     let mut stream = synonyms.into_stream();
                     while let Some(synonyms) = stream.next() {
-
                         let synonyms = std::str::from_utf8(synonyms).unwrap();
                         let nb_synonym_words = split_query_string(synonyms).count();
+
                         for synonym in split_query_string(synonyms) {
                             let lev = build_dfa(synonym);
-                            let automaton = Automaton::synonym(index, nb_synonym_words, lev);
+                            let automaton = if nb_synonym_words == 1 {
+                                Automaton::exact(index, lev)
+                            } else {
+                                Automaton::non_exact(index, lev)
+                            };
                             automatons.push((automaton, synonym.to_owned()));
                         }
                     }
@@ -96,7 +106,7 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
 
             if n == 1 {
                 let lev = if not_prefix_dfa { build_dfa(&ngram) } else { build_prefix_dfa(&ngram) };
-                let automaton = Automaton::original(index, ngram_nb_words, lev);
+                let automaton = Automaton::exact(index, lev);
                 automatons.push((automaton, ngram));
             }
 
@@ -174,9 +184,9 @@ where S: Store,
 
         while let Some((input, indexed_values)) = stream.next() {
             for iv in indexed_values {
-                let Automaton { index, is_synonym, number_words, ref dfa } = automatons[iv.index];
+                let Automaton { index, is_exact, ref dfa } = automatons[iv.index];
                 let distance = dfa.eval(input).to_u8();
-                let is_exact = (is_synonym && number_words == 1) || (!is_synonym && distance == 0 && input.len() == dfa.query_len());
+                let is_exact = is_exact && distance == 0 && input.len() == dfa.query_len();
 
                 let doc_indexes = self.store.word_indexes(input)?;
                 let doc_indexes = match doc_indexes {
@@ -1023,7 +1033,30 @@ mod tests {
         });
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches }) => {
             let mut iter = matches.into_iter();
-            assert_matches!(iter.next(), Some(Match { query_index: 0, .. }));
+            assert_matches!(iter.next(), Some(Match { query_index: 0, distance: 0, .. })); // téléphone
+            assert_matches!(iter.next(), Some(Match { query_index: 0, distance: 1, .. })); // telephone
+            assert_matches!(iter.next(), Some(Match { query_index: 0, distance: 2, .. })); // télephone
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), None);
+    }
+
+    #[test]
+    fn simple_concatenation() {
+        let store = InMemorySetStore::from_iter(vec![
+            ("iphone",  &[doc_index(0, 0)][..]),
+            ("case",    &[doc_index(0, 1)][..]),
+        ]);
+
+        let builder = QueryBuilder::new(&store);
+        let results = builder.query("i phone case", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(Match { query_index: 0, word_index: 0, distance: 0, .. })); // iphone
+            assert_matches!(iter.next(), Some(Match { query_index: 1, word_index: 0, distance: 1, .. })); // phone
+            assert_matches!(iter.next(), Some(Match { query_index: 2, word_index: 1, distance: 0, .. })); // case
             assert_matches!(iter.next(), None);
         });
         assert_matches!(iter.next(), None);
