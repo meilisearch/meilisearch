@@ -4,6 +4,7 @@
 mod automaton;
 mod distinct_map;
 mod query_builder;
+mod reordered_attrs;
 mod store;
 pub mod criterion;
 
@@ -59,73 +60,53 @@ pub struct DocIndex {
 ///
 /// The order of the field is important because it defines
 /// the way these structures are ordered between themselves.
-///
-/// The word in itself is not important.
-// TODO do data oriented programming ? very arrays ?
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Match {
-    /// The word index in the query sentence.
-    /// Same as the `attribute_index` but for the query words.
-    ///
-    /// Used to retrieve the automaton that match this word.
-    pub query_index: u32,
-
-    /// The distance the word has with the query word
-    /// (i.e. the Levenshtein distance).
-    pub distance: u8,
-
+pub struct Highlight {
     /// The attribute in the document where the word was found
     /// along with the index in it.
     pub attribute: u16,
-    pub word_index: u16,
 
-    /// Whether the word that match is an exact match or a prefix.
-    pub is_exact: bool,
-
-    /// The position in bytes where the word was found
-    /// along with the length of it.
+    /// The position in bytes where the word was found.
     ///
     /// It informs on the original word area in the text indexed
     /// without needing to run the tokenizer again.
     pub char_index: u16,
+
+    /// The length in bytes of the found word.
+    ///
+    /// It informs on the original word area in the text indexed
+    /// without needing to run the tokenizer again.
     pub char_length: u16,
 }
 
-impl Match {
-    pub fn zero() -> Self {
-        Match {
-            query_index: 0,
-            distance: 0,
-            attribute: 0,
-            word_index: 0,
-            is_exact: false,
-            char_index: 0,
-            char_length: 0,
-        }
-    }
-
-    pub fn max() -> Self {
-        Match {
-            query_index: u32::max_value(),
-            distance: u8::max_value(),
-            attribute: u16::max_value(),
-            word_index: u16::max_value(),
-            is_exact: true,
-            char_index: u16::max_value(),
-            char_length: u16::max_value(),
-        }
-    }
+#[doc(hidden)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TmpMatch {
+    pub query_index: u32,
+    pub distance: u8,
+    pub attribute: u16,
+    pub word_index: u16,
+    pub is_exact: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Document {
     pub id: DocumentId,
-    pub matches: Vec<Match>,
+    pub highlights: Vec<Highlight>,
+
+    #[cfg(test)]
+    pub matches: Vec<TmpMatch>,
 }
 
 impl Document {
-    fn from_raw(raw: &RawDocument) -> Document {
-        let len = raw.matches.range.len();
+    #[cfg(not(test))]
+    fn from_raw(raw: RawDocument) -> Document {
+        Document { id: raw.id, highlights: raw.highlights }
+    }
+
+    #[cfg(test)]
+    fn from_raw(raw: RawDocument) -> Document {
+        let len = raw.query_index().len();
         let mut matches = Vec::with_capacity(len);
 
         let query_index = raw.query_index();
@@ -133,23 +114,19 @@ impl Document {
         let attribute = raw.attribute();
         let word_index = raw.word_index();
         let is_exact = raw.is_exact();
-        let char_index = raw.char_index();
-        let char_length = raw.char_length();
 
         for i in 0..len {
-            let match_ = Match {
+            let match_ = TmpMatch {
                 query_index: query_index[i],
                 distance: distance[i],
                 attribute: attribute[i],
                 word_index: word_index[i],
                 is_exact: is_exact[i],
-                char_index: char_index[i],
-                char_length: char_length[i],
             };
             matches.push(match_);
         }
 
-        Document { id: raw.id, matches }
+        Document { id: raw.id, matches, highlights: raw.highlights }
     }
 }
 
@@ -157,11 +134,12 @@ impl Document {
 pub struct RawDocument {
     pub id: DocumentId,
     pub matches: SharedMatches,
+    pub highlights: Vec<Highlight>,
 }
 
 impl RawDocument {
-    fn new(id: DocumentId, range: Range, matches: Arc<Matches>) -> RawDocument {
-        RawDocument { id, matches: SharedMatches { range, matches } }
+    fn new(id: DocumentId, matches: SharedMatches, highlights: Vec<Highlight>) -> RawDocument {
+        RawDocument { id, matches, highlights }
     }
 
     pub fn query_index(&self) -> &[u32] {
@@ -198,20 +176,6 @@ impl RawDocument {
         // can only be done in this module
         unsafe { &self.matches.matches.is_exact.get_unchecked(r.start..r.end) }
     }
-
-    pub fn char_index(&self) -> &[u16] {
-        let r = self.matches.range;
-        // it is safe because construction/modifications
-        // can only be done in this module
-        unsafe { &self.matches.matches.char_index.get_unchecked(r.start..r.end) }
-    }
-
-    pub fn char_length(&self) -> &[u16] {
-        let r = self.matches.range;
-        // it is safe because construction/modifications
-        // can only be done in this module
-        unsafe { &self.matches.matches.char_length.get_unchecked(r.start..r.end) }
-    }
 }
 
 impl fmt::Debug for RawDocument {
@@ -223,39 +187,36 @@ impl fmt::Debug for RawDocument {
             .field("attribute", &self.attribute())
             .field("word_index", &self.word_index())
             .field("is_exact", &self.is_exact())
-            .field("char_index", &self.char_index())
-            .field("char_length", &self.char_length())
             .finish()
     }
 }
 
-pub fn raw_documents_from_matches(matches: SetBuf<(DocumentId, Match)>) -> Vec<RawDocument> {
-    let mut docs_ranges = Vec::<(_, Range)>::new();
+fn raw_documents_from_matches(matches: SetBuf<(DocumentId, TmpMatch, Highlight)>) -> Vec<RawDocument> {
+    let mut docs_ranges: Vec<(_, Range, _)> = Vec::new();
     let mut matches2 = Matches::with_capacity(matches.len());
 
-    for group in matches.linear_group_by(|(a, _), (b, _)| a == b) {
-        let id = group[0].0;
-        let start = docs_ranges.last().map(|(_, r)| r.end).unwrap_or(0);
+    for group in matches.linear_group_by(|(a, _, _), (b, _, _)| a == b) {
+        let document_id = group[0].0;
+        let start = docs_ranges.last().map(|(_, r, _)| r.end).unwrap_or(0);
         let end = start + group.len();
-        docs_ranges.push((id, Range { start, end }));
+
+        let highlights = group.iter().map(|(_, _, h)| *h).collect();
+        docs_ranges.push((document_id, Range { start, end }, highlights));
 
         matches2.extend_from_slice(group);
     }
 
     let matches = Arc::new(matches2);
-    docs_ranges.into_iter().map(|(i, r)| RawDocument::new(i, r, matches.clone())).collect()
+    docs_ranges.into_iter().map(|(i, range, highlights)| {
+        let matches = SharedMatches { range, matches: matches.clone() };
+        RawDocument::new(i, matches, highlights)
+    }).collect()
 }
 
 #[derive(Debug, Copy, Clone)]
 struct Range {
     start: usize,
     end: usize,
-}
-
-impl Range {
-    fn len(self) -> usize {
-        self.end - self.start
-    }
 }
 
 #[derive(Clone)]
@@ -271,8 +232,6 @@ struct Matches {
     attribute: Vec<u16>,
     word_index: Vec<u16>,
     is_exact: Vec<bool>,
-    char_index: Vec<u16>,
-    char_length: Vec<u16>,
 }
 
 impl Matches {
@@ -283,24 +242,19 @@ impl Matches {
             attribute: Vec::with_capacity(cap),
             word_index: Vec::with_capacity(cap),
             is_exact: Vec::with_capacity(cap),
-            char_index: Vec::with_capacity(cap),
-            char_length: Vec::with_capacity(cap),
         }
     }
 
-    fn extend_from_slice(&mut self, matches: &[(DocumentId, Match)]) {
-        for (_, match_) in matches {
+    fn extend_from_slice(&mut self, matches: &[(DocumentId, TmpMatch, Highlight)]) {
+        for (_, match_, _) in matches {
             self.query_index.push(match_.query_index);
             self.distance.push(match_.distance);
             self.attribute.push(match_.attribute);
             self.word_index.push(match_.word_index);
             self.is_exact.push(match_.is_exact);
-            self.char_index.push(match_.char_index);
-            self.char_length.push(match_.char_length);
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
