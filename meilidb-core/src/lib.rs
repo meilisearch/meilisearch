@@ -162,7 +162,7 @@ impl fmt::Debug for RawDocument {
 }
 
 fn raw_documents_from_matches(matches: SetBuf<(DocumentId, TmpMatch, Highlight)>) -> Vec<RawDocument> {
-    let mut docs_ranges = Vec::<(DocumentId, Range, Vec<Highlight>)>::new();
+    let mut docs_ranges: Vec<(_, Range, _)> = Vec::new();
     let mut matches2 = Matches::with_capacity(matches.len());
 
     for group in matches.linear_group_by(|(a, _, _), (b, _, _)| a == b) {

@@ -229,7 +229,7 @@ impl<'c, S, FI> QueryBuilder<'c, S, FI>
     }
 
     pub fn add_searchable_attribute(&mut self, attribute: u16) {
-        let reorders = self.searchable_attrs.get_or_insert_with(Default::default);
+        let reorders = self.searchable_attrs.get_or_insert_with(ReorderedAttrs::new);
         reorders.insert_attribute(attribute);
     }
 }

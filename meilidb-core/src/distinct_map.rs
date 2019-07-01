@@ -1,5 +1,4 @@
 use std::hash::Hash;
-
 use hashbrown::HashMap;
 
 pub struct DistinctMap<K> {
