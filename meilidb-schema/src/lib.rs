@@ -5,6 +5,7 @@ use std::{fmt, u16};
 use std::ops::BitOr;
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
 use serde::{Serialize, Deserialize};
 use linked_hash_map::LinkedHashMap;
 
@@ -82,13 +83,13 @@ impl SchemaBuilder {
         }
 
         let identifier = self.identifier;
-        Schema { inner: Arc::new(InnerSchema { identifier, attrs, props }) }
+        Schema { inner: ArcSwap::new(Arc::new(InnerSchema { identifier, attrs, props })) }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Schema {
-    inner: Arc<InnerSchema>,
+    inner: ArcSwap<InnerSchema>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,15 +100,15 @@ struct InnerSchema {
 }
 
 impl Schema {
-    pub fn from_toml<R: Read>(mut reader: R) -> Result<Schema, Box<Error>> {
+    pub fn from_toml<R: Read>(mut reader: R) -> Result<Schema, Box<dyn Error>> {
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer)?;
         let builder: SchemaBuilder = toml::from_slice(&buffer)?;
         Ok(builder.build())
     }
 
-    pub fn to_toml<W: Write>(&self, mut writer: W) -> Result<(), Box<Error>> {
-        let identifier = self.inner.identifier.clone();
+    pub fn to_toml<W: Write>(&self, mut writer: W) -> Result<(), Box<dyn Error>> {
+        let identifier = self.inner.lease().identifier.clone();
         let attributes = self.attributes_ordered();
         let builder = SchemaBuilder { identifier, attributes };
 
@@ -117,15 +118,15 @@ impl Schema {
         Ok(())
     }
 
-    pub fn from_json<R: Read>(mut reader: R) -> Result<Schema, Box<Error>> {
+    pub fn from_json<R: Read>(mut reader: R) -> Result<Schema, Box<dyn Error>> {
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer)?;
         let builder: SchemaBuilder = serde_json::from_slice(&buffer)?;
         Ok(builder.build())
     }
 
-    pub fn to_json<W: Write>(&self, mut writer: W) -> Result<(), Box<Error>> {
-        let identifier = self.inner.identifier.clone();
+    pub fn to_json<W: Write>(&self, mut writer: W) -> Result<(), Box<dyn Error>> {
+        let identifier = self.inner.lease().identifier.clone();
         let attributes = self.attributes_ordered();
         let builder = SchemaBuilder { identifier, attributes };
         let string = serde_json::to_string_pretty(&builder)?;
@@ -140,17 +141,37 @@ impl Schema {
     }
 
     pub fn write_to_bin<W: Write>(&self, writer: W) -> bincode::Result<()> {
-        let identifier = self.inner.identifier.clone();
+        let identifier = self.inner.lease().identifier.clone();
         let attributes = self.attributes_ordered();
         let builder = SchemaBuilder { identifier, attributes };
 
         bincode::serialize_into(writer, &builder)
     }
 
+    pub fn new_attribute<S: Into<String>>(&self, name: S, props: SchemaProps) -> SchemaAttr {
+        let mut new_attr = None;
+        let name = name.into();
+
+        let _new = self.inner.rcu(|old| {
+            let mut inner = InnerSchema::clone(&old);
+
+            let attr = SchemaAttr(inner.attrs.len() as u16);
+            inner.props.push((name.clone(), props));
+            inner.attrs.insert(name.clone(), attr);
+
+            new_attr = Some(attr);
+
+            inner
+        });
+
+        new_attr.unwrap()
+    }
+
     fn attributes_ordered(&self) -> LinkedHashMap<String, SchemaProps> {
+        let inner = self.inner.lease();
         let mut ordered = BTreeMap::new();
-        for (name, attr) in &self.inner.attrs {
-            let (_, props) = self.inner.props[attr.0 as usize];
+        for (name, attr) in &inner.attrs {
+            let (_, props) = inner.props[attr.0 as usize];
             ordered.insert(attr.0, (name, props));
         }
 
@@ -163,29 +184,26 @@ impl Schema {
     }
 
     pub fn props(&self, attr: SchemaAttr) -> SchemaProps {
-        let (_, props) = self.inner.props[attr.0 as usize];
+        let (_, props) = self.inner.lease().props[attr.0 as usize];
         props
     }
 
-    pub fn identifier_name(&self) -> &str {
-        &self.inner.identifier
+    pub fn identifier_name(&self) -> String {
+        self.inner.lease().identifier.clone()
     }
 
     pub fn attribute<S: AsRef<str>>(&self, name: S) -> Option<SchemaAttr> {
-        self.inner.attrs.get(name.as_ref()).cloned()
+        self.inner.lease().attrs.get(name.as_ref()).cloned()
     }
 
-    pub fn attribute_name(&self, attr: SchemaAttr) -> &str {
-        let (name, _) = &self.inner.props[attr.0 as usize];
-        name
+    pub fn attribute_name(&self, attr: SchemaAttr) -> String {
+        let (name, _) = &self.inner.lease().props[attr.0 as usize];
+        name.to_owned()
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item=(&str, SchemaAttr, SchemaProps)> + 'a {
-        self.inner.props.iter()
-            .map(move |(name, prop)| {
-                let attr = self.inner.attrs.get(name).unwrap();
-                (name.as_str(), *attr, *prop)
-            })
+    #[cfg(test)]
+    fn inner(&self) -> Arc<InnerSchema> {
+        self.inner.load()
     }
 }
 
@@ -239,13 +257,13 @@ mod tests {
         schema.write_to_bin(&mut buffer)?;
         let schema2 = Schema::read_from_bin(buffer.as_slice())?;
 
-        assert_eq!(schema, schema2);
+        assert_eq!(schema.inner(), schema2.inner());
 
         Ok(())
     }
 
     #[test]
-    fn serialize_deserialize_toml() -> Result<(), Box<Error>> {
+    fn serialize_deserialize_toml() -> Result<(), Box<dyn Error>> {
         let mut builder = SchemaBuilder::with_identifier("id");
         builder.new_attribute("alpha", STORED);
         builder.new_attribute("beta", STORED | INDEXED);
@@ -256,7 +274,7 @@ mod tests {
         schema.to_toml(&mut buffer)?;
 
         let schema2 = Schema::from_toml(buffer.as_slice())?;
-        assert_eq!(schema, schema2);
+        assert_eq!(schema.inner(), schema2.inner());
 
         let data = r#"
             identifier = "id"
@@ -272,13 +290,13 @@ mod tests {
             indexed = true
         "#;
         let schema2 = Schema::from_toml(data.as_bytes())?;
-        assert_eq!(schema, schema2);
+        assert_eq!(schema.inner(), schema2.inner());
 
         Ok(())
     }
 
     #[test]
-    fn serialize_deserialize_json() -> Result<(), Box<Error>> {
+    fn serialize_deserialize_json() -> Result<(), Box<dyn Error>> {
         let mut builder = SchemaBuilder::with_identifier("id");
         builder.new_attribute("alpha", STORED);
         builder.new_attribute("beta", STORED | INDEXED);
@@ -289,7 +307,7 @@ mod tests {
         schema.to_json(&mut buffer)?;
 
         let schema2 = Schema::from_json(buffer.as_slice())?;
-        assert_eq!(schema, schema2);
+        assert_eq!(schema.inner(), schema2.inner());
 
         let data = r#"
             {
@@ -308,7 +326,7 @@ mod tests {
                 }
             }"#;
         let schema2 = Schema::from_json(data.as_bytes())?;
-        assert_eq!(schema, schema2);
+        assert_eq!(schema.inner(), schema2.inner());
 
         Ok(())
     }
