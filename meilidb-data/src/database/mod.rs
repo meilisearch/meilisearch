@@ -107,7 +107,9 @@ impl Database {
 
                 let synonyms = {
                     let cf_name = format!("{}-synonyms", name);
-                    self.inner.cf_handle(&cf_name).expect("cf not found");
+                    if self.inner.cf_handle(&cf_name).is_none() {
+                        self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
+                    }
                     SynonymsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
                 };
 
