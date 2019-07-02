@@ -36,7 +36,7 @@ impl<'a> DocumentsAddition<'a> {
         let schema = &self.inner.lease_inner().schema;
         let identifier = schema.identifier_name();
 
-        let document_id = match extract_document_id(identifier, &document)? {
+        let document_id = match extract_document_id(&identifier, &document)? {
             Some(id) => id,
             None => return Err(Error::MissingDocumentId),
         };

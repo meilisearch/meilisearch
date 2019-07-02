@@ -5,7 +5,7 @@ use std::sync::Arc;
 use arc_swap::{ArcSwap, Lease};
 use meilidb_core::criterion::Criteria;
 use meilidb_core::{DocIndex, Store, DocumentId, QueryBuilder};
-use meilidb_schema::Schema;
+use meilidb_schema::{Schema, SchemaAttr, SchemaProps};
 use rmp_serde::decode::Error as RmpError;
 use serde::de;
 
@@ -99,6 +99,14 @@ impl Index {
 
     pub fn custom_settings(&self) -> CustomSettings {
         self.0.lease().raw.custom.clone()
+    }
+
+    pub fn add_schema_attribute<S: Into<String>>(&self, name: S, props: SchemaProps) -> SchemaAttr {
+        let attr = self.schema().new_attribute(name, props);
+
+        //
+
+        attr
     }
 
     pub fn documents_addition(&self) -> DocumentsAddition {
