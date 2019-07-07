@@ -6,12 +6,12 @@ use std::{cmp, mem};
 
 use fst::{Streamer, IntoStreamer};
 use hashbrown::HashMap;
+use levenshtein_automata::DFA;
 use log::info;
 use meilidb_tokenizer::{is_cjk, split_query_string};
 use rayon::slice::ParallelSliceMut;
 use sdset::SetBuf;
 use slice_group_by::GroupByMut;
-use levenshtein_automata::DFA;
 
 use crate::automaton::{build_dfa, build_prefix_dfa};
 use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
