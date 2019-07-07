@@ -14,8 +14,9 @@ use sdset::SetBuf;
 use slice_group_by::GroupByMut;
 
 use crate::automaton::{build_dfa, build_prefix_dfa};
-use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::criterion::Criteria;
+use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
+use crate::query_enhancer::{QueryEnhancerBuilder, QueryEnhancer};
 use crate::raw_documents_from_matches;
 use crate::reordered_attrs::ReorderedAttrs;
 use crate::{TmpMatch, Highlight, DocumentId, Store, RawDocument, Document};
@@ -91,18 +92,36 @@ fn split_best_frequency<'a, S: Store>(
     Ok(best.map(|(_, l, r)| (l, r)))
 }
 
-fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton>, S::Error> {
+fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automaton>, QueryEnhancer), S::Error> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
     let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
-    let mut automatons = Vec::new();
-
     let synonyms = store.synonyms()?;
 
-    for n in 1..=NGRAMS {
-        let mut query_index = 0;
-        let mut ngrams = query_words.windows(n).peekable();
+    let mut automatons = Vec::new();
+    let mut enhancer_builder = QueryEnhancerBuilder::new(&query_words);
 
-        while let Some(ngram_slice) = ngrams.next() {
+    // We must not declare the original words to the query enhancer
+    // *but* we need to push them in the automatons list first
+    let mut original_words = query_words.iter().enumerate().peekable();
+    while let Some((query_index, word)) = original_words.next() {
+
+        let has_following_word = original_words.peek().is_some();
+        let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
+
+        let automaton = if not_prefix_dfa {
+            Automaton::exact(query_index, word)
+        } else {
+            Automaton::prefix_exact(query_index, word)
+        };
+        automatons.push(automaton);
+    }
+
+    for n in 1..=NGRAMS {
+
+        let mut ngrams = query_words.windows(n).enumerate().peekable();
+        while let Some((query_index, ngram_slice)) = ngrams.next() {
+
+            let query_range = query_index..query_index + n;
             let ngram_nb_words = ngram_slice.len();
             let ngram = ngram_slice.join(" ");
 
@@ -127,15 +146,19 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
                     let mut stream = synonyms.into_stream();
                     while let Some(synonyms) = stream.next() {
                         let synonyms = std::str::from_utf8(synonyms).unwrap();
-                        let nb_synonym_words = split_query_string(synonyms).count();
+                        let synonyms_words: Vec<_> = split_query_string(synonyms).collect();
+                        let nb_synonym_words = synonyms_words.len();
 
-                        for synonym in split_query_string(synonyms) {
+                        let real_query_index = automatons.len();
+                        enhancer_builder.declare(query_range.clone(), real_query_index, &synonyms_words);
+
+                        for (i, synonym) in synonyms_words.into_iter().enumerate() {
                             let automaton = if nb_synonym_words == 1 {
-                                Automaton::exact(query_index, synonym)
+                                Automaton::exact(real_query_index + i, synonym)
                             } else {
-                                Automaton::non_exact(query_index, synonym)
+                                Automaton::non_exact(real_query_index + i, synonym)
                             };
-                            automatons.push((automaton, synonym.to_owned()));
+                            automatons.push(automaton);
                         }
                     }
                 }
@@ -145,37 +168,34 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<Vec<Automaton
                 // TODO we do not support "phrase query" in other words:
                 //      first term *must* follow the second term
                 if let Some((left, right)) = split_best_frequency(&ngram, store)? {
-                    let automaton = Automaton::exact(query_index, left);
-                    automatons.push((automaton, left.to_owned()));
 
-                    let automaton = Automaton::exact(query_index, right);
-                    automatons.push((automaton, right.to_owned()));
+                    let real_query_index = automatons.len();
+                    enhancer_builder.declare(query_range.clone(), real_query_index, &[left, right]);
+
+                    // TODO must mark it as "phrase query"
+                    //      (the next match must follow its query index)
+                    let automaton = Automaton::exact(real_query_index, left);
+                    automatons.push(automaton);
+
+                    let automaton = Automaton::exact(real_query_index + 1, right);
+                    automatons.push(automaton);
                 }
-
-                let automaton = if not_prefix_dfa {
-                    Automaton::exact(query_index, &ngram)
-                } else {
-                    Automaton::prefix_exact(query_index, &ngram)
-                };
-                automatons.push((automaton, ngram));
 
             } else {
                 // automaton of concatenation of query words
                 let concat = ngram_slice.concat();
                 let normalized = normalize_str(&concat);
-                let automaton = Automaton::exact(query_index, &normalized);
-                automatons.push((automaton, normalized));
-            }
 
-            query_index += 1;
+                let real_query_index = automatons.len();
+                enhancer_builder.declare(query_range.clone(), real_query_index, &[&normalized]);
+
+                let automaton = Automaton::exact(real_query_index, &normalized);
+                automatons.push(automaton);
+            }
         }
     }
 
-    automatons.sort_unstable_by(|a, b| (a.0.query_index, &a.1).cmp(&(b.0.query_index, &b.1)));
-    automatons.dedup_by(|a, b| (a.0.query_index, &a.1) == (b.0.query_index, &b.1));
-    let automatons = automatons.into_iter().map(|(a, _)| a).collect();
-
-    Ok(automatons)
+    Ok((automatons, enhancer_builder.build()))
 }
 
 fn rewrite_matched_positions(matches: &mut [(DocumentId, TmpMatch, Highlight)]) {
@@ -238,7 +258,7 @@ impl<'c, S, FI> QueryBuilder<'c, S, FI>
 where S: Store,
 {
     fn query_all(&self, query: &str) -> Result<Vec<RawDocument>, S::Error> {
-        let automatons = generate_automatons(query, &self.store)?;
+        let (automatons, query_enhancer) = generate_automatons(query, &self.store)?;
         let words = self.store.words()?.as_fst();
         let searchables = self.searchable_attrs.as_ref();
 
