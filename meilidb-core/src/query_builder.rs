@@ -11,7 +11,7 @@ use log::info;
 use meilidb_tokenizer::{is_cjk, split_query_string};
 use rayon::slice::ParallelSliceMut;
 use sdset::SetBuf;
-use slice_group_by::GroupByMut;
+use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::automaton::{build_dfa, build_prefix_dfa};
 use crate::criterion::Criteria;
@@ -24,34 +24,30 @@ use crate::{TmpMatch, Highlight, DocumentId, Store, RawDocument, Document};
 const NGRAMS: usize = 3;
 
 struct Automaton {
-    query_index: usize,
     query_len: usize,
     is_exact: bool,
     dfa: DFA,
 }
 
 impl Automaton {
-    fn exact(query_index: usize, query: &str) -> Automaton {
+    fn exact(query: &str) -> Automaton {
         Automaton {
-            query_index,
             query_len: query.len(),
             is_exact: true,
             dfa: build_dfa(query),
         }
     }
 
-    fn prefix_exact(query_index: usize, query: &str) -> Automaton {
+    fn prefix_exact(query: &str) -> Automaton {
         Automaton {
-            query_index,
             query_len: query.len(),
             is_exact: true,
             dfa: build_prefix_dfa(query),
         }
     }
 
-    fn non_exact(query_index: usize, query: &str) -> Automaton {
+    fn non_exact(query: &str) -> Automaton {
         Automaton {
-            query_index,
             query_len: query.len(),
             is_exact: false,
             dfa: build_dfa(query),
@@ -102,16 +98,16 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automato
 
     // We must not declare the original words to the query enhancer
     // *but* we need to push them in the automatons list first
-    let mut original_words = query_words.iter().enumerate().peekable();
-    while let Some((query_index, word)) = original_words.next() {
+    let mut original_words = query_words.iter().peekable();
+    while let Some(word) = original_words.next() {
 
         let has_following_word = original_words.peek().is_some();
         let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
 
         let automaton = if not_prefix_dfa {
-            Automaton::exact(query_index, word)
+            Automaton::exact(word)
         } else {
-            Automaton::prefix_exact(query_index, word)
+            Automaton::prefix_exact(word)
         };
         automatons.push(automaton);
     }
@@ -152,11 +148,11 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automato
                         let real_query_index = automatons.len();
                         enhancer_builder.declare(query_range.clone(), real_query_index, &synonyms_words);
 
-                        for (i, synonym) in synonyms_words.into_iter().enumerate() {
+                        for synonym in synonyms_words {
                             let automaton = if nb_synonym_words == 1 {
-                                Automaton::exact(real_query_index + i, synonym)
+                                Automaton::exact(synonym)
                             } else {
-                                Automaton::non_exact(real_query_index + i, synonym)
+                                Automaton::non_exact(synonym)
                             };
                             automatons.push(automaton);
                         }
@@ -174,10 +170,10 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automato
 
                     // TODO must mark it as "phrase query"
                     //      (the next match must follow its query index)
-                    let automaton = Automaton::exact(real_query_index, left);
+                    let automaton = Automaton::exact(left);
                     automatons.push(automaton);
 
-                    let automaton = Automaton::exact(real_query_index + 1, right);
+                    let automaton = Automaton::exact(right);
                     automatons.push(automaton);
                 }
 
@@ -189,26 +185,13 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automato
                 let real_query_index = automatons.len();
                 enhancer_builder.declare(query_range.clone(), real_query_index, &[&normalized]);
 
-                let automaton = Automaton::exact(real_query_index, &normalized);
+                let automaton = Automaton::exact(&normalized);
                 automatons.push(automaton);
             }
         }
     }
 
     Ok((automatons, enhancer_builder.build()))
-}
-
-fn rewrite_matched_positions(matches: &mut [(DocumentId, TmpMatch, Highlight)]) {
-    for document_matches in matches.linear_group_by_mut(|(a, _, _), (b, _, _)| a == b) {
-        let mut offset = 0;
-        for query_indexes in document_matches.linear_group_by_mut(|(_, a, _), (_, b, _)| a.query_index == b.query_index) {
-            let word_index = query_indexes[0].1.word_index - offset as u16;
-            for (_, match_, _) in query_indexes.iter_mut() {
-                match_.word_index = word_index;
-            }
-            offset += query_indexes.len() - 1;
-        }
-    }
 }
 
 pub struct QueryBuilder<'c, S, FI = fn(DocumentId) -> bool> {
@@ -275,7 +258,7 @@ where S: Store,
 
         while let Some((input, indexed_values)) = stream.next() {
             for iv in indexed_values {
-                let Automaton { query_index, is_exact, query_len, ref dfa } = automatons[iv.index];
+                let Automaton { is_exact, query_len, ref dfa } = automatons[iv.index];
                 let distance = dfa.eval(input).to_u8();
                 let is_exact = is_exact && distance == 0 && input.len() == query_len;
 
@@ -288,34 +271,129 @@ where S: Store,
                 for di in doc_indexes.as_slice() {
                     let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
                     if let Some(attribute) = attribute {
+
                         let match_ = TmpMatch {
-                            query_index: query_index as u32,
+                            query_index: iv.index as u32,
                             distance,
                             attribute,
                             word_index: di.word_index,
                             is_exact,
                         };
+
+                        // TODO do not store in the same matches vec
                         let highlight = Highlight {
                             attribute: di.attribute,
                             char_index: di.char_index,
                             char_length: di.char_length,
                         };
+
                         matches.push((di.document_id, match_, highlight));
                     }
                 }
             }
         }
 
-        // rewrite the matched positions for next criteria evaluations
-        matches.par_sort_unstable();
-        rewrite_matched_positions(&mut matches);
+        // we sort the matches to make them rewritable
+        matches.par_sort_unstable_by_key(|(id, match_, _)| {
+            (*id, match_.attribute, match_.word_index) // query_id ???
+        });
 
-        let total_matches = matches.len();
-        let padded_matches = {
-            matches.par_sort_unstable();
-            matches.dedup();
-            SetBuf::new_unchecked(matches)
-        };
+        let mut padded_matches = Vec::with_capacity(matches.len());
+        for same_document in matches.linear_group_by(|a, b| a.0 == b.0) {
+
+            for same_attribute in same_document.linear_group_by(|a, b| a.1.attribute == b.1.attribute) {
+
+                let mut padding = 0;
+                let mut iter = same_attribute.linear_group_by(|a, b| a.1.word_index == b.1.word_index);
+                while let Some(same_word_index) = iter.next() {
+
+                    let mut biggest = 0;
+                    for (id, match_, highlight) in same_word_index {
+
+                        let mut replacement = query_enhancer.replacement(match_.query_index);
+                        let replacement_len = replacement.len() - 1;
+                        let nexts = iter.remainder().linear_group_by(|a, b| a.1.word_index == b.1.word_index);
+
+                        if let Some(query_index) = replacement.next() {
+                            let match_ = TmpMatch {
+                                query_index,
+                                word_index: match_.word_index + padding as u16,
+                                ..match_.clone()
+                            };
+                            padded_matches.push((*id, match_, *highlight));
+                        }
+
+                        let mut found = false;
+
+                        // look ahead and if there already is a match
+                        // corresponding to this padding word, abort the padding
+                        'padding: for (x, next_group) in nexts.enumerate() {
+
+                            for (i, query_index) in replacement.clone().enumerate().skip(x) {
+                                let padmatch_ = TmpMatch {
+                                    query_index,
+                                    word_index: match_.word_index + padding as u16 + (i + 1) as u16,
+                                    ..match_.clone()
+                                };
+
+                                for (_, nmatch_, _) in next_group {
+                                    let mut rep = query_enhancer.replacement(nmatch_.query_index);
+                                    let query_index = rep.next().unwrap();
+                                    let nmatch_ = TmpMatch { query_index, ..nmatch_.clone() };
+                                    if nmatch_.query_index == padmatch_.query_index {
+
+                                        if !found {
+                                            // if we find a corresponding padding for the
+                                            // first time we must push preceding paddings
+                                            for (i, query_index) in replacement.clone().enumerate().take(i) {
+                                                let match_ = TmpMatch {
+                                                    query_index,
+                                                    word_index: match_.word_index + padding as u16 + (i + 1) as u16,
+                                                    ..match_.clone()
+                                                };
+                                                padded_matches.push((*id, match_, *highlight));
+                                                biggest = biggest.max(i + 1);
+                                            }
+                                        }
+
+                                        padded_matches.push((*id, padmatch_, *highlight));
+                                        found = true;
+                                        continue 'padding;
+                                    }
+                                }
+                            }
+
+                            // if we do not find a corresponding padding in the
+                            // next groups so stop here and pad what was found
+                            break
+                        }
+
+                        if !found {
+                            // if no padding was found in the following matches
+                            // we must insert the entire padding
+                            for (i, query_index) in replacement.enumerate() {
+                                let match_ = TmpMatch {
+                                    query_index,
+                                    word_index: match_.word_index + padding as u16 + (i + 1) as u16,
+                                    ..match_.clone()
+                                };
+                                padded_matches.push((*id, match_, *highlight));
+                            }
+
+                            biggest = biggest.max(replacement_len);
+                        }
+                    }
+
+                    padding += biggest;
+                }
+            }
+
+        }
+
+        let total_matches = padded_matches.len();
+        padded_matches.par_sort_unstable();
+        let padded_matches = SetBuf::new_unchecked(padded_matches);
+
         let raw_documents = raw_documents_from_matches(padded_matches);
 
         info!("{} total documents to classify", raw_documents.len());
