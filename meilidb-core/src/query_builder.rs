@@ -65,29 +65,6 @@ pub fn normalize_str(string: &str) -> String {
     string
 }
 
-fn split_best_frequency<'a, S: Store>(
-    word: &'a str,
-    store: &S,
-) -> Result<Option<(&'a str, &'a str)>, S::Error>
-{
-    let chars = word.char_indices().skip(1);
-    let mut best = None;
-
-    for (i, _) in chars {
-        let (left, right) = word.split_at(i);
-
-        let left_freq = store.word_indexes(left.as_bytes())?.map_or(0, |i| i.len());
-        let right_freq = store.word_indexes(right.as_bytes())?.map_or(0, |i| i.len());
-        let min_freq = cmp::min(left_freq, right_freq);
-
-        if min_freq != 0 && best.map_or(true, |(old, _, _)| min_freq > old) {
-            best = Some((min_freq, left, right));
-        }
-    }
-
-    Ok(best.map(|(_, l, r)| (l, r)))
-}
-
 fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automaton>, QueryEnhancer), S::Error> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
     let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
@@ -160,24 +137,7 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automato
                 }
             }
 
-            if n == 1 {
-                // TODO we do not support "phrase query" in other words:
-                //      first term *must* follow the second term
-                if let Some((left, right)) = split_best_frequency(&ngram, store)? {
-
-                    let real_query_index = automatons.len();
-                    enhancer_builder.declare(query_range.clone(), real_query_index, &[left, right]);
-
-                    // TODO must mark it as "phrase query"
-                    //      (the next match must follow its query index)
-                    let automaton = Automaton::exact(left);
-                    automatons.push(automaton);
-
-                    let automaton = Automaton::exact(right);
-                    automatons.push(automaton);
-                }
-
-            } else {
+            if n != 1 {
                 // automaton of concatenation of query words
                 let concat = ngram_slice.concat();
                 let normalized = normalize_str(&concat);
@@ -1541,52 +1501,6 @@ mod tests {
             assert_matches!(iter.next(), Some(TmpMatch { query_index: 1, word_index: 0, distance: 1, .. })); // phone
             assert_matches!(iter.next(), Some(TmpMatch { query_index: 2, word_index: 2, distance: 0, .. })); // case
             assert_matches!(iter.next(), None);
-        });
-        assert_matches!(iter.next(), None);
-    }
-
-    #[test]
-    fn simple_split() {
-        let store = InMemorySetStore::from_iter(vec![
-            ("porte",   &[doc_char_index(0, 0, 0)][..]),
-            ("feuille", &[doc_char_index(0, 1, 1)][..]),
-            ("search",  &[doc_char_index(1, 0, 0)][..]),
-            ("engine",  &[doc_char_index(1, 1, 1)][..]),
-        ]);
-
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("portefeuille", 0..20).unwrap();
-        let mut iter = results.into_iter();
-
-        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, highlights }) => {
-            let mut matches = matches.into_iter();
-            let mut highlights = highlights.into_iter();
-
-            assert_matches!(matches.next(), Some(TmpMatch { query_index: 0, word_index: 0, .. })); // porte
-            assert_matches!(highlights.next(), Some(Highlight { char_index: 0, .. }));
-
-            assert_matches!(matches.next(), Some(TmpMatch { query_index: 1, word_index: 1, .. })); // feuille
-            assert_matches!(highlights.next(), Some(Highlight { char_index: 1, .. }));
-
-            assert_matches!(matches.next(), None);
-        });
-        assert_matches!(iter.next(), None);
-
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("searchengine", 0..20).unwrap();
-        let mut iter = results.into_iter();
-
-        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, highlights }) => {
-            let mut matches = matches.into_iter();
-            let mut highlights = highlights.into_iter();
-
-            assert_matches!(matches.next(), Some(TmpMatch { query_index: 0, word_index: 0, .. })); // search
-            assert_matches!(highlights.next(), Some(Highlight { char_index: 0, .. }));
-
-            assert_matches!(matches.next(), Some(TmpMatch { query_index: 1, word_index: 1, .. })); // engine
-            assert_matches!(highlights.next(), Some(Highlight { char_index: 1, .. }));
-
-            assert_matches!(matches.next(), None);
         });
         assert_matches!(iter.next(), None);
     }
