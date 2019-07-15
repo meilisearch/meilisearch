@@ -13,7 +13,7 @@ pub mod criterion;
 use serde::{Serialize, Deserialize};
 use zerocopy::{AsBytes, FromBytes};
 
-use self::raw_document::raw_documents_from_matches;
+use self::raw_document::raw_documents_from;
 
 pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder, normalize_str};
 pub use self::raw_document::RawDocument;

@@ -66,25 +66,34 @@ impl fmt::Debug for RawDocument {
     }
 }
 
-pub fn raw_documents_from_matches(matches: SetBuf<(DocumentId, TmpMatch, Highlight)>) -> Vec<RawDocument> {
+pub fn raw_documents_from(
+    matches: SetBuf<(DocumentId, TmpMatch)>,
+    highlights: SetBuf<(DocumentId, Highlight)>,
+) -> Vec<RawDocument>
+{
     let mut docs_ranges: Vec<(_, Range, _)> = Vec::new();
     let mut matches2 = Matches::with_capacity(matches.len());
 
-    for group in matches.linear_group_by(|(a, _, _), (b, _, _)| a == b) {
-        let document_id = group[0].0;
-        let start = docs_ranges.last().map(|(_, r, _)| r.end).unwrap_or(0);
-        let end = start + group.len();
+    let matches = matches.linear_group_by(|(a, _), (b, _)| a == b);
+    let highlights = highlights.linear_group_by(|(a, _), (b, _)| a == b);
 
-        let highlights = group.iter().map(|(_, _, h)| *h).collect();
+    for (mgroup, hgroup) in matches.zip(highlights) {
+        debug_assert_eq!(mgroup[0].0, hgroup[0].0);
+
+        let document_id = mgroup[0].0;
+        let start = docs_ranges.last().map(|(_, r, _)| r.end).unwrap_or(0);
+        let end = start + mgroup.len();
+
+        let highlights = hgroup.iter().map(|(_, h)| *h).collect();
         docs_ranges.push((document_id, Range { start, end }, highlights));
 
-        matches2.extend_from_slice(group);
+        matches2.extend_from_slice(mgroup);
     }
 
     let matches = Arc::new(matches2);
-    docs_ranges.into_iter().map(|(i, range, highlights)| {
+    docs_ranges.into_iter().map(|(id, range, highlights)| {
         let matches = SharedMatches { range, matches: matches.clone() };
-        RawDocument::new(i, matches, highlights)
+        RawDocument::new(id, matches, highlights)
     }).collect()
 }
 
@@ -120,8 +129,8 @@ impl Matches {
         }
     }
 
-    fn extend_from_slice(&mut self, matches: &[(DocumentId, TmpMatch, Highlight)]) {
-        for (_, match_, _) in matches {
+    fn extend_from_slice(&mut self, matches: &[(DocumentId, TmpMatch)]) {
+        for (_, match_) in matches {
             self.query_index.push(match_.query_index);
             self.distance.push(match_.distance);
             self.attribute.push(match_.attribute);

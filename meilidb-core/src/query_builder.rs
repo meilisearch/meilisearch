@@ -17,7 +17,7 @@ use crate::automaton::{build_dfa, build_prefix_dfa};
 use crate::criterion::Criteria;
 use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
 use crate::query_enhancer::{QueryEnhancerBuilder, QueryEnhancer};
-use crate::raw_documents_from_matches;
+use crate::raw_documents_from;
 use crate::reordered_attrs::ReorderedAttrs;
 use crate::{TmpMatch, Highlight, DocumentId, Store, RawDocument, Document};
 
@@ -215,6 +215,7 @@ where S: Store,
         };
 
         let mut matches = Vec::new();
+        let mut highlights = Vec::new();
 
         while let Some((input, indexed_values)) = stream.next() {
             for iv in indexed_values {
@@ -240,23 +241,21 @@ where S: Store,
                             is_exact,
                         };
 
-                        // TODO do not store in the same matches vec
                         let highlight = Highlight {
                             attribute: di.attribute,
                             char_index: di.char_index,
                             char_length: di.char_length,
                         };
 
-                        matches.push((di.document_id, match_, highlight));
+                        matches.push((di.document_id, match_));
+                        highlights.push((di.document_id, highlight));
                     }
                 }
             }
         }
 
         // we sort the matches to make them rewritable
-        matches.par_sort_unstable_by_key(|(id, match_, _)| {
-            (*id, match_.attribute, match_.word_index) // query_id ???
-        });
+        matches.par_sort_unstable_by_key(|(id, match_)| (*id, match_.attribute, match_.word_index));
 
         let mut padded_matches = Vec::with_capacity(matches.len());
         for same_document in matches.linear_group_by(|a, b| a.0 == b.0) {
@@ -268,7 +267,7 @@ where S: Store,
                 while let Some(same_word_index) = iter.next() {
 
                     let mut biggest = 0;
-                    for (id, match_, highlight) in same_word_index {
+                    for (id, match_) in same_word_index {
 
                         let mut replacement = query_enhancer.replacement(match_.query_index);
                         let replacement_len = replacement.len() - 1;
@@ -280,7 +279,7 @@ where S: Store,
                                 word_index: match_.word_index + padding as u16,
                                 ..match_.clone()
                             };
-                            padded_matches.push((*id, match_, *highlight));
+                            padded_matches.push((*id, match_));
                         }
 
                         let mut found = false;
@@ -296,7 +295,7 @@ where S: Store,
                                     ..match_.clone()
                                 };
 
-                                for (_, nmatch_, _) in next_group {
+                                for (_, nmatch_) in next_group {
                                     let mut rep = query_enhancer.replacement(nmatch_.query_index);
                                     let query_index = rep.next().unwrap();
                                     let nmatch_ = TmpMatch { query_index, ..nmatch_.clone() };
@@ -311,12 +310,12 @@ where S: Store,
                                                     word_index: match_.word_index + padding as u16 + (i + 1) as u16,
                                                     ..match_.clone()
                                                 };
-                                                padded_matches.push((*id, match_, *highlight));
+                                                padded_matches.push((*id, match_));
                                                 biggest = biggest.max(i + 1);
                                             }
                                         }
 
-                                        padded_matches.push((*id, padmatch_, *highlight));
+                                        padded_matches.push((*id, padmatch_));
                                         found = true;
                                         continue 'padding;
                                     }
@@ -337,7 +336,7 @@ where S: Store,
                                     word_index: match_.word_index + padding as u16 + (i + 1) as u16,
                                     ..match_.clone()
                                 };
-                                padded_matches.push((*id, match_, *highlight));
+                                padded_matches.push((*id, match_));
                             }
 
                             biggest = biggest.max(replacement_len);
@@ -350,11 +349,19 @@ where S: Store,
 
         }
 
-        let total_matches = padded_matches.len();
-        padded_matches.par_sort_unstable();
-        let padded_matches = SetBuf::new_unchecked(padded_matches);
 
-        let raw_documents = raw_documents_from_matches(padded_matches);
+        let matches = {
+            padded_matches.par_sort_unstable();
+            SetBuf::new_unchecked(padded_matches)
+        };
+
+        let highlights = {
+            highlights.par_sort_unstable_by_key(|(id, _)| *id);
+            SetBuf::new_unchecked(highlights)
+        };
+
+        let total_matches = matches.len();
+        let raw_documents = raw_documents_from(matches, highlights);
 
         info!("{} total documents to classify", raw_documents.len());
         info!("{} total matches to classify", total_matches);
