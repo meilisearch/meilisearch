@@ -18,6 +18,7 @@ meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
 quickcheck = "0.8.2"
 rand = "0.6.5"
 rand_xorshift = "0.1.1"
+rustyline = { version = "5.0.0", default-features = false }
 serde = { version = "1.0.91" , features = ["derive"] }
 serde_json = "1.0.39"
 structopt = "0.2.15"
