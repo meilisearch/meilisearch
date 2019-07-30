@@ -2,16 +2,17 @@
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 use std::collections::btree_map::{BTreeMap, Entry};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::error::Error;
 use std::io::{self, Write};
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::time::{Instant, Duration};
 
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use structopt::StructOpt;
+use linked_hash_map::LinkedHashMap;
 use rustyline::{Editor, Config};
+use structopt::StructOpt;
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use meilidb_core::Highlight;
 use meilidb_data::Database;
@@ -35,7 +36,7 @@ pub struct Opt {
     pub char_context: usize,
 }
 
-type Document = HashMap<String, String>;
+type Document = LinkedHashMap<String, String>;
 
 fn display_highlights(text: &str, ranges: &[usize]) -> io::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
