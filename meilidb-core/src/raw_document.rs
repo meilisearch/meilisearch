@@ -74,8 +74,8 @@ pub fn raw_documents_from(
     let mut docs_ranges: Vec<(_, Range, _)> = Vec::new();
     let mut matches2 = Matches::with_capacity(matches.len());
 
-    let matches = matches.linear_group_by(|(a, _), (b, _)| a == b);
-    let highlights = highlights.linear_group_by(|(a, _), (b, _)| a == b);
+    let matches = matches.linear_group_by_key(|(id, _)| *id);
+    let highlights = highlights.linear_group_by_key(|(id, _)| *id);
 
     for (mgroup, hgroup) in matches.zip(highlights) {
         debug_assert_eq!(mgroup[0].0, hgroup[0].0);

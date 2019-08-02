@@ -197,6 +197,110 @@ impl<'c, S, FI> QueryBuilder<'c, S, FI>
     }
 }
 
+fn multiword_rewrite_matches(
+    mut matches: Vec<(DocumentId, TmpMatch)>,
+    query_enhancer: &QueryEnhancer,
+) -> SetBuf<(DocumentId, TmpMatch)>
+{
+    let mut padded_matches = Vec::with_capacity(matches.len());
+
+    // we sort the matches by word index to make them rewritable
+    let start = Instant::now();
+    matches.par_sort_unstable_by_key(|(id, match_)| (*id, match_.attribute, match_.word_index));
+    info!("rewrite sort by word_index took {:.2?}", start.elapsed());
+
+    let start = Instant::now();
+    // for each attribute of each document
+    for same_document_attribute in matches.linear_group_by_key(|(id, m)| (*id, m.attribute)) {
+
+        // padding will only be applied
+        // to word indices in the same attribute
+        let mut padding = 0;
+        let mut iter = same_document_attribute.linear_group_by_key(|(_, m)| m.word_index);
+
+        // for each match at the same position
+        // in this document attribute
+        while let Some(same_word_index) = iter.next() {
+
+            // find the biggest padding
+            let mut biggest = 0;
+            for (id, match_) in same_word_index {
+
+                let mut replacement = query_enhancer.replacement(match_.query_index);
+                let replacement_len = replacement.len();
+                let nexts = iter.remainder().linear_group_by_key(|(_, m)| m.word_index);
+
+                if let Some(query_index) = replacement.next() {
+                    let word_index = match_.word_index + padding as u16;
+                    let match_ = TmpMatch { query_index, word_index, ..match_.clone() };
+                    padded_matches.push((*id, match_));
+                }
+
+                let mut found = false;
+
+                // look ahead and if there already is a match
+                // corresponding to this padding word, abort the padding
+                'padding: for (x, next_group) in nexts.enumerate() {
+
+                    for (i, query_index) in replacement.clone().enumerate().skip(x) {
+                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
+                        let padmatch = TmpMatch { query_index, word_index, ..match_.clone() };
+
+                        for (_, nmatch_) in next_group {
+                            let mut rep = query_enhancer.replacement(nmatch_.query_index);
+                            let query_index = rep.next().unwrap();
+                            if query_index == padmatch.query_index {
+
+                                if !found {
+                                    // if we find a corresponding padding for the
+                                    // first time we must push preceding paddings
+                                    for (i, query_index) in replacement.clone().enumerate().take(i) {
+                                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
+                                        let match_ = TmpMatch { query_index, word_index, ..match_.clone() };
+                                        padded_matches.push((*id, match_));
+                                        biggest = biggest.max(i + 1);
+                                    }
+                                }
+
+                                padded_matches.push((*id, padmatch));
+                                found = true;
+                                continue 'padding;
+                            }
+                        }
+                    }
+
+                    // if we do not find a corresponding padding in the
+                    // next groups so stop here and pad what was found
+                    break
+                }
+
+                if !found {
+                    // if no padding was found in the following matches
+                    // we must insert the entire padding
+                    for (i, query_index) in replacement.enumerate() {
+                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
+                        let match_ = TmpMatch { query_index, word_index, ..match_.clone() };
+                        padded_matches.push((*id, match_));
+                    }
+
+                    biggest = biggest.max(replacement_len - 1);
+                }
+            }
+
+            padding += biggest;
+        }
+    }
+    info!("main multiword rewrite took {:.2?}", start.elapsed());
+
+    let start = Instant::now();
+    for document_matches in padded_matches.linear_group_by_key_mut(|(id, _)| *id) {
+        document_matches.sort_unstable();
+    }
+    info!("final rewrite sort took {:.2?}", start.elapsed());
+
+    SetBuf::new_unchecked(padded_matches)
+}
+
 impl<'c, S, FI> QueryBuilder<'c, S, FI>
 where S: Store,
 {
@@ -217,22 +321,26 @@ where S: Store,
         let mut matches = Vec::new();
         let mut highlights = Vec::new();
 
+        let mut query_db = std::time::Duration::default();
+
+        let start = Instant::now();
         while let Some((input, indexed_values)) = stream.next() {
             for iv in indexed_values {
                 let Automaton { is_exact, query_len, ref dfa } = automatons[iv.index];
                 let distance = dfa.eval(input).to_u8();
                 let is_exact = is_exact && distance == 0 && input.len() == query_len;
 
+                let start = Instant::now();
                 let doc_indexes = self.store.word_indexes(input)?;
                 let doc_indexes = match doc_indexes {
                     Some(doc_indexes) => doc_indexes,
                     None => continue,
                 };
+                query_db += start.elapsed();
 
                 for di in doc_indexes.as_slice() {
                     let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
                     if let Some(attribute) = attribute {
-
                         let match_ = TmpMatch {
                             query_index: iv.index as u32,
                             distance,
@@ -253,118 +361,28 @@ where S: Store,
                 }
             }
         }
+        info!("main query all took {:.2?} (get indexes {:.2?})", start.elapsed(), query_db);
 
-        // we sort the matches to make them rewritable
-        matches.par_sort_unstable_by_key(|(id, match_)| (*id, match_.attribute, match_.word_index));
+        info!("{} total matches to rewrite", matches.len());
 
-        let mut padded_matches = Vec::with_capacity(matches.len());
-        for same_document in matches.linear_group_by(|a, b| a.0 == b.0) {
+        let start = Instant::now();
+        let matches = multiword_rewrite_matches(matches, &query_enhancer);
+        info!("multiword rewrite took {:.2?}", start.elapsed());
 
-            for same_attribute in same_document.linear_group_by(|a, b| a.1.attribute == b.1.attribute) {
-
-                let mut padding = 0;
-                let mut iter = same_attribute.linear_group_by(|a, b| a.1.word_index == b.1.word_index);
-                while let Some(same_word_index) = iter.next() {
-
-                    let mut biggest = 0;
-                    for (id, match_) in same_word_index {
-
-                        let mut replacement = query_enhancer.replacement(match_.query_index);
-                        let replacement_len = replacement.len() - 1;
-                        let nexts = iter.remainder().linear_group_by(|a, b| a.1.word_index == b.1.word_index);
-
-                        if let Some(query_index) = replacement.next() {
-                            let match_ = TmpMatch {
-                                query_index,
-                                word_index: match_.word_index + padding as u16,
-                                ..match_.clone()
-                            };
-                            padded_matches.push((*id, match_));
-                        }
-
-                        let mut found = false;
-
-                        // look ahead and if there already is a match
-                        // corresponding to this padding word, abort the padding
-                        'padding: for (x, next_group) in nexts.enumerate() {
-
-                            for (i, query_index) in replacement.clone().enumerate().skip(x) {
-                                let padmatch_ = TmpMatch {
-                                    query_index,
-                                    word_index: match_.word_index + padding as u16 + (i + 1) as u16,
-                                    ..match_.clone()
-                                };
-
-                                for (_, nmatch_) in next_group {
-                                    let mut rep = query_enhancer.replacement(nmatch_.query_index);
-                                    let query_index = rep.next().unwrap();
-                                    let nmatch_ = TmpMatch { query_index, ..nmatch_.clone() };
-                                    if nmatch_.query_index == padmatch_.query_index {
-
-                                        if !found {
-                                            // if we find a corresponding padding for the
-                                            // first time we must push preceding paddings
-                                            for (i, query_index) in replacement.clone().enumerate().take(i) {
-                                                let match_ = TmpMatch {
-                                                    query_index,
-                                                    word_index: match_.word_index + padding as u16 + (i + 1) as u16,
-                                                    ..match_.clone()
-                                                };
-                                                padded_matches.push((*id, match_));
-                                                biggest = biggest.max(i + 1);
-                                            }
-                                        }
-
-                                        padded_matches.push((*id, padmatch_));
-                                        found = true;
-                                        continue 'padding;
-                                    }
-                                }
-                            }
-
-                            // if we do not find a corresponding padding in the
-                            // next groups so stop here and pad what was found
-                            break
-                        }
-
-                        if !found {
-                            // if no padding was found in the following matches
-                            // we must insert the entire padding
-                            for (i, query_index) in replacement.enumerate() {
-                                let match_ = TmpMatch {
-                                    query_index,
-                                    word_index: match_.word_index + padding as u16 + (i + 1) as u16,
-                                    ..match_.clone()
-                                };
-                                padded_matches.push((*id, match_));
-                            }
-
-                            biggest = biggest.max(replacement_len);
-                        }
-                    }
-
-                    padding += biggest;
-                }
-            }
-
-        }
-
-
-        let matches = {
-            padded_matches.par_sort_unstable();
-            SetBuf::new_unchecked(padded_matches)
-        };
-
+        let start = Instant::now();
         let highlights = {
             highlights.par_sort_unstable_by_key(|(id, _)| *id);
             SetBuf::new_unchecked(highlights)
         };
+        info!("sorting highlights took {:.2?}", start.elapsed());
 
-        let total_matches = matches.len();
+        info!("{} total matches to classify", matches.len());
+
+        let start = Instant::now();
         let raw_documents = raw_documents_from(matches, highlights);
+        info!("making raw documents took {:.2?}", start.elapsed());
 
         info!("{} total documents to classify", raw_documents.len());
-        info!("{} total matches to classify", total_matches);
 
         Ok(raw_documents)
     }

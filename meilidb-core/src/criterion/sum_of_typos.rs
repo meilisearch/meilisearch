@@ -21,7 +21,7 @@ fn custom_log10(n: u8) -> f32 {
 
 #[inline]
 fn sum_matches_typos(query_index: &[u32], distance: &[u8]) -> usize {
-    let mut number_words = 0;
+    let mut number_words: usize = 0;
     let mut sum_typos = 0.0;
     let mut index = 0;
 

@@ -21,10 +21,10 @@ impl<'a> SynonymsAddition<'a> {
     pub fn add_synonym<S, T, I>(&mut self, synonym: S, alternatives: I)
     where S: AsRef<str>,
           T: AsRef<str>,
-          I: Iterator<Item=T>,
+          I: IntoIterator<Item=T>,
     {
         let synonym = normalize_str(synonym.as_ref());
-        let alternatives = alternatives.map(|s| s.as_ref().to_lowercase());
+        let alternatives = alternatives.into_iter().map(|s| s.as_ref().to_lowercase());
         self.synonyms.entry(synonym).or_insert_with(Vec::new).extend(alternatives);
     }
 

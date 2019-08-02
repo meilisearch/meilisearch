@@ -52,17 +52,20 @@ where S: AsRef<str>,
     !original.map(AsRef::as_ref).eq(words.iter().map(AsRef::as_ref))
 }
 
+type Origin = usize;
+type RealLength = usize;
+
 struct FakeIntervalTree {
-    intervals: Vec<(Range<usize>, (usize, usize))>, // origin, real_length
+    intervals: Vec<(Range<usize>, (Origin, RealLength))>,
 }
 
 impl FakeIntervalTree {
-    fn new(mut intervals: Vec<(Range<usize>, (usize, usize))>) -> FakeIntervalTree {
+    fn new(mut intervals: Vec<(Range<usize>, (Origin, RealLength))>) -> FakeIntervalTree {
         intervals.sort_unstable_by_key(|(r, _)| (r.start, r.end));
         FakeIntervalTree { intervals }
     }
 
-    fn query(&self, point: usize) -> Option<(Range<usize>, (usize, usize))> {
+    fn query(&self, point: usize) -> Option<(Range<usize>, (Origin, RealLength))> {
         let element = self.intervals.binary_search_by(|(r, _)| {
             if point >= r.start {
                 if point < r.end { Equal } else { Less }
@@ -81,7 +84,7 @@ impl FakeIntervalTree {
 pub struct QueryEnhancerBuilder<'a, S> {
     query: &'a [S],
     origins: Vec<usize>,
-    real_to_origin: Vec<(Range<usize>, (usize, usize))>,
+    real_to_origin: Vec<(Range<usize>, (Origin, RealLength))>,
 }
 
 impl<S: AsRef<str>> QueryEnhancerBuilder<'_, S> {
@@ -147,8 +150,8 @@ impl QueryEnhancer {
         // query the fake interval tree with the real query index
         let (range, (origin, real_length)) =
             self.real_to_origin
-            .query(real)
-            .expect("real has never been declared");
+                .query(real)
+                .expect("real has never been declared");
 
         // if `real` is the end bound of the range
         if (range.start + real_length - 1) == real {

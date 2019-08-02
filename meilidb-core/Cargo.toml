@@ -14,7 +14,7 @@ meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
 rayon = "1.0.3"
 sdset = "0.3.2"
 serde = { version = "1.0.88", features = ["derive"] }
-slice-group-by = "0.2.4"
+slice-group-by = "0.2.6"
 zerocopy = "0.2.2"
 
 [dependencies.fst]
