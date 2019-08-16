@@ -1,7 +1,7 @@
 use std::hash::Hash;
 use std::ops::Range;
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use std::{mem, cmp, cmp::Reverse};
 
 use fst::{Streamer, IntoStreamer};
@@ -325,10 +325,11 @@ where S: Store,
         let mut matches = Vec::new();
         let mut highlights = Vec::new();
 
-        let mut query_db = std::time::Duration::default();
+        let fetching_end_time = Instant::now() + Duration::from_millis(30);
+        let mut query_db = Duration::default();
         let start = Instant::now();
 
-        for automaton in automatons {
+        'automatons: for automaton in automatons {
             let Automaton { index, is_exact, query_len, dfa, .. } = automaton;
             let mut stream = words.search(&dfa).into_stream();
 
@@ -345,6 +346,11 @@ where S: Store,
                 query_db += start.elapsed();
 
                 for di in doc_indexes.as_slice() {
+
+                    if Instant::now() > fetching_end_time {
+                        break 'automatons
+                    }
+
                     let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
                     if let Some(attribute) = attribute {
                         let match_ = TmpMatch {
