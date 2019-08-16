@@ -319,27 +319,20 @@ where S: Store,
 {
     fn query_all(&self, query: &str) -> Result<Vec<RawDocument>, S::Error> {
         let (automatons, query_enhancer) = generate_automatons(query, &self.store)?;
-        let words = self.store.words()?.as_fst();
+        let words = self.store.words()?;
         let searchables = self.searchable_attrs.as_ref();
-
-        let mut stream = {
-            let mut op_builder = fst::raw::OpBuilder::new();
-            for Automaton { dfa, .. } in &automatons {
-                let stream = words.search(dfa);
-                op_builder.push(stream);
-            }
-            op_builder.r#union()
-        };
 
         let mut matches = Vec::new();
         let mut highlights = Vec::new();
 
         let mut query_db = std::time::Duration::default();
-
         let start = Instant::now();
-        while let Some((input, indexed_values)) = stream.next() {
-            for iv in indexed_values {
-                let Automaton { index, is_exact, query_len, ref dfa, .. } = automatons[iv.index];
+
+        for automaton in automatons {
+            let Automaton { index, is_exact, query_len, dfa, .. } = automaton;
+            let mut stream = words.search(&dfa).into_stream();
+
+            while let Some(input) = stream.next() {
                 let distance = dfa.eval(input).to_u8();
                 let is_exact = is_exact && distance == 0 && input.len() == query_len;
 
@@ -374,8 +367,8 @@ where S: Store,
                 }
             }
         }
-        info!("main query all took {:.2?} (get indexes {:.2?})", start.elapsed(), query_db);
 
+        info!("main query all took {:.2?} (get indexes {:.2?})", start.elapsed(), query_db);
         info!("{} total matches to rewrite", matches.len());
 
         let start = Instant::now();
