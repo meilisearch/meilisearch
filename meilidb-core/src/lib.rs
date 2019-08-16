@@ -1,3 +1,5 @@
+#![feature(checked_duration_since)]
+
 #[cfg(test)]
 #[macro_use] extern crate assert_matches;
 

@@ -1,4 +1,4 @@
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ReorderedAttrs {
     count: usize,
     reorders: Vec<Option<u16>>,
