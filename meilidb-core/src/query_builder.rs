@@ -2,7 +2,7 @@ use std::hash::Hash;
 use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
-use std::{cmp, mem};
+use std::{mem, cmp, cmp::Reverse};
 
 use fst::{Streamer, IntoStreamer};
 use hashbrown::HashMap;
@@ -24,30 +24,38 @@ use crate::{TmpMatch, Highlight, DocumentId, Store, RawDocument, Document};
 const NGRAMS: usize = 3;
 
 struct Automaton {
+    index: usize,
+    ngram: usize,
     query_len: usize,
     is_exact: bool,
     dfa: DFA,
 }
 
 impl Automaton {
-    fn exact(query: &str) -> Automaton {
+    fn exact(index: usize, ngram: usize, query: &str) -> Automaton {
         Automaton {
+            index,
+            ngram,
             query_len: query.len(),
             is_exact: true,
             dfa: build_dfa(query),
         }
     }
 
-    fn prefix_exact(query: &str) -> Automaton {
+    fn prefix_exact(index: usize, ngram: usize, query: &str) -> Automaton {
         Automaton {
+            index,
+            ngram,
             query_len: query.len(),
             is_exact: true,
             dfa: build_prefix_dfa(query),
         }
     }
 
-    fn non_exact(query: &str) -> Automaton {
+    fn non_exact(index: usize, ngram: usize, query: &str) -> Automaton {
         Automaton {
+            index,
+            ngram,
             query_len: query.len(),
             is_exact: false,
             dfa: build_dfa(query),
@@ -82,9 +90,9 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automato
         let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
 
         let automaton = if not_prefix_dfa {
-            Automaton::exact(word)
+            Automaton::exact(automatons.len(), 1, word)
         } else {
-            Automaton::prefix_exact(word)
+            Automaton::prefix_exact(automatons.len(), 1, word)
         };
         automatons.push(automaton);
     }
@@ -127,9 +135,9 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automato
 
                         for synonym in synonyms_words {
                             let automaton = if nb_synonym_words == 1 {
-                                Automaton::exact(synonym)
+                                Automaton::exact(automatons.len(), n, synonym)
                             } else {
-                                Automaton::non_exact(synonym)
+                                Automaton::non_exact(automatons.len(), n, synonym)
                             };
                             automatons.push(automaton);
                         }
@@ -145,11 +153,16 @@ fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automato
                 let real_query_index = automatons.len();
                 enhancer_builder.declare(query_range.clone(), real_query_index, &[&normalized]);
 
-                let automaton = Automaton::exact(&normalized);
+                let automaton = Automaton::exact(automatons.len(), n, &normalized);
                 automatons.push(automaton);
             }
         }
     }
+
+    // order automatons, the most important first,
+    // we keep the original automatons at the front.
+    let original_len = query_words.len();
+    automatons[original_len..].sort_unstable_by_key(|a| (Reverse(a.is_exact), Reverse(a.ngram)));
 
     Ok((automatons, enhancer_builder.build()))
 }
@@ -326,7 +339,7 @@ where S: Store,
         let start = Instant::now();
         while let Some((input, indexed_values)) = stream.next() {
             for iv in indexed_values {
-                let Automaton { is_exact, query_len, ref dfa } = automatons[iv.index];
+                let Automaton { index, is_exact, query_len, ref dfa, .. } = automatons[iv.index];
                 let distance = dfa.eval(input).to_u8();
                 let is_exact = is_exact && distance == 0 && input.len() == query_len;
 
@@ -342,7 +355,7 @@ where S: Store,
                     let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
                     if let Some(attribute) = attribute {
                         let match_ = TmpMatch {
-                            query_index: iv.index as u32,
+                            query_index: index as u32,
                             distance,
                             attribute,
                             word_index: di.word_index,
