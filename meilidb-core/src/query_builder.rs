@@ -239,6 +239,12 @@ fn multiword_rewrite_matches(
     // for each attribute of each document
     for same_document_attribute in matches.linear_group_by_key(|(id, m)| (*id, m.attribute)) {
 
+        let elapsed = start.elapsed();
+        if elapsed > Duration::from_millis(10) {
+            info!("abort multiword rewrite after {:.2?}", elapsed);
+            break;
+        }
+
         // padding will only be applied
         // to word indices in the same attribute
         let mut padding = 0;
