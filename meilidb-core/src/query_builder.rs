@@ -29,17 +29,27 @@ struct Automaton {
     ngram: usize,
     query_len: usize,
     is_exact: bool,
-    dfa: DFA,
+    is_prefix: bool,
+    query: String,
 }
 
 impl Automaton {
+    fn dfa(&self) -> DFA {
+        if self.is_prefix {
+            build_prefix_dfa(&self.query)
+        } else {
+            build_dfa(&self.query)
+        }
+    }
+
     fn exact(index: usize, ngram: usize, query: &str) -> Automaton {
         Automaton {
             index,
             ngram,
             query_len: query.len(),
             is_exact: true,
-            dfa: build_dfa(query),
+            is_prefix: false,
+            query: query.to_string(),
         }
     }
 
@@ -49,7 +59,8 @@ impl Automaton {
             ngram,
             query_len: query.len(),
             is_exact: true,
-            dfa: build_prefix_dfa(query),
+            is_prefix: true,
+            query: query.to_string(),
         }
     }
 
@@ -59,7 +70,8 @@ impl Automaton {
             ngram,
             query_len: query.len(),
             is_exact: false,
-            dfa: build_dfa(query),
+            is_prefix: false,
+            query: query.to_string(),
         }
     }
 }
@@ -344,7 +356,8 @@ where S: Store + Sync,
                     .par_bridge()
                     .try_for_each_with((sender, store, searchables), |data, automaton| {
                         let (sender, store, searchables) = data;
-                        let Automaton { index, is_exact, query_len, dfa, .. } = automaton;
+                        let Automaton { index, is_exact, query_len, .. } = automaton;
+                        let dfa = automaton.dfa();
 
                         let words = store.words().map_err(Error::StoreError)?;
                         let mut stream = words.search(&dfa).into_stream();
