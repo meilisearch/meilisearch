@@ -6,19 +6,19 @@ edition = "2018"
 
 [dependencies]
 arc-swap = "0.3.11"
-bincode = "1.1.2"
+bincode = "1.1.4"
 deunicode = "1.0.0"
-hashbrown = { version = "0.2.2", features = ["serde"] }
+hashbrown = { version = "0.6.0", features = ["serde"] }
 meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
 meilidb-schema = { path = "../meilidb-schema", version = "0.1.0" }
 meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
 ordered-float = { version = "1.0.2", features = ["serde"] }
-rocksdb = { version = "0.12.2", default-features = false }
 sdset = "0.3.2"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_json = "1.0.40"
 siphasher = "0.3.0"
-zerocopy = "0.2.2"
+rocksdb = { version = "0.12.3", default-features = false }
+zerocopy = "0.2.8"
 
 [dependencies.rmp-serde]
 git = "https://github.com/3Hren/msgpack-rust.git"
