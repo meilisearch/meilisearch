@@ -85,7 +85,7 @@ fn index(
     synonyms: Vec<Synonym>,
 ) -> Result<Database, Box<dyn Error>>
 {
-    let database = Database::start_default(database_path)?;
+    let database = Database::open(database_path)?;
 
     let mut wtr = csv::Writer::from_path("./stats.csv").unwrap();
     wtr.write_record(&["NumberOfDocuments", "DiskUsed", "MemoryUsed"])?;

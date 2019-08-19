@@ -5,8 +5,8 @@ use fst::{SetBuilder, set::OpBuilder};
 use meilidb_core::normalize_str;
 use sdset::SetBuf;
 
-use crate::database::index::InnerIndex;
 use super::{Error, Index};
+use super::index::Cache;
 
 pub struct SynonymsAddition<'a> {
     inner: &'a Index,
@@ -29,9 +29,9 @@ impl<'a> SynonymsAddition<'a> {
     }
 
     pub fn finalize(self) -> Result<(), Error> {
-        let lease_inner = self.inner.lease_inner();
-        let synonyms = &lease_inner.raw.synonyms;
-        let main = &lease_inner.raw.main;
+        let ref_index = self.inner.as_ref();
+        let synonyms = ref_index.synonyms_index;
+        let main = ref_index.main_index;
 
         let mut synonyms_builder = SetBuilder::memory();
 
@@ -72,15 +72,14 @@ impl<'a> SynonymsAddition<'a> {
         main.set_synonyms_set(&synonyms)?;
 
         // update the "consistent" view of the Index
+        let cache = ref_index.cache;
         let words = Arc::new(main.words_set()?.unwrap_or_default());
-        let ranked_map = lease_inner.ranked_map.clone();
+        let ranked_map = cache.ranked_map.clone();
         let synonyms = Arc::new(synonyms);
-        let schema = lease_inner.schema.clone();
-        let raw = lease_inner.raw.clone();
-        lease_inner.raw.compact();
+        let schema = cache.schema.clone();
 
-        let inner = InnerIndex { words, synonyms, schema, ranked_map, raw };
-        self.inner.0.store(Arc::new(inner));
+        let cache = Cache { words, synonyms, schema, ranked_map };
+        self.inner.cache.store(Arc::new(cache));
 
         Ok(())
     }

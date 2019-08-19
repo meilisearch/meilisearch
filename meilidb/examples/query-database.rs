@@ -143,7 +143,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::from_args();
 
     let start = Instant::now();
-    let database = Database::start_default(&opt.database_path)?;
+    let database = Database::open(&opt.database_path)?;
 
     let index = database.open_index("test")?.unwrap();
     let schema = index.schema();

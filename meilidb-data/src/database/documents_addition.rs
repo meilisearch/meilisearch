@@ -9,7 +9,8 @@ use crate::indexer::Indexer;
 use crate::serde::{extract_document_id, Serializer, RamDocumentStore};
 use crate::RankedMap;
 
-use super::{Error, Index, InnerIndex, DocumentsDeletion};
+use super::{Error, Index, DocumentsDeletion};
+use super::index::Cache;
 
 pub struct DocumentsAddition<'a> {
     inner: &'a Index,
@@ -33,7 +34,7 @@ impl<'a> DocumentsAddition<'a> {
     pub fn update_document<D>(&mut self, document: D) -> Result<(), Error>
     where D: serde::Serialize,
     {
-        let schema = &self.inner.lease_inner().schema;
+        let schema = &self.inner.schema();
         let identifier = schema.identifier_name();
 
         let document_id = match extract_document_id(identifier, &document)? {
@@ -59,11 +60,11 @@ impl<'a> DocumentsAddition<'a> {
     }
 
     pub fn finalize(self) -> Result<(), Error> {
-        let lease_inner = self.inner.lease_inner();
-        let docs_words = &lease_inner.raw.docs_words;
-        let documents = &lease_inner.raw.documents;
-        let main = &lease_inner.raw.main;
-        let words = &lease_inner.raw.words;
+        let ref_index = self.inner.as_ref();
+        let docs_words = ref_index.docs_words_index;
+        let documents = ref_index.documents_index;
+        let main = ref_index.main_index;
+        let words = ref_index.words_index;
 
         // 1. remove the previous documents match indexes
         let mut documents_deletion = DocumentsDeletion::new(self.inner, self.ranked_map.clone());
@@ -119,15 +120,14 @@ impl<'a> DocumentsAddition<'a> {
         main.set_ranked_map(&self.ranked_map)?;
 
         // update the "consistent" view of the Index
+        let cache = ref_index.cache;
         let words = Arc::new(words);
         let ranked_map = self.ranked_map;
-        let synonyms = lease_inner.synonyms.clone();
-        let schema = lease_inner.schema.clone();
-        let raw = lease_inner.raw.clone();
-        lease_inner.raw.compact();
+        let synonyms = cache.synonyms.clone();
+        let schema = cache.schema.clone();
 
-        let inner = InnerIndex { words, synonyms, schema, ranked_map, raw };
-        self.inner.0.store(Arc::new(inner));
+        let cache = Cache { words, synonyms, schema, ranked_map };
+        self.inner.cache.store(Arc::new(cache));
 
         Ok(())
     }

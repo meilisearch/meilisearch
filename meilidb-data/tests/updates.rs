@@ -12,7 +12,7 @@ fn simple_schema() -> Schema {
 #[test]
 fn insert_delete_document() {
     let tmp_dir = tempfile::tempdir().unwrap();
-    let database = Database::start_default(&tmp_dir).unwrap();
+    let database = Database::open(&tmp_dir).unwrap();
 
     let schema = simple_schema();
     let index = database.create_index("hello", schema).unwrap();
@@ -38,7 +38,7 @@ fn insert_delete_document() {
 #[test]
 fn replace_document() {
     let tmp_dir = tempfile::tempdir().unwrap();
-    let database = Database::start_default(&tmp_dir).unwrap();
+    let database = Database::open(&tmp_dir).unwrap();
 
     let schema = simple_schema();
     let index = database.create_index("hello", schema).unwrap();
