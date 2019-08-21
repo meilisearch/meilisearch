@@ -12,7 +12,28 @@ use crate::RankedMap;
 use super::{Error, Index, DocumentsDeletion};
 use super::index::Cache;
 
-pub struct DocumentsAddition<'a> {
+pub struct DocumentsAddition<'a, D> {
+    index: &'a Index,
+    documents: Vec<D>,
+}
+
+impl<'a, D> DocumentsAddition<'a, D> {
+    pub fn new(index: &'a Index) -> DocumentsAddition<'a, D> {
+        DocumentsAddition { index, documents: Vec::new() }
+    }
+
+    pub fn update_document(&mut self, document: D) {
+        self.documents.push(document);
+    }
+
+    pub fn finalize(self) -> Result<u64, Error>
+    where D: serde::Serialize
+    {
+        self.index.push_documents_addition(self.documents)
+    }
+}
+
+pub struct FinalDocumentsAddition<'a> {
     inner: &'a Index,
     document_ids: HashSet<DocumentId>,
     document_store: RamDocumentStore,
@@ -20,9 +41,9 @@ pub struct DocumentsAddition<'a> {
     ranked_map: RankedMap,
 }
 
-impl<'a> DocumentsAddition<'a> {
-    pub fn new(inner: &'a Index, ranked_map: RankedMap) -> DocumentsAddition<'a> {
-        DocumentsAddition {
+impl<'a> FinalDocumentsAddition<'a> {
+    pub fn new(inner: &'a Index, ranked_map: RankedMap) -> FinalDocumentsAddition<'a> {
+        FinalDocumentsAddition {
             inner,
             document_ids: HashSet::new(),
             document_store: RamDocumentStore::new(),

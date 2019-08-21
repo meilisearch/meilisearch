@@ -18,7 +18,7 @@ sdset = "0.3.2"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_json = "1.0.40"
 siphasher = "0.3.0"
-sled = "0.25.0"
+sled = "0.26.0"
 zerocopy = "0.2.8"
 
 [dependencies.rmp-serde]
@@ -30,4 +30,4 @@ git = "https://github.com/Kerollmops/fst.git"
 branch = "arc-byte-slice"
 
 [dev-dependencies]
-tempfile = "3.0.7"
+tempfile = "3.1.0"

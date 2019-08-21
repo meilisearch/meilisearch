@@ -1,12 +1,15 @@
 use std::collections::HashSet;
+use std::convert::TryInto;
 use std::sync::Arc;
+use std::thread;
 
 use arc_swap::{ArcSwap, Guard};
 use meilidb_core::criterion::Criteria;
 use meilidb_core::{DocIndex, Store, DocumentId, QueryBuilder};
 use meilidb_schema::Schema;
 use sdset::SetBuf;
-use serde::de;
+use serde::{de, Serialize, Deserialize};
+use sled::Transactional;
 
 use crate::ranked_map::RankedMap;
 use crate::serde::{Deserializer, DeserializerError};
@@ -18,11 +21,11 @@ use self::docs_words_index::DocsWordsIndex;
 use self::documents_index::DocumentsIndex;
 use self::main_index::MainIndex;
 use self::synonyms_index::SynonymsIndex;
-use self::updates_index::UpdatesIndex;
 use self::words_index::WordsIndex;
 
 use super::{
-    DocumentsAddition, DocumentsDeletion,
+    DocumentsAddition, FinalDocumentsAddition,
+    DocumentsDeletion,
     SynonymsAddition, SynonymsDeletion,
 };
 
@@ -31,8 +34,82 @@ mod docs_words_index;
 mod documents_index;
 mod main_index;
 mod synonyms_index;
-mod updates_index;
 mod words_index;
+
+fn event_is_set(event: &sled::Event) -> bool {
+    match event {
+        sled::Event::Set(_, _) => true,
+        _ => false,
+    }
+}
+
+#[derive(Deserialize)]
+enum UpdateOwned {
+    DocumentsAddition(Vec<serde_json::Value>),
+    DocumentsDeletion( () /*DocumentsDeletion*/),
+    SynonymsAddition( () /*SynonymsAddition*/),
+    SynonymsDeletion( () /*SynonymsDeletion*/),
+}
+
+#[derive(Serialize)]
+enum Update<D: serde::Serialize> {
+    DocumentsAddition(Vec<D>),
+    DocumentsDeletion( () /*DocumentsDeletion*/),
+    SynonymsAddition( () /*SynonymsAddition*/),
+    SynonymsDeletion( () /*SynonymsDeletion*/),
+}
+
+fn spawn_update_system(index: Index) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        loop {
+            let subscription = index.updates_index.watch_prefix(vec![]);
+            while let Some(result) = index.updates_index.iter().next() {
+                let (key, _) = result.unwrap();
+
+                let updates = &index.updates_index;
+                let results = &index.updates_results_index;
+                (updates, results).transaction(|(updates, results)| {
+                    let update = updates.remove(&key)?.unwrap();
+                    let array_id = key.as_ref().try_into().unwrap();
+                    let id = u64::from_be_bytes(array_id);
+
+                    // this is an emulation of the try block (#31436)
+                    let result: Result<(), Error> = (|| {
+                        match bincode::deserialize(&update)? {
+                            UpdateOwned::DocumentsAddition(documents) => {
+                                let ranked_map = index.cache.load().ranked_map.clone();
+                                let mut addition = FinalDocumentsAddition::new(&index, ranked_map);
+                                for document in documents {
+                                    addition.update_document(document)?;
+                                }
+                                addition.finalize()?;
+                            },
+                            UpdateOwned::DocumentsDeletion(_) => {
+                                // ...
+                            },
+                            UpdateOwned::SynonymsAddition(_) => {
+                                // ...
+                            },
+                            UpdateOwned::SynonymsDeletion(_) => {
+                                // ...
+                            },
+                        }
+                        Ok(())
+                    })();
+
+                    let result = result.map_err(|e| e.to_string());
+                    let value = bincode::serialize(&result).unwrap();
+                    results.insert(&array_id, value)
+                })
+                .unwrap();
+            }
+
+            // this subscription is just used to block
+            // the loop until a new update is inserted
+            subscription.filter(event_is_set).next();
+        }
+    })
+}
 
 #[derive(Copy, Clone)]
 pub struct IndexStats {
@@ -52,7 +129,11 @@ pub struct Index {
     docs_words_index: DocsWordsIndex,
     documents_index: DocumentsIndex,
     custom_settings_index: CustomSettingsIndex,
-    updates_index: UpdatesIndex,
+
+    // used by the update system
+    db: sled::Db,
+    updates_index: Arc<sled::Tree>,
+    updates_results_index: Arc<sled::Tree>,
 }
 
 pub(crate) struct Cache {
@@ -63,64 +144,23 @@ pub(crate) struct Cache {
 }
 
 impl Index {
-    pub fn new(db: &sled::Db, name: &str) -> Result<Index, Error> {
-        let main_index = db.open_tree(name).map(MainIndex)?;
-        let synonyms_index = db.open_tree(format!("{}-synonyms", name)).map(SynonymsIndex)?;
-        let words_index = db.open_tree(format!("{}-words", name)).map(WordsIndex)?;
-        let docs_words_index = db.open_tree(format!("{}-docs-words", name)).map(DocsWordsIndex)?;
-        let documents_index = db.open_tree(format!("{}-documents", name)).map(DocumentsIndex)?;
-        let custom_settings_index = db.open_tree(format!("{}-custom", name)).map(CustomSettingsIndex)?;
-
-        let updates = db.open_tree(format!("{}-updates", name))?;
-        let updates_results = db.open_tree(format!("{}-updates-results", name))?;
-        let updates_index = UpdatesIndex::new(db.clone(), updates, updates_results);
-
-        let words = match main_index.words_set()? {
-            Some(words) => Arc::new(words),
-            None => Arc::new(fst::Set::default()),
-        };
-
-        let synonyms = match main_index.synonyms_set()? {
-            Some(synonyms) => Arc::new(synonyms),
-            None => Arc::new(fst::Set::default()),
-        };
-
-        let schema = match main_index.schema()? {
-            Some(schema) => schema,
-            None => return Err(Error::SchemaMissing),
-        };
-
-        let ranked_map = match main_index.ranked_map()? {
-            Some(map) => map,
-            None => RankedMap::default(),
-        };
-
-        let cache = Cache { words, synonyms, schema, ranked_map };
-        let cache = ArcSwap::from_pointee(cache);
-
-        Ok(Index {
-            cache,
-            main_index,
-            synonyms_index,
-            words_index,
-            docs_words_index,
-            documents_index,
-            custom_settings_index,
-            updates_index,
-        })
+    pub fn new(db: sled::Db, name: &str) -> Result<Index, Error> {
+        Index::new_raw(db, name, None)
     }
 
-    pub fn with_schema(db: &sled::Db, name: &str, schema: Schema) -> Result<Index, Error> {
+    pub fn with_schema(db: sled::Db, name: &str, schema: Schema) -> Result<Index, Error> {
+        Index::new_raw(db, name, Some(schema))
+    }
+
+    fn new_raw(db: sled::Db, name: &str, schema: Option<Schema>) -> Result<Index, Error> {
         let main_index = db.open_tree(name).map(MainIndex)?;
         let synonyms_index = db.open_tree(format!("{}-synonyms", name)).map(SynonymsIndex)?;
         let words_index = db.open_tree(format!("{}-words", name)).map(WordsIndex)?;
         let docs_words_index = db.open_tree(format!("{}-docs-words", name)).map(DocsWordsIndex)?;
         let documents_index = db.open_tree(format!("{}-documents", name)).map(DocumentsIndex)?;
         let custom_settings_index = db.open_tree(format!("{}-custom", name)).map(CustomSettingsIndex)?;
-
-        let updates = db.open_tree(format!("{}-updates", name))?;
-        let updates_results = db.open_tree(format!("{}-updates-results", name))?;
-        let updates_index = UpdatesIndex::new(db.clone(), updates, updates_results);
+        let updates_index = db.open_tree(format!("{}-updates", name))?;
+        let updates_results_index = db.open_tree(format!("{}-updates-results", name))?;
 
         let words = match main_index.words_set()? {
             Some(words) => Arc::new(words),
@@ -132,12 +172,18 @@ impl Index {
             None => Arc::new(fst::Set::default()),
         };
 
-        match main_index.schema()? {
-            Some(current) => if current != schema {
+        let schema = match (schema, main_index.schema()?) {
+            (Some(ref expected), Some(ref current)) if current != expected => {
                 return Err(Error::SchemaDiffer)
             },
-            None => main_index.set_schema(&schema)?,
-        }
+            (Some(expected), Some(_)) => expected,
+            (Some(expected), None) => {
+                main_index.set_schema(&expected)?;
+                expected
+            },
+            (None, Some(current)) => current,
+            (None, None) => return Err(Error::SchemaMissing),
+        };
 
         let ranked_map = match main_index.ranked_map()? {
             Some(map) => map,
@@ -147,7 +193,7 @@ impl Index {
         let cache = Cache { words, synonyms, schema, ranked_map };
         let cache = ArcSwap::from_pointee(cache);
 
-        Ok(Index {
+        let index = Index {
             cache,
             main_index,
             synonyms_index,
@@ -155,8 +201,14 @@ impl Index {
             docs_words_index,
             documents_index,
             custom_settings_index,
+            db,
             updates_index,
-        })
+            updates_results_index,
+        };
+
+        let _handle = spawn_update_system(index.clone());
+
+        Ok(index)
     }
 
     pub fn stats(&self) -> sled::Result<IndexStats> {
@@ -202,9 +254,8 @@ impl Index {
         self.custom_settings_index.clone()
     }
 
-    pub fn documents_addition(&self) -> DocumentsAddition {
-        let ranked_map = self.cache.load().ranked_map.clone();
-        DocumentsAddition::new(self, ranked_map)
+    pub fn documents_addition<D>(&self) -> DocumentsAddition<D> {
+        DocumentsAddition::new(self)
     }
 
     pub fn documents_deletion(&self) -> DocumentsDeletion {
@@ -242,6 +293,40 @@ impl Index {
         // TODO: currently we return an error if all document fields are missing,
         //       returning None would have been better
         T::deserialize(&mut deserializer).map(Some)
+    }
+}
+
+impl Index {
+    pub(crate) fn push_documents_addition<D>(&self, addition: Vec<D>) -> Result<u64, Error>
+    where D: serde::Serialize
+    {
+        let addition = Update::DocumentsAddition(addition);
+        let update = bincode::serialize(&addition)?;
+        self.raw_push_update(update)
+    }
+
+    pub(crate) fn push_documents_deletion(&self, deletion: DocumentsDeletion) -> Result<u64, Error> {
+        let update = bincode::serialize(&())?;
+        self.raw_push_update(update)
+    }
+
+    pub(crate) fn push_synonyms_addition(&self, addition: SynonymsAddition) -> Result<u64, Error> {
+        let update = bincode::serialize(&())?;
+        self.raw_push_update(update)
+    }
+
+    pub(crate) fn push_synonyms_deletion(&self, deletion: SynonymsDeletion) -> Result<u64, Error> {
+        let update = bincode::serialize(&())?;
+        self.raw_push_update(update)
+    }
+
+    fn raw_push_update(&self, raw_update: Vec<u8>) -> Result<u64, Error> {
+        let update_id = self.db.generate_id()?;
+        let update_id_array = update_id.to_be_bytes();
+
+        self.updates_index.insert(update_id_array, raw_update)?;
+
+        Ok(update_id)
     }
 }
 

@@ -15,7 +15,7 @@ mod synonyms_deletion;
 pub use self::error::Error;
 pub use self::index::{Index, CustomSettingsIndex};
 
-use self::documents_addition::DocumentsAddition;
+use self::documents_addition::{DocumentsAddition, FinalDocumentsAddition};
 use self::documents_deletion::DocumentsDeletion;
 use self::synonyms_addition::SynonymsAddition;
 use self::synonyms_deletion::SynonymsDeletion;
@@ -75,7 +75,7 @@ impl Database {
                     return Ok(None)
                 }
 
-                let index = Index::new(&self.inner, name)?;
+                let index = Index::new(self.inner.clone(), name)?;
                 vacant.insert(index).clone()
             },
         };
@@ -91,7 +91,7 @@ impl Database {
                 occupied.get().clone()
             },
             Entry::Vacant(vacant) => {
-                let index = Index::with_schema(&self.inner, name, schema)?;
+                let index = Index::with_schema(self.inner.clone(), name, schema)?;
 
                 let mut indexes = self.indexes()?;
                 indexes.insert(name.to_string());

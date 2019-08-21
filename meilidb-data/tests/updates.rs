@@ -20,7 +20,7 @@ fn insert_delete_document() {
     let doc1 = json!({ "objectId": 123, "title": "hello" });
 
     let mut addition = index.documents_addition();
-    addition.update_document(&doc1).unwrap();
+    addition.update_document(&doc1);
     addition.finalize().unwrap();
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
@@ -28,7 +28,7 @@ fn insert_delete_document() {
     assert_eq!(index.document(None, docs[0].id).unwrap().as_ref(), Some(&doc1));
 
     let mut deletion = index.documents_deletion();
-    deletion.delete_document(&doc1).unwrap();
+    deletion.delete_document(&doc1);
     deletion.finalize().unwrap();
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
@@ -47,7 +47,7 @@ fn replace_document() {
     let doc2 = json!({ "objectId": 123, "title": "coucou" });
 
     let mut addition = index.documents_addition();
-    addition.update_document(&doc1).unwrap();
+    addition.update_document(&doc1);
     addition.finalize().unwrap();
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
@@ -55,7 +55,7 @@ fn replace_document() {
     assert_eq!(index.document(None, docs[0].id).unwrap().as_ref(), Some(&doc1));
 
     let mut deletion = index.documents_addition();
-    deletion.update_document(&doc2).unwrap();
+    deletion.update_document(&doc2);
     deletion.finalize().unwrap();
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
