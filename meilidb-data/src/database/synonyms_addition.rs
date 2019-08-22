@@ -9,13 +9,46 @@ use super::{Error, Index};
 use super::index::Cache;
 
 pub struct SynonymsAddition<'a> {
-    inner: &'a Index,
+    index: &'a Index,
     synonyms: BTreeMap<String, Vec<String>>,
 }
 
 impl<'a> SynonymsAddition<'a> {
-    pub fn new(inner: &'a Index) -> SynonymsAddition<'a> {
-        SynonymsAddition { inner, synonyms: BTreeMap::new() }
+    pub fn new(index: &'a Index) -> SynonymsAddition<'a> {
+        SynonymsAddition { index, synonyms: BTreeMap::new() }
+    }
+
+    pub fn add_synonym<S, T, I>(&mut self, synonym: S, alternatives: I)
+    where S: AsRef<str>,
+          T: AsRef<str>,
+          I: Iterator<Item=T>,
+    {
+        let synonym = normalize_str(synonym.as_ref());
+        let alternatives = alternatives.map(|s| s.as_ref().to_lowercase());
+        self.synonyms.entry(synonym).or_insert_with(Vec::new).extend(alternatives);
+    }
+
+    pub fn finalize(self) -> Result<u64, Error> {
+        self.index.push_synonyms_addition(self.synonyms)
+    }
+}
+
+pub struct FinalSynonymsAddition<'a> {
+    inner: &'a Index,
+    synonyms: BTreeMap<String, Vec<String>>,
+}
+
+impl<'a> FinalSynonymsAddition<'a> {
+    pub fn new(inner: &'a Index) -> FinalSynonymsAddition<'a> {
+        FinalSynonymsAddition { inner, synonyms: BTreeMap::new() }
+    }
+
+    pub fn from_map(
+        inner: &'a Index,
+        synonyms: BTreeMap<String, Vec<String>>,
+    ) -> FinalSynonymsAddition<'a>
+    {
+        FinalSynonymsAddition { inner, synonyms }
     }
 
     pub fn add_synonym<S, T, I>(&mut self, synonym: S, alternatives: I)

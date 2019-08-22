@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, BTreeMap};
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::thread;
@@ -26,7 +26,7 @@ use self::words_index::WordsIndex;
 use super::{
     DocumentsAddition, FinalDocumentsAddition,
     DocumentsDeletion, FinalDocumentsDeletion,
-    SynonymsAddition,
+    SynonymsAddition, FinalSynonymsAddition,
     SynonymsDeletion,
 };
 
@@ -48,7 +48,7 @@ fn event_is_set(event: &sled::Event) -> bool {
 enum UpdateOwned {
     DocumentsAddition(Vec<serde_json::Value>),
     DocumentsDeletion(Vec<DocumentId>),
-    SynonymsAddition( () /*SynonymsAddition*/),
+    SynonymsAddition(BTreeMap<String, Vec<String>>),
     SynonymsDeletion( () /*SynonymsDeletion*/),
 }
 
@@ -56,7 +56,7 @@ enum UpdateOwned {
 enum Update<D: serde::Serialize> {
     DocumentsAddition(Vec<D>),
     DocumentsDeletion(Vec<DocumentId>),
-    SynonymsAddition( () /*SynonymsAddition*/),
+    SynonymsAddition(BTreeMap<String, Vec<String>>),
     SynonymsDeletion( () /*SynonymsDeletion*/),
 }
 
@@ -91,8 +91,9 @@ fn spawn_update_system(index: Index) -> thread::JoinHandle<()> {
                                 deletion.extend(documents);
                                 deletion.finalize()?;
                             },
-                            UpdateOwned::SynonymsAddition(_) => {
-                                // ...
+                            UpdateOwned::SynonymsAddition(synonyms) => {
+                                let addition = FinalSynonymsAddition::from_map(&index, synonyms);
+                                addition.finalize()?;
                             },
                             UpdateOwned::SynonymsDeletion(_) => {
                                 // ...
@@ -313,8 +314,12 @@ impl Index {
         self.raw_push_update(update)
     }
 
-    pub(crate) fn push_synonyms_addition(&self, addition: SynonymsAddition) -> Result<u64, Error> {
-        let update = bincode::serialize(&())?;
+    pub(crate) fn push_synonyms_addition(
+        &self,
+        addition: BTreeMap<String, Vec<String>>,
+    ) -> Result<u64, Error>
+    {
+        let update = bincode::serialize(&addition)?;
         self.raw_push_update(update)
     }
 
