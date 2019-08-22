@@ -10,13 +10,13 @@ use super::{Error, Index};
 use super::index::Cache;
 
 pub struct SynonymsDeletion<'a> {
-    inner: &'a Index,
+    index: &'a Index,
     synonyms: BTreeMap<String, Option<Vec<String>>>,
 }
 
 impl<'a> SynonymsDeletion<'a> {
-    pub fn new(inner: &'a Index) -> SynonymsDeletion<'a> {
-        SynonymsDeletion { inner, synonyms: BTreeMap::new() }
+    pub fn new(index: &'a Index) -> SynonymsDeletion<'a> {
+        SynonymsDeletion { index, synonyms: BTreeMap::new() }
     }
 
     pub fn delete_all_alternatives_of<S: AsRef<str>>(&mut self, synonym: S) {
@@ -36,6 +36,29 @@ impl<'a> SynonymsDeletion<'a> {
             Some(v) => v.extend(alternatives),
             None => *value = Some(Vec::from_iter(alternatives)),
         }
+    }
+
+    pub fn finalize(self) -> Result<u64, Error> {
+        self.index.push_synonyms_deletion(self.synonyms)
+    }
+}
+
+pub struct FinalSynonymsDeletion<'a> {
+    inner: &'a Index,
+    synonyms: BTreeMap<String, Option<Vec<String>>>,
+}
+
+impl<'a> FinalSynonymsDeletion<'a> {
+    pub fn new(inner: &'a Index) -> FinalSynonymsDeletion<'a> {
+        FinalSynonymsDeletion { inner, synonyms: BTreeMap::new() }
+    }
+
+    pub fn from_map(
+        inner: &'a Index,
+        synonyms: BTreeMap<String, Option<Vec<String>>>,
+    ) -> FinalSynonymsDeletion<'a>
+    {
+        FinalSynonymsDeletion { inner, synonyms }
     }
 
     pub fn finalize(self) -> Result<(), Error> {

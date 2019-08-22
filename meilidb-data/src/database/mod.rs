@@ -18,7 +18,7 @@ pub use self::index::{Index, CustomSettingsIndex};
 use self::documents_addition::{DocumentsAddition, FinalDocumentsAddition};
 use self::documents_deletion::{DocumentsDeletion, FinalDocumentsDeletion};
 use self::synonyms_addition::{SynonymsAddition, FinalSynonymsAddition};
-use self::synonyms_deletion::SynonymsDeletion;
+use self::synonyms_deletion::{SynonymsDeletion, FinalSynonymsDeletion};
 
 fn load_indexes(tree: &sled::Tree) -> Result<HashSet<String>, Error> {
     match tree.get("indexes")? {

@@ -27,7 +27,7 @@ use super::{
     DocumentsAddition, FinalDocumentsAddition,
     DocumentsDeletion, FinalDocumentsDeletion,
     SynonymsAddition, FinalSynonymsAddition,
-    SynonymsDeletion,
+    SynonymsDeletion, FinalSynonymsDeletion,
 };
 
 mod custom_settings_index;
@@ -49,7 +49,7 @@ enum UpdateOwned {
     DocumentsAddition(Vec<serde_json::Value>),
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition(BTreeMap<String, Vec<String>>),
-    SynonymsDeletion( () /*SynonymsDeletion*/),
+    SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
 }
 
 #[derive(Serialize)]
@@ -57,7 +57,7 @@ enum Update<D: serde::Serialize> {
     DocumentsAddition(Vec<D>),
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition(BTreeMap<String, Vec<String>>),
-    SynonymsDeletion( () /*SynonymsDeletion*/),
+    SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
 }
 
 fn spawn_update_system(index: Index) -> thread::JoinHandle<()> {
@@ -95,8 +95,9 @@ fn spawn_update_system(index: Index) -> thread::JoinHandle<()> {
                                 let addition = FinalSynonymsAddition::from_map(&index, synonyms);
                                 addition.finalize()?;
                             },
-                            UpdateOwned::SynonymsDeletion(_) => {
-                                // ...
+                            UpdateOwned::SynonymsDeletion(synonyms) => {
+                                let deletion = FinalSynonymsDeletion::from_map(&index, synonyms);
+                                deletion.finalize()?;
                             },
                         }
                         Ok(())
@@ -323,8 +324,12 @@ impl Index {
         self.raw_push_update(update)
     }
 
-    pub(crate) fn push_synonyms_deletion(&self, deletion: SynonymsDeletion) -> Result<u64, Error> {
-        let update = bincode::serialize(&())?;
+    pub(crate) fn push_synonyms_deletion(
+        &self,
+        deletion: BTreeMap<String, Option<Vec<String>>>,
+    ) -> Result<u64, Error>
+    {
+        let update = bincode::serialize(&deletion)?;
         self.raw_push_update(update)
     }
 
