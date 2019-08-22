@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use meilidb_core::DocumentId;
-use super::Error;
+use crate::database::Error;
 
 #[derive(Clone)]
 pub struct DocsWordsIndex(pub Arc<sled::Tree>);

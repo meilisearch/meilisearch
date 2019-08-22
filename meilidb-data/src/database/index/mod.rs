@@ -13,8 +13,6 @@ use sled::Transactional;
 use crate::ranked_map::RankedMap;
 use crate::serde::{Deserializer, DeserializerError};
 
-use super::Error;
-
 pub use self::custom_settings_index::CustomSettingsIndex;
 use self::docs_words_index::DocsWordsIndex;
 use self::documents_index::DocumentsIndex;
@@ -22,7 +20,8 @@ use self::main_index::MainIndex;
 use self::synonyms_index::SynonymsIndex;
 use self::words_index::WordsIndex;
 
-use super::{
+use crate::database::{
+    Error,
     DocumentsAddition, DocumentsDeletion,
     SynonymsAddition, SynonymsDeletion,
     apply_documents_addition, apply_documents_deletion,

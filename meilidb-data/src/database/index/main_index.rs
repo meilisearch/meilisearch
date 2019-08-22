@@ -1,8 +1,9 @@
 use std::sync::Arc;
-use meilidb_schema::Schema;
-use crate::ranked_map::RankedMap;
 
-use super::Error;
+use meilidb_schema::Schema;
+
+use crate::ranked_map::RankedMap;
+use crate::database::Error;
 
 const SCHEMA_KEY:     &str = "schema";
 const WORDS_KEY:      &str = "words";

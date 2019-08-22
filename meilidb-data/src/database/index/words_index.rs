@@ -1,4 +1,5 @@
 use std::sync::Arc;
+
 use meilidb_core::DocIndex;
 use sdset::{Set, SetBuf};
 use zerocopy::{LayoutVerified, AsBytes};

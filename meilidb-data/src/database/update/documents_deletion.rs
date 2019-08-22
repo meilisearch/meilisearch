@@ -8,8 +8,7 @@ use sdset::{SetBuf, SetOperation, duo::DifferenceByKey};
 use crate::RankedMap;
 use crate::serde::extract_document_id;
 
-use super::{Index, Error};
-use super::index::Cache;
+use crate::database::{Index, Error, index::Cache};
 
 pub struct DocumentsDeletion<'a> {
     index: &'a Index,

@@ -9,8 +9,7 @@ use crate::indexer::Indexer;
 use crate::serde::{extract_document_id, Serializer, RamDocumentStore};
 use crate::RankedMap;
 
-use super::{Error, Index, apply_documents_deletion};
-use super::index::Cache;
+use crate::database::{Error, Index, index::Cache, apply_documents_deletion};
 
 pub struct DocumentsAddition<'a, D> {
     index: &'a Index,

@@ -6,8 +6,7 @@ use fst::{SetBuilder, set::OpBuilder};
 use meilidb_core::normalize_str;
 use sdset::SetBuf;
 
-use super::{Error, Index};
-use super::index::Cache;
+use crate::database::{Error, Index, index::Cache};
 
 pub struct SynonymsDeletion<'a> {
     index: &'a Index,

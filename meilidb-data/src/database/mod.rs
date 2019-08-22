@@ -6,24 +6,20 @@ use meilidb_schema::Schema;
 
 mod error;
 mod index;
-
-mod documents_addition;
-mod documents_deletion;
-mod synonyms_addition;
-mod synonyms_deletion;
+mod update;
 
 pub use self::error::Error;
 pub use self::index::{Index, CustomSettingsIndex};
 
-pub use self::documents_addition::DocumentsAddition;
-pub use self::documents_deletion::DocumentsDeletion;
-pub use self::synonyms_addition::SynonymsAddition;
-pub use self::synonyms_deletion::SynonymsDeletion;
+pub use self::update::DocumentsAddition;
+pub use self::update::DocumentsDeletion;
+pub use self::update::SynonymsAddition;
+pub use self::update::SynonymsDeletion;
 
-use self::documents_addition::apply_documents_addition;
-use self::documents_deletion::apply_documents_deletion;
-use self::synonyms_addition::apply_synonyms_addition;
-use self::synonyms_deletion::apply_synonyms_deletion;
+use self::update::apply_documents_addition;
+use self::update::apply_documents_deletion;
+use self::update::apply_synonyms_addition;
+use self::update::apply_synonyms_deletion;
 
 fn load_indexes(tree: &sled::Tree) -> Result<HashSet<String>, Error> {
     match tree.get("indexes")? {
