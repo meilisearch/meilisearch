@@ -99,14 +99,14 @@ struct InnerSchema {
 }
 
 impl Schema {
-    pub fn from_toml<R: Read>(mut reader: R) -> Result<Schema, Box<Error>> {
+    pub fn from_toml<R: Read>(mut reader: R) -> Result<Schema, Box<dyn Error>> {
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer)?;
         let builder: SchemaBuilder = toml::from_slice(&buffer)?;
         Ok(builder.build())
     }
 
-    pub fn to_toml<W: Write>(&self, mut writer: W) -> Result<(), Box<Error>> {
+    pub fn to_toml<W: Write>(&self, mut writer: W) -> Result<(), Box<dyn Error>> {
         let identifier = self.inner.identifier.clone();
         let attributes = self.attributes_ordered();
         let builder = SchemaBuilder { identifier, attributes };
@@ -117,14 +117,14 @@ impl Schema {
         Ok(())
     }
 
-    pub fn from_json<R: Read>(mut reader: R) -> Result<Schema, Box<Error>> {
+    pub fn from_json<R: Read>(mut reader: R) -> Result<Schema, Box<dyn Error>> {
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer)?;
         let builder: SchemaBuilder = serde_json::from_slice(&buffer)?;
         Ok(builder.build())
     }
 
-    pub fn to_json<W: Write>(&self, mut writer: W) -> Result<(), Box<Error>> {
+    pub fn to_json<W: Write>(&self, mut writer: W) -> Result<(), Box<dyn Error>> {
         let identifier = self.inner.identifier.clone();
         let attributes = self.attributes_ordered();
         let builder = SchemaBuilder { identifier, attributes };
@@ -245,7 +245,7 @@ mod tests {
     }
 
     #[test]
-    fn serialize_deserialize_toml() -> Result<(), Box<Error>> {
+    fn serialize_deserialize_toml() -> Result<(), Box<dyn Error>> {
         let mut builder = SchemaBuilder::with_identifier("id");
         builder.new_attribute("alpha", DISPLAYED);
         builder.new_attribute("beta", DISPLAYED | INDEXED);
@@ -278,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn serialize_deserialize_json() -> Result<(), Box<Error>> {
+    fn serialize_deserialize_json() -> Result<(), Box<dyn Error>> {
         let mut builder = SchemaBuilder::with_identifier("id");
         builder.new_attribute("alpha", DISPLAYED);
         builder.new_attribute("beta", DISPLAYED | INDEXED);
