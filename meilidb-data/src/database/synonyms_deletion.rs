@@ -43,110 +43,95 @@ impl<'a> SynonymsDeletion<'a> {
     }
 }
 
-pub struct FinalSynonymsDeletion<'a> {
-    inner: &'a Index,
-    synonyms: BTreeMap<String, Option<Vec<String>>>,
-}
+pub fn apply_synonyms_deletion(
+    index: &Index,
+    deletion: BTreeMap<String, Option<Vec<String>>>,
+) -> Result<(), Error>
+{
+    let ref_index = index.as_ref();
+    let synonyms = ref_index.synonyms_index;
+    let main = ref_index.main_index;
 
-impl<'a> FinalSynonymsDeletion<'a> {
-    pub fn new(inner: &'a Index) -> FinalSynonymsDeletion<'a> {
-        FinalSynonymsDeletion { inner, synonyms: BTreeMap::new() }
-    }
+    let mut delete_whole_synonym_builder = SetBuilder::memory();
 
-    pub fn from_map(
-        inner: &'a Index,
-        synonyms: BTreeMap<String, Option<Vec<String>>>,
-    ) -> FinalSynonymsDeletion<'a>
-    {
-        FinalSynonymsDeletion { inner, synonyms }
-    }
+    for (synonym, alternatives) in deletion {
+        match alternatives {
+            Some(alternatives) => {
+                let prev_alternatives = synonyms.alternatives_to(synonym.as_bytes())?;
+                let prev_alternatives = match prev_alternatives {
+                    Some(alternatives) => alternatives,
+                    None => continue,
+                };
 
-    pub fn finalize(self) -> Result<(), Error> {
-        let ref_index = self.inner.as_ref();
-        let synonyms = ref_index.synonyms_index;
-        let main = ref_index.main_index;
+                let delta_alternatives = {
+                    let alternatives = SetBuf::from_dirty(alternatives);
+                    let mut builder = SetBuilder::memory();
+                    builder.extend_iter(alternatives).unwrap();
+                    builder.into_inner()
+                        .and_then(fst::Set::from_bytes)
+                        .unwrap()
+                };
 
-        let mut delete_whole_synonym_builder = SetBuilder::memory();
-
-        for (synonym, alternatives) in self.synonyms {
-            match alternatives {
-                Some(alternatives) => {
-                    let prev_alternatives = synonyms.alternatives_to(synonym.as_bytes())?;
-                    let prev_alternatives = match prev_alternatives {
-                        Some(alternatives) => alternatives,
-                        None => continue,
-                    };
-
-                    let delta_alternatives = {
-                        let alternatives = SetBuf::from_dirty(alternatives);
-                        let mut builder = SetBuilder::memory();
-                        builder.extend_iter(alternatives).unwrap();
-                        builder.into_inner()
-                            .and_then(fst::Set::from_bytes)
-                            .unwrap()
-                    };
-
-                    let op = OpBuilder::new()
-                        .add(prev_alternatives.stream())
-                        .add(delta_alternatives.stream())
-                        .difference();
-
-                    let (alternatives, empty_alternatives) = {
-                        let mut builder = SetBuilder::memory();
-                        let len = builder.get_ref().len();
-                        builder.extend_stream(op).unwrap();
-                        let is_empty = len == builder.get_ref().len();
-                        let alternatives = builder.into_inner().unwrap();
-                        (alternatives, is_empty)
-                    };
-
-                    if empty_alternatives {
-                        delete_whole_synonym_builder.insert(synonym.as_bytes())?;
-                    } else {
-                        synonyms.set_alternatives_to(synonym.as_bytes(), alternatives)?;
-                    }
-                },
-                None => {
-                    delete_whole_synonym_builder.insert(&synonym).unwrap();
-                    synonyms.del_alternatives_of(synonym.as_bytes())?;
-                }
-            }
-        }
-
-        let delta_synonyms = delete_whole_synonym_builder
-            .into_inner()
-            .and_then(fst::Set::from_bytes)
-            .unwrap();
-
-        let synonyms = match main.synonyms_set()? {
-            Some(synonyms) => {
                 let op = OpBuilder::new()
-                    .add(synonyms.stream())
-                    .add(delta_synonyms.stream())
+                    .add(prev_alternatives.stream())
+                    .add(delta_alternatives.stream())
                     .difference();
 
-                let mut synonyms_builder = SetBuilder::memory();
-                synonyms_builder.extend_stream(op).unwrap();
-                synonyms_builder
-                    .into_inner()
-                    .and_then(fst::Set::from_bytes)
-                    .unwrap()
+                let (alternatives, empty_alternatives) = {
+                    let mut builder = SetBuilder::memory();
+                    let len = builder.get_ref().len();
+                    builder.extend_stream(op).unwrap();
+                    let is_empty = len == builder.get_ref().len();
+                    let alternatives = builder.into_inner().unwrap();
+                    (alternatives, is_empty)
+                };
+
+                if empty_alternatives {
+                    delete_whole_synonym_builder.insert(synonym.as_bytes())?;
+                } else {
+                    synonyms.set_alternatives_to(synonym.as_bytes(), alternatives)?;
+                }
             },
-            None => fst::Set::default(),
-        };
-
-        main.set_synonyms_set(&synonyms)?;
-
-        // update the "consistent" view of the Index
-        let cache = ref_index.cache;
-        let words = Arc::new(main.words_set()?.unwrap_or_default());
-        let ranked_map = cache.ranked_map.clone();
-        let synonyms = Arc::new(synonyms);
-        let schema = cache.schema.clone();
-
-        let cache = Cache { words, synonyms, schema, ranked_map };
-        self.inner.cache.store(Arc::new(cache));
-
-        Ok(())
+            None => {
+                delete_whole_synonym_builder.insert(&synonym).unwrap();
+                synonyms.del_alternatives_of(synonym.as_bytes())?;
+            }
+        }
     }
+
+    let delta_synonyms = delete_whole_synonym_builder
+        .into_inner()
+        .and_then(fst::Set::from_bytes)
+        .unwrap();
+
+    let synonyms = match main.synonyms_set()? {
+        Some(synonyms) => {
+            let op = OpBuilder::new()
+                .add(synonyms.stream())
+                .add(delta_synonyms.stream())
+                .difference();
+
+            let mut synonyms_builder = SetBuilder::memory();
+            synonyms_builder.extend_stream(op).unwrap();
+            synonyms_builder
+                .into_inner()
+                .and_then(fst::Set::from_bytes)
+                .unwrap()
+        },
+        None => fst::Set::default(),
+    };
+
+    main.set_synonyms_set(&synonyms)?;
+
+    // update the "consistent" view of the Index
+    let cache = ref_index.cache;
+    let words = Arc::new(main.words_set()?.unwrap_or_default());
+    let ranked_map = cache.ranked_map.clone();
+    let synonyms = Arc::new(synonyms);
+    let schema = cache.schema.clone();
+
+    let cache = Cache { words, synonyms, schema, ranked_map };
+    index.cache.store(Arc::new(cache));
+
+    Ok(())
 }

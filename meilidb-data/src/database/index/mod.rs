@@ -1,5 +1,4 @@
 use std::collections::{HashSet, BTreeMap};
-use std::convert::TryInto;
 use std::sync::Arc;
 use std::thread;
 
@@ -24,10 +23,10 @@ use self::synonyms_index::SynonymsIndex;
 use self::words_index::WordsIndex;
 
 use super::{
-    DocumentsAddition, FinalDocumentsAddition,
-    DocumentsDeletion, FinalDocumentsDeletion,
-    SynonymsAddition, FinalSynonymsAddition,
-    SynonymsDeletion, FinalSynonymsDeletion,
+    DocumentsAddition, DocumentsDeletion,
+    SynonymsAddition, SynonymsDeletion,
+    apply_documents_addition, apply_documents_deletion,
+    apply_synonyms_addition, apply_synonyms_deletion,
 };
 
 mod custom_settings_index;
@@ -71,33 +70,23 @@ fn spawn_update_system(index: Index) -> thread::JoinHandle<()> {
                 let results = &index.updates_results_index;
                 (updates, results).transaction(|(updates, results)| {
                     let update = updates.remove(&key)?.unwrap();
-                    let array_id = key.as_ref().try_into().unwrap();
-                    let id = u64::from_be_bytes(array_id);
 
                     // this is an emulation of the try block (#31436)
                     let result: Result<(), Error> = (|| {
                         match bincode::deserialize(&update)? {
                             UpdateOwned::DocumentsAddition(documents) => {
                                 let ranked_map = index.cache.load().ranked_map.clone();
-                                let mut addition = FinalDocumentsAddition::new(&index, ranked_map);
-                                for document in documents {
-                                    addition.update_document(document)?;
-                                }
-                                addition.finalize()?;
+                                apply_documents_addition(&index, ranked_map, documents)?;
                             },
                             UpdateOwned::DocumentsDeletion(documents) => {
                                 let ranked_map = index.cache.load().ranked_map.clone();
-                                let mut deletion = FinalDocumentsDeletion::new(&index, ranked_map);
-                                deletion.extend(documents);
-                                deletion.finalize()?;
+                                apply_documents_deletion(&index, ranked_map, documents)?;
                             },
                             UpdateOwned::SynonymsAddition(synonyms) => {
-                                let addition = FinalSynonymsAddition::from_map(&index, synonyms);
-                                addition.finalize()?;
+                                apply_synonyms_addition(&index, synonyms)?;
                             },
                             UpdateOwned::SynonymsDeletion(synonyms) => {
-                                let deletion = FinalSynonymsDeletion::from_map(&index, synonyms);
-                                deletion.finalize()?;
+                                apply_synonyms_deletion(&index, synonyms)?;
                             },
                         }
                         Ok(())
@@ -105,7 +94,7 @@ fn spawn_update_system(index: Index) -> thread::JoinHandle<()> {
 
                     let result = result.map_err(|e| e.to_string());
                     let value = bincode::serialize(&result).unwrap();
-                    results.insert(&array_id, value)
+                    results.insert(&key, value)
                 })
                 .unwrap();
             }
@@ -310,7 +299,12 @@ impl Index {
         self.raw_push_update(update)
     }
 
-    pub(crate) fn push_documents_deletion(&self, deletion: Vec<DocumentId>) -> Result<u64, Error> {
+    pub(crate) fn push_documents_deletion(
+        &self,
+        deletion: Vec<DocumentId>,
+    ) -> Result<u64, Error>
+    {
+        let deletion = Update::<()>::DocumentsDeletion(deletion);
         let update = bincode::serialize(&deletion)?;
         self.raw_push_update(update)
     }
@@ -320,6 +314,7 @@ impl Index {
         addition: BTreeMap<String, Vec<String>>,
     ) -> Result<u64, Error>
     {
+        let addition = Update::<()>::SynonymsAddition(addition);
         let update = bincode::serialize(&addition)?;
         self.raw_push_update(update)
     }
@@ -329,6 +324,7 @@ impl Index {
         deletion: BTreeMap<String, Option<Vec<String>>>,
     ) -> Result<u64, Error>
     {
+        let deletion = Update::<()>::SynonymsDeletion(deletion);
         let update = bincode::serialize(&deletion)?;
         self.raw_push_update(update)
     }
