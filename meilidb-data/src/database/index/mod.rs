@@ -25,8 +25,9 @@ use self::words_index::WordsIndex;
 
 use super::{
     DocumentsAddition, FinalDocumentsAddition,
-    DocumentsDeletion,
-    SynonymsAddition, SynonymsDeletion,
+    DocumentsDeletion, FinalDocumentsDeletion,
+    SynonymsAddition,
+    SynonymsDeletion,
 };
 
 mod custom_settings_index;
@@ -46,7 +47,7 @@ fn event_is_set(event: &sled::Event) -> bool {
 #[derive(Deserialize)]
 enum UpdateOwned {
     DocumentsAddition(Vec<serde_json::Value>),
-    DocumentsDeletion( () /*DocumentsDeletion*/),
+    DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition( () /*SynonymsAddition*/),
     SynonymsDeletion( () /*SynonymsDeletion*/),
 }
@@ -54,7 +55,7 @@ enum UpdateOwned {
 #[derive(Serialize)]
 enum Update<D: serde::Serialize> {
     DocumentsAddition(Vec<D>),
-    DocumentsDeletion( () /*DocumentsDeletion*/),
+    DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition( () /*SynonymsAddition*/),
     SynonymsDeletion( () /*SynonymsDeletion*/),
 }
@@ -84,8 +85,11 @@ fn spawn_update_system(index: Index) -> thread::JoinHandle<()> {
                                 }
                                 addition.finalize()?;
                             },
-                            UpdateOwned::DocumentsDeletion(_) => {
-                                // ...
+                            UpdateOwned::DocumentsDeletion(documents) => {
+                                let ranked_map = index.cache.load().ranked_map.clone();
+                                let mut deletion = FinalDocumentsDeletion::new(&index, ranked_map);
+                                deletion.extend(documents);
+                                deletion.finalize()?;
                             },
                             UpdateOwned::SynonymsAddition(_) => {
                                 // ...
@@ -259,8 +263,7 @@ impl Index {
     }
 
     pub fn documents_deletion(&self) -> DocumentsDeletion {
-        let ranked_map = self.cache.load().ranked_map.clone();
-        DocumentsDeletion::new(self, ranked_map)
+        DocumentsDeletion::new(self)
     }
 
     pub fn synonyms_addition(&self) -> SynonymsAddition {
@@ -305,8 +308,8 @@ impl Index {
         self.raw_push_update(update)
     }
 
-    pub(crate) fn push_documents_deletion(&self, deletion: DocumentsDeletion) -> Result<u64, Error> {
-        let update = bincode::serialize(&())?;
+    pub(crate) fn push_documents_deletion(&self, deletion: Vec<DocumentId>) -> Result<u64, Error> {
+        let update = bincode::serialize(&deletion)?;
         self.raw_push_update(update)
     }
 

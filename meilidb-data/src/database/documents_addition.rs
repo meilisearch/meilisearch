@@ -9,7 +9,7 @@ use crate::indexer::Indexer;
 use crate::serde::{extract_document_id, Serializer, RamDocumentStore};
 use crate::RankedMap;
 
-use super::{Error, Index, DocumentsDeletion};
+use super::{Error, Index, FinalDocumentsDeletion};
 use super::index::Cache;
 
 pub struct DocumentsAddition<'a, D> {
@@ -88,7 +88,7 @@ impl<'a> FinalDocumentsAddition<'a> {
         let words = ref_index.words_index;
 
         // 1. remove the previous documents match indexes
-        let mut documents_deletion = DocumentsDeletion::new(self.inner, self.ranked_map.clone());
+        let mut documents_deletion = FinalDocumentsDeletion::new(self.inner, self.ranked_map.clone());
         documents_deletion.extend(self.document_ids);
         documents_deletion.finalize()?;
 

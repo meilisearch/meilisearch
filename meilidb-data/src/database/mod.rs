@@ -16,7 +16,7 @@ pub use self::error::Error;
 pub use self::index::{Index, CustomSettingsIndex};
 
 use self::documents_addition::{DocumentsAddition, FinalDocumentsAddition};
-use self::documents_deletion::DocumentsDeletion;
+use self::documents_deletion::{DocumentsDeletion, FinalDocumentsDeletion};
 use self::synonyms_addition::SynonymsAddition;
 use self::synonyms_deletion::SynonymsDeletion;
 

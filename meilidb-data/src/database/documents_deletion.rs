@@ -12,14 +12,39 @@ use super::{Index, Error};
 use super::index::Cache;
 
 pub struct DocumentsDeletion<'a> {
+    index: &'a Index,
+    documents: Vec<DocumentId>,
+}
+
+impl<'a> DocumentsDeletion<'a> {
+    pub fn new(index: &'a Index) -> DocumentsDeletion<'a> {
+        DocumentsDeletion { index, documents: Vec::new() }
+    }
+
+    pub fn delete_document(&mut self, document_id: DocumentId) {
+        self.documents.push(document_id);
+    }
+
+    pub fn finalize(self) -> Result<u64, Error> {
+        self.index.push_documents_deletion(self.documents)
+    }
+}
+
+impl Extend<DocumentId> for DocumentsDeletion<'_> {
+    fn extend<T: IntoIterator<Item=DocumentId>>(&mut self, iter: T) {
+        self.documents.extend(iter)
+    }
+}
+
+pub struct FinalDocumentsDeletion<'a> {
     inner: &'a Index,
     documents: Vec<DocumentId>,
     ranked_map: RankedMap,
 }
 
-impl<'a> DocumentsDeletion<'a> {
-    pub fn new(inner: &'a Index, ranked_map: RankedMap) -> DocumentsDeletion {
-        DocumentsDeletion { inner, documents: Vec::new(), ranked_map }
+impl<'a> FinalDocumentsDeletion<'a> {
+    pub fn new(inner: &'a Index, ranked_map: RankedMap) -> FinalDocumentsDeletion {
+        FinalDocumentsDeletion { inner, documents: Vec::new(), ranked_map }
     }
 
     fn delete_document_by_id(&mut self, id: DocumentId) {
@@ -132,7 +157,7 @@ impl<'a> DocumentsDeletion<'a> {
     }
 }
 
-impl<'a> Extend<DocumentId> for DocumentsDeletion<'a> {
+impl Extend<DocumentId> for FinalDocumentsDeletion<'_> {
     fn extend<T: IntoIterator<Item=DocumentId>>(&mut self, iter: T) {
         self.documents.extend(iter)
     }
