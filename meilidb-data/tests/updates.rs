@@ -21,15 +21,23 @@ fn insert_delete_document() {
 
     let mut addition = index.documents_addition();
     addition.update_document(&doc1);
-    addition.finalize().unwrap();
+    let update_id = addition.finalize().unwrap();
+    println!("addition update id: {}", update_id);
+
+    // TODO remove this and create a waitable function
+    std::thread::sleep(std::time::Duration::from_millis(100));
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 1);
     assert_eq!(index.document(None, docs[0].id).unwrap().as_ref(), Some(&doc1));
 
     let mut deletion = index.documents_deletion();
-    deletion.delete_document(&doc1);
-    deletion.finalize().unwrap();
+    deletion.delete_document(&doc1).unwrap();
+    let update_id = deletion.finalize().unwrap();
+    println!("deletion update id: {}", update_id);
+
+    // TODO remove this and create a waitable function
+    std::thread::sleep(std::time::Duration::from_millis(100));
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 0);
@@ -48,7 +56,11 @@ fn replace_document() {
 
     let mut addition = index.documents_addition();
     addition.update_document(&doc1);
-    addition.finalize().unwrap();
+    let update_id = addition.finalize().unwrap();
+    println!("addition update id: {}", update_id);
+
+    // TODO remove this and create a waitable function
+    std::thread::sleep(std::time::Duration::from_millis(100));
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 1);
@@ -56,7 +68,11 @@ fn replace_document() {
 
     let mut deletion = index.documents_addition();
     deletion.update_document(&doc2);
-    deletion.finalize().unwrap();
+    let update_id = deletion.finalize().unwrap();
+    println!("deletion update id: {}", update_id);
+
+    // TODO remove this and create a waitable function
+    std::thread::sleep(std::time::Duration::from_millis(100));
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 0);
