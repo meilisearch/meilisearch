@@ -44,15 +44,15 @@ fn event_is_set(event: &sled::Event) -> bool {
 
 #[derive(Deserialize)]
 enum UpdateOwned {
-    DocumentsAddition(Vec<serde_json::Value>),
+    DocumentsAddition(Vec<rmpv::Value>),
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition(BTreeMap<String, Vec<String>>),
     SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
 }
 
 #[derive(Serialize)]
-enum Update<D: serde::Serialize> {
-    DocumentsAddition(Vec<D>),
+enum Update {
+    DocumentsAddition(Vec<rmpv::Value>),
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition(BTreeMap<String, Vec<String>>),
     SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
@@ -72,7 +72,7 @@ fn spawn_update_system(index: Index) -> thread::JoinHandle<()> {
 
                     // this is an emulation of the try block (#31436)
                     let result: Result<(), Error> = (|| {
-                        match bincode::deserialize(&update)? {
+                        match rmp_serde::from_read_ref(&update)? {
                             UpdateOwned::DocumentsAddition(documents) => {
                                 let ranked_map = index.cache.load().ranked_map.clone();
                                 apply_documents_addition(&index, ranked_map, documents)?;
@@ -293,8 +293,15 @@ impl Index {
     pub(crate) fn push_documents_addition<D>(&self, addition: Vec<D>) -> Result<u64, Error>
     where D: serde::Serialize
     {
-        let addition = Update::DocumentsAddition(addition);
-        let update = bincode::serialize(&addition)?;
+        let mut values = Vec::with_capacity(addition.len());
+        for add in addition {
+            let vec = rmp_serde::to_vec_named(&add)?;
+            let add = rmp_serde::from_read(&vec[..])?;
+            values.push(add);
+        }
+
+        let addition = Update::DocumentsAddition(values);
+        let update = rmp_serde::to_vec_named(&addition)?;
         self.raw_push_update(update)
     }
 
@@ -303,8 +310,8 @@ impl Index {
         deletion: Vec<DocumentId>,
     ) -> Result<u64, Error>
     {
-        let deletion = Update::<()>::DocumentsDeletion(deletion);
-        let update = bincode::serialize(&deletion)?;
+        let deletion = Update::DocumentsDeletion(deletion);
+        let update = rmp_serde::to_vec_named(&deletion)?;
         self.raw_push_update(update)
     }
 
@@ -313,8 +320,8 @@ impl Index {
         addition: BTreeMap<String, Vec<String>>,
     ) -> Result<u64, Error>
     {
-        let addition = Update::<()>::SynonymsAddition(addition);
-        let update = bincode::serialize(&addition)?;
+        let addition = Update::SynonymsAddition(addition);
+        let update = rmp_serde::to_vec_named(&addition)?;
         self.raw_push_update(update)
     }
 
@@ -323,8 +330,8 @@ impl Index {
         deletion: BTreeMap<String, Option<Vec<String>>>,
     ) -> Result<u64, Error>
     {
-        let deletion = Update::<()>::SynonymsDeletion(deletion);
-        let update = bincode::serialize(&deletion)?;
+        let deletion = Update::SynonymsDeletion(deletion);
+        let update = rmp_serde::to_vec_named(&deletion)?;
         self.raw_push_update(update)
     }
 

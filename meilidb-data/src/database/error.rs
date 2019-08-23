@@ -9,6 +9,8 @@ pub enum Error {
     MissingDocumentId,
     SledError(sled::Error),
     FstError(fst::Error),
+    RmpDecodeError(rmp_serde::decode::Error),
+    RmpEncodeError(rmp_serde::encode::Error),
     BincodeError(bincode::Error),
     SerializerError(SerializerError),
 }
@@ -22,6 +24,18 @@ impl From<sled::Error> for Error {
 impl From<fst::Error> for Error {
     fn from(error: fst::Error) -> Error {
         Error::FstError(error)
+    }
+}
+
+impl From<rmp_serde::decode::Error> for Error {
+    fn from(error: rmp_serde::decode::Error) -> Error {
+        Error::RmpDecodeError(error)
+    }
+}
+
+impl From<rmp_serde::encode::Error> for Error {
+    fn from(error: rmp_serde::encode::Error) -> Error {
+        Error::RmpEncodeError(error)
     }
 }
 
@@ -47,6 +61,8 @@ impl fmt::Display for Error {
             MissingDocumentId => write!(f, "document id is missing"),
             SledError(e) => write!(f, "Sled error; {}", e),
             FstError(e) => write!(f, "fst error; {}", e),
+            RmpDecodeError(e) => write!(f, "rmp decode error; {}", e),
+            RmpEncodeError(e) => write!(f, "rmp encode error; {}", e),
             BincodeError(e) => write!(f, "bincode error; {}", e),
             SerializerError(e) => write!(f, "serializer error; {}", e),
         }

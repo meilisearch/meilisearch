@@ -25,6 +25,11 @@ zerocopy = "0.2.8"
 git = "https://github.com/3Hren/msgpack-rust.git"
 rev = "40b3d48"
 
+[dependencies.rmpv]
+git = "https://github.com/3Hren/msgpack-rust.git"
+rev = "40b3d48"
+features = ["with-serde"]
+
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
 branch = "arc-byte-slice"

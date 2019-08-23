@@ -35,7 +35,7 @@ impl<'a, D> DocumentsAddition<'a, D> {
 pub fn apply_documents_addition(
     index: &Index,
     mut ranked_map: RankedMap,
-    addition: Vec<serde_json::Value>,
+    addition: Vec<rmpv::Value>,
 ) -> Result<(), Error>
 {
     let mut document_ids = HashSet::new();
