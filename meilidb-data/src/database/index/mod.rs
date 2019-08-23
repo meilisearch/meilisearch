@@ -114,7 +114,7 @@ pub struct IndexStats {
 
 #[derive(Clone)]
 pub struct Index {
-    pub(crate) cache: ArcSwap<Cache>,
+    pub(crate) cache: Arc<ArcSwap<Cache>>,
 
     // TODO this will be a snapshot in the future
     main_index: MainIndex,
@@ -185,7 +185,7 @@ impl Index {
         };
 
         let cache = Cache { words, synonyms, schema, ranked_map };
-        let cache = ArcSwap::from_pointee(cache);
+        let cache = Arc::new(ArcSwap::from_pointee(cache));
 
         let index = Index {
             cache,
