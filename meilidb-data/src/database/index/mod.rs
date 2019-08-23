@@ -264,6 +264,43 @@ impl Index {
         SynonymsDeletion::new(self)
     }
 
+    pub fn update_status(
+        &self,
+        update_id: u64,
+    ) -> Result<Option<Result<(), String>>, Error>
+    {
+        let update_id = update_id.to_be_bytes();
+        match self.updates_results_index.get(update_id)? {
+            Some(value) => {
+                let value = bincode::deserialize(&value)?;
+                Ok(Some(value))
+            },
+            None => Ok(None),
+        }
+    }
+
+    pub fn update_status_blocking(
+        &self,
+        update_id: u64,
+    ) -> Result<Result<(), String>, Error>
+    {
+        let update_id_bytes = update_id.to_be_bytes().to_vec();
+        let mut subscription = self.updates_results_index.watch_prefix(update_id_bytes);
+
+        // if we find the update result return it now
+        if let Some(result) = self.update_status(update_id)? {
+            return Ok(result)
+        }
+
+        // this subscription is used to block the thread
+        // until the update_id is inserted in the tree
+        subscription.next();
+
+        // the thread has been unblocked, it means that the update result
+        // has been inserted in the tree, retrieve it
+        Ok(self.update_status(update_id)?.unwrap())
+    }
+
     pub fn document<T>(
         &self,
         fields: Option<&HashSet<&str>>,
