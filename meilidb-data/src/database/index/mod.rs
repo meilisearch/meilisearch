@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use arc_swap::{ArcSwap, Guard};
+use arc_swap::{ArcSwap, ArcSwapOption, Guard};
 use meilidb_core::criterion::Criteria;
 use meilidb_core::{DocIndex, Store, DocumentId, QueryBuilder};
 use meilidb_schema::Schema;
@@ -60,7 +60,7 @@ enum Update {
     SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum UpdateType {
     DocumentsAddition { number: usize },
     DocumentsDeletion { number: usize },
@@ -68,12 +68,12 @@ pub enum UpdateType {
     SynonymsDeletion { number: usize },
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DetailedDuration {
     main: Duration,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct UpdateStatus {
     pub update_id: u64,
     pub update_type: UpdateType,
@@ -132,6 +132,10 @@ fn spawn_update_system(index: Index) -> thread::JoinHandle<()> {
                         detailed_duration,
                     };
 
+                    if let Some(callback) = &*index.update_callback.load() {
+                        (callback)(status.clone());
+                    }
+
                     let value = bincode::serialize(&status).unwrap();
                     results.insert(&key, value)
                 })
@@ -168,6 +172,7 @@ pub struct Index {
     db: sled::Db,
     updates_index: Arc<sled::Tree>,
     updates_results_index: Arc<sled::Tree>,
+    update_callback: Arc<ArcSwapOption<Box<dyn Fn(UpdateStatus) + Send + Sync + 'static>>>,
 }
 
 pub(crate) struct Cache {
@@ -238,11 +243,22 @@ impl Index {
             db,
             updates_index,
             updates_results_index,
+            update_callback: Arc::new(ArcSwapOption::empty()),
         };
 
         let _handle = spawn_update_system(index.clone());
 
         Ok(index)
+    }
+
+    pub fn set_update_callback<F>(&self, callback: F)
+    where F: Fn(UpdateStatus) + Send + Sync + 'static
+    {
+        self.update_callback.store(Some(Arc::new(Box::new(callback))));
+    }
+
+    pub fn unset_update_callback(&self) {
+        self.update_callback.store(None);
     }
 
     pub fn stats(&self) -> sled::Result<IndexStats> {
