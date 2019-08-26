@@ -23,7 +23,7 @@ fn insert_delete_document() {
     addition.update_document(&doc1);
     let update_id = addition.finalize().unwrap();
     let status = index.update_status_blocking(update_id).unwrap();
-    assert_eq!(status, Ok(()));
+    assert!(status.result.is_ok());
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 1);
@@ -33,7 +33,7 @@ fn insert_delete_document() {
     deletion.delete_document(&doc1).unwrap();
     let update_id = deletion.finalize().unwrap();
     let status = index.update_status_blocking(update_id).unwrap();
-    assert_eq!(status, Ok(()));
+    assert!(status.result.is_ok());
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 0);
@@ -54,7 +54,7 @@ fn replace_document() {
     addition.update_document(&doc1);
     let update_id = addition.finalize().unwrap();
     let status = index.update_status_blocking(update_id).unwrap();
-    assert_eq!(status, Ok(()));
+    assert!(status.result.is_ok());
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 1);
@@ -64,7 +64,7 @@ fn replace_document() {
     deletion.update_document(&doc2);
     let update_id = deletion.finalize().unwrap();
     let status = index.update_status_blocking(update_id).unwrap();
-    assert_eq!(status, Ok(()));
+    assert!(status.result.is_ok());
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 0);
