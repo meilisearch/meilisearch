@@ -21,10 +21,10 @@ impl<'a> SynonymsAddition<'a> {
     pub fn add_synonym<S, T, I>(&mut self, synonym: S, alternatives: I)
     where S: AsRef<str>,
           T: AsRef<str>,
-          I: Iterator<Item=T>,
+          I: IntoIterator<Item=T>,
     {
         let synonym = normalize_str(synonym.as_ref());
-        let alternatives = alternatives.map(|s| s.as_ref().to_lowercase());
+        let alternatives = alternatives.into_iter().map(|s| s.as_ref().to_lowercase());
         self.synonyms.entry(synonym).or_insert_with(Vec::new).extend(alternatives);
     }
 
@@ -73,7 +73,7 @@ impl<'a> SynonymsAddition<'a> {
 
         // update the "consistent" view of the Index
         let words = main.words_set()?.unwrap_or_default();
-        let ranked_map = lease_inner.ranked_map.clone();;
+        let ranked_map = lease_inner.ranked_map.clone();
         let schema = lease_inner.schema.clone();
         let raw = lease_inner.raw.clone();
         lease_inner.raw.compact();

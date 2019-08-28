@@ -31,9 +31,13 @@ pub struct Opt {
     #[structopt(long = "schema", parse(from_os_str))]
     pub schema_path: PathBuf,
 
+    /// The file with the synonyms.
+    #[structopt(long = "synonyms", parse(from_os_str))]
+    pub synonyms: Option<PathBuf>,
+
     /// The path to the list of stop words (one by line).
     #[structopt(long = "stop-words", parse(from_os_str))]
-    pub stop_words_path: Option<PathBuf>,
+    pub stop_words: Option<PathBuf>,
 
     #[structopt(long = "update-group-size")]
     pub update_group_size: Option<usize>,
@@ -45,12 +49,40 @@ struct Document<'a> (
     HashMap<Cow<'a, str>, Cow<'a, str>>
 );
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Synonym {
+    OneWay(SynonymOneWay),
+    MultiWay { synonyms: Vec<String> },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SynonymOneWay {
+    pub search_terms: String,
+    pub synonyms: Synonyms,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Synonyms {
+    Multiple(Vec<String>),
+    Single(String),
+}
+
+fn read_synomys(path: &Path) -> Result<Vec<Synonym>, Box<dyn Error>> {
+    let file = File::open(path)?;
+    let synonyms = serde_json::from_reader(file)?;
+    Ok(synonyms)
+}
+
 fn index(
     schema: Schema,
     database_path: &Path,
     csv_data_path: &Path,
     update_group_size: Option<usize>,
     stop_words: &HashSet<String>,
+    synonyms: Vec<Synonym>,
 ) -> Result<Database, Box<dyn Error>>
 {
     let database = Database::start_default(database_path)?;
@@ -61,6 +93,28 @@ fn index(
     let mut system = sysinfo::System::new();
 
     let index = database.create_index("test", schema.clone())?;
+
+    let mut synonyms_adder = index.synonyms_addition();
+    for synonym in synonyms {
+        match synonym {
+            Synonym::OneWay(SynonymOneWay { search_terms, synonyms }) => {
+                let alternatives = match synonyms {
+                    Synonyms::Multiple(alternatives) => alternatives,
+                    Synonyms::Single(alternative) => vec![alternative],
+                };
+                synonyms_adder.add_synonym(search_terms, alternatives);
+            },
+            Synonym::MultiWay { mut synonyms } => {
+                for _ in 0..synonyms.len() {
+                    if let Some((synonym, alternatives)) = synonyms.split_first() {
+                        synonyms_adder.add_synonym(synonym, alternatives);
+                    }
+                    synonyms.rotate_left(1);
+                }
+            },
+        }
+    }
+    synonyms_adder.finalize()?;
 
     let mut rdr = csv::Reader::from_path(csv_data_path)?;
     let mut raw_record = csv::StringRecord::new();
@@ -133,13 +187,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         Schema::from_toml(file)?
     };
 
-    let stop_words = match opt.stop_words_path {
+    let stop_words = match opt.stop_words {
         Some(ref path) => retrieve_stop_words(path)?,
         None           => HashSet::new(),
     };
 
+    let synonyms = match opt.synonyms {
+        Some(ref path) => read_synomys(path)?,
+        None           => Vec::new(),
+    };
+
     let start = Instant::now();
-    let result = index(schema, &opt.database_path, &opt.csv_data_path, opt.update_group_size, &stop_words);
+    let result = index(
+        schema,
+        &opt.database_path,
+        &opt.csv_data_path,
+        opt.update_group_size,
+        &stop_words,
+        synonyms,
+    );
 
     if let Err(e) = result {
         return Err(e.into())
