@@ -24,6 +24,9 @@ pub struct Opt {
     #[structopt(parse(from_os_str))]
     pub database_path: PathBuf,
 
+    #[structopt(long = "fetch-timeout-ms")]
+    pub fetch_timeout_ms: Option<u64>,
+
     /// Fields that must be displayed.
     pub displayed_fields: Vec<String>,
 
@@ -159,7 +162,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             Ok(query) => {
                 let start_total = Instant::now();
 
-                let builder = index.query_builder().with_fetch_timeout(Duration::from_millis(40));
+                let builder = match opt.fetch_timeout_ms {
+                    Some(timeout_ms) => {
+                        let timeout = Duration::from_millis(timeout_ms);
+                        index.query_builder().with_fetch_timeout(timeout)
+                    },
+                    None => index.query_builder(),
+                };
                 let documents = builder.query(&query, 0..opt.number_results)?;
 
                 let mut retrieve_duration = Duration::default();
