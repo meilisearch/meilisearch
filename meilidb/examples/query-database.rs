@@ -159,7 +159,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Ok(query) => {
                 let start_total = Instant::now();
 
-                let builder = index.query_builder();
+                let builder = index.query_builder().with_fetch_timeout(Duration::from_millis(40));
                 let documents = builder.query(&query, 0..opt.number_results)?;
 
                 let mut retrieve_duration = Duration::default();

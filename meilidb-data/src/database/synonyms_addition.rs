@@ -73,7 +73,7 @@ impl<'a> SynonymsAddition<'a> {
 
         // update the "consistent" view of the Index
         let words = main.words_set()?.unwrap_or_default();
-        let ranked_map = lease_inner.ranked_map.clone();;
+        let ranked_map = lease_inner.ranked_map.clone();
         let schema = lease_inner.schema.clone();
         let raw = lease_inner.raw.clone();
         lease_inner.raw.compact();

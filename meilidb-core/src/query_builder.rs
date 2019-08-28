@@ -185,6 +185,7 @@ pub struct QueryBuilder<'c, S, FI = fn(DocumentId) -> bool> {
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
     filter: Option<FI>,
+    fetch_timeout: Option<Duration>,
 }
 
 impl<'c, S> QueryBuilder<'c, S, fn(DocumentId) -> bool> {
@@ -193,7 +194,7 @@ impl<'c, S> QueryBuilder<'c, S, fn(DocumentId) -> bool> {
     }
 
     pub fn with_criteria(store: S, criteria: Criteria<'c>) -> Self {
-        QueryBuilder { store, criteria, searchable_attrs: None, filter: None }
+        QueryBuilder { store, criteria, searchable_attrs: None, filter: None, fetch_timeout: None }
     }
 }
 
@@ -207,7 +208,12 @@ impl<'c, S, FI> QueryBuilder<'c, S, FI>
             criteria: self.criteria,
             searchable_attrs: self.searchable_attrs,
             filter: Some(function),
+            fetch_timeout: self.fetch_timeout,
         }
+    }
+
+    pub fn with_fetch_timeout(self, timeout: Duration) -> QueryBuilder<'c, S, FI> {
+        QueryBuilder { fetch_timeout: Some(timeout), ..self }
     }
 
     pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'c, S, FI, F>
@@ -226,6 +232,7 @@ impl<'c, S, FI> QueryBuilder<'c, S, FI>
 fn multiword_rewrite_matches(
     mut matches: Vec<(DocumentId, TmpMatch)>,
     query_enhancer: &QueryEnhancer,
+    timeout: Option<Duration>,
 ) -> SetBuf<(DocumentId, TmpMatch)>
 {
     let mut padded_matches = Vec::with_capacity(matches.len());
@@ -240,7 +247,7 @@ fn multiword_rewrite_matches(
     for same_document_attribute in matches.linear_group_by_key(|(id, m)| (*id, m.attribute)) {
 
         let elapsed = start.elapsed();
-        if elapsed > Duration::from_millis(10) {
+        if timeout.map_or(false, |timeout| elapsed > timeout) {
             info!("abort multiword rewrite after {:.2?}", elapsed);
             break;
         }
@@ -341,6 +348,7 @@ where S: Store + Sync,
         let (automatons, query_enhancer) = generate_automatons(query, &self.store)?;
         let searchables = self.searchable_attrs.as_ref();
         let store = &self.store;
+        let fetch_timeout = &self.fetch_timeout;
 
         rayon::scope(move |s| {
             enum Error<E> {
@@ -351,10 +359,10 @@ where S: Store + Sync,
             let mut matches = Vec::new();
             let mut highlights = Vec::new();
 
-            let recv_end_time = Instant::now() + Duration::from_millis(30);
+            let recv_end_time = fetch_timeout.map(|d| Instant::now() + d * 75 / 100);
             let start = Instant::now();
 
-            let (sender, receiver) = crossbeam_channel::bounded(10);
+            let (sender, receiver) = crossbeam_channel::unbounded();
 
             s.spawn(move |_| {
                 let result = automatons
@@ -417,6 +425,11 @@ where S: Store + Sync,
             });
 
             let iter = receiver.recv().into_iter().chain(iter::from_fn(|| {
+                let recv_end_time = match recv_end_time {
+                    Some(time) => time,
+                    None => return receiver.recv().ok(),
+                };
+
                 match recv_end_time.checked_duration_since(Instant::now()) {
                     Some(timeout) => receiver.recv_timeout(timeout).ok(),
                     None => None,
@@ -434,7 +447,8 @@ where S: Store + Sync,
             info!("{} total matches to rewrite", matches.len());
 
             let start = Instant::now();
-            let matches = multiword_rewrite_matches(matches, &query_enhancer);
+            let timeout = fetch_timeout.map(|d| d * 25 / 100);
+            let matches = multiword_rewrite_matches(matches, &query_enhancer, timeout);
             info!("multiword rewrite took {:.2?}", start.elapsed());
 
             let start = Instant::now();
@@ -526,7 +540,15 @@ impl<'c, I, FI, FD> DistinctQueryBuilder<'c, I, FI, FD>
         DistinctQueryBuilder {
             inner: self.inner.with_filter(function),
             function: self.function,
-            size: self.size
+            size: self.size,
+        }
+    }
+
+    pub fn with_fetch_timeout(self, timeout: Duration) -> DistinctQueryBuilder<'c, I, FI, FD> {
+        DistinctQueryBuilder {
+            inner: self.inner.with_fetch_timeout(timeout),
+            function: self.function,
+            size: self.size,
         }
     }
 
