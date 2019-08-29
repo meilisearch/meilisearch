@@ -2,6 +2,7 @@ use std::hash::{Hash, Hasher};
 
 use meilidb_core::DocumentId;
 use serde::{ser, Serialize};
+use serde_json::Value;
 use siphasher::sip::SipHasher;
 
 use super::{SerializerError, ConvertToString};
@@ -16,7 +17,18 @@ where D: serde::Serialize,
     document.serialize(serializer)
 }
 
-pub fn compute_document_id<T: Hash>(t: &T) -> DocumentId {
+pub fn value_to_string(value: &Value) -> Option<String> {
+    match value {
+        Value::Null => None,
+        Value::Bool(_) => None,
+        Value::Number(value) => Some(value.to_string()),
+        Value::String(value) => Some(value.to_string()),
+        Value::Array(_) => None,
+        Value::Object(_) => None,
+    }
+}
+
+pub fn compute_document_id<H: Hash>(t: H) -> DocumentId {
     let mut s = SipHasher::new();
     t.hash(&mut s);
     let hash = s.finish();
@@ -213,10 +225,11 @@ impl<'a> ser::SerializeMap for ExtractDocumentIdMapSerializer<'a> {
         let key = key.serialize(ConvertToString)?;
 
         if self.identifier == key {
-            // TODO is it possible to have multiple ids?
-            let id = bincode::serialize(value).unwrap();
-            let document_id = compute_document_id(&id);
-            self.document_id = Some(document_id);
+            let value = serde_json::to_string(value).and_then(|s| serde_json::from_str(&s))?;
+            match value_to_string(&value).map(|s| compute_document_id(&s)) {
+                Some(document_id) => self.document_id = Some(document_id),
+                None => return Err(SerializerError::InvalidDocumentIdType),
+            }
         }
 
         Ok(())
@@ -244,10 +257,11 @@ impl<'a> ser::SerializeStruct for ExtractDocumentIdStructSerializer<'a> {
     where T: Serialize,
     {
         if self.identifier == key {
-            // TODO can it be possible to have multiple ids?
-            let id = bincode::serialize(value).unwrap();
-            let document_id = compute_document_id(&id);
-            self.document_id = Some(document_id);
+            let value = serde_json::to_string(value).and_then(|s| serde_json::from_str(&s))?;
+            match value_to_string(&value).map(compute_document_id) {
+                Some(document_id) => self.document_id = Some(document_id),
+                None => return Err(SerializerError::InvalidDocumentIdType),
+            }
         }
 
         Ok(())
