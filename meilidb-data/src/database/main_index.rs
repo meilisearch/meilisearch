@@ -73,7 +73,7 @@ impl MainIndex {
     pub fn set_ranked_map(&self, value: &RankedMap) -> Result<(), Error> {
         let mut bytes = Vec::new();
         value.write_to_bin(&mut bytes)?;
-        self.0.set("ranked_map", bytes)?;
+        self.0.set("ranked-map", bytes)?;
         Ok(())
     }
 }
