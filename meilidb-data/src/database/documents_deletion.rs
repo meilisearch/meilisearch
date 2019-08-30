@@ -118,8 +118,9 @@ impl<'a> DocumentsDeletion<'a> {
         main.set_ranked_map(&self.ranked_map)?;
 
         // update the "consistent" view of the Index
+        let words = Arc::new(words);
         let ranked_map = lease_inner.ranked_map.clone();
-        let synonyms = fst::Set::from_bytes(lease_inner.synonyms.as_fst().to_vec()).unwrap(); // clone()
+        let synonyms = lease_inner.synonyms.clone();
         let schema = lease_inner.schema.clone();
         let raw = lease_inner.raw.clone();
         lease_inner.raw.compact();

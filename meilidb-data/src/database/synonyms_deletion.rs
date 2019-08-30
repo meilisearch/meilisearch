@@ -115,8 +115,9 @@ impl<'a> SynonymsDeletion<'a> {
         main.set_synonyms_set(&synonyms)?;
 
         // update the "consistent" view of the Index
-        let words = main.words_set()?.unwrap_or_default();
+        let words = Arc::new(main.words_set()?.unwrap_or_default());
         let ranked_map = lease_inner.ranked_map.clone();
+        let synonyms = Arc::new(synonyms);
         let schema = lease_inner.schema.clone();
         let raw = lease_inner.raw.clone();
         lease_inner.raw.compact();
