@@ -30,8 +30,8 @@ pub struct IndexStats {
 pub struct Index(pub ArcSwap<InnerIndex>);
 
 pub struct InnerIndex {
-    pub words: fst::Set,
-    pub synonyms: fst::Set,
+    pub words: Arc<fst::Set>,
+    pub synonyms: Arc<fst::Set>,
     pub schema: Schema,
     pub ranked_map: RankedMap,
     pub raw: RawIndex, // TODO this will be a snapshot in the future
@@ -40,13 +40,13 @@ pub struct InnerIndex {
 impl Index {
     pub fn from_raw(raw: RawIndex) -> Result<Index, Error> {
         let words = match raw.main.words_set()? {
-            Some(words) => words,
-            None => fst::Set::default(),
+            Some(words) => Arc::new(words),
+            None => Arc::new(fst::Set::default()),
         };
 
         let synonyms = match raw.main.synonyms_set()? {
-            Some(synonyms) => synonyms,
-            None => fst::Set::default(),
+            Some(synonyms) => Arc::new(synonyms),
+            None => Arc::new(fst::Set::default()),
         };
 
         let schema = match raw.main.schema()? {
