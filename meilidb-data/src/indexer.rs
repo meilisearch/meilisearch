@@ -34,7 +34,43 @@ impl Indexer {
     }
 
     pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) {
-        for token in Tokenizer::new(text) {
+        let lowercase_text = text.to_lowercase();
+        let deunicoded = deunicode_with_tofu(&lowercase_text, "");
+
+        // TODO compute the deunicoded version after the cjk check
+        let next = if !lowercase_text.contains(is_cjk) && lowercase_text != deunicoded {
+            Some(deunicoded)
+        } else {
+            None
+        };
+        let iter = Some(lowercase_text).into_iter().chain(next);
+
+        for text in iter {
+            for token in Tokenizer::new(&text) {
+                let must_continue = index_token(
+                    token,
+                    id,
+                    attr,
+                    self.word_limit,
+                    &mut self.words_doc_indexes,
+                    &mut self.docs_words,
+                );
+
+                if !must_continue { break }
+            }
+        }
+    }
+
+    pub fn index_text_seq<'a, I, IT>(&mut self, id: DocumentId, attr: SchemaAttr, iter: I)
+    where I: IntoIterator<Item=&'a str, IntoIter=IT>,
+          IT: Iterator<Item = &'a str> + Clone,
+    {
+        // TODO serialize this to one call to the SeqTokenizer loop
+
+        let lowercased: Vec<_> = iter.into_iter().map(str::to_lowercase).collect();
+        let iter = lowercased.iter().map(|t| t.as_str());
+
+        for token in SeqTokenizer::new(iter) {
             let must_continue = index_token(
                 token,
                 id,
@@ -46,12 +82,14 @@ impl Indexer {
 
             if !must_continue { break }
         }
-    }
 
-    pub fn index_text_seq<'a, I>(&mut self, id: DocumentId, attr: SchemaAttr, iter: I)
-    where I: IntoIterator<Item=&'a str>,
-    {
-        let iter = iter.into_iter();
+        let deunicoded: Vec<_> = lowercased.into_iter().map(|lowercase_text| {
+            if lowercase_text.contains(is_cjk) { return lowercase_text }
+            let deunicoded = deunicode_with_tofu(&lowercase_text, "");
+            if lowercase_text != deunicoded { deunicoded } else { lowercase_text }
+        }).collect();
+        let iter = deunicoded.iter().map(|t| t.as_str());
+
         for token in SeqTokenizer::new(iter) {
             let must_continue = index_token(
                 token,
@@ -96,8 +134,6 @@ fn index_token(
 {
     if token.word_index >= word_limit { return false }
 
-    let lower = token.word.to_lowercase();
-    let token = Token { word: &lower, ..token };
     match token_to_docindex(id, attr, token) {
         Some(docindex) => {
             let word = Vec::from(token.word);
@@ -105,21 +141,6 @@ fn index_token(
             docs_words.entry(id).or_insert_with(Vec::new).push(word);
         },
         None => return false,
-    }
-
-    if !lower.contains(is_cjk) {
-        let unidecoded = deunicode_with_tofu(&lower, "");
-        if unidecoded != lower {
-            let token = Token { word: &unidecoded, ..token };
-            match token_to_docindex(id, attr, token) {
-                Some(docindex) => {
-                    let word = Vec::from(token.word);
-                    words_doc_indexes.entry(word.clone()).or_insert_with(Vec::new).push(docindex);
-                    docs_words.entry(id).or_insert_with(Vec::new).push(word);
-                },
-                None => return false,
-            }
-        }
     }
 
     true
@@ -139,4 +160,49 @@ fn token_to_docindex(id: DocumentId, attr: SchemaAttr, token: Token) -> Option<D
     };
 
     Some(docindex)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strange_apostrophe() {
+        let mut indexer = Indexer::new();
+
+        let docid = DocumentId(0);
+        let attr = SchemaAttr(0);
+        let text = "Zut, l’aspirateur, j’ai oublié de l’éteindre !";
+        indexer.index_text(docid, attr, text);
+
+        let Indexed { words_doc_indexes, .. } = indexer.build();
+
+        assert!(words_doc_indexes.get(&b"l"[..]).is_some());
+        assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
+        assert!(words_doc_indexes.get(&b"ai"[..]).is_some());
+        assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
+
+        // with the ugly apostrophe...
+        assert!(words_doc_indexes.get(&"l’éteindre".to_owned().into_bytes()).is_some());
+    }
+
+    #[test]
+    fn strange_apostrophe_in_sequence() {
+        let mut indexer = Indexer::new();
+
+        let docid = DocumentId(0);
+        let attr = SchemaAttr(0);
+        let text = vec!["Zut, l’aspirateur, j’ai oublié de l’éteindre !"];
+        indexer.index_text_seq(docid, attr, text);
+
+        let Indexed { words_doc_indexes, .. } = indexer.build();
+
+        assert!(words_doc_indexes.get(&b"l"[..]).is_some());
+        assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
+        assert!(words_doc_indexes.get(&b"ai"[..]).is_some());
+        assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
+
+        // with the ugly apostrophe...
+        assert!(words_doc_indexes.get(&"l’éteindre".to_owned().into_bytes()).is_some());
+    }
 }
