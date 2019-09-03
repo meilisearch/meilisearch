@@ -8,14 +8,14 @@ use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 use linked_hash_map::LinkedHashMap;
 
-pub const STORED: SchemaProps  = SchemaProps { stored: true,  indexed: false, ranked: false };
-pub const INDEXED: SchemaProps = SchemaProps { stored: false, indexed: true,  ranked: false };
-pub const RANKED: SchemaProps  = SchemaProps { stored: false, indexed: false, ranked: true  };
+pub const DISPLAYED: SchemaProps = SchemaProps { displayed: true,  indexed: false, ranked: false };
+pub const INDEXED: SchemaProps   = SchemaProps { displayed: false, indexed: true,  ranked: false };
+pub const RANKED: SchemaProps    = SchemaProps { displayed: false, indexed: false, ranked: true  };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaProps {
     #[serde(default)]
-    stored: bool,
+    displayed: bool,
 
     #[serde(default)]
     indexed: bool,
@@ -25,8 +25,8 @@ pub struct SchemaProps {
 }
 
 impl SchemaProps {
-    pub fn is_stored(self) -> bool {
-        self.stored
+    pub fn is_displayed(self) -> bool {
+        self.displayed
     }
 
     pub fn is_indexed(self) -> bool {
@@ -43,7 +43,7 @@ impl BitOr for SchemaProps {
 
     fn bitor(self, other: Self) -> Self::Output {
         SchemaProps {
-            stored: self.stored | other.stored,
+            displayed: self.displayed | other.displayed,
             indexed: self.indexed | other.indexed,
             ranked: self.ranked | other.ranked,
         }
@@ -229,8 +229,8 @@ mod tests {
     #[test]
     fn serialize_deserialize() -> bincode::Result<()> {
         let mut builder = SchemaBuilder::with_identifier("id");
-        builder.new_attribute("alpha", STORED);
-        builder.new_attribute("beta", STORED | INDEXED);
+        builder.new_attribute("alpha", DISPLAYED);
+        builder.new_attribute("beta", DISPLAYED | INDEXED);
         builder.new_attribute("gamma", INDEXED);
         let schema = builder.build();
 
@@ -247,8 +247,8 @@ mod tests {
     #[test]
     fn serialize_deserialize_toml() -> Result<(), Box<Error>> {
         let mut builder = SchemaBuilder::with_identifier("id");
-        builder.new_attribute("alpha", STORED);
-        builder.new_attribute("beta", STORED | INDEXED);
+        builder.new_attribute("alpha", DISPLAYED);
+        builder.new_attribute("beta", DISPLAYED | INDEXED);
         builder.new_attribute("gamma", INDEXED);
         let schema = builder.build();
 
@@ -262,10 +262,10 @@ mod tests {
             identifier = "id"
 
             [attributes."alpha"]
-            stored = true
+            displayed = true
 
             [attributes."beta"]
-            stored = true
+            displayed = true
             indexed = true
 
             [attributes."gamma"]
@@ -280,8 +280,8 @@ mod tests {
     #[test]
     fn serialize_deserialize_json() -> Result<(), Box<Error>> {
         let mut builder = SchemaBuilder::with_identifier("id");
-        builder.new_attribute("alpha", STORED);
-        builder.new_attribute("beta", STORED | INDEXED);
+        builder.new_attribute("alpha", DISPLAYED);
+        builder.new_attribute("beta", DISPLAYED | INDEXED);
         builder.new_attribute("gamma", INDEXED);
         let schema = builder.build();
 
@@ -296,10 +296,10 @@ mod tests {
                 "identifier": "id",
                 "attributes": {
                     "alpha": {
-                        "stored": true
+                        "displayed": true
                     },
                     "beta": {
-                        "stored": true,
+                        "displayed": true,
                         "indexed": true
                     },
                     "gamma": {

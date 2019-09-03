@@ -1,11 +1,11 @@
 use serde_json::json;
 use meilidb_data::Database;
-use meilidb_schema::{Schema, SchemaBuilder, STORED, INDEXED};
+use meilidb_schema::{Schema, SchemaBuilder, DISPLAYED, INDEXED};
 
 fn simple_schema() -> Schema {
     let mut builder = SchemaBuilder::with_identifier("objectId");
-    builder.new_attribute("objectId", STORED | INDEXED);
-    builder.new_attribute("title", STORED | INDEXED);
+    builder.new_attribute("objectId", DISPLAYED | INDEXED);
+    builder.new_attribute("title", DISPLAYED | INDEXED);
     builder.build()
 }
 
