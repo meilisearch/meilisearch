@@ -215,10 +215,154 @@ impl fmt::Display for SchemaAttr {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Diff {
+    IdentChange {
+        old: String,
+        new: String,
+    },
+    AttrMove {
+        name: String,
+        old: usize,
+        new: usize,
+    },
+    AttrPropsChange {
+        name: String,
+        old: SchemaProps,
+        new: SchemaProps,
+    },
+    NewAttr {
+        name: String,
+        pos: usize,
+        props: SchemaProps,
+    },
+    RemovedAttr {
+        name: String,
+    },
+}
+
+pub fn diff(old: &Schema, new: &Schema) -> Vec<Diff> {
+    use Diff::{AttrMove, AttrPropsChange, IdentChange, NewAttr, RemovedAttr};
+
+    let mut differences = Vec::new();
+    let old = old.to_builder();
+    let new = new.to_builder();
+
+    // check if the old identifier differs from the new one
+    if old.identifier != new.identifier {
+        let old = old.identifier;
+        let new = new.identifier;
+        differences.push(IdentChange { old, new });
+    }
+
+    // compare all old attributes positions
+    // and properties with the new ones
+    for (pos, (name, props)) in old.attributes.iter().enumerate() {
+        match new.attributes.get_full(name) {
+            Some((npos, _, nprops)) => {
+                if pos != npos {
+                    let name = name.clone();
+                    differences.push(AttrMove {
+                        name,
+                        old: pos,
+                        new: npos,
+                    });
+                }
+                if props != nprops {
+                    let name = name.clone();
+                    differences.push(AttrPropsChange {
+                        name,
+                        old: *props,
+                        new: *nprops,
+                    });
+                }
+            }
+            None => differences.push(RemovedAttr { name: name.clone() }),
+        }
+    }
+
+    // retrieve all attributes that
+    // were not present in the old schema
+    for (pos, (name, props)) in new.attributes.iter().enumerate() {
+        if !old.attributes.contains_key(name) {
+            let name = name.clone();
+            differences.push(NewAttr {
+                name,
+                pos,
+                props: *props,
+            });
+        }
+    }
+
+    differences
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::error::Error;
+
+    #[test]
+    fn difference() {
+        use Diff::{AttrMove, AttrPropsChange, IdentChange, NewAttr, RemovedAttr};
+
+        let mut builder = SchemaBuilder::with_identifier("id");
+        builder.new_attribute("alpha", DISPLAYED);
+        builder.new_attribute("beta", DISPLAYED | INDEXED);
+        builder.new_attribute("gamma", INDEXED);
+        builder.new_attribute("omega", INDEXED);
+        let old = builder.build();
+
+        let mut builder = SchemaBuilder::with_identifier("kiki");
+        builder.new_attribute("beta", DISPLAYED | INDEXED);
+        builder.new_attribute("alpha", DISPLAYED | INDEXED);
+        builder.new_attribute("delta", RANKED);
+        builder.new_attribute("gamma", DISPLAYED);
+        let new = builder.build();
+
+        let differences = diff(&old, &new);
+        let expected = &[
+            IdentChange {
+                old: format!("id"),
+                new: format!("kiki"),
+            },
+            AttrMove {
+                name: format!("alpha"),
+                old: 0,
+                new: 1,
+            },
+            AttrPropsChange {
+                name: format!("alpha"),
+                old: DISPLAYED,
+                new: DISPLAYED | INDEXED,
+            },
+            AttrMove {
+                name: format!("beta"),
+                old: 1,
+                new: 0,
+            },
+            AttrMove {
+                name: format!("gamma"),
+                old: 2,
+                new: 3,
+            },
+            AttrPropsChange {
+                name: format!("gamma"),
+                old: INDEXED,
+                new: DISPLAYED,
+            },
+            RemovedAttr {
+                name: format!("omega"),
+            },
+            NewAttr {
+                name: format!("delta"),
+                pos: 2,
+                props: RANKED,
+            },
+        ];
+
+        assert_eq!(&differences, expected)
+    }
 
     #[test]
     fn serialize_deserialize() -> bincode::Result<()> {
