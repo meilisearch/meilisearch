@@ -4,18 +4,18 @@
 identifier = "id"
 
 [attributes.id]
-stored = true
+displayed = true
 
 [attributes.title]
-stored = true
+displayed = true
 indexed = true
 
 [attributes.overview]
-stored = true
+displayed = true
 indexed = true
 
 [attributes.release_date]
-stored = true
+displayed = true
 
 [attributes.poster]
-stored = true
+displayed = true

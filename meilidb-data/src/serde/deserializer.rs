@@ -50,7 +50,8 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a>
         });
 
         let iter = document_attributes.filter_map(|(attr, value)| {
-            if self.fields.map_or(true, |f| f.contains(&attr)) {
+            let is_displayed = schema.props(attr).is_displayed();
+            if is_displayed && self.fields.map_or(true, |f| f.contains(&attr)) {
                 let attribute_name = schema.attribute_name(attr);
                 Some((attribute_name, Value::new(value)))
             } else {

@@ -5,15 +5,15 @@
 identifier = "id"
 
 [attributes.id]
-stored = true
+displayed = true
 
 [attributes.title]
-stored = true
+displayed = true
 indexed = true
 
 [attributes.description]
-stored = true
+displayed = true
 indexed = true
 
 [attributes.image]
-stored = true
+displayed = true
