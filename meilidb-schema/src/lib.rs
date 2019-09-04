@@ -6,7 +6,7 @@ use std::ops::BitOr;
 use std::sync::Arc;
 
 use serde::{Serialize, Deserialize};
-use linked_hash_map::LinkedHashMap;
+use indexmap::IndexMap;
 
 pub const DISPLAYED: SchemaProps = SchemaProps { displayed: true,  indexed: false, ranked: false };
 pub const INDEXED: SchemaProps   = SchemaProps { displayed: false, indexed: true,  ranked: false };
@@ -53,14 +53,14 @@ impl BitOr for SchemaProps {
 #[derive(Serialize, Deserialize)]
 pub struct SchemaBuilder {
     identifier: String,
-    attributes: LinkedHashMap<String, SchemaProps>,
+    attributes: IndexMap<String, SchemaProps>,
 }
 
 impl SchemaBuilder {
     pub fn with_identifier<S: Into<String>>(name: S) -> SchemaBuilder {
         SchemaBuilder {
             identifier: name.into(),
-            attributes: LinkedHashMap::new(),
+            attributes: IndexMap::new(),
         }
     }
 
@@ -147,14 +147,14 @@ impl Schema {
         bincode::serialize_into(writer, &builder)
     }
 
-    fn attributes_ordered(&self) -> LinkedHashMap<String, SchemaProps> {
+    fn attributes_ordered(&self) -> IndexMap<String, SchemaProps> {
         let mut ordered = BTreeMap::new();
         for (name, attr) in &self.inner.attrs {
             let (_, props) = self.inner.props[attr.0 as usize];
             ordered.insert(attr.0, (name, props));
         }
 
-        let mut attributes = LinkedHashMap::with_capacity(ordered.len());
+        let mut attributes = IndexMap::with_capacity(ordered.len());
         for (_, (name, props)) in ordered {
             attributes.insert(name.clone(), props);
         }
