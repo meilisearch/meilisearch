@@ -11,7 +11,7 @@ const SYNONYMS_KEY:   &str = "synonyms";
 const RANKED_MAP_KEY: &str = "ranked-map";
 
 #[derive(Clone)]
-pub struct MainIndex(pub(crate) Arc<sled::Tree>);
+pub struct MainIndex(pub(crate) crate::CfTree);
 
 impl MainIndex {
     pub fn schema(&self) -> Result<Option<Schema>, Error> {

@@ -7,7 +7,7 @@ pub enum Error {
     SchemaMissing,
     WordIndexMissing,
     MissingDocumentId,
-    SledError(sled::Error),
+    RocksDbError(rocksdb::Error),
     FstError(fst::Error),
     RmpDecodeError(rmp_serde::decode::Error),
     RmpEncodeError(rmp_serde::encode::Error),
@@ -15,9 +15,9 @@ pub enum Error {
     SerializerError(SerializerError),
 }
 
-impl From<sled::Error> for Error {
-    fn from(error: sled::Error) -> Error {
-        Error::SledError(error)
+impl From<rocksdb::Error> for Error {
+    fn from(error: rocksdb::Error) -> Error {
+        Error::RocksDbError(error)
     }
 }
 
@@ -59,7 +59,7 @@ impl fmt::Display for Error {
             SchemaMissing => write!(f, "this index does not have a schema"),
             WordIndexMissing => write!(f, "this index does not have a word index"),
             MissingDocumentId => write!(f, "document id is missing"),
-            SledError(e) => write!(f, "Sled error; {}", e),
+            RocksDbError(e) => write!(f, "RocksDB error; {}", e),
             FstError(e) => write!(f, "fst error; {}", e),
             RmpDecodeError(e) => write!(f, "rmp decode error; {}", e),
             RmpEncodeError(e) => write!(f, "rmp encode error; {}", e),

@@ -13,7 +13,7 @@ use crate::database::Index;
 #[derive(Debug)]
 pub enum DeserializerError {
     RmpError(RmpError),
-    SledError(sled::Error),
+    RocksDbError(rocksdb::Error),
     Custom(String),
 }
 
@@ -27,7 +27,7 @@ impl fmt::Display for DeserializerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             DeserializerError::RmpError(e) => write!(f, "rmp serde related error: {}", e),
-            DeserializerError::SledError(e) => write!(f, "Sled related error: {}", e),
+            DeserializerError::RocksDbError(e) => write!(f, "RocksDB related error: {}", e),
             DeserializerError::Custom(s) => f.write_str(s),
         }
     }
@@ -41,9 +41,9 @@ impl From<RmpError> for DeserializerError {
     }
 }
 
-impl From<sled::Error> for DeserializerError {
-    fn from(error: sled::Error) -> DeserializerError {
-        DeserializerError::SledError(error)
+impl From<rocksdb::Error> for DeserializerError {
+    fn from(error: rocksdb::Error) -> DeserializerError {
+        DeserializerError::RocksDbError(error)
     }
 }
 
@@ -75,36 +75,20 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a>
         let schema = self.index.schema();
         let documents = self.index.as_ref().documents_index;
 
-        let mut error = None;
-
         let iter = documents
-            .document_fields(self.document_id)
-            .filter_map(|result| {
-                match result {
-                    Ok((attr, value)) => {
-                    	let is_displayed = schema.props(attr).is_displayed();
-                        if is_displayed && self.fields.map_or(true, |f| f.contains(&attr)) {
-                            let attribute_name = schema.attribute_name(attr);
-                            Some((attribute_name, Value::new(value)))
-                        } else {
-                            None
-                        }
-                    },
-                    Err(e) => {
-                        if error.is_none() {
-                            error = Some(e);
-                        }
-                        None
-                    }
+            .document_fields(self.document_id)?
+            .filter_map(|(attr, value)| {
+                let is_displayed = schema.props(attr).is_displayed();
+                if is_displayed && self.fields.map_or(true, |f| f.contains(&attr)) {
+                    let attribute_name = schema.attribute_name(attr);
+                    Some((attribute_name, Value::new(value)))
+                } else {
+                    None
                 }
             });
 
         let map_deserializer = de::value::MapDeserializer::new(iter);
         let result = visitor.visit_map(map_deserializer).map_err(DeserializerError::from);
-
-        if let Some(e) = error {
-            return Err(DeserializerError::from(e))
-        }
 
         result
     }

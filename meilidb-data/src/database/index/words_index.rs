@@ -1,14 +1,13 @@
-use std::sync::Arc;
-
 use meilidb_core::DocIndex;
 use sdset::{Set, SetBuf};
 use zerocopy::{LayoutVerified, AsBytes};
+use crate::RocksDbResult;
 
 #[derive(Clone)]
-pub struct WordsIndex(pub(crate) Arc<sled::Tree>);
+pub struct WordsIndex(pub(crate) crate::CfTree);
 
 impl WordsIndex {
-    pub fn doc_indexes(&self, word: &[u8]) -> sled::Result<Option<SetBuf<DocIndex>>> {
+    pub fn doc_indexes(&self, word: &[u8]) -> RocksDbResult<Option<SetBuf<DocIndex>>> {
         // we must force an allocation to make the memory aligned
         match self.0.get(word)? {
             Some(bytes) => {
@@ -36,11 +35,11 @@ impl WordsIndex {
         }
     }
 
-    pub fn set_doc_indexes(&self, word: &[u8], set: &Set<DocIndex>) -> sled::Result<()> {
+    pub fn set_doc_indexes(&self, word: &[u8], set: &Set<DocIndex>) -> RocksDbResult<()> {
         self.0.insert(word, set.as_bytes()).map(drop)
     }
 
-    pub fn del_doc_indexes(&self, word: &[u8]) -> sled::Result<()> {
+    pub fn del_doc_indexes(&self, word: &[u8]) -> RocksDbResult<()> {
         self.0.remove(word).map(drop)
     }
 }

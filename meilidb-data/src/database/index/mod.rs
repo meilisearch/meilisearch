@@ -1,17 +1,19 @@
 use std::collections::{HashSet, BTreeMap};
 use std::convert::TryInto;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use arc_swap::{ArcSwap, ArcSwapOption, Guard};
+use crossbeam_channel::Receiver;
 use meilidb_core::criterion::Criteria;
 use meilidb_core::{DocIndex, Store, DocumentId, QueryBuilder};
 use meilidb_schema::Schema;
 use sdset::SetBuf;
 use serde::{de, Serialize, Deserialize};
-use sled::Transactional;
 
+use crate::CfTree;
 use crate::ranked_map::RankedMap;
 use crate::serde::{Deserializer, DeserializerError};
 
@@ -22,6 +24,7 @@ use self::main_index::MainIndex;
 use self::synonyms_index::SynonymsIndex;
 use self::words_index::WordsIndex;
 
+use crate::RocksDbResult;
 use crate::database::{
     Error,
     DocumentsAddition, DocumentsDeletion,
@@ -36,13 +39,6 @@ mod documents_index;
 mod main_index;
 mod synonyms_index;
 mod words_index;
-
-fn event_is_set(event: &sled::Event) -> bool {
-    match event {
-        sled::Event::Set(_, _) => true,
-        _ => false,
-    }
-}
 
 #[derive(Deserialize)]
 enum UpdateOwned {
@@ -81,72 +77,88 @@ pub struct UpdateStatus {
     pub detailed_duration: DetailedDuration,
 }
 
-fn spawn_update_system(index: Index) -> thread::JoinHandle<()> {
+fn spawn_update_system(index: Index, subscription: Receiver<()>) -> thread::JoinHandle<()> {
     thread::spawn(move || {
+        let mut subscription = subscription.into_iter();
+
         loop {
-            let subscription = index.updates_index.watch_prefix(vec![]);
-            while let Some(result) = index.updates_index.iter().next() {
-                let (key, _) = result.unwrap();
+            while let Some((key, _)) = index.updates_index.iter().unwrap().next() {
                 let update_id = key.as_ref().try_into().map(u64::from_be_bytes).unwrap();
 
                 let updates = &index.updates_index;
                 let results = &index.updates_results_index;
 
-                (updates, results).transaction(|(updates, results)| {
-                    let update = updates.remove(&key)?.unwrap();
+                let update = updates.get(&key).unwrap().unwrap();
 
-                    let (update_type, result, duration) = match rmp_serde::from_read_ref(&update).unwrap() {
-                        UpdateOwned::DocumentsAddition(documents) => {
-                            let update_type = UpdateType::DocumentsAddition { number: documents.len() };
-                            let ranked_map = index.cache.load().ranked_map.clone();
-                            let start = Instant::now();
-                            let result = apply_documents_addition(&index, ranked_map, documents);
-                            (update_type, result, start.elapsed())
-                        },
-                        UpdateOwned::DocumentsDeletion(documents) => {
-                            let update_type = UpdateType::DocumentsDeletion { number: documents.len() };
-                            let ranked_map = index.cache.load().ranked_map.clone();
-                            let start = Instant::now();
-                            let result = apply_documents_deletion(&index, ranked_map, documents);
-                            (update_type, result, start.elapsed())
-                        },
-                        UpdateOwned::SynonymsAddition(synonyms) => {
-                            let update_type = UpdateType::SynonymsAddition { number: synonyms.len() };
-                            let start = Instant::now();
-                            let result = apply_synonyms_addition(&index, synonyms);
-                            (update_type, result, start.elapsed())
-                        },
-                        UpdateOwned::SynonymsDeletion(synonyms) => {
-                            let update_type = UpdateType::SynonymsDeletion { number: synonyms.len() };
-                            let start = Instant::now();
-                            let result = apply_synonyms_deletion(&index, synonyms);
-                            (update_type, result, start.elapsed())
-                        },
-                    };
+                let (update_type, result, duration) = match rmp_serde::from_read_ref(&update).unwrap() {
+                    UpdateOwned::DocumentsAddition(documents) => {
+                        let update_type = UpdateType::DocumentsAddition { number: documents.len() };
+                        let ranked_map = index.cache.load().ranked_map.clone();
+                        let start = Instant::now();
+                        let result = apply_documents_addition(&index, ranked_map, documents);
+                        (update_type, result, start.elapsed())
+                    },
+                    UpdateOwned::DocumentsDeletion(documents) => {
+                        let update_type = UpdateType::DocumentsDeletion { number: documents.len() };
+                        let ranked_map = index.cache.load().ranked_map.clone();
+                        let start = Instant::now();
+                        let result = apply_documents_deletion(&index, ranked_map, documents);
+                        (update_type, result, start.elapsed())
+                    },
+                    UpdateOwned::SynonymsAddition(synonyms) => {
+                        let update_type = UpdateType::SynonymsAddition { number: synonyms.len() };
+                        let start = Instant::now();
+                        let result = apply_synonyms_addition(&index, synonyms);
+                        (update_type, result, start.elapsed())
+                    },
+                    UpdateOwned::SynonymsDeletion(synonyms) => {
+                        let update_type = UpdateType::SynonymsDeletion { number: synonyms.len() };
+                        let start = Instant::now();
+                        let result = apply_synonyms_deletion(&index, synonyms);
+                        (update_type, result, start.elapsed())
+                    },
+                };
 
-                    let detailed_duration = DetailedDuration { main: duration };
-                    let status = UpdateStatus {
-                        update_id,
-                        update_type,
-                        result: result.map_err(|e| e.to_string()),
-                        detailed_duration,
-                    };
+                let detailed_duration = DetailedDuration { main: duration };
+                let status = UpdateStatus {
+                    update_id,
+                    update_type,
+                    result: result.map_err(|e| e.to_string()),
+                    detailed_duration,
+                };
 
-                    if let Some(callback) = &*index.update_callback.load() {
-                        (callback)(status.clone());
-                    }
+                if let Some(callback) = &*index.update_callback.load() {
+                    (callback)(status.clone());
+                }
 
-                    let value = bincode::serialize(&status).unwrap();
-                    results.insert(&key, value)
-                })
-                .unwrap();
+                let value = bincode::serialize(&status).unwrap();
+                results.insert(&key, value).unwrap();
+                updates.remove(&key).unwrap();
             }
 
             // this subscription is just used to block
             // the loop until a new update is inserted
-            subscription.filter(event_is_set).next();
+            subscription.next();
         }
     })
+}
+
+fn last_update_id(
+    update_index: &crate::CfTree,
+    update_results_index: &crate::CfTree,
+) -> RocksDbResult<u64>
+{
+    let uikey = match update_index.last_key()? {
+        Some(key) => Some(key.as_ref().try_into().map(u64::from_be_bytes).unwrap()),
+        None => None,
+    };
+
+    let urikey = match update_results_index.last_key()? {
+        Some(key) => Some(key.as_ref().try_into().map(u64::from_be_bytes).unwrap()),
+        None => None,
+    };
+
+    Ok(uikey.max(urikey).unwrap_or(0))
 }
 
 #[derive(Copy, Clone)]
@@ -169,9 +181,9 @@ pub struct Index {
     custom_settings_index: CustomSettingsIndex,
 
     // used by the update system
-    db: sled::Db,
-    updates_index: Arc<sled::Tree>,
-    updates_results_index: Arc<sled::Tree>,
+    updates_id: Arc<AtomicU64>,
+    updates_index: crate::CfTree,
+    updates_results_index: crate::CfTree,
     update_callback: Arc<ArcSwapOption<Box<dyn Fn(UpdateStatus) + Send + Sync + 'static>>>,
 }
 
@@ -183,23 +195,23 @@ pub(crate) struct Cache {
 }
 
 impl Index {
-    pub fn new(db: sled::Db, name: &str) -> Result<Index, Error> {
+    pub fn new(db: Arc<rocksdb::DB>, name: &str) -> Result<Index, Error> {
         Index::new_raw(db, name, None)
     }
 
-    pub fn with_schema(db: sled::Db, name: &str, schema: Schema) -> Result<Index, Error> {
+    pub fn with_schema(db: Arc<rocksdb::DB>, name: &str, schema: Schema) -> Result<Index, Error> {
         Index::new_raw(db, name, Some(schema))
     }
 
-    fn new_raw(db: sled::Db, name: &str, schema: Option<Schema>) -> Result<Index, Error> {
-        let main_index = db.open_tree(name).map(MainIndex)?;
-        let synonyms_index = db.open_tree(format!("{}-synonyms", name)).map(SynonymsIndex)?;
-        let words_index = db.open_tree(format!("{}-words", name)).map(WordsIndex)?;
-        let docs_words_index = db.open_tree(format!("{}-docs-words", name)).map(DocsWordsIndex)?;
-        let documents_index = db.open_tree(format!("{}-documents", name)).map(DocumentsIndex)?;
-        let custom_settings_index = db.open_tree(format!("{}-custom", name)).map(CustomSettingsIndex)?;
-        let updates_index = db.open_tree(format!("{}-updates", name))?;
-        let updates_results_index = db.open_tree(format!("{}-updates-results", name))?;
+    fn new_raw(db: Arc<rocksdb::DB>, name: &str, schema: Option<Schema>) -> Result<Index, Error> {
+        let main_index = CfTree::create(db.clone(), name.to_string()).map(MainIndex)?;
+        let synonyms_index = CfTree::create(db.clone(), format!("{}-synonyms", name)).map(SynonymsIndex)?;
+        let words_index = CfTree::create(db.clone(), format!("{}-words", name)).map(WordsIndex)?;
+        let docs_words_index = CfTree::create(db.clone(), format!("{}-docs-words", name)).map(DocsWordsIndex)?;
+        let documents_index = CfTree::create(db.clone(), format!("{}-documents", name)).map(DocumentsIndex)?;
+        let custom_settings_index = CfTree::create(db.clone(), format!("{}-custom", name)).map(CustomSettingsIndex)?;
+        let (updates_index, subscription) = CfTree::create_with_subcription(db.clone(), format!("{}-updates", name))?;
+        let updates_results_index = CfTree::create(db.clone(), format!("{}-updates-results", name))?;
 
         let words = match main_index.words_set()? {
             Some(words) => Arc::new(words),
@@ -232,6 +244,9 @@ impl Index {
         let cache = Cache { words, synonyms, schema, ranked_map };
         let cache = Arc::new(ArcSwap::from_pointee(cache));
 
+        let last_update_id = last_update_id(&updates_index, &updates_results_index)?;
+        let updates_id = Arc::new(AtomicU64::new(last_update_id + 1));
+
         let index = Index {
             cache,
             main_index,
@@ -240,13 +255,13 @@ impl Index {
             docs_words_index,
             documents_index,
             custom_settings_index,
-            db,
+            updates_id,
             updates_index,
             updates_results_index,
             update_callback: Arc::new(ArcSwapOption::empty()),
         };
 
-        let _handle = spawn_update_system(index.clone());
+        let _handle = spawn_update_system(index.clone(), subscription);
 
         Ok(index)
     }
@@ -261,7 +276,7 @@ impl Index {
         self.update_callback.store(None);
     }
 
-    pub fn stats(&self) -> sled::Result<IndexStats> {
+    pub fn stats(&self) -> RocksDbResult<IndexStats> {
         let cache = self.cache.load();
         Ok(IndexStats {
             number_of_words: cache.words.len(),
@@ -340,17 +355,15 @@ impl Index {
         update_id: u64,
     ) -> Result<UpdateStatus, Error>
     {
-        let update_id_bytes = update_id.to_be_bytes().to_vec();
-        let mut subscription = self.updates_results_index.watch_prefix(update_id_bytes);
-
         // if we find the update result return it now
         if let Some(result) = self.update_status(update_id)? {
             return Ok(result)
         }
 
-        // this subscription is used to block the thread
-        // until the update_id is inserted in the tree
-        subscription.next();
+        loop {
+            if self.updates_results_index.get(&update_id.to_be_bytes())?.is_some() { break }
+            std::thread::sleep(Duration::from_millis(300));
+        }
 
         // the thread has been unblocked, it means that the update result
         // has been inserted in the tree, retrieve it
@@ -429,11 +442,9 @@ impl Index {
     }
 
     fn raw_push_update(&self, raw_update: Vec<u8>) -> Result<u64, Error> {
-        let update_id = self.db.generate_id()?;
+        let update_id = self.updates_id.fetch_add(1, Ordering::SeqCst);
         let update_id_array = update_id.to_be_bytes();
-
         self.updates_index.insert(update_id_array, raw_update)?;
-
         Ok(update_id)
     }
 }
