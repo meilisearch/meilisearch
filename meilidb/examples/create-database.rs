@@ -6,7 +6,6 @@ use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::error::Error;
-use std::borrow::Cow;
 use std::fs::File;
 
 use diskus::Walk;
@@ -44,9 +43,8 @@ pub struct Opt {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Document<'a> (
-    #[serde(borrow)]
-    HashMap<Cow<'a, str>, Cow<'a, str>>
+struct Document (
+    HashMap<String, String>
 );
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,7 +83,7 @@ fn index(
     synonyms: Vec<Synonym>,
 ) -> Result<Database, Box<dyn Error>>
 {
-    let database = Database::start_default(database_path)?;
+    let database = Database::open(database_path)?;
 
     let mut wtr = csv::Writer::from_path("./stats.csv").unwrap();
     wtr.write_record(&["NumberOfDocuments", "DiskUsed", "MemoryUsed"])?;
@@ -138,7 +136,7 @@ fn index(
                 }
             };
 
-            update.update_document(&document)?;
+            update.update_document(document);
 
             print!("\rindexing document {}", i);
             i += 1;

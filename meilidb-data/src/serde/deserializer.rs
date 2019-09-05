@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::io::Cursor;
+use std::{fmt, error::Error};
 
 use meilidb_core::DocumentId;
 use meilidb_schema::SchemaAttr;
@@ -9,6 +10,43 @@ use serde::{de, forward_to_deserialize_any};
 
 use crate::database::Index;
 
+#[derive(Debug)]
+pub enum DeserializerError {
+    RmpError(RmpError),
+    SledError(sled::Error),
+    Custom(String),
+}
+
+impl de::Error for DeserializerError {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        DeserializerError::Custom(msg.to_string())
+    }
+}
+
+impl fmt::Display for DeserializerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DeserializerError::RmpError(e) => write!(f, "rmp serde related error: {}", e),
+            DeserializerError::SledError(e) => write!(f, "Sled related error: {}", e),
+            DeserializerError::Custom(s) => f.write_str(s),
+        }
+    }
+}
+
+impl Error for DeserializerError {}
+
+impl From<RmpError> for DeserializerError {
+    fn from(error: RmpError) -> DeserializerError {
+        DeserializerError::RmpError(error)
+    }
+}
+
+impl From<sled::Error> for DeserializerError {
+    fn from(error: sled::Error) -> DeserializerError {
+        DeserializerError::SledError(error)
+    }
+}
+
 pub struct Deserializer<'a> {
     pub document_id: DocumentId,
     pub index: &'a Index,
@@ -17,7 +55,7 @@ pub struct Deserializer<'a> {
 
 impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a>
 {
-    type Error = RmpError;
+    type Error = DeserializerError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: de::Visitor<'de>
@@ -34,33 +72,41 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a>
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where V: de::Visitor<'de>
     {
-        let schema = &self.index.lease_inner().schema;
-        let documents = &self.index.lease_inner().raw.documents;
+        let schema = self.index.schema();
+        let documents = self.index.as_ref().documents_index;
 
-        let document_attributes = documents.document_fields(self.document_id);
-        let document_attributes = document_attributes.filter_map(|result| {
-            match result {
-                Ok(value) => Some(value),
-                Err(e) => {
-                    // TODO: must log the error
-                    // error!("sled iter error; {}", e);
-                    None
-                },
-            }
-        });
+        let mut error = None;
 
-        let iter = document_attributes.filter_map(|(attr, value)| {
-            let is_displayed = schema.props(attr).is_displayed();
-            if is_displayed && self.fields.map_or(true, |f| f.contains(&attr)) {
-                let attribute_name = schema.attribute_name(attr);
-                Some((attribute_name, Value::new(value)))
-            } else {
-                None
-            }
-        });
+        let iter = documents
+            .document_fields(self.document_id)
+            .filter_map(|result| {
+                match result {
+                    Ok((attr, value)) => {
+                    	let is_displayed = schema.props(attr).is_displayed();
+                        if is_displayed && self.fields.map_or(true, |f| f.contains(&attr)) {
+                            let attribute_name = schema.attribute_name(attr);
+                            Some((attribute_name, Value::new(value)))
+                        } else {
+                            None
+                        }
+                    },
+                    Err(e) => {
+                        if error.is_none() {
+                            error = Some(e);
+                        }
+                        None
+                    }
+                }
+            });
 
         let map_deserializer = de::value::MapDeserializer::new(iter);
-        visitor.visit_map(map_deserializer)
+        let result = visitor.visit_map(map_deserializer).map_err(DeserializerError::from);
+
+        if let Some(e) = error {
+            return Err(DeserializerError::from(e))
+        }
+
+        result
     }
 }
 

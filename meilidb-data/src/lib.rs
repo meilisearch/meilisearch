@@ -5,8 +5,8 @@ mod number;
 mod ranked_map;
 mod serde;
 
-pub use rocksdb;
-pub use self::database::{Database, Index, CustomSettings};
+pub use sled;
+pub use self::database::{Database, Index, CustomSettingsIndex};
 pub use self::number::Number;
 pub use self::ranked_map::RankedMap;
 pub use self::serde::{compute_document_id, extract_document_id, value_to_string};

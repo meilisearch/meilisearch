@@ -1,88 +1,64 @@
 use std::collections::hash_map::Entry;
 use std::collections::{HashSet, HashMap};
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use meilidb_schema::Schema;
 
-mod custom_settings;
-mod docs_words_index;
-mod documents_addition;
-mod documents_deletion;
-mod documents_index;
 mod error;
 mod index;
-mod main_index;
-mod raw_index;
-mod synonyms_addition;
-mod synonyms_deletion;
-mod synonyms_index;
-mod words_index;
+mod update;
 
 pub use self::error::Error;
-pub use self::index::Index;
-pub use self::custom_settings::CustomSettings;
+pub use self::index::{Index, CustomSettingsIndex};
 
-use self::docs_words_index::DocsWordsIndex;
-use self::documents_addition::DocumentsAddition;
-use self::documents_deletion::DocumentsDeletion;
-use self::synonyms_addition::SynonymsAddition;
-use self::synonyms_deletion::SynonymsDeletion;
-use self::documents_index::DocumentsIndex;
-use self::index::InnerIndex;
-use self::main_index::MainIndex;
-use self::raw_index::{RawIndex, InnerRawIndex};
-use self::words_index::WordsIndex;
-use self::synonyms_index::SynonymsIndex;
+pub use self::update::DocumentsAddition;
+pub use self::update::DocumentsDeletion;
+pub use self::update::SynonymsAddition;
+pub use self::update::SynonymsDeletion;
+
+use self::update::apply_documents_addition;
+use self::update::apply_documents_deletion;
+use self::update::apply_synonyms_addition;
+use self::update::apply_synonyms_deletion;
+
+fn load_indexes(tree: &sled::Tree) -> Result<HashSet<String>, Error> {
+    match tree.get("indexes")? {
+        Some(bytes) => Ok(bincode::deserialize(&bytes)?),
+        None => Ok(HashSet::new())
+    }
+}
 
 pub struct Database {
-    cache: RwLock<HashMap<String, Arc<Index>>>,
-    inner: Arc<rocksdb::DB>,
+    cache: RwLock<HashMap<String, Index>>,
+    inner: sled::Db,
 }
 
 impl Database {
-    pub fn start_default<P: AsRef<Path>>(path: P) -> Result<Database, Error> {
-        let path = path.as_ref();
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Database, Error> {
         let cache = RwLock::new(HashMap::new());
+        let inner = sled::Db::open(path)?;
 
-        let options = {
-            let mut options = rocksdb::Options::default();
-            options.create_if_missing(true);
-            options
-        };
-        let cfs = rocksdb::DB::list_cf(&options, path).unwrap_or(Vec::new());
-        let inner = Arc::new(rocksdb::DB::open_cf(&options, path, &cfs)?);
+        let indexes = load_indexes(&inner)?;
         let database = Database { cache, inner };
 
-        let mut indexes: Vec<_> = cfs.iter()
-            .filter_map(|c| c.split('-').nth(0).filter(|&c| c != "default"))
-            .collect();
-        indexes.sort_unstable();
-        indexes.dedup();
-
         for index in indexes {
-            database.open_index(index)?;
+            database.open_index(&index)?;
         }
 
         Ok(database)
     }
 
-    pub fn indexes(&self) -> Result<Option<HashSet<String>>, Error> {
-        let bytes = match self.inner.get("indexes")? {
-            Some(bytes) => bytes,
-            None => return Ok(None),
-        };
-
-        let indexes = bincode::deserialize(&bytes)?;
-        Ok(Some(indexes))
+    pub fn indexes(&self) -> Result<HashSet<String>, Error> {
+        load_indexes(&self.inner)
     }
 
     fn set_indexes(&self, value: &HashSet<String>) -> Result<(), Error> {
         let bytes = bincode::serialize(value)?;
-        self.inner.put("indexes", bytes)?;
+        self.inner.insert("indexes", bytes)?;
         Ok(())
     }
 
-    pub fn open_index(&self, name: &str) -> Result<Option<Arc<Index>>, Error> {
+    pub fn open_index(&self, name: &str) -> Result<Option<Index>, Error> {
         {
             let cache = self.cache.read().unwrap();
             if let Some(index) = cache.get(name).cloned() {
@@ -96,56 +72,19 @@ impl Database {
                 occupied.get().clone()
             },
             Entry::Vacant(vacant) => {
-                if !self.indexes()?.map_or(false, |x| x.contains(name)) {
+                if !self.indexes()?.contains(name) {
                     return Ok(None)
                 }
 
-                let main = {
-                    self.inner.cf_handle(name).expect("cf not found");
-                    MainIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(name)))
-                };
-
-                let synonyms = {
-                    let cf_name = format!("{}-synonyms", name);
-                    self.inner.cf_handle(&cf_name).expect("cf not found");
-                    SynonymsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
-                };
-
-                let words = {
-                    let cf_name = format!("{}-words", name);
-                    self.inner.cf_handle(&cf_name).expect("cf not found");
-                    WordsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
-                };
-
-                let docs_words = {
-                    let cf_name = format!("{}-docs-words", name);
-                    self.inner.cf_handle(&cf_name).expect("cf not found");
-                    DocsWordsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
-                };
-
-                let documents = {
-                    let cf_name = format!("{}-documents", name);
-                    self.inner.cf_handle(&cf_name).expect("cf not found");
-                    DocumentsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
-                };
-
-                let custom = {
-                    let cf_name = format!("{}-custom", name);
-                    self.inner.cf_handle(&cf_name).expect("cf not found");
-                    CustomSettings(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
-                };
-
-                let raw_index = RawIndex { main, synonyms, words, docs_words, documents, custom };
-                let index = Index::from_raw(raw_index)?;
-
-                vacant.insert(Arc::new(index)).clone()
+                let index = Index::new(self.inner.clone(), name)?;
+                vacant.insert(index).clone()
             },
         };
 
         Ok(Some(index))
     }
 
-    pub fn create_index(&self, name: &str, schema: Schema) -> Result<Arc<Index>, Error> {
+    pub fn create_index(&self, name: &str, schema: Schema) -> Result<Index, Error> {
         let mut cache = self.cache.write().unwrap();
 
         let index = match cache.entry(name.to_string()) {
@@ -153,57 +92,13 @@ impl Database {
                 occupied.get().clone()
             },
             Entry::Vacant(vacant) => {
-                let main = {
-                    self.inner.create_cf(name, &rocksdb::Options::default())?;
-                    MainIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(name)))
-                };
+                let index = Index::with_schema(self.inner.clone(), name, schema)?;
 
-                if let Some(prev_schema) = main.schema()? {
-                    if prev_schema != schema {
-                        return Err(Error::SchemaDiffer)
-                    }
-                }
-
-                main.set_schema(&schema)?;
-
-                let synonyms = {
-                    let cf_name = format!("{}-synonyms", name);
-                    self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
-                    SynonymsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
-                };
-
-                let words = {
-                    let cf_name = format!("{}-words", name);
-                    self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
-                    WordsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
-                };
-
-                let docs_words = {
-                    let cf_name = format!("{}-docs-words", name);
-                    self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
-                    DocsWordsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
-                };
-
-                let documents = {
-                    let cf_name = format!("{}-documents", name);
-                    self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
-                    DocumentsIndex(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
-                };
-
-                let custom = {
-                    let cf_name = format!("{}-custom", name);
-                    self.inner.create_cf(&cf_name, &rocksdb::Options::default())?;
-                    CustomSettings(InnerRawIndex::new(self.inner.clone(), Arc::from(cf_name)))
-                };
-
-                let mut indexes = self.indexes()?.unwrap_or_else(HashSet::new);
+                let mut indexes = self.indexes()?;
                 indexes.insert(name.to_string());
                 self.set_indexes(&indexes)?;
 
-                let raw_index = RawIndex { main, synonyms, words, docs_words, documents, custom };
-                let index = Index::from_raw(raw_index)?;
-
-                vacant.insert(Arc::new(index)).clone()
+                vacant.insert(index).clone()
             },
         };
 
