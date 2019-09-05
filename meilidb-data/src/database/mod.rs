@@ -21,8 +21,10 @@ use self::update::apply_documents_deletion;
 use self::update::apply_synonyms_addition;
 use self::update::apply_synonyms_deletion;
 
+const INDEXES_KEY: &str = "indexes";
+
 fn load_indexes(tree: &sled::Tree) -> Result<HashSet<String>, Error> {
-    match tree.get("indexes")? {
+    match tree.get(INDEXES_KEY)? {
         Some(bytes) => Ok(bincode::deserialize(&bytes)?),
         None => Ok(HashSet::new())
     }
@@ -54,7 +56,7 @@ impl Database {
 
     fn set_indexes(&self, value: &HashSet<String>) -> Result<(), Error> {
         let bytes = bincode::serialize(value)?;
-        self.inner.insert("indexes", bytes)?;
+        self.inner.insert(INDEXES_KEY, bytes)?;
         Ok(())
     }
 
