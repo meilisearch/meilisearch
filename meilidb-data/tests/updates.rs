@@ -33,6 +33,7 @@ fn insert_delete_document() {
     let status = index.update_status_blocking(update_id).unwrap();
     assert!(as_been_updated.swap(false, Relaxed));
     assert!(status.result.is_ok());
+    assert_eq!(index.number_of_documents(), 1);
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 1);
@@ -44,6 +45,7 @@ fn insert_delete_document() {
     let status = index.update_status_blocking(update_id).unwrap();
     assert!(as_been_updated.swap(false, Relaxed));
     assert!(status.result.is_ok());
+    assert_eq!(index.number_of_documents(), 0);
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 0);
@@ -71,17 +73,19 @@ fn replace_document() {
     let status = index.update_status_blocking(update_id).unwrap();
     assert!(as_been_updated.swap(false, Relaxed));
     assert!(status.result.is_ok());
+    assert_eq!(index.number_of_documents(), 1);
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 1);
     assert_eq!(index.document(None, docs[0].id).unwrap().as_ref(), Some(&doc1));
 
-    let mut deletion = index.documents_addition();
-    deletion.update_document(&doc2);
-    let update_id = deletion.finalize().unwrap();
+    let mut addition = index.documents_addition();
+    addition.update_document(&doc2);
+    let update_id = addition.finalize().unwrap();
     let status = index.update_status_blocking(update_id).unwrap();
     assert!(as_been_updated.swap(false, Relaxed));
     assert!(status.result.is_ok());
+    assert_eq!(index.number_of_documents(), 1);
 
     let docs = index.query_builder().query("hello", 0..10).unwrap();
     assert_eq!(docs.len(), 0);
