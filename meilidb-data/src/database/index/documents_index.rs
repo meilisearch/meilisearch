@@ -35,14 +35,16 @@ impl DocumentsIndex {
         Ok(())
     }
 
-    pub fn del_all_document_fields(&self, id: DocumentId) -> RocksDbResult<()> {
+    pub fn del_all_document_fields(&self, id: DocumentId) -> RocksDbResult<usize> {
         let (start, end) = document_fields_range(id);
 
+        let mut count = 0;
         for (key, _) in self.0.range(start, end)? {
             self.0.remove(key)?;
+            count += 1;
         }
 
-        Ok(())
+        Ok(count)
     }
 
     pub fn document_fields(&self, id: DocumentId) -> RocksDbResult<DocumentFieldsIter> {
@@ -52,7 +54,7 @@ impl DocumentsIndex {
         Ok(DocumentFieldsIter(iter))
     }
 
-    pub fn len(&self) -> RocksDbResult<usize> {
+    pub fn len(&self) -> RocksDbResult<u64> {
         let mut last_document_id = None;
         let mut count = 0;
 

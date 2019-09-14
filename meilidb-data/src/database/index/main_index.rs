@@ -1,14 +1,16 @@
 use std::sync::Arc;
+use std::convert::TryInto;
 
 use meilidb_schema::Schema;
 
 use crate::ranked_map::RankedMap;
 use crate::database::Error;
 
-const SCHEMA_KEY:     &str = "schema";
-const WORDS_KEY:      &str = "words";
-const SYNONYMS_KEY:   &str = "synonyms";
-const RANKED_MAP_KEY: &str = "ranked-map";
+const SCHEMA_KEY:              &str = "schema";
+const WORDS_KEY:               &str = "words";
+const SYNONYMS_KEY:            &str = "synonyms";
+const RANKED_MAP_KEY:          &str = "ranked-map";
+const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 
 #[derive(Clone)]
 pub struct MainIndex(pub(crate) crate::CfTree);
@@ -78,5 +80,23 @@ impl MainIndex {
         value.write_to_bin(&mut bytes)?;
         self.0.insert(RANKED_MAP_KEY, bytes)?;
         Ok(())
+    }
+
+    pub fn number_of_documents(&self) -> Result<u64, Error> {
+        match self.0.get(NUMBER_OF_DOCUMENTS_KEY)? {
+            Some(bytes) => {
+                let array = (*bytes).try_into().unwrap();
+                Ok(u64::from_be_bytes(array))
+            },
+            None => Ok(0),
+        }
+    }
+
+    pub fn set_number_of_documents<F>(&self, f: F) -> Result<u64, Error>
+    where F: FnOnce(u64) -> u64,
+    {
+        let new = self.number_of_documents().map(f)?;
+        self.0.insert(NUMBER_OF_DOCUMENTS_KEY, new.to_be_bytes())?;
+        Ok(new)
     }
 }

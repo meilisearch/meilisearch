@@ -5,11 +5,10 @@ use fst::{SetBuilder, set::OpBuilder};
 use sdset::{SetOperation, duo::Union};
 use serde::Serialize;
 
+use crate::RankedMap;
+use crate::database::{Error, Index, index::Cache, apply_documents_deletion};
 use crate::indexer::Indexer;
 use crate::serde::{extract_document_id, Serializer, RamDocumentStore};
-use crate::RankedMap;
-
-use crate::database::{Error, Index, index::Cache, apply_documents_deletion};
 
 pub struct DocumentsAddition<'a, D> {
     index: &'a Index,
@@ -73,8 +72,8 @@ pub fn apply_documents_addition(
     let words = ref_index.words_index;
 
     // 1. remove the previous documents match indexes
-    let document_ids = document_ids.into_iter().collect();
-    apply_documents_deletion(index, ranked_map.clone(), document_ids)?;
+    let documents_to_insert = document_ids.iter().cloned().collect();
+    apply_documents_deletion(index, ranked_map.clone(), documents_to_insert)?;
 
     // 2. insert new document attributes in the database
     for ((id, attr), value) in document_store.into_inner() {
@@ -124,13 +123,16 @@ pub fn apply_documents_addition(
     main.set_words_set(&words)?;
     main.set_ranked_map(&ranked_map)?;
 
+    let inserted_documents_len = document_ids.len() as u64;
+    let number_of_documents = main.set_number_of_documents(|old| old + inserted_documents_len)?;
+
     // update the "consistent" view of the Index
     let cache = ref_index.cache;
     let words = Arc::new(words);
     let synonyms = cache.synonyms.clone();
     let schema = cache.schema.clone();
 
-    let cache = Cache { words, synonyms, schema, ranked_map };
+    let cache = Cache { words, synonyms, schema, ranked_map, number_of_documents };
     index.cache.store(Arc::new(cache));
 
     Ok(())

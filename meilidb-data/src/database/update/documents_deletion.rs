@@ -1,4 +1,4 @@
-use std::collections::{HashMap, BTreeSet};
+use std::collections::{HashMap, HashSet, BTreeSet};
 use std::sync::Arc;
 
 use fst::{SetBuilder, Streamer};
@@ -88,6 +88,7 @@ pub fn apply_documents_deletion(
         }
     }
 
+    let mut deleted_documents = HashSet::new();
     let mut removed_words = BTreeSet::new();
     for (word, document_ids) in words_document_ids {
         let document_ids = SetBuf::from_dirty(document_ids);
@@ -105,7 +106,9 @@ pub fn apply_documents_deletion(
         }
 
         for id in document_ids {
-            documents.del_all_document_fields(id)?;
+            if documents.del_all_document_fields(id)? != 0 {
+                deleted_documents.insert(id);
+            }
             docs_words.del_doc_words(id)?;
         }
     }
@@ -131,13 +134,16 @@ pub fn apply_documents_deletion(
     main.set_words_set(&words)?;
     main.set_ranked_map(&ranked_map)?;
 
+    let deleted_documents_len = deleted_documents.len() as u64;
+    let number_of_documents = main.set_number_of_documents(|old| old - deleted_documents_len)?;
+
     // update the "consistent" view of the Index
     let cache = ref_index.cache;
     let words = Arc::new(words);
     let synonyms = cache.synonyms.clone();
     let schema = cache.schema.clone();
 
-    let cache = Cache { words, synonyms, schema, ranked_map };
+    let cache = Cache { words, synonyms, schema, ranked_map, number_of_documents };
     index.cache.store(Arc::new(cache));
 
     Ok(())

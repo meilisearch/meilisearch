@@ -85,8 +85,9 @@ pub fn apply_synonyms_addition(
     let ranked_map = cache.ranked_map.clone();
     let synonyms = Arc::new(synonyms);
     let schema = cache.schema.clone();
+    let number_of_documents = cache.number_of_documents;
 
-    let cache = Cache { words, synonyms, schema, ranked_map };
+    let cache = Cache { words, synonyms, schema, ranked_map, number_of_documents };
     index.cache.store(Arc::new(cache));
 
     Ok(())
