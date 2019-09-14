@@ -3,7 +3,7 @@ use meilidb_core::DocumentId;
 use crate::database::Error;
 
 #[derive(Clone)]
-pub struct DocsWordsIndex(pub Arc<sled::Tree>);
+pub struct DocsWordsIndex(pub crate::CfTree);
 
 impl DocsWordsIndex {
     pub fn doc_words(&self, id: DocumentId) -> Result<Option<fst::Set>, Error> {

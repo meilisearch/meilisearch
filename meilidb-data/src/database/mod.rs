@@ -1,6 +1,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::{HashSet, HashMap};
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::RwLock;
 use meilidb_schema::Schema;
 
@@ -21,8 +22,10 @@ use self::update::apply_documents_deletion;
 use self::update::apply_synonyms_addition;
 use self::update::apply_synonyms_deletion;
 
-fn load_indexes(tree: &sled::Tree) -> Result<HashSet<String>, Error> {
-    match tree.get("indexes")? {
+const INDEXES_KEY: &str = "indexes";
+
+fn load_indexes(tree: &rocksdb::DB) -> Result<HashSet<String>, Error> {
+    match tree.get(INDEXES_KEY)? {
         Some(bytes) => Ok(bincode::deserialize(&bytes)?),
         None => Ok(HashSet::new())
     }
@@ -30,13 +33,18 @@ fn load_indexes(tree: &sled::Tree) -> Result<HashSet<String>, Error> {
 
 pub struct Database {
     cache: RwLock<HashMap<String, Index>>,
-    inner: sled::Db,
+    inner: Arc<rocksdb::DB>,
 }
 
 impl Database {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Database, Error> {
         let cache = RwLock::new(HashMap::new());
-        let inner = sled::Db::open(path)?;
+
+        let mut options = rocksdb::Options::default();
+        options.create_if_missing(true);
+
+        let cfs = rocksdb::DB::list_cf(&options, &path).unwrap_or_default();
+        let inner = Arc::new(rocksdb::DB::open_cf(&options, path, cfs)?);
 
         let indexes = load_indexes(&inner)?;
         let database = Database { cache, inner };
@@ -54,7 +62,7 @@ impl Database {
 
     fn set_indexes(&self, value: &HashSet<String>) -> Result<(), Error> {
         let bytes = bincode::serialize(value)?;
-        self.inner.insert("indexes", bytes)?;
+        self.inner.put(INDEXES_KEY, bytes)?;
         Ok(())
     }
 

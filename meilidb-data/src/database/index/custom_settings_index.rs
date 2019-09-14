@@ -1,11 +1,10 @@
-use std::sync::Arc;
 use std::ops::Deref;
 
 #[derive(Clone)]
-pub struct CustomSettingsIndex(pub(crate) Arc<sled::Tree>);
+pub struct CustomSettingsIndex(pub(crate) crate::CfTree);
 
 impl Deref for CustomSettingsIndex {
-    type Target = sled::Tree;
+    type Target = crate::CfTree;
 
     fn deref(&self) -> &Self::Target {
         &self.0
