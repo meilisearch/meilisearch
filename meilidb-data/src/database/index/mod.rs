@@ -164,7 +164,7 @@ fn last_update_id(
 #[derive(Copy, Clone)]
 pub struct IndexStats {
     pub number_of_words: usize,
-    pub number_of_documents: usize,
+    pub number_of_documents: u64,
     pub number_attrs_in_ranked_map: usize,
 }
 
@@ -192,6 +192,7 @@ pub(crate) struct Cache {
     pub synonyms: Arc<fst::Set>,
     pub schema: Schema,
     pub ranked_map: RankedMap,
+    pub number_of_documents: u64,
 }
 
 impl Index {
@@ -241,7 +242,9 @@ impl Index {
             None => RankedMap::default(),
         };
 
-        let cache = Cache { words, synonyms, schema, ranked_map };
+        let number_of_documents = documents_index.len()?;
+
+        let cache = Cache { words, synonyms, schema, ranked_map, number_of_documents };
         let cache = Arc::new(ArcSwap::from_pointee(cache));
 
         let last_update_id = last_update_id(&updates_index, &updates_results_index)?;
@@ -280,7 +283,7 @@ impl Index {
         let cache = self.cache.load();
         Ok(IndexStats {
             number_of_words: cache.words.len(),
-            number_of_documents: self.documents_index.len()?,
+            number_of_documents: cache.number_of_documents,
             number_attrs_in_ranked_map: cache.ranked_map.len(),
         })
     }
@@ -317,6 +320,10 @@ impl Index {
 
     pub fn custom_settings(&self) -> CustomSettingsIndex {
         self.custom_settings_index.clone()
+    }
+
+    pub fn number_of_documents(&self) -> u64 {
+        self.cache.load().number_of_documents
     }
 
     pub fn documents_addition<D>(&self) -> DocumentsAddition<D> {

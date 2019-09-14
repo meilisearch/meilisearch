@@ -54,7 +54,7 @@ impl DocumentsIndex {
         Ok(DocumentFieldsIter(iter))
     }
 
-    pub fn len(&self) -> RocksDbResult<usize> {
+    pub fn len(&self) -> RocksDbResult<u64> {
         let mut last_document_id = None;
         let mut count = 0;
 

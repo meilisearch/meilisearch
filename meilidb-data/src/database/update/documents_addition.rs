@@ -132,7 +132,7 @@ pub fn apply_documents_addition(
     let synonyms = cache.synonyms.clone();
     let schema = cache.schema.clone();
 
-    let cache = Cache { words, synonyms, schema, ranked_map };
+    let cache = Cache { words, synonyms, schema, ranked_map, number_of_documents };
     index.cache.store(Arc::new(cache));
 
     Ok(())
