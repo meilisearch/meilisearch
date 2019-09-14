@@ -123,6 +123,9 @@ pub fn apply_documents_addition(
     main.set_words_set(&words)?;
     main.set_ranked_map(&ranked_map)?;
 
+    let inserted_documents_len = document_ids.len() as u64;
+    let number_of_documents = main.set_number_of_documents(|old| old + inserted_documents_len)?;
+
     // update the "consistent" view of the Index
     let cache = ref_index.cache;
     let words = Arc::new(words);

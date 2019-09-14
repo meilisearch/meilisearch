@@ -134,6 +134,9 @@ pub fn apply_documents_deletion(
     main.set_words_set(&words)?;
     main.set_ranked_map(&ranked_map)?;
 
+    let deleted_documents_len = deleted_documents.len() as u64;
+    let number_of_documents = main.set_number_of_documents(|old| old - deleted_documents_len)?;
+
     // update the "consistent" view of the Index
     let cache = ref_index.cache;
     let words = Arc::new(words);
