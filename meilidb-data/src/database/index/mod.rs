@@ -40,15 +40,7 @@ mod main_index;
 mod synonyms_index;
 mod words_index;
 
-#[derive(Deserialize)]
-enum UpdateOwned {
-    DocumentsAddition(Vec<rmpv::Value>),
-    DocumentsDeletion(Vec<DocumentId>),
-    SynonymsAddition(BTreeMap<String, Vec<String>>),
-    SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
-}
-
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 enum Update {
     DocumentsAddition(Vec<rmpv::Value>),
     DocumentsDeletion(Vec<DocumentId>),
@@ -91,27 +83,27 @@ fn spawn_update_system(index: Index, subscription: Receiver<()>) -> thread::Join
                 let update = updates.get(&key).unwrap().unwrap();
 
                 let (update_type, result, duration) = match rmp_serde::from_read_ref(&update).unwrap() {
-                    UpdateOwned::DocumentsAddition(documents) => {
+                    Update::DocumentsAddition(documents) => {
                         let update_type = UpdateType::DocumentsAddition { number: documents.len() };
                         let ranked_map = index.cache.load().ranked_map.clone();
                         let start = Instant::now();
                         let result = apply_documents_addition(&index, ranked_map, documents);
                         (update_type, result, start.elapsed())
                     },
-                    UpdateOwned::DocumentsDeletion(documents) => {
+                    Update::DocumentsDeletion(documents) => {
                         let update_type = UpdateType::DocumentsDeletion { number: documents.len() };
                         let ranked_map = index.cache.load().ranked_map.clone();
                         let start = Instant::now();
                         let result = apply_documents_deletion(&index, ranked_map, documents);
                         (update_type, result, start.elapsed())
                     },
-                    UpdateOwned::SynonymsAddition(synonyms) => {
+                    Update::SynonymsAddition(synonyms) => {
                         let update_type = UpdateType::SynonymsAddition { number: synonyms.len() };
                         let start = Instant::now();
                         let result = apply_synonyms_addition(&index, synonyms);
                         (update_type, result, start.elapsed())
                     },
-                    UpdateOwned::SynonymsDeletion(synonyms) => {
+                    Update::SynonymsDeletion(synonyms) => {
                         let update_type = UpdateType::SynonymsDeletion { number: synonyms.len() };
                         let start = Instant::now();
                         let result = apply_synonyms_deletion(&index, synonyms);
