@@ -105,49 +105,6 @@ impl Schema {
         SchemaBuilder { identifier, attributes }
     }
 
-    pub fn from_toml<R: Read>(mut reader: R) -> Result<Schema, Box<dyn Error>> {
-        let mut buffer = Vec::new();
-        reader.read_to_end(&mut buffer)?;
-        let builder: SchemaBuilder = toml::from_slice(&buffer)?;
-        Ok(builder.build())
-    }
-
-    pub fn to_toml<W: Write>(&self, mut writer: W) -> Result<(), Box<dyn Error>> {
-        let builder = self.to_builder();
-        let string = toml::to_string_pretty(&builder)?;
-        writer.write_all(string.as_bytes())?;
-
-        Ok(())
-    }
-
-    pub fn from_json<R: Read>(mut reader: R) -> Result<Schema, Box<dyn Error>> {
-        let mut buffer = Vec::new();
-        reader.read_to_end(&mut buffer)?;
-        let builder: SchemaBuilder = serde_json::from_slice(&buffer)?;
-        Ok(builder.build())
-    }
-
-    pub fn to_json<W: Write>(&self, mut writer: W) -> Result<(), Box<dyn Error>> {
-        let builder = self.to_builder();
-        let string = serde_json::to_string_pretty(&builder)?;
-        writer.write_all(string.as_bytes())?;
-
-        Ok(())
-    }
-
-    pub fn read_from_bin<R: Read>(reader: R) -> bincode::Result<Schema> {
-        let builder: SchemaBuilder = bincode::deserialize_from(reader)?;
-        Ok(builder.build())
-    }
-
-    pub fn write_to_bin<W: Write>(&self, writer: W) -> bincode::Result<()> {
-        let identifier = self.inner.identifier.clone();
-        let attributes = self.attributes_ordered();
-        let builder = SchemaBuilder { identifier, attributes };
-
-        bincode::serialize_into(writer, &builder)
-    }
-
     fn attributes_ordered(&self) -> IndexMap<String, SchemaProps> {
         let mut ordered = BTreeMap::new();
         for (name, attr) in &self.inner.attrs {
@@ -253,9 +210,8 @@ mod tests {
         let schema = builder.build();
 
         let mut buffer = Vec::new();
-
-        schema.write_to_bin(&mut buffer)?;
-        let schema2 = Schema::read_from_bin(buffer.as_slice())?;
+        bincode::serialize_into(&mut buffer, &schema)?;
+        let schema2 = bincode::deserialize_from(buffer.as_slice())?;
 
         assert_eq!(schema, schema2);
 
@@ -270,10 +226,9 @@ mod tests {
         builder.new_attribute("gamma", INDEXED);
         let schema = builder.build();
 
-        let mut buffer = Vec::new();
-        schema.to_toml(&mut buffer)?;
+        let buffer = toml::to_vec(&schema)?;
+        let schema2 = toml::from_slice(buffer.as_slice())?;
 
-        let schema2 = Schema::from_toml(buffer.as_slice())?;
         assert_eq!(schema, schema2);
 
         let data = r#"
@@ -289,7 +244,7 @@ mod tests {
             [attributes."gamma"]
             indexed = true
         "#;
-        let schema2 = Schema::from_toml(data.as_bytes())?;
+        let schema2 = toml::from_str(data)?;
         assert_eq!(schema, schema2);
 
         Ok(())
@@ -303,10 +258,9 @@ mod tests {
         builder.new_attribute("gamma", INDEXED);
         let schema = builder.build();
 
-        let mut buffer = Vec::new();
-        schema.to_json(&mut buffer)?;
+        let buffer = serde_json::to_vec(&schema)?;
+        let schema2 = serde_json::from_slice(buffer.as_slice())?;
 
-        let schema2 = Schema::from_json(buffer.as_slice())?;
         assert_eq!(schema, schema2);
 
         let data = r#"
@@ -325,7 +279,7 @@ mod tests {
                     }
                 }
             }"#;
-        let schema2 = Schema::from_json(data.as_bytes())?;
+        let schema2 = serde_json::from_str(data)?;
         assert_eq!(schema, schema2);
 
         Ok(())

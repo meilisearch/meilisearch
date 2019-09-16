@@ -6,7 +6,7 @@ use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{self, File};
 
 use diskus::Walk;
 use sysinfo::{SystemExt, ProcessExt};
@@ -181,8 +181,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::from_args();
 
     let schema = {
-        let file = File::open(&opt.schema_path)?;
-        Schema::from_toml(file)?
+        let string = fs::read_to_string(&opt.schema_path)?;
+        toml::from_str(&string)?
     };
 
     let stop_words = match opt.stop_words {

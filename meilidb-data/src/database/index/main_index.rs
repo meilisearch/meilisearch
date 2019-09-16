@@ -19,7 +19,7 @@ impl MainIndex {
     pub fn schema(&self) -> Result<Option<Schema>, Error> {
         match self.0.get(SCHEMA_KEY)? {
             Some(bytes) => {
-                let schema = Schema::read_from_bin(bytes.as_ref())?;
+                let schema = bincode::deserialize_from(bytes.as_ref())?;
                 Ok(Some(schema))
             },
             None => Ok(None),
@@ -27,8 +27,7 @@ impl MainIndex {
     }
 
     pub fn set_schema(&self, schema: &Schema) -> Result<(), Error> {
-        let mut bytes = Vec::new();
-        schema.write_to_bin(&mut bytes)?;
+        let bytes = bincode::serialize(schema)?;
         self.0.insert(SCHEMA_KEY, bytes)?;
         Ok(())
     }
