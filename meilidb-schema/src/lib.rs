@@ -99,6 +99,12 @@ struct InnerSchema {
 }
 
 impl Schema {
+    fn to_builder(&self) -> SchemaBuilder {
+        let identifier = self.inner.identifier.clone();
+        let attributes = self.attributes_ordered();
+        SchemaBuilder { identifier, attributes }
+    }
+
     pub fn from_toml<R: Read>(mut reader: R) -> Result<Schema, Box<dyn Error>> {
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer)?;
@@ -107,10 +113,7 @@ impl Schema {
     }
 
     pub fn to_toml<W: Write>(&self, mut writer: W) -> Result<(), Box<dyn Error>> {
-        let identifier = self.inner.identifier.clone();
-        let attributes = self.attributes_ordered();
-        let builder = SchemaBuilder { identifier, attributes };
-
+        let builder = self.to_builder();
         let string = toml::to_string_pretty(&builder)?;
         writer.write_all(string.as_bytes())?;
 
@@ -125,9 +128,7 @@ impl Schema {
     }
 
     pub fn to_json<W: Write>(&self, mut writer: W) -> Result<(), Box<dyn Error>> {
-        let identifier = self.inner.identifier.clone();
-        let attributes = self.attributes_ordered();
-        let builder = SchemaBuilder { identifier, attributes };
+        let builder = self.to_builder();
         let string = serde_json::to_string_pretty(&builder)?;
         writer.write_all(string.as_bytes())?;
 
