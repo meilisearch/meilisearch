@@ -190,6 +190,23 @@ impl Schema {
     }
 }
 
+impl Serialize for Schema {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S: serde::ser::Serializer,
+    {
+        self.to_builder().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Schema {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where D: serde::de::Deserializer<'de>,
+    {
+        let builder = SchemaBuilder::deserialize(deserializer)?;
+        Ok(builder.build())
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 #[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct SchemaAttr(pub u16);
