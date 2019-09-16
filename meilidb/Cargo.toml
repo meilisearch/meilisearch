@@ -13,8 +13,8 @@ meilidb-schema = { path = "../meilidb-schema", version = "0.1.0" }
 csv = "1.0.7"
 diskus = "0.5.0"
 env_logger = "0.6.1"
+indexmap = { version = "1.1.0", features = ["serde-1"] }
 jemallocator = "0.1.9"
-linked-hash-map = "0.5.2"
 meilidb-core = { path = "../meilidb-core", version = "0.1.0" }
 quickcheck = "0.8.2"
 rand = "0.6.5"
@@ -26,3 +26,4 @@ structopt = "0.2.15"
 sysinfo = "0.8.4"
 tempfile = "3.0.7"
 termcolor = "1.0.4"
+toml = "0.5.3"

@@ -9,7 +9,7 @@ use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::time::{Instant, Duration};
 
-use linked_hash_map::LinkedHashMap;
+use indexmap::IndexMap;
 use rustyline::{Editor, Config};
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -39,7 +39,7 @@ pub struct Opt {
     pub char_context: usize,
 }
 
-type Document = LinkedHashMap<String, String>;
+type Document = IndexMap<String, String>;
 
 fn display_highlights(text: &str, ranges: &[usize]) -> io::Result<()> {
     let mut stdout = StandardStream::stdout(ColorChoice::Always);
