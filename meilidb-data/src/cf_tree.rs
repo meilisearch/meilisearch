@@ -93,6 +93,13 @@ impl CfTree {
         let mut iter = self.index.db.iterator_cf(cf, IteratorMode::End)?;
         Ok(iter.next().map(|(key, _)| key))
     }
+
+    pub fn prefix_iterator<P>(&self, prefix: P) -> RocksDbResult<rocksdb::DBIterator>
+    where P: AsRef<[u8]>,
+    {
+        let cf = self.index.db.cf_handle(&self.index.name).unwrap();
+        self.index.db.prefix_iterator_cf(cf, prefix)
+    }
 }
 
 pub struct CfIter<'a> {

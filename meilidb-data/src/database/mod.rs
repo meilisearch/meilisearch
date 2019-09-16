@@ -9,8 +9,10 @@ mod error;
 mod index;
 mod update;
 
+use crate::CfTree;
+
 pub use self::error::Error;
-pub use self::index::{Index, CustomSettingsIndex};
+pub use self::index::{Index, CustomSettingsIndex, CommonIndex};
 
 pub use self::update::DocumentsAddition;
 pub use self::update::DocumentsDeletion;
@@ -23,6 +25,7 @@ use self::update::apply_synonyms_addition;
 use self::update::apply_synonyms_deletion;
 
 const INDEXES_KEY: &str = "indexes";
+const COMMON_KEY: &str = "common-index";
 
 fn load_indexes(tree: &rocksdb::DB) -> Result<HashSet<String>, Error> {
     match tree.get(INDEXES_KEY)? {
@@ -34,6 +37,7 @@ fn load_indexes(tree: &rocksdb::DB) -> Result<HashSet<String>, Error> {
 pub struct Database {
     cache: RwLock<HashMap<String, Index>>,
     inner: Arc<rocksdb::DB>,
+    common: Arc<CommonIndex>,
 }
 
 impl Database {
@@ -45,9 +49,10 @@ impl Database {
 
         let cfs = rocksdb::DB::list_cf(&options, &path).unwrap_or_default();
         let inner = Arc::new(rocksdb::DB::open_cf(&options, path, cfs)?);
-
+        let common_tree = CfTree::create(inner.clone(), COMMON_KEY.to_owned())?;
+        let common = Arc::new(CommonIndex(common_tree));
         let indexes = load_indexes(&inner)?;
-        let database = Database { cache, inner };
+        let database = Database { cache, inner, common };
 
         for index in indexes {
             database.open_index(&index)?;
@@ -111,5 +116,9 @@ impl Database {
         };
 
         Ok(index)
+    }
+
+    pub fn common_index(&self) -> Arc<CommonIndex> {
+        self.common.clone()
     }
 }
