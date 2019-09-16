@@ -18,6 +18,7 @@ use crate::ranked_map::RankedMap;
 use crate::serde::{Deserializer, DeserializerError};
 
 pub use self::custom_settings_index::CustomSettingsIndex;
+pub use self::common_index::CommonIndex;
 use self::docs_words_index::DocsWordsIndex;
 use self::documents_index::DocumentsIndex;
 use self::main_index::MainIndex;
@@ -33,6 +34,7 @@ use crate::database::{
     apply_synonyms_addition, apply_synonyms_deletion,
 };
 
+mod common_index;
 mod custom_settings_index;
 mod docs_words_index;
 mod documents_index;
