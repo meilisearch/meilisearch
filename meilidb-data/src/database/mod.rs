@@ -118,6 +118,26 @@ impl Database {
         Ok(index)
     }
 
+    pub fn delete_index(&self, name: &str) -> Result<(), Error> {
+        let mut cache = self.cache.write().unwrap();
+
+        self.inner.drop_cf(name)?;
+        let _ = self.inner.drop_cf(&format!("{}-synonyms", name));
+        let _ = self.inner.drop_cf(&format!("{}-words", name));
+        let _ = self.inner.drop_cf(&format!("{}-docs-words", name));
+        let _ = self.inner.drop_cf(&format!("{}-documents", name));
+        let _ = self.inner.drop_cf(&format!("{}-custom", name));
+        let _ = self.inner.drop_cf(&format!("{}-updates", name));
+        let _ = self.inner.drop_cf(&format!("{}-updates-results", name));
+        cache.remove(name);
+
+        if let Ok(mut index_list) = self.indexes() {
+            index_list.remove(name);
+            let _ = self.set_indexes(&index_list);
+        }
+        Ok(())
+    }
+
     pub fn common_index(&self) -> Arc<CommonIndex> {
         self.common.clone()
     }
