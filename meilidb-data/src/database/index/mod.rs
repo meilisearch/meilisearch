@@ -1,4 +1,4 @@
-use std::collections::{HashSet, BTreeMap};
+use std::collections::{HashMap, HashSet, BTreeMap};
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -155,11 +155,12 @@ fn last_update_id(
     Ok(uikey.max(urikey).unwrap_or(0))
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct IndexStats {
     pub number_of_words: usize,
     pub number_of_documents: u64,
     pub number_attrs_in_ranked_map: usize,
+    pub documents_fields_repartition: HashMap<String, u64>,
 }
 
 #[derive(Clone)]
@@ -275,10 +276,12 @@ impl Index {
 
     pub fn stats(&self) -> RocksDbResult<IndexStats> {
         let cache = self.cache.load();
+        let documents_fields_repartition = self.documents_index.documents_fields_repartition(cache.schema.clone())?;
         Ok(IndexStats {
             number_of_words: cache.words.len(),
             number_of_documents: cache.number_of_documents,
             number_attrs_in_ranked_map: cache.ranked_map.len(),
+            documents_fields_repartition,
         })
     }
 
