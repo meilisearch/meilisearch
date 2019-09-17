@@ -121,4 +121,11 @@ impl Database {
     pub fn common_index(&self) -> Arc<CommonIndex> {
         self.common.clone()
     }
+
+    pub fn checkpoint_to<P>(&self, path: P) -> Result<(), Error>
+    where P: AsRef<Path>,
+    {
+        let checkpoint = rocksdb::checkpoint::Checkpoint::new(&self.inner)?;
+        Ok(checkpoint.create_checkpoint(path)?)
+    }
 }
