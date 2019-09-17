@@ -1,7 +1,8 @@
 use std::convert::TryInto;
+use std::collections::HashMap;
 
 use meilidb_core::DocumentId;
-use meilidb_schema::SchemaAttr;
+use meilidb_schema::{Schema, SchemaAttr};
 use rocksdb::DBVector;
 
 use crate::document_attr_key::DocumentAttrKey;
@@ -54,6 +55,20 @@ impl DocumentsIndex {
         Ok(DocumentFieldsIter(iter))
     }
 
+    pub fn documents_fields_repartition(&self, schema: Schema) -> RocksDbResult<HashMap<String, u64>> {
+        let iter = self.0.iter()?;
+        let mut repartition_attributes_id = HashMap::new();
+        for key in DocumentsKeysIter(iter) {
+            let counter = repartition_attributes_id.entry(key.attribute).or_insert(0);
+            *counter += 1u64;
+        }
+        let mut repartition_with_attribute_name = HashMap::new();
+        for (key, val) in repartition_attributes_id {
+            repartition_with_attribute_name.insert(schema.attribute_name(key).to_owned(), val);
+        }
+        Ok(repartition_with_attribute_name)
+    }
+
     pub fn len(&self) -> RocksDbResult<u64> {
         let mut last_document_id = None;
         let mut count = 0;
@@ -83,6 +98,23 @@ impl Iterator for DocumentFieldsIter<'_> {
                 let array = key.as_ref().try_into().unwrap();
                 let key = DocumentAttrKey::from_be_bytes(array);
                 Some((key.attribute, value))
+            },
+            None => None,
+        }
+    }
+}
+
+pub struct DocumentsKeysIter<'a>(crate::CfIter<'a>);
+
+impl Iterator for DocumentsKeysIter<'_> {
+    type Item = DocumentAttrKey;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.next() {
+            Some((key, _)) => {
+                let array = key.as_ref().try_into().unwrap();
+                let key = DocumentAttrKey::from_be_bytes(array);
+                Some(key)
             },
             None => None,
         }
