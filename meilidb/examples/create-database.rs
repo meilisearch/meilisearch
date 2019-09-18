@@ -154,7 +154,8 @@ fn index(
         // write stats
         let directory_size = Walk::new(&[database_path.to_owned()], 4).run();
         system.refresh_all();
-        let memory = system.get_process(sysinfo::get_current_pid()).unwrap().memory(); // in kb
+        let pid = sysinfo::get_current_pid()?;
+        let memory = system.get_process(pid).unwrap().memory(); // in kb
         wtr.write_record(&[i.to_string(), directory_size.to_string(), memory.to_string()])?;
         wtr.flush()?;
     }
