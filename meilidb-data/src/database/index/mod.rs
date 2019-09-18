@@ -17,7 +17,7 @@ use crate::CfTree;
 use crate::ranked_map::RankedMap;
 use crate::serde::{Deserializer, DeserializerError};
 
-pub use self::custom_settings_index::CustomSettingsIndex;
+pub use self::custom_settings_index::{CustomSettingsIndex, RankingOrdering, StopWords, RankingOrder, DistinctField, RankingRules};
 pub use self::common_index::CommonIndex;
 use self::docs_words_index::DocsWordsIndex;
 use self::documents_index::DocumentsIndex;
