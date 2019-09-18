@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use super::Error;
@@ -5,6 +6,14 @@ use std::marker::PhantomData;
 
 #[derive(Clone)]
 pub struct CommonIndex(pub crate::CfTree);
+
+impl Deref for CommonIndex {
+    type Target = crate::CfTree;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl CommonIndex {
     pub fn get<T, K>(&self, key: K) -> Result<Option<T>, Error>
