@@ -316,6 +316,14 @@ impl Index {
         self.cache.load().schema.clone()
     }
 
+    pub fn synonyms_index(&self) -> SynonymsIndex {
+        self.synonyms_index.clone()
+    }
+
+    pub fn synonyms_set(&self) -> Arc<fst::Set> {
+        self.cache.load().synonyms.clone()
+    }
+
     pub fn custom_settings(&self) -> CustomSettingsIndex {
         self.custom_settings_index.clone()
     }
