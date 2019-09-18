@@ -19,6 +19,7 @@ use crate::serde::{Deserializer, DeserializerError};
 
 pub use self::custom_settings_index::{CustomSettingsIndex, RankingOrdering, StopWords, RankingOrder, DistinctField, RankingRules};
 pub use self::common_index::CommonIndex;
+pub use self::documents_index::DocumentsIdsIter;
 use self::docs_words_index::DocsWordsIndex;
 use self::documents_index::DocumentsIndex;
 use self::main_index::MainIndex;
@@ -372,6 +373,10 @@ impl Index {
         // the thread has been unblocked, it means that the update result
         // has been inserted in the tree, retrieve it
         Ok(self.update_status(update_id)?.unwrap())
+    }
+
+    pub fn documents_ids(&self) -> Result<DocumentsIdsIter, Error> {
+        Ok(self.documents_index.documents_ids()?)
     }
 
     pub fn document<T>(
