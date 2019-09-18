@@ -10,7 +10,7 @@ pub use self::cf_tree::{CfTree, CfIter};
 pub use self::database::{
     Database, Index, CustomSettingsIndex, RankingOrdering,
     StopWords, RankingOrder, DistinctField, RankingRules,
-    UpdateType, DetailedDuration, UpdateStatus
+    UpdateType, DetailedDuration, UpdateStatus, Error
 };
 pub use self::number::Number;
 pub use self::ranked_map::RankedMap;
