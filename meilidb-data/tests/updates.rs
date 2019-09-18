@@ -189,3 +189,27 @@ fn custom_settings() {
     assert_eq!(ret_distinct_field, distinct_field);
     assert_eq!(ret_ranking_rules, ranking_rules);
 }
+
+#[test]
+fn documents_ids() {
+    let tmp_dir = tempfile::tempdir().unwrap();
+    let database = Database::open(&tmp_dir).unwrap();
+
+    let schema = simple_schema();
+    let index = database.create_index("hello", schema).unwrap();
+
+    let doc1 = json!({ "objectId": 123, "title": "hello" });
+    let doc2 = json!({ "objectId": 456, "title": "world" });
+    let doc3 = json!({ "objectId": 789 });
+
+    let mut addition = index.documents_addition();
+    addition.update_document(&doc1);
+    addition.update_document(&doc2);
+    addition.update_document(&doc3);
+    let update_id = addition.finalize().unwrap();
+    let status = index.update_status_blocking(update_id).unwrap();
+    assert!(status.result.is_ok());
+
+    let documents_ids_count = index.documents_ids().unwrap().count();
+    assert_eq!(documents_ids_count, 3);
+}

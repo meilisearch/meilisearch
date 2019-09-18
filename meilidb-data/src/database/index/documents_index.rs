@@ -55,6 +55,11 @@ impl DocumentsIndex {
         Ok(DocumentFieldsIter(iter))
     }
 
+    pub fn documents_ids(&self) -> RocksDbResult<DocumentsIdsIter> {
+        let iter = DocumentsKeysIter(self.0.iter()?);
+        Ok(DocumentsIdsIter { inner: iter, last: None })
+    }
+
     pub fn documents_fields_repartition(&self, schema: Schema) -> RocksDbResult<HashMap<String, u64>> {
         let iter = self.0.iter()?;
         let mut repartition_attributes_id = HashMap::new();
@@ -118,5 +123,24 @@ impl Iterator for DocumentsKeysIter<'_> {
             },
             None => None,
         }
+    }
+}
+
+pub struct DocumentsIdsIter<'a> {
+    inner: DocumentsKeysIter<'a>,
+    last: Option<DocumentId>,
+}
+
+impl Iterator for DocumentsIdsIter<'_> {
+    type Item = DocumentId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for DocumentAttrKey { document_id, .. } in &mut self.inner {
+            if self.last != Some(document_id) {
+                self.last = Some(document_id);
+                return Some(document_id)
+            }
+        }
+        None
     }
 }
