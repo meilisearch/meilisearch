@@ -12,7 +12,11 @@ mod update;
 use crate::CfTree;
 
 pub use self::error::Error;
-pub use self::index::{Index, CustomSettingsIndex, CommonIndex, RankingOrdering, StopWords, RankingOrder, DistinctField, RankingRules};
+pub use self::index::{
+    Index, CustomSettingsIndex, CommonIndex, RankingOrdering,
+    StopWords, RankingOrder, DistinctField, RankingRules,
+    UpdateType, DetailedDuration, UpdateStatus
+};
 
 pub use self::update::DocumentsAddition;
 pub use self::update::DocumentsDeletion;
