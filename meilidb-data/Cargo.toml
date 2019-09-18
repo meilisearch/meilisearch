@@ -38,3 +38,4 @@ branch = "arc-byte-slice"
 [dev-dependencies]
 tempfile = "3.1.0"
 maplit = "1.0.2"
+big_s = "1.0.2"
