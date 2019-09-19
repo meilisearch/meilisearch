@@ -15,7 +15,7 @@ pub use self::error::Error;
 pub use self::index::{
     Index, CustomSettingsIndex, CommonIndex, RankingOrdering,
     StopWords, RankingOrder, DistinctField, RankingRules,
-    UpdateType, DetailedDuration, UpdateStatus
+    UpdateType, DetailedDuration, UpdateResult, UpdateStatus
 };
 
 pub use self::update::DocumentsAddition;

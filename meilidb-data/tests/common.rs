@@ -1,4 +1,3 @@
-
 use meilidb_data::{Database};
 use meilidb_data::Index;
 use meilidb_schema::{SchemaBuilder, DISPLAYED, INDEXED};

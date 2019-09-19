@@ -1,8 +1,9 @@
-mod common;
 #[macro_use] extern crate maplit;
 
+mod common;
+
 use big_s::S;
-use meilidb_data::{RankingOrdering};
+use meilidb_data::RankingOrdering;
 
 #[test]
 fn stop_words() {
