@@ -59,35 +59,24 @@ We have seen much better performances when [using jemalloc as the global allocat
 
 ## Usage and examples
 
-You can try a little part of MeiliDB with the following commands.
-It creates an index named _movies_ and insert two great Tarantino movies in it.
+Currently MeiliDB do not provide an http server but you can run these two examples to try it out.
+
+It creates an index named _movies_ and insert _19 700_ (in batches of _1000_) movies into it.
 
 ```bash
-cargo run --release
-
-curl -XPOST 'http://127.0.0.1:8000/movies' \
-    -d '
-identifier = "id"
-
-[attributes.id]
-stored = true
-
-[attributes.title]
-stored = true
-indexed = true
-'
-
-curl -H 'Content-Type: application/json' \
-     -XPUT 'http://127.0.0.1:8000/movies' \
-     -d '{ "id": 123, "title": "Inglorious Bastards" }'
-
-curl -H 'Content-Type: application/json' \
-     -XPUT 'http://127.0.0.1:8000/movies' \
-     -d '{ "id": 456, "title": "Django Unchained" }'
+cargo run --release --example create-database -- \
+    --schema examples/movies/schema-movies.toml \
+    --update-group-size 1000 \
+    movies.mdb \
+    examples/movies/movies.csv
 ```
 
-Once the database is initialized you can query it by using the following command:
+Once this is done, you can query this database using the second binary example.
 
 ```bash
-curl -XGET 'http://127.0.0.1:8000/movies/search?q=inglo'
+cargo run --release --example query-database -- \
+    movies.mdb \
+    --fetch-timeout-ms 50 \
+    -n 4 \
+    id title overview release_date poster
 ```
