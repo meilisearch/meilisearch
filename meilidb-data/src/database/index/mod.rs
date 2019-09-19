@@ -316,6 +316,10 @@ impl Index {
         self.cache.load().schema.clone()
     }
 
+    pub fn ranked_map(&self) -> RankedMap {
+        self.cache.load().ranked_map.clone()
+    }
+
     pub fn synonyms_index(&self) -> SynonymsIndex {
         self.synonyms_index.clone()
     }
