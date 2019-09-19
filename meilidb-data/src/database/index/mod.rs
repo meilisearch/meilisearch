@@ -61,7 +61,7 @@ pub enum UpdateType {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DetailedDuration {
-    main: Duration,
+    pub main: Duration,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
