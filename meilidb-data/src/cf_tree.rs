@@ -17,9 +17,12 @@ struct CfTreeInner {
 impl CfTree {
     pub fn create(db: Arc<rocksdb::DB>, name: String) -> RocksDbResult<CfTree> {
         let mut options = rocksdb::Options::default();
-        options.create_missing_column_families(true);
+        options.create_missing_column_families(true); // this doesn't work
 
-        let _cf = db.create_cf(&name, &options)?;
+        if db.cf_handle(&name).is_none() {
+            let _cf = db.create_cf(&name, &options)?;
+        }
+
         let index = Arc::new(CfTreeInner { db, name });
 
         Ok(CfTree { index, sender: None })
@@ -31,9 +34,12 @@ impl CfTree {
     ) -> RocksDbResult<(CfTree, Receiver<()>)>
     {
         let mut options = rocksdb::Options::default();
-        options.create_missing_column_families(true);
+        options.create_missing_column_families(true); // this doesn't work
 
-        let _cf = db.create_cf(&name, &options)?;
+        if db.cf_handle(&name).is_none() {
+            let _cf = db.create_cf(&name, &options)?;
+        }
+
         let index = Arc::new(CfTreeInner { db, name });
         let (sender, receiver) = unbounded();
 
