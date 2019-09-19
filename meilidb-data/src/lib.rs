@@ -7,7 +7,12 @@ mod ranked_map;
 mod serde;
 
 pub use self::cf_tree::{CfTree, CfIter};
-pub use self::database::{Database, Index, CustomSettingsIndex, RankingOrdering, StopWords, RankingOrder, DistinctField, RankingRules};
+pub use self::database::{
+    Database, Index, CustomSettingsIndex, RankingOrdering,
+    StopWords, RankingOrder, DistinctField, RankingRules,
+    UpdateType, DetailedDuration, UpdateResult, UpdateStatus,
+    Error,
+};
 pub use self::number::Number;
 pub use self::ranked_map::RankedMap;
 pub use self::serde::{compute_document_id, extract_document_id, value_to_string};

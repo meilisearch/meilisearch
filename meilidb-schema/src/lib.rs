@@ -1,6 +1,4 @@
 use std::collections::{HashMap, BTreeMap};
-use std::io::{Read, Write};
-use std::error::Error;
 use std::{fmt, u16};
 use std::ops::BitOr;
 use std::sync::Arc;
@@ -15,13 +13,13 @@ pub const RANKED: SchemaProps    = SchemaProps { displayed: false, indexed: fals
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaProps {
     #[serde(default)]
-    displayed: bool,
+    pub displayed: bool,
 
     #[serde(default)]
-    indexed: bool,
+    pub indexed: bool,
 
     #[serde(default)]
-    ranked: bool,
+    pub ranked: bool,
 }
 
 impl SchemaProps {
