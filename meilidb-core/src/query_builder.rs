@@ -7,7 +7,7 @@ use std::{mem, cmp, cmp::Reverse};
 use fst::{Streamer, IntoStreamer};
 use hashbrown::HashMap;
 use levenshtein_automata::DFA;
-use log::info;
+use log::trace;
 use meilidb_tokenizer::{is_cjk, split_query_string};
 use rayon::slice::ParallelSliceMut;
 use rayon::iter::{ParallelIterator, ParallelBridge};
@@ -240,7 +240,7 @@ fn multiword_rewrite_matches(
     // we sort the matches by word index to make them rewritable
     let start = Instant::now();
     matches.par_sort_unstable_by_key(|(id, match_)| (*id, match_.attribute, match_.word_index));
-    info!("rewrite sort by word_index took {:.2?}", start.elapsed());
+    trace!("rewrite sort by word_index took {:.2?}", start.elapsed());
 
     let start = Instant::now();
     // for each attribute of each document
@@ -326,13 +326,13 @@ fn multiword_rewrite_matches(
         // check the timeout *after* having processed at least one element
         if timeout.map_or(false, |timeout| start.elapsed() > timeout) { break }
     }
-    info!("main multiword rewrite took {:.2?}", start.elapsed());
+    trace!("main multiword rewrite took {:.2?}", start.elapsed());
 
     let start = Instant::now();
     for document_matches in padded_matches.linear_group_by_key_mut(|(id, _)| *id) {
         document_matches.sort_unstable();
     }
-    info!("final rewrite sort took {:.2?}", start.elapsed());
+    trace!("final rewrite sort took {:.2?}", start.elapsed());
 
     SetBuf::new_unchecked(padded_matches)
 }
@@ -419,28 +419,28 @@ where S: Store + Sync,
             highlights.append(&mut rcv_highlights);
         }
 
-        info!("main query all took {:.2?}", start.elapsed());
-        info!("{} total matches to rewrite", matches.len());
+        trace!("main query all took {:.2?}", start.elapsed());
+        trace!("{} total matches to rewrite", matches.len());
 
         let start = Instant::now();
         let timeout = fetch_timeout.map(|d| d * 25 / 100);
         let matches = multiword_rewrite_matches(matches, &query_enhancer, timeout);
-        info!("multiword rewrite took {:.2?}", start.elapsed());
+        trace!("multiword rewrite took {:.2?}", start.elapsed());
 
         let start = Instant::now();
         let highlights = {
             highlights.par_sort_unstable_by_key(|(id, _)| *id);
             SetBuf::new_unchecked(highlights)
         };
-        info!("sorting highlights took {:.2?}", start.elapsed());
+        trace!("sorting highlights took {:.2?}", start.elapsed());
 
-        info!("{} total matches to classify", matches.len());
+        trace!("{} total matches to classify", matches.len());
 
         let start = Instant::now();
         let raw_documents = raw_documents_from(matches, highlights);
-        info!("making raw documents took {:.2?}", start.elapsed());
+        trace!("making raw documents took {:.2?}", start.elapsed());
 
-        info!("{} total documents to classify", raw_documents.len());
+        trace!("{} total documents to classify", raw_documents.len());
 
         Ok(raw_documents)
     }
@@ -461,7 +461,7 @@ where S: Store + Sync,
 
         let start = Instant::now();
         let mut documents = self.query_all(query)?;
-        info!("query_all took {:.2?}", start.elapsed());
+        trace!("query_all took {:.2?}", start.elapsed());
 
         let mut groups = vec![documents.as_mut_slice()];
 
@@ -480,10 +480,10 @@ where S: Store + Sync,
 
                 let start = Instant::now();
                 group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                info!("criterion {} sort took {:.2?}", criterion.name(), start.elapsed());
+                trace!("criterion {} sort took {:.2?}", criterion.name(), start.elapsed());
 
                 for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
-                    info!("criterion {} produced a group of size {}", criterion.name(), group.len());
+                    trace!("criterion {} produced a group of size {}", criterion.name(), group.len());
 
                     documents_seen += group.len();
                     groups.push(group);
@@ -542,7 +542,7 @@ where S: Store + Sync,
     pub fn query(self, query: &str, range: Range<usize>) -> Result<Vec<Document>, S::Error> {
         let start = Instant::now();
         let mut documents = self.inner.query_all(query)?;
-        info!("query_all took {:.2?}", start.elapsed());
+        trace!("query_all took {:.2?}", start.elapsed());
 
         let mut groups = vec![documents.as_mut_slice()];
         let mut key_cache = HashMap::new();
@@ -570,7 +570,7 @@ where S: Store + Sync,
 
                 let start = Instant::now();
                 group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                info!("criterion {} sort took {:.2?}", criterion.name(), start.elapsed());
+                trace!("criterion {} sort took {:.2?}", criterion.name(), start.elapsed());
 
                 for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
                     // we must compute the real distinguished len of this sub-group
@@ -597,7 +597,7 @@ where S: Store + Sync,
                         if buf_distinct.len() >= range.end { break }
                     }
 
-                    info!("criterion {} produced a group of size {}", criterion.name(), group.len());
+                    trace!("criterion {} produced a group of size {}", criterion.name(), group.len());
 
                     documents_seen += group.len();
                     groups.push(group);
