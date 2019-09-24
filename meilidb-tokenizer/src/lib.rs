@@ -39,8 +39,8 @@ fn is_separator(c: char) -> bool {
 
 fn classify_separator(c: char) -> Option<SeparatorCategory> {
     match c {
-        ' ' | '\'' | '"' => Some(Soft),
-        '.' | ';' | ',' | '!' | '?' | '-' | '(' | ')' => Some(Hard),
+        ' ' | '\'' | ':' | '"' => Some(Soft),
+        '.' | ';' | ',' | '!' | '?' | '-' | '_' | '(' | ')' => Some(Hard),
         _ => None,
     }
 }
