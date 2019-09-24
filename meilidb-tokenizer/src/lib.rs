@@ -39,8 +39,8 @@ fn is_separator(c: char) -> bool {
 
 fn classify_separator(c: char) -> Option<SeparatorCategory> {
     match c {
-        ' ' | '\'' | ':' | '"' => Some(Soft),
-        '.' | ';' | ',' | '!' | '?' | '-' | '_' | '(' | ')' => Some(Hard),
+        ' ' | '-' | '_' | '\'' | ':' | '"' => Some(Soft),
+        '.' | ';' | ',' | '!' | '?' |  '(' | ')' => Some(Hard),
         _ => None,
     }
 }
@@ -249,8 +249,8 @@ mod tests {
         assert_eq!(tokenizer.next(), Some(Token { word: "yo", word_index: 0, char_index: 0 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "lolo", word_index: 8, char_index: 5 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "wtf", word_index: 16, char_index: 12 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "lol", word_index: 24, char_index: 18 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "aïe", word_index: 32, char_index: 24 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "lol", word_index: 17, char_index: 18 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "aïe", word_index: 25, char_index: 24 }));
         assert_eq!(tokenizer.next(), None);
     }
 
@@ -268,8 +268,8 @@ mod tests {
         assert_eq!(tokenizer.next(), Some(Token { word: "yo", word_index: 0, char_index: 0 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "lolo", word_index: 8, char_index: 5 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "😱", word_index: 16, char_index: 12 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "lol", word_index: 24, char_index: 16 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "😣", word_index: 32, char_index: 22 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "lol", word_index: 17, char_index: 16 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "😣", word_index: 25, char_index: 22 }));
         assert_eq!(tokenizer.next(), None);
     }
 
@@ -288,8 +288,8 @@ mod tests {
         assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ed3}", word_index: 1, char_index: 1 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ef2}", word_index: 2, char_index: 2 }));
         assert_eq!(tokenizer.next(), Some(Token { word: "lolilol", word_index: 3, char_index: 4 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "hello", word_index: 11, char_index: 14 }));
-        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec7}", word_index: 12, char_index: 23 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "hello", word_index: 4, char_index: 14 }));
+        assert_eq!(tokenizer.next(), Some(Token { word: "\u{2ec7}", word_index: 5, char_index: 23 }));
         assert_eq!(tokenizer.next(), None);
     }
 }
