@@ -1,6 +1,6 @@
 mod common;
 
-use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 use std::sync::Arc;
 
 use serde_json::json;
@@ -96,4 +96,53 @@ fn documents_ids() {
 
     let documents_ids_count = index.documents_ids().unwrap().count();
     assert_eq!(documents_ids_count, 3);
+}
+
+#[test]
+fn current_update_id() {
+    let index = common::simple_index();
+    let update_id = Arc::new(AtomicU64::new(0));
+
+    let update_id_cloned = update_id.clone();
+    let index_cloned = index.clone();
+    index.set_update_callback(move |_| {
+        let current_update_id = index_cloned.current_update_id().unwrap().unwrap();
+        assert_eq!(current_update_id, update_id_cloned.load(Relaxed));
+    });
+
+    let doc1 = json!({ "objectId": 123, "title": "hello" });
+    let mut addition = index.documents_addition();
+    addition.update_document(&doc1);
+    update_id.store(addition.finalize().unwrap(), Relaxed);
+}
+
+#[test]
+fn nest_updates_in_queue() {
+    let index = common::simple_index();
+
+    index.set_update_callback(move |_| {
+        std::thread::sleep(std::time::Duration::from_secs(15));
+    });
+
+    let doc1 = json!({ "objectId": 123, "title": "hello" });
+    let doc2 = json!({ "objectId": 456, "title": "world" });
+    let doc3 = json!({ "objectId": 789 });
+
+    let mut addition = index.documents_addition();
+    addition.update_document(&doc1);
+    let _ = addition.finalize().unwrap();
+
+    let mut addition = index.documents_addition();
+    addition.update_document(&doc2);
+    let _ = addition.finalize().unwrap();
+
+    let mut addition = index.documents_addition();
+    addition.update_document(&doc3);
+    let _ = addition.finalize().unwrap();
+
+    let should_have_in_queue_updates = vec![1, 2, 3];
+
+    let in_queue_updates = index.enqueued_updates_ids().unwrap();
+    assert_eq!(in_queue_updates, should_have_in_queue_updates);
+
 }

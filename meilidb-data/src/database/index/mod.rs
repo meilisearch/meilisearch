@@ -359,6 +359,24 @@ impl Index {
         SynonymsDeletion::new(self)
     }
 
+    pub fn current_update_id(&self) -> Result<Option<u64>, Error> {
+        if let Some((key, _)) = self.updates_index.iter()?.next() {
+            return Ok(Some(key.as_ref().try_into().map(u64::from_be_bytes).unwrap()))
+        }
+        Ok(None)
+    }
+
+    pub fn enqueued_updates_ids(&self) -> Result<Vec<u64>, Error> {
+        let mut updates = Vec::new();
+
+        for (key, _) in self.updates_index.iter()? {
+            let update_id = key.as_ref().try_into().map(u64::from_be_bytes).unwrap();
+            updates.push(update_id);
+        }
+
+        Ok(updates)
+    }
+
     pub fn update_status(
         &self,
         update_id: u64,
