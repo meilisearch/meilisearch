@@ -13,7 +13,7 @@ pub mod store;
 
 pub use self::query_builder::QueryBuilder;
 pub use self::raw_document::RawDocument;
-pub use self::error::Error;
+pub use self::error::{Error, MResult};
 
 use self::number::{Number, ParseNumberError};
 use self::ranked_map::RankedMap;

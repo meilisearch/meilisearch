@@ -103,8 +103,8 @@ impl<'r, T: rkv::Readable + 'r> Iterator for DocumentFieldsIter<'r, T> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(Ok((key, Some(rkv::Value::Blob(bytes))))) => {
-                let bytes = key.get(8..8+2).unwrap();
-                let array = TryFrom::try_from(bytes).unwrap();
+                let key_bytes = key.get(8..8+2).unwrap();
+                let array = TryFrom::try_from(key_bytes).unwrap();
                 let attr = u16::from_be_bytes(array);
                 let attr = SchemaAttr::new(attr);
                 Some(Ok((attr, bytes)))

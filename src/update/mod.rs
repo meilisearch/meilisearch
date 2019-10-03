@@ -7,7 +7,7 @@ pub use self::documents_deletion::{DocumentsDeletion, apply_documents_deletion};
 use std::time::Duration;
 use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
-use crate::{store, Error, DocumentId};
+use crate::{store, Error, MResult, DocumentId};
 
 #[derive(Serialize, Deserialize)]
 pub enum Update {
@@ -50,7 +50,7 @@ pub fn update_status<T: rkv::Readable>(
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     update_id: u64,
-) -> Result<UpdateStatus, rkv::StoreError>
+) -> MResult<UpdateStatus>
 {
     match updates_results_store.update_result(reader, update_id)? {
         Some(result) => Ok(UpdateStatus::Processed(result)),

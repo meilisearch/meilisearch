@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 use rkv::Value;
-use crate::update::Update;
+use crate::{update::Update, MResult};
 
 #[derive(Copy, Clone)]
 pub struct Updates {
@@ -47,13 +47,13 @@ impl Updates {
         &self,
         writer: &mut rkv::Writer,
         update: &Update,
-    ) -> Result<u64, rkv::StoreError>
+    ) -> MResult<u64>
     {
         let last_update_id = self.last_update_id(writer)?;
         let last_update_id = last_update_id.map_or(0, |(n, _)| n + 1);
         let last_update_id_bytes = last_update_id.to_be_bytes();
 
-        let update = rmp_serde::to_vec_named(&update).unwrap();
+        let update = rmp_serde::to_vec_named(&update)?;
         let blob = Value::Blob(&update);
         self.updates.put(writer, last_update_id_bytes, &blob)?;
 
@@ -63,7 +63,7 @@ impl Updates {
     pub fn pop_back(
         &self,
         writer: &mut rkv::Writer,
-    ) -> Result<Option<(u64, Update)>, rkv::StoreError>
+    ) -> MResult<Option<(u64, Update)>>
     {
         let (last_id, last_data) = match self.last_update_id(writer)? {
             Some(entry) => entry,
@@ -72,7 +72,7 @@ impl Updates {
 
         match last_data {
             Some(Value::Blob(bytes)) => {
-                let update = rmp_serde::from_read_ref(&bytes).unwrap();
+                let update = rmp_serde::from_read_ref(&bytes)?;
                 Ok(Some((last_id, update)))
             },
             Some(value) => panic!("invalid type {:?}", value),

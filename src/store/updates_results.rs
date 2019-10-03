@@ -1,5 +1,5 @@
 use rkv::Value;
-use crate::update::UpdateResult;
+use crate::{update::UpdateResult, MResult};
 
 #[derive(Copy, Clone)]
 pub struct UpdatesResults {
@@ -12,25 +12,26 @@ impl UpdatesResults {
         writer: &mut rkv::Writer,
         update_id: u64,
         update_result: &UpdateResult,
-    ) -> Result<(), rkv::StoreError>
+    ) -> MResult<()>
     {
         let update_id_bytes = update_id.to_be_bytes();
-        let update_result = bincode::serialize(&update_result).unwrap();
+        let update_result = bincode::serialize(&update_result)?;
         let blob = Value::Blob(&update_result);
-        self.updates_results.put(writer, update_id_bytes, &blob)
+        self.updates_results.put(writer, update_id_bytes, &blob)?;
+        Ok(())
     }
 
     pub fn update_result<T: rkv::Readable>(
         &self,
         reader: &T,
         update_id: u64,
-    ) -> Result<Option<UpdateResult>, rkv::StoreError>
+    ) -> MResult<Option<UpdateResult>>
     {
         let update_id_bytes = update_id.to_be_bytes();
 
         match self.updates_results.get(reader, update_id_bytes)? {
             Some(Value::Blob(bytes)) => {
-                let update_result = bincode::deserialize(&bytes).unwrap();
+                let update_result = bincode::deserialize(&bytes)?;
                 Ok(Some(update_result))
             },
             Some(value) => panic!("invalid type {:?}", value),

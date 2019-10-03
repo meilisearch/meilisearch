@@ -1,6 +1,8 @@
 use std::{error, fmt};
 use crate::serde::SerializerError;
 
+pub type MResult<T> = Result<T, Error>;
+
 #[derive(Debug)]
 pub enum Error {
     SchemaDiffer,

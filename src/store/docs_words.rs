@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use rkv::Value;
-use crate::DocumentId;
+use crate::{DocumentId, MResult};
 
 #[derive(Copy, Clone)]
 pub struct DocsWords {
@@ -34,14 +34,14 @@ impl DocsWords {
         &self,
         reader: &T,
         document_id: DocumentId,
-    ) -> Result<Option<fst::Set>, rkv::StoreError>
+    ) -> MResult<Option<fst::Set>>
     {
         let document_id_bytes = document_id.0.to_be_bytes();
         match self.docs_words.get(reader, document_id_bytes)? {
             Some(Value::Blob(bytes)) => {
                 let len = bytes.len();
                 let bytes = Arc::from(bytes);
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
+                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len)?;
                 Ok(Some(fst::Set::from(fst)))
             },
             Some(value) => panic!("invalid type {:?}", value),

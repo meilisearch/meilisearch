@@ -9,7 +9,7 @@ use slice_group_by::{GroupBy, GroupByMut};
 use crate::automaton::{Automaton, AutomatonProducer, QueryEnhancer};
 use crate::raw_document::{RawDocument, raw_documents_from};
 use crate::{Document, DocumentId, Highlight, TmpMatch, criterion::Criteria};
-use crate::{store, reordered_attrs::ReorderedAttrs};
+use crate::{store, MResult, reordered_attrs::ReorderedAttrs};
 
 pub struct QueryBuilder<'a> {
     criteria: Criteria<'a>,
@@ -125,7 +125,7 @@ fn fetch_raw_documents(
     searchables: Option<&ReorderedAttrs>,
     main_store: &store::Main,
     postings_lists_store: &store::PostingsLists,
-) -> Result<Vec<RawDocument>, rkv::StoreError>
+) -> MResult<Vec<RawDocument>>
 {
     let mut matches = Vec::new();
     let mut highlights = Vec::new();
@@ -206,7 +206,7 @@ impl<'a> QueryBuilder<'a> {
         reader: &rkv::Reader,
         query: &str,
         range: Range<usize>,
-    ) -> Result<Vec<Document>, rkv::StoreError>
+    ) -> MResult<Vec<Document>>
     {
         let start_processing = Instant::now();
         let mut raw_documents_processed = Vec::new();
