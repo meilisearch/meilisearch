@@ -1,46 +1,17 @@
 use std::borrow::Cow;
-use std::sync::Arc;
 use std::{mem, ptr};
 use zerocopy::{AsBytes, LayoutVerified};
 
 use crate::DocIndex;
 use crate::store::aligned_to;
-use crate::store::WORDS_KEY;
 
-pub struct Words {
-    pub(crate) main: rkv::SingleStore,
-    pub(crate) words_indexes: rkv::SingleStore,
+#[derive(Copy, Clone)]
+pub struct PostingsLists {
+    pub(crate) postings_lists: rkv::SingleStore,
 }
 
-impl Words {
-    pub fn put_words_fst(
-        &self,
-        writer: &mut rkv::Writer,
-        fst: &fst::Set,
-    ) -> Result<(), rkv::StoreError>
-    {
-        let blob = rkv::Value::Blob(fst.as_fst().as_bytes());
-        self.main.put(writer, WORDS_KEY, &blob)
-    }
-
-    pub fn words_fst<T: rkv::Readable>(
-        &self,
-        reader: &T,
-    ) -> Result<fst::Set, rkv::StoreError>
-    {
-        match self.main.get(reader, WORDS_KEY)? {
-            Some(rkv::Value::Blob(bytes)) => {
-                let len = bytes.len();
-                let bytes = Arc::from(bytes);
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
-                Ok(fst::Set::from(fst))
-            },
-            Some(value) => panic!("invalid type {:?}", value),
-            None => panic!("could not find word index"),
-        }
-    }
-
-    pub fn put_words_indexes(
+impl PostingsLists {
+    pub fn put_postings_list(
         &self,
         writer: &mut rkv::Writer,
         word: &[u8],
@@ -48,23 +19,35 @@ impl Words {
     ) -> Result<(), rkv::StoreError>
     {
         let blob = rkv::Value::Blob(words_indexes.as_bytes());
-        self.main.put(writer, word, &blob)
+        self.postings_lists.put(writer, word, &blob)
     }
 
-    pub fn word_indexes<'a, T: rkv::Readable>(
+    pub fn del_postings_list(
+        &self,
+        writer: &mut rkv::Writer,
+        word: &[u8],
+    ) -> Result<(), rkv::StoreError>
+    {
+        self.postings_lists.delete(writer, word)
+    }
+
+    pub fn postings_list<'a, T: rkv::Readable>(
         &self,
         reader: &'a T,
         word: &[u8],
-    ) -> Result<Option<Cow<'a, [DocIndex]>>, rkv::StoreError>
+    ) -> Result<Option<Cow<'a, sdset::Set<DocIndex>>>, rkv::StoreError>
     {
-        let bytes = match self.main.get(reader, word)? {
+        let bytes = match self.postings_lists.get(reader, word)? {
             Some(rkv::Value::Blob(bytes)) => bytes,
             Some(value) => panic!("invalid type {:?}", value),
             None => return Ok(None),
         };
 
         match LayoutVerified::new_slice(bytes) {
-            Some(layout) => Ok(Some(Cow::Borrowed(layout.into_slice()))),
+            Some(layout) => {
+                let set = sdset::Set::new(layout.into_slice()).unwrap();
+                Ok(Some(Cow::Borrowed(set)))
+            },
             None => {
                 let len = bytes.len();
                 let elem_size = mem::size_of::<DocIndex>();
@@ -81,7 +64,8 @@ impl Words {
                         vec.set_len(elems);
                     }
 
-                    return Ok(Some(Cow::Owned(vec)))
+                    let setbuf = sdset::SetBuf::new(vec).unwrap();
+                    return Ok(Some(Cow::Owned(setbuf)))
                 }
 
                 Ok(None)

@@ -3,7 +3,9 @@ use serde::ser;
 
 use crate::{DocumentId, RankedMap};
 use crate::raw_indexer::RawIndexer;
-use super::{RamDocumentStore, SerializerError, ConvertToString, ConvertToNumber, Indexer};
+use crate::serde::RamDocumentStore;
+
+use super::{SerializerError, ConvertToString, ConvertToNumber, Indexer};
 
 pub struct Serializer<'a> {
     pub schema: &'a Schema,

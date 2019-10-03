@@ -1,5 +1,5 @@
+#[derive(Copy, Clone)]
 pub struct Synonyms {
-    pub(crate) main: rkv::SingleStore,
     pub(crate) synonyms: rkv::SingleStore,
 }
 

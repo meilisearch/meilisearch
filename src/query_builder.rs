@@ -11,16 +11,12 @@ use crate::raw_document::{RawDocument, raw_documents_from};
 use crate::{Document, DocumentId, Highlight, TmpMatch, criterion::Criteria};
 use crate::{store, reordered_attrs::ReorderedAttrs};
 
-pub struct Automatons {
-    // TODO better use Vec of SmallVec
-    automatons: Vec<Vec<Automaton>>,
-}
-
 pub struct QueryBuilder<'a> {
     criteria: Criteria<'a>,
     searchables_attrs: Option<ReorderedAttrs>,
     timeout: Duration,
-    words_store: store::Words,
+    main_store: store::Main,
+    postings_lists_store: store::PostingsLists,
     synonyms_store: store::Synonyms,
 }
 
@@ -34,7 +30,6 @@ fn multiword_rewrite_matches(
     // we sort the matches by word index to make them rewritable
     matches.sort_unstable_by_key(|(id, match_)| (*id, match_.attribute, match_.word_index));
 
-    let start = Instant::now();
     // for each attribute of each document
     for same_document_attribute in matches.linear_group_by_key(|(id, m)| (*id, m.attribute)) {
 
@@ -128,7 +123,8 @@ fn fetch_raw_documents(
     automatons: &[Automaton],
     query_enhancer: &QueryEnhancer,
     searchables: Option<&ReorderedAttrs>,
-    words_store: &store::Words,
+    main_store: &store::Main,
+    postings_lists_store: &store::PostingsLists,
 ) -> Result<Vec<RawDocument>, rkv::StoreError>
 {
     let mut matches = Vec::new();
@@ -138,14 +134,17 @@ fn fetch_raw_documents(
         let Automaton { index, is_exact, query_len, .. } = automaton;
         let dfa = automaton.dfa();
 
-        let words = words_store.words_fst(reader)?;
+        let words = match main_store.words_fst(reader)? {
+            Some(words) => words,
+            None => return Ok(Vec::new()),
+        };
 
         let mut stream = words.search(&dfa).into_stream();
         while let Some(input) = stream.next() {
             let distance = dfa.eval(input).to_u8();
             let is_exact = *is_exact && distance == 0 && input.len() == *query_len;
 
-            let doc_indexes = match words_store.word_indexes(reader, input)? {
+            let doc_indexes = match postings_lists_store.postings_list(reader, input)? {
                 Some(doc_indexes) => doc_indexes,
                 None => continue,
             };
@@ -187,12 +186,17 @@ fn fetch_raw_documents(
 }
 
 impl<'a> QueryBuilder<'a> {
-    pub fn new(words: store::Words, synonyms: store::Synonyms) -> QueryBuilder<'a> {
+    pub fn new(
+        main: store::Main,
+        postings_lists: store::PostingsLists,
+        synonyms: store::Synonyms,
+    ) -> QueryBuilder<'a> {
         QueryBuilder {
             criteria: Criteria::default(),
             searchables_attrs: None,
             timeout: Duration::from_secs(1),
-            words_store: words,
+            main_store: main,
+            postings_lists_store: postings_lists,
             synonyms_store: synonyms,
         }
     }
@@ -222,7 +226,8 @@ impl<'a> QueryBuilder<'a> {
                 &automatons,
                 &query_enhancer,
                 self.searchables_attrs.as_ref(),
-                &self.words_store,
+                &self.main_store,
+                &self.postings_lists_store,
             )?;
 
             let mut groups = vec![raw_documents.as_mut_slice()];

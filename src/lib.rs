@@ -1,9 +1,11 @@
 mod automaton;
+mod error;
 mod number;
 mod query_builder;
+mod ranked_map;
 mod raw_document;
 mod reordered_attrs;
-mod ranked_map;
+mod update;
 pub mod criterion;
 pub mod raw_indexer;
 pub mod serde;
@@ -11,6 +13,7 @@ pub mod store;
 
 pub use self::query_builder::QueryBuilder;
 pub use self::raw_document::RawDocument;
+pub use self::error::Error;
 
 use self::number::{Number, ParseNumberError};
 use self::ranked_map::RankedMap;

@@ -2,16 +2,28 @@ use std::convert::TryFrom;
 use meilidb_schema::SchemaAttr;
 use crate::DocumentId;
 
+#[derive(Copy, Clone)]
 pub struct DocumentsFields {
     pub(crate) documents_fields: rkv::SingleStore,
 }
 
 impl DocumentsFields {
     pub fn del_all_document_fields(
-        &mut self,
+        &self,
         writer: &mut rkv::Writer,
         document_id: DocumentId,
-    ) -> Result<(), rkv::StoreError>
+    ) -> Result<usize, rkv::StoreError>
+    {
+        unimplemented!()
+    }
+
+    pub fn put_document_field(
+        &self,
+        writer: &mut rkv::Writer,
+        document_id: DocumentId,
+        attribute: SchemaAttr,
+        value: &[u8],
+    ) -> Result<Option<&[u8]>, rkv::StoreError>
     {
         unimplemented!()
     }

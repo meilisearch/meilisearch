@@ -68,10 +68,10 @@ impl fmt::Display for SerializerError {
                 write!(f, "error while trying to parse a number: {}", e)
             },
             SerializerError::UnserializableType { type_name } => {
-                write!(f, "{} are not a serializable type", type_name)
+                write!(f, "{} is not a serializable type", type_name)
             },
             SerializerError::UnindexableType { type_name } => {
-                write!(f, "{} are not an indexable type", type_name)
+                write!(f, "{} is not an indexable type", type_name)
             },
             SerializerError::UnrankableType { type_name } => {
                 write!(f, "{} types can not be used for ranking", type_name)
