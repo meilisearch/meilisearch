@@ -13,14 +13,17 @@ impl Updates {
     ) -> Result<u64, rkv::StoreError>
     {
         // let update = rmp_serde::to_vec_named(&addition)?;
+
+        // WARN could not retrieve the last key/data entry of a tree...
+        // self.updates.get(writer, )?;
+
         unimplemented!()
     }
 
-    pub fn alternatives_to<T: rkv::Readable>(
+    pub fn pop_back(
         &self,
-        reader: &T,
-        word: &[u8],
-    ) -> Result<Option<fst::Set>, rkv::StoreError>
+        writer: &mut rkv::Writer,
+    ) -> Result<Option<(u64, Update)>, rkv::StoreError>
     {
         unimplemented!()
     }

@@ -7,35 +7,76 @@ pub struct DocumentsFields {
     pub(crate) documents_fields: rkv::SingleStore,
 }
 
-impl DocumentsFields {
-    pub fn del_all_document_fields(
-        &self,
-        writer: &mut rkv::Writer,
-        document_id: DocumentId,
-    ) -> Result<usize, rkv::StoreError>
-    {
-        unimplemented!()
-    }
+fn document_attribute_into_key(document_id: DocumentId, attribute: SchemaAttr) -> [u8; 10] {
+    let document_id_bytes = document_id.0.to_be_bytes();
+    let attr_bytes = attribute.0.to_be_bytes();
 
+    let mut key = [0u8; 10];
+    key[0..8].copy_from_slice(&document_id_bytes);
+    key[8..10].copy_from_slice(&attr_bytes);
+
+    key
+}
+
+impl DocumentsFields {
     pub fn put_document_field(
         &self,
         writer: &mut rkv::Writer,
         document_id: DocumentId,
         attribute: SchemaAttr,
         value: &[u8],
-    ) -> Result<Option<&[u8]>, rkv::StoreError>
+    ) -> Result<(), rkv::StoreError>
     {
-        unimplemented!()
+        let key = document_attribute_into_key(document_id, attribute);
+        self.documents_fields.put(writer, key, &rkv::Value::Blob(value))
     }
 
-    pub fn document_field<T: rkv::Readable>(
+    pub fn del_all_document_fields(
         &self,
-        reader: &T,
+        writer: &mut rkv::Writer,
+        document_id: DocumentId,
+    ) -> Result<usize, rkv::StoreError>
+    {
+        let document_id_bytes = document_id.0.to_be_bytes();
+        let mut keys_to_delete = Vec::new();
+
+        // WARN we can not delete the keys using the iterator
+        //      so we store them and delete them just after
+        let iter = self.documents_fields.iter_from(writer, document_id_bytes)?;
+        for result in iter {
+            let (key, _) = result?;
+            let current_document_id = {
+                let bytes = key.get(0..8).unwrap();
+                let array = TryFrom::try_from(bytes).unwrap();
+                DocumentId(u64::from_be_bytes(array))
+            };
+
+            if current_document_id != document_id { break }
+            keys_to_delete.push(key.to_owned());
+        }
+
+        let count = keys_to_delete.len();
+        for key in keys_to_delete {
+            self.documents_fields.delete(writer, key)?;
+        }
+
+        Ok(count)
+    }
+
+    pub fn document_field<'a, T: rkv::Readable>(
+        &self,
+        reader: &'a T,
         document_id: DocumentId,
         attribute: SchemaAttr,
-    ) -> Result<Option<&[u8]>, rkv::StoreError>
+    ) -> Result<Option<&'a [u8]>, rkv::StoreError>
     {
-        unimplemented!()
+        let key = document_attribute_into_key(document_id, attribute);
+
+        match self.documents_fields.get(reader, key)? {
+            Some(rkv::Value::Blob(bytes)) => Ok(Some(bytes)),
+            Some(value) => panic!("invalid type {:?}", value),
+            None => Ok(None),
+        }
     }
 
     pub fn document_fields<'r, T: rkv::Readable>(
@@ -63,7 +104,7 @@ impl<'r, T: rkv::Readable + 'r> Iterator for DocumentFieldsIter<'r, T> {
         match self.iter.next() {
             Some(Ok((key, Some(rkv::Value::Blob(bytes))))) => {
                 let bytes = key.get(8..8+2).unwrap();
-                let array = <[u8; 2]>::try_from(bytes).unwrap();
+                let array = TryFrom::try_from(bytes).unwrap();
                 let attr = u16::from_be_bytes(array);
                 let attr = SchemaAttr::new(attr);
                 Some(Ok((attr, bytes)))

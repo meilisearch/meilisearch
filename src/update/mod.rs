@@ -4,10 +4,10 @@ mod documents_deletion;
 pub use self::documents_addition::{DocumentsAddition, apply_documents_addition};
 pub use self::documents_deletion::{DocumentsDeletion, apply_documents_deletion};
 
+use std::time::Duration;
 use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
-use crate::{store, DocumentId};
-use super::Error;
+use crate::{store, Error, DocumentId};
 
 #[derive(Serialize, Deserialize)]
 pub enum Update {
@@ -15,6 +15,27 @@ pub enum Update {
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition(BTreeMap<String, Vec<String>>),
     SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub enum UpdateType {
+    DocumentsAddition { number: usize },
+    DocumentsDeletion { number: usize },
+    SynonymsAddition { number: usize },
+    SynonymsDeletion { number: usize },
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct DetailedDuration {
+    pub main: Duration,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct UpdateResult {
+    pub update_id: u64,
+    pub update_type: UpdateType,
+    pub result: Result<(), String>,
+    pub detailed_duration: DetailedDuration,
 }
 
 pub fn push_documents_addition<D: serde::Serialize>(

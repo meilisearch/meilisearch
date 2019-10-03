@@ -1,6 +1,14 @@
 use std::sync::Arc;
-use crate::store::WORDS_KEY;
+use std::convert::TryInto;
+
+use rkv::Value;
 use crate::RankedMap;
+
+const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
+const RANKED_MAP_KEY:          &str = "ranked-map";
+const SCHEMA_KEY:              &str = "schema";
+const SYNONYMS_KEY:            &str = "synonyms";
+const WORDS_KEY:               &str = "words";
 
 #[derive(Copy, Clone)]
 pub struct Main {
@@ -24,7 +32,7 @@ impl Main {
     ) -> Result<Option<fst::Set>, rkv::StoreError>
     {
         match self.main.get(reader, WORDS_KEY)? {
-            Some(rkv::Value::Blob(bytes)) => {
+            Some(Value::Blob(bytes)) => {
                 let len = bytes.len();
                 let bytes = Arc::from(bytes);
                 let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
@@ -41,23 +49,50 @@ impl Main {
         ranked_map: &RankedMap,
     ) -> Result<(), rkv::StoreError>
     {
-        unimplemented!()
+        let mut bytes = Vec::new();
+        ranked_map.write_to_bin(&mut bytes).unwrap();
+        let blob = Value::Blob(&bytes[..]);
+        self.main.put(writer, RANKED_MAP_KEY, &blob)
     }
 
     pub fn ranked_map<T: rkv::Readable>(
         &self,
         reader: &T,
-    ) -> Result<RankedMap, rkv::StoreError>
+    ) -> Result<Option<RankedMap>, rkv::StoreError>
     {
-        unimplemented!()
+        match self.main.get(reader, RANKED_MAP_KEY)? {
+            Some(Value::Blob(bytes)) => {
+                let ranked_map = RankedMap::read_from_bin(bytes).unwrap();
+                Ok(Some(ranked_map))
+            },
+            Some(value) => panic!("invalid type {:?}", value),
+            None => Ok(None),
+        }
     }
 
     pub fn put_number_of_documents<F: Fn(u64) -> u64>(
         &self,
         writer: &mut rkv::Writer,
-        func: F,
-    ) -> Result<(), rkv::StoreError>
+        f: F,
+    ) -> Result<u64, rkv::StoreError>
     {
-        unimplemented!()
+        let new = self.number_of_documents(writer).map(f)?;
+        self.main.put(writer, NUMBER_OF_DOCUMENTS_KEY, &Value::Blob(&new.to_be_bytes()))?;
+        Ok(new)
+    }
+
+    pub fn number_of_documents<T: rkv::Readable>(
+        &self,
+        reader: &T,
+    ) -> Result<u64, rkv::StoreError>
+    {
+        match self.main.get(reader, NUMBER_OF_DOCUMENTS_KEY)? {
+            Some(Value::Blob(bytes)) => {
+                let array = bytes.try_into().unwrap();
+                Ok(u64::from_be_bytes(array))
+            },
+            Some(value) => panic!("invalid type {:?}", value),
+            None => Ok(0),
+        }
     }
 }

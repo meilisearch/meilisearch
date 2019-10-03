@@ -4,6 +4,7 @@ mod main;
 mod postings_lists;
 mod synonyms;
 mod updates;
+mod updates_results;
 
 pub use self::docs_words::DocsWords;
 pub use self::documents_fields::{DocumentsFields, DocumentFieldsIter};
@@ -11,12 +12,7 @@ pub use self::main::Main;
 pub use self::postings_lists::PostingsLists;
 pub use self::synonyms::Synonyms;
 pub use self::updates::Updates;
-
-const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
-const RANKED_MAP_KEY:          &str = "ranked-map";
-const SCHEMA_KEY:              &str = "schema";
-const SYNONYMS_KEY:            &str = "synonyms";
-const WORDS_KEY:               &str = "words";
+pub use self::updates_results::UpdatesResults;
 
 fn aligned_to(bytes: &[u8], align: usize) -> bool {
     (bytes as *const _ as *const () as usize) % align == 0
@@ -42,6 +38,10 @@ fn updates_name(name: &str) -> String {
     format!("{}-updates", name)
 }
 
+fn updates_results_name(name: &str) -> String {
+    format!("{}-updates-results", name)
+}
+
 #[derive(Copy, Clone)]
 pub struct Index {
     pub main: Main,
@@ -50,6 +50,7 @@ pub struct Index {
     pub synonyms: Synonyms,
     pub docs_words: DocsWords,
     pub updates: Updates,
+    pub updates_results: UpdatesResults,
 }
 
 pub fn create(env: &rkv::Rkv, name: &str) -> Result<Index, rkv::StoreError> {
@@ -75,6 +76,7 @@ fn open_options(
     let synonyms_name = synonyms_name(name);
     let docs_words_name = docs_words_name(name);
     let updates_name = updates_name(name);
+    let updates_results_name = updates_results_name(name);
 
     // open all the database names
     let main = env.open_single(main_name, options)?;
@@ -83,6 +85,7 @@ fn open_options(
     let synonyms = env.open_single(synonyms_name.as_str(), options)?;
     let docs_words = env.open_single(docs_words_name.as_str(), options)?;
     let updates = env.open_single(updates_name.as_str(), options)?;
+    let updates_results = env.open_single(updates_results_name.as_str(), options)?;
 
     Ok(Index {
         main: Main { main },
@@ -91,5 +94,6 @@ fn open_options(
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
         updates: Updates { updates },
+        updates_results: UpdatesResults { updates_results },
     })
 }
