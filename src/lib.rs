@@ -1,15 +1,22 @@
 mod automaton;
+mod number;
 mod query_builder;
 mod raw_document;
 mod reordered_attrs;
+mod ranked_map;
 pub mod criterion;
 pub mod raw_indexer;
+pub mod serde;
 pub mod store;
 
 pub use self::query_builder::QueryBuilder;
 pub use self::raw_document::RawDocument;
 
+use self::number::{Number, ParseNumberError};
+use self::ranked_map::RankedMap;
+
 use zerocopy::{AsBytes, FromBytes};
+use ::serde::{Serialize, Deserialize};
 
 pub type BEI64 = zerocopy::I64<byteorder::BigEndian>;
 
@@ -18,9 +25,10 @@ pub type BEI64 = zerocopy::I64<byteorder::BigEndian>;
 /// It is used to inform the database the document you want to deserialize.
 /// Helpful for custom ranking.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize)]
 #[derive(AsBytes, FromBytes)]
 #[repr(C)]
-pub struct DocumentId(pub i64);
+pub struct DocumentId(pub u64);
 
 /// This structure represent the position of a word
 /// in a document and its attributes.

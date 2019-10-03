@@ -1,6 +1,6 @@
 use std::time::{Instant, Duration};
 use std::ops::Range;
-use std::{cmp, mem};
+use std::mem;
 
 use fst::{IntoStreamer, Streamer};
 use sdset::SetBuf;

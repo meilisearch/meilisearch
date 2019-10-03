@@ -16,7 +16,7 @@ fn main() {
     let created_arc = Manager::singleton().write().unwrap().get_or_create(path, Rkv::new).unwrap();
     let env = created_arc.read().unwrap();
 
-    let (words, synonyms) = store::create(&env, "test").unwrap();
+    let (words, synonyms, documents_fields) = store::create(&env, "test").unwrap();
 
     {
         let mut writer = env.write().unwrap();
