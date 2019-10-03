@@ -38,6 +38,32 @@ pub struct UpdateResult {
     pub detailed_duration: DetailedDuration,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub enum UpdateStatus {
+    Enqueued,
+    Processed(UpdateResult),
+    Unknown,
+}
+
+pub fn update_status<T: rkv::Readable>(
+    reader: &T,
+    updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+    update_id: u64,
+) -> Result<UpdateStatus, rkv::StoreError>
+{
+    match updates_results_store.update_result(reader, update_id)? {
+        Some(result) => Ok(UpdateStatus::Processed(result)),
+        None => {
+            if updates_store.contains(reader, update_id)? {
+                Ok(UpdateStatus::Enqueued)
+            } else {
+                Ok(UpdateStatus::Unknown)
+            }
+        }
+    }
+}
+
 pub fn push_documents_addition<D: serde::Serialize>(
     writer: &mut rkv::Writer,
     updates_store: store::Updates,

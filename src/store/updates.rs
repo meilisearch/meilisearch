@@ -33,6 +33,16 @@ impl Updates {
         Ok(Some((number, last_data)))
     }
 
+    pub fn contains<T: rkv::Readable>(
+        &self,
+        reader: &T,
+        update_id: u64,
+    ) -> Result<bool, rkv::StoreError>
+    {
+        let update_id_bytes = update_id.to_be_bytes();
+        self.updates.get(reader, update_id_bytes).map(|v| v.is_some())
+    }
+
     pub fn push_back(
         &self,
         writer: &mut rkv::Writer,
