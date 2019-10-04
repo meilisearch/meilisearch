@@ -2,8 +2,8 @@ use rkv::{Manager, Rkv, SingleStore, Value, StoreOptions};
 use std::{fs, path::Path};
 
 use meilidb_schema::SchemaAttr;
-use new_meilidb::{store, QueryBuilder, DocumentId};
-use new_meilidb::raw_indexer::{RawIndexer, Indexed};
+use meilidb_core::{store, QueryBuilder, DocumentId};
+use meilidb_core::raw_indexer::{RawIndexer, Indexed};
 
 fn main() {
     let path = Path::new("test.rkv");
