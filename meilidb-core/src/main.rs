@@ -7,6 +7,8 @@ fn main() {
     fs::create_dir_all(path).unwrap();
 
     let database = Database::open_or_create(path).unwrap();
+    println!("{:?}", database.indexes_names());
+
     let hello = database.open_index("hello").unwrap();
     let hello1 = database.open_index("hello1").unwrap();
     let hello2 = database.open_index("hello2").unwrap();
