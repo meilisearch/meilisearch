@@ -1,6 +1,8 @@
 [workspace]
 members = [
     "meilidb-core",
+    "meilidb-schema",
+    "meilidb-tokenizer",
 ]
 
 [profile.release]

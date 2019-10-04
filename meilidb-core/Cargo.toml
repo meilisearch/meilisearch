@@ -19,8 +19,8 @@ siphasher = "0.3.0"
 slice-group-by = "0.2.6"
 zerocopy = "0.2.8"
 
-meilidb-schema = { path = "../../MeiliDB/meilidb-schema", version = "0.1.0" }
-meilidb-tokenizer = { path = "../../MeiliDB/meilidb-tokenizer", version = "0.1.0" }
+meilidb-schema = { path = "../meilidb-schema", version = "0.1.0" }
+meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
 
 [dependencies.rmp-serde]
 git = "https://github.com/3Hren/msgpack-rust.git"
