@@ -1,22 +1,15 @@
 use rkv::{Manager, Rkv, SingleStore, Value, StoreOptions};
 use std::{fs, path::Path};
-
-use meilidb_schema::SchemaAttr;
-use meilidb_core::{store, QueryBuilder, DocumentId};
-use meilidb_core::raw_indexer::{RawIndexer, Indexed};
+use meilidb_core::{Database, QueryBuilder};
 
 fn main() {
     let path = Path::new("test.rkv");
     fs::create_dir_all(path).unwrap();
 
-    // The Manager enforces that each process opens the same environment
-    // at most once by caching a handle to each environment that it opens.
-    // Use it to retrieve the handle to an opened environment—or create one
-    // if it hasn't already been opened:
-    let created_arc = Manager::singleton().write().unwrap().get_or_create(path, Rkv::new).unwrap();
-    let env = created_arc.read().unwrap();
-
-    let index = store::create(&env, "test").unwrap();
+    let database = Database::open_or_create(path).unwrap();
+    let hello = database.open_index("hello").unwrap();
+    let hello1 = database.open_index("hello1").unwrap();
+    let hello2 = database.open_index("hello2").unwrap();
 
     // {
     //     let mut writer = env.write().unwrap();
@@ -44,9 +37,9 @@ fn main() {
     //     writer.commit().unwrap();
     // }
 
-    let reader = env.read().unwrap();
-    let builder = QueryBuilder::new(index.main, index.postings_lists, index.synonyms);
-    let documents = builder.query(&reader, "oubli", 0..20).unwrap();
+    // let reader = env.read().unwrap();
+    // let builder = QueryBuilder::new(index.main, index.postings_lists, index.synonyms);
+    // let documents = builder.query(&reader, "oubli", 0..20).unwrap();
 
-    println!("{:?}", documents);
+    // println!("{:?}", documents);
 }
