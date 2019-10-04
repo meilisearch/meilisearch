@@ -63,9 +63,9 @@ impl DocumentsFields {
         Ok(count)
     }
 
-    pub fn document_field<'a, T: rkv::Readable>(
+    pub fn document_field<'a>(
         &self,
-        reader: &'a T,
+        reader: &'a impl rkv::Readable,
         document_id: DocumentId,
         attribute: SchemaAttr,
     ) -> Result<Option<&'a [u8]>, rkv::StoreError>

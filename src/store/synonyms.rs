@@ -4,17 +4,17 @@ pub struct Synonyms {
 }
 
 impl Synonyms {
-    pub fn synonyms_fst<T: rkv::Readable>(
+    pub fn synonyms_fst(
         &self,
-        reader: &T,
+        reader: &impl rkv::Readable,
     ) -> Result<fst::Set, rkv::StoreError>
     {
         Ok(fst::Set::default())
     }
 
-    pub fn alternatives_to<T: rkv::Readable>(
+    pub fn alternatives_to(
         &self,
-        reader: &T,
+        reader: &impl rkv::Readable,
         word: &[u8],
     ) -> Result<Option<fst::Set>, rkv::StoreError>
     {

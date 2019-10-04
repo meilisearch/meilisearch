@@ -21,9 +21,9 @@ impl UpdatesResults {
         Ok(())
     }
 
-    pub fn update_result<T: rkv::Readable>(
+    pub fn update_result(
         &self,
-        reader: &T,
+        reader: &impl rkv::Readable,
         update_id: u64,
     ) -> MResult<Option<UpdateResult>>
     {

@@ -26,9 +26,9 @@ impl Main {
         self.main.put(writer, WORDS_KEY, &blob)
     }
 
-    pub fn words_fst<T: rkv::Readable>(
+    pub fn words_fst(
         &self,
-        reader: &T,
+        reader: &impl rkv::Readable,
     ) -> MResult<Option<fst::Set>>
     {
         match self.main.get(reader, WORDS_KEY)? {
@@ -56,9 +56,9 @@ impl Main {
         Ok(())
     }
 
-    pub fn ranked_map<T: rkv::Readable>(
+    pub fn ranked_map(
         &self,
-        reader: &T,
+        reader: &impl rkv::Readable,
     ) -> MResult<Option<RankedMap>>
     {
         match self.main.get(reader, RANKED_MAP_KEY)? {
@@ -82,9 +82,9 @@ impl Main {
         Ok(new)
     }
 
-    pub fn number_of_documents<T: rkv::Readable>(
+    pub fn number_of_documents(
         &self,
-        reader: &T,
+        reader: &impl rkv::Readable,
     ) -> Result<u64, rkv::StoreError>
     {
         match self.main.get(reader, NUMBER_OF_DOCUMENTS_KEY)? {

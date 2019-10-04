@@ -10,9 +10,9 @@ pub struct Updates {
 impl Updates {
     // TODO we should use the MDB_LAST op but
     //      it is not exposed by the rkv library
-    fn last_update_id<'a, T: rkv::Readable>(
+    fn last_update_id<'a>(
         &self,
-        reader: &'a T,
+        reader: &'a impl rkv::Readable,
     ) -> Result<Option<(u64, Option<Value<'a>>)>, rkv::StoreError>
     {
         let mut last = None;
@@ -33,9 +33,9 @@ impl Updates {
         Ok(Some((number, last_data)))
     }
 
-    pub fn contains<T: rkv::Readable>(
+    pub fn contains(
         &self,
-        reader: &T,
+        reader: &impl rkv::Readable,
         update_id: u64,
     ) -> Result<bool, rkv::StoreError>
     {

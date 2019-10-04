@@ -21,8 +21,6 @@ use self::ranked_map::RankedMap;
 use zerocopy::{AsBytes, FromBytes};
 use ::serde::{Serialize, Deserialize};
 
-pub type BEI64 = zerocopy::I64<byteorder::BigEndian>;
-
 /// Represent an internally generated document unique identifier.
 ///
 /// It is used to inform the database the document you want to deserialize.

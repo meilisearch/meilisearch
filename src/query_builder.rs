@@ -119,7 +119,7 @@ fn multiword_rewrite_matches(
 }
 
 fn fetch_raw_documents(
-    reader: &rkv::Reader,
+    reader: &impl rkv::Readable,
     automatons: &[Automaton],
     query_enhancer: &QueryEnhancer,
     searchables: Option<&ReorderedAttrs>,
@@ -203,7 +203,7 @@ impl<'a> QueryBuilder<'a> {
 
     pub fn query(
         self,
-        reader: &rkv::Reader,
+        reader: &impl rkv::Readable,
         query: &str,
         range: Range<usize>,
     ) -> MResult<Vec<Document>>

@@ -31,9 +31,9 @@ impl PostingsLists {
         self.postings_lists.delete(writer, word)
     }
 
-    pub fn postings_list<'a, T: rkv::Readable>(
+    pub fn postings_list<'a>(
         &self,
-        reader: &'a T,
+        reader: &'a impl rkv::Readable,
         word: &[u8],
     ) -> Result<Option<Cow<'a, sdset::Set<DocIndex>>>, rkv::StoreError>
     {

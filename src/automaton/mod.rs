@@ -22,7 +22,7 @@ pub struct AutomatonProducer {
 
 impl AutomatonProducer {
     pub fn new(
-        reader: &rkv::Reader,
+        reader: &impl rkv::Readable,
         query: &str,
         synonyms_store: store::Synonyms,
     ) -> (AutomatonProducer, QueryEnhancer)
@@ -99,7 +99,7 @@ pub fn normalize_str(string: &str) -> String {
 }
 
 fn generate_automatons(
-    reader: &rkv::Reader,
+    reader: &impl rkv::Readable,
     query: &str,
     synonym_store: store::Synonyms,
 ) -> Result<(Vec<Vec<Automaton>>, QueryEnhancer), rkv::StoreError>
