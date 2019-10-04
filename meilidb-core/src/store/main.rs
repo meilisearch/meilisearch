@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::convert::TryInto;
 
+use meilidb_schema::Schema;
 use rkv::Value;
 use crate::{RankedMap, MResult};
 
@@ -37,6 +38,33 @@ impl Main {
                 let bytes = Arc::from(bytes);
                 let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len)?;
                 Ok(Some(fst::Set::from(fst)))
+            },
+            Some(value) => panic!("invalid type {:?}", value),
+            None => Ok(None),
+        }
+    }
+
+    pub fn put_schema(
+        &self,
+        writer: &mut rkv::Writer,
+        schema: &Schema,
+    ) -> MResult<()>
+    {
+        let bytes = bincode::serialize(schema)?;
+        let blob = Value::Blob(&bytes[..]);
+        self.main.put(writer, SCHEMA_KEY, &blob)?;
+        Ok(())
+    }
+
+    pub fn schema(
+        &self,
+        reader: &impl rkv::Readable,
+    ) -> MResult<Option<Schema>>
+    {
+        match self.main.get(reader, SCHEMA_KEY)? {
+            Some(Value::Blob(bytes)) => {
+                let schema = bincode::deserialize_from(bytes.as_ref())?;
+                Ok(Some(schema))
             },
             Some(value) => panic!("invalid type {:?}", value),
             None => Ok(None),
