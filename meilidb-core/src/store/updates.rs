@@ -73,6 +73,11 @@ impl Updates {
         match last_data {
             Some(Value::Blob(bytes)) => {
                 let update = rmp_serde::from_read_ref(&bytes)?;
+
+                // remove it from the database now
+                let last_id_bytes = last_id.to_be_bytes();
+                self.updates.delete(writer, last_id_bytes)?;
+
                 Ok(Some((last_id, update)))
             },
             Some(value) => panic!("invalid type {:?}", value),
