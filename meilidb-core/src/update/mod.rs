@@ -4,10 +4,7 @@ mod documents_deletion;
 pub use self::documents_addition::{DocumentsAddition, apply_documents_addition};
 pub use self::documents_deletion::{DocumentsDeletion, apply_documents_deletion};
 
-use std::collections::BTreeMap;
-use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-
 use serde::{Serialize, Deserialize};
 use crate::{store, Error, MResult, DocumentId, RankedMap};
 
@@ -63,7 +60,7 @@ pub fn update_status<T: rkv::Readable>(
 }
 
 pub fn push_documents_addition<D: serde::Serialize>(
-    mut writer: &mut rkv::Writer,
+    writer: &mut rkv::Writer,
     updates_store: store::Updates,
     addition: Vec<D>,
 ) -> Result<u64, Error>
@@ -97,78 +94,81 @@ pub fn update_task(
     writer: &mut rkv::Writer,
     index: store::Index,
     mut callback: Option<impl FnOnce(UpdateResult)>,
-) -> MResult<()>
+) -> MResult<bool>
 {
-    if let Some((update_id, update)) = index.updates.pop_back(writer)? {
-        let (update_type, result, duration) = match update {
-            Update::DocumentsAddition(documents) => {
-                let update_type = UpdateType::DocumentsAddition { number: documents.len() };
+    let (update_id, update) = match index.updates.pop_front(writer)? {
+        Some(value) => value,
+        None => return Ok(false),
+    };
 
-                let schema = match index.main.schema(writer)? {
-                    Some(schema) => schema,
-                    None => return Err(Error::SchemaMissing),
-                };
-                let ranked_map = match index.main.ranked_map(writer)? {
-                    Some(ranked_map) => ranked_map,
-                    None => RankedMap::default(),
-                };
+    let (update_type, result, duration) = match update {
+        Update::DocumentsAddition(documents) => {
+            let update_type = UpdateType::DocumentsAddition { number: documents.len() };
 
-                let start = Instant::now();
-                let result = apply_documents_addition(
-                    writer,
-                    index.main,
-                    index.documents_fields,
-                    index.postings_lists,
-                    index.docs_words,
-                    &schema,
-                    ranked_map,
-                    documents,
-                );
+            let schema = match index.main.schema(writer)? {
+                Some(schema) => schema,
+                None => return Err(Error::SchemaMissing),
+            };
+            let ranked_map = match index.main.ranked_map(writer)? {
+                Some(ranked_map) => ranked_map,
+                None => RankedMap::default(),
+            };
 
-                (update_type, result, start.elapsed())
-            },
-            Update::DocumentsDeletion(documents) => {
-                let update_type = UpdateType::DocumentsDeletion { number: documents.len() };
+            let start = Instant::now();
+            let result = apply_documents_addition(
+                writer,
+                index.main,
+                index.documents_fields,
+                index.postings_lists,
+                index.docs_words,
+                &schema,
+                ranked_map,
+                documents,
+            );
 
-                let schema = match index.main.schema(writer)? {
-                    Some(schema) => schema,
-                    None => return Err(Error::SchemaMissing),
-                };
-                let ranked_map = match index.main.ranked_map(writer)? {
-                    Some(ranked_map) => ranked_map,
-                    None => RankedMap::default(),
-                };
+            (update_type, result, start.elapsed())
+        },
+        Update::DocumentsDeletion(documents) => {
+            let update_type = UpdateType::DocumentsDeletion { number: documents.len() };
 
-                let start = Instant::now();
-                let result = apply_documents_deletion(
-                    writer,
-                    index.main,
-                    index.documents_fields,
-                    index.postings_lists,
-                    index.docs_words,
-                    &schema,
-                    ranked_map,
-                    documents,
-                );
+            let schema = match index.main.schema(writer)? {
+                Some(schema) => schema,
+                None => return Err(Error::SchemaMissing),
+            };
+            let ranked_map = match index.main.ranked_map(writer)? {
+                Some(ranked_map) => ranked_map,
+                None => RankedMap::default(),
+            };
 
-                (update_type, result, start.elapsed())
-            },
-        };
+            let start = Instant::now();
+            let result = apply_documents_deletion(
+                writer,
+                index.main,
+                index.documents_fields,
+                index.postings_lists,
+                index.docs_words,
+                &schema,
+                ranked_map,
+                documents,
+            );
 
-        let detailed_duration = DetailedDuration { main: duration };
-        let status = UpdateResult {
-            update_id,
-            update_type,
-            result: result.map_err(|e| e.to_string()),
-            detailed_duration,
-        };
+            (update_type, result, start.elapsed())
+        },
+    };
 
-        index.updates_results.put_update_result(writer, update_id, &status)?;
+    let detailed_duration = DetailedDuration { main: duration };
+    let status = UpdateResult {
+        update_id,
+        update_type,
+        result: result.map_err(|e| e.to_string()),
+        detailed_duration,
+    };
 
-        if let Some(callback) = callback.take() {
-            (callback)(status);
-        }
+    index.updates_results.put_update_result(writer, update_id, &status)?;
+
+    if let Some(callback) = callback.take() {
+        (callback)(status);
     }
 
-    Ok(())
+    Ok(true)
 }

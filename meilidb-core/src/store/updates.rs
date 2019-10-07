@@ -33,6 +33,23 @@ impl Updates {
         Ok(Some((number, last_data)))
     }
 
+    fn first_update_id<'a>(
+        &self,
+        reader: &'a impl rkv::Readable,
+    ) -> Result<Option<(u64, Option<Value<'a>>)>, rkv::StoreError>
+    {
+        let mut iter = self.updates.iter_start(reader)?;
+        let (first_key, first_data) = match iter.next() {
+            Some(result) => result?,
+            None => return Ok(None),
+        };
+
+        let array = first_key.try_into().unwrap();
+        let number = u64::from_be_bytes(array);
+
+        Ok(Some((number, first_data)))
+    }
+
     pub fn contains(
         &self,
         reader: &impl rkv::Readable,
@@ -60,12 +77,12 @@ impl Updates {
         Ok(last_update_id)
     }
 
-    pub fn pop_back(
+    pub fn pop_front(
         &self,
         writer: &mut rkv::Writer,
     ) -> MResult<Option<(u64, Update)>>
     {
-        let (last_id, last_data) = match self.last_update_id(writer)? {
+        let (last_id, last_data) = match self.first_update_id(writer)? {
             Some(entry) => entry,
             None => return Ok(None),
         };
