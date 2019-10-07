@@ -11,12 +11,24 @@ use crate::store;
 
 pub struct DocumentsDeletion {
     updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+    updates_notifier: crossbeam_channel::Sender<()>,
     documents: Vec<DocumentId>,
 }
 
 impl DocumentsDeletion {
-    pub fn new(updates_store: store::Updates) -> DocumentsDeletion {
-        DocumentsDeletion { updates_store, documents: Vec::new() }
+    pub fn new(
+        updates_store: store::Updates,
+        updates_results_store: store::UpdatesResults,
+        updates_notifier: crossbeam_channel::Sender<()>,
+    ) -> DocumentsDeletion
+    {
+        DocumentsDeletion {
+            updates_store,
+            updates_results_store,
+            updates_notifier,
+            documents: Vec::new(),
+        }
     }
 
     pub fn delete_document_by_id(&mut self, document_id: DocumentId) {
@@ -37,8 +49,17 @@ impl DocumentsDeletion {
         Ok(())
     }
 
-    pub fn finalize(self, writer: &mut rkv::Writer) -> Result<u64, Error> {
-        push_documents_deletion(writer, self.updates_store, self.documents)
+    pub fn finalize(self, mut writer: rkv::Writer) -> Result<u64, Error> {
+        let update_id = push_documents_deletion(
+            &mut writer,
+            self.updates_store,
+            self.updates_results_store,
+            self.documents,
+        )?;
+        writer.commit()?;
+        let _ = self.updates_notifier.send(());
+
+        Ok(update_id)
     }
 }
 

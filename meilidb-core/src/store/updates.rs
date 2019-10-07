@@ -10,7 +10,7 @@ pub struct Updates {
 impl Updates {
     // TODO we should use the MDB_LAST op but
     //      it is not exposed by the rkv library
-    fn last_update_id<'a>(
+    pub fn last_update_id<'a>(
         &self,
         reader: &'a impl rkv::Readable,
     ) -> Result<Option<(u64, Option<Value<'a>>)>, rkv::StoreError>
@@ -60,21 +60,18 @@ impl Updates {
         self.updates.get(reader, update_id_bytes).map(|v| v.is_some())
     }
 
-    pub fn push_back(
+    pub fn put_update(
         &self,
         writer: &mut rkv::Writer,
+        update_id: u64,
         update: &Update,
-    ) -> MResult<u64>
+    ) -> MResult<()>
     {
-        let last_update_id = self.last_update_id(writer)?;
-        let last_update_id = last_update_id.map_or(0, |(n, _)| n + 1);
-        let last_update_id_bytes = last_update_id.to_be_bytes();
-
+        let update_id_bytes = update_id.to_be_bytes();
         let update = rmp_serde::to_vec_named(&update)?;
         let blob = Value::Blob(&update);
-        self.updates.put(writer, last_update_id_bytes, &blob)?;
-
-        Ok(last_update_id)
+        self.updates.put(writer, update_id_bytes, &blob)?;
+        Ok(())
     }
 
     pub fn pop_front(
@@ -82,20 +79,20 @@ impl Updates {
         writer: &mut rkv::Writer,
     ) -> MResult<Option<(u64, Update)>>
     {
-        let (last_id, last_data) = match self.first_update_id(writer)? {
+        let (first_id, first_data) = match self.first_update_id(writer)? {
             Some(entry) => entry,
             None => return Ok(None),
         };
 
-        match last_data {
+        match first_data {
             Some(Value::Blob(bytes)) => {
                 let update = rmp_serde::from_read_ref(&bytes)?;
 
                 // remove it from the database now
-                let last_id_bytes = last_id.to_be_bytes();
-                self.updates.delete(writer, last_id_bytes)?;
+                let first_id_bytes = first_id.to_be_bytes();
+                self.updates.delete(writer, first_id_bytes)?;
 
-                Ok(Some((last_id, update)))
+                Ok(Some((first_id, update)))
             },
             Some(value) => panic!("invalid type {:?}", value),
             None => Ok(None),

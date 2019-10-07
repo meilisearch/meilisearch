@@ -1,17 +1,25 @@
 use rkv::{Manager, Rkv, SingleStore, Value, StoreOptions};
 use std::{fs, path::Path};
-use meilidb_core::{Database, QueryBuilder};
+use meilidb_core::{Database, MResult, QueryBuilder};
 
-fn main() {
+fn main() -> MResult<()> {
+    env_logger::init();
+
     let path = Path::new("test.rkv");
-    fs::create_dir_all(path).unwrap();
-
-    let database = Database::open_or_create(path).unwrap();
+    let database = Database::open_or_create(path)?;
     println!("{:?}", database.indexes_names());
 
-    let hello = database.open_index("hello").unwrap();
-    let hello1 = database.open_index("hello1").unwrap();
-    let hello2 = database.open_index("hello2").unwrap();
+    let hello = database.open_index("hello")?;
+    let hello1 = database.open_index("hello1")?;
+    let hello2 = database.open_index("hello2")?;
+
+    let mut additions = hello.documents_addition();
+    additions.extend(vec![()]);
+
+    let rkv = database.rkv.read().unwrap();
+    let writer = rkv.write()?;
+
+    additions.finalize(writer)?;
 
     // {
     //     let mut writer = env.write().unwrap();
@@ -44,4 +52,8 @@ fn main() {
     // let documents = builder.query(&reader, "oubli", 0..20).unwrap();
 
     // println!("{:?}", documents);
+
+    std::thread::sleep(std::time::Duration::from_secs(10));
+
+    Ok(())
 }

@@ -14,6 +14,8 @@ pub use self::synonyms::Synonyms;
 pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;
 
+use crate::update;
+
 fn aligned_to(bytes: &[u8], align: usize) -> bool {
     (bytes as *const _ as *const () as usize) % align == 0
 }
@@ -46,31 +48,62 @@ fn updates_results_name(name: &str) -> String {
     format!("store-{}-updates-results", name)
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Index {
     pub main: Main,
     pub postings_lists: PostingsLists,
     pub documents_fields: DocumentsFields,
     pub synonyms: Synonyms,
     pub docs_words: DocsWords,
+
     pub updates: Updates,
     pub updates_results: UpdatesResults,
+    updates_notifier: crossbeam_channel::Sender<()>,
 }
 
-pub fn create(env: &rkv::Rkv, name: &str) -> Result<Index, rkv::StoreError> {
-    open_options(env, name, rkv::StoreOptions::create())
+impl Index {
+    pub fn documents_addition<D>(&self) -> update::DocumentsAddition<D> {
+        update::DocumentsAddition::new(
+            self.updates,
+            self.updates_results,
+            self.updates_notifier.clone(),
+        )
+    }
+
+    pub fn documents_deletion<D>(&self) -> update::DocumentsDeletion {
+        update::DocumentsDeletion::new(
+            self.updates,
+            self.updates_results,
+            self.updates_notifier.clone(),
+        )
+    }
 }
 
-pub fn open(env: &rkv::Rkv, name: &str) -> Result<Index, rkv::StoreError> {
+pub fn create(
+    env: &rkv::Rkv,
+    name: &str,
+    updates_notifier: crossbeam_channel::Sender<()>,
+) -> Result<Index, rkv::StoreError>
+{
+    open_options(env, name, rkv::StoreOptions::create(), updates_notifier)
+}
+
+pub fn open(
+    env: &rkv::Rkv,
+    name: &str,
+    updates_notifier: crossbeam_channel::Sender<()>,
+) -> Result<Index, rkv::StoreError>
+{
     let mut options = rkv::StoreOptions::default();
     options.create = false;
-    open_options(env, name, options)
+    open_options(env, name, options, updates_notifier)
 }
 
 fn open_options(
     env: &rkv::Rkv,
     name: &str,
     options: rkv::StoreOptions,
+    updates_notifier: crossbeam_channel::Sender<()>,
 ) -> Result<Index, rkv::StoreError>
 {
     // create all the store names
@@ -99,5 +132,6 @@ fn open_options(
         docs_words: DocsWords { docs_words },
         updates: Updates { updates },
         updates_results: UpdatesResults { updates_results },
+        updates_notifier,
     })
 }

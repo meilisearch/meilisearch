@@ -13,22 +13,49 @@ use crate::{Error, RankedMap};
 
 pub struct DocumentsAddition<D> {
     updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+    updates_notifier: crossbeam_channel::Sender<()>,
     documents: Vec<D>,
 }
 
 impl<D> DocumentsAddition<D> {
-    pub fn new(updates_store: store::Updates) -> DocumentsAddition<D> {
-        DocumentsAddition { updates_store, documents: Vec::new() }
+    pub fn new(
+        updates_store: store::Updates,
+        updates_results_store: store::UpdatesResults,
+        updates_notifier: crossbeam_channel::Sender<()>,
+    ) -> DocumentsAddition<D>
+    {
+        DocumentsAddition {
+            updates_store,
+            updates_results_store,
+            updates_notifier,
+            documents: Vec::new(),
+        }
     }
 
     pub fn update_document(&mut self, document: D) {
         self.documents.push(document);
     }
 
-    pub fn finalize(self, writer: &mut rkv::Writer) -> Result<u64, Error>
+    pub fn finalize(self, mut writer: rkv::Writer) -> Result<u64, Error>
     where D: serde::Serialize
     {
-        push_documents_addition(writer, self.updates_store, self.documents)
+        let update_id = push_documents_addition(
+            &mut writer,
+            self.updates_store,
+            self.updates_results_store,
+            self.documents,
+        )?;
+        writer.commit()?;
+        let _ = self.updates_notifier.send(());
+
+        Ok(update_id)
+    }
+}
+
+impl<D> Extend<D> for DocumentsAddition<D> {
+    fn extend<T: IntoIterator<Item=D>>(&mut self, iter: T) {
+        self.documents.extend(iter)
     }
 }
 

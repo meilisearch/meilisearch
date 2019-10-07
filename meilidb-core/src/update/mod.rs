@@ -5,16 +5,17 @@ pub use self::documents_addition::{DocumentsAddition, apply_documents_addition};
 pub use self::documents_deletion::{DocumentsDeletion, apply_documents_deletion};
 
 use std::time::{Duration, Instant};
+use log::debug;
 use serde::{Serialize, Deserialize};
 use crate::{store, Error, MResult, DocumentId, RankedMap};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Update {
     DocumentsAddition(Vec<rmpv::Value>),
     DocumentsDeletion(Vec<DocumentId>),
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateType {
     DocumentsAddition { number: usize },
     DocumentsDeletion { number: usize },
@@ -59,11 +60,29 @@ pub fn update_status<T: rkv::Readable>(
     }
 }
 
+pub fn biggest_update_id(
+    writer: &mut rkv::Writer,
+    updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+) -> MResult<Option<u64>>
+{
+    let last_update_id = updates_store.last_update_id(writer)?;
+    let last_update_id = last_update_id.map(|(n, _)| n);
+
+    let last_update_results_id = updates_results_store.last_update_id(writer)?;
+    let last_update_results_id = last_update_results_id.map(|(n, _)| n);
+
+    let max = last_update_id.max(last_update_results_id);
+
+    Ok(max)
+}
+
 pub fn push_documents_addition<D: serde::Serialize>(
     writer: &mut rkv::Writer,
     updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
     addition: Vec<D>,
-) -> Result<u64, Error>
+) -> MResult<u64>
 {
     let mut values = Vec::with_capacity(addition.len());
     for add in addition {
@@ -72,22 +91,29 @@ pub fn push_documents_addition<D: serde::Serialize>(
         values.push(add);
     }
 
-    let update = Update::DocumentsAddition(values);
-    let update_id = updates_store.push_back(writer, &update)?;
+    let last_update_id = biggest_update_id(writer, updates_store, updates_results_store)?;
+    let last_update_id = last_update_id.map_or(0, |n| n + 1);
 
-    Ok(update_id)
+    let update = Update::DocumentsAddition(values);
+    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+
+    Ok(last_update_id)
 }
 
 pub fn push_documents_deletion(
     writer: &mut rkv::Writer,
     updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
     deletion: Vec<DocumentId>,
-) -> Result<u64, Error>
+) -> MResult<u64>
 {
-    let update = Update::DocumentsDeletion(deletion);
-    let update_id = updates_store.push_back(writer, &update)?;
+    let last_update_id = biggest_update_id(writer, updates_store, updates_results_store)?;
+    let last_update_id = last_update_id.map_or(0, |n| n + 1);
 
-    Ok(update_id)
+    let update = Update::DocumentsDeletion(deletion);
+    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+
+    Ok(last_update_id)
 }
 
 pub fn update_task(
@@ -101,56 +127,58 @@ pub fn update_task(
         None => return Ok(false),
     };
 
+    debug!("Processing update number {}", update_id);
+
     let (update_type, result, duration) = match update {
         Update::DocumentsAddition(documents) => {
-            let update_type = UpdateType::DocumentsAddition { number: documents.len() };
+            let start = Instant::now();
 
-            let schema = match index.main.schema(writer)? {
-                Some(schema) => schema,
-                None => return Err(Error::SchemaMissing),
-            };
             let ranked_map = match index.main.ranked_map(writer)? {
                 Some(ranked_map) => ranked_map,
                 None => RankedMap::default(),
             };
 
-            let start = Instant::now();
-            let result = apply_documents_addition(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.postings_lists,
-                index.docs_words,
-                &schema,
-                ranked_map,
-                documents,
-            );
+            let update_type = UpdateType::DocumentsAddition { number: documents.len() };
+
+            let result = match index.main.schema(writer)? {
+                Some(schema) => apply_documents_addition(
+                    writer,
+                    index.main,
+                    index.documents_fields,
+                    index.postings_lists,
+                    index.docs_words,
+                    &schema,
+                    ranked_map,
+                    documents,
+                ),
+                None => Err(Error::SchemaMissing),
+            };
 
             (update_type, result, start.elapsed())
         },
         Update::DocumentsDeletion(documents) => {
-            let update_type = UpdateType::DocumentsDeletion { number: documents.len() };
+            let start = Instant::now();
 
-            let schema = match index.main.schema(writer)? {
-                Some(schema) => schema,
-                None => return Err(Error::SchemaMissing),
-            };
             let ranked_map = match index.main.ranked_map(writer)? {
                 Some(ranked_map) => ranked_map,
                 None => RankedMap::default(),
             };
 
-            let start = Instant::now();
-            let result = apply_documents_deletion(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.postings_lists,
-                index.docs_words,
-                &schema,
-                ranked_map,
-                documents,
-            );
+            let update_type = UpdateType::DocumentsDeletion { number: documents.len() };
+
+            let result = match index.main.schema(writer)? {
+                Some(schema) => apply_documents_deletion(
+                    writer,
+                    index.main,
+                    index.documents_fields,
+                    index.postings_lists,
+                    index.docs_words,
+                    &schema,
+                    ranked_map,
+                    documents,
+                ),
+                None => Err(Error::SchemaMissing),
+            };
 
             (update_type, result, start.elapsed())
         },

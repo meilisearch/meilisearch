@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use rkv::Value;
 use crate::{update::UpdateResult, MResult};
 
@@ -7,6 +8,31 @@ pub struct UpdatesResults {
 }
 
 impl UpdatesResults {
+    // TODO we should use the MDB_LAST op but
+    //      it is not exposed by the rkv library
+    pub fn last_update_id<'a>(
+        &self,
+        reader: &'a impl rkv::Readable,
+    ) -> Result<Option<(u64, Option<Value<'a>>)>, rkv::StoreError>
+    {
+        let mut last = None;
+        let iter = self.updates_results.iter_start(reader)?;
+        for result in iter {
+            let (key, data) = result?;
+            last = Some((key, data));
+        }
+
+        let (last_key, last_data) = match last {
+            Some(entry) => entry,
+            None => return Ok(None),
+        };
+
+        let array = last_key.try_into().unwrap();
+        let number = u64::from_be_bytes(array);
+
+        Ok(Some((number, last_data)))
+    }
+
     pub fn put_update_result(
         &self,
         writer: &mut rkv::Writer,
