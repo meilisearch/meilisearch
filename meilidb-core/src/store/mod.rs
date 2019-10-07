@@ -15,7 +15,7 @@ pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;
 
 use meilidb_schema::Schema;
-use crate::{update, MResult};
+use crate::{update, query_builder::QueryBuilder, MResult};
 
 fn aligned_to(bytes: &[u8], align: usize) -> bool {
     (bytes as *const _ as *const () as usize) % align == 0
@@ -84,6 +84,10 @@ impl Index {
             self.updates_results,
             self.updates_notifier.clone(),
         )
+    }
+
+    pub fn query_builder(&self) -> QueryBuilder {
+        QueryBuilder::new(self.main, self.postings_lists, self.synonyms)
     }
 }
 

@@ -15,7 +15,6 @@ pub mod store;
 pub use self::database::Database;
 pub use self::error::{Error, MResult};
 pub use self::number::{Number, ParseNumberError};
-pub use self::query_builder::QueryBuilder;
 pub use self::ranked_map::RankedMap;
 pub use self::raw_document::RawDocument;
 pub use self::store::Index;

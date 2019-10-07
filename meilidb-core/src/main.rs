@@ -3,7 +3,7 @@ use std::{fs, path::Path};
 use serde_json::json;
 use rkv::{Manager, Rkv, SingleStore, Value, StoreOptions};
 
-use meilidb_core::{Database, MResult, QueryBuilder};
+use meilidb_core::{Database, MResult};
 use meilidb_schema::{SchemaBuilder, DISPLAYED, INDEXED};
 
 fn main() -> MResult<()> {
@@ -11,6 +11,7 @@ fn main() -> MResult<()> {
 
     let path = Path::new("test.rkv");
     let database = Database::open_or_create(path)?;
+    let rkv = database.rkv.read().unwrap();
     println!("{:?}", database.indexes_names());
 
     let hello = database.open_index("hello")?;
@@ -23,20 +24,18 @@ fn main() -> MResult<()> {
     builder.new_attribute("gamma", INDEXED);
     let schema = builder.build();
 
-    let rkv = database.rkv.read().unwrap();
     let writer = rkv.write()?;
 
     hello.schema_update(writer, schema)?;
 
     let object = json!({
         "id": 23,
-        "alpha": "hello",
+        "beta": "hello",
     });
 
     let mut additions = hello.documents_addition();
     additions.extend(vec![object]);
 
-    let rkv = database.rkv.read().unwrap();
     let writer = rkv.write()?;
 
     additions.finalize(writer)?;
@@ -67,11 +66,11 @@ fn main() -> MResult<()> {
     //     writer.commit().unwrap();
     // }
 
-    // let reader = env.read().unwrap();
-    // let builder = QueryBuilder::new(index.main, index.postings_lists, index.synonyms);
-    // let documents = builder.query(&reader, "oubli", 0..20).unwrap();
+    let builder = hello.query_builder();
+    let reader = rkv.read().unwrap();
+    let documents = builder.query(&reader, "hello", 0..20).unwrap();
 
-    // println!("{:?}", documents);
+    println!("{:?}", documents);
 
     std::thread::sleep(std::time::Duration::from_secs(2));
 
