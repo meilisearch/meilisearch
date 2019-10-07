@@ -18,28 +18,32 @@ fn aligned_to(bytes: &[u8], align: usize) -> bool {
     (bytes as *const _ as *const () as usize) % align == 0
 }
 
+fn main_name(name: &str) -> String {
+    format!("store-{}", name)
+}
+
 fn postings_lists_name(name: &str) -> String {
-    format!("{}-postings-lists", name)
+    format!("store-{}-postings-lists", name)
 }
 
 fn documents_fields_name(name: &str) -> String {
-    format!("{}-documents-fields", name)
+    format!("store-{}-documents-fields", name)
 }
 
 fn synonyms_name(name: &str) -> String {
-    format!("{}-synonyms", name)
+    format!("store-{}-synonyms", name)
 }
 
 fn docs_words_name(name: &str) -> String {
-    format!("{}-docs-words", name)
+    format!("store-{}-docs-words", name)
 }
 
 fn updates_name(name: &str) -> String {
-    format!("{}-updates", name)
+    format!("store-{}-updates", name)
 }
 
 fn updates_results_name(name: &str) -> String {
-    format!("{}-updates-results", name)
+    format!("store-{}-updates-results", name)
 }
 
 #[derive(Copy, Clone)]
@@ -69,8 +73,8 @@ fn open_options(
     options: rkv::StoreOptions,
 ) -> Result<Index, rkv::StoreError>
 {
-    // create all the database names
-    let main_name = name;
+    // create all the store names
+    let main_name = main_name(name);
     let postings_lists_name = postings_lists_name(name);
     let documents_fields_name = documents_fields_name(name);
     let synonyms_name = synonyms_name(name);
@@ -78,8 +82,8 @@ fn open_options(
     let updates_name = updates_name(name);
     let updates_results_name = updates_results_name(name);
 
-    // open all the database names
-    let main = env.open_single(main_name, options)?;
+    // open all the stores
+    let main = env.open_single(main_name.as_str(), options)?;
     let postings_lists = env.open_single(postings_lists_name.as_str(), options)?;
     let documents_fields = env.open_single(documents_fields_name.as_str(), options)?;
     let synonyms = env.open_single(synonyms_name.as_str(), options)?;
