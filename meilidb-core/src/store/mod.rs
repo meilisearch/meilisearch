@@ -14,7 +14,8 @@ pub use self::synonyms::Synonyms;
 pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;
 
-use crate::update;
+use meilidb_schema::Schema;
+use crate::{update, MResult};
 
 fn aligned_to(bytes: &[u8], align: usize) -> bool {
     (bytes as *const _ as *const () as usize) % align == 0
@@ -62,6 +63,13 @@ pub struct Index {
 }
 
 impl Index {
+    pub fn schema_update(&self, mut writer: rkv::Writer, schema: Schema) -> MResult<()> {
+        update::push_schema_update(&mut writer, self.updates, self.updates_results, schema)?;
+        writer.commit()?;
+        let _ = self.updates_notifier.send(());
+        Ok(())
+    }
+
     pub fn documents_addition<D>(&self) -> update::DocumentsAddition<D> {
         update::DocumentsAddition::new(
             self.updates,

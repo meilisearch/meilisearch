@@ -9,7 +9,7 @@ use crate::raw_indexer::RawIndexer;
 use crate::serde::{extract_document_id, Serializer, RamDocumentStore};
 use crate::store;
 use crate::update::{push_documents_addition, apply_documents_deletion};
-use crate::{Error, RankedMap};
+use crate::{MResult, Error, RankedMap};
 
 pub struct DocumentsAddition<D> {
     updates_store: store::Updates,
@@ -37,7 +37,7 @@ impl<D> DocumentsAddition<D> {
         self.documents.push(document);
     }
 
-    pub fn finalize(self, mut writer: rkv::Writer) -> Result<u64, Error>
+    pub fn finalize(self, mut writer: rkv::Writer) -> MResult<u64>
     where D: serde::Serialize
     {
         let update_id = push_documents_addition(
@@ -65,14 +65,18 @@ pub fn apply_documents_addition(
     documents_fields_store: store::DocumentsFields,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    schema: &Schema,
     mut ranked_map: RankedMap,
     addition: Vec<rmpv::Value>,
-) -> Result<(), Error>
+) -> MResult<()>
 {
     let mut document_ids = HashSet::new();
     let mut document_store = RamDocumentStore::new();
     let mut indexer = RawIndexer::new();
+
+    let schema = match main_store.schema(writer)? {
+        Some(schema) => schema,
+        None => return Err(Error::SchemaMissing),
+    };
 
     let identifier = schema.identifier_name();
 
@@ -87,7 +91,7 @@ pub fn apply_documents_addition(
 
         // 2. index the document fields in ram stores
         let serializer = Serializer {
-            schema,
+            schema: &schema,
             document_store: &mut document_store,
             indexer: &mut indexer,
             ranked_map: &mut ranked_map,
@@ -105,7 +109,6 @@ pub fn apply_documents_addition(
         documents_fields_store,
         postings_lists_store,
         docs_words_store,
-        schema,
         ranked_map.clone(),
         documents_to_insert,
     )?;

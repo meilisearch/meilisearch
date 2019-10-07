@@ -1,22 +1,30 @@
 mod documents_addition;
 mod documents_deletion;
+mod schema_update;
 
 pub use self::documents_addition::{DocumentsAddition, apply_documents_addition};
 pub use self::documents_deletion::{DocumentsDeletion, apply_documents_deletion};
+pub use self::schema_update::apply_schema_update;
 
 use std::time::{Duration, Instant};
+
 use log::debug;
 use serde::{Serialize, Deserialize};
+
 use crate::{store, Error, MResult, DocumentId, RankedMap};
+use crate::error::UnsupportedOperation;
+use meilidb_schema::Schema;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Update {
+    SchemaUpdate(Schema),
     DocumentsAddition(Vec<rmpv::Value>),
     DocumentsDeletion(Vec<DocumentId>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateType {
+    SchemaUpdate { schema: Schema },
     DocumentsAddition { number: usize },
     DocumentsDeletion { number: usize },
 }
@@ -77,6 +85,22 @@ pub fn biggest_update_id(
     Ok(max)
 }
 
+pub fn push_schema_update(
+    writer: &mut rkv::Writer,
+    updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+    schema: Schema,
+) -> MResult<u64>
+{
+    let last_update_id = biggest_update_id(writer, updates_store, updates_results_store)?;
+    let last_update_id = last_update_id.map_or(0, |n| n + 1);
+
+    let update = Update::SchemaUpdate(schema);
+    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+
+    Ok(last_update_id)
+}
+
 pub fn push_documents_addition<D: serde::Serialize>(
     writer: &mut rkv::Writer,
     updates_store: store::Updates,
@@ -127,9 +151,14 @@ pub fn update_task(
         None => return Ok(false),
     };
 
-    debug!("Processing update number {}", update_id);
-
     let (update_type, result, duration) = match update {
+        Update::SchemaUpdate(schema) => {
+            let start = Instant::now();
+            let update_type = UpdateType::SchemaUpdate { schema: schema.clone() };
+            let result = apply_schema_update(writer, index.main, &schema);
+
+            (update_type, result, start.elapsed())
+        },
         Update::DocumentsAddition(documents) => {
             let start = Instant::now();
 
@@ -140,19 +169,15 @@ pub fn update_task(
 
             let update_type = UpdateType::DocumentsAddition { number: documents.len() };
 
-            let result = match index.main.schema(writer)? {
-                Some(schema) => apply_documents_addition(
-                    writer,
-                    index.main,
-                    index.documents_fields,
-                    index.postings_lists,
-                    index.docs_words,
-                    &schema,
-                    ranked_map,
-                    documents,
-                ),
-                None => Err(Error::SchemaMissing),
-            };
+            let result = apply_documents_addition(
+                writer,
+                index.main,
+                index.documents_fields,
+                index.postings_lists,
+                index.docs_words,
+                ranked_map,
+                documents,
+            );
 
             (update_type, result, start.elapsed())
         },
@@ -166,23 +191,21 @@ pub fn update_task(
 
             let update_type = UpdateType::DocumentsDeletion { number: documents.len() };
 
-            let result = match index.main.schema(writer)? {
-                Some(schema) => apply_documents_deletion(
-                    writer,
-                    index.main,
-                    index.documents_fields,
-                    index.postings_lists,
-                    index.docs_words,
-                    &schema,
-                    ranked_map,
-                    documents,
-                ),
-                None => Err(Error::SchemaMissing),
-            };
+            let result = apply_documents_deletion(
+                writer,
+                index.main,
+                index.documents_fields,
+                index.postings_lists,
+                index.docs_words,
+                ranked_map,
+                documents,
+            );
 
             (update_type, result, start.elapsed())
         },
     };
+
+    debug!("Processed update number {} {:?} {:?}", update_id, update_type, result);
 
     let detailed_duration = DetailedDuration { main: duration };
     let status = UpdateResult {

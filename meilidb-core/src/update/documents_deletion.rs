@@ -4,7 +4,7 @@ use fst::{SetBuilder, Streamer};
 use meilidb_schema::Schema;
 use sdset::{SetBuf, SetOperation, duo::DifferenceByKey};
 
-use crate::{DocumentId, RankedMap, Error};
+use crate::{DocumentId, RankedMap, MResult, Error};
 use crate::serde::extract_document_id;
 use crate::update::push_documents_deletion;
 use crate::store;
@@ -35,7 +35,7 @@ impl DocumentsDeletion {
         self.documents.push(document_id);
     }
 
-    pub fn delete_document<D>(&mut self, schema: &Schema, document: D) -> Result<(), Error>
+    pub fn delete_document<D>(&mut self, schema: &Schema, document: D) -> MResult<()>
     where D: serde::Serialize,
     {
         let identifier = schema.identifier_name();
@@ -49,7 +49,7 @@ impl DocumentsDeletion {
         Ok(())
     }
 
-    pub fn finalize(self, mut writer: rkv::Writer) -> Result<u64, Error> {
+    pub fn finalize(self, mut writer: rkv::Writer) -> MResult<u64> {
         let update_id = push_documents_deletion(
             &mut writer,
             self.updates_store,
@@ -75,12 +75,16 @@ pub fn apply_documents_deletion(
     documents_fields_store: store::DocumentsFields,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    schema: &Schema,
     mut ranked_map: RankedMap,
     deletion: Vec<DocumentId>,
-) -> Result<(), Error>
+) -> MResult<()>
 {
     let idset = SetBuf::from_dirty(deletion);
+
+    let schema = match main_store.schema(writer)? {
+        Some(schema) => schema,
+        None => return Err(Error::SchemaMissing),
+    };
 
     // collect the ranked attributes according to the schema
     let ranked_attrs: Vec<_> = schema.iter()

@@ -16,6 +16,7 @@ pub enum Error {
     RmpEncode(rmp_serde::encode::Error),
     Bincode(bincode::Error),
     Serializer(SerializerError),
+    UnsupportedOperation(UnsupportedOperation),
 }
 
 impl From<io::Error> for Error {
@@ -60,6 +61,12 @@ impl From<SerializerError> for Error {
     }
 }
 
+impl From<UnsupportedOperation> for Error {
+    fn from(op: UnsupportedOperation) -> Error {
+        Error::UnsupportedOperation(op)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Error::*;
@@ -75,9 +82,23 @@ impl fmt::Display for Error {
             RmpEncode(e) => write!(f, "rmp encode error; {}", e),
             Bincode(e) => write!(f, "bincode error; {}", e),
             Serializer(e) => write!(f, "serializer error; {}", e),
+            UnsupportedOperation(op) => write!(f, "unsupported operation; {}", op),
         }
     }
 }
 
 impl error::Error for Error { }
 
+#[derive(Debug)]
+pub enum UnsupportedOperation {
+    SchemaAlreadyExists,
+}
+
+impl fmt::Display for UnsupportedOperation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::UnsupportedOperation::*;
+        match self {
+            SchemaAlreadyExists => write!(f, "Cannot update index which already have a schema"),
+        }
+    }
+}

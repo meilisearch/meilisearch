@@ -1,6 +1,10 @@
-use rkv::{Manager, Rkv, SingleStore, Value, StoreOptions};
 use std::{fs, path::Path};
+
+use serde_json::json;
+use rkv::{Manager, Rkv, SingleStore, Value, StoreOptions};
+
 use meilidb_core::{Database, MResult, QueryBuilder};
+use meilidb_schema::{SchemaBuilder, DISPLAYED, INDEXED};
 
 fn main() -> MResult<()> {
     env_logger::init();
@@ -13,8 +17,24 @@ fn main() -> MResult<()> {
     let hello1 = database.open_index("hello1")?;
     let hello2 = database.open_index("hello2")?;
 
+    let mut builder = SchemaBuilder::with_identifier("id");
+    builder.new_attribute("alpha", DISPLAYED);
+    builder.new_attribute("beta", DISPLAYED | INDEXED);
+    builder.new_attribute("gamma", INDEXED);
+    let schema = builder.build();
+
+    let rkv = database.rkv.read().unwrap();
+    let writer = rkv.write()?;
+
+    hello.schema_update(writer, schema)?;
+
+    let object = json!({
+        "id": 23,
+        "alpha": "hello",
+    });
+
     let mut additions = hello.documents_addition();
-    additions.extend(vec![()]);
+    additions.extend(vec![object]);
 
     let rkv = database.rkv.read().unwrap();
     let writer = rkv.write()?;
@@ -53,7 +73,7 @@ fn main() -> MResult<()> {
 
     // println!("{:?}", documents);
 
-    std::thread::sleep(std::time::Duration::from_secs(10));
+    std::thread::sleep(std::time::Duration::from_secs(2));
 
     Ok(())
 }
