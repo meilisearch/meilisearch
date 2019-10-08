@@ -1,12 +1,15 @@
 mod documents_addition;
 mod documents_deletion;
 mod schema_update;
+mod synonyms_addition;
 
 pub use self::documents_addition::{DocumentsAddition, apply_documents_addition};
 pub use self::documents_deletion::{DocumentsDeletion, apply_documents_deletion};
 pub use self::schema_update::apply_schema_update;
+pub use self::synonyms_addition::{SynonymsAddition, apply_synonyms_addition};
 
 use std::time::{Duration, Instant};
+use std::collections::BTreeMap;
 
 use log::debug;
 use serde::{Serialize, Deserialize};
@@ -20,6 +23,7 @@ pub enum Update {
     SchemaUpdate(Schema),
     DocumentsAddition(Vec<rmpv::Value>),
     DocumentsDeletion(Vec<DocumentId>),
+    SynonymsAddition(BTreeMap<String, Vec<String>>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +31,7 @@ pub enum UpdateType {
     SchemaUpdate { schema: Schema },
     DocumentsAddition { number: usize },
     DocumentsDeletion { number: usize },
+    SynonymsAddition { number: usize },
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -68,7 +73,7 @@ pub fn update_status<T: rkv::Readable>(
     }
 }
 
-pub fn biggest_update_id(
+fn biggest_update_id(
     writer: &mut rkv::Writer,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
@@ -85,6 +90,21 @@ pub fn biggest_update_id(
     Ok(max)
 }
 
+pub fn next_update_id(
+    writer: &mut rkv::Writer,
+    updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+) -> MResult<u64>
+{
+    let last_update_id = biggest_update_id(
+        writer,
+        updates_store,
+        updates_results_store
+    )?;
+
+    Ok(last_update_id.map_or(0, |n| n + 1))
+}
+
 pub fn push_schema_update(
     writer: &mut rkv::Writer,
     updates_store: store::Updates,
@@ -92,8 +112,7 @@ pub fn push_schema_update(
     schema: Schema,
 ) -> MResult<u64>
 {
-    let last_update_id = biggest_update_id(writer, updates_store, updates_results_store)?;
-    let last_update_id = last_update_id.map_or(0, |n| n + 1);
+    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = Update::SchemaUpdate(schema);
     let update_id = updates_store.put_update(writer, last_update_id, &update)?;
@@ -115,8 +134,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
         values.push(add);
     }
 
-    let last_update_id = biggest_update_id(writer, updates_store, updates_results_store)?;
-    let last_update_id = last_update_id.map_or(0, |n| n + 1);
+    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = Update::DocumentsAddition(values);
     let update_id = updates_store.put_update(writer, last_update_id, &update)?;
@@ -131,10 +149,24 @@ pub fn push_documents_deletion(
     deletion: Vec<DocumentId>,
 ) -> MResult<u64>
 {
-    let last_update_id = biggest_update_id(writer, updates_store, updates_results_store)?;
-    let last_update_id = last_update_id.map_or(0, |n| n + 1);
+    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = Update::DocumentsDeletion(deletion);
+    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+
+    Ok(last_update_id)
+}
+
+pub fn push_synonyms_addition(
+    writer: &mut rkv::Writer,
+    updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+    addition: BTreeMap<String, Vec<String>>,
+) -> MResult<u64>
+{
+    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
+
+    let update = Update::SynonymsAddition(addition);
     let update_id = updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
@@ -201,6 +233,20 @@ pub fn update_task(
                 index.docs_words,
                 ranked_map,
                 documents,
+            );
+
+            (update_type, result, start.elapsed())
+        },
+        Update::SynonymsAddition(synonyms) => {
+            let start = Instant::now();
+
+            let update_type = UpdateType::SynonymsAddition { number: synonyms.len() };
+
+            let result = apply_synonyms_addition(
+                writer,
+                index.main,
+                index.synonyms,
+                synonyms,
             );
 
             (update_type, result, start.elapsed())
