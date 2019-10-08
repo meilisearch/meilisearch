@@ -9,7 +9,7 @@ use crate::automaton::normalize_str;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::{extract_document_id, Serializer, RamDocumentStore};
 use crate::store;
-use crate::update::push_synonyms_deletion;
+use crate::update::{Update, next_update_id};
 use crate::{MResult, Error, RankedMap};
 
 pub struct SynonymsDeletion {
@@ -65,6 +65,21 @@ impl SynonymsDeletion {
 
         Ok(update_id)
     }
+}
+
+pub fn push_synonyms_deletion(
+    writer: &mut rkv::Writer,
+    updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+    deletion: BTreeMap<String, Option<Vec<String>>>,
+) -> MResult<u64>
+{
+    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
+
+    let update = Update::SynonymsDeletion(deletion);
+    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+
+    Ok(last_update_id)
 }
 
 pub fn apply_synonyms_deletion(

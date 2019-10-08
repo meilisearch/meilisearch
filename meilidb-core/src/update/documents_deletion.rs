@@ -6,7 +6,7 @@ use sdset::{SetBuf, SetOperation, duo::DifferenceByKey};
 
 use crate::{DocumentId, RankedMap, MResult, Error};
 use crate::serde::extract_document_id;
-use crate::update::push_documents_deletion;
+use crate::update::{Update, next_update_id};
 use crate::store;
 
 pub struct DocumentsDeletion {
@@ -67,6 +67,21 @@ impl Extend<DocumentId> for DocumentsDeletion {
     fn extend<T: IntoIterator<Item=DocumentId>>(&mut self, iter: T) {
         self.documents.extend(iter)
     }
+}
+
+pub fn push_documents_deletion(
+    writer: &mut rkv::Writer,
+    updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+    deletion: Vec<DocumentId>,
+) -> MResult<u64>
+{
+    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
+
+    let update = Update::DocumentsDeletion(deletion);
+    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+
+    Ok(last_update_id)
 }
 
 pub fn apply_documents_deletion(

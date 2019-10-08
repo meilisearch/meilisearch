@@ -6,12 +6,13 @@ mod synonyms_deletion;
 
 pub use self::documents_addition::{DocumentsAddition, apply_documents_addition};
 pub use self::documents_deletion::{DocumentsDeletion, apply_documents_deletion};
-pub use self::schema_update::apply_schema_update;
+pub use self::schema_update::{apply_schema_update, push_schema_update};
 pub use self::synonyms_addition::{SynonymsAddition, apply_synonyms_addition};
 pub use self::synonyms_deletion::{SynonymsDeletion, apply_synonyms_deletion};
 
 use std::time::{Duration, Instant};
 use std::collections::BTreeMap;
+use std::cmp;
 
 use log::debug;
 use serde::{Serialize, Deserialize};
@@ -77,11 +78,11 @@ pub fn update_status<T: rkv::Readable>(
     }
 }
 
-fn biggest_update_id(
+pub fn next_update_id(
     writer: &mut rkv::Writer,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-) -> MResult<Option<u64>>
+) -> MResult<u64>
 {
     let last_update_id = updates_store.last_update_id(writer)?;
     let last_update_id = last_update_id.map(|(n, _)| n);
@@ -89,106 +90,10 @@ fn biggest_update_id(
     let last_update_results_id = updates_results_store.last_update_id(writer)?;
     let last_update_results_id = last_update_results_id.map(|(n, _)| n);
 
-    let max = last_update_id.max(last_update_results_id);
+    let max_update_id = cmp::max(last_update_id, last_update_results_id);
+    let new_update_id = max_update_id.map_or(0, |n| n + 1);
 
-    Ok(max)
-}
-
-pub fn next_update_id(
-    writer: &mut rkv::Writer,
-    updates_store: store::Updates,
-    updates_results_store: store::UpdatesResults,
-) -> MResult<u64>
-{
-    let last_update_id = biggest_update_id(
-        writer,
-        updates_store,
-        updates_results_store
-    )?;
-
-    Ok(last_update_id.map_or(0, |n| n + 1))
-}
-
-pub fn push_schema_update(
-    writer: &mut rkv::Writer,
-    updates_store: store::Updates,
-    updates_results_store: store::UpdatesResults,
-    schema: Schema,
-) -> MResult<u64>
-{
-    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
-
-    let update = Update::SchemaUpdate(schema);
-    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
-
-    Ok(last_update_id)
-}
-
-pub fn push_documents_addition<D: serde::Serialize>(
-    writer: &mut rkv::Writer,
-    updates_store: store::Updates,
-    updates_results_store: store::UpdatesResults,
-    addition: Vec<D>,
-) -> MResult<u64>
-{
-    let mut values = Vec::with_capacity(addition.len());
-    for add in addition {
-        let vec = rmp_serde::to_vec_named(&add)?;
-        let add = rmp_serde::from_read(&vec[..])?;
-        values.push(add);
-    }
-
-    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
-
-    let update = Update::DocumentsAddition(values);
-    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
-
-    Ok(last_update_id)
-}
-
-pub fn push_documents_deletion(
-    writer: &mut rkv::Writer,
-    updates_store: store::Updates,
-    updates_results_store: store::UpdatesResults,
-    deletion: Vec<DocumentId>,
-) -> MResult<u64>
-{
-    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
-
-    let update = Update::DocumentsDeletion(deletion);
-    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
-
-    Ok(last_update_id)
-}
-
-pub fn push_synonyms_addition(
-    writer: &mut rkv::Writer,
-    updates_store: store::Updates,
-    updates_results_store: store::UpdatesResults,
-    addition: BTreeMap<String, Vec<String>>,
-) -> MResult<u64>
-{
-    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
-
-    let update = Update::SynonymsAddition(addition);
-    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
-
-    Ok(last_update_id)
-}
-
-pub fn push_synonyms_deletion(
-    writer: &mut rkv::Writer,
-    updates_store: store::Updates,
-    updates_results_store: store::UpdatesResults,
-    deletion: BTreeMap<String, Option<Vec<String>>>,
-) -> MResult<u64>
-{
-    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
-
-    let update = Update::SynonymsDeletion(deletion);
-    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
-
-    Ok(last_update_id)
+    Ok(new_update_id)
 }
 
 pub fn update_task(

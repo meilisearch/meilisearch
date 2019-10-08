@@ -8,7 +8,7 @@ use serde::Serialize;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::{extract_document_id, Serializer, RamDocumentStore};
 use crate::store;
-use crate::update::{push_documents_addition, apply_documents_deletion};
+use crate::update::{Update, next_update_id, apply_documents_deletion};
 use crate::{MResult, Error, RankedMap};
 
 pub struct DocumentsAddition<D> {
@@ -57,6 +57,28 @@ impl<D> Extend<D> for DocumentsAddition<D> {
     fn extend<T: IntoIterator<Item=D>>(&mut self, iter: T) {
         self.documents.extend(iter)
     }
+}
+
+pub fn push_documents_addition<D: serde::Serialize>(
+    writer: &mut rkv::Writer,
+    updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+    addition: Vec<D>,
+) -> MResult<u64>
+{
+    let mut values = Vec::with_capacity(addition.len());
+    for add in addition {
+        let vec = rmp_serde::to_vec_named(&add)?;
+        let add = rmp_serde::from_read(&vec[..])?;
+        values.push(add);
+    }
+
+    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
+
+    let update = Update::DocumentsAddition(values);
+    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+
+    Ok(last_update_id)
 }
 
 pub fn apply_documents_addition(
