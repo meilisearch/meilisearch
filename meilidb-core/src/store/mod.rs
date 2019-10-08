@@ -133,6 +133,20 @@ impl Index {
         )
     }
 
+    pub fn update_status<T: rkv::Readable>(
+        &self,
+        reader: &T,
+        update_id: u64,
+    ) -> MResult<update::UpdateStatus>
+    {
+        update::update_status(
+            reader,
+            self.updates,
+            self.updates_results,
+            update_id,
+        )
+    }
+
     pub fn query_builder(&self) -> QueryBuilder {
         QueryBuilder::new(self.main, self.postings_lists, self.synonyms)
     }
