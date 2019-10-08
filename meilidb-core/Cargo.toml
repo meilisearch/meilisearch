@@ -44,8 +44,10 @@ git = "https://github.com/Kerollmops/fst.git"
 branch = "arc-byte-slice"
 
 [dev-dependencies]
+assert_matches = "1.3"
 csv = "1.0.7"
 rustyline = { version = "5.0.0", default-features = false }
 structopt = "0.3.2"
+tempfile = "3.1.0"
 termcolor = "1.0.4"
 toml = "0.5.3"
