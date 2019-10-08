@@ -11,6 +11,7 @@ crossbeam-channel = "0.3.9"
 deunicode = "1.0.0"
 env_logger = "0.7.0"
 hashbrown = { version = "0.6.0", features = ["serde"] }
+lmdb-rkv = "0.12.3"
 log = "0.4.8"
 meilidb-schema = { path = "../meilidb-schema", version = "0.1.0" }
 meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
@@ -41,3 +42,10 @@ features = ["fst_automaton"]
 [dependencies.fst]
 git = "https://github.com/Kerollmops/fst.git"
 branch = "arc-byte-slice"
+
+[dev-dependencies]
+csv = "1.0.7"
+rustyline = { version = "5.0.0", default-features = false }
+structopt = "0.3.2"
+termcolor = "1.0.4"
+toml = "0.5.3"
