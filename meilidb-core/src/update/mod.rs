@@ -2,11 +2,13 @@ mod documents_addition;
 mod documents_deletion;
 mod schema_update;
 mod synonyms_addition;
+mod synonyms_deletion;
 
 pub use self::documents_addition::{DocumentsAddition, apply_documents_addition};
 pub use self::documents_deletion::{DocumentsDeletion, apply_documents_deletion};
 pub use self::schema_update::apply_schema_update;
 pub use self::synonyms_addition::{SynonymsAddition, apply_synonyms_addition};
+pub use self::synonyms_deletion::{SynonymsDeletion, apply_synonyms_deletion};
 
 use std::time::{Duration, Instant};
 use std::collections::BTreeMap;
@@ -24,6 +26,7 @@ pub enum Update {
     DocumentsAddition(Vec<rmpv::Value>),
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition(BTreeMap<String, Vec<String>>),
+    SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,6 +35,7 @@ pub enum UpdateType {
     DocumentsAddition { number: usize },
     DocumentsDeletion { number: usize },
     SynonymsAddition { number: usize },
+    SynonymsDeletion { number: usize },
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -172,6 +176,21 @@ pub fn push_synonyms_addition(
     Ok(last_update_id)
 }
 
+pub fn push_synonyms_deletion(
+    writer: &mut rkv::Writer,
+    updates_store: store::Updates,
+    updates_results_store: store::UpdatesResults,
+    deletion: BTreeMap<String, Option<Vec<String>>>,
+) -> MResult<u64>
+{
+    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
+
+    let update = Update::SynonymsDeletion(deletion);
+    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+
+    Ok(last_update_id)
+}
+
 pub fn update_task(
     writer: &mut rkv::Writer,
     index: store::Index,
@@ -243,6 +262,20 @@ pub fn update_task(
             let update_type = UpdateType::SynonymsAddition { number: synonyms.len() };
 
             let result = apply_synonyms_addition(
+                writer,
+                index.main,
+                index.synonyms,
+                synonyms,
+            );
+
+            (update_type, result, start.elapsed())
+        },
+        Update::SynonymsDeletion(synonyms) => {
+            let start = Instant::now();
+
+            let update_type = UpdateType::SynonymsDeletion { number: synonyms.len() };
+
+            let result = apply_synonyms_deletion(
                 writer,
                 index.main,
                 index.synonyms,

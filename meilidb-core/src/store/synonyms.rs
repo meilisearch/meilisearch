@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use rkv::StoreError;
 use crate::error::MResult;
 
 #[derive(Copy, Clone)]
@@ -16,6 +17,19 @@ impl Synonyms {
     {
         let blob = rkv::Value::Blob(synonyms.as_fst().as_bytes());
         self.synonyms.put(writer, word, &blob)
+    }
+
+    pub fn del_synonyms(
+        &self,
+        writer: &mut rkv::Writer,
+        word: &[u8],
+    ) -> Result<bool, rkv::StoreError>
+    {
+        match self.synonyms.delete(writer, word) {
+            Ok(()) => Ok(true),
+            Err(StoreError::LmdbError(lmdb::Error::NotFound)) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn synonyms(

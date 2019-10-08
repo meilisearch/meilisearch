@@ -62,7 +62,7 @@ pub fn apply_synonyms_addition(
     main_store: store::Main,
     synonyms_store: store::Synonyms,
     addition: BTreeMap<String, Vec<String>>,
-) -> Result<(), Error>
+) -> MResult<()>
 {
     let mut synonyms_builder = SetBuilder::memory();
 
