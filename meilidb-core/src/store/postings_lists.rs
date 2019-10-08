@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 use std::{mem, ptr};
+
 use zerocopy::{AsBytes, LayoutVerified};
+use rkv::StoreError;
 
 use crate::DocIndex;
 use crate::store::aligned_to;
@@ -26,9 +28,13 @@ impl PostingsLists {
         &self,
         writer: &mut rkv::Writer,
         word: &[u8],
-    ) -> Result<(), rkv::StoreError>
+    ) -> Result<bool, rkv::StoreError>
     {
-        self.postings_lists.delete(writer, word)
+        match self.postings_lists.delete(writer, word) {
+            Ok(()) => Ok(true),
+            Err(StoreError::LmdbError(lmdb::Error::NotFound)) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn postings_list<'a>(

@@ -18,6 +18,20 @@ fn document_attribute_into_key(document_id: DocumentId, attribute: SchemaAttr) -
     key
 }
 
+fn document_attribute_from_key(key: [u8; 10]) -> (DocumentId, SchemaAttr) {
+    let document_id = {
+        let array = TryFrom::try_from(&key[0..8]).unwrap();
+        DocumentId(u64::from_be_bytes(array))
+    };
+
+    let schema_attr = {
+        let array = TryFrom::try_from(&key[8..8+2]).unwrap();
+        SchemaAttr(u16::from_be_bytes(array))
+    };
+
+    (document_id, schema_attr)
+}
+
 impl DocumentsFields {
     pub fn put_document_field(
         &self,
@@ -45,13 +59,10 @@ impl DocumentsFields {
         let iter = self.documents_fields.iter_from(writer, document_id_bytes)?;
         for result in iter {
             let (key, _) = result?;
-            let current_document_id = {
-                let bytes = key.get(0..8).unwrap();
-                let array = TryFrom::try_from(bytes).unwrap();
-                DocumentId(u64::from_be_bytes(array))
-            };
-
+            let array = TryFrom::try_from(key).unwrap();
+            let (current_document_id, _) = document_attribute_from_key(array);
             if current_document_id != document_id { break }
+
             keys_to_delete.push(key.to_owned());
         }
 
@@ -103,10 +114,10 @@ impl<'r, T: rkv::Readable + 'r> Iterator for DocumentFieldsIter<'r, T> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(Ok((key, Some(rkv::Value::Blob(bytes))))) => {
-                let key_bytes = key.get(8..8+2).unwrap();
-                let array = TryFrom::try_from(key_bytes).unwrap();
-                let attr = u16::from_be_bytes(array);
-                let attr = SchemaAttr::new(attr);
+                let array = TryFrom::try_from(key).unwrap();
+                let (current_document_id, attr) = document_attribute_from_key(array);
+                if current_document_id != self.document_id { return None; }
+
                 Some(Ok((attr, bytes)))
             },
             Some(Ok((key, data))) => panic!("{:?}, {:?}", key, data),

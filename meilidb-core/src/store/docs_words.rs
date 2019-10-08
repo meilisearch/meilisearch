@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use rkv::Value;
+use rkv::{Value, StoreError};
 use crate::{DocumentId, MResult};
 
 #[derive(Copy, Clone)]
@@ -24,10 +24,14 @@ impl DocsWords {
         &self,
         writer: &mut rkv::Writer,
         document_id: DocumentId,
-    ) -> Result<(), rkv::StoreError>
+    ) -> Result<bool, rkv::StoreError>
     {
         let document_id_bytes = document_id.0.to_be_bytes();
-        self.docs_words.delete(writer, document_id_bytes)
+        match self.docs_words.delete(writer, document_id_bytes) {
+            Ok(()) => Ok(true),
+            Err(StoreError::LmdbError(lmdb::Error::NotFound)) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn doc_words<T: rkv::Readable>(

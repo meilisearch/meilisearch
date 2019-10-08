@@ -36,6 +36,7 @@ impl AutomatonProducer {
     }
 }
 
+#[derive(Debug)]
 pub struct Automaton {
     pub index: usize,
     pub ngram: usize,
@@ -108,6 +109,7 @@ fn generate_automatons(
     let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
     let synonyms = synonym_store.synonyms_fst(reader)?;
 
+    let mut automaton_index = 0;
     let mut automatons = Vec::new();
     let mut enhancer_builder = QueryEnhancerBuilder::new(&query_words);
 
@@ -121,10 +123,11 @@ fn generate_automatons(
         let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
 
         let automaton = if not_prefix_dfa {
-            Automaton::exact(automatons.len(), 1, word)
+            Automaton::exact(automaton_index, 1, word)
         } else {
-            Automaton::prefix_exact(automatons.len(), 1, word)
+            Automaton::prefix_exact(automaton_index, 1, word)
         };
+        automaton_index += 1;
         original_automatons.push(automaton);
     }
 
@@ -162,15 +165,16 @@ fn generate_automatons(
                         let synonyms_words: Vec<_> = split_query_string(synonyms).collect();
                         let nb_synonym_words = synonyms_words.len();
 
-                        let real_query_index = automatons.len();
+                        let real_query_index = automaton_index;
                         enhancer_builder.declare(query_range.clone(), real_query_index, &synonyms_words);
 
                         for synonym in synonyms_words {
                             let automaton = if nb_synonym_words == 1 {
-                                Automaton::exact(automatons.len(), n, synonym)
+                                Automaton::exact(automaton_index, n, synonym)
                             } else {
-                                Automaton::non_exact(automatons.len(), n, synonym)
+                                Automaton::non_exact(automaton_index, n, synonym)
                             };
+                            automaton_index += 1;
                             automatons.push(vec![automaton]);
                         }
                     }
@@ -182,10 +186,11 @@ fn generate_automatons(
                 let concat = ngram_slice.concat();
                 let normalized = normalize_str(&concat);
 
-                let real_query_index = automatons.len();
+                let real_query_index = automaton_index;
                 enhancer_builder.declare(query_range.clone(), real_query_index, &[&normalized]);
 
-                let automaton = Automaton::exact(automatons.len(), n, &normalized);
+                let automaton = Automaton::exact(automaton_index, n, &normalized);
+                automaton_index += 1;
                 automatons.push(vec![automaton]);
             }
         }

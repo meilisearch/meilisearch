@@ -130,8 +130,12 @@ pub fn apply_documents_deletion(
             if documents_fields_store.del_all_document_fields(writer, id)? != 0 {
                 deleted_documents.insert(id);
             }
-            docs_words_store.del_doc_words(writer, id)?;
         }
+    }
+
+    let deleted_documents_len = deleted_documents.len() as u64;
+    for id in deleted_documents {
+        docs_words_store.del_doc_words(writer, id)?;
     }
 
     let removed_words = fst::Set::from_iter(removed_words).unwrap();
@@ -155,7 +159,6 @@ pub fn apply_documents_deletion(
     main_store.put_words_fst(writer, &words)?;
     main_store.put_ranked_map(writer, &ranked_map)?;
 
-    let deleted_documents_len = deleted_documents.len() as u64;
     main_store.put_number_of_documents(writer, |old| old - deleted_documents_len)?;
 
     Ok(())

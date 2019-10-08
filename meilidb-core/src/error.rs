@@ -1,5 +1,5 @@
 use std::{error, fmt, io};
-use crate::serde::SerializerError;
+use crate::serde::{SerializerError, DeserializerError};
 
 pub type MResult<T> = Result<T, Error>;
 
@@ -16,6 +16,7 @@ pub enum Error {
     RmpEncode(rmp_serde::encode::Error),
     Bincode(bincode::Error),
     Serializer(SerializerError),
+    Deserializer(DeserializerError),
     UnsupportedOperation(UnsupportedOperation),
 }
 
@@ -61,6 +62,12 @@ impl From<SerializerError> for Error {
     }
 }
 
+impl From<DeserializerError> for Error {
+    fn from(error: DeserializerError) -> Error {
+        Error::Deserializer(error)
+    }
+}
+
 impl From<UnsupportedOperation> for Error {
     fn from(op: UnsupportedOperation) -> Error {
         Error::UnsupportedOperation(op)
@@ -82,6 +89,7 @@ impl fmt::Display for Error {
             RmpEncode(e) => write!(f, "rmp encode error; {}", e),
             Bincode(e) => write!(f, "bincode error; {}", e),
             Serializer(e) => write!(f, "serializer error; {}", e),
+            Deserializer(e) => write!(f, "deserializer error; {}", e),
             UnsupportedOperation(op) => write!(f, "unsupported operation; {}", op),
         }
     }

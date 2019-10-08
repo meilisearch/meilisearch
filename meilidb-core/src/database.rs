@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
 use crossbeam_channel::Receiver;
-use log::error;
+use log::{debug, error};
 
 use crate::{store, update, Index, MResult};
 
@@ -23,6 +23,7 @@ fn update_awaiter(receiver: Receiver<()>, rkv: Arc<RwLock<rkv::Rkv>>, index: Ind
                 Ok(rkv) => rkv,
                 Err(e) => { error!("rkv RwLock read failed: {}", e); break }
             };
+
             let mut writer = match rkv.write() {
                 Ok(writer) => writer,
                 Err(e) => { error!("LMDB writer transaction begin failed: {}", e); break }
@@ -31,7 +32,7 @@ fn update_awaiter(receiver: Receiver<()>, rkv: Arc<RwLock<rkv::Rkv>>, index: Ind
             match update::update_task(&mut writer, index.clone(), None as Option::<fn(_)>) {
                 Ok(true) => if let Err(e) = writer.commit() { error!("update transaction failed: {}", e) },
                 // no more updates to handle for now
-                Ok(false) => { writer.abort(); break },
+                Ok(false) => { debug!("no more updates"); writer.abort(); break },
                 Err(e) => { error!("update task failed: {}", e); writer.abort() },
             }
         }

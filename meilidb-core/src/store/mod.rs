@@ -14,8 +14,11 @@ pub use self::synonyms::Synonyms;
 pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;
 
+use std::collections::HashSet;
 use meilidb_schema::Schema;
-use crate::{update, query_builder::QueryBuilder, MResult};
+use serde::de;
+use crate::{update, query_builder::QueryBuilder, DocumentId, MResult, Error};
+use crate::serde::Deserializer;
 
 fn aligned_to(bytes: &[u8], align: usize) -> bool {
     (bytes as *const _ as *const () as usize) % align == 0
@@ -63,6 +66,34 @@ pub struct Index {
 }
 
 impl Index {
+    pub fn document<T: de::DeserializeOwned, R: rkv::Readable>(
+        &self,
+        reader: &R,
+        fields: Option<&HashSet<&str>>,
+        document_id: DocumentId,
+    ) -> MResult<Option<T>>
+    {
+        let schema = self.main.schema(reader)?;
+        let schema = schema.ok_or(Error::SchemaMissing)?;
+
+        let fields = match fields {
+            Some(fields) => fields.into_iter().map(|name| schema.attribute(name)).collect(),
+            None => None,
+        };
+
+        let mut deserializer = Deserializer {
+            document_id,
+            reader,
+            documents_fields: self.documents_fields,
+            schema: &schema,
+            fields: fields.as_ref(),
+        };
+
+        // TODO: currently we return an error if all document fields are missing,
+        //       returning None would have been better
+        Ok(T::deserialize(&mut deserializer).map(Some)?)
+    }
+
     pub fn schema_update(&self, mut writer: rkv::Writer, schema: Schema) -> MResult<()> {
         update::push_schema_update(&mut writer, self.updates, self.updates_results, schema)?;
         writer.commit()?;

@@ -151,6 +151,8 @@ pub fn update_task(
         None => return Ok(false),
     };
 
+    debug!("Processing update number {}", update_id);
+
     let (update_type, result, duration) = match update {
         Update::SchemaUpdate(schema) => {
             let start = Instant::now();
