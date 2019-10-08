@@ -117,6 +117,22 @@ impl Index {
         )
     }
 
+    pub fn synonyms_addition(&self) -> update::SynonymsAddition {
+        update::SynonymsAddition::new(
+            self.updates,
+            self.updates_results,
+            self.updates_notifier.clone(),
+        )
+    }
+
+    pub fn synonyms_deletion(&self) -> update::SynonymsDeletion {
+        update::SynonymsDeletion::new(
+            self.updates,
+            self.updates_results,
+            self.updates_notifier.clone(),
+        )
+    }
+
     pub fn query_builder(&self) -> QueryBuilder {
         QueryBuilder::new(self.main, self.postings_lists, self.synonyms)
     }
