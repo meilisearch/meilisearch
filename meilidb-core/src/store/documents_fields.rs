@@ -94,21 +94,20 @@ impl DocumentsFields {
         &self,
         reader: &'r T,
         document_id: DocumentId,
-    ) -> Result<DocumentFieldsIter<'r, T>, rkv::StoreError>
+    ) -> Result<DocumentFieldsIter<'r>, rkv::StoreError>
     {
         let document_id_bytes = document_id.0.to_be_bytes();
         let iter = self.documents_fields.iter_from(reader, document_id_bytes)?;
-        Ok(DocumentFieldsIter { reader, document_id, iter })
+        Ok(DocumentFieldsIter { document_id, iter })
     }
 }
 
-pub struct DocumentFieldsIter<'r, T> {
-    reader: &'r T,
+pub struct DocumentFieldsIter<'r> {
     document_id: DocumentId,
     iter: rkv::store::single::Iter<'r>,
 }
 
-impl<'r, T: rkv::Readable + 'r> Iterator for DocumentFieldsIter<'r, T> {
+impl<'r> Iterator for DocumentFieldsIter<'r> {
     type Item = Result<(SchemaAttr, &'r [u8]), rkv::StoreError>;
 
     fn next(&mut self) -> Option<Self::Item> {

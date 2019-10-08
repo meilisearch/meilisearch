@@ -1,16 +1,12 @@
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
-use std::sync::Arc;
 
 use fst::{SetBuilder, set::OpBuilder};
 use sdset::SetBuf;
 
 use crate::automaton::normalize_str;
-use crate::raw_indexer::RawIndexer;
-use crate::serde::{extract_document_id, Serializer, RamDocumentStore};
-use crate::store;
 use crate::update::{Update, next_update_id};
-use crate::{MResult, Error, RankedMap};
+use crate::{store, MResult};
 
 pub struct SynonymsDeletion {
     updates_store: store::Updates,
@@ -77,7 +73,7 @@ pub fn push_synonyms_deletion(
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = Update::SynonymsDeletion(deletion);
-    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+    updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
 }

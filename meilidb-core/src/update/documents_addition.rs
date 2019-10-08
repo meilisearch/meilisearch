@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use fst::{SetBuilder, set::OpBuilder};
-use meilidb_schema::Schema;
 use sdset::{SetOperation, duo::Union};
 use serde::Serialize;
 
@@ -76,7 +75,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = Update::DocumentsAddition(values);
-    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+    updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
 }

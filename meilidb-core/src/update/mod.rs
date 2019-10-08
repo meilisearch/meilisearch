@@ -17,8 +17,7 @@ use std::cmp;
 use log::debug;
 use serde::{Serialize, Deserialize};
 
-use crate::{store, Error, MResult, DocumentId, RankedMap};
-use crate::error::UnsupportedOperation;
+use crate::{store, MResult, DocumentId, RankedMap};
 use meilidb_schema::Schema;
 
 #[derive(Debug, Serialize, Deserialize)]

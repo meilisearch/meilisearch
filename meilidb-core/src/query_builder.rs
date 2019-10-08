@@ -353,7 +353,7 @@ mod tests {
     pub struct TempDatabase {
         database: Database,
         index: Index,
-        tempdir: TempDir,
+        _tempdir: TempDir,
     }
 
     impl TempDatabase {
@@ -418,7 +418,7 @@ mod tests {
             writer.commit().unwrap();
             drop(rkv);
 
-            TempDatabase { database, index, tempdir }
+            TempDatabase { database, index, _tempdir: tempdir }
         }
     }
 

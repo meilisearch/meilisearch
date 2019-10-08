@@ -25,7 +25,7 @@ pub fn push_schema_update(
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = Update::SchemaUpdate(schema);
-    let update_id = updates_store.put_update(writer, last_update_id, &update)?;
+    updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
 }
