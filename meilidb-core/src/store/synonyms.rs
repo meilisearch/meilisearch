@@ -1,23 +1,38 @@
+use std::sync::Arc;
+use crate::error::MResult;
+
 #[derive(Copy, Clone)]
 pub struct Synonyms {
     pub(crate) synonyms: rkv::SingleStore,
 }
 
 impl Synonyms {
-    pub fn synonyms_fst(
+    pub fn put_synonyms(
         &self,
-        reader: &impl rkv::Readable,
-    ) -> Result<fst::Set, rkv::StoreError>
+        writer: &mut rkv::Writer,
+        word: &[u8],
+        synonyms: &fst::Set,
+    ) -> Result<(), rkv::StoreError>
     {
-        Ok(fst::Set::default())
+        let blob = rkv::Value::Blob(synonyms.as_fst().as_bytes());
+        self.synonyms.put(writer, word, &blob)
     }
 
-    pub fn alternatives_to(
+    pub fn synonyms(
         &self,
         reader: &impl rkv::Readable,
         word: &[u8],
-    ) -> Result<Option<fst::Set>, rkv::StoreError>
+    ) -> MResult<Option<fst::Set>>
     {
-        unimplemented!()
+        match self.synonyms.get(reader, word)? {
+            Some(rkv::Value::Blob(bytes)) => {
+                let len = bytes.len();
+                let bytes = Arc::from(bytes);
+                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len)?;
+                Ok(Some(fst::Set::from(fst)))
+            },
+            Some(value) => panic!("invalid type {:?}", value),
+            None => Ok(None),
+        }
     }
 }

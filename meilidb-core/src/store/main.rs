@@ -99,6 +99,33 @@ impl Main {
         }
     }
 
+    pub fn put_synonyms_fst(
+        &self,
+        writer: &mut rkv::Writer,
+        fst: &fst::Set,
+    ) -> MResult<()>
+    {
+        let blob = rkv::Value::Blob(fst.as_fst().as_bytes());
+        Ok(self.main.put(writer, SYNONYMS_KEY, &blob)?)
+    }
+
+    pub fn synonyms_fst(
+        &self,
+        reader: &impl rkv::Readable,
+    ) -> MResult<Option<fst::Set>>
+    {
+        match self.main.get(reader, SYNONYMS_KEY)? {
+            Some(Value::Blob(bytes)) => {
+                let len = bytes.len();
+                let bytes = Arc::from(bytes);
+                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len)?;
+                Ok(Some(fst::Set::from(fst)))
+            },
+            Some(value) => panic!("invalid type {:?}", value),
+            None => Ok(None),
+        }
+    }
+
     pub fn put_number_of_documents<F: Fn(u64) -> u64>(
         &self,
         writer: &mut rkv::Writer,

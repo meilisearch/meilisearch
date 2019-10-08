@@ -9,6 +9,7 @@ use levenshtein_automata::DFA;
 use meilidb_tokenizer::{split_query_string, is_cjk};
 
 use crate::store;
+use crate::error::MResult;
 
 use self::dfa::{build_dfa, build_prefix_dfa};
 use self::query_enhancer::QueryEnhancerBuilder;
@@ -24,11 +25,18 @@ impl AutomatonProducer {
     pub fn new(
         reader: &impl rkv::Readable,
         query: &str,
+        main_store: store::Main,
         synonyms_store: store::Synonyms,
-    ) -> (AutomatonProducer, QueryEnhancer)
+    ) -> MResult<(AutomatonProducer, QueryEnhancer)>
     {
-        let (automatons, query_enhancer) = generate_automatons(reader, query, synonyms_store).unwrap();
-        (AutomatonProducer { automatons }, query_enhancer)
+        let (automatons, query_enhancer) = generate_automatons(
+            reader,
+            query,
+            main_store,
+            synonyms_store,
+        )?;
+
+        Ok((AutomatonProducer { automatons }, query_enhancer))
     }
 
     pub fn into_iter(self) -> vec::IntoIter<Vec<Automaton>> {
@@ -102,12 +110,16 @@ pub fn normalize_str(string: &str) -> String {
 fn generate_automatons(
     reader: &impl rkv::Readable,
     query: &str,
+    main_store: store::Main,
     synonym_store: store::Synonyms,
-) -> Result<(Vec<Vec<Automaton>>, QueryEnhancer), rkv::StoreError>
+) -> MResult<(Vec<Vec<Automaton>>, QueryEnhancer)>
 {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
     let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
-    let synonyms = synonym_store.synonyms_fst(reader)?;
+    let synonyms = match main_store.synonyms_fst(reader)? {
+        Some(synonym) => synonym,
+        None => fst::Set::default(),
+    };
 
     let mut automaton_index = 0;
     let mut automatons = Vec::new();
@@ -157,7 +169,7 @@ fn generate_automatons(
                 let base_nb_words = split_query_string(base).count();
                 if ngram_nb_words != base_nb_words { continue }
 
-                if let Some(synonyms) = synonym_store.alternatives_to(reader, base.as_bytes())? {
+                if let Some(synonyms) = synonym_store.synonyms(reader, base.as_bytes())? {
 
                     let mut stream = synonyms.into_stream();
                     while let Some(synonyms) = stream.next() {
