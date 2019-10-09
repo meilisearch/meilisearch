@@ -24,7 +24,7 @@ pub use self::{
 pub trait Criterion: Send + Sync {
     fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering;
 
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
 
     #[inline]
     fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
@@ -37,7 +37,7 @@ impl<'a, T: Criterion + ?Sized + Send + Sync> Criterion for &'a T {
         (**self).evaluate(lhs, rhs)
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         (**self).name()
     }
 
@@ -51,7 +51,7 @@ impl<T: Criterion + ?Sized> Criterion for Box<T> {
         (**self).evaluate(lhs, rhs)
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         (**self).name()
     }
 

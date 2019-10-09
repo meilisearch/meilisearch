@@ -101,7 +101,7 @@ impl<'a> Criterion for SortByAttr<'a> {
         }
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "SortByAttr"
     }
 }

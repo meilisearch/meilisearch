@@ -10,7 +10,7 @@ impl Criterion for DocumentId {
         lhs.id.cmp(&rhs.id)
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "DocumentId"
     }
 }
