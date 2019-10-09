@@ -15,13 +15,13 @@ pub mod raw_indexer;
 pub mod serde;
 pub mod store;
 
-pub use self::database::Database;
+pub use self::database::{Database, BoxUpdateFn};
 pub use self::error::{Error, MResult};
 pub use self::number::{Number, ParseNumberError};
 pub use self::ranked_map::RankedMap;
 pub use self::raw_document::RawDocument;
 pub use self::store::Index;
-pub use self::update::UpdateStatus;
+pub use self::update::{UpdateStatus, UpdateResult};
 
 use zerocopy::{AsBytes, FromBytes};
 use ::serde::{Serialize, Deserialize};

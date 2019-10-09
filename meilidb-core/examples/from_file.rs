@@ -5,14 +5,14 @@ use std::io::Write;
 use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, Duration};
-use std::{fs, io};
+use std::{fs, io, sync::mpsc};
 
 use rustyline::{Editor, Config};
 use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-use meilidb_core::{Highlight, Database};
+use meilidb_core::{Highlight, Database, UpdateResult, BoxUpdateFn};
 use meilidb_schema::SchemaAttr;
 
 const INDEX_NAME: &str = "default";
@@ -79,8 +79,10 @@ struct Document(HashMap<String, String>);
 fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
+    let (sender, receiver) = mpsc::sync_channel(0);
+    let update_fn = move |update: UpdateResult| sender.send(update.update_id).unwrap();
+    let index = database.open_index(INDEX_NAME, Some(Box::new(update_fn)))?;
     let rkv = database.rkv.read().unwrap();
-    let index = database.open_index(INDEX_NAME)?;
 
     let schema = {
         let string = fs::read_to_string(&command.schema)?;
@@ -139,14 +141,9 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
         max_update_id = max_update_id.max(update_id);
     }
 
-    loop {
-        println!("Waiting for update {}", max_update_id);
-
-        let reader = rkv.read().unwrap();
-        if let Some(_) = index.updates_results.update_result(&reader, max_update_id)? {
-            break
-        }
-        std::thread::sleep(std::time::Duration::from_secs(1));
+    println!("Waiting for update {}", max_update_id);
+    for id in receiver {
+        if id == max_update_id { break }
     }
 
     println!("database created in {:.2?} at: {:?}", start.elapsed(), command.database_path);
@@ -253,7 +250,8 @@ fn crop_text(
 
 fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<dyn Error>> {
     let rkv = database.rkv.read().unwrap();
-    let index = database.open_index(INDEX_NAME)?;
+    let update_fn = None as Option::<BoxUpdateFn>;
+    let index = database.open_index(INDEX_NAME, update_fn)?;
     let reader = rkv.read().unwrap();
 
     let schema = index.main.schema(&reader)?;

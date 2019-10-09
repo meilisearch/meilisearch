@@ -8,14 +8,23 @@ use log::{debug, error};
 
 use crate::{store, update, Index, MResult};
 
+pub type BoxUpdateFn = Box<dyn Fn(update::UpdateResult) + Send + Sync + 'static>;
+type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
+
 pub struct Database {
     pub rkv: Arc<RwLock<rkv::Rkv>>,
     main_store: rkv::SingleStore,
     indexes_store: rkv::SingleStore,
-    indexes: RwLock<HashMap<String, (Index, thread::JoinHandle<()>)>>,
+    indexes: RwLock<HashMap<String, (Index, Arc<ArcSwapFn>, thread::JoinHandle<()>)>>,
 }
 
-fn update_awaiter(receiver: Receiver<()>, rkv: Arc<RwLock<rkv::Rkv>>, index: Index) {
+fn update_awaiter(
+    receiver: Receiver<()>,
+    rkv: Arc<RwLock<rkv::Rkv>>,
+    update_fn: Arc<ArcSwapFn>,
+    index: Index,
+)
+{
     for () in receiver {
         // consume all updates in order (oldest first)
         loop {
@@ -29,7 +38,13 @@ fn update_awaiter(receiver: Receiver<()>, rkv: Arc<RwLock<rkv::Rkv>>, index: Ind
                 Err(e) => { error!("LMDB writer transaction begin failed: {}", e); break }
             };
 
-            match update::update_task(&mut writer, index.clone(), None as Option::<fn(_)>) {
+            let update_fn = update_fn.load();
+            let update_fn: Option<&dyn Fn(update::UpdateResult)> = match *update_fn {
+                Some(ref f) => Some(f.as_ref()),
+                None => None,
+            };
+
+            match update::update_task(&mut writer, index.clone(), update_fn) {
                 Ok(true) => if let Err(e) = writer.commit() { error!("update transaction failed: {}", e) },
                 // no more updates to handle for now
                 Ok(false) => { debug!("no more updates"); writer.abort(); break },
@@ -78,15 +93,21 @@ impl Database {
 
             let (sender, receiver) = crossbeam_channel::bounded(100);
             let index = store::open(&rkv_read, &index_name, sender.clone())?;
+            let update_fn = Arc::new(ArcSwapFn::empty());
+
             let rkv_clone = rkv.clone();
             let index_clone = index.clone();
-            let handle = thread::spawn(move || update_awaiter(receiver, rkv_clone, index_clone));
+            let update_fn_clone = update_fn.clone();
+
+            let handle = thread::spawn(move || {
+                update_awaiter(receiver, rkv_clone, update_fn_clone, index_clone)
+            });
 
             // send an update notification to make sure that
             // possible previous boot updates are consumed
             sender.send(()).unwrap();
 
-            let result = indexes.insert(index_name, (index, handle));
+            let result = indexes.insert(index_name, (index, update_fn, handle));
             assert!(result.is_none(), "The index should not have been already open");
         }
 
@@ -95,12 +116,20 @@ impl Database {
         Ok(Database { rkv, main_store, indexes_store, indexes: RwLock::new(indexes) })
     }
 
-    pub fn open_index(&self, name: impl Into<String>) -> MResult<Index> {
+    pub fn open_index(
+        &self,
+        name: impl Into<String>,
+        update_fn: Option<BoxUpdateFn>,
+    ) -> MResult<Index>
+    {
         let indexes_lock = self.indexes.read().unwrap();
         let name = name.into();
 
         match indexes_lock.get(&name) {
-            Some((index, _)) => Ok(index.clone()),
+            Some((index, old_update_fn, _)) => {
+                old_update_fn.swap(update_fn.map(Arc::new));
+                Ok(index.clone())
+            },
             None => {
                 drop(indexes_lock);
 
@@ -117,8 +146,16 @@ impl Database {
                     indexes_write.entry(name).or_insert_with(|| {
                         let rkv_clone = self.rkv.clone();
                         let index_clone = index.clone();
-                        let handle = thread::spawn(move || update_awaiter(receiver, rkv_clone, index_clone));
-                        (index.clone(), handle)
+
+                        let update_fn = update_fn.map(Arc::new);
+                        let update_fn = Arc::new(ArcSwapFn::new(update_fn));
+                        let update_fn_clone = update_fn.clone();
+
+                        let handle = thread::spawn(move || {
+                            update_awaiter(receiver, rkv_clone, update_fn_clone, index_clone)
+                        });
+
+                        (index.clone(), update_fn, handle)
                     });
                 }
 

@@ -98,7 +98,7 @@ pub fn next_update_id(
 pub fn update_task(
     writer: &mut rkv::Writer,
     index: store::Index,
-    mut callback: Option<impl FnOnce(UpdateResult)>,
+    mut callback: Option<impl Fn(UpdateResult)>,
 ) -> MResult<bool>
 {
     let (update_id, update) = match index.updates.pop_front(writer)? {
@@ -111,6 +111,7 @@ pub fn update_task(
     let (update_type, result, duration) = match update {
         Update::SchemaUpdate(schema) => {
             let start = Instant::now();
+
             let update_type = UpdateType::SchemaUpdate { schema: schema.clone() };
             let result = apply_schema_update(writer, index.main, &schema);
 

@@ -296,10 +296,10 @@ mod tests {
     use sdset::SetBuf;
     use tempfile::TempDir;
 
+    use crate::automaton::normalize_str;
+    use crate::database::{Database, BoxUpdateFn};
     use crate::DocIndex;
     use crate::store::Index;
-    use crate::database::Database;
-    use crate::automaton::normalize_str;
 
     fn set_from_stream<'f, I, S>(stream: I) -> Set
     where
@@ -392,7 +392,8 @@ mod tests {
         fn from_iter<I: IntoIterator<Item=(&'a str, &'a [DocIndex])>>(iter: I) -> Self {
             let tempdir = TempDir::new().unwrap();
             let database = Database::open_or_create(&tempdir).unwrap();
-            let index = database.open_index("default").unwrap();
+            let update_fn = None as Option::<BoxUpdateFn>;
+            let index = database.open_index("default", update_fn).unwrap();
 
             let rkv = database.rkv.read().unwrap();
             let mut writer = rkv.write().unwrap();
