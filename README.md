@@ -6,7 +6,7 @@
 [![Rust 1.31+](https://img.shields.io/badge/rust-1.31+-lightgray.svg)](
 https://www.rust-lang.org)
 
-A _full-text search database_ using a key-value store internally.
+A _full-text search database_ based on the fast [LMDB key-value store](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
 
 ## Features
 
