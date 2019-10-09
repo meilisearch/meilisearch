@@ -6,19 +6,19 @@
 [![Rust 1.31+](https://img.shields.io/badge/rust-1.31+-lightgray.svg)](
 https://www.rust-lang.org)
 
-A _full-text search database_ using a key-value store internally.
+A _full-text search database_ based on the fast [LMDB key-value store](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
 
 ## Features
 
-- Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/criterion/mod.rs#L95-L101) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
-- Accepts [custom criteria](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/criterion/mod.rs#L22-L29) and can apply them in any custom order
-- Support [ranged queries](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/query_builder.rs#L146), useful for paginating results
-- Can [distinct](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/query_builder.rs#L68) and [filter](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/query_builder.rs#L57) returned documents based on context defined rules
-- Can store complete documents or only [user schema specified fields](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/examples/movies/schema-movies.toml)
-- The [default tokenizer](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-tokenizer/src/lib.rs#L99) can index latin and kanji based languages
-- Returns [the matching text areas](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/lib.rs#L117-L120), useful to highlight matched words in results
-- Accepts query time search config like the [searchable fields](https://github.com/meilisearch/MeiliDB/blob/3d85cbf0cfa3a3103cf1e151a75a443719cdd5d7/meilidb-core/src/query_builder.rs#L79)
-- Supports run time indexing  (incremental indexing)
+- Provides [6 default ranking criteria](https://github.com/Kerollmops/new-meilidb/blob/dea7e28a45dde897f97742bdd33fcf75d5673502/meilidb-core/src/criterion/mod.rs#L14-L19) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
+- Accepts [custom criteria](https://github.com/Kerollmops/new-meilidb/blob/dea7e28a45dde897f97742bdd33fcf75d5673502/meilidb-core/src/criterion/mod.rs#L24-L33) and can apply them in any custom order
+- Support [ranged queries](https://github.com/Kerollmops/new-meilidb/blob/dea7e28a45dde897f97742bdd33fcf75d5673502/meilidb-core/src/query_builder.rs#L255-L260), useful for paginating results
+- Can [distinct](https://github.com/Kerollmops/new-meilidb/blob/dea7e28a45dde897f97742bdd33fcf75d5673502/meilidb-core/src/query_builder.rs#L241-L246) and [filter](https://github.com/Kerollmops/new-meilidb/blob/dea7e28a45dde897f97742bdd33fcf75d5673502/meilidb-core/src/query_builder.rs#L223-L235) returned documents based on context defined rules
+- Can store complete documents or only [user schema specified fields](https://github.com/Kerollmops/new-meilidb/blob/dea7e28a45dde897f97742bdd33fcf75d5673502/meilidb-schema/src/lib.rs#L265-L279)
+- The [default tokenizer](https://github.com/Kerollmops/new-meilidb/blob/dea7e28a45dde897f97742bdd33fcf75d5673502/meilidb-tokenizer/src/lib.rs) can index latin and kanji based languages
+- Returns [the matching text areas](https://github.com/Kerollmops/new-meilidb/blob/dea7e28a45dde897f97742bdd33fcf75d5673502/meilidb-core/src/lib.rs#L66-L88), useful to highlight matched words in results
+- Accepts query time search config like the [searchable attributes](https://github.com/Kerollmops/new-meilidb/blob/dea7e28a45dde897f97742bdd33fcf75d5673502/meilidb-core/src/query_builder.rs#L248-L252)
+- Supports run time indexing (incremental indexing)
 
 
 
@@ -64,19 +64,18 @@ Currently MeiliDB do not provide an http server but you can run these two exampl
 It creates an index named _movies_ and insert _19 700_ (in batches of _1000_) movies into it.
 
 ```bash
-cargo run --release --example create-database -- \
-    --schema examples/movies/schema-movies.toml \
-    --update-group-size 1000 \
-    movies.mdb \
-    examples/movies/movies.csv
+cargo run --release --example from_file -- \
+    index example.mdb datasets/movies/data.csv \
+    --schema datasets/movies/schema.toml \
+    --update-group-size 1000
 ```
 
 Once this is done, you can query this database using the second binary example.
 
 ```bash
-cargo run --release --example query-database -- \
-    movies.mdb \
-    --fetch-timeout-ms 50 \
-    -n 4 \
-    id title overview release_date poster
+cargo run --release --example from_file -- \
+    search example.mdb
+    --number 4 \
+    --filter '!adult' \
+    id popularity adult original_title
 ```

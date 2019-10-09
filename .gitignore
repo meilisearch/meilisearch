@@ -1,8 +1,7 @@
 /target
-/Cargo.lock
-meilidb/Cargo.lock
-meilidb-core/Cargo.lock
-**/*.rs.bk
+Cargo.lock
 **/*.csv
 **/*.json_lines
-**/*.rdb
+**/*.rs.bk
+/*.mdb
+/query-history.txt

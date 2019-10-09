@@ -99,7 +99,7 @@ impl Criterion for WordsProximity {
         lhs.cmp(&rhs)
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "WordsProximity"
     }
 }

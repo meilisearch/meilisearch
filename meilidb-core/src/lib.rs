@@ -1,25 +1,31 @@
-#![feature(checked_duration_since)]
-
 #[cfg(test)]
 #[macro_use] extern crate assert_matches;
 
 mod automaton;
+mod database;
 mod distinct_map;
+mod error;
+mod number;
 mod query_builder;
-mod query_enhancer;
+mod ranked_map;
 mod raw_document;
 mod reordered_attrs;
-mod store;
+mod update;
 pub mod criterion;
+pub mod raw_indexer;
+pub mod serde;
+pub mod store;
 
-use serde::{Serialize, Deserialize};
-use zerocopy::{AsBytes, FromBytes};
-
-use self::raw_document::raw_documents_from;
-
-pub use self::query_builder::{QueryBuilder, DistinctQueryBuilder, normalize_str};
+pub use self::database::{Database, BoxUpdateFn};
+pub use self::error::{Error, MResult};
+pub use self::number::{Number, ParseNumberError};
+pub use self::ranked_map::RankedMap;
 pub use self::raw_document::RawDocument;
-pub use self::store::Store;
+pub use self::store::Index;
+pub use self::update::{UpdateStatus, UpdateResult};
+
+use zerocopy::{AsBytes, FromBytes};
+use ::serde::{Serialize, Deserialize};
 
 /// Represent an internally generated document unique identifier.
 ///

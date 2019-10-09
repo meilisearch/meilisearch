@@ -4,6 +4,7 @@ mod words_proximity;
 mod sum_of_words_attribute;
 mod sum_of_words_position;
 mod exact;
+mod sort_by_attr;
 mod document_id;
 
 use std::cmp::Ordering;
@@ -16,13 +17,14 @@ pub use self::{
     sum_of_words_attribute::SumOfWordsAttribute,
     sum_of_words_position::SumOfWordsPosition,
     exact::Exact,
+    sort_by_attr::SortByAttr,
     document_id::DocumentId,
 };
 
 pub trait Criterion: Send + Sync {
     fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering;
 
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
 
     #[inline]
     fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
@@ -35,7 +37,7 @@ impl<'a, T: Criterion + ?Sized + Send + Sync> Criterion for &'a T {
         (**self).evaluate(lhs, rhs)
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         (**self).name()
     }
 
@@ -49,7 +51,7 @@ impl<T: Criterion + ?Sized> Criterion for Box<T> {
         (**self).evaluate(lhs, rhs)
     }
 
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         (**self).name()
     }
 

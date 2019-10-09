@@ -1,248 +1,40 @@
+use hashbrown::HashMap;
 use std::hash::Hash;
+use std::mem;
 use std::ops::Range;
 use std::rc::Rc;
 use std::time::{Instant, Duration};
-use std::{mem, cmp, cmp::Reverse};
 
-use fst::{Streamer, IntoStreamer};
-use hashbrown::HashMap;
-use levenshtein_automata::DFA;
-use log::trace;
-use meilidb_tokenizer::{is_cjk, split_query_string};
-use rayon::slice::ParallelSliceMut;
-use rayon::iter::{ParallelIterator, ParallelBridge};
+use fst::{IntoStreamer, Streamer};
 use sdset::SetBuf;
 use slice_group_by::{GroupBy, GroupByMut};
 
-use crate::automaton::{build_dfa, build_prefix_dfa};
-use crate::criterion::Criteria;
+use crate::automaton::{Automaton, AutomatonProducer, QueryEnhancer};
 use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
-use crate::query_enhancer::{QueryEnhancerBuilder, QueryEnhancer};
-use crate::raw_documents_from;
-use crate::reordered_attrs::ReorderedAttrs;
-use crate::{TmpMatch, Highlight, DocumentId, Store, RawDocument, Document};
+use crate::raw_document::{RawDocument, raw_documents_from};
+use crate::{Document, DocumentId, Highlight, TmpMatch, criterion::Criteria};
+use crate::{store, MResult, reordered_attrs::ReorderedAttrs};
 
-const NGRAMS: usize = 3;
-
-struct Automaton {
-    index: usize,
-    ngram: usize,
-    query_len: usize,
-    is_exact: bool,
-    is_prefix: bool,
-    query: String,
-}
-
-impl Automaton {
-    fn dfa(&self) -> DFA {
-        if self.is_prefix {
-            build_prefix_dfa(&self.query)
-        } else {
-            build_dfa(&self.query)
-        }
-    }
-
-    fn exact(index: usize, ngram: usize, query: &str) -> Automaton {
-        Automaton {
-            index,
-            ngram,
-            query_len: query.len(),
-            is_exact: true,
-            is_prefix: false,
-            query: query.to_string(),
-        }
-    }
-
-    fn prefix_exact(index: usize, ngram: usize, query: &str) -> Automaton {
-        Automaton {
-            index,
-            ngram,
-            query_len: query.len(),
-            is_exact: true,
-            is_prefix: true,
-            query: query.to_string(),
-        }
-    }
-
-    fn non_exact(index: usize, ngram: usize, query: &str) -> Automaton {
-        Automaton {
-            index,
-            ngram,
-            query_len: query.len(),
-            is_exact: false,
-            is_prefix: false,
-            query: query.to_string(),
-        }
-    }
-}
-
-pub fn normalize_str(string: &str) -> String {
-    let mut string = string.to_lowercase();
-
-    if !string.contains(is_cjk) {
-        string = deunicode::deunicode_with_tofu(&string, "");
-    }
-
-    string
-}
-
-fn generate_automatons<S: Store>(query: &str, store: &S) -> Result<(Vec<Automaton>, QueryEnhancer), S::Error> {
-    let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
-    let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
-    let synonyms = store.synonyms()?;
-
-    let mut automatons = Vec::new();
-    let mut enhancer_builder = QueryEnhancerBuilder::new(&query_words);
-
-    // We must not declare the original words to the query enhancer
-    // *but* we need to push them in the automatons list first
-    let mut original_words = query_words.iter().peekable();
-    while let Some(word) = original_words.next() {
-
-        let has_following_word = original_words.peek().is_some();
-        let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
-
-        let automaton = if not_prefix_dfa {
-            Automaton::exact(automatons.len(), 1, word)
-        } else {
-            Automaton::prefix_exact(automatons.len(), 1, word)
-        };
-        automatons.push(automaton);
-    }
-
-    for n in 1..=NGRAMS {
-
-        let mut ngrams = query_words.windows(n).enumerate().peekable();
-        while let Some((query_index, ngram_slice)) = ngrams.next() {
-
-            let query_range = query_index..query_index + n;
-            let ngram_nb_words = ngram_slice.len();
-            let ngram = ngram_slice.join(" ");
-
-            let has_following_word = ngrams.peek().is_some();
-            let not_prefix_dfa = has_following_word || has_end_whitespace || ngram.chars().all(is_cjk);
-
-            // automaton of synonyms of the ngrams
-            let normalized = normalize_str(&ngram);
-            let lev = if not_prefix_dfa { build_dfa(&normalized) } else { build_prefix_dfa(&normalized) };
-
-            let mut stream = synonyms.search(&lev).into_stream();
-            while let Some(base) = stream.next() {
-
-                // only trigger alternatives when the last word has been typed
-                // i.e. "new " do not but "new yo" triggers alternatives to "new york"
-                let base = std::str::from_utf8(base).unwrap();
-                let base_nb_words = split_query_string(base).count();
-                if ngram_nb_words != base_nb_words { continue }
-
-                if let Some(synonyms) = store.alternatives_to(base.as_bytes())? {
-
-                    let mut stream = synonyms.into_stream();
-                    while let Some(synonyms) = stream.next() {
-                        let synonyms = std::str::from_utf8(synonyms).unwrap();
-                        let synonyms_words: Vec<_> = split_query_string(synonyms).collect();
-                        let nb_synonym_words = synonyms_words.len();
-
-                        let real_query_index = automatons.len();
-                        enhancer_builder.declare(query_range.clone(), real_query_index, &synonyms_words);
-
-                        for synonym in synonyms_words {
-                            let automaton = if nb_synonym_words == 1 {
-                                Automaton::exact(automatons.len(), n, synonym)
-                            } else {
-                                Automaton::non_exact(automatons.len(), n, synonym)
-                            };
-                            automatons.push(automaton);
-                        }
-                    }
-                }
-            }
-
-            if n != 1 {
-                // automaton of concatenation of query words
-                let concat = ngram_slice.concat();
-                let normalized = normalize_str(&concat);
-
-                let real_query_index = automatons.len();
-                enhancer_builder.declare(query_range.clone(), real_query_index, &[&normalized]);
-
-                let automaton = Automaton::exact(automatons.len(), n, &normalized);
-                automatons.push(automaton);
-            }
-        }
-    }
-
-    // order automatons, the most important first,
-    // we keep the original automatons at the front.
-    let original_len = query_words.len();
-    automatons[original_len..].sort_unstable_by_key(|a| (Reverse(a.is_exact), Reverse(a.ngram)));
-
-    Ok((automatons, enhancer_builder.build()))
-}
-
-pub struct QueryBuilder<'c, S, FI = fn(DocumentId) -> bool> {
-    store: S,
+pub struct QueryBuilder<'c, FI = fn(DocumentId) -> bool> {
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
     filter: Option<FI>,
-    fetch_timeout: Option<Duration>,
-}
-
-impl<'c, S> QueryBuilder<'c, S, fn(DocumentId) -> bool> {
-    pub fn new(store: S) -> Self {
-        QueryBuilder::with_criteria(store, Criteria::default())
-    }
-
-    pub fn with_criteria(store: S, criteria: Criteria<'c>) -> Self {
-        QueryBuilder { store, criteria, searchable_attrs: None, filter: None, fetch_timeout: None }
-    }
-}
-
-impl<'c, S, FI> QueryBuilder<'c, S, FI>
-{
-    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'c, S, F>
-    where F: Fn(DocumentId) -> bool,
-    {
-        QueryBuilder {
-            store: self.store,
-            criteria: self.criteria,
-            searchable_attrs: self.searchable_attrs,
-            filter: Some(function),
-            fetch_timeout: self.fetch_timeout,
-        }
-    }
-
-    pub fn with_fetch_timeout(self, timeout: Duration) -> QueryBuilder<'c, S, FI> {
-        QueryBuilder { fetch_timeout: Some(timeout), ..self }
-    }
-
-    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'c, S, FI, F>
-    where F: Fn(DocumentId) -> Option<K>,
-          K: Hash + Eq,
-    {
-        DistinctQueryBuilder { inner: self, function, size }
-    }
-
-    pub fn add_searchable_attribute(&mut self, attribute: u16) {
-        let reorders = self.searchable_attrs.get_or_insert_with(ReorderedAttrs::new);
-        reorders.insert_attribute(attribute);
-    }
+    timeout: Duration,
+    main_store: store::Main,
+    postings_lists_store: store::PostingsLists,
+    synonyms_store: store::Synonyms,
 }
 
 fn multiword_rewrite_matches(
     mut matches: Vec<(DocumentId, TmpMatch)>,
     query_enhancer: &QueryEnhancer,
-    timeout: Option<Duration>,
 ) -> SetBuf<(DocumentId, TmpMatch)>
 {
     let mut padded_matches = Vec::with_capacity(matches.len());
 
     // we sort the matches by word index to make them rewritable
-    let start = Instant::now();
-    matches.par_sort_unstable_by_key(|(id, match_)| (*id, match_.attribute, match_.word_index));
-    trace!("rewrite sort by word_index took {:.2?}", start.elapsed());
+    matches.sort_unstable_by_key(|(id, match_)| (*id, match_.attribute, match_.word_index));
 
-    let start = Instant::now();
     // for each attribute of each document
     for same_document_attribute in matches.linear_group_by_key(|(id, m)| (*id, m.attribute)) {
 
@@ -322,194 +114,248 @@ fn multiword_rewrite_matches(
 
             padding += biggest;
         }
-
-        // check the timeout *after* having processed at least one element
-        if timeout.map_or(false, |timeout| start.elapsed() > timeout) { break }
     }
-    trace!("main multiword rewrite took {:.2?}", start.elapsed());
 
-    let start = Instant::now();
     for document_matches in padded_matches.linear_group_by_key_mut(|(id, _)| *id) {
         document_matches.sort_unstable();
     }
-    trace!("final rewrite sort took {:.2?}", start.elapsed());
 
     SetBuf::new_unchecked(padded_matches)
 }
 
-impl<'c, S, FI> QueryBuilder<'c, S, FI>
-where S: Store + Sync,
-      S::Error: Send,
+fn fetch_raw_documents(
+    reader: &impl rkv::Readable,
+    automatons: &[Automaton],
+    query_enhancer: &QueryEnhancer,
+    searchables: Option<&ReorderedAttrs>,
+    main_store: &store::Main,
+    postings_lists_store: &store::PostingsLists,
+) -> MResult<Vec<RawDocument>>
 {
-    fn query_all(&self, query: &str) -> Result<Vec<RawDocument>, S::Error> {
-        let (automatons, query_enhancer) = generate_automatons(query, &self.store)?;
-        let searchables = self.searchable_attrs.as_ref();
-        let store = &self.store;
-        let fetch_timeout = &self.fetch_timeout;
+    let mut matches = Vec::new();
+    let mut highlights = Vec::new();
 
-        let mut matches = Vec::new();
-        let mut highlights = Vec::new();
+    for automaton in automatons {
+        let Automaton { index, is_exact, query_len, .. } = automaton;
+        let dfa = automaton.dfa();
 
-        let timeout = fetch_timeout.map(|d| d * 75 / 100);
-        let start = Instant::now();
+        let words = match main_store.words_fst(reader)? {
+            Some(words) => words,
+            None => return Ok(Vec::new()),
+        };
 
-        let results: Vec<_> = automatons
-            .into_iter()
-            .par_bridge()
-            .map_with((store, searchables), |(store, searchables), automaton| {
-                let Automaton { index, is_exact, query_len, .. } = automaton;
-                let dfa = automaton.dfa();
+        let mut stream = words.search(&dfa).into_stream();
+        while let Some(input) = stream.next() {
+            let distance = dfa.eval(input).to_u8();
+            let is_exact = *is_exact && distance == 0 && input.len() == *query_len;
 
-                let words = match store.words() {
-                    Ok(words) => words,
-                    Err(err) => return Some(Err(err)),
-                };
+            let doc_indexes = match postings_lists_store.postings_list(reader, input)? {
+                Some(doc_indexes) => doc_indexes,
+                None => continue,
+            };
 
-                let mut stream = words.search(&dfa).into_stream();
-                let mut matches = Vec::new();
-                let mut highlights = Vec::new();
+            matches.reserve(doc_indexes.len());
+            highlights.reserve(doc_indexes.len());
 
-                while let Some(input) = stream.next() {
-                    let distance = dfa.eval(input).to_u8();
-                    let is_exact = is_exact && distance == 0 && input.len() == query_len;
-
-                    let doc_indexes = match store.word_indexes(input) {
-                        Ok(Some(doc_indexes)) => doc_indexes,
-                        Ok(None) => continue,
-                        Err(err) => return Some(Err(err)),
+            for di in doc_indexes.as_ref() {
+                let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
+                if let Some(attribute) = attribute {
+                    let match_ = TmpMatch {
+                        query_index: *index as u32,
+                        distance,
+                        attribute,
+                        word_index: di.word_index,
+                        is_exact,
                     };
 
-                    matches.reserve(doc_indexes.len());
-                    highlights.reserve(doc_indexes.len());
+                    let highlight = Highlight {
+                        attribute: di.attribute,
+                        char_index: di.char_index,
+                        char_length: di.char_length,
+                    };
 
-                    for di in doc_indexes.as_slice() {
-                        let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
-                        if let Some(attribute) = attribute {
-                            let match_ = TmpMatch {
-                                query_index: index as u32,
-                                distance,
-                                attribute,
-                                word_index: di.word_index,
-                                is_exact,
-                            };
-
-                            let highlight = Highlight {
-                                attribute: di.attribute,
-                                char_index: di.char_index,
-                                char_length: di.char_length,
-                            };
-
-                            matches.push((di.document_id, match_));
-                            highlights.push((di.document_id, highlight));
-                        }
-                    }
-
-                    // check the timeout *after* having processed at least one element
-                    if timeout.map_or(false, |timeout| start.elapsed() > timeout) { break }
+                    matches.push((di.document_id, match_));
+                    highlights.push((di.document_id, highlight));
                 }
-
-                Some(Ok((matches, highlights)))
-            })
-            .while_some()
-            .collect();
-
-        for result in results {
-            let (mut rcv_matches, mut rcv_highlights) = result?;
-            matches.append(&mut rcv_matches);
-            highlights.append(&mut rcv_highlights);
+            }
         }
+    }
 
-        trace!("main query all took {:.2?}", start.elapsed());
-        trace!("{} total matches to rewrite", matches.len());
+    let matches = multiword_rewrite_matches(matches, &query_enhancer);
+    let highlights = {
+        highlights.sort_unstable_by_key(|(id, _)| *id);
+        SetBuf::new_unchecked(highlights)
+    };
 
-        let start = Instant::now();
-        let timeout = fetch_timeout.map(|d| d * 25 / 100);
-        let matches = multiword_rewrite_matches(matches, &query_enhancer, timeout);
-        trace!("multiword rewrite took {:.2?}", start.elapsed());
+    Ok(raw_documents_from(matches, highlights))
+}
 
-        let start = Instant::now();
-        let highlights = {
-            highlights.par_sort_unstable_by_key(|(id, _)| *id);
-            SetBuf::new_unchecked(highlights)
-        };
-        trace!("sorting highlights took {:.2?}", start.elapsed());
+impl<'c> QueryBuilder<'c> {
+    pub fn new(
+        main: store::Main,
+        postings_lists: store::PostingsLists,
+        synonyms: store::Synonyms,
+    ) -> QueryBuilder<'c>
+    {
+        QueryBuilder::with_criteria(main, postings_lists, synonyms, Criteria::default())
+    }
 
-        trace!("{} total matches to classify", matches.len());
-
-        let start = Instant::now();
-        let raw_documents = raw_documents_from(matches, highlights);
-        trace!("making raw documents took {:.2?}", start.elapsed());
-
-        trace!("{} total documents to classify", raw_documents.len());
-
-        Ok(raw_documents)
+    pub fn with_criteria(
+        main: store::Main,
+        postings_lists: store::PostingsLists,
+        synonyms: store::Synonyms,
+        criteria: Criteria<'c>,
+    ) -> QueryBuilder<'c>
+    {
+        QueryBuilder {
+            criteria,
+            searchable_attrs: None,
+            filter: None,
+            timeout: Duration::from_millis(30),
+            main_store: main,
+            postings_lists_store: postings_lists,
+            synonyms_store: synonyms,
+        }
     }
 }
 
-impl<'c, S, FI> QueryBuilder<'c, S, FI>
-where S: Store + Sync,
-      S::Error: Send,
-      FI: Fn(DocumentId) -> bool,
-{
-    pub fn query(self, query: &str, range: Range<usize>) -> Result<Vec<Document>, S::Error> {
+impl<'c, FI> QueryBuilder<'c, FI> {
+    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'c, F>
+    where F: Fn(DocumentId) -> bool,
+    {
+        QueryBuilder {
+            criteria: self.criteria,
+            searchable_attrs: self.searchable_attrs,
+            filter: Some(function),
+            timeout: self.timeout,
+            main_store: self.main_store,
+            postings_lists_store: self.postings_lists_store,
+            synonyms_store: self.synonyms_store,
+        }
+    }
+
+    pub fn with_fetch_timeout(self, timeout: Duration) -> QueryBuilder<'c, FI> {
+        QueryBuilder { timeout, ..self }
+    }
+
+    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'c, FI, F>
+    where F: Fn(DocumentId) -> Option<K>,
+          K: Hash + Eq,
+    {
+        DistinctQueryBuilder { inner: self, function, size }
+    }
+
+    pub fn add_searchable_attribute(&mut self, attribute: u16) {
+        let reorders = self.searchable_attrs.get_or_insert_with(ReorderedAttrs::new);
+        reorders.insert_attribute(attribute);
+    }
+}
+
+impl<FI> QueryBuilder<'_, FI> where FI: Fn(DocumentId) -> bool {
+    pub fn query(
+        self,
+        reader: &impl rkv::Readable,
+        query: &str,
+        range: Range<usize>,
+    ) -> MResult<Vec<Document>>
+    {
         // We delegate the filter work to the distinct query builder,
         // specifying a distinct rule that has no effect.
         if self.filter.is_some() {
             let builder = self.with_distinct(|_| None as Option<()>, 1);
-            return builder.query(query, range);
+            return builder.query(reader, query, range);
         }
 
-        let start = Instant::now();
-        let mut documents = self.query_all(query)?;
-        trace!("query_all took {:.2?}", start.elapsed());
+        let start_processing = Instant::now();
+        let mut raw_documents_processed = Vec::with_capacity(range.len());
 
-        let mut groups = vec![documents.as_mut_slice()];
+        let (automaton_producer, query_enhancer) = AutomatonProducer::new(
+            reader,
+            query,
+            self.main_store,
+            self.synonyms_store,
+        )?;
 
-        'criteria: for criterion in self.criteria.as_ref() {
-            let tmp_groups = mem::replace(&mut groups, Vec::new());
-            let mut documents_seen = 0;
+        let mut automaton_producer = automaton_producer.into_iter();
+        let mut automatons = Vec::new();
 
-            for group in tmp_groups {
-                // if this group does not overlap with the requested range,
-                // push it without sorting and splitting it
-                if documents_seen + group.len() < range.start {
-                    documents_seen += group.len();
-                    groups.push(group);
-                    continue;
-                }
+        // aggregate automatons groups by groups after time
+        while let Some(auts) = automaton_producer.next() {
+            automatons.extend(auts);
 
-                let start = Instant::now();
-                group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                trace!("criterion {} sort took {:.2?}", criterion.name(), start.elapsed());
+            // we must retrieve the documents associated
+            // with the current automatons
+            let mut raw_documents = fetch_raw_documents(
+                reader,
+                &automatons,
+                &query_enhancer,
+                self.searchable_attrs.as_ref(),
+                &self.main_store,
+                &self.postings_lists_store,
+            )?;
 
-                for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
-                    trace!("criterion {} produced a group of size {}", criterion.name(), group.len());
+            // stop processing when time is running out
+            if !raw_documents_processed.is_empty() && start_processing.elapsed() > self.timeout {
+                break
+            }
 
-                    documents_seen += group.len();
-                    groups.push(group);
+            let mut groups = vec![raw_documents.as_mut_slice()];
 
-                    // we have sort enough documents if the last document sorted is after
-                    // the end of the requested range, we can continue to the next criterion
-                    if documents_seen >= range.end { continue 'criteria }
+            'criteria: for criterion in self.criteria.as_ref() {
+                let tmp_groups = mem::replace(&mut groups, Vec::new());
+                let mut documents_seen = 0;
+
+                for group in tmp_groups {
+                    // if this group does not overlap with the requested range,
+                    // push it without sorting and splitting it
+                    if documents_seen + group.len() < range.start {
+                        documents_seen += group.len();
+                        groups.push(group);
+                        continue;
+                    }
+
+                    group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
+
+                    for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
+                        documents_seen += group.len();
+                        groups.push(group);
+
+                        // we have sort enough documents if the last document sorted is after
+                        // the end of the requested range, we can continue to the next criterion
+                        if documents_seen >= range.end { continue 'criteria }
+                    }
                 }
             }
+
+            // once we classified the documents related to the current
+            // automatons we save that as the next valid result
+            let iter = raw_documents.into_iter().skip(range.start).take(range.len());
+            raw_documents_processed.clear();
+            raw_documents_processed.extend(iter);
+
+            // stop processing when time is running out
+            if start_processing.elapsed() > self.timeout { break }
         }
 
-        let offset = cmp::min(documents.len(), range.start);
-        let iter = documents.into_iter().skip(offset).take(range.len());
-        Ok(iter.map(|d| Document::from_raw(d)).collect())
+        // make real documents now that we know
+        // those must be returned
+        let documents = raw_documents_processed
+            .into_iter()
+            .map(|d| Document::from_raw(d))
+            .collect();
+
+        Ok(documents)
     }
 }
 
-pub struct DistinctQueryBuilder<'c, I, FI, FD> {
-    inner: QueryBuilder<'c, I, FI>,
+pub struct DistinctQueryBuilder<'c, FI, FD> {
+    inner: QueryBuilder<'c, FI>,
     function: FD,
     size: usize,
 }
 
-impl<'c, I, FI, FD> DistinctQueryBuilder<'c, I, FI, FD>
-{
-    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'c, I, F, FD>
+impl<'c, FI, FD> DistinctQueryBuilder<'c, FI, FD> {
+    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'c, F, FD>
     where F: Fn(DocumentId) -> bool,
     {
         DistinctQueryBuilder {
@@ -519,7 +365,7 @@ impl<'c, I, FI, FD> DistinctQueryBuilder<'c, I, FI, FD>
         }
     }
 
-    pub fn with_fetch_timeout(self, timeout: Duration) -> DistinctQueryBuilder<'c, I, FI, FD> {
+    pub fn with_fetch_timeout(self, timeout: Duration) -> DistinctQueryBuilder<'c, FI, FD> {
         DistinctQueryBuilder {
             inner: self.inner.with_fetch_timeout(timeout),
             function: self.function,
@@ -532,114 +378,156 @@ impl<'c, I, FI, FD> DistinctQueryBuilder<'c, I, FI, FD>
     }
 }
 
-impl<'c, S, FI, FD, K> DistinctQueryBuilder<'c, S, FI, FD>
-where S: Store + Sync,
-      S::Error: Send,
-      FI: Fn(DocumentId) -> bool,
+impl<'c, FI, FD, K> DistinctQueryBuilder<'c, FI, FD>
+where FI: Fn(DocumentId) -> bool,
       FD: Fn(DocumentId) -> Option<K>,
       K: Hash + Eq,
 {
-    pub fn query(self, query: &str, range: Range<usize>) -> Result<Vec<Document>, S::Error> {
-        let start = Instant::now();
-        let mut documents = self.inner.query_all(query)?;
-        trace!("query_all took {:.2?}", start.elapsed());
+    pub fn query(
+        self,
+        reader: &impl rkv::Readable,
+        query: &str,
+        range: Range<usize>,
+    ) -> MResult<Vec<Document>>
+    {
+        let start_processing = Instant::now();
+        let mut raw_documents_processed = Vec::new();
 
-        let mut groups = vec![documents.as_mut_slice()];
-        let mut key_cache = HashMap::new();
+        let (automaton_producer, query_enhancer) = AutomatonProducer::new(
+            reader,
+            query,
+            self.inner.main_store,
+            self.inner.synonyms_store,
+        )?;
 
-        let mut filter_map = HashMap::new();
-        // these two variables informs on the current distinct map and
-        // on the raw offset of the start of the group where the
-        // range.start bound is located according to the distinct function
-        let mut distinct_map = DistinctMap::new(self.size);
-        let mut distinct_raw_offset = 0;
+        let mut automaton_producer = automaton_producer.into_iter();
+        let mut automatons = Vec::new();
 
-        'criteria: for criterion in self.inner.criteria.as_ref() {
-            let tmp_groups = mem::replace(&mut groups, Vec::new());
-            let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
-            let mut documents_seen = 0;
+        // aggregate automatons groups by groups after time
+        while let Some(auts) = automaton_producer.next() {
+            automatons.extend(auts);
 
-            for group in tmp_groups {
-                // if this group does not overlap with the requested range,
-                // push it without sorting and splitting it
-                if documents_seen + group.len() < distinct_raw_offset {
-                    documents_seen += group.len();
-                    groups.push(group);
-                    continue;
-                }
+            // we must retrieve the documents associated
+            // with the current automatons
+            let mut raw_documents = fetch_raw_documents(
+                reader,
+                &automatons,
+                &query_enhancer,
+                self.inner.searchable_attrs.as_ref(),
+                &self.inner.main_store,
+                &self.inner.postings_lists_store,
+            )?;
 
-                let start = Instant::now();
-                group.par_sort_unstable_by(|a, b| criterion.evaluate(a, b));
-                trace!("criterion {} sort took {:.2?}", criterion.name(), start.elapsed());
+            // stop processing when time is running out
+            if !raw_documents_processed.is_empty() && start_processing.elapsed() > self.inner.timeout {
+                break
+            }
 
-                for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
-                    // we must compute the real distinguished len of this sub-group
-                    for document in group.iter() {
-                        let filter_accepted = match &self.inner.filter {
-                            Some(filter) => {
-                                let entry = filter_map.entry(document.id);
-                                *entry.or_insert_with(|| (filter)(document.id))
-                            },
-                            None => true,
-                        };
+            let mut groups = vec![raw_documents.as_mut_slice()];
+            let mut key_cache = HashMap::new();
 
-                        if filter_accepted {
-                            let entry = key_cache.entry(document.id);
-                            let key = entry.or_insert_with(|| (self.function)(document.id).map(Rc::new));
+            let mut filter_map = HashMap::new();
+            // these two variables informs on the current distinct map and
+            // on the raw offset of the start of the group where the
+            // range.start bound is located according to the distinct function
+            let mut distinct_map = DistinctMap::new(self.size);
+            let mut distinct_raw_offset = 0;
 
-                            match key.clone() {
-                                Some(key) => buf_distinct.register(key),
-                                None => buf_distinct.register_without_key(),
+            'criteria: for criterion in self.inner.criteria.as_ref() {
+                let tmp_groups = mem::replace(&mut groups, Vec::new());
+                let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
+                let mut documents_seen = 0;
+
+                for group in tmp_groups {
+                    // if this group does not overlap with the requested range,
+                    // push it without sorting and splitting it
+                    if documents_seen + group.len() < distinct_raw_offset {
+                        documents_seen += group.len();
+                        groups.push(group);
+                        continue;
+                    }
+
+                    group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
+
+                    for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
+                        // we must compute the real distinguished len of this sub-group
+                        for document in group.iter() {
+                            let filter_accepted = match &self.inner.filter {
+                                Some(filter) => {
+                                    let entry = filter_map.entry(document.id);
+                                    *entry.or_insert_with(|| (filter)(document.id))
+                                },
+                                None => true,
                             };
+
+                            if filter_accepted {
+                                let entry = key_cache.entry(document.id);
+                                let key = entry.or_insert_with(|| (self.function)(document.id).map(Rc::new));
+
+                                match key.clone() {
+                                    Some(key) => buf_distinct.register(key),
+                                    None => buf_distinct.register_without_key(),
+                                };
+                            }
+
+                            // the requested range end is reached: stop computing distinct
+                            if buf_distinct.len() >= range.end { break }
                         }
 
-                        // the requested range end is reached: stop computing distinct
-                        if buf_distinct.len() >= range.end { break }
+                        documents_seen += group.len();
+                        groups.push(group);
+
+                        // if this sub-group does not overlap with the requested range
+                        // we must update the distinct map and its start index
+                        if buf_distinct.len() < range.start {
+                            buf_distinct.transfert_to_internal();
+                            distinct_raw_offset = documents_seen;
+                        }
+
+                        // we have sort enough documents if the last document sorted is after
+                        // the end of the requested range, we can continue to the next criterion
+                        if buf_distinct.len() >= range.end { continue 'criteria }
                     }
-
-                    trace!("criterion {} produced a group of size {}", criterion.name(), group.len());
-
-                    documents_seen += group.len();
-                    groups.push(group);
-
-                    // if this sub-group does not overlap with the requested range
-                    // we must update the distinct map and its start index
-                    if buf_distinct.len() < range.start {
-                        buf_distinct.transfert_to_internal();
-                        distinct_raw_offset = documents_seen;
-                    }
-
-                    // we have sort enough documents if the last document sorted is after
-                    // the end of the requested range, we can continue to the next criterion
-                    if buf_distinct.len() >= range.end { continue 'criteria }
                 }
             }
-        }
 
-        let mut out_documents = Vec::with_capacity(range.len());
-        let mut seen = BufferedDistinctMap::new(&mut distinct_map);
+            // once we classified the documents related to the current
+            // automatons we save that as the next valid result
+            let mut seen = BufferedDistinctMap::new(&mut distinct_map);
+            raw_documents_processed.clear();
 
-        for document in documents.into_iter().skip(distinct_raw_offset) {
-            let filter_accepted = match &self.inner.filter {
-                Some(_) => filter_map.remove(&document.id).expect("BUG: filtered not found"),
-                None => true,
-            };
-
-            if filter_accepted {
-                let key = key_cache.remove(&document.id).expect("BUG: cached key not found");
-                let distinct_accepted = match key {
-                    Some(key) => seen.register(key),
-                    None => seen.register_without_key(),
+            for document in raw_documents.into_iter().skip(distinct_raw_offset) {
+                let filter_accepted = match &self.inner.filter {
+                    Some(_) => filter_map.remove(&document.id).unwrap(),
+                    None => true,
                 };
 
-                if distinct_accepted && seen.len() > range.start {
-                    out_documents.push(Document::from_raw(document));
-                    if out_documents.len() == range.len() { break }
+                if filter_accepted {
+                    let key = key_cache.remove(&document.id).unwrap();
+                    let distinct_accepted = match key {
+                        Some(key) => seen.register(key),
+                        None => seen.register_without_key(),
+                    };
+
+                    if distinct_accepted && seen.len() > range.start {
+                        raw_documents_processed.push(document);
+                        if raw_documents_processed.len() == range.len() { break }
+                    }
                 }
             }
+
+            // stop processing when time is running out
+            if start_processing.elapsed() > self.inner.timeout { break }
         }
 
-        Ok(out_documents)
+        // make real documents now that we know
+        // those must be returned
+        let documents = raw_documents_processed
+            .into_iter()
+            .map(|d| Document::from_raw(d))
+            .collect();
+
+        Ok(documents)
     }
 }
 
@@ -650,19 +538,14 @@ mod tests {
     use std::collections::{BTreeSet, HashMap};
     use std::iter::FromIterator;
 
-    use sdset::SetBuf;
     use fst::{Set, IntoStreamer};
+    use sdset::SetBuf;
+    use tempfile::TempDir;
 
+    use crate::automaton::normalize_str;
+    use crate::database::{Database, BoxUpdateFn};
     use crate::DocIndex;
-    use crate::store::Store;
-
-    #[derive(Default)]
-    struct InMemorySetStore {
-        set: Set,
-        synonyms: Set,
-        indexes: HashMap<Vec<u8>, SetBuf<DocIndex>>,
-        alternatives: HashMap<Vec<u8>, Set>,
-    }
+    use crate::store::Index;
 
     fn set_from_stream<'f, I, S>(stream: I) -> Set
     where
@@ -693,57 +576,6 @@ mod tests {
         builder.into_inner().and_then(Set::from_bytes).unwrap()
     }
 
-    impl InMemorySetStore {
-        pub fn add_synonym(&mut self, word: &str, new: SetBuf<&str>) {
-            let word = word.to_lowercase();
-            let alternatives = self.alternatives.entry(word.as_bytes().to_vec()).or_default();
-            let new = sdset_into_fstset(&new);
-            *alternatives = set_from_stream(alternatives.op().add(new.into_stream()).r#union());
-
-            self.synonyms = insert_key(&self.synonyms, word.as_bytes());
-        }
-    }
-
-    impl<'a> FromIterator<(&'a str, &'a [DocIndex])> for InMemorySetStore {
-        fn from_iter<I: IntoIterator<Item=(&'a str, &'a [DocIndex])>>(iter: I) -> Self {
-            let mut tree = BTreeSet::new();
-            let mut map = HashMap::new();
-
-            for (word, indexes) in iter {
-                let word = word.to_lowercase().into_bytes();
-                tree.insert(word.clone());
-                map.entry(word).or_insert_with(Vec::new).extend_from_slice(indexes);
-            }
-
-            InMemorySetStore {
-                set: Set::from_iter(tree).unwrap(),
-                synonyms: Set::default(),
-                indexes: map.into_iter().map(|(k, v)| (k, SetBuf::from_dirty(v))).collect(),
-                alternatives: HashMap::new(),
-            }
-        }
-    }
-
-    impl Store for InMemorySetStore {
-        type Error = std::io::Error;
-
-        fn words(&self) -> Result<&Set, Self::Error> {
-            Ok(&self.set)
-        }
-
-        fn word_indexes(&self, word: &[u8]) -> Result<Option<SetBuf<DocIndex>>, Self::Error> {
-            Ok(self.indexes.get(word).cloned())
-        }
-
-        fn synonyms(&self) -> Result<&Set, Self::Error> {
-            Ok(&self.synonyms)
-        }
-
-        fn alternatives_to(&self, word: &[u8]) -> Result<Option<Set>, Self::Error> {
-            Ok(self.alternatives.get(word).map(|s| Set::from_bytes(s.as_fst().to_vec()).unwrap()))
-        }
-    }
-
     const fn doc_index(document_id: u64, word_index: u16) -> DocIndex {
         DocIndex {
             document_id: DocumentId(document_id),
@@ -764,16 +596,92 @@ mod tests {
         }
     }
 
+    pub struct TempDatabase {
+        database: Database,
+        index: Index,
+        _tempdir: TempDir,
+    }
+
+    impl TempDatabase {
+        pub fn query_builder(&self) -> QueryBuilder {
+            self.index.query_builder()
+        }
+
+        pub fn add_synonym(&mut self, word: &str, new: SetBuf<&str>) {
+            let rkv = self.database.rkv.read().unwrap();
+            let mut writer = rkv.write().unwrap();
+
+            let word = word.to_lowercase();
+
+            let alternatives = match self.index.synonyms.synonyms(&writer, word.as_bytes()).unwrap() {
+                Some(alternatives) => alternatives,
+                None => fst::Set::default(),
+            };
+
+            let new = sdset_into_fstset(&new);
+            let new_alternatives = set_from_stream(alternatives.op().add(new.into_stream()).r#union());
+            self.index.synonyms.put_synonyms(&mut writer, word.as_bytes(), &new_alternatives).unwrap();
+
+            let synonyms = match self.index.main.synonyms_fst(&writer).unwrap() {
+                Some(synonyms) => synonyms,
+                None => fst::Set::default(),
+            };
+
+            let synonyms_fst = insert_key(&synonyms, word.as_bytes());
+            self.index.main.put_synonyms_fst(&mut writer, &synonyms_fst).unwrap();
+
+            writer.commit().unwrap();
+        }
+    }
+
+    impl<'a> FromIterator<(&'a str, &'a [DocIndex])> for TempDatabase {
+        fn from_iter<I: IntoIterator<Item=(&'a str, &'a [DocIndex])>>(iter: I) -> Self {
+            let tempdir = TempDir::new().unwrap();
+            let database = Database::open_or_create(&tempdir).unwrap();
+            let update_fn = None as Option::<BoxUpdateFn>;
+            let index = database.open_index("default", update_fn).unwrap();
+
+            let rkv = database.rkv.read().unwrap();
+            let mut writer = rkv.write().unwrap();
+
+            let mut words_fst = BTreeSet::new();
+            let mut postings_lists = HashMap::new();
+
+            for (word, indexes) in iter {
+                let word = word.to_lowercase().into_bytes();
+                words_fst.insert(word.clone());
+                postings_lists.entry(word).or_insert_with(Vec::new).extend_from_slice(indexes);
+            }
+
+            let words_fst = Set::from_iter(words_fst).unwrap();
+
+            index.main.put_words_fst(&mut writer, &words_fst).unwrap();
+
+            for (word, postings_list) in postings_lists {
+                let postings_list = SetBuf::from_dirty(postings_list);
+                index.postings_lists.put_postings_list(&mut writer, &word, &postings_list).unwrap();
+            }
+
+            writer.commit().unwrap();
+            drop(rkv);
+
+            TempDatabase { database, index, _tempdir: tempdir }
+        }
+    }
+
     #[test]
     fn simple() {
-        let store = InMemorySetStore::from_iter(vec![
-            ("iphone",  &[doc_char_index(0, 0, 0)][..]),
-            ("from",    &[doc_char_index(0, 1, 1)][..]),
-            ("apple",   &[doc_char_index(0, 2, 2)][..]),
+        let store = TempDatabase::from_iter(vec![
+            ("iphone", &[doc_char_index(0, 0, 0)][..]),
+            ("from",   &[doc_char_index(0, 1, 1)][..]),
+            ("apple",  &[doc_char_index(0, 2, 2)][..]),
         ]);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("iphone from apple", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "iphone from apple", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -788,14 +696,17 @@ mod tests {
 
     #[test]
     fn simple_synonyms() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("hello", &[doc_index(0, 0)][..]),
         ]);
 
         store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("hello", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "hello", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -805,8 +716,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("bonjour", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "bonjour", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -819,15 +730,18 @@ mod tests {
 
     #[test]
     fn prefix_synonyms() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("hello", &[doc_index(0, 0)][..]),
         ]);
 
         store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello"]));
         store.add_synonym("salut", SetBuf::from_dirty(vec!["hello"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("sal", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "sal", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -837,8 +751,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("bonj", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "bonj", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -848,14 +762,14 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("sal blabla", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "sal blabla", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("bonj blabla", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "bonj blabla", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), None);
@@ -863,14 +777,17 @@ mod tests {
 
     #[test]
     fn levenshtein_synonyms() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("hello", &[doc_index(0, 0)][..]),
         ]);
 
         store.add_synonym("salutation", SetBuf::from_dirty(vec!["hello"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("salutution", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "salutution", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -880,8 +797,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("saluttion", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "saluttion", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -894,7 +811,7 @@ mod tests {
 
     #[test]
     fn harder_synonyms() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("hello",   &[doc_index(0, 0)][..]),
             ("bonjour", &[doc_index(1, 3)]),
             ("salut",   &[doc_index(2, 5)]),
@@ -904,8 +821,11 @@ mod tests {
         store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello", "salut"]));
         store.add_synonym("salut", SetBuf::from_dirty(vec!["hello", "bonjour"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("hello", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "hello", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -925,8 +845,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("bonjour", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "bonjour", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -946,8 +866,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("salut", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "salut", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -971,7 +891,7 @@ mod tests {
     #[test]
     /// Unique word has multi-word synonyms
     fn unique_to_multiword_synonyms() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("new",    &[doc_char_index(0, 0, 0)][..]),
             ("york",   &[doc_char_index(0, 1, 1)][..]),
             ("city",   &[doc_char_index(0, 2, 2)][..]),
@@ -984,8 +904,11 @@ mod tests {
         store.add_synonym("NY",  SetBuf::from_dirty(vec!["NYC", "new york", "new york city"]));
         store.add_synonym("NYC", SetBuf::from_dirty(vec!["NY",  "new york", "new york city"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("NY subway", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "NY subway", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
@@ -1009,8 +932,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("NYC subway", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "NYC subway", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
@@ -1037,7 +960,7 @@ mod tests {
 
     #[test]
     fn unique_to_multiword_synonyms_words_proximity() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("new",    &[doc_char_index(0, 0, 0)][..]),
             ("york",   &[doc_char_index(0, 1, 1)][..]),
             ("city",   &[doc_char_index(0, 2, 2)][..]),
@@ -1053,8 +976,11 @@ mod tests {
 
         store.add_synonym("NY",  SetBuf::from_dirty(vec!["york new"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("NY", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "NY", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches, .. }) => {
@@ -1077,8 +1003,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("new york", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "new york", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -1098,7 +1024,7 @@ mod tests {
 
     #[test]
     fn unique_to_multiword_synonyms_cumulative_word_index() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("NY",     &[doc_char_index(0, 0, 0)][..]),
             ("subway", &[doc_char_index(0, 1, 1)][..]),
 
@@ -1109,8 +1035,11 @@ mod tests {
 
         store.add_synonym("new york", SetBuf::from_dirty(vec!["NY"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("NY subway", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "NY subway", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -1126,8 +1055,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("new york subway", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "new york subway", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -1150,7 +1079,7 @@ mod tests {
     #[test]
     /// Unique word has multi-word synonyms
     fn harder_unique_to_multiword_synonyms_one() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("new",     &[doc_char_index(0, 0, 0)][..]),
             ("york",    &[doc_char_index(0, 1, 1)][..]),
             ("city",    &[doc_char_index(0, 2, 2)][..]),
@@ -1166,8 +1095,11 @@ mod tests {
         store.add_synonym("NY",  SetBuf::from_dirty(vec!["NYC", "new york", "new york city"]));
         store.add_synonym("NYC", SetBuf::from_dirty(vec!["NY",  "new york", "new york city"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("NY subway", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "NY subway", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
@@ -1191,8 +1123,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("NYC subway", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "NYC subway", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
@@ -1221,7 +1153,7 @@ mod tests {
     #[test]
     /// Unique word has multi-word synonyms
     fn even_harder_unique_to_multiword_synonyms() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("new",         &[doc_char_index(0, 0, 0)][..]),
             ("york",        &[doc_char_index(0, 1, 1)][..]),
             ("city",        &[doc_char_index(0, 2, 2)][..]),
@@ -1239,8 +1171,11 @@ mod tests {
         store.add_synonym("NYC", SetBuf::from_dirty(vec!["NY",  "new york", "new york city"]));
         store.add_synonym("subway", SetBuf::from_dirty(vec!["underground train"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("NY subway broken", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "NY subway broken", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -1267,8 +1202,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("NYC subway", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "NYC subway", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
@@ -1299,7 +1234,7 @@ mod tests {
     #[test]
     /// Multi-word has multi-word synonyms
     fn multiword_to_multiword_synonyms() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("NY",      &[doc_char_index(0, 0, 0)][..]),
             ("subway",  &[doc_char_index(0, 1, 1)][..]),
 
@@ -1319,8 +1254,11 @@ mod tests {
         store.add_synonym("new york city", SetBuf::from_dirty(vec![     "NYC", "NY", "new york"      ]));
         store.add_synonym("underground train", SetBuf::from_dirty(vec![ "subway"                     ]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("new york underground train broken", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "new york underground train broken", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches, .. }) => {
@@ -1356,8 +1294,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("new york city underground train broken", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "new york city underground train broken", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches, .. }) => {
@@ -1402,7 +1340,7 @@ mod tests {
 
     #[test]
     fn intercrossed_multiword_synonyms() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("new",   &[doc_index(0, 0)][..]),
             ("york",  &[doc_index(0, 1)][..]),
             ("big",   &[doc_index(0, 2)][..]),
@@ -1412,8 +1350,11 @@ mod tests {
         store.add_synonym("new york", SetBuf::from_dirty(vec![      "new york city" ]));
         store.add_synonym("new york city", SetBuf::from_dirty(vec![ "new york"      ]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("new york big ", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "new york big ", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -1432,7 +1373,7 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("NY",     &[doc_index(0, 0)][..]),
             ("city",   &[doc_index(0, 1)][..]),
             ("subway", &[doc_index(0, 2)][..]),
@@ -1448,8 +1389,11 @@ mod tests {
 
         store.add_synonym("NY", SetBuf::from_dirty(vec!["new york city story"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("NY subway ", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "NY subway ", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
@@ -1485,7 +1429,7 @@ mod tests {
 
     #[test]
     fn cumulative_word_indices() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("NYC",    &[doc_index(0, 0)][..]),
             ("long",   &[doc_index(0, 1)][..]),
             ("subway", &[doc_index(0, 2)][..]),
@@ -1495,8 +1439,11 @@ mod tests {
         store.add_synonym("new york city", SetBuf::from_dirty(vec!["NYC"]));
         store.add_synonym("subway",        SetBuf::from_dirty(vec!["underground train"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("new york city long subway cool ", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "new york city long subway cool ", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -1515,7 +1462,7 @@ mod tests {
 
     #[test]
     fn deunicoded_synonyms() {
-        let mut store = InMemorySetStore::from_iter(vec![
+        let mut store = TempDatabase::from_iter(vec![
             ("telephone", &[doc_index(0, 0)][..]), // meilidb-data indexes the unidecoded
             ("téléphone", &[doc_index(0, 0)][..]), // and the original words with the same DocIndex
 
@@ -1524,8 +1471,11 @@ mod tests {
 
         store.add_synonym("téléphone", SetBuf::from_dirty(vec!["iphone"]));
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("telephone", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "telephone", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -1541,8 +1491,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("téléphone", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "téléphone", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -1558,8 +1508,8 @@ mod tests {
         });
         assert_matches!(iter.next(), None);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("télephone", 0..20).unwrap();
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "télephone", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
@@ -1578,13 +1528,16 @@ mod tests {
 
     #[test]
     fn simple_concatenation() {
-        let store = InMemorySetStore::from_iter(vec![
+        let store = TempDatabase::from_iter(vec![
             ("iphone",  &[doc_index(0, 0)][..]),
             ("case",    &[doc_index(0, 1)][..]),
         ]);
 
-        let builder = QueryBuilder::new(&store);
-        let results = builder.query("i phone case", 0..20).unwrap();
+        let rkv = store.database.rkv.read().unwrap();
+        let reader = rkv.read().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "i phone case", 0..20).unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
