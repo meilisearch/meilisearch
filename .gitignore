@@ -1,5 +1,5 @@
 /target
 **/*.rs.bk
 Cargo.lock
-/*.rkv
+/*.mdb
 /query-history.txt
