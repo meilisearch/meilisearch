@@ -4,6 +4,7 @@ mod words_proximity;
 mod sum_of_words_attribute;
 mod sum_of_words_position;
 mod exact;
+mod sort_by_attr;
 mod document_id;
 
 use std::cmp::Ordering;
@@ -16,6 +17,7 @@ pub use self::{
     sum_of_words_attribute::SumOfWordsAttribute,
     sum_of_words_position::SumOfWordsPosition,
     exact::Exact,
+    sort_by_attr::SortByAttr,
     document_id::DocumentId,
 };
 
