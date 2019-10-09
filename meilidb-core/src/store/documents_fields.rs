@@ -74,7 +74,7 @@ impl DocumentsFields {
         Ok(count)
     }
 
-    pub fn document_field<'a>(
+    pub fn document_attribute<'a>(
         &self,
         reader: &'a impl rkv::Readable,
         document_id: DocumentId,

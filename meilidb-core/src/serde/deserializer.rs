@@ -52,7 +52,7 @@ pub struct Deserializer<'a, R> {
     pub reader: &'a R,
     pub documents_fields: DocumentsFields,
     pub schema: &'a Schema,
-    pub fields: Option<&'a HashSet<SchemaAttr>>,
+    pub attributes: Option<&'a HashSet<SchemaAttr>>,
 }
 
 impl<'de, 'a, 'b, R: 'a> de::Deserializer<'de> for &'b mut Deserializer<'a, R>
@@ -86,7 +86,7 @@ where R: rkv::Readable,
                 };
 
                 let is_displayed = self.schema.props(attr).is_displayed();
-                if is_displayed && self.fields.map_or(true, |f| f.contains(&attr)) {
+                if is_displayed && self.attributes.map_or(true, |f| f.contains(&attr)) {
                     let attribute_name = self.schema.attribute_name(attr);
                     Some((attribute_name, Value::new(value)))
                 } else {

@@ -53,6 +53,11 @@ struct SearchCommand {
     #[structopt(short = "C", long, default_value = "35")]
     char_context: usize,
 
+    /// A filter string that can be `!adult` or `adult` to
+    /// filter documents on this specfied field
+    #[structopt(short, long)]
+    filter: Option<String>,
+
     /// Fields that must be displayed.
     displayed_fields: Vec<String>,
 }
@@ -269,8 +274,29 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
             Ok(query) => {
                 let start_total = Instant::now();
 
-                let builder = index.query_builder();
-                let documents = builder.query(&reader, &query, 0..command.number_results)?;
+                let documents = match command.filter {
+                    Some(ref filter) => {
+                        let filter = filter.as_str();
+                        let (positive, filter) = if filter.chars().next() == Some('!') {
+                            (false, &filter[1..])
+                        } else {
+                            (true, filter)
+                        };
+
+                        let attr = schema.attribute(&filter).expect("Could not find filtered attribute");
+
+                        let builder = index.query_builder();
+                        let builder = builder.with_filter(|document_id| {
+                            let string: String = index.document_attribute(&reader, document_id, attr).unwrap().unwrap();
+                            (string == "true") == positive
+                        });
+                        builder.query(&reader, &query, 0..command.number_results)?
+                    },
+                    None => {
+                        let builder = index.query_builder();
+                        builder.query(&reader, &query, 0..command.number_results)?
+                    }
+                };
 
                 let mut retrieve_duration = Duration::default();
 

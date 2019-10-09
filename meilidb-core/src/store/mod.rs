@@ -15,7 +15,7 @@ pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;
 
 use std::collections::HashSet;
-use meilidb_schema::Schema;
+use meilidb_schema::{Schema, SchemaAttr};
 use serde::de;
 use crate::{update, query_builder::QueryBuilder, DocumentId, MResult, Error};
 use crate::serde::Deserializer;
@@ -69,15 +69,15 @@ impl Index {
     pub fn document<T: de::DeserializeOwned, R: rkv::Readable>(
         &self,
         reader: &R,
-        fields: Option<&HashSet<&str>>,
+        attributes: Option<&HashSet<&str>>,
         document_id: DocumentId,
     ) -> MResult<Option<T>>
     {
         let schema = self.main.schema(reader)?;
         let schema = schema.ok_or(Error::SchemaMissing)?;
 
-        let fields = match fields {
-            Some(fields) => fields.into_iter().map(|name| schema.attribute(name)).collect(),
+        let attributes = match attributes {
+            Some(attributes) => attributes.into_iter().map(|name| schema.attribute(name)).collect(),
             None => None,
         };
 
@@ -86,12 +86,26 @@ impl Index {
             reader,
             documents_fields: self.documents_fields,
             schema: &schema,
-            fields: fields.as_ref(),
+            attributes: attributes.as_ref(),
         };
 
         // TODO: currently we return an error if all document fields are missing,
         //       returning None would have been better
         Ok(T::deserialize(&mut deserializer).map(Some)?)
+    }
+
+    pub fn document_attribute<T: de::DeserializeOwned, R: rkv::Readable>(
+        &self,
+        reader: &R,
+        document_id: DocumentId,
+        attribute: SchemaAttr,
+    ) -> MResult<Option<T>>
+    {
+        let bytes = self.documents_fields.document_attribute(reader, document_id, attribute)?;
+        match bytes {
+            Some(bytes) => Ok(Some(rmp_serde::from_read_ref(bytes)?)),
+            None => Ok(None),
+        }
     }
 
     pub fn schema_update(&self, mut writer: rkv::Writer, schema: Schema) -> MResult<()> {
