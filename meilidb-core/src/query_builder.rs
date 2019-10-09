@@ -19,7 +19,7 @@ pub struct QueryBuilder<'c, FI = fn(DocumentId) -> bool> {
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
     filter: Option<FI>,
-    timeout: Duration,
+    timeout: Option<Duration>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     synonyms_store: store::Synonyms,
@@ -211,7 +211,7 @@ impl<'c> QueryBuilder<'c> {
             criteria,
             searchable_attrs: None,
             filter: None,
-            timeout: Duration::from_millis(30),
+            timeout: None,
             main_store: main,
             postings_lists_store: postings_lists,
             synonyms_store: synonyms,
@@ -235,7 +235,7 @@ impl<'c, FI> QueryBuilder<'c, FI> {
     }
 
     pub fn with_fetch_timeout(self, timeout: Duration) -> QueryBuilder<'c, FI> {
-        QueryBuilder { timeout, ..self }
+        QueryBuilder { timeout: Some(timeout), ..self }
     }
 
     pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'c, FI, F>
@@ -295,8 +295,10 @@ impl<FI> QueryBuilder<'_, FI> where FI: Fn(DocumentId) -> bool {
             )?;
 
             // stop processing when time is running out
-            if !raw_documents_processed.is_empty() && start_processing.elapsed() > self.timeout {
-                break
+            if let Some(timeout) = self.timeout {
+                if !raw_documents_processed.is_empty() && start_processing.elapsed() > timeout {
+                    break
+                }
             }
 
             let mut groups = vec![raw_documents.as_mut_slice()];
@@ -334,7 +336,9 @@ impl<FI> QueryBuilder<'_, FI> where FI: Fn(DocumentId) -> bool {
             raw_documents_processed.extend(iter);
 
             // stop processing when time is running out
-            if start_processing.elapsed() > self.timeout { break }
+            if let Some(timeout) = self.timeout {
+                if start_processing.elapsed() > timeout { break }
+            }
         }
 
         // make real documents now that we know
@@ -419,8 +423,10 @@ where FI: Fn(DocumentId) -> bool,
             )?;
 
             // stop processing when time is running out
-            if !raw_documents_processed.is_empty() && start_processing.elapsed() > self.inner.timeout {
-                break
+            if let Some(timeout) = self.inner.timeout {
+                if !raw_documents_processed.is_empty() && start_processing.elapsed() > timeout {
+                    break
+                }
             }
 
             let mut groups = vec![raw_documents.as_mut_slice()];
@@ -517,7 +523,9 @@ where FI: Fn(DocumentId) -> bool,
             }
 
             // stop processing when time is running out
-            if start_processing.elapsed() > self.inner.timeout { break }
+            if let Some(timeout) = self.inner.timeout {
+                if start_processing.elapsed() > timeout { break }
+            }
         }
 
         // make real documents now that we know
