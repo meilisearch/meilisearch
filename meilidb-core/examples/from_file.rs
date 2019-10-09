@@ -1,5 +1,5 @@
 use std::collections::btree_map::{BTreeMap, Entry};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::error::Error;
 use std::io::Write;
 use std::iter::FromIterator;
@@ -74,7 +74,7 @@ impl Command {
 
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
-struct Document(HashMap<String, String>);
+struct Document(indexmap::IndexMap<String, String>);
 
 fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
@@ -316,7 +316,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     println!();
                 }
 
-                eprintln!("document field retrieve took {:.2?}", retrieve_duration);
+                eprintln!("whole documents fields retrieve took {:.2?}", retrieve_duration);
                 eprintln!("===== Found {} results in {:.2?} =====", number_of_documents, start_total.elapsed());
             },
             Err(err) => {
