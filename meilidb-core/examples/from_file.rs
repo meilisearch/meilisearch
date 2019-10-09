@@ -84,7 +84,7 @@ struct Document(indexmap::IndexMap<String, String>);
 fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
-    let (sender, receiver) = mpsc::sync_channel(0);
+    let (sender, receiver) = mpsc::sync_channel(100);
     let update_fn = move |update: UpdateResult| sender.send(update.update_id).unwrap();
     let index = database.open_index(INDEX_NAME, Some(Box::new(update_fn)))?;
     let rkv = database.rkv.read().unwrap();
@@ -144,6 +144,7 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
         println!("committing update...");
         let update_id = additions.finalize(writer)?;
         max_update_id = max_update_id.max(update_id);
+        println!("committed update {}", update_id);
     }
 
     println!("Waiting for update {}", max_update_id);
