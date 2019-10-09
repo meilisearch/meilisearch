@@ -3,6 +3,7 @@
 
 mod automaton;
 mod database;
+mod distinct_map;
 mod error;
 mod number;
 mod query_builder;
