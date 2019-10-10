@@ -22,7 +22,7 @@ pub use self::number::{Number, ParseNumberError};
 pub use self::ranked_map::RankedMap;
 pub use self::raw_document::RawDocument;
 pub use self::store::Index;
-pub use self::update::{UpdateStatus, UpdateResult};
+pub use self::update::{UpdateStatus, UpdateResult, UpdateType};
 
 use zerocopy::{AsBytes, FromBytes};
 use ::serde::{Serialize, Deserialize};
