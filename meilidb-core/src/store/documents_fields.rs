@@ -144,7 +144,7 @@ impl<'r> Iterator for DocumentsIdsIter<'r> {
     type Item = Result<DocumentId, rkv::StoreError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        for result in self.iter.next() {
+        for result in &mut self.iter {
             match result {
                 Ok((key, _)) => {
                     let array = TryFrom::try_from(key).unwrap();
