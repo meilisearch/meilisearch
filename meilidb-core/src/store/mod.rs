@@ -66,7 +66,7 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn document<T: de::DeserializeOwned, R: rkv::Readable>(
+    pub fn document<R: rkv::Readable, T: de::DeserializeOwned>(
         &self,
         reader: &R,
         attributes: Option<&HashSet<&str>>,
