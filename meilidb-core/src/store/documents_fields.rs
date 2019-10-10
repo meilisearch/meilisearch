@@ -100,6 +100,15 @@ impl DocumentsFields {
         let iter = self.documents_fields.iter_from(reader, document_id_bytes)?;
         Ok(DocumentFieldsIter { document_id, iter })
     }
+
+    pub fn documents_ids<'r, T: rkv::Readable>(
+        &self,
+        reader: &'r T,
+    ) -> Result<DocumentsIdsIter<'r>, rkv::StoreError>
+    {
+        let iter = self.documents_fields.iter_start(reader)?;
+        Ok(DocumentsIdsIter { last_seen_id: None, iter })
+    }
 }
 
 pub struct DocumentFieldsIter<'r> {
@@ -123,5 +132,33 @@ impl<'r> Iterator for DocumentFieldsIter<'r> {
             Some(Err(e)) => Some(Err(e)),
             None => None,
         }
+    }
+}
+
+pub struct DocumentsIdsIter<'r> {
+    last_seen_id: Option<DocumentId>,
+    iter: rkv::store::single::Iter<'r>,
+}
+
+impl<'r> Iterator for DocumentsIdsIter<'r> {
+    type Item = Result<DocumentId, rkv::StoreError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for result in self.iter.next() {
+            match result {
+                Ok((key, Some(rkv::Value::Blob(bytes)))) => {
+                    let array = TryFrom::try_from(key).unwrap();
+                    let (document_id, attr) = document_attribute_from_key(array);
+                    if Some(document_id) != self.last_seen_id {
+                        self.last_seen_id = Some(document_id);
+                        return Some(Ok(document_id))
+                    }
+                },
+                Ok((key, data)) => panic!("{:?}, {:?}", key, data),
+                Err(e) => return Some(Err(e)),
+            }
+        }
+
+        None
     }
 }
