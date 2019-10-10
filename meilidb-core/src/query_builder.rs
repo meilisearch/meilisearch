@@ -551,7 +551,7 @@ mod tests {
     use tempfile::TempDir;
 
     use crate::automaton::normalize_str;
-    use crate::database::{Database, BoxUpdateFn};
+    use crate::database::Database;
     use crate::DocIndex;
     use crate::store::Index;
 
@@ -646,8 +646,7 @@ mod tests {
         fn from_iter<I: IntoIterator<Item=(&'a str, &'a [DocIndex])>>(iter: I) -> Self {
             let tempdir = TempDir::new().unwrap();
             let database = Database::open_or_create(&tempdir).unwrap();
-            let update_fn = None as Option::<BoxUpdateFn>;
-            let index = database.open_index("default", update_fn).unwrap();
+            let index = database.create_index("default").unwrap();
 
             let rkv = database.rkv.read().unwrap();
             let mut writer = rkv.write().unwrap();

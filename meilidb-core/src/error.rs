@@ -6,6 +6,7 @@ pub type MResult<T> = Result<T, Error>;
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
+    IndexAlreadyExists,
     SchemaDiffer,
     SchemaMissing,
     WordIndexMissing,
@@ -79,6 +80,7 @@ impl fmt::Display for Error {
         use self::Error::*;
         match self {
             Io(e) => write!(f, "{}", e),
+            IndexAlreadyExists => write!(f, "index already exists"),
             SchemaDiffer => write!(f, "schemas differ"),
             SchemaMissing => write!(f, "this index does not have a schema"),
             WordIndexMissing => write!(f, "this index does not have a word index"),
