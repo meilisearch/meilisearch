@@ -124,7 +124,7 @@ impl Index {
         )
     }
 
-    pub fn documents_deletion<D>(&self) -> update::DocumentsDeletion {
+    pub fn documents_deletion(&self) -> update::DocumentsDeletion {
         update::DocumentsDeletion::new(
             self.updates,
             self.updates_results,
