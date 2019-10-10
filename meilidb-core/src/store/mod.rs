@@ -17,8 +17,9 @@ pub use self::updates_results::UpdatesResults;
 use std::collections::HashSet;
 use meilidb_schema::{Schema, SchemaAttr};
 use serde::de;
-use crate::{update, query_builder::QueryBuilder, DocumentId, MResult, Error};
+use crate::criterion::Criteria;
 use crate::serde::Deserializer;
+use crate::{update, query_builder::QueryBuilder, DocumentId, MResult, Error};
 
 fn aligned_to(bytes: &[u8], align: usize) -> bool {
     (bytes as *const _ as *const () as usize) % align == 0
@@ -163,6 +164,10 @@ impl Index {
 
     pub fn query_builder(&self) -> QueryBuilder {
         QueryBuilder::new(self.main, self.postings_lists, self.synonyms)
+    }
+
+    pub fn query_builder_with_criteria<'c>(&self, criteria: Criteria<'c>) -> QueryBuilder<'c> {
+        QueryBuilder::with_criteria(self.main, self.postings_lists, self.synonyms, criteria)
     }
 }
 
