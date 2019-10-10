@@ -13,7 +13,7 @@ type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
 
 pub struct Database {
     pub rkv: Arc<RwLock<rkv::Rkv>>,
-    main_store: rkv::SingleStore,
+    common_store: rkv::SingleStore,
     indexes_store: rkv::SingleStore,
     indexes: RwLock<HashMap<String, (Index, Arc<ArcSwapFn>, thread::JoinHandle<()>)>>,
 }
@@ -72,7 +72,7 @@ impl Database {
 
         let rkv_read = rkv.read().unwrap();
         let create_options = rkv::store::Options::create();
-        let main_store = rkv_read.open_single("main", create_options)?;
+        let common_store = rkv_read.open_single("common", create_options)?;
         let indexes_store = rkv_read.open_single("indexes", create_options)?;
 
         // list all indexes that needs to be opened
@@ -113,7 +113,7 @@ impl Database {
 
         drop(rkv_read);
 
-        Ok(Database { rkv, main_store, indexes_store, indexes: RwLock::new(indexes) })
+        Ok(Database { rkv, common_store, indexes_store, indexes: RwLock::new(indexes) })
     }
 
     pub fn open_index(&self, name: impl AsRef<str>) -> Option<Index> {
@@ -182,7 +182,7 @@ impl Database {
         Ok(indexes.keys().cloned().collect())
     }
 
-    pub fn main_store(&self) -> rkv::SingleStore {
-        self.main_store
+    pub fn common_store(&self) -> rkv::SingleStore {
+        self.common_store
     }
 }
