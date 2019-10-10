@@ -307,7 +307,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     doc.highlights.sort_unstable_by_key(|m| (m.char_index, m.char_length));
 
                     let start_retrieve = Instant::now();
-                    let result = index.document::<Document, _>(&reader, Some(&fields), doc.id);
+                    let result = index.document::<_, Document>(&reader, Some(&fields), doc.id);
                     retrieve_duration += start_retrieve.elapsed();
 
                     match result {

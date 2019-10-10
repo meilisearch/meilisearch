@@ -146,15 +146,14 @@ impl<'r> Iterator for DocumentsIdsIter<'r> {
     fn next(&mut self) -> Option<Self::Item> {
         for result in self.iter.next() {
             match result {
-                Ok((key, Some(rkv::Value::Blob(bytes)))) => {
+                Ok((key, _)) => {
                     let array = TryFrom::try_from(key).unwrap();
-                    let (document_id, attr) = document_attribute_from_key(array);
+                    let (document_id, _) = document_attribute_from_key(array);
                     if Some(document_id) != self.last_seen_id {
                         self.last_seen_id = Some(document_id);
                         return Some(Ok(document_id))
                     }
                 },
-                Ok((key, data)) => panic!("{:?}, {:?}", key, data),
                 Err(e) => return Some(Err(e)),
             }
         }
