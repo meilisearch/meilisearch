@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::hash_map::{HashMap, Entry};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
@@ -116,53 +116,64 @@ impl Database {
         Ok(Database { rkv, main_store, indexes_store, indexes: RwLock::new(indexes) })
     }
 
-    pub fn open_index(
-        &self,
-        name: impl Into<String>,
-        update_fn: Option<BoxUpdateFn>,
-    ) -> MResult<Index>
-    {
+    pub fn open_index(&self, name: impl AsRef<str>) -> Option<Index> {
         let indexes_lock = self.indexes.read().unwrap();
-        let name = name.into();
+        match indexes_lock.get(name.as_ref()) {
+            Some((index, ..)) => Some(index.clone()),
+            None => None,
+        }
+    }
 
-        match indexes_lock.get(&name) {
-            Some((index, old_update_fn, _)) => {
-                old_update_fn.swap(update_fn.map(Arc::new));
-                Ok(index.clone())
-            },
-            None => {
-                drop(indexes_lock);
+    pub fn create_index(&self, name: impl AsRef<str>) -> MResult<Index> {
+        let name = name.as_ref();
+        let mut indexes_lock = self.indexes.write().unwrap();
 
+        match indexes_lock.entry(name.to_owned()) {
+            Entry::Occupied(_) => Err(crate::Error::IndexAlreadyExists),
+            Entry::Vacant(entry) => {
                 let rkv_lock = self.rkv.read().unwrap();
                 let (sender, receiver) = crossbeam_channel::bounded(100);
-                let index = store::create(&rkv_lock, &name, sender)?;
+                let index = store::create(&rkv_lock, name, sender)?;
 
                 let mut writer = rkv_lock.write()?;
                 let value = rkv::Value::Blob(&[]);
-                self.indexes_store.put(&mut writer, &name, &value)?;
+                self.indexes_store.put(&mut writer, name, &value)?;
 
-                {
-                    let mut indexes_write = self.indexes.write().unwrap();
-                    indexes_write.entry(name).or_insert_with(|| {
-                        let rkv_clone = self.rkv.clone();
-                        let index_clone = index.clone();
+                let rkv_clone = self.rkv.clone();
+                let index_clone = index.clone();
 
-                        let update_fn = update_fn.map(Arc::new);
-                        let update_fn = Arc::new(ArcSwapFn::new(update_fn));
-                        let update_fn_clone = update_fn.clone();
+                let no_update_fn = Arc::new(ArcSwapFn::empty());
+                let no_update_fn_clone = no_update_fn.clone();
 
-                        let handle = thread::spawn(move || {
-                            update_awaiter(receiver, rkv_clone, update_fn_clone, index_clone)
-                        });
-
-                        (index.clone(), update_fn, handle)
-                    });
-                }
+                let handle = thread::spawn(move || {
+                    update_awaiter(receiver, rkv_clone, no_update_fn_clone, index_clone)
+                });
 
                 writer.commit()?;
+                entry.insert((index.clone(), no_update_fn, handle));
 
                 Ok(index)
+            }
+        }
+    }
+
+    pub fn set_update_callback(&self, name: impl AsRef<str>, update_fn: BoxUpdateFn) -> bool {
+        let indexes_lock = self.indexes.read().unwrap();
+        match indexes_lock.get(name.as_ref()) {
+            Some((_, current_update_fn, _)) => {
+                let update_fn = Some(Arc::new(update_fn));
+                current_update_fn.swap(update_fn);
+                true
             },
+            None => false,
+        }
+    }
+
+    pub fn unset_update_callback(&self, name: impl AsRef<str>) -> bool {
+        let indexes_lock = self.indexes.read().unwrap();
+        match indexes_lock.get(name.as_ref()) {
+            Some((_, current_update_fn, _)) => { current_update_fn.swap(None); true },
+            None => false,
         }
     }
 

@@ -12,7 +12,7 @@ use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-use meilidb_core::{Highlight, Database, UpdateResult, BoxUpdateFn};
+use meilidb_core::{Highlight, Database, UpdateResult};
 use meilidb_schema::SchemaAttr;
 
 const INDEX_NAME: &str = "default";
@@ -86,7 +86,14 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
     let (sender, receiver) = mpsc::sync_channel(100);
     let update_fn = move |update: UpdateResult| sender.send(update.update_id).unwrap();
-    let index = database.open_index(INDEX_NAME, Some(Box::new(update_fn)))?;
+    let index = match database.open_index(INDEX_NAME) {
+        Some(index) => index,
+        None => database.create_index(INDEX_NAME).unwrap()
+    };
+
+    let done = database.set_update_callback(INDEX_NAME, Box::new(update_fn));
+    assert!(done, "could not set the index update function");
+
     let rkv = database.rkv.read().unwrap();
 
     let schema = {
@@ -256,8 +263,7 @@ fn crop_text(
 
 fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<dyn Error>> {
     let rkv = database.rkv.read().unwrap();
-    let update_fn = None as Option::<BoxUpdateFn>;
-    let index = database.open_index(INDEX_NAME, update_fn)?;
+    let index = database.open_index(INDEX_NAME).expect("Could not find index");
     let reader = rkv.read().unwrap();
 
     let schema = index.main.schema(&reader)?;
