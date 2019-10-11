@@ -22,7 +22,7 @@ use meilidb_schema::Schema;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Update {
-    SchemaUpdate(Schema),
+    Schema(Schema),
     DocumentsAddition(Vec<rmpv::Value>),
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition(BTreeMap<String, Vec<String>>),
@@ -31,7 +31,7 @@ pub enum Update {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateType {
-    SchemaUpdate { schema: Schema },
+    Schema { schema: Schema },
     DocumentsAddition { number: usize },
     DocumentsDeletion { number: usize },
     SynonymsAddition { number: usize },
@@ -104,10 +104,10 @@ pub fn update_task(writer: &mut rkv::Writer, index: store::Index) -> MResult<Opt
     debug!("Processing update number {}", update_id);
 
     let (update_type, result, duration) = match update {
-        Update::SchemaUpdate(schema) => {
+        Update::Schema(schema) => {
             let start = Instant::now();
 
-            let update_type = UpdateType::SchemaUpdate { schema: schema.clone() };
+            let update_type = UpdateType::Schema { schema: schema.clone() };
             let result = apply_schema_update(writer, index.main, &schema);
 
             (update_type, result, start.elapsed())
