@@ -65,8 +65,8 @@ pub fn push_documents_addition<D: serde::Serialize>(
 {
     let mut values = Vec::with_capacity(addition.len());
     for add in addition {
-        let vec = rmp_serde::to_vec_named(&add)?;
-        let add = rmp_serde::from_read(&vec[..])?;
+        let vec = serde_json::to_vec(&add)?;
+        let add = serde_json::from_slice(&vec)?;
         values.push(add);
     }
 
@@ -85,7 +85,7 @@ pub fn apply_documents_addition(
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
     mut ranked_map: RankedMap,
-    addition: Vec<rmpv::Value>,
+    addition: Vec<serde_json::Value>,
 ) -> MResult<()>
 {
     let mut document_ids = HashSet::new();

@@ -26,7 +26,7 @@ use meilidb_schema::Schema;
 pub enum Update {
     Schema(Schema),
     Customs(Vec<u8>),
-    DocumentsAddition(Vec<rmpv::Value>),
+    DocumentsAddition(Vec<serde_json::Value>),
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition(BTreeMap<String, Vec<String>>),
     SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),

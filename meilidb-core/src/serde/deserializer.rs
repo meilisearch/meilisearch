@@ -3,8 +3,9 @@ use std::io::Cursor;
 use std::{fmt, error::Error};
 
 use meilidb_schema::{Schema, SchemaAttr};
-use rmp_serde::decode::{Deserializer as RmpDeserializer, ReadReader};
-use rmp_serde::decode::{Error as RmpError};
+use serde_json::Error as SerdeJsonError;
+use serde_json::Deserializer as SerdeJsonDeserializer;
+use serde_json::de::IoRead as SerdeJsonIoRead;
 use serde::{de, forward_to_deserialize_any};
 
 use crate::store::DocumentsFields;
@@ -12,8 +13,8 @@ use crate::DocumentId;
 
 #[derive(Debug)]
 pub enum DeserializerError {
-    RmpError(RmpError),
-    RkvError(rkv::StoreError),
+    SerdeJson(SerdeJsonError),
+    Rkv(rkv::StoreError),
     Custom(String),
 }
 
@@ -26,8 +27,8 @@ impl de::Error for DeserializerError {
 impl fmt::Display for DeserializerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            DeserializerError::RmpError(e) => write!(f, "rmp serde related error: {}", e),
-            DeserializerError::RkvError(e) => write!(f, "rkv related error: {}", e),
+            DeserializerError::SerdeJson(e) => write!(f, "serde json related error: {}", e),
+            DeserializerError::Rkv(e) => write!(f, "rkv related error: {}", e),
             DeserializerError::Custom(s) => f.write_str(s),
         }
     }
@@ -35,15 +36,15 @@ impl fmt::Display for DeserializerError {
 
 impl Error for DeserializerError {}
 
-impl From<RmpError> for DeserializerError {
-    fn from(error: RmpError) -> DeserializerError {
-        DeserializerError::RmpError(error)
+impl From<SerdeJsonError> for DeserializerError {
+    fn from(error: SerdeJsonError) -> DeserializerError {
+        DeserializerError::SerdeJson(error)
     }
 }
 
 impl From<rkv::StoreError> for DeserializerError {
     fn from(error: rkv::StoreError) -> DeserializerError {
-        DeserializerError::RkvError(error)
+        DeserializerError::Rkv(error)
     }
 }
 
@@ -88,7 +89,12 @@ where R: rkv::Readable,
                 let is_displayed = self.schema.props(attr).is_displayed();
                 if is_displayed && self.attributes.map_or(true, |f| f.contains(&attr)) {
                     let attribute_name = self.schema.attribute_name(attr);
-                    Some((attribute_name, Value::new(value)))
+
+                    let cursor = Cursor::new(value.to_owned());
+                    let ioread = SerdeJsonIoRead::new(cursor);
+                    let value = Value(SerdeJsonDeserializer::new(ioread));
+
+                    Some((attribute_name, value))
                 } else {
                     None
                 }
@@ -104,18 +110,9 @@ where R: rkv::Readable,
     }
 }
 
-struct Value<A>(RmpDeserializer<ReadReader<Cursor<A>>>) where A: AsRef<[u8]>;
+struct Value(SerdeJsonDeserializer<SerdeJsonIoRead<Cursor<Vec<u8>>>>);
 
-impl<A> Value<A> where A: AsRef<[u8]>
-{
-    fn new(value: A) -> Value<A> {
-        Value(RmpDeserializer::new(Cursor::new(value)))
-    }
-}
-
-impl<'de, A> de::IntoDeserializer<'de, RmpError> for Value<A>
-where A: AsRef<[u8]>,
-{
+impl<'de> de::IntoDeserializer<'de, SerdeJsonError> for Value {
     type Deserializer = Self;
 
     fn into_deserializer(self) -> Self::Deserializer {
@@ -123,10 +120,8 @@ where A: AsRef<[u8]>,
     }
 }
 
-impl<'de, 'a, A> de::Deserializer<'de> for Value<A>
-where A: AsRef<[u8]>,
-{
-    type Error = RmpError;
+impl<'de> de::Deserializer<'de> for Value {
+    type Error = SerdeJsonError;
 
     fn deserialize_any<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
     where V: de::Visitor<'de>

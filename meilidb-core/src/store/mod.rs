@@ -104,7 +104,7 @@ impl Index {
     {
         let bytes = self.documents_fields.document_attribute(reader, document_id, attribute)?;
         match bytes {
-            Some(bytes) => Ok(Some(rmp_serde::from_read_ref(bytes)?)),
+            Some(bytes) => Ok(Some(serde_json::from_slice(bytes)?)),
             None => Ok(None),
         }
     }

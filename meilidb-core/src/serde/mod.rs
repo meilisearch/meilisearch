@@ -26,7 +26,6 @@ use std::collections::BTreeMap;
 use std::{fmt, error::Error};
 
 use meilidb_schema::SchemaAttr;
-use rmp_serde::encode::Error as RmpError;
 use serde_json::Error as SerdeJsonError;
 use serde::ser;
 
@@ -36,10 +35,9 @@ use crate::{DocumentId, ParseNumberError};
 pub enum SerializerError {
     DocumentIdNotFound,
     InvalidDocumentIdType,
-    RmpError(RmpError),
     RkvError(rkv::StoreError),
-    SerdeJsonError(SerdeJsonError),
-    ParseNumberError(ParseNumberError),
+    SerdeJson(SerdeJsonError),
+    ParseNumber(ParseNumberError),
     UnserializableType { type_name: &'static str },
     UnindexableType { type_name: &'static str },
     UnrankableType { type_name: &'static str },
@@ -56,15 +54,14 @@ impl fmt::Display for SerializerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             SerializerError::DocumentIdNotFound => {
-                write!(f, "serialized document does not have an id according to the schema")
+                f.write_str("serialized document does not have an id according to the schema")
             },
             SerializerError::InvalidDocumentIdType => {
-                write!(f, "document identifier can only be of type string or number")
+                f.write_str("document identifier can only be of type string or number")
             },
-            SerializerError::RmpError(e) => write!(f, "rmp serde related error: {}", e),
             SerializerError::RkvError(e) => write!(f, "rkv related error: {}", e),
-            SerializerError::SerdeJsonError(e) => write!(f, "serde json error: {}", e),
-            SerializerError::ParseNumberError(e) => {
+            SerializerError::SerdeJson(e) => write!(f, "serde json error: {}", e),
+            SerializerError::ParseNumber(e) => {
                 write!(f, "error while trying to parse a number: {}", e)
             },
             SerializerError::UnserializableType { type_name } => {
@@ -89,15 +86,9 @@ impl From<String> for SerializerError {
     }
 }
 
-impl From<RmpError> for SerializerError {
-    fn from(error: RmpError) -> SerializerError {
-        SerializerError::RmpError(error)
-    }
-}
-
 impl From<SerdeJsonError> for SerializerError {
     fn from(error: SerdeJsonError) -> SerializerError {
-        SerializerError::SerdeJsonError(error)
+        SerializerError::SerdeJson(error)
     }
 }
 
@@ -109,7 +100,7 @@ impl From<rkv::StoreError> for SerializerError {
 
 impl From<ParseNumberError> for SerializerError {
     fn from(error: ParseNumberError) -> SerializerError {
-        SerializerError::ParseNumberError(error)
+        SerializerError::ParseNumber(error)
     }
 }
 
