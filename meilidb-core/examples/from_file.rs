@@ -101,7 +101,7 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
         toml::from_str(&string).unwrap()
     };
 
-    let writer = rkv.write().unwrap();
+    let mut writer = rkv.write().unwrap();
     match index.main.schema(&writer)? {
         Some(current_schema) => {
             if current_schema != schema {
@@ -109,7 +109,10 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
             }
             writer.abort();
         },
-        None => index.schema_update(writer, schema)?,
+        None => {
+            index.schema_update(&mut writer, schema)?;
+            writer.commit().unwrap();
+        },
     }
 
     let mut rdr = csv::Reader::from_path(command.csv_data_path)?;
@@ -147,9 +150,10 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
         println!();
 
-        let writer = rkv.write().unwrap();
+        let mut writer = rkv.write().unwrap();
         println!("committing update...");
-        let update_id = additions.finalize(writer)?;
+        let update_id = additions.finalize(&mut writer)?;
+        writer.commit().unwrap();
         max_update_id = max_update_id.max(update_id);
         println!("committed update {}", update_id);
     }

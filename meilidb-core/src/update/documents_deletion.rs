@@ -49,16 +49,14 @@ impl DocumentsDeletion {
         Ok(())
     }
 
-    pub fn finalize(self, mut writer: rkv::Writer) -> MResult<u64> {
+    pub fn finalize(self, writer: &mut rkv::Writer) -> MResult<u64> {
+        let _ = self.updates_notifier.send(());
         let update_id = push_documents_deletion(
-            &mut writer,
+            writer,
             self.updates_store,
             self.updates_results_store,
             self.documents,
         )?;
-        writer.commit()?;
-        let _ = self.updates_notifier.send(());
-
         Ok(update_id)
     }
 }
