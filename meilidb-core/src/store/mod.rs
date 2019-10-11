@@ -109,10 +109,9 @@ impl Index {
         }
     }
 
-    pub fn schema_update(&self, mut writer: rkv::Writer, schema: Schema) -> MResult<()> {
-        update::push_schema_update(&mut writer, self.updates, self.updates_results, schema)?;
-        writer.commit()?;
+    pub fn schema_update(&self, writer: &mut rkv::Writer, schema: Schema) -> MResult<()> {
         let _ = self.updates_notifier.send(());
+        update::push_schema_update(writer, self.updates, self.updates_results, schema)?;
         Ok(())
     }
 

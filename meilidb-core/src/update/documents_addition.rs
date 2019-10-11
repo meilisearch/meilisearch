@@ -36,18 +36,16 @@ impl<D> DocumentsAddition<D> {
         self.documents.push(document);
     }
 
-    pub fn finalize(self, mut writer: rkv::Writer) -> MResult<u64>
+    pub fn finalize(self, writer: &mut rkv::Writer) -> MResult<u64>
     where D: serde::Serialize
     {
+        let _ = self.updates_notifier.send(());
         let update_id = push_documents_addition(
-            &mut writer,
+            writer,
             self.updates_store,
             self.updates_results_store,
             self.documents,
         )?;
-        writer.commit()?;
-        let _ = self.updates_notifier.send(());
-
         Ok(update_id)
     }
 }
