@@ -16,7 +16,7 @@ pub use self::updates_results::UpdatesResults;
 
 use std::collections::HashSet;
 use meilidb_schema::{Schema, SchemaAttr};
-use serde::de;
+use serde::{ser, de};
 use crate::criterion::Criteria;
 use crate::serde::Deserializer;
 use crate::{update, query_builder::QueryBuilder, DocumentId, MResult, Error};
@@ -109,10 +109,14 @@ impl Index {
         }
     }
 
-    pub fn schema_update(&self, writer: &mut rkv::Writer, schema: Schema) -> MResult<()> {
+    pub fn schema_update(&self, writer: &mut rkv::Writer, schema: Schema) -> MResult<u64> {
         let _ = self.updates_notifier.send(());
-        update::push_schema_update(writer, self.updates, self.updates_results, schema)?;
-        Ok(())
+        update::push_schema_update(writer, self.updates, self.updates_results, schema)
+    }
+
+    pub fn customs_update(&self, writer: &mut rkv::Writer, customs: Vec<u8>) -> MResult<u64> {
+        let _ = self.updates_notifier.send(());
+        update::push_customs_update(writer, self.updates, self.updates_results, customs)
     }
 
     pub fn documents_addition<D>(&self) -> update::DocumentsAddition<D> {

@@ -1,9 +1,11 @@
+mod customs_update;
 mod documents_addition;
 mod documents_deletion;
 mod schema_update;
 mod synonyms_addition;
 mod synonyms_deletion;
 
+pub use self::customs_update::{apply_customs_update, push_customs_update};
 pub use self::documents_addition::{DocumentsAddition, apply_documents_addition};
 pub use self::documents_deletion::{DocumentsDeletion, apply_documents_deletion};
 pub use self::schema_update::{apply_schema_update, push_schema_update};
@@ -23,6 +25,7 @@ use meilidb_schema::Schema;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Update {
     Schema(Schema),
+    Customs(Vec<u8>),
     DocumentsAddition(Vec<rmpv::Value>),
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition(BTreeMap<String, Vec<String>>),
@@ -32,6 +35,7 @@ pub enum Update {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateType {
     Schema { schema: Schema },
+    Customs,
     DocumentsAddition { number: usize },
     DocumentsDeletion { number: usize },
     SynonymsAddition { number: usize },
@@ -112,6 +116,14 @@ pub fn update_task(writer: &mut rkv::Writer, index: store::Index) -> MResult<Opt
 
             (update_type, result, start.elapsed())
         },
+        Update::Customs(customs) => {
+            let start = Instant::now();
+
+            let update_type = UpdateType::Customs;
+            let result = apply_customs_update(writer, index.main, &customs);
+
+            (update_type, result, start.elapsed())
+        }
         Update::DocumentsAddition(documents) => {
             let start = Instant::now();
 

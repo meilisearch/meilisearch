@@ -3,8 +3,10 @@ use std::convert::TryInto;
 
 use meilidb_schema::Schema;
 use rkv::Value;
+use serde::de;
 use crate::{RankedMap, MResult};
 
+const CUSTOMS_KEY:             &str = "customs-key";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY:          &str = "ranked-map";
 const SCHEMA_KEY:              &str = "schema";
@@ -63,7 +65,7 @@ impl Main {
     {
         match self.main.get(reader, SCHEMA_KEY)? {
             Some(Value::Blob(bytes)) => {
-                let schema = bincode::deserialize_from(bytes.as_ref())?;
+                let schema = bincode::deserialize_from(bytes)?;
                 Ok(Some(schema))
             },
             Some(value) => panic!("invalid type {:?}", value),
@@ -149,6 +151,19 @@ impl Main {
             },
             Some(value) => panic!("invalid type {:?}", value),
             None => Ok(0),
+        }
+    }
+
+    pub fn put_customs(&self, writer: &mut rkv::Writer, customs: &[u8]) -> MResult<()> {
+        self.main.put(writer, CUSTOMS_KEY, &Value::Blob(customs))?;
+        Ok(())
+    }
+
+    pub fn customs<'t>(&self, reader: &'t impl rkv::Readable) -> MResult<Option<&'t [u8]>> {
+        match self.main.get(reader, CUSTOMS_KEY)? {
+            Some(Value::Blob(bytes)) => Ok(Some(bytes)),
+            Some(value) => panic!("invalid type {:?}", value),
+            None => Ok(None),
         }
     }
 }
