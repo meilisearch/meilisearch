@@ -1,4 +1,5 @@
 use std::{error, fmt, io};
+use serde_json::Error as SerdeJsonError;
 use crate::serde::{SerializerError, DeserializerError};
 
 pub type MResult<T> = Result<T, Error>;
@@ -13,8 +14,7 @@ pub enum Error {
     MissingDocumentId,
     Rkv(rkv::StoreError),
     Fst(fst::Error),
-    RmpDecode(rmp_serde::decode::Error),
-    RmpEncode(rmp_serde::encode::Error),
+    SerdeJson(SerdeJsonError),
     Bincode(bincode::Error),
     Serializer(SerializerError),
     Deserializer(DeserializerError),
@@ -39,15 +39,9 @@ impl From<fst::Error> for Error {
     }
 }
 
-impl From<rmp_serde::decode::Error> for Error {
-    fn from(error: rmp_serde::decode::Error) -> Error {
-        Error::RmpDecode(error)
-    }
-}
-
-impl From<rmp_serde::encode::Error> for Error {
-    fn from(error: rmp_serde::encode::Error) -> Error {
-        Error::RmpEncode(error)
+impl From<SerdeJsonError> for Error {
+    fn from(error: SerdeJsonError) -> Error {
+        Error::SerdeJson(error)
     }
 }
 
@@ -87,8 +81,7 @@ impl fmt::Display for Error {
             MissingDocumentId => write!(f, "document id is missing"),
             Rkv(e) => write!(f, "rkv error; {}", e),
             Fst(e) => write!(f, "fst error; {}", e),
-            RmpDecode(e) => write!(f, "rmp decode error; {}", e),
-            RmpEncode(e) => write!(f, "rmp encode error; {}", e),
+            SerdeJson(e) => write!(f, "serde json error; {}", e),
             Bincode(e) => write!(f, "bincode error; {}", e),
             Serializer(e) => write!(f, "serializer error; {}", e),
             Deserializer(e) => write!(f, "deserializer error; {}", e),

@@ -68,7 +68,7 @@ impl Updates {
     ) -> MResult<()>
     {
         let update_id_bytes = update_id.to_be_bytes();
-        let update = rmp_serde::to_vec_named(&update)?;
+        let update = serde_json::to_vec(&update)?;
         let blob = Value::Blob(&update);
         self.updates.put(writer, update_id_bytes, &blob)?;
         Ok(())
@@ -86,8 +86,7 @@ impl Updates {
 
         match first_data {
             Some(Value::Blob(bytes)) => {
-                let update = rmp_serde::from_read_ref(&bytes)?;
-
+                let update = serde_json::from_slice(&bytes)?;
                 // remove it from the database now
                 let first_id_bytes = first_id.to_be_bytes();
                 self.updates.delete(writer, first_id_bytes)?;

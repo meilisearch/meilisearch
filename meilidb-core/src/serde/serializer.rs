@@ -270,7 +270,7 @@ where T: ser::Serialize,
     if let Some(attribute) = schema.attribute(key) {
         let props = schema.props(attribute);
 
-        let serialized = rmp_serde::to_vec_named(value)?;
+        let serialized = serde_json::to_vec(value)?;
         document_store.set_document_field(document_id, attribute, serialized);
 
         if props.is_indexed() {
