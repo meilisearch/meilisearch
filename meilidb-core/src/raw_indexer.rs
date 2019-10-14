@@ -33,7 +33,8 @@ impl RawIndexer {
         }
     }
 
-    pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) {
+    pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) -> usize {
+        let mut number_of_words = 0;
         let lowercase_text = text.to_lowercase();
         let deunicoded = deunicode_with_tofu(&lowercase_text, "");
 
@@ -57,8 +58,12 @@ impl RawIndexer {
                 );
 
                 if !must_continue { break }
+
+                number_of_words += 1;
             }
         }
+
+        number_of_words
     }
 
     pub fn index_text_seq<'a, I, IT>(&mut self, id: DocumentId, attr: SchemaAttr, iter: I)
