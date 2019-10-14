@@ -13,7 +13,7 @@ pub struct Indexer<'a> {
 }
 
 impl<'a> ser::Serializer for Indexer<'a> {
-    type Ok = ();
+    type Ok = Option<usize>;
     type Error = SerializerError;
     type SerializeSeq = SeqIndexer<'a>;
     type SerializeTuple = TupleIndexer<'a>;
@@ -83,8 +83,8 @@ impl<'a> ser::Serializer for Indexer<'a> {
     }
 
     fn serialize_str(self, text: &str) -> Result<Self::Ok, Self::Error> {
-        self.indexer.index_text(self.document_id, self.attribute, text);
-        Ok(())
+        let number_of_words = self.indexer.index_text(self.document_id, self.attribute, text);
+        Ok(Some(number_of_words))
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
@@ -99,8 +99,8 @@ impl<'a> ser::Serializer for Indexer<'a> {
     where T: ser::Serialize,
     {
         let text = value.serialize(ConvertToString)?;
-        self.indexer.index_text(self.document_id, self.attribute, &text);
-        Ok(())
+        let number_of_words = self.indexer.index_text(self.document_id, self.attribute, &text);
+        Ok(Some(number_of_words))
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
@@ -225,7 +225,7 @@ pub struct SeqIndexer<'a> {
 }
 
 impl<'a> ser::SerializeSeq for SeqIndexer<'a> {
-    type Ok = ();
+    type Ok = Option<usize>;
     type Error = SerializerError;
 
     fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
@@ -239,7 +239,7 @@ impl<'a> ser::SerializeSeq for SeqIndexer<'a> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let texts = self.texts.iter().map(String::as_str);
         self.indexer.index_text_seq(self.document_id, self.attribute, texts);
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -251,7 +251,7 @@ pub struct MapIndexer<'a> {
 }
 
 impl<'a> ser::SerializeMap for MapIndexer<'a> {
-    type Ok = ();
+    type Ok = Option<usize>;
     type Error = SerializerError;
 
     fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
@@ -273,7 +273,7 @@ impl<'a> ser::SerializeMap for MapIndexer<'a> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let texts = self.texts.iter().map(String::as_str);
         self.indexer.index_text_seq(self.document_id, self.attribute, texts);
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -285,7 +285,7 @@ pub struct StructSerializer<'a> {
 }
 
 impl<'a> ser::SerializeStruct for StructSerializer<'a> {
-    type Ok = ();
+    type Ok = Option<usize>;
     type Error = SerializerError;
 
     fn serialize_field<T: ?Sized>(
@@ -305,7 +305,7 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let texts = self.texts.iter().map(String::as_str);
         self.indexer.index_text_seq(self.document_id, self.attribute, texts);
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -317,7 +317,7 @@ pub struct TupleIndexer<'a> {
 }
 
 impl<'a> ser::SerializeTuple for TupleIndexer<'a> {
-    type Ok = ();
+    type Ok = Option<usize>;
     type Error = SerializerError;
 
     fn serialize_element<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
@@ -331,6 +331,6 @@ impl<'a> ser::SerializeTuple for TupleIndexer<'a> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let texts = self.texts.iter().map(String::as_str);
         self.indexer.index_text_seq(self.document_id, self.attribute, texts);
-        Ok(())
+        Ok(None)
     }
 }

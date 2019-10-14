@@ -86,6 +86,7 @@ pub fn apply_documents_deletion(
     writer: &mut rkv::Writer,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
+    documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
     mut ranked_map: RankedMap,
@@ -140,6 +141,7 @@ pub fn apply_documents_deletion(
         }
 
         for id in document_ids {
+            documents_fields_counts_store.del_all_document_fields_counts(writer, id)?;
             if documents_fields_store.del_all_document_fields(writer, id)? != 0 {
                 deleted_documents.insert(id);
             }
