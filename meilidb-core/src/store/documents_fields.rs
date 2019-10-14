@@ -1,35 +1,11 @@
 use std::convert::TryFrom;
 use meilidb_schema::SchemaAttr;
 use crate::DocumentId;
+use super::{document_attribute_into_key, document_attribute_from_key};
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFields {
     pub(crate) documents_fields: rkv::SingleStore,
-}
-
-fn document_attribute_into_key(document_id: DocumentId, attribute: SchemaAttr) -> [u8; 10] {
-    let document_id_bytes = document_id.0.to_be_bytes();
-    let attr_bytes = attribute.0.to_be_bytes();
-
-    let mut key = [0u8; 10];
-    key[0..8].copy_from_slice(&document_id_bytes);
-    key[8..10].copy_from_slice(&attr_bytes);
-
-    key
-}
-
-fn document_attribute_from_key(key: [u8; 10]) -> (DocumentId, SchemaAttr) {
-    let document_id = {
-        let array = TryFrom::try_from(&key[0..8]).unwrap();
-        DocumentId(u64::from_be_bytes(array))
-    };
-
-    let schema_attr = {
-        let array = TryFrom::try_from(&key[8..8+2]).unwrap();
-        SchemaAttr(u16::from_be_bytes(array))
-    };
-
-    (document_id, schema_attr)
 }
 
 impl DocumentsFields {
@@ -100,15 +76,6 @@ impl DocumentsFields {
         let iter = self.documents_fields.iter_from(reader, document_id_bytes)?;
         Ok(DocumentFieldsIter { document_id, iter })
     }
-
-    pub fn documents_ids<'r, T: rkv::Readable>(
-        &self,
-        reader: &'r T,
-    ) -> Result<DocumentsIdsIter<'r>, rkv::StoreError>
-    {
-        let iter = self.documents_fields.iter_start(reader)?;
-        Ok(DocumentsIdsIter { last_seen_id: None, iter })
-    }
 }
 
 pub struct DocumentFieldsIter<'r> {
@@ -132,32 +99,5 @@ impl<'r> Iterator for DocumentFieldsIter<'r> {
             Some(Err(e)) => Some(Err(e)),
             None => None,
         }
-    }
-}
-
-pub struct DocumentsIdsIter<'r> {
-    last_seen_id: Option<DocumentId>,
-    iter: rkv::store::single::Iter<'r>,
-}
-
-impl<'r> Iterator for DocumentsIdsIter<'r> {
-    type Item = Result<DocumentId, rkv::StoreError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        for result in &mut self.iter {
-            match result {
-                Ok((key, _)) => {
-                    let array = TryFrom::try_from(key).unwrap();
-                    let (document_id, _) = document_attribute_from_key(array);
-                    if Some(document_id) != self.last_seen_id {
-                        self.last_seen_id = Some(document_id);
-                        return Some(Ok(document_id))
-                    }
-                },
-                Err(e) => return Some(Err(e)),
-            }
-        }
-
-        None
     }
 }
