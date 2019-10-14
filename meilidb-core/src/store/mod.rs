@@ -201,11 +201,22 @@ impl Index {
     }
 
     pub fn query_builder(&self) -> QueryBuilder {
-        QueryBuilder::new(self.main, self.postings_lists, self.synonyms)
+        QueryBuilder::new(
+            self.main,
+            self.postings_lists,
+            self.documents_fields_counts,
+            self.synonyms,
+        )
     }
 
     pub fn query_builder_with_criteria<'c>(&self, criteria: Criteria<'c>) -> QueryBuilder<'c> {
-        QueryBuilder::with_criteria(self.main, self.postings_lists, self.synonyms, criteria)
+        QueryBuilder::with_criteria(
+            self.main,
+            self.postings_lists,
+            self.documents_fields_counts,
+            self.synonyms,
+            criteria,
+        )
     }
 }
 

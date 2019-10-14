@@ -1,7 +1,10 @@
 use std::sync::Arc;
 use std::fmt;
+
+use meilidb_schema::SchemaAttr;
 use sdset::SetBuf;
 use slice_group_by::GroupBy;
+
 use crate::{TmpMatch, DocumentId, Highlight};
 
 #[derive(Clone)]
@@ -9,13 +12,10 @@ pub struct RawDocument {
     pub id: DocumentId,
     pub matches: SharedMatches,
     pub highlights: Vec<Highlight>,
+    pub fields_counts: SetBuf<(SchemaAttr, u64)>,
 }
 
 impl RawDocument {
-    fn new(id: DocumentId, matches: SharedMatches, highlights: Vec<Highlight>) -> RawDocument {
-        RawDocument { id, matches, highlights }
-    }
-
     pub fn query_index(&self) -> &[u32] {
         let r = self.matches.range;
         // it is safe because construction/modifications
@@ -60,7 +60,7 @@ impl fmt::Debug for RawDocument {
         f.write_fmt(format_args!("{:>15}: {:^5?},\r\n",  "distance",    self.distance()))?;
         f.write_fmt(format_args!("{:>15}: {:^5?},\r\n",  "attribute",   self.attribute()))?;
         f.write_fmt(format_args!("{:>15}: {:^5?},\r\n",  "word_index",  self.word_index()))?;
-        f.write_fmt(format_args!("{:>15}: {:^5?},\r\n", "is_exact",    self.is_exact()))?;
+        f.write_fmt(format_args!("{:>15}: {:^5?},\r\n",  "is_exact",    self.is_exact()))?;
         f.write_str("}")?;
         Ok(())
     }
@@ -69,31 +69,34 @@ impl fmt::Debug for RawDocument {
 pub fn raw_documents_from(
     matches: SetBuf<(DocumentId, TmpMatch)>,
     highlights: SetBuf<(DocumentId, Highlight)>,
+    fields_counts: SetBuf<(DocumentId, SchemaAttr, u64)>,
 ) -> Vec<RawDocument>
 {
-    let mut docs_ranges: Vec<(_, Range, _)> = Vec::new();
+    let mut docs_ranges: Vec<(_, Range, _, _)> = Vec::new();
     let mut matches2 = Matches::with_capacity(matches.len());
 
     let matches = matches.linear_group_by_key(|(id, _)| *id);
     let highlights = highlights.linear_group_by_key(|(id, _)| *id);
+    let fields_counts = fields_counts.linear_group_by_key(|(id, _, _)| *id);
 
-    for (mgroup, hgroup) in matches.zip(highlights) {
+    for ((mgroup, hgroup), fgroup) in matches.zip(highlights).zip(fields_counts) {
         debug_assert_eq!(mgroup[0].0, hgroup[0].0);
+        debug_assert_eq!(mgroup[0].0, fgroup[0].0);
 
         let document_id = mgroup[0].0;
-        let start = docs_ranges.last().map(|(_, r, _)| r.end).unwrap_or(0);
+        let start = docs_ranges.last().map(|(_, r, _, _)| r.end).unwrap_or(0);
         let end = start + mgroup.len();
-
         let highlights = hgroup.iter().map(|(_, h)| *h).collect();
-        docs_ranges.push((document_id, Range { start, end }, highlights));
+        let fields_counts = SetBuf::new(fgroup.iter().map(|(_, a, c)| (*a, *c)).collect()).unwrap();
 
+        docs_ranges.push((document_id, Range { start, end }, highlights, fields_counts));
         matches2.extend_from_slice(mgroup);
     }
 
     let matches = Arc::new(matches2);
-    docs_ranges.into_iter().map(|(id, range, highlights)| {
+    docs_ranges.into_iter().map(|(id, range, highlights, fields_counts)| {
         let matches = SharedMatches { range, matches: matches.clone() };
-        RawDocument::new(id, matches, highlights)
+        RawDocument { id, matches, highlights, fields_counts }
     }).collect()
 }
 

@@ -47,6 +47,9 @@ impl RawIndexer {
         let iter = Some(lowercase_text).into_iter().chain(next);
 
         for text in iter {
+            // we must not count 2 times the same words
+            number_of_words = 0;
+
             for token in Tokenizer::new(&text) {
                 let must_continue = index_token(
                     token,

@@ -22,6 +22,7 @@ pub struct QueryBuilder<'c, FI = fn(DocumentId) -> bool> {
     timeout: Option<Duration>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
+    documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
 }
 
@@ -130,6 +131,7 @@ fn fetch_raw_documents(
     searchables: Option<&ReorderedAttrs>,
     main_store: &store::Main,
     postings_lists_store: &store::PostingsLists,
+    documents_fields_counts_store: &store::DocumentsFieldsCounts,
 ) -> MResult<Vec<RawDocument>>
 {
     let mut matches = Vec::new();
@@ -187,22 +189,42 @@ fn fetch_raw_documents(
         SetBuf::new_unchecked(highlights)
     };
 
-    Ok(raw_documents_from(matches, highlights))
+    let fields_counts = {
+        let mut fields_counts = Vec::new();
+        for group in matches.linear_group_by_key(|(id, ..)| *id) {
+            let id = group[0].0;
+            for result in documents_fields_counts_store.document_fields_counts(reader, id)? {
+                let (attr, count) = result?;
+                fields_counts.push((id, attr, count));
+            }
+        }
+        SetBuf::new(fields_counts).unwrap()
+    };
+
+    Ok(raw_documents_from(matches, highlights, fields_counts))
 }
 
 impl<'c> QueryBuilder<'c> {
     pub fn new(
         main: store::Main,
         postings_lists: store::PostingsLists,
+        documents_fields_counts: store::DocumentsFieldsCounts,
         synonyms: store::Synonyms,
     ) -> QueryBuilder<'c>
     {
-        QueryBuilder::with_criteria(main, postings_lists, synonyms, Criteria::default())
+        QueryBuilder::with_criteria(
+            main,
+            postings_lists,
+            documents_fields_counts,
+            synonyms,
+            Criteria::default(),
+        )
     }
 
     pub fn with_criteria(
         main: store::Main,
         postings_lists: store::PostingsLists,
+        documents_fields_counts: store::DocumentsFieldsCounts,
         synonyms: store::Synonyms,
         criteria: Criteria<'c>,
     ) -> QueryBuilder<'c>
@@ -214,6 +236,7 @@ impl<'c> QueryBuilder<'c> {
             timeout: None,
             main_store: main,
             postings_lists_store: postings_lists,
+            documents_fields_counts_store: documents_fields_counts,
             synonyms_store: synonyms,
         }
     }
@@ -230,6 +253,7 @@ impl<'c, FI> QueryBuilder<'c, FI> {
             timeout: self.timeout,
             main_store: self.main_store,
             postings_lists_store: self.postings_lists_store,
+            documents_fields_counts_store: self.documents_fields_counts_store,
             synonyms_store: self.synonyms_store,
         }
     }
@@ -292,6 +316,7 @@ impl<FI> QueryBuilder<'_, FI> where FI: Fn(DocumentId) -> bool {
                 self.searchable_attrs.as_ref(),
                 &self.main_store,
                 &self.postings_lists_store,
+                &self.documents_fields_counts_store,
             )?;
 
             // stop processing when time is running out
@@ -420,6 +445,7 @@ where FI: Fn(DocumentId) -> bool,
                 self.inner.searchable_attrs.as_ref(),
                 &self.inner.main_store,
                 &self.inner.postings_lists_store,
+                &self.inner.documents_fields_counts_store,
             )?;
 
             // stop processing when time is running out
@@ -549,6 +575,7 @@ mod tests {
     use fst::{Set, IntoStreamer};
     use sdset::SetBuf;
     use tempfile::TempDir;
+    use meilidb_schema::SchemaAttr;
 
     use crate::automaton::normalize_str;
     use crate::database::Database;
@@ -653,11 +680,15 @@ mod tests {
 
             let mut words_fst = BTreeSet::new();
             let mut postings_lists = HashMap::new();
+            let mut fields_counts = HashMap::<_, u64>::new();
 
             for (word, indexes) in iter {
                 let word = word.to_lowercase().into_bytes();
                 words_fst.insert(word.clone());
                 postings_lists.entry(word).or_insert_with(Vec::new).extend_from_slice(indexes);
+                for idx in indexes {
+                    fields_counts.insert((idx.document_id, idx.attribute, idx.word_index), 1);
+                }
             }
 
             let words_fst = Set::from_iter(words_fst).unwrap();
@@ -667,6 +698,25 @@ mod tests {
             for (word, postings_list) in postings_lists {
                 let postings_list = SetBuf::from_dirty(postings_list);
                 index.postings_lists.put_postings_list(&mut writer, &word, &postings_list).unwrap();
+            }
+
+            for ((docid, attr, _), count) in fields_counts {
+                let prev = index.documents_fields_counts
+                    .document_attribute_count(
+                        &mut writer,
+                        docid,
+                        SchemaAttr(attr),
+                    ).unwrap();
+
+                let prev = prev.unwrap_or(0);
+
+                index.documents_fields_counts
+                    .put_document_field_count(
+                        &mut writer,
+                        docid,
+                        SchemaAttr(attr),
+                        prev + count,
+                    ).unwrap();
             }
 
             writer.commit().unwrap();
@@ -1470,8 +1520,8 @@ mod tests {
     #[test]
     fn deunicoded_synonyms() {
         let mut store = TempDatabase::from_iter(vec![
-            ("telephone", &[doc_index(0, 0)][..]), // meilidb-data indexes the unidecoded
-            ("téléphone", &[doc_index(0, 0)][..]), // and the original words with the same DocIndex
+            ("telephone", &[doc_index(0, 0)][..]), // meilidb indexes the unidecoded
+            ("téléphone", &[doc_index(0, 0)][..]), // and the original words on the same DocIndex
 
             ("iphone",    &[doc_index(1, 0)][..]),
         ]);
