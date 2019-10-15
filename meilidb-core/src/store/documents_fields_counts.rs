@@ -80,6 +80,15 @@ impl DocumentsFieldsCounts {
         let iter = self.documents_fields_counts.iter_start(reader)?;
         Ok(DocumentsIdsIter { last_seen_id: None, iter })
     }
+
+    pub fn all_documents_fields_counts<'r, T: rkv::Readable>(
+        &self,
+        reader: &'r T,
+    ) -> Result<AllDocumentsFieldsCountsIter<'r>, rkv::StoreError>
+    {
+        let iter = self.documents_fields_counts.iter_start(reader)?;
+        Ok(AllDocumentsFieldsCountsIter { iter })
+    }
 }
 
 pub struct DocumentFieldsCountsIter<'r> {
@@ -130,5 +139,26 @@ impl Iterator for DocumentsIdsIter<'_> {
         }
 
         None
+    }
+}
+
+pub struct AllDocumentsFieldsCountsIter<'r> {
+    iter: rkv::store::single::Iter<'r>,
+}
+
+impl<'r> Iterator for AllDocumentsFieldsCountsIter<'r> {
+    type Item = Result<(DocumentId, SchemaAttr, u64), rkv::StoreError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(Ok((key, Some(rkv::Value::U64(count))))) => {
+                let array = TryFrom::try_from(key).unwrap();
+                let (document_id, attr) = document_attribute_from_key(array);
+                Some(Ok((document_id, attr, count)))
+            },
+            Some(Ok((key, data))) => panic!("{:?}, {:?}", key, data),
+            Some(Err(e)) => Some(Err(e)),
+            None => None,
+        }
     }
 }
