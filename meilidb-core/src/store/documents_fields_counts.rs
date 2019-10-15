@@ -27,19 +27,14 @@ impl DocumentsFieldsCounts {
         document_id: DocumentId,
     ) -> Result<usize, rkv::StoreError>
     {
-        let document_id_bytes = document_id.0.to_be_bytes();
         let mut keys_to_delete = Vec::new();
 
         // WARN we can not delete the keys using the iterator
         //      so we store them and delete them just after
-        let iter = self.documents_fields_counts.iter_from(writer, document_id_bytes)?;
-        for result in iter {
-            let (key, _) = result?;
-            let array = TryFrom::try_from(key).unwrap();
-            let (current_document_id, _) = document_attribute_from_key(array);
-            if current_document_id != document_id { break }
-
-            keys_to_delete.push(key.to_owned());
+        for result in self.document_fields_counts(writer, document_id)? {
+            let (attribute, _) = result?;
+            let key = document_attribute_into_key(document_id, attribute);
+            keys_to_delete.push(key);
         }
 
         let count = keys_to_delete.len();
@@ -50,9 +45,9 @@ impl DocumentsFieldsCounts {
         Ok(count)
     }
 
-    pub fn document_attribute_count<'a>(
+    pub fn document_field_count(
         &self,
-        reader: &'a impl rkv::Readable,
+        reader: &impl rkv::Readable,
         document_id: DocumentId,
         attribute: SchemaAttr,
     ) -> Result<Option<u64>, rkv::StoreError>
@@ -92,7 +87,7 @@ pub struct DocumentFieldsCountsIter<'r> {
     iter: rkv::store::single::Iter<'r>,
 }
 
-impl<'r> Iterator for DocumentFieldsCountsIter<'r> {
+impl Iterator for DocumentFieldsCountsIter<'_> {
     type Item = Result<(SchemaAttr, u64), rkv::StoreError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -116,7 +111,7 @@ pub struct DocumentsIdsIter<'r> {
     iter: rkv::store::single::Iter<'r>,
 }
 
-impl<'r> Iterator for DocumentsIdsIter<'r> {
+impl Iterator for DocumentsIdsIter<'_> {
     type Item = Result<DocumentId, rkv::StoreError>;
 
     fn next(&mut self) -> Option<Self::Item> {

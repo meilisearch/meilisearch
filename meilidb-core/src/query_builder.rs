@@ -702,7 +702,7 @@ mod tests {
 
             for ((docid, attr, _), count) in fields_counts {
                 let prev = index.documents_fields_counts
-                    .document_attribute_count(
+                    .document_field_count(
                         &mut writer,
                         docid,
                         SchemaAttr(attr),
