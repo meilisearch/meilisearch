@@ -1,5 +1,6 @@
 mod docs_words;
 mod documents_fields;
+mod documents_fields_counts;
 mod main;
 mod postings_lists;
 mod synonyms;
@@ -8,6 +9,7 @@ mod updates_results;
 
 pub use self::docs_words::DocsWords;
 pub use self::documents_fields::{DocumentsFields, DocumentFieldsIter};
+pub use self::documents_fields_counts::{DocumentsFieldsCounts, DocumentFieldsCountsIter, DocumentsIdsIter};
 pub use self::main::Main;
 pub use self::postings_lists::PostingsLists;
 pub use self::synonyms::Synonyms;
@@ -15,14 +17,42 @@ pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;
 
 use std::collections::HashSet;
+use std::convert::TryFrom;
+
 use meilidb_schema::{Schema, SchemaAttr};
-use serde::{ser, de};
+use serde::de;
+
 use crate::criterion::Criteria;
 use crate::serde::Deserializer;
 use crate::{update, query_builder::QueryBuilder, DocumentId, MResult, Error};
 
 fn aligned_to(bytes: &[u8], align: usize) -> bool {
     (bytes as *const _ as *const () as usize) % align == 0
+}
+
+fn document_attribute_into_key(document_id: DocumentId, attribute: SchemaAttr) -> [u8; 10] {
+    let document_id_bytes = document_id.0.to_be_bytes();
+    let attr_bytes = attribute.0.to_be_bytes();
+
+    let mut key = [0u8; 10];
+    key[0..8].copy_from_slice(&document_id_bytes);
+    key[8..10].copy_from_slice(&attr_bytes);
+
+    key
+}
+
+fn document_attribute_from_key(key: [u8; 10]) -> (DocumentId, SchemaAttr) {
+    let document_id = {
+        let array = TryFrom::try_from(&key[0..8]).unwrap();
+        DocumentId(u64::from_be_bytes(array))
+    };
+
+    let schema_attr = {
+        let array = TryFrom::try_from(&key[8..8+2]).unwrap();
+        SchemaAttr(u16::from_be_bytes(array))
+    };
+
+    (document_id, schema_attr)
 }
 
 fn main_name(name: &str) -> String {
@@ -35,6 +65,10 @@ fn postings_lists_name(name: &str) -> String {
 
 fn documents_fields_name(name: &str) -> String {
     format!("store-{}-documents-fields", name)
+}
+
+fn documents_fields_counts_name(name: &str) -> String {
+    format!("store-{}-documents-fields-counts", name)
 }
 
 fn synonyms_name(name: &str) -> String {
@@ -58,6 +92,7 @@ pub struct Index {
     pub main: Main,
     pub postings_lists: PostingsLists,
     pub documents_fields: DocumentsFields,
+    pub documents_fields_counts: DocumentsFieldsCounts,
     pub synonyms: Synonyms,
     pub docs_words: DocsWords,
 
@@ -166,11 +201,22 @@ impl Index {
     }
 
     pub fn query_builder(&self) -> QueryBuilder {
-        QueryBuilder::new(self.main, self.postings_lists, self.synonyms)
+        QueryBuilder::new(
+            self.main,
+            self.postings_lists,
+            self.documents_fields_counts,
+            self.synonyms,
+        )
     }
 
     pub fn query_builder_with_criteria<'c>(&self, criteria: Criteria<'c>) -> QueryBuilder<'c> {
-        QueryBuilder::with_criteria(self.main, self.postings_lists, self.synonyms, criteria)
+        QueryBuilder::with_criteria(
+            self.main,
+            self.postings_lists,
+            self.documents_fields_counts,
+            self.synonyms,
+            criteria,
+        )
     }
 }
 
@@ -205,6 +251,7 @@ fn open_options(
     let main_name = main_name(name);
     let postings_lists_name = postings_lists_name(name);
     let documents_fields_name = documents_fields_name(name);
+    let documents_fields_counts_name = documents_fields_counts_name(name);
     let synonyms_name = synonyms_name(name);
     let docs_words_name = docs_words_name(name);
     let updates_name = updates_name(name);
@@ -214,6 +261,7 @@ fn open_options(
     let main = env.open_single(main_name.as_str(), options)?;
     let postings_lists = env.open_single(postings_lists_name.as_str(), options)?;
     let documents_fields = env.open_single(documents_fields_name.as_str(), options)?;
+    let documents_fields_counts = env.open_single(documents_fields_counts_name.as_str(), options)?;
     let synonyms = env.open_single(synonyms_name.as_str(), options)?;
     let docs_words = env.open_single(docs_words_name.as_str(), options)?;
     let updates = env.open_single(updates_name.as_str(), options)?;
@@ -223,6 +271,7 @@ fn open_options(
         main: Main { main },
         postings_lists: PostingsLists { postings_lists },
         documents_fields: DocumentsFields { documents_fields },
+        documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
         updates: Updates { updates },

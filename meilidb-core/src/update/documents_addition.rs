@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use fst::{SetBuilder, set::OpBuilder};
 use sdset::{SetOperation, duo::Union};
@@ -82,6 +82,7 @@ pub fn apply_documents_addition(
     writer: &mut rkv::Writer,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
+    documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
     mut ranked_map: RankedMap,
@@ -90,6 +91,7 @@ pub fn apply_documents_addition(
 {
     let mut document_ids = HashSet::new();
     let mut document_store = RamDocumentStore::new();
+    let mut document_fields_counts = HashMap::new();
     let mut indexer = RawIndexer::new();
 
     let schema = match main_store.schema(writer)? {
@@ -112,6 +114,7 @@ pub fn apply_documents_addition(
         let serializer = Serializer {
             schema: &schema,
             document_store: &mut document_store,
+            document_fields_counts: &mut document_fields_counts,
             indexer: &mut indexer,
             ranked_map: &mut ranked_map,
             document_id,
@@ -126,6 +129,7 @@ pub fn apply_documents_addition(
         writer,
         main_store,
         documents_fields_store,
+        documents_fields_counts_store,
         postings_lists_store,
         docs_words_store,
         ranked_map.clone(),
@@ -135,6 +139,11 @@ pub fn apply_documents_addition(
     // 2. insert new document attributes in the database
     for ((id, attr), value) in document_store.into_inner() {
         documents_fields_store.put_document_field(writer, id, attr, &value)?;
+    }
+
+    // 3. insert new document attributes counts
+    for ((id, attr), count) in document_fields_counts {
+        documents_fields_counts_store.put_document_field_count(writer, id, attr, count)?;
     }
 
     let indexed = indexer.build();

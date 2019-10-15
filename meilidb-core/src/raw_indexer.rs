@@ -33,7 +33,8 @@ impl RawIndexer {
         }
     }
 
-    pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) {
+    pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) -> usize {
+        let mut number_of_words = 0;
         let lowercase_text = text.to_lowercase();
         let deunicoded = deunicode_with_tofu(&lowercase_text, "");
 
@@ -46,6 +47,9 @@ impl RawIndexer {
         let iter = Some(lowercase_text).into_iter().chain(next);
 
         for text in iter {
+            // we must not count 2 times the same words
+            number_of_words = 0;
+
             for token in Tokenizer::new(&text) {
                 let must_continue = index_token(
                     token,
@@ -57,8 +61,12 @@ impl RawIndexer {
                 );
 
                 if !must_continue { break }
+
+                number_of_words += 1;
             }
         }
+
+        number_of_words
     }
 
     pub fn index_text_seq<'a, I, IT>(&mut self, id: DocumentId, attr: SchemaAttr, iter: I)

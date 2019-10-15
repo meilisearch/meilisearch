@@ -1,5 +1,5 @@
-use crate::{store, error::UnsupportedOperation, MResult};
 use crate::update::{Update, next_update_id};
+use crate::{store, MResult};
 
 pub fn apply_customs_update(
     writer: &mut rkv::Writer,

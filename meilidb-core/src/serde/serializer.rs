@@ -1,4 +1,5 @@
-use meilidb_schema::Schema;
+use std::collections::HashMap;
+use meilidb_schema::{Schema, SchemaAttr};
 use serde::ser;
 
 use crate::{DocumentId, RankedMap};
@@ -10,6 +11,7 @@ use super::{SerializerError, ConvertToString, ConvertToNumber, Indexer};
 pub struct Serializer<'a> {
     pub schema: &'a Schema,
     pub document_store: &'a mut RamDocumentStore,
+    pub document_fields_counts: &'a mut HashMap<(DocumentId, SchemaAttr), u64>,
     pub indexer: &'a mut RawIndexer,
     pub ranked_map: &'a mut RankedMap,
     pub document_id: DocumentId,
@@ -135,6 +137,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
             schema: self.schema,
             document_id: self.document_id,
             document_store: self.document_store,
+            document_fields_counts: self.document_fields_counts,
             indexer: self.indexer,
             ranked_map: self.ranked_map,
             current_key_name: None,
@@ -151,6 +154,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
             schema: self.schema,
             document_id: self.document_id,
             document_store: self.document_store,
+            document_fields_counts: self.document_fields_counts,
             indexer: self.indexer,
             ranked_map: self.ranked_map,
         })
@@ -172,6 +176,7 @@ pub struct MapSerializer<'a> {
     schema: &'a Schema,
     document_id: DocumentId,
     document_store: &'a mut RamDocumentStore,
+    document_fields_counts: &'a mut HashMap<(DocumentId, SchemaAttr), u64>,
     indexer: &'a mut RawIndexer,
     ranked_map: &'a mut RankedMap,
     current_key_name: Option<String>,
@@ -209,6 +214,7 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
             self.schema,
             self.document_id,
             self.document_store,
+            self.document_fields_counts,
             self.indexer,
             self.ranked_map,
             &key,
@@ -225,6 +231,7 @@ pub struct StructSerializer<'a> {
     schema: &'a Schema,
     document_id: DocumentId,
     document_store: &'a mut RamDocumentStore,
+    document_fields_counts: &'a mut HashMap<(DocumentId, SchemaAttr), u64>,
     indexer: &'a mut RawIndexer,
     ranked_map: &'a mut RankedMap,
 }
@@ -244,6 +251,7 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
             self.schema,
             self.document_id,
             self.document_store,
+            self.document_fields_counts,
             self.indexer,
             self.ranked_map,
             key,
@@ -260,6 +268,7 @@ fn serialize_value<T: ?Sized>(
     schema: &Schema,
     document_id: DocumentId,
     document_store: &mut RamDocumentStore,
+    documents_fields_counts: &mut HashMap<(DocumentId, SchemaAttr), u64>,
     indexer: &mut RawIndexer,
     ranked_map: &mut RankedMap,
     key: &str,
@@ -275,7 +284,9 @@ where T: ser::Serialize,
 
         if props.is_indexed() {
             let indexer = Indexer { attribute, indexer, document_id };
-            value.serialize(indexer)?;
+            if let Some(number_of_words) = value.serialize(indexer)? {
+                documents_fields_counts.insert((document_id, attribute), number_of_words as u64);
+            }
         }
 
         if props.is_ranked() {

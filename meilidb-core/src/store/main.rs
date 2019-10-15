@@ -3,7 +3,6 @@ use std::convert::TryInto;
 
 use meilidb_schema::Schema;
 use rkv::Value;
-use serde::de;
 use crate::{RankedMap, MResult};
 
 const CUSTOMS_KEY:             &str = "customs-key";
