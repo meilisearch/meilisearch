@@ -23,8 +23,7 @@ fn update_awaiter(
     rkv: Arc<RwLock<rkv::Rkv>>,
     update_fn: Arc<ArcSwapFn>,
     index: Index,
-)
-{
+) {
     for () in receiver {
         // consume all updates in order (oldest first)
         loop {

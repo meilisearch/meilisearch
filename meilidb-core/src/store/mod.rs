@@ -186,6 +186,13 @@ impl Index {
         )
     }
 
+    pub fn current_update_id<T: rkv::Readable>(&self, reader: &T) -> MResult<Option<u64>> {
+        match self.updates.last_update_id(reader)? {
+            Some((id, _)) => Ok(Some(id)),
+            None => Ok(None),
+        }
+    }
+
     pub fn update_status<T: rkv::Readable>(
         &self,
         reader: &T,
