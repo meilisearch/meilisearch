@@ -18,11 +18,12 @@ use std::cmp;
 
 use log::debug;
 use serde::{Serialize, Deserialize};
+use zlmdb::Result as ZResult;
 
 use crate::{store, MResult, DocumentId, RankedMap};
 use meilidb_schema::Schema;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Update {
     Schema(Schema),
     Customs(Vec<u8>),
@@ -62,8 +63,8 @@ pub enum UpdateStatus {
     Unknown,
 }
 
-pub fn update_status<T: rkv::Readable>(
-    reader: &T,
+pub fn update_status(
+    reader: &zlmdb::RoTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     update_id: u64,
@@ -82,10 +83,10 @@ pub fn update_status<T: rkv::Readable>(
 }
 
 pub fn next_update_id(
-    writer: &mut rkv::Writer,
+    writer: &mut zlmdb::RwTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-) -> MResult<u64>
+) -> ZResult<u64>
 {
     let last_update_id = updates_store.last_update_id(writer)?;
     let last_update_id = last_update_id.map(|(n, _)| n);
@@ -99,7 +100,7 @@ pub fn next_update_id(
     Ok(new_update_id)
 }
 
-pub fn update_task(writer: &mut rkv::Writer, index: store::Index) -> MResult<Option<UpdateResult>> {
+pub fn update_task(writer: &mut zlmdb::RwTxn, index: store::Index) -> MResult<Option<UpdateResult>> {
     let (update_id, update) = match index.updates.pop_front(writer)? {
         Some(value) => value,
         None => return Ok(None),
@@ -120,7 +121,7 @@ pub fn update_task(writer: &mut rkv::Writer, index: store::Index) -> MResult<Opt
             let start = Instant::now();
 
             let update_type = UpdateType::Customs;
-            let result = apply_customs_update(writer, index.main, &customs);
+            let result = apply_customs_update(writer, index.main, &customs).map_err(Into::into);
 
             (update_type, result, start.elapsed())
         }

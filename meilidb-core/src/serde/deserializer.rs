@@ -14,7 +14,7 @@ use crate::DocumentId;
 #[derive(Debug)]
 pub enum DeserializerError {
     SerdeJson(SerdeJsonError),
-    Rkv(rkv::StoreError),
+    Zlmdb(zlmdb::Error),
     Custom(String),
 }
 
@@ -28,7 +28,7 @@ impl fmt::Display for DeserializerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             DeserializerError::SerdeJson(e) => write!(f, "serde json related error: {}", e),
-            DeserializerError::Rkv(e) => write!(f, "rkv related error: {}", e),
+            DeserializerError::Zlmdb(e) => write!(f, "zlmdb related error: {}", e),
             DeserializerError::Custom(s) => f.write_str(s),
         }
     }
@@ -42,23 +42,21 @@ impl From<SerdeJsonError> for DeserializerError {
     }
 }
 
-impl From<rkv::StoreError> for DeserializerError {
-    fn from(error: rkv::StoreError) -> DeserializerError {
-        DeserializerError::Rkv(error)
+impl From<zlmdb::Error> for DeserializerError {
+    fn from(error: zlmdb::Error) -> DeserializerError {
+        DeserializerError::Zlmdb(error)
     }
 }
 
-pub struct Deserializer<'a, R> {
+pub struct Deserializer<'a> {
     pub document_id: DocumentId,
-    pub reader: &'a R,
+    pub reader: &'a zlmdb::RoTxn,
     pub documents_fields: DocumentsFields,
     pub schema: &'a Schema,
     pub attributes: Option<&'a HashSet<SchemaAttr>>,
 }
 
-impl<'de, 'a, 'b, R: 'a> de::Deserializer<'de> for &'b mut Deserializer<'a, R>
-where R: rkv::Readable,
-{
+impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
     type Error = DeserializerError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>

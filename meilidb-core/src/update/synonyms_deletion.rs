@@ -49,7 +49,7 @@ impl SynonymsDeletion {
         }
     }
 
-    pub fn finalize(self, writer: &mut rkv::Writer) -> MResult<u64> {
+    pub fn finalize(self, writer: &mut zlmdb::RwTxn) -> MResult<u64> {
         let _ = self.updates_notifier.send(());
         let update_id = push_synonyms_deletion(
             writer,
@@ -62,7 +62,7 @@ impl SynonymsDeletion {
 }
 
 pub fn push_synonyms_deletion(
-    writer: &mut rkv::Writer,
+    writer: &mut zlmdb::RwTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     deletion: BTreeMap<String, Option<Vec<String>>>,
@@ -77,7 +77,7 @@ pub fn push_synonyms_deletion(
 }
 
 pub fn apply_synonyms_deletion(
-    writer: &mut rkv::Writer,
+    writer: &mut zlmdb::RwTxn,
     main_store: store::Main,
     synonyms_store: store::Synonyms,
     deletion: BTreeMap<String, Option<Vec<String>>>,

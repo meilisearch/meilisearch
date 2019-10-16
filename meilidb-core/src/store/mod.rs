@@ -17,42 +17,28 @@ pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;
 
 use std::collections::HashSet;
-use std::convert::TryFrom;
 
 use meilidb_schema::{Schema, SchemaAttr};
 use serde::de;
+use zerocopy::{AsBytes, FromBytes};
+use zlmdb::Result as ZResult;
 
 use crate::criterion::Criteria;
 use crate::serde::Deserializer;
 use crate::{update, query_builder::QueryBuilder, DocumentId, MResult, Error};
 
-fn aligned_to(bytes: &[u8], align: usize) -> bool {
-    (bytes as *const _ as *const () as usize) % align == 0
-}
+type BEU64 = zerocopy::U64<byteorder::BigEndian>;
+type BEU16 = zerocopy::U16<byteorder::BigEndian>;
 
-fn document_attribute_into_key(document_id: DocumentId, attribute: SchemaAttr) -> [u8; 10] {
-    let document_id_bytes = document_id.0.to_be_bytes();
-    let attr_bytes = attribute.0.to_be_bytes();
+#[derive(Debug, Copy, Clone)]
+#[derive(AsBytes, FromBytes)]
+#[repr(C)]
+pub struct DocumentAttrKey { docid: BEU64, attr: BEU16 }
 
-    let mut key = [0u8; 10];
-    key[0..8].copy_from_slice(&document_id_bytes);
-    key[8..10].copy_from_slice(&attr_bytes);
-
-    key
-}
-
-fn document_attribute_from_key(key: [u8; 10]) -> (DocumentId, SchemaAttr) {
-    let document_id = {
-        let array = TryFrom::try_from(&key[0..8]).unwrap();
-        DocumentId(u64::from_be_bytes(array))
-    };
-
-    let schema_attr = {
-        let array = TryFrom::try_from(&key[8..8+2]).unwrap();
-        SchemaAttr(u16::from_be_bytes(array))
-    };
-
-    (document_id, schema_attr)
+impl DocumentAttrKey {
+    fn new(docid: DocumentId, attr: SchemaAttr) -> DocumentAttrKey {
+        DocumentAttrKey { docid: BEU64::new(docid.0), attr: BEU16::new(attr.0) }
+    }
 }
 
 fn main_name(name: &str) -> String {
@@ -102,9 +88,9 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn document<R: rkv::Readable, T: de::DeserializeOwned>(
+    pub fn document<T: de::DeserializeOwned>(
         &self,
-        reader: &R,
+        reader: &zlmdb::RoTxn,
         attributes: Option<&HashSet<&str>>,
         document_id: DocumentId,
     ) -> MResult<Option<T>>
@@ -130,9 +116,9 @@ impl Index {
         Ok(T::deserialize(&mut deserializer).map(Some)?)
     }
 
-    pub fn document_attribute<T: de::DeserializeOwned, R: rkv::Readable>(
+    pub fn document_attribute<T: de::DeserializeOwned>(
         &self,
-        reader: &R,
+        reader: &zlmdb::RoTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
     ) -> MResult<Option<T>>
@@ -144,12 +130,12 @@ impl Index {
         }
     }
 
-    pub fn schema_update(&self, writer: &mut rkv::Writer, schema: Schema) -> MResult<u64> {
+    pub fn schema_update(&self, writer: &mut zlmdb::RwTxn, schema: Schema) -> MResult<u64> {
         let _ = self.updates_notifier.send(());
         update::push_schema_update(writer, self.updates, self.updates_results, schema)
     }
 
-    pub fn customs_update(&self, writer: &mut rkv::Writer, customs: Vec<u8>) -> MResult<u64> {
+    pub fn customs_update(&self, writer: &mut zlmdb::RwTxn, customs: Vec<u8>) -> ZResult<u64> {
         let _ = self.updates_notifier.send(());
         update::push_customs_update(writer, self.updates, self.updates_results, customs)
     }
@@ -186,16 +172,16 @@ impl Index {
         )
     }
 
-    pub fn current_update_id<T: rkv::Readable>(&self, reader: &T) -> MResult<Option<u64>> {
+    pub fn current_update_id(&self, reader: &zlmdb::RoTxn) -> MResult<Option<u64>> {
         match self.updates.last_update_id(reader)? {
             Some((id, _)) => Ok(Some(id)),
             None => Ok(None),
         }
     }
 
-    pub fn update_status<T: rkv::Readable>(
+    pub fn update_status(
         &self,
-        reader: &T,
+        reader: &zlmdb::RoTxn,
         update_id: u64,
     ) -> MResult<update::UpdateStatus>
     {
@@ -228,31 +214,10 @@ impl Index {
 }
 
 pub fn create(
-    env: &rkv::Rkv,
+    env: &zlmdb::Env,
     name: &str,
     updates_notifier: crossbeam_channel::Sender<()>,
-) -> Result<Index, rkv::StoreError>
-{
-    open_options(env, name, rkv::StoreOptions::create(), updates_notifier)
-}
-
-pub fn open(
-    env: &rkv::Rkv,
-    name: &str,
-    updates_notifier: crossbeam_channel::Sender<()>,
-) -> Result<Index, rkv::StoreError>
-{
-    let mut options = rkv::StoreOptions::default();
-    options.create = false;
-    open_options(env, name, options, updates_notifier)
-}
-
-fn open_options(
-    env: &rkv::Rkv,
-    name: &str,
-    options: rkv::StoreOptions,
-    updates_notifier: crossbeam_channel::Sender<()>,
-) -> Result<Index, rkv::StoreError>
+) -> MResult<Index>
 {
     // create all the store names
     let main_name = main_name(name);
@@ -265,14 +230,14 @@ fn open_options(
     let updates_results_name = updates_results_name(name);
 
     // open all the stores
-    let main = env.open_single(main_name.as_str(), options)?;
-    let postings_lists = env.open_single(postings_lists_name.as_str(), options)?;
-    let documents_fields = env.open_single(documents_fields_name.as_str(), options)?;
-    let documents_fields_counts = env.open_single(documents_fields_counts_name.as_str(), options)?;
-    let synonyms = env.open_single(synonyms_name.as_str(), options)?;
-    let docs_words = env.open_single(docs_words_name.as_str(), options)?;
-    let updates = env.open_single(updates_name.as_str(), options)?;
-    let updates_results = env.open_single(updates_results_name.as_str(), options)?;
+    let main = env.create_dyn_database(Some(&main_name))?;
+    let postings_lists = env.create_database(Some(&postings_lists_name))?;
+    let documents_fields = env.create_database(Some(&documents_fields_name))?;
+    let documents_fields_counts = env.create_database(Some(&documents_fields_counts_name))?;
+    let synonyms = env.create_database(Some(&synonyms_name))?;
+    let docs_words = env.create_database(Some(&docs_words_name))?;
+    let updates = env.create_database(Some(&updates_name))?;
+    let updates_results = env.create_database(Some(&updates_results_name))?;
 
     Ok(Index {
         main: Main { main },
@@ -285,4 +250,67 @@ fn open_options(
         updates_results: UpdatesResults { updates_results },
         updates_notifier,
     })
+}
+
+pub fn open(
+    env: &zlmdb::Env,
+    name: &str,
+    updates_notifier: crossbeam_channel::Sender<()>,
+) -> MResult<Option<Index>>
+{
+    // create all the store names
+    let main_name = main_name(name);
+    let postings_lists_name = postings_lists_name(name);
+    let documents_fields_name = documents_fields_name(name);
+    let documents_fields_counts_name = documents_fields_counts_name(name);
+    let synonyms_name = synonyms_name(name);
+    let docs_words_name = docs_words_name(name);
+    let updates_name = updates_name(name);
+    let updates_results_name = updates_results_name(name);
+
+    // open all the stores
+    let main = match env.open_dyn_database(Some(&main_name))? {
+        Some(main) => main,
+        None => return Ok(None),
+    };
+    let postings_lists = match env.open_database(Some(&postings_lists_name))? {
+        Some(postings_lists) => postings_lists,
+        None => return Ok(None),
+    };
+    let documents_fields = match env.open_database(Some(&documents_fields_name))? {
+        Some(documents_fields) => documents_fields,
+        None => return Ok(None),
+    };
+    let documents_fields_counts = match env.open_database(Some(&documents_fields_counts_name))? {
+        Some(documents_fields_counts) => documents_fields_counts,
+        None => return Ok(None),
+    };
+    let synonyms = match env.open_database(Some(&synonyms_name))? {
+        Some(synonyms) => synonyms,
+        None => return Ok(None),
+    };
+    let docs_words = match env.open_database(Some(&docs_words_name))? {
+        Some(docs_words) => docs_words,
+        None => return Ok(None),
+    };
+    let updates = match env.open_database(Some(&updates_name))? {
+        Some(updates) => updates,
+        None => return Ok(None),
+    };
+    let updates_results = match env.open_database(Some(&updates_results_name))? {
+        Some(updates_results) => updates_results,
+        None => return Ok(None),
+    };
+
+    Ok(Some(Index {
+        main: Main { main },
+        postings_lists: PostingsLists { postings_lists },
+        documents_fields: DocumentsFields { documents_fields },
+        documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
+        synonyms: Synonyms { synonyms },
+        docs_words: DocsWords { docs_words },
+        updates: Updates { updates },
+        updates_results: UpdatesResults { updates_results },
+        updates_notifier,
+    }))
 }

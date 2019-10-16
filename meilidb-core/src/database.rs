@@ -3,6 +3,7 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
+use zlmdb::types::{Str, Unit};
 use crossbeam_channel::Receiver;
 use log::{debug, error};
 
@@ -12,27 +13,22 @@ pub type BoxUpdateFn = Box<dyn Fn(update::UpdateResult) + Send + Sync + 'static>
 type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
 
 pub struct Database {
-    pub rkv: Arc<RwLock<rkv::Rkv>>,
-    common_store: rkv::SingleStore,
-    indexes_store: rkv::SingleStore,
+    pub env: zlmdb::Env,
+    common_store: zlmdb::DynDatabase,
+    indexes_store: zlmdb::Database<Str, Unit>,
     indexes: RwLock<HashMap<String, (Index, Arc<ArcSwapFn>, thread::JoinHandle<()>)>>,
 }
 
 fn update_awaiter(
     receiver: Receiver<()>,
-    rkv: Arc<RwLock<rkv::Rkv>>,
+    env: zlmdb::Env,
     update_fn: Arc<ArcSwapFn>,
     index: Index,
 ) {
     for () in receiver {
         // consume all updates in order (oldest first)
         loop {
-            let rkv = match rkv.read() {
-                Ok(rkv) => rkv,
-                Err(e) => { error!("rkv RwLock read failed: {}", e); break }
-            };
-
-            let mut writer = match rkv.write() {
+            let mut writer = match env.write_txn() {
                 Ok(writer) => writer,
                 Err(e) => { error!("LMDB writer transaction begin failed: {}", e); break }
             };
@@ -55,64 +51,57 @@ fn update_awaiter(
 
 impl Database {
     pub fn open_or_create(path: impl AsRef<Path>) -> MResult<Database> {
-        let manager = rkv::Manager::singleton();
-        let mut rkv_write = manager.write().unwrap();
-
         fs::create_dir_all(path.as_ref())?;
 
-        let rkv = rkv_write
-            .get_or_create(path.as_ref(), |path| {
-                let mut builder = rkv::Rkv::environment_builder();
-                builder.set_max_dbs(3000).set_map_size(10 * 1024 * 1024 * 1024); // 10GB
-                rkv::Rkv::from_env(path, builder)
-            })?;
+        let env = zlmdb::EnvOpenOptions::new()
+            .map_size(10 * 1024 * 1024 * 1024) // 10GB
+            .max_dbs(3000)
+            .open(path)?;
 
-        drop(rkv_write);
-
-        let rkv_read = rkv.read().unwrap();
-        let create_options = rkv::store::Options::create();
-        let common_store = rkv_read.open_single("common", create_options)?;
-        let indexes_store = rkv_read.open_single("indexes", create_options)?;
+        let common_store = env.create_dyn_database(Some("common"))?;
+        let indexes_store = env.create_database::<Str, Unit>(Some("indexes"))?;
 
         // list all indexes that needs to be opened
         let mut must_open = Vec::new();
-        let reader = rkv_read.read()?;
-        for result in indexes_store.iter_start(&reader)? {
-            let (key, _) = result?;
-            if let Ok(index_name) = std::str::from_utf8(key) {
-                must_open.push(index_name.to_owned());
-            }
+        let reader = env.read_txn()?;
+        for result in indexes_store.iter(&reader)? {
+            let (index_name, _) = result?;
+            must_open.push(index_name.to_owned());
         }
 
-        drop(reader);
+        reader.abort();
 
         // open the previously aggregated indexes
         let mut indexes = HashMap::new();
         for index_name in must_open {
 
             let (sender, receiver) = crossbeam_channel::bounded(100);
-            let index = store::open(&rkv_read, &index_name, sender.clone())?;
+            let index = match store::open(&env, &index_name, sender.clone())? {
+                Some(index) => index,
+                None => {
+                    log::warn!("the index {} doesn't exist or has not all the databases", index_name);
+                    continue;
+                },
+            };
             let update_fn = Arc::new(ArcSwapFn::empty());
 
-            let rkv_clone = rkv.clone();
+            let env_clone = env.clone();
             let index_clone = index.clone();
             let update_fn_clone = update_fn.clone();
 
             let handle = thread::spawn(move || {
-                update_awaiter(receiver, rkv_clone, update_fn_clone, index_clone)
+                update_awaiter(receiver, env_clone, update_fn_clone, index_clone)
             });
 
             // send an update notification to make sure that
-            // possible previous boot updates are consumed
+            // possible pre-boot updates are consumed
             sender.send(()).unwrap();
 
             let result = indexes.insert(index_name, (index, update_fn, handle));
             assert!(result.is_none(), "The index should not have been already open");
         }
 
-        drop(rkv_read);
-
-        Ok(Database { rkv, common_store, indexes_store, indexes: RwLock::new(indexes) })
+        Ok(Database { env, common_store, indexes_store, indexes: RwLock::new(indexes) })
     }
 
     pub fn open_index(&self, name: impl AsRef<str>) -> Option<Index> {
@@ -130,22 +119,20 @@ impl Database {
         match indexes_lock.entry(name.to_owned()) {
             Entry::Occupied(_) => Err(crate::Error::IndexAlreadyExists),
             Entry::Vacant(entry) => {
-                let rkv_lock = self.rkv.read().unwrap();
                 let (sender, receiver) = crossbeam_channel::bounded(100);
-                let index = store::create(&rkv_lock, name, sender)?;
+                let index = store::create(&self.env, name, sender)?;
 
-                let mut writer = rkv_lock.write()?;
-                let value = rkv::Value::Blob(&[]);
-                self.indexes_store.put(&mut writer, name, &value)?;
+                let mut writer = self.env.write_txn()?;
+                self.indexes_store.put(&mut writer, name, &())?;
 
-                let rkv_clone = self.rkv.clone();
+                let env_clone = self.env.clone();
                 let index_clone = index.clone();
 
                 let no_update_fn = Arc::new(ArcSwapFn::empty());
                 let no_update_fn_clone = no_update_fn.clone();
 
                 let handle = thread::spawn(move || {
-                    update_awaiter(receiver, rkv_clone, no_update_fn_clone, index_clone)
+                    update_awaiter(receiver, env_clone, no_update_fn_clone, index_clone)
                 });
 
                 writer.commit()?;
@@ -181,7 +168,7 @@ impl Database {
         Ok(indexes.keys().cloned().collect())
     }
 
-    pub fn common_store(&self) -> rkv::SingleStore {
+    pub fn common_store(&self) -> zlmdb::DynDatabase {
         self.common_store
     }
 }

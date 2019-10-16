@@ -94,14 +94,14 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     let done = database.set_update_callback(INDEX_NAME, Box::new(update_fn));
     assert!(done, "could not set the index update function");
 
-    let rkv = database.rkv.read().unwrap();
+    let env = &database.env;
 
     let schema = {
         let string = fs::read_to_string(&command.schema)?;
         toml::from_str(&string).unwrap()
     };
 
-    let mut writer = rkv.write().unwrap();
+    let mut writer = env.write_txn().unwrap();
     match index.main.schema(&writer)? {
         Some(current_schema) => {
             if current_schema != schema {
@@ -150,7 +150,7 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
         println!();
 
-        let mut writer = rkv.write().unwrap();
+        let mut writer = env.write_txn().unwrap();
         println!("committing update...");
         let update_id = additions.finalize(&mut writer)?;
         writer.commit().unwrap();
@@ -266,9 +266,9 @@ fn crop_text(
 }
 
 fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<dyn Error>> {
-    let rkv = database.rkv.read().unwrap();
+    let env = &database.env;
     let index = database.open_index(INDEX_NAME).expect("Could not find index");
-    let reader = rkv.read().unwrap();
+    let reader = env.read_txn().unwrap();
 
     let schema = index.main.schema(&reader)?;
     let schema = schema.ok_or(meilidb_core::Error::SchemaMissing)?;
@@ -317,7 +317,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     doc.highlights.sort_unstable_by_key(|m| (m.char_index, m.char_length));
 
                     let start_retrieve = Instant::now();
-                    let result = index.document::<_, Document>(&reader, Some(&fields), doc.id);
+                    let result = index.document::<Document>(&reader, Some(&fields), doc.id);
                     retrieve_duration += start_retrieve.elapsed();
 
                     match result {

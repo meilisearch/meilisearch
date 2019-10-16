@@ -1,163 +1,142 @@
-use std::convert::TryFrom;
 use meilidb_schema::SchemaAttr;
+use zlmdb::types::OwnedType;
+use zlmdb::Result as ZResult;
 use crate::DocumentId;
-use super::{document_attribute_into_key, document_attribute_from_key};
+use super::DocumentAttrKey;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFieldsCounts {
-    pub(crate) documents_fields_counts: rkv::SingleStore,
+    pub(crate) documents_fields_counts: zlmdb::Database<OwnedType<DocumentAttrKey>, OwnedType<u64>>,
 }
 
 impl DocumentsFieldsCounts {
     pub fn put_document_field_count(
         &self,
-        writer: &mut rkv::Writer,
+        writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
         value: u64,
-    ) -> Result<(), rkv::StoreError>
+    ) -> ZResult<()>
     {
-        let key = document_attribute_into_key(document_id, attribute);
-        self.documents_fields_counts.put(writer, key, &rkv::Value::U64(value))
+        let key = DocumentAttrKey::new(document_id, attribute);
+        self.documents_fields_counts.put(writer, &key, &value)
     }
 
     pub fn del_all_document_fields_counts(
         &self,
-        writer: &mut rkv::Writer,
+        writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
-    ) -> Result<usize, rkv::StoreError>
+    ) -> ZResult<usize>
     {
-        let mut keys_to_delete = Vec::new();
-
-        // WARN we can not delete the keys using the iterator
-        //      so we store them and delete them just after
-        for result in self.document_fields_counts(writer, document_id)? {
-            let (attribute, _) = result?;
-            let key = document_attribute_into_key(document_id, attribute);
-            keys_to_delete.push(key);
-        }
-
-        let count = keys_to_delete.len();
-        for key in keys_to_delete {
-            self.documents_fields_counts.delete(writer, key)?;
-        }
-
-        Ok(count)
+        let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
+        let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
+        self.documents_fields_counts.delete_range(writer, start..=end)
     }
 
     pub fn document_field_count(
         &self,
-        reader: &impl rkv::Readable,
+        reader: &zlmdb::RoTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
-    ) -> Result<Option<u64>, rkv::StoreError>
+    ) -> ZResult<Option<u64>>
     {
-        let key = document_attribute_into_key(document_id, attribute);
-
-        match self.documents_fields_counts.get(reader, key)? {
-            Some(rkv::Value::U64(count)) => Ok(Some(count)),
-            Some(value) => panic!("invalid type {:?}", value),
+        let key = DocumentAttrKey::new(document_id, attribute);
+        match self.documents_fields_counts.get(reader, &key)? {
+            Some(count) => Ok(Some(count)),
             None => Ok(None),
         }
     }
 
-    pub fn document_fields_counts<'r, T: rkv::Readable>(
+    pub fn document_fields_counts<'txn>(
         &self,
-        reader: &'r T,
+        reader: &'txn zlmdb::RoTxn,
         document_id: DocumentId,
-    ) -> Result<DocumentFieldsCountsIter<'r>, rkv::StoreError>
+    ) -> ZResult<DocumentFieldsCountsIter<'txn>>
     {
-        let document_id_bytes = document_id.0.to_be_bytes();
-        let iter = self.documents_fields_counts.iter_from(reader, document_id_bytes)?;
-        Ok(DocumentFieldsCountsIter { document_id, iter })
+        let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
+        let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
+        let iter = self.documents_fields_counts.range(reader, start..=end)?;
+        Ok(DocumentFieldsCountsIter { iter })
     }
 
-    pub fn documents_ids<'r, T: rkv::Readable>(
+    pub fn documents_ids<'txn>(
         &self,
-        reader: &'r T,
-    ) -> Result<DocumentsIdsIter<'r>, rkv::StoreError>
+        reader: &'txn zlmdb::RoTxn,
+    ) -> ZResult<DocumentsIdsIter<'txn>>
     {
-        let iter = self.documents_fields_counts.iter_start(reader)?;
+        let iter = self.documents_fields_counts.iter(reader)?;
         Ok(DocumentsIdsIter { last_seen_id: None, iter })
     }
 
-    pub fn all_documents_fields_counts<'r, T: rkv::Readable>(
+    pub fn all_documents_fields_counts<'txn>(
         &self,
-        reader: &'r T,
-    ) -> Result<AllDocumentsFieldsCountsIter<'r>, rkv::StoreError>
+        reader: &'txn zlmdb::RoTxn,
+    ) -> ZResult<AllDocumentsFieldsCountsIter<'txn>>
     {
-        let iter = self.documents_fields_counts.iter_start(reader)?;
+        let iter = self.documents_fields_counts.iter(reader)?;
         Ok(AllDocumentsFieldsCountsIter { iter })
     }
 }
 
-pub struct DocumentFieldsCountsIter<'r> {
-    document_id: DocumentId,
-    iter: rkv::store::single::Iter<'r>,
+pub struct DocumentFieldsCountsIter<'txn> {
+    iter: zlmdb::RoRange<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
 }
 
 impl Iterator for DocumentFieldsCountsIter<'_> {
-    type Item = Result<(SchemaAttr, u64), rkv::StoreError>;
+    type Item = ZResult<(SchemaAttr, u64)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
-            Some(Ok((key, Some(rkv::Value::U64(count))))) => {
-                let array = TryFrom::try_from(key).unwrap();
-                let (current_document_id, attr) = document_attribute_from_key(array);
-                if current_document_id != self.document_id { return None; }
-
+            Some(Ok((key, count))) => {
+                let attr = SchemaAttr(key.attr.get());
                 Some(Ok((attr, count)))
             },
-            Some(Ok((key, data))) => panic!("{:?}, {:?}", key, data),
-            Some(Err(e)) => Some(Err(e)),
+            Some(Err(e)) => Some(Err(e.into())),
             None => None,
         }
     }
 }
 
-pub struct DocumentsIdsIter<'r> {
+pub struct DocumentsIdsIter<'txn> {
     last_seen_id: Option<DocumentId>,
-    iter: rkv::store::single::Iter<'r>,
+    iter: zlmdb::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
 }
 
 impl Iterator for DocumentsIdsIter<'_> {
-    type Item = Result<DocumentId, rkv::StoreError>;
+    type Item = ZResult<DocumentId>;
 
     fn next(&mut self) -> Option<Self::Item> {
         for result in &mut self.iter {
             match result {
                 Ok((key, _)) => {
-                    let array = TryFrom::try_from(key).unwrap();
-                    let (document_id, _) = document_attribute_from_key(array);
+                    let document_id = DocumentId(key.docid.get());
                     if Some(document_id) != self.last_seen_id {
                         self.last_seen_id = Some(document_id);
                         return Some(Ok(document_id))
                     }
                 },
-                Err(e) => return Some(Err(e)),
+                Err(e) => return Some(Err(e.into())),
             }
         }
-
         None
     }
 }
 
-pub struct AllDocumentsFieldsCountsIter<'r> {
-    iter: rkv::store::single::Iter<'r>,
+pub struct AllDocumentsFieldsCountsIter<'txn> {
+    iter: zlmdb::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
 }
 
 impl<'r> Iterator for AllDocumentsFieldsCountsIter<'r> {
-    type Item = Result<(DocumentId, SchemaAttr, u64), rkv::StoreError>;
+    type Item = ZResult<(DocumentId, SchemaAttr, u64)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
-            Some(Ok((key, Some(rkv::Value::U64(count))))) => {
-                let array = TryFrom::try_from(key).unwrap();
-                let (document_id, attr) = document_attribute_from_key(array);
-                Some(Ok((document_id, attr, count)))
+            Some(Ok((key, count))) => {
+                let docid = DocumentId(key.docid.get());
+                let attr = SchemaAttr(key.attr.get());
+                Some(Ok((docid, attr, count)))
             },
-            Some(Ok((key, data))) => panic!("{:?}, {:?}", key, data),
-            Some(Err(e)) => Some(Err(e)),
+            Some(Err(e)) => Some(Err(e.into())),
             None => None,
         }
     }

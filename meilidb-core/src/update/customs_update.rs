@@ -1,21 +1,22 @@
+use zlmdb::Result as ZResult;
 use crate::update::{Update, next_update_id};
-use crate::{store, MResult};
+use crate::store;
 
 pub fn apply_customs_update(
-    writer: &mut rkv::Writer,
+    writer: &mut zlmdb::RwTxn,
     main_store: store::Main,
     customs: &[u8],
-) -> MResult<()>
+) -> ZResult<()>
 {
     main_store.put_customs(writer, customs)
 }
 
 pub fn push_customs_update(
-    writer: &mut rkv::Writer,
+    writer: &mut zlmdb::RwTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     customs: Vec<u8>,
-) -> MResult<u64>
+) -> ZResult<u64>
 {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 

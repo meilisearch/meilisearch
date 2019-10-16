@@ -49,7 +49,7 @@ impl DocumentsDeletion {
         Ok(())
     }
 
-    pub fn finalize(self, writer: &mut rkv::Writer) -> MResult<u64> {
+    pub fn finalize(self, writer: &mut zlmdb::RwTxn) -> MResult<u64> {
         let _ = self.updates_notifier.send(());
         let update_id = push_documents_deletion(
             writer,
@@ -68,7 +68,7 @@ impl Extend<DocumentId> for DocumentsDeletion {
 }
 
 pub fn push_documents_deletion(
-    writer: &mut rkv::Writer,
+    writer: &mut zlmdb::RwTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     deletion: Vec<DocumentId>,
@@ -83,7 +83,7 @@ pub fn push_documents_deletion(
 }
 
 pub fn apply_documents_deletion(
-    writer: &mut rkv::Writer,
+    writer: &mut zlmdb::RwTxn,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
     documents_fields_counts_store: store::DocumentsFieldsCounts,

@@ -1,54 +1,51 @@
 use std::sync::Arc;
-use rkv::{Value, StoreError};
-use crate::{DocumentId, MResult};
+use zlmdb::types::{OwnedType, ByteSlice};
+use zlmdb::Result as ZResult;
+use crate::DocumentId;
+use super::BEU64;
 
 #[derive(Copy, Clone)]
 pub struct DocsWords {
-    pub(crate) docs_words: rkv::SingleStore,
+    pub(crate) docs_words: zlmdb::Database<OwnedType<BEU64>, ByteSlice>,
 }
 
 impl DocsWords {
     pub fn put_doc_words(
         &self,
-        writer: &mut rkv::Writer,
+        writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
         words: &fst::Set,
-    ) -> Result<(), rkv::StoreError>
+    ) -> ZResult<()>
     {
-        let document_id_bytes = document_id.0.to_be_bytes();
+        let document_id = BEU64::new(document_id.0);
         let bytes = words.as_fst().as_bytes();
-        self.docs_words.put(writer, document_id_bytes, &Value::Blob(bytes))
+        self.docs_words.put(writer, &document_id, bytes)
     }
 
     pub fn del_doc_words(
         &self,
-        writer: &mut rkv::Writer,
+        writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
-    ) -> Result<bool, rkv::StoreError>
+    ) -> ZResult<bool>
     {
-        let document_id_bytes = document_id.0.to_be_bytes();
-        match self.docs_words.delete(writer, document_id_bytes) {
-            Ok(()) => Ok(true),
-            Err(StoreError::LmdbError(lmdb::Error::NotFound)) => Ok(false),
-            Err(e) => Err(e),
-        }
+        let document_id = BEU64::new(document_id.0);
+        self.docs_words.delete(writer, &document_id)
     }
 
-    pub fn doc_words<T: rkv::Readable>(
+    pub fn doc_words(
         &self,
-        reader: &T,
+        reader: &zlmdb::RoTxn,
         document_id: DocumentId,
-    ) -> MResult<Option<fst::Set>>
+    ) -> ZResult<Option<fst::Set>>
     {
-        let document_id_bytes = document_id.0.to_be_bytes();
-        match self.docs_words.get(reader, document_id_bytes)? {
-            Some(Value::Blob(bytes)) => {
+        let document_id = BEU64::new(document_id.0);
+        match self.docs_words.get(reader, &document_id)? {
+            Some(bytes) => {
                 let len = bytes.len();
                 let bytes = Arc::from(bytes);
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len)?;
+                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
                 Ok(Some(fst::Set::from(fst)))
             },
-            Some(value) => panic!("invalid type {:?}", value),
             None => Ok(None),
         }
     }

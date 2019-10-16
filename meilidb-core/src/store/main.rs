@@ -1,9 +1,8 @@
 use std::sync::Arc;
-use std::convert::TryInto;
-
 use meilidb_schema::Schema;
-use rkv::Value;
-use crate::{RankedMap, MResult};
+use zlmdb::types::{Str, OwnedType, ByteSlice, Serde};
+use zlmdb::Result as ZResult;
+use crate::RankedMap;
 
 const CUSTOMS_KEY:             &str = "customs-key";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
@@ -14,155 +13,80 @@ const WORDS_KEY:               &str = "words";
 
 #[derive(Copy, Clone)]
 pub struct Main {
-    pub(crate) main: rkv::SingleStore,
+    pub(crate) main: zlmdb::DynDatabase,
 }
 
 impl Main {
-    pub fn put_words_fst(
-        &self,
-        writer: &mut rkv::Writer,
-        fst: &fst::Set,
-    ) -> Result<(), rkv::StoreError>
-    {
-        let blob = rkv::Value::Blob(fst.as_fst().as_bytes());
-        self.main.put(writer, WORDS_KEY, &blob)
+    pub fn put_words_fst(&self, writer: &mut zlmdb::RwTxn, fst: &fst::Set) -> ZResult<()> {
+        let bytes = fst.as_fst().as_bytes();
+        self.main.put::<Str, ByteSlice>(writer, WORDS_KEY, bytes)
     }
 
-    pub fn words_fst(
-        &self,
-        reader: &impl rkv::Readable,
-    ) -> MResult<Option<fst::Set>>
-    {
-        match self.main.get(reader, WORDS_KEY)? {
-            Some(Value::Blob(bytes)) => {
+    pub fn words_fst(&self, reader: &zlmdb::RoTxn) -> ZResult<Option<fst::Set>> {
+        match self.main.get::<Str, ByteSlice>(reader, WORDS_KEY)? {
+            Some(bytes) => {
                 let len = bytes.len();
                 let bytes = Arc::from(bytes);
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len)?;
+                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
                 Ok(Some(fst::Set::from(fst)))
             },
-            Some(value) => panic!("invalid type {:?}", value),
             None => Ok(None),
         }
     }
 
-    pub fn put_schema(
-        &self,
-        writer: &mut rkv::Writer,
-        schema: &Schema,
-    ) -> MResult<()>
-    {
-        let bytes = bincode::serialize(schema)?;
-        let blob = Value::Blob(&bytes[..]);
-        self.main.put(writer, SCHEMA_KEY, &blob)?;
-        Ok(())
+    pub fn put_schema(&self, writer: &mut zlmdb::RwTxn, schema: &Schema) -> ZResult<()> {
+        self.main.put::<Str, Serde<Schema>>(writer, SCHEMA_KEY, schema)
     }
 
-    pub fn schema(
-        &self,
-        reader: &impl rkv::Readable,
-    ) -> MResult<Option<Schema>>
-    {
-        match self.main.get(reader, SCHEMA_KEY)? {
-            Some(Value::Blob(bytes)) => {
-                let schema = bincode::deserialize_from(bytes)?;
-                Ok(Some(schema))
-            },
-            Some(value) => panic!("invalid type {:?}", value),
-            None => Ok(None),
-        }
+    pub fn schema(&self, reader: &zlmdb::RoTxn) -> ZResult<Option<Schema>> {
+        self.main.get::<Str, Serde<Schema>>(reader, SCHEMA_KEY)
     }
 
-    pub fn put_ranked_map(
-        &self,
-        writer: &mut rkv::Writer,
-        ranked_map: &RankedMap,
-    ) -> MResult<()>
-    {
-        let mut bytes = Vec::new();
-        ranked_map.write_to_bin(&mut bytes)?;
-        let blob = Value::Blob(&bytes[..]);
-        self.main.put(writer, RANKED_MAP_KEY, &blob)?;
-        Ok(())
+    pub fn put_ranked_map(&self, writer: &mut zlmdb::RwTxn, ranked_map: &RankedMap) -> ZResult<()> {
+        self.main.put::<Str, Serde<RankedMap>>(writer, RANKED_MAP_KEY, &ranked_map)
     }
 
-    pub fn ranked_map(
-        &self,
-        reader: &impl rkv::Readable,
-    ) -> MResult<Option<RankedMap>>
-    {
-        match self.main.get(reader, RANKED_MAP_KEY)? {
-            Some(Value::Blob(bytes)) => {
-                let ranked_map = RankedMap::read_from_bin(bytes)?;
-                Ok(Some(ranked_map))
-            },
-            Some(value) => panic!("invalid type {:?}", value),
-            None => Ok(None),
-        }
+    pub fn ranked_map(&self, reader: &zlmdb::RoTxn) -> ZResult<Option<RankedMap>> {
+        self.main.get::<Str, Serde<RankedMap>>(reader, RANKED_MAP_KEY)
     }
 
-    pub fn put_synonyms_fst(
-        &self,
-        writer: &mut rkv::Writer,
-        fst: &fst::Set,
-    ) -> MResult<()>
-    {
-        let blob = rkv::Value::Blob(fst.as_fst().as_bytes());
-        Ok(self.main.put(writer, SYNONYMS_KEY, &blob)?)
+    pub fn put_synonyms_fst(&self, writer: &mut zlmdb::RwTxn, fst: &fst::Set) -> ZResult<()> {
+        let bytes = fst.as_fst().as_bytes();
+        self.main.put::<Str, ByteSlice>(writer, SYNONYMS_KEY, bytes)
     }
 
-    pub fn synonyms_fst(
-        &self,
-        reader: &impl rkv::Readable,
-    ) -> MResult<Option<fst::Set>>
-    {
-        match self.main.get(reader, SYNONYMS_KEY)? {
-            Some(Value::Blob(bytes)) => {
+    pub fn synonyms_fst(&self, reader: &zlmdb::RoTxn) -> ZResult<Option<fst::Set>> {
+        match self.main.get::<Str, ByteSlice>(reader, SYNONYMS_KEY)? {
+            Some(bytes) => {
                 let len = bytes.len();
                 let bytes = Arc::from(bytes);
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len)?;
+                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
                 Ok(Some(fst::Set::from(fst)))
             },
-            Some(value) => panic!("invalid type {:?}", value),
             None => Ok(None),
         }
     }
 
-    pub fn put_number_of_documents<F: Fn(u64) -> u64>(
-        &self,
-        writer: &mut rkv::Writer,
-        f: F,
-    ) -> Result<u64, rkv::StoreError>
+    pub fn put_number_of_documents<F>(&self, writer: &mut zlmdb::RwTxn, f: F) -> ZResult<u64>
+    where F: Fn(u64) -> u64,
     {
         let new = self.number_of_documents(writer).map(f)?;
-        self.main.put(writer, NUMBER_OF_DOCUMENTS_KEY, &Value::Blob(&new.to_be_bytes()))?;
+        self.main.put::<Str, OwnedType<u64>>(writer, NUMBER_OF_DOCUMENTS_KEY, &new)?;
         Ok(new)
     }
 
-    pub fn number_of_documents(
-        &self,
-        reader: &impl rkv::Readable,
-    ) -> Result<u64, rkv::StoreError>
-    {
-        match self.main.get(reader, NUMBER_OF_DOCUMENTS_KEY)? {
-            Some(Value::Blob(bytes)) => {
-                let array = bytes.try_into().unwrap();
-                Ok(u64::from_be_bytes(array))
-            },
-            Some(value) => panic!("invalid type {:?}", value),
+    pub fn number_of_documents(&self, reader: &zlmdb::RwTxn) -> ZResult<u64> {
+        match self.main.get::<Str, OwnedType<u64>>(reader, NUMBER_OF_DOCUMENTS_KEY)? {
+            Some(value) => Ok(value),
             None => Ok(0),
         }
     }
 
-    pub fn put_customs(&self, writer: &mut rkv::Writer, customs: &[u8]) -> MResult<()> {
-        self.main.put(writer, CUSTOMS_KEY, &Value::Blob(customs))?;
-        Ok(())
+    pub fn put_customs(&self, writer: &mut zlmdb::RwTxn, customs: &[u8]) -> ZResult<()> {
+        self.main.put::<Str, ByteSlice>(writer, CUSTOMS_KEY, customs)
     }
 
-    pub fn customs<'t>(&self, reader: &'t impl rkv::Readable) -> MResult<Option<&'t [u8]>> {
-        match self.main.get(reader, CUSTOMS_KEY)? {
-            Some(Value::Blob(bytes)) => Ok(Some(bytes)),
-            Some(value) => panic!("invalid type {:?}", value),
-            None => Ok(None),
-        }
+    pub fn customs<'txn>(&self, reader: &'txn zlmdb::RoTxn) -> ZResult<Option<&'txn [u8]>> {
+        self.main.get::<Str, ByteSlice>(reader, CUSTOMS_KEY)
     }
 }
