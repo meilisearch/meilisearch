@@ -1,100 +1,56 @@
-use std::convert::TryInto;
-use rkv::Value;
-use crate::{update::Update, MResult};
+use zlmdb::types::{OwnedType, Serde};
+use zlmdb::Result as ZResult;
+use crate::update::Update;
+use super::BEU64;
 
 #[derive(Copy, Clone)]
 pub struct Updates {
-    pub(crate) updates: rkv::SingleStore,
+    pub(crate) updates: zlmdb::Database<OwnedType<BEU64>, Serde<Update>>,
 }
 
 impl Updates {
-    // TODO we should use the MDB_LAST op but
-    //      it is not exposed by the rkv library
-    pub fn last_update_id<'a>(
-        &self,
-        reader: &'a impl rkv::Readable,
-    ) -> Result<Option<(u64, Option<Value<'a>>)>, rkv::StoreError>
-    {
-        let mut last = None;
-        let iter = self.updates.iter_start(reader)?;
-        for result in iter {
-            let (key, data) = result?;
-            last = Some((key, data));
+    // TODO do not trigger deserialize if possible
+    pub fn last_update_id(&self, reader: &zlmdb::RoTxn) -> ZResult<Option<(u64, Update)>> {
+        match self.updates.last(reader)? {
+            Some((key, data)) => Ok(Some((key.get(), data))),
+            None => Ok(None),
         }
-
-        let (last_key, last_data) = match last {
-            Some(entry) => entry,
-            None => return Ok(None),
-        };
-
-        let array = last_key.try_into().unwrap();
-        let number = u64::from_be_bytes(array);
-
-        Ok(Some((number, last_data)))
     }
 
-    fn first_update_id<'a>(
-        &self,
-        reader: &'a impl rkv::Readable,
-    ) -> Result<Option<(u64, Option<Value<'a>>)>, rkv::StoreError>
-    {
-        let mut iter = self.updates.iter_start(reader)?;
-        let (first_key, first_data) = match iter.next() {
-            Some(result) => result?,
-            None => return Ok(None),
-        };
-
-        let array = first_key.try_into().unwrap();
-        let number = u64::from_be_bytes(array);
-
-        Ok(Some((number, first_data)))
+    // TODO do not trigger deserialize if possible
+    fn first_update_id(&self, reader: &zlmdb::RoTxn) -> ZResult<Option<(u64, Update)>> {
+        match self.updates.first(reader)? {
+            Some((key, data)) => Ok(Some((key.get(), data))),
+            None => Ok(None),
+        }
     }
 
-    pub fn contains(
-        &self,
-        reader: &impl rkv::Readable,
-        update_id: u64,
-    ) -> Result<bool, rkv::StoreError>
-    {
-        let update_id_bytes = update_id.to_be_bytes();
-        self.updates.get(reader, update_id_bytes).map(|v| v.is_some())
+    // TODO do not trigger deserialize if possible
+    pub fn contains(&self, reader: &zlmdb::RoTxn, update_id: u64) -> ZResult<bool> {
+        let update_id = BEU64::new(update_id);
+        self.updates.get(reader, &update_id).map(|v| v.is_some())
     }
 
     pub fn put_update(
         &self,
-        writer: &mut rkv::Writer,
+        writer: &mut zlmdb::RwTxn,
         update_id: u64,
         update: &Update,
-    ) -> MResult<()>
+    ) -> ZResult<()>
     {
-        let update_id_bytes = update_id.to_be_bytes();
-        let update = serde_json::to_vec(&update)?;
-        let blob = Value::Blob(&update);
-        self.updates.put(writer, update_id_bytes, &blob)?;
-        Ok(())
+        // TODO prefer using serde_json?
+        let update_id = BEU64::new(update_id);
+        self.updates.put(writer, &update_id, update)
     }
 
-    pub fn pop_front(
-        &self,
-        writer: &mut rkv::Writer,
-    ) -> MResult<Option<(u64, Update)>>
-    {
-        let (first_id, first_data) = match self.first_update_id(writer)? {
-            Some(entry) => entry,
-            None => return Ok(None),
-        };
-
-        match first_data {
-            Some(Value::Blob(bytes)) => {
-                let update = serde_json::from_slice(&bytes)?;
-                // remove it from the database now
-                let first_id_bytes = first_id.to_be_bytes();
-                self.updates.delete(writer, first_id_bytes)?;
-
-                Ok(Some((first_id, update)))
+    pub fn pop_front(&self, writer: &mut zlmdb::RwTxn) -> ZResult<Option<(u64, Update)>> {
+        match self.first_update_id(writer)? {
+            Some((update_id, update)) => {
+                let key = BEU64::new(update_id);
+                self.updates.delete(writer, &key)?;
+                Ok(Some((update_id, update)))
             },
-            Some(value) => panic!("invalid type {:?}", value),
-            None => Ok(None),
+            None => Ok(None)
         }
     }
 }

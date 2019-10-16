@@ -12,7 +12,7 @@ pub enum Error {
     SchemaMissing,
     WordIndexMissing,
     MissingDocumentId,
-    Rkv(rkv::StoreError),
+    Zlmdb(zlmdb::Error),
     Fst(fst::Error),
     SerdeJson(SerdeJsonError),
     Bincode(bincode::Error),
@@ -27,9 +27,9 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<rkv::StoreError> for Error {
-    fn from(error: rkv::StoreError) -> Error {
-        Error::Rkv(error)
+impl From<zlmdb::Error> for Error {
+    fn from(error: zlmdb::Error) -> Error {
+        Error::Zlmdb(error)
     }
 }
 
@@ -79,7 +79,7 @@ impl fmt::Display for Error {
             SchemaMissing => write!(f, "this index does not have a schema"),
             WordIndexMissing => write!(f, "this index does not have a word index"),
             MissingDocumentId => write!(f, "document id is missing"),
-            Rkv(e) => write!(f, "rkv error; {}", e),
+            Zlmdb(e) => write!(f, "zlmdb error; {}", e),
             Fst(e) => write!(f, "fst error; {}", e),
             SerdeJson(e) => write!(f, "serde json error; {}", e),
             Bincode(e) => write!(f, "bincode error; {}", e),

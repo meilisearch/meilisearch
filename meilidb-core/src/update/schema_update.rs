@@ -3,7 +3,7 @@ use crate::{store, error::UnsupportedOperation, MResult};
 use crate::update::{Update, next_update_id};
 
 pub fn apply_schema_update(
-    writer: &mut rkv::Writer,
+    writer: &mut zlmdb::RwTxn,
     main_store: store::Main,
     new_schema: &Schema,
 ) -> MResult<()>
@@ -12,11 +12,11 @@ pub fn apply_schema_update(
         return Err(UnsupportedOperation::SchemaAlreadyExists.into())
     }
 
-    main_store.put_schema(writer, new_schema)
+    main_store.put_schema(writer, new_schema).map_err(Into::into)
 }
 
 pub fn push_schema_update(
-    writer: &mut rkv::Writer,
+    writer: &mut zlmdb::RwTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     schema: Schema,

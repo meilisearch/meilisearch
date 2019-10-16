@@ -2,10 +2,13 @@ use std::io::{Read, Write};
 
 use hashbrown::HashMap;
 use meilidb_schema::SchemaAttr;
+use serde::{Serialize, Deserialize};
 
 use crate::{DocumentId, Number};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct RankedMap(HashMap<(DocumentId, SchemaAttr), Number>);
 
 impl RankedMap {
