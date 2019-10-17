@@ -210,9 +210,9 @@ fn generate_automatons(
 
     // order automatons, the most important first,
     // we keep the original automatons at the front.
-    automatons[1..].sort_unstable_by_key(|a| {
+    automatons[1..].sort_by_key(|a| {
         let a = a.first().unwrap();
-        (Reverse(a.is_exact), Reverse(a.ngram))
+        (Reverse(a.is_exact), a.ngram)
     });
 
     Ok((automatons, enhancer_builder.build()))
