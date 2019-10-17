@@ -1,5 +1,4 @@
 use hashbrown::HashMap;
-use std::hash::Hash;
 use std::mem;
 use std::ops::Range;
 use std::rc::Rc;
@@ -15,10 +14,11 @@ use crate::raw_document::{RawDocument, raw_documents_from};
 use crate::{Document, DocumentId, Highlight, TmpMatch, criterion::Criteria};
 use crate::{store, MResult, reordered_attrs::ReorderedAttrs};
 
-pub struct QueryBuilder<'c, FI = fn(DocumentId) -> bool> {
+pub struct QueryBuilder<'c, 'f, 'd> {
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
-    filter: Option<FI>,
+    filter: Option<Box<dyn Fn(DocumentId) -> bool + 'f>>,
+    distinct: Option<(Box<dyn Fn(DocumentId) -> Option<u64> + 'd>, usize)>,
     timeout: Option<Duration>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
@@ -204,13 +204,13 @@ fn fetch_raw_documents(
     Ok(raw_documents_from(matches, highlights, fields_counts))
 }
 
-impl<'c> QueryBuilder<'c> {
+impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
     pub fn new(
         main: store::Main,
         postings_lists: store::PostingsLists,
         documents_fields_counts: store::DocumentsFieldsCounts,
         synonyms: store::Synonyms,
-    ) -> QueryBuilder<'c>
+    ) -> QueryBuilder<'c, 'f, 'd>
     {
         QueryBuilder::with_criteria(
             main,
@@ -227,12 +227,13 @@ impl<'c> QueryBuilder<'c> {
         documents_fields_counts: store::DocumentsFieldsCounts,
         synonyms: store::Synonyms,
         criteria: Criteria<'c>,
-    ) -> QueryBuilder<'c>
+    ) -> QueryBuilder<'c, 'f, 'd>
     {
         QueryBuilder {
             criteria,
             searchable_attrs: None,
             filter: None,
+            distinct: None,
             timeout: None,
             main_store: main,
             postings_lists_store: postings_lists,
@@ -242,40 +243,28 @@ impl<'c> QueryBuilder<'c> {
     }
 }
 
-impl<'c, FI> QueryBuilder<'c, FI> {
-    pub fn with_filter<F>(self, function: F) -> QueryBuilder<'c, F>
-    where F: Fn(DocumentId) -> bool,
+impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
+    pub fn with_filter<F>(&mut self, function: F)
+    where F: Fn(DocumentId) -> bool + 'f,
     {
-        QueryBuilder {
-            criteria: self.criteria,
-            searchable_attrs: self.searchable_attrs,
-            filter: Some(function),
-            timeout: self.timeout,
-            main_store: self.main_store,
-            postings_lists_store: self.postings_lists_store,
-            documents_fields_counts_store: self.documents_fields_counts_store,
-            synonyms_store: self.synonyms_store,
-        }
+        self.filter = Some(Box::new(function))
     }
 
-    pub fn with_fetch_timeout(self, timeout: Duration) -> QueryBuilder<'c, FI> {
-        QueryBuilder { timeout: Some(timeout), ..self }
+    pub fn with_fetch_timeout(&mut self, timeout: Duration) {
+        self.timeout = Some(timeout)
     }
 
-    pub fn with_distinct<F, K>(self, function: F, size: usize) -> DistinctQueryBuilder<'c, FI, F>
-    where F: Fn(DocumentId) -> Option<K>,
-          K: Hash + Eq,
+    pub fn with_distinct<F, K>(&mut self, function: F, size: usize)
+    where F: Fn(DocumentId) -> Option<u64> + 'd,
     {
-        DistinctQueryBuilder { inner: self, function, size }
+        self.distinct = Some((Box::new(function), size))
     }
 
     pub fn add_searchable_attribute(&mut self, attribute: u16) {
         let reorders = self.searchable_attrs.get_or_insert_with(ReorderedAttrs::new);
         reorders.insert_attribute(attribute);
     }
-}
 
-impl<FI> QueryBuilder<'_, FI> where FI: Fn(DocumentId) -> bool {
     pub fn query(
         self,
         reader: &zlmdb::RoTxn,
@@ -283,286 +272,336 @@ impl<FI> QueryBuilder<'_, FI> where FI: Fn(DocumentId) -> bool {
         range: Range<usize>,
     ) -> MResult<Vec<Document>>
     {
-        // We delegate the filter work to the distinct query builder,
-        // specifying a distinct rule that has no effect.
-        if self.filter.is_some() {
-            let builder = self.with_distinct(|_| None as Option<()>, 1);
-            return builder.query(reader, query, range);
-        }
-
-        let start_processing = Instant::now();
-        let mut raw_documents_processed = Vec::with_capacity(range.len());
-
-        let (automaton_producer, query_enhancer) = AutomatonProducer::new(
-            reader,
-            query,
-            self.main_store,
-            self.synonyms_store,
-        )?;
-
-        let mut automaton_producer = automaton_producer.into_iter();
-        let mut automatons = Vec::new();
-
-        // aggregate automatons groups by groups after time
-        while let Some(auts) = automaton_producer.next() {
-            automatons.extend(auts);
-
-            // we must retrieve the documents associated
-            // with the current automatons
-            let mut raw_documents = fetch_raw_documents(
-                reader,
-                &automatons,
-                &query_enhancer,
-                self.searchable_attrs.as_ref(),
-                &self.main_store,
-                &self.postings_lists_store,
-                &self.documents_fields_counts_store,
-            )?;
-
-            // stop processing when time is running out
-            if let Some(timeout) = self.timeout {
-                if !raw_documents_processed.is_empty() && start_processing.elapsed() > timeout {
-                    break
-                }
-            }
-
-            let mut groups = vec![raw_documents.as_mut_slice()];
-
-            'criteria: for criterion in self.criteria.as_ref() {
-                let tmp_groups = mem::replace(&mut groups, Vec::new());
-                let mut documents_seen = 0;
-
-                for group in tmp_groups {
-                    // if this group does not overlap with the requested range,
-                    // push it without sorting and splitting it
-                    if documents_seen + group.len() < range.start {
-                        documents_seen += group.len();
-                        groups.push(group);
-                        continue;
-                    }
-
-                    group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
-
-                    for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
-                        documents_seen += group.len();
-                        groups.push(group);
-
-                        // we have sort enough documents if the last document sorted is after
-                        // the end of the requested range, we can continue to the next criterion
-                        if documents_seen >= range.end { continue 'criteria }
-                    }
-                }
-            }
-
-            // once we classified the documents related to the current
-            // automatons we save that as the next valid result
-            let iter = raw_documents.into_iter().skip(range.start).take(range.len());
-            raw_documents_processed.clear();
-            raw_documents_processed.extend(iter);
-
-            // stop processing when time is running out
-            if let Some(timeout) = self.timeout {
-                if start_processing.elapsed() > timeout { break }
+        match self.distinct {
+            Some((distinct, distinct_size)) => {
+                raw_query_with_distinct(
+                    reader,
+                    query,
+                    range,
+                    self.filter,
+                    distinct,
+                    distinct_size,
+                    self.timeout,
+                    self.criteria,
+                    self.searchable_attrs,
+                    self.main_store,
+                    self.postings_lists_store,
+                    self.documents_fields_counts_store,
+                    self.synonyms_store,
+                )
+            },
+            None => {
+                raw_query(
+                    reader,
+                    query,
+                    range,
+                    self.filter,
+                    self.timeout,
+                    self.criteria,
+                    self.searchable_attrs,
+                    self.main_store,
+                    self.postings_lists_store,
+                    self.documents_fields_counts_store,
+                    self.synonyms_store,
+                )
             }
         }
-
-        // make real documents now that we know
-        // those must be returned
-        let documents = raw_documents_processed
-            .into_iter()
-            .map(|d| Document::from_raw(d))
-            .collect();
-
-        Ok(documents)
     }
 }
 
-pub struct DistinctQueryBuilder<'c, FI, FD> {
-    inner: QueryBuilder<'c, FI>,
-    function: FD,
-    size: usize,
-}
+fn raw_query<'c, FI>(
+    reader: &zlmdb::RoTxn,
 
-impl<'c, FI, FD> DistinctQueryBuilder<'c, FI, FD> {
-    pub fn with_filter<F>(self, function: F) -> DistinctQueryBuilder<'c, F, FD>
-    where F: Fn(DocumentId) -> bool,
-    {
-        DistinctQueryBuilder {
-            inner: self.inner.with_filter(function),
-            function: self.function,
-            size: self.size,
-        }
-    }
+    query: &str,
+    range: Range<usize>,
 
-    pub fn with_fetch_timeout(self, timeout: Duration) -> DistinctQueryBuilder<'c, FI, FD> {
-        DistinctQueryBuilder {
-            inner: self.inner.with_fetch_timeout(timeout),
-            function: self.function,
-            size: self.size,
-        }
-    }
+    filter: Option<FI>,
+    timeout: Option<Duration>,
 
-    pub fn add_searchable_attribute(&mut self, attribute: u16) {
-        self.inner.add_searchable_attribute(attribute);
-    }
-}
+    criteria: Criteria<'c>,
+    searchable_attrs: Option<ReorderedAttrs>,
 
-impl<'c, FI, FD, K> DistinctQueryBuilder<'c, FI, FD>
+    main_store: store::Main,
+    postings_lists_store: store::PostingsLists,
+    documents_fields_counts_store: store::DocumentsFieldsCounts,
+    synonyms_store: store::Synonyms,
+) -> MResult<Vec<Document>>
 where FI: Fn(DocumentId) -> bool,
-      FD: Fn(DocumentId) -> Option<K>,
-      K: Hash + Eq,
 {
-    pub fn query(
-        self,
-        reader: &zlmdb::RoTxn,
-        query: &str,
-        range: Range<usize>,
-    ) -> MResult<Vec<Document>>
-    {
-        let start_processing = Instant::now();
-        let mut raw_documents_processed = Vec::new();
-
-        let (automaton_producer, query_enhancer) = AutomatonProducer::new(
+    // We delegate the filter work to the distinct query builder,
+    // specifying a distinct rule that has no effect.
+    if filter.is_some() {
+        let distinct = |_| None;
+        let distinct_size = 1;
+        return raw_query_with_distinct(
             reader,
             query,
-            self.inner.main_store,
-            self.inner.synonyms_store,
+            range,
+            filter,
+            distinct,
+            distinct_size,
+            timeout,
+            criteria,
+            searchable_attrs,
+            main_store,
+            postings_lists_store,
+            documents_fields_counts_store,
+            synonyms_store,
+        )
+    }
+
+    let start_processing = Instant::now();
+    let mut raw_documents_processed = Vec::with_capacity(range.len());
+
+    let (automaton_producer, query_enhancer) = AutomatonProducer::new(
+        reader,
+        query,
+        main_store,
+        synonyms_store,
+    )?;
+
+    let mut automaton_producer = automaton_producer.into_iter();
+    let mut automatons = Vec::new();
+
+    // aggregate automatons groups by groups after time
+    while let Some(auts) = automaton_producer.next() {
+        automatons.extend(auts);
+
+        // we must retrieve the documents associated
+        // with the current automatons
+        let mut raw_documents = fetch_raw_documents(
+            reader,
+            &automatons,
+            &query_enhancer,
+            searchable_attrs.as_ref(),
+            &main_store,
+            &postings_lists_store,
+            &documents_fields_counts_store,
         )?;
 
-        let mut automaton_producer = automaton_producer.into_iter();
-        let mut automatons = Vec::new();
+        // stop processing when time is running out
+        if let Some(timeout) = timeout {
+            if !raw_documents_processed.is_empty() && start_processing.elapsed() > timeout {
+                break
+            }
+        }
 
-        // aggregate automatons groups by groups after time
-        while let Some(auts) = automaton_producer.next() {
-            automatons.extend(auts);
+        let mut groups = vec![raw_documents.as_mut_slice()];
 
-            // we must retrieve the documents associated
-            // with the current automatons
-            let mut raw_documents = fetch_raw_documents(
-                reader,
-                &automatons,
-                &query_enhancer,
-                self.inner.searchable_attrs.as_ref(),
-                &self.inner.main_store,
-                &self.inner.postings_lists_store,
-                &self.inner.documents_fields_counts_store,
-            )?;
+        'criteria: for criterion in criteria.as_ref() {
+            let tmp_groups = mem::replace(&mut groups, Vec::new());
+            let mut documents_seen = 0;
 
-            // stop processing when time is running out
-            if let Some(timeout) = self.inner.timeout {
-                if !raw_documents_processed.is_empty() && start_processing.elapsed() > timeout {
-                    break
+            for group in tmp_groups {
+                // if this group does not overlap with the requested range,
+                // push it without sorting and splitting it
+                if documents_seen + group.len() < range.start {
+                    documents_seen += group.len();
+                    groups.push(group);
+                    continue;
+                }
+
+                group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
+
+                for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
+                    documents_seen += group.len();
+                    groups.push(group);
+
+                    // we have sort enough documents if the last document sorted is after
+                    // the end of the requested range, we can continue to the next criterion
+                    if documents_seen >= range.end { continue 'criteria }
                 }
             }
+        }
 
-            let mut groups = vec![raw_documents.as_mut_slice()];
-            let mut key_cache = HashMap::new();
+        // once we classified the documents related to the current
+        // automatons we save that as the next valid result
+        let iter = raw_documents.into_iter().skip(range.start).take(range.len());
+        raw_documents_processed.clear();
+        raw_documents_processed.extend(iter);
 
-            let mut filter_map = HashMap::new();
-            // these two variables informs on the current distinct map and
-            // on the raw offset of the start of the group where the
-            // range.start bound is located according to the distinct function
-            let mut distinct_map = DistinctMap::new(self.size);
-            let mut distinct_raw_offset = 0;
+        // stop processing when time is running out
+        if let Some(timeout) = timeout {
+            if start_processing.elapsed() > timeout { break }
+        }
+    }
 
-            'criteria: for criterion in self.inner.criteria.as_ref() {
-                let tmp_groups = mem::replace(&mut groups, Vec::new());
-                let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
-                let mut documents_seen = 0;
+    // make real documents now that we know
+    // those must be returned
+    let documents = raw_documents_processed
+        .into_iter()
+        .map(|d| Document::from_raw(d))
+        .collect();
 
-                for group in tmp_groups {
-                    // if this group does not overlap with the requested range,
-                    // push it without sorting and splitting it
-                    if documents_seen + group.len() < distinct_raw_offset {
-                        documents_seen += group.len();
-                        groups.push(group);
-                        continue;
-                    }
+    Ok(documents)
+}
 
-                    group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
+fn raw_query_with_distinct<'c, FI, FD>(
+    reader: &zlmdb::RoTxn,
 
-                    for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
-                        // we must compute the real distinguished len of this sub-group
-                        for document in group.iter() {
-                            let filter_accepted = match &self.inner.filter {
-                                Some(filter) => {
-                                    let entry = filter_map.entry(document.id);
-                                    *entry.or_insert_with(|| (filter)(document.id))
-                                },
-                                None => true,
+    query: &str,
+    range: Range<usize>,
+
+    filter: Option<FI>,
+
+    distinct: FD,
+    distinct_size: usize,
+    timeout: Option<Duration>,
+
+    criteria: Criteria<'c>,
+    searchable_attrs: Option<ReorderedAttrs>,
+
+    main_store: store::Main,
+    postings_lists_store: store::PostingsLists,
+    documents_fields_counts_store: store::DocumentsFieldsCounts,
+    synonyms_store: store::Synonyms,
+) -> MResult<Vec<Document>>
+where FI: Fn(DocumentId) -> bool,
+      FD: Fn(DocumentId) -> Option<u64>,
+{
+    let start_processing = Instant::now();
+    let mut raw_documents_processed = Vec::new();
+
+    let (automaton_producer, query_enhancer) = AutomatonProducer::new(
+        reader,
+        query,
+        main_store,
+        synonyms_store,
+    )?;
+
+    let mut automaton_producer = automaton_producer.into_iter();
+    let mut automatons = Vec::new();
+
+    // aggregate automatons groups by groups after time
+    while let Some(auts) = automaton_producer.next() {
+        automatons.extend(auts);
+
+        // we must retrieve the documents associated
+        // with the current automatons
+        let mut raw_documents = fetch_raw_documents(
+            reader,
+            &automatons,
+            &query_enhancer,
+            searchable_attrs.as_ref(),
+            &main_store,
+            &postings_lists_store,
+            &documents_fields_counts_store,
+        )?;
+
+        // stop processing when time is running out
+        if let Some(timeout) = timeout {
+            if !raw_documents_processed.is_empty() && start_processing.elapsed() > timeout {
+                break
+            }
+        }
+
+        let mut groups = vec![raw_documents.as_mut_slice()];
+        let mut key_cache = HashMap::new();
+
+        let mut filter_map = HashMap::new();
+        // these two variables informs on the current distinct map and
+        // on the raw offset of the start of the group where the
+        // range.start bound is located according to the distinct function
+        let mut distinct_map = DistinctMap::new(distinct_size);
+        let mut distinct_raw_offset = 0;
+
+        'criteria: for criterion in criteria.as_ref() {
+            let tmp_groups = mem::replace(&mut groups, Vec::new());
+            let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
+            let mut documents_seen = 0;
+
+            for group in tmp_groups {
+                // if this group does not overlap with the requested range,
+                // push it without sorting and splitting it
+                if documents_seen + group.len() < distinct_raw_offset {
+                    documents_seen += group.len();
+                    groups.push(group);
+                    continue;
+                }
+
+                group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
+
+                for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
+                    // we must compute the real distinguished len of this sub-group
+                    for document in group.iter() {
+                        let filter_accepted = match &filter {
+                            Some(filter) => {
+                                let entry = filter_map.entry(document.id);
+                                *entry.or_insert_with(|| (filter)(document.id))
+                            },
+                            None => true,
+                        };
+
+                        if filter_accepted {
+                            let entry = key_cache.entry(document.id);
+                            let key = entry.or_insert_with(|| (distinct)(document.id).map(Rc::new));
+
+                            match key.clone() {
+                                Some(key) => buf_distinct.register(key),
+                                None => buf_distinct.register_without_key(),
                             };
-
-                            if filter_accepted {
-                                let entry = key_cache.entry(document.id);
-                                let key = entry.or_insert_with(|| (self.function)(document.id).map(Rc::new));
-
-                                match key.clone() {
-                                    Some(key) => buf_distinct.register(key),
-                                    None => buf_distinct.register_without_key(),
-                                };
-                            }
-
-                            // the requested range end is reached: stop computing distinct
-                            if buf_distinct.len() >= range.end { break }
                         }
 
-                        documents_seen += group.len();
-                        groups.push(group);
-
-                        // if this sub-group does not overlap with the requested range
-                        // we must update the distinct map and its start index
-                        if buf_distinct.len() < range.start {
-                            buf_distinct.transfert_to_internal();
-                            distinct_raw_offset = documents_seen;
-                        }
-
-                        // we have sort enough documents if the last document sorted is after
-                        // the end of the requested range, we can continue to the next criterion
-                        if buf_distinct.len() >= range.end { continue 'criteria }
+                        // the requested range end is reached: stop computing distinct
+                        if buf_distinct.len() >= range.end { break }
                     }
+
+                    documents_seen += group.len();
+                    groups.push(group);
+
+                    // if this sub-group does not overlap with the requested range
+                    // we must update the distinct map and its start index
+                    if buf_distinct.len() < range.start {
+                        buf_distinct.transfert_to_internal();
+                        distinct_raw_offset = documents_seen;
+                    }
+
+                    // we have sort enough documents if the last document sorted is after
+                    // the end of the requested range, we can continue to the next criterion
+                    if buf_distinct.len() >= range.end { continue 'criteria }
                 }
             }
+        }
 
-            // once we classified the documents related to the current
-            // automatons we save that as the next valid result
-            let mut seen = BufferedDistinctMap::new(&mut distinct_map);
-            raw_documents_processed.clear();
+        // once we classified the documents related to the current
+        // automatons we save that as the next valid result
+        let mut seen = BufferedDistinctMap::new(&mut distinct_map);
+        raw_documents_processed.clear();
 
-            for document in raw_documents.into_iter().skip(distinct_raw_offset) {
-                let filter_accepted = match &self.inner.filter {
-                    Some(_) => filter_map.remove(&document.id).unwrap(),
-                    None => true,
+        for document in raw_documents.into_iter().skip(distinct_raw_offset) {
+            let filter_accepted = match &filter {
+                Some(_) => filter_map.remove(&document.id).unwrap(),
+                None => true,
+            };
+
+            if filter_accepted {
+                let key = key_cache.remove(&document.id).unwrap();
+                let distinct_accepted = match key {
+                    Some(key) => seen.register(key),
+                    None => seen.register_without_key(),
                 };
 
-                if filter_accepted {
-                    let key = key_cache.remove(&document.id).unwrap();
-                    let distinct_accepted = match key {
-                        Some(key) => seen.register(key),
-                        None => seen.register_without_key(),
-                    };
-
-                    if distinct_accepted && seen.len() > range.start {
-                        raw_documents_processed.push(document);
-                        if raw_documents_processed.len() == range.len() { break }
-                    }
+                if distinct_accepted && seen.len() > range.start {
+                    raw_documents_processed.push(document);
+                    if raw_documents_processed.len() == range.len() { break }
                 }
-            }
-
-            // stop processing when time is running out
-            if let Some(timeout) = self.inner.timeout {
-                if start_processing.elapsed() > timeout { break }
             }
         }
 
-        // make real documents now that we know
-        // those must be returned
-        let documents = raw_documents_processed
-            .into_iter()
-            .map(|d| Document::from_raw(d))
-            .collect();
-
-        Ok(documents)
+        // stop processing when time is running out
+        if let Some(timeout) = timeout {
+            if start_processing.elapsed() > timeout { break }
+        }
     }
+
+    // make real documents now that we know
+    // those must be returned
+    let documents = raw_documents_processed
+        .into_iter()
+        .map(|d| Document::from_raw(d))
+        .collect();
+
+    Ok(documents)
 }
 
 #[cfg(test)]
