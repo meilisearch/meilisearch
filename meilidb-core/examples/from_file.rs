@@ -285,6 +285,13 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
             Ok(query) => {
                 let start_total = Instant::now();
 
+                let builder = index.query_builder();
+                let builder = if let Some(timeout) = command.fetch_timeout_ms {
+                    builder.with_fetch_timeout(Duration::from_millis(timeout))
+                } else {
+                    builder
+                };
+
                 let documents = match command.filter {
                     Some(ref filter) => {
                         let filter = filter.as_str();
@@ -296,15 +303,14 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
 
                         let attr = schema.attribute(&filter).expect("Could not find filtered attribute");
 
-                        let builder = index.query_builder();
                         let builder = builder.with_filter(|document_id| {
                             let string: String = index.document_attribute(&reader, document_id, attr).unwrap().unwrap();
                             (string == "true") == positive
                         });
+
                         builder.query(&reader, &query, 0..command.number_results)?
                     },
                     None => {
-                        let builder = index.query_builder();
                         builder.query(&reader, &query, 0..command.number_results)?
                     }
                 };
