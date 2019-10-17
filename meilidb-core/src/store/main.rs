@@ -75,7 +75,7 @@ impl Main {
         Ok(new)
     }
 
-    pub fn number_of_documents(&self, reader: &zlmdb::RwTxn) -> ZResult<u64> {
+    pub fn number_of_documents(&self, reader: &zlmdb::RoTxn) -> ZResult<u64> {
         match self.main.get::<Str, OwnedType<u64>>(reader, NUMBER_OF_DOCUMENTS_KEY)? {
             Some(value) => Ok(value),
             None => Ok(0),
