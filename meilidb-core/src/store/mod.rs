@@ -202,7 +202,11 @@ impl Index {
         )
     }
 
-    pub fn query_builder_with_criteria<'c>(&self, criteria: Criteria<'c>) -> QueryBuilder<'c> {
+    pub fn query_builder_with_criteria<'c, 'f, 'd>(
+        &self,
+        criteria: Criteria<'c>,
+    ) -> QueryBuilder<'c, 'f, 'd>
+    {
         QueryBuilder::with_criteria(
             self.main,
             self.postings_lists,

@@ -268,9 +268,10 @@ fn crop_text(
 fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<dyn Error>> {
     let env = &database.env;
     let index = database.open_index(INDEX_NAME).expect("Could not find index");
-    let reader = env.read_txn().unwrap();
 
+    let reader = env.read_txn().unwrap();
     let schema = index.main.schema(&reader)?;
+    reader.abort();
     let schema = schema.ok_or(meilidb_core::Error::SchemaMissing)?;
 
     let fields = command.displayed_fields.iter().map(String::as_str);
@@ -285,35 +286,32 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
             Ok(query) => {
                 let start_total = Instant::now();
 
-                let builder = index.query_builder();
-                let builder = if let Some(timeout) = command.fetch_timeout_ms {
-                    builder.with_fetch_timeout(Duration::from_millis(timeout))
-                } else {
-                    builder
-                };
+                let reader = env.read_txn().unwrap();
+                let ref_index = &index;
+                let ref_reader = &reader;
 
-                let documents = match command.filter {
-                    Some(ref filter) => {
-                        let filter = filter.as_str();
-                        let (positive, filter) = if filter.chars().next() == Some('!') {
-                            (false, &filter[1..])
-                        } else {
-                            (true, filter)
-                        };
+                let mut builder = index.query_builder();
+                if let Some(timeout) = command.fetch_timeout_ms {
+                    builder.with_fetch_timeout(Duration::from_millis(timeout));
+                }
 
-                        let attr = schema.attribute(&filter).expect("Could not find filtered attribute");
+                if let Some(ref filter) = command.filter {
+                    let filter = filter.as_str();
+                    let (positive, filter) = if filter.chars().next() == Some('!') {
+                        (false, &filter[1..])
+                    } else {
+                        (true, filter)
+                    };
 
-                        let builder = builder.with_filter(|document_id| {
-                            let string: String = index.document_attribute(&reader, document_id, attr).unwrap().unwrap();
-                            (string == "true") == positive
-                        });
+                    let attr = schema.attribute(&filter).expect("Could not find filtered attribute");
 
-                        builder.query(&reader, &query, 0..command.number_results)?
-                    },
-                    None => {
-                        builder.query(&reader, &query, 0..command.number_results)?
-                    }
-                };
+                    builder.with_filter(move |document_id| {
+                        let string: String = ref_index.document_attribute(ref_reader, document_id, attr).unwrap().unwrap();
+                        (string == "true") == positive
+                    });
+                }
+
+                let documents = builder.query(ref_reader, &query, 0..command.number_results)?;
 
                 let mut retrieve_duration = Duration::default();
 
