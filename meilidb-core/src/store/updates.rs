@@ -1,11 +1,31 @@
-use zlmdb::types::{OwnedType, Serde};
-use zlmdb::Result as ZResult;
+use std::borrow::Cow;
+use zlmdb::types::OwnedType;
+use zlmdb::{Result as ZResult, BytesEncode, BytesDecode};
+use serde::{Serialize, Deserialize};
 use crate::update::Update;
 use super::BEU64;
 
+pub struct SerdeJson<T>(std::marker::PhantomData<T>);
+
+impl<T> BytesEncode for SerdeJson<T> where T: Serialize {
+    type EItem = T;
+
+    fn bytes_encode(item: &Self::EItem) -> Option<Cow<[u8]>> {
+        serde_json::to_vec(item).map(Cow::Owned).ok()
+    }
+}
+
+impl<'a, T: 'a> BytesDecode<'a> for SerdeJson<T> where T: Deserialize<'a> + Clone {
+    type DItem = T;
+
+    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
+        serde_json::from_slice(bytes).ok()
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct Updates {
-    pub(crate) updates: zlmdb::Database<OwnedType<BEU64>, Serde<Update>>,
+    pub(crate) updates: zlmdb::Database<OwnedType<BEU64>, SerdeJson<Update>>,
 }
 
 impl Updates {
