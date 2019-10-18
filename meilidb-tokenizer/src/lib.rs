@@ -176,7 +176,7 @@ where
         let current = iter.next().map(|s| Tokenizer::new(s).peekable());
         SeqTokenizer {
             inner: iter,
-            current: current,
+            current,
             word_offset: 0,
             char_offset: 0,
         }

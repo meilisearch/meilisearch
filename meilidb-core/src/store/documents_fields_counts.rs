@@ -11,7 +11,7 @@ pub struct DocumentsFieldsCounts {
 
 impl DocumentsFieldsCounts {
     pub fn put_document_field_count(
-        &self,
+        self,
         writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
@@ -22,7 +22,7 @@ impl DocumentsFieldsCounts {
     }
 
     pub fn del_all_document_fields_counts(
-        &self,
+        self,
         writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
     ) -> ZResult<usize> {
@@ -33,7 +33,7 @@ impl DocumentsFieldsCounts {
     }
 
     pub fn document_field_count(
-        &self,
+        self,
         reader: &zlmdb::RoTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
@@ -46,7 +46,7 @@ impl DocumentsFieldsCounts {
     }
 
     pub fn document_fields_counts<'txn>(
-        &self,
+        self,
         reader: &'txn zlmdb::RoTxn,
         document_id: DocumentId,
     ) -> ZResult<DocumentFieldsCountsIter<'txn>> {
@@ -57,7 +57,7 @@ impl DocumentsFieldsCounts {
     }
 
     pub fn documents_ids<'txn>(
-        &self,
+        self,
         reader: &'txn zlmdb::RoTxn,
     ) -> ZResult<DocumentsIdsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
@@ -68,7 +68,7 @@ impl DocumentsFieldsCounts {
     }
 
     pub fn all_documents_fields_counts<'txn>(
-        &self,
+        self,
         reader: &'txn zlmdb::RoTxn,
     ) -> ZResult<AllDocumentsFieldsCountsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
@@ -89,7 +89,7 @@ impl Iterator for DocumentFieldsCountsIter<'_> {
                 let attr = SchemaAttr(key.attr.get());
                 Some(Ok((attr, count)))
             }
-            Some(Err(e)) => Some(Err(e.into())),
+            Some(Err(e)) => Some(Err(e)),
             None => None,
         }
     }
@@ -113,7 +113,7 @@ impl Iterator for DocumentsIdsIter<'_> {
                         return Some(Ok(document_id));
                     }
                 }
-                Err(e) => return Some(Err(e.into())),
+                Err(e) => return Some(Err(e)),
             }
         }
         None
@@ -134,7 +134,7 @@ impl<'r> Iterator for AllDocumentsFieldsCountsIter<'r> {
                 let attr = SchemaAttr(key.attr.get());
                 Some(Ok((docid, attr, count)))
             }
-            Some(Err(e)) => Some(Err(e.into())),
+            Some(Err(e)) => Some(Err(e)),
             None => None,
         }
     }

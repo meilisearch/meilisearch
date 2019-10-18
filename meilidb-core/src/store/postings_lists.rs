@@ -11,7 +11,7 @@ pub struct PostingsLists {
 
 impl PostingsLists {
     pub fn put_postings_list(
-        &self,
+        self,
         writer: &mut zlmdb::RwTxn,
         word: &[u8],
         words_indexes: &Set<DocIndex>,
@@ -19,12 +19,12 @@ impl PostingsLists {
         self.postings_lists.put(writer, word, words_indexes)
     }
 
-    pub fn del_postings_list(&self, writer: &mut zlmdb::RwTxn, word: &[u8]) -> ZResult<bool> {
+    pub fn del_postings_list(self, writer: &mut zlmdb::RwTxn, word: &[u8]) -> ZResult<bool> {
         self.postings_lists.delete(writer, word)
     }
 
     pub fn postings_list<'txn>(
-        &self,
+        self,
         reader: &'txn zlmdb::RoTxn,
         word: &[u8],
     ) -> ZResult<Option<Cow<'txn, Set<DocIndex>>>> {

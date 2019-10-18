@@ -102,7 +102,7 @@ pub struct QueryEnhancerBuilder<'a, S> {
 impl<S: AsRef<str>> QueryEnhancerBuilder<'_, S> {
     pub fn new(query: &[S]) -> QueryEnhancerBuilder<S> {
         // we initialize origins query indices based on their positions
-        let origins: Vec<_> = (0..query.len() + 1).collect();
+        let origins: Vec<_> = (0..=query.len()).collect();
         let real_to_origin = origins.iter().map(|&o| (o..o + 1, (o, 1))).collect();
 
         QueryEnhancerBuilder {

@@ -152,6 +152,12 @@ impl RawIndexer {
     }
 }
 
+impl Default for RawIndexer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn index_token(
     token: Token,
     id: DocumentId,

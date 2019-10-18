@@ -106,7 +106,7 @@ impl Index {
 
         let attributes = match attributes {
             Some(attributes) => attributes
-                .into_iter()
+                .iter()
                 .map(|name| schema.attribute(name))
                 .collect(),
             None => None,

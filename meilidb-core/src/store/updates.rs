@@ -36,7 +36,7 @@ pub struct Updates {
 
 impl Updates {
     // TODO do not trigger deserialize if possible
-    pub fn last_update_id(&self, reader: &zlmdb::RoTxn) -> ZResult<Option<(u64, Update)>> {
+    pub fn last_update_id(self, reader: &zlmdb::RoTxn) -> ZResult<Option<(u64, Update)>> {
         match self.updates.last(reader)? {
             Some((key, data)) => Ok(Some((key.get(), data))),
             None => Ok(None),
@@ -44,7 +44,7 @@ impl Updates {
     }
 
     // TODO do not trigger deserialize if possible
-    fn first_update_id(&self, reader: &zlmdb::RoTxn) -> ZResult<Option<(u64, Update)>> {
+    fn first_update_id(self, reader: &zlmdb::RoTxn) -> ZResult<Option<(u64, Update)>> {
         match self.updates.first(reader)? {
             Some((key, data)) => Ok(Some((key.get(), data))),
             None => Ok(None),
@@ -52,13 +52,13 @@ impl Updates {
     }
 
     // TODO do not trigger deserialize if possible
-    pub fn contains(&self, reader: &zlmdb::RoTxn, update_id: u64) -> ZResult<bool> {
+    pub fn contains(self, reader: &zlmdb::RoTxn, update_id: u64) -> ZResult<bool> {
         let update_id = BEU64::new(update_id);
         self.updates.get(reader, &update_id).map(|v| v.is_some())
     }
 
     pub fn put_update(
-        &self,
+        self,
         writer: &mut zlmdb::RwTxn,
         update_id: u64,
         update: &Update,
@@ -68,7 +68,7 @@ impl Updates {
         self.updates.put(writer, &update_id, update)
     }
 
-    pub fn pop_front(&self, writer: &mut zlmdb::RwTxn) -> ZResult<Option<(u64, Update)>> {
+    pub fn pop_front(self, writer: &mut zlmdb::RwTxn) -> ZResult<Option<(u64, Update)>> {
         match self.first_update_id(writer)? {
             Some((update_id, update)) => {
                 let key = BEU64::new(update_id);

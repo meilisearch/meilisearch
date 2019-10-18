@@ -7,7 +7,7 @@ pub fn apply_schema_update(
     main_store: store::Main,
     new_schema: &Schema,
 ) -> MResult<()> {
-    if let Some(_) = main_store.schema(writer)? {
+    if main_store.schema(writer)?.is_some() {
         return Err(UnsupportedOperation::SchemaAlreadyExists.into());
     }
 

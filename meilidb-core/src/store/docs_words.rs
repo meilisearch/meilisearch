@@ -11,7 +11,7 @@ pub struct DocsWords {
 
 impl DocsWords {
     pub fn put_doc_words(
-        &self,
+        self,
         writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
         words: &fst::Set,
@@ -22,7 +22,7 @@ impl DocsWords {
     }
 
     pub fn del_doc_words(
-        &self,
+        self,
         writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
     ) -> ZResult<bool> {
@@ -31,7 +31,7 @@ impl DocsWords {
     }
 
     pub fn doc_words(
-        &self,
+        self,
         reader: &zlmdb::RoTxn,
         document_id: DocumentId,
     ) -> ZResult<Option<fst::Set>> {

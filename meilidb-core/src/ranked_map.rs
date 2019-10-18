@@ -15,6 +15,10 @@ impl RankedMap {
         self.0.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn insert(&mut self, document: DocumentId, attribute: SchemaAttr, number: Number) {
         self.0.insert((document, attribute), number);
     }

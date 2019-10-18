@@ -12,7 +12,7 @@ pub struct DocumentsFields {
 
 impl DocumentsFields {
     pub fn put_document_field(
-        &self,
+        self,
         writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
@@ -23,7 +23,7 @@ impl DocumentsFields {
     }
 
     pub fn del_all_document_fields(
-        &self,
+        self,
         writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
     ) -> ZResult<usize> {
@@ -33,7 +33,7 @@ impl DocumentsFields {
     }
 
     pub fn document_attribute<'txn>(
-        &self,
+        self,
         reader: &'txn zlmdb::RoTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
@@ -43,7 +43,7 @@ impl DocumentsFields {
     }
 
     pub fn document_fields<'txn>(
-        &self,
+        self,
         reader: &'txn zlmdb::RoTxn,
         document_id: DocumentId,
     ) -> ZResult<DocumentFieldsIter<'txn>> {
@@ -67,7 +67,7 @@ impl<'txn> Iterator for DocumentFieldsIter<'txn> {
                 let attr = SchemaAttr(key.attr.get());
                 Some(Ok((attr, bytes)))
             }
-            Some(Err(e)) => Some(Err(e.into())),
+            Some(Err(e)) => Some(Err(e)),
             None => None,
         }
     }

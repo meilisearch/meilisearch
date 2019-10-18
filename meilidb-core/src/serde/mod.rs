@@ -119,3 +119,9 @@ impl RamDocumentStore {
         self.0
     }
 }
+
+impl Default for RamDocumentStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}

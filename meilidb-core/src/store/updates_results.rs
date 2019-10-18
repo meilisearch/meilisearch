@@ -9,7 +9,7 @@ pub struct UpdatesResults {
 }
 
 impl UpdatesResults {
-    pub fn last_update_id(&self, reader: &zlmdb::RoTxn) -> ZResult<Option<(u64, UpdateResult)>> {
+    pub fn last_update_id(self, reader: &zlmdb::RoTxn) -> ZResult<Option<(u64, UpdateResult)>> {
         match self.updates_results.last(reader)? {
             Some((key, data)) => Ok(Some((key.get(), data))),
             None => Ok(None),
@@ -17,7 +17,7 @@ impl UpdatesResults {
     }
 
     pub fn put_update_result(
-        &self,
+        self,
         writer: &mut zlmdb::RwTxn,
         update_id: u64,
         update_result: &UpdateResult,
@@ -27,7 +27,7 @@ impl UpdatesResults {
     }
 
     pub fn update_result(
-        &self,
+        self,
         reader: &zlmdb::RoTxn,
         update_id: u64,
     ) -> ZResult<Option<UpdateResult>> {

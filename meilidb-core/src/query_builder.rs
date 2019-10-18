@@ -57,7 +57,7 @@ fn multiword_rewrite_matches(
                     let match_ = TmpMatch {
                         query_index,
                         word_index,
-                        ..match_.clone()
+                        ..*match_
                     };
                     padded_matches.push((*id, match_));
                 }
@@ -72,7 +72,7 @@ fn multiword_rewrite_matches(
                         let padmatch = TmpMatch {
                             query_index,
                             word_index,
-                            ..match_.clone()
+                            ..*match_
                         };
 
                         for (_, nmatch_) in next_group {
@@ -89,7 +89,7 @@ fn multiword_rewrite_matches(
                                         let match_ = TmpMatch {
                                             query_index,
                                             word_index,
-                                            ..match_.clone()
+                                            ..*match_
                                         };
                                         padded_matches.push((*id, match_));
                                         biggest = biggest.max(i + 1);
@@ -116,7 +116,7 @@ fn multiword_rewrite_matches(
                         let match_ = TmpMatch {
                             query_index,
                             word_index,
-                            ..match_.clone()
+                            ..*match_
                         };
                         padded_matches.push((*id, match_));
                     }
@@ -141,9 +141,9 @@ fn fetch_raw_documents(
     automatons: &[Automaton],
     query_enhancer: &QueryEnhancer,
     searchables: Option<&ReorderedAttrs>,
-    main_store: &store::Main,
-    postings_lists_store: &store::PostingsLists,
-    documents_fields_counts_store: &store::DocumentsFieldsCounts,
+    main_store: store::Main,
+    postings_lists_store: store::PostingsLists,
+    documents_fields_counts_store: store::DocumentsFieldsCounts,
 ) -> MResult<Vec<RawDocument>> {
     let mut matches = Vec::new();
     let mut highlights = Vec::new();
@@ -370,11 +370,11 @@ where
     let (automaton_producer, query_enhancer) =
         AutomatonProducer::new(reader, query, main_store, synonyms_store)?;
 
-    let mut automaton_producer = automaton_producer.into_iter();
+    let automaton_producer = automaton_producer.into_iter();
     let mut automatons = Vec::new();
 
     // aggregate automatons groups by groups after time
-    while let Some(auts) = automaton_producer.next() {
+    for auts in automaton_producer {
         automatons.extend(auts);
 
         // we must retrieve the documents associated
@@ -384,9 +384,9 @@ where
             &automatons,
             &query_enhancer,
             searchable_attrs.as_ref(),
-            &main_store,
-            &postings_lists_store,
-            &documents_fields_counts_store,
+            main_store,
+            postings_lists_store,
+            documents_fields_counts_store,
         )?;
 
         // stop processing when time is running out
@@ -447,7 +447,7 @@ where
     // those must be returned
     let documents = raw_documents_processed
         .into_iter()
-        .map(|d| Document::from_raw(d))
+        .map(Document::from_raw)
         .collect();
 
     Ok(documents)
@@ -483,11 +483,11 @@ where
     let (automaton_producer, query_enhancer) =
         AutomatonProducer::new(reader, query, main_store, synonyms_store)?;
 
-    let mut automaton_producer = automaton_producer.into_iter();
+    let automaton_producer = automaton_producer.into_iter();
     let mut automatons = Vec::new();
 
     // aggregate automatons groups by groups after time
-    while let Some(auts) = automaton_producer.next() {
+    for auts in automaton_producer {
         automatons.extend(auts);
 
         // we must retrieve the documents associated
@@ -497,9 +497,9 @@ where
             &automatons,
             &query_enhancer,
             searchable_attrs.as_ref(),
-            &main_store,
-            &postings_lists_store,
-            &documents_fields_counts_store,
+            main_store,
+            postings_lists_store,
+            documents_fields_counts_store,
         )?;
 
         // stop processing when time is running out
@@ -620,7 +620,7 @@ where
     // those must be returned
     let documents = raw_documents_processed
         .into_iter()
-        .map(|d| Document::from_raw(d))
+        .map(Document::from_raw)
         .collect();
 
     Ok(documents)
