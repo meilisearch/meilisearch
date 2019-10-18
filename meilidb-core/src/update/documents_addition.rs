@@ -1,14 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
-use fst::{SetBuilder, set::OpBuilder};
-use sdset::{SetOperation, duo::Union};
+use fst::{set::OpBuilder, SetBuilder};
+use sdset::{duo::Union, SetOperation};
 use serde::Serialize;
 
 use crate::raw_indexer::RawIndexer;
-use crate::serde::{extract_document_id, Serializer, RamDocumentStore};
+use crate::serde::{extract_document_id, RamDocumentStore, Serializer};
 use crate::store;
-use crate::update::{Update, next_update_id, apply_documents_deletion};
-use crate::{MResult, Error, RankedMap};
+use crate::update::{apply_documents_deletion, next_update_id, Update};
+use crate::{Error, MResult, RankedMap};
 
 pub struct DocumentsAddition<D> {
     updates_store: store::Updates,
@@ -22,8 +22,7 @@ impl<D> DocumentsAddition<D> {
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
         updates_notifier: crossbeam_channel::Sender<()>,
-    ) -> DocumentsAddition<D>
-    {
+    ) -> DocumentsAddition<D> {
         DocumentsAddition {
             updates_store,
             updates_results_store,
@@ -37,7 +36,8 @@ impl<D> DocumentsAddition<D> {
     }
 
     pub fn finalize(self, writer: &mut zlmdb::RwTxn) -> MResult<u64>
-    where D: serde::Serialize
+    where
+        D: serde::Serialize,
     {
         let _ = self.updates_notifier.send(());
         let update_id = push_documents_addition(
@@ -51,7 +51,7 @@ impl<D> DocumentsAddition<D> {
 }
 
 impl<D> Extend<D> for DocumentsAddition<D> {
-    fn extend<T: IntoIterator<Item=D>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = D>>(&mut self, iter: T) {
         self.documents.extend(iter)
     }
 }
@@ -61,8 +61,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     addition: Vec<D>,
-) -> MResult<u64>
-{
+) -> MResult<u64> {
     let mut values = Vec::with_capacity(addition.len());
     for add in addition {
         let vec = serde_json::to_vec(&add)?;
@@ -87,8 +86,7 @@ pub fn apply_documents_addition(
     docs_words_store: store::DocsWords,
     mut ranked_map: RankedMap,
     addition: Vec<serde_json::Value>,
-) -> MResult<()>
-{
+) -> MResult<()> {
     let mut document_ids = HashSet::new();
     let mut document_store = RamDocumentStore::new();
     let mut document_fields_counts = HashMap::new();
@@ -182,7 +180,7 @@ pub fn apply_documents_addition(
                 .into_inner()
                 .and_then(fst::Set::from_bytes)
                 .unwrap()
-        },
+        }
         None => delta_words,
     };
 

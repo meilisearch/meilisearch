@@ -15,19 +15,19 @@ mod extract_document_id;
 mod indexer;
 mod serializer;
 
-pub use self::deserializer::{Deserializer, DeserializerError};
-pub use self::extract_document_id::{extract_document_id, compute_document_id, value_to_string};
-pub use self::convert_to_string::ConvertToString;
 pub use self::convert_to_number::ConvertToNumber;
+pub use self::convert_to_string::ConvertToString;
+pub use self::deserializer::{Deserializer, DeserializerError};
+pub use self::extract_document_id::{compute_document_id, extract_document_id, value_to_string};
 pub use self::indexer::Indexer;
 pub use self::serializer::Serializer;
 
 use std::collections::BTreeMap;
-use std::{fmt, error::Error};
+use std::{error::Error, fmt};
 
 use meilidb_schema::SchemaAttr;
-use serde_json::Error as SerdeJsonError;
 use serde::ser;
+use serde_json::Error as SerdeJsonError;
 
 use crate::{DocumentId, ParseNumberError};
 
@@ -55,24 +55,24 @@ impl fmt::Display for SerializerError {
         match self {
             SerializerError::DocumentIdNotFound => {
                 f.write_str("serialized document does not have an id according to the schema")
-            },
+            }
             SerializerError::InvalidDocumentIdType => {
                 f.write_str("document identifier can only be of type string or number")
-            },
+            }
             SerializerError::Zlmdb(e) => write!(f, "zlmdb related error: {}", e),
             SerializerError::SerdeJson(e) => write!(f, "serde json error: {}", e),
             SerializerError::ParseNumber(e) => {
                 write!(f, "error while trying to parse a number: {}", e)
-            },
+            }
             SerializerError::UnserializableType { type_name } => {
                 write!(f, "{} is not a serializable type", type_name)
-            },
+            }
             SerializerError::UnindexableType { type_name } => {
                 write!(f, "{} is not an indexable type", type_name)
-            },
+            }
             SerializerError::UnrankableType { type_name } => {
                 write!(f, "{} types can not be used for ranking", type_name)
-            },
+            }
             SerializerError::Custom(s) => f.write_str(s),
         }
     }

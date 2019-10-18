@@ -13,8 +13,7 @@ impl Synonyms {
         writer: &mut zlmdb::RwTxn,
         word: &[u8],
         synonyms: &fst::Set,
-    ) -> ZResult<()>
-    {
+    ) -> ZResult<()> {
         let bytes = synonyms.as_fst().as_bytes();
         self.synonyms.put(writer, word, bytes)
     }
@@ -30,7 +29,7 @@ impl Synonyms {
                 let bytes = Arc::from(bytes);
                 let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
                 Ok(Some(fst::Set::from(fst)))
-            },
+            }
             None => Ok(None),
         }
     }

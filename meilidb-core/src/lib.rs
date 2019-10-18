@@ -1,7 +1,9 @@
 #[cfg(test)]
-#[macro_use] extern crate assert_matches;
+#[macro_use]
+extern crate assert_matches;
 
 mod automaton;
+pub mod criterion;
 mod database;
 mod distinct_map;
 mod error;
@@ -9,31 +11,41 @@ mod number;
 mod query_builder;
 mod ranked_map;
 mod raw_document;
-mod reordered_attrs;
-mod update;
-pub mod criterion;
 pub mod raw_indexer;
+mod reordered_attrs;
 pub mod serde;
 pub mod store;
+mod update;
 
-pub use self::database::{Database, BoxUpdateFn};
+pub use self::database::{BoxUpdateFn, Database};
 pub use self::error::{Error, MResult};
 pub use self::number::{Number, ParseNumberError};
 pub use self::ranked_map::RankedMap;
 pub use self::raw_document::RawDocument;
 pub use self::store::Index;
-pub use self::update::{UpdateStatus, UpdateResult, UpdateType};
+pub use self::update::{UpdateResult, UpdateStatus, UpdateType};
 
+use ::serde::{Deserialize, Serialize};
 use zerocopy::{AsBytes, FromBytes};
-use ::serde::{Serialize, Deserialize};
 
 /// Represent an internally generated document unique identifier.
 ///
 /// It is used to inform the database the document you want to deserialize.
 /// Helpful for custom ranking.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
-#[derive(Serialize, Deserialize)]
-#[derive(AsBytes, FromBytes)]
+#[derive(
+    Debug,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    AsBytes,
+    FromBytes,
+)]
 #[repr(C)]
 pub struct DocumentId(pub u64);
 
@@ -42,8 +54,7 @@ pub struct DocumentId(pub u64);
 ///
 /// This is stored in the map, generated at index time,
 /// extracted and interpreted at search time.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[derive(AsBytes, FromBytes)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, AsBytes, FromBytes)]
 #[repr(C)]
 pub struct DocIndex {
     /// The document identifier where the word was found.
@@ -109,7 +120,10 @@ pub struct Document {
 impl Document {
     #[cfg(not(test))]
     fn from_raw(raw: RawDocument) -> Document {
-        Document { id: raw.id, highlights: raw.highlights }
+        Document {
+            id: raw.id,
+            highlights: raw.highlights,
+        }
     }
 
     #[cfg(test)]
@@ -134,7 +148,11 @@ impl Document {
             matches.push(match_);
         }
 
-        Document { id: raw.id, matches, highlights: raw.highlights }
+        Document {
+            id: raw.id,
+            matches,
+            highlights: raw.highlights,
+        }
     }
 }
 

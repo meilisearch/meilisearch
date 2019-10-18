@@ -6,7 +6,10 @@ pub struct ReorderedAttrs {
 
 impl ReorderedAttrs {
     pub fn new() -> ReorderedAttrs {
-        ReorderedAttrs { count: 0, reorders: Vec::new() }
+        ReorderedAttrs {
+            count: 0,
+            reorders: Vec::new(),
+        }
     }
 
     pub fn insert_attribute(&mut self, attribute: u16) {

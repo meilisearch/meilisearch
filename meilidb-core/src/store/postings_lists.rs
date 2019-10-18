@@ -1,8 +1,8 @@
-use std::borrow::Cow;
+use crate::DocIndex;
 use sdset::{Set, SetBuf};
+use std::borrow::Cow;
 use zlmdb::types::{ByteSlice, CowSlice};
 use zlmdb::Result as ZResult;
-use crate::DocIndex;
 
 #[derive(Copy, Clone)]
 pub struct PostingsLists {
@@ -15,8 +15,7 @@ impl PostingsLists {
         writer: &mut zlmdb::RwTxn,
         word: &[u8],
         words_indexes: &Set<DocIndex>,
-    ) -> ZResult<()>
-    {
+    ) -> ZResult<()> {
         self.postings_lists.put(writer, word, words_indexes)
     }
 
@@ -28,8 +27,7 @@ impl PostingsLists {
         &self,
         reader: &'txn zlmdb::RoTxn,
         word: &[u8],
-    ) -> ZResult<Option<Cow<'txn, Set<DocIndex>>>>
-    {
+    ) -> ZResult<Option<Cow<'txn, Set<DocIndex>>>> {
         match self.postings_lists.get(reader, word)? {
             Some(Cow::Borrowed(slice)) => Ok(Some(Cow::Borrowed(Set::new_unchecked(slice)))),
             Some(Cow::Owned(vec)) => Ok(Some(Cow::Owned(SetBuf::new_unchecked(vec)))),

@@ -1,5 +1,5 @@
+use std::cmp::Ordering::{Equal, Greater, Less};
 use std::ops::Range;
-use std::cmp::Ordering::{Less, Greater, Equal};
 
 /// Return `true` if the specified range can accept the given replacements words.
 /// Returns `false` if the replacements words are already present in the original query
@@ -34,13 +34,14 @@ use std::cmp::Ordering::{Less, Greater, Equal};
 //  [new york city]
 //
 fn rewrite_range_with<S, T>(query: &[S], range: Range<usize>, words: &[T]) -> bool
-where S: AsRef<str>,
-      T: AsRef<str>,
+where
+    S: AsRef<str>,
+    T: AsRef<str>,
 {
     if words.len() <= range.len() {
         // there is fewer or equal replacement words
         // than there is already in the replaced range
-        return false
+        return false;
     }
 
     // retrieve the part to rewrite but with the length
@@ -49,7 +50,9 @@ where S: AsRef<str>,
 
     // check if the original query doesn't already contain
     // the replacement words
-    !original.map(AsRef::as_ref).eq(words.iter().map(AsRef::as_ref))
+    !original
+        .map(AsRef::as_ref)
+        .eq(words.iter().map(AsRef::as_ref))
 }
 
 type Origin = usize;
@@ -68,11 +71,20 @@ impl FakeIntervalTree {
     fn query(&self, point: usize) -> Option<(Range<usize>, (Origin, RealLength))> {
         let element = self.intervals.binary_search_by(|(r, _)| {
             if point >= r.start {
-                if point < r.end { Equal } else { Less }
-            } else { Greater }
+                if point < r.end {
+                    Equal
+                } else {
+                    Less
+                }
+            } else {
+                Greater
+            }
         });
 
-        let n = match element { Ok(n) => n, Err(n) => n };
+        let n = match element {
+            Ok(n) => n,
+            Err(n) => n,
+        };
 
         match self.intervals.get(n) {
             Some((range, value)) if range.contains(&point) => Some((range.clone(), *value)),
@@ -91,9 +103,13 @@ impl<S: AsRef<str>> QueryEnhancerBuilder<'_, S> {
     pub fn new(query: &[S]) -> QueryEnhancerBuilder<S> {
         // we initialize origins query indices based on their positions
         let origins: Vec<_> = (0..query.len() + 1).collect();
-        let real_to_origin = origins.iter().map(|&o| (o..o+1, (o, 1))).collect();
+        let real_to_origin = origins.iter().map(|&o| (o..o + 1, (o, 1))).collect();
 
-        QueryEnhancerBuilder { query, origins, real_to_origin }
+        QueryEnhancerBuilder {
+            query,
+            origins,
+            real_to_origin,
+        }
     }
 
     /// Update the final real to origin query indices mapping.
@@ -101,12 +117,12 @@ impl<S: AsRef<str>> QueryEnhancerBuilder<'_, S> {
     /// `range` is the original words range that this `replacement` words replace
     /// and `real` is the first real query index of these replacement words.
     pub fn declare<T>(&mut self, range: Range<usize>, real: usize, replacement: &[T])
-    where T: AsRef<str>,
+    where
+        T: AsRef<str>,
     {
         // check if the range of original words
         // can be rewritten with the replacement words
         if rewrite_range_with(self.query, range.clone(), replacement) {
-
             // this range can be replaced so we need to
             // modify the origins accordingly
             let offset = replacement.len() - range.len();
@@ -126,7 +142,8 @@ impl<S: AsRef<str>> QueryEnhancerBuilder<'_, S> {
         // we need to pad real query indices
         let real_range = real..real + replacement.len().max(range.len());
         let real_length = replacement.len();
-        self.real_to_origin.push((real_range, (range.start, real_length)));
+        self.real_to_origin
+            .push((real_range, (range.start, real_length)));
     }
 
     pub fn build(self) -> QueryEnhancer {
@@ -148,10 +165,10 @@ impl QueryEnhancer {
         let real = real as usize;
 
         // query the fake interval tree with the real query index
-        let (range, (origin, real_length)) =
-            self.real_to_origin
-                .query(real)
-                .expect("real has never been declared");
+        let (range, (origin, real_length)) = self
+            .real_to_origin
+            .query(real)
+            .expect("real has never been declared");
 
         // if `real` is the end bound of the range
         if (range.start + real_length - 1) == real {
@@ -160,7 +177,10 @@ impl QueryEnhancer {
             for (i, slice) in self.origins[new_origin..].windows(2).enumerate() {
                 let len = slice[1] - slice[0];
                 count = count.saturating_sub(len);
-                if count == 0 { new_origin = origin + i; break }
+                if count == 0 {
+                    new_origin = origin + i;
+                    break;
+                }
             }
 
             let n = real - range.start;
@@ -168,15 +188,20 @@ impl QueryEnhancer {
             let end = self.origins[new_origin + 1];
             let remaining = (end - start) - n;
 
-            Range { start: (start + n) as u32, end: (start + n + remaining) as u32 }
-
+            Range {
+                start: (start + n) as u32,
+                end: (start + n + remaining) as u32,
+            }
         } else {
             // just return the origin along with
             // the real position of the word
             let n = real as usize - range.start;
             let origin = self.origins[origin];
 
-            Range { start: (origin + n) as u32, end: (origin + n + 1) as u32 }
+            Range {
+                start: (origin + n) as u32,
+                end: (origin + n + 1) as u32,
+            }
         }
     }
 }
@@ -382,16 +407,16 @@ mod tests {
 
         let enhancer = builder.build();
 
-        assert_eq!(enhancer.replacement(0),  0..1); // great
-        assert_eq!(enhancer.replacement(1),  1..2); // awesome
-        assert_eq!(enhancer.replacement(2),  2..5); // NYC
-        assert_eq!(enhancer.replacement(3),  5..7); // subway
-        assert_eq!(enhancer.replacement(4),  2..3); // new
-        assert_eq!(enhancer.replacement(5),  3..4); // york
-        assert_eq!(enhancer.replacement(6),  4..5); // city
-        assert_eq!(enhancer.replacement(7),  5..6); // underground
-        assert_eq!(enhancer.replacement(8),  6..7); // train
-        assert_eq!(enhancer.replacement(9),  0..2); // good
+        assert_eq!(enhancer.replacement(0), 0..1); // great
+        assert_eq!(enhancer.replacement(1), 1..2); // awesome
+        assert_eq!(enhancer.replacement(2), 2..5); // NYC
+        assert_eq!(enhancer.replacement(3), 5..7); // subway
+        assert_eq!(enhancer.replacement(4), 2..3); // new
+        assert_eq!(enhancer.replacement(5), 3..4); // york
+        assert_eq!(enhancer.replacement(6), 4..5); // city
+        assert_eq!(enhancer.replacement(7), 5..6); // underground
+        assert_eq!(enhancer.replacement(8), 6..7); // train
+        assert_eq!(enhancer.replacement(9), 0..2); // good
         assert_eq!(enhancer.replacement(10), 1..5); // NY
         assert_eq!(enhancer.replacement(11), 2..5); // metro
     }

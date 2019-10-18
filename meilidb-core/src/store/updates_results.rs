@@ -1,7 +1,7 @@
+use super::BEU64;
+use crate::update::UpdateResult;
 use zlmdb::types::{OwnedType, Serde};
 use zlmdb::Result as ZResult;
-use crate::update::UpdateResult;
-use super::BEU64;
 
 #[derive(Copy, Clone)]
 pub struct UpdatesResults {
@@ -21,8 +21,7 @@ impl UpdatesResults {
         writer: &mut zlmdb::RwTxn,
         update_id: u64,
         update_result: &UpdateResult,
-    ) -> ZResult<()>
-    {
+    ) -> ZResult<()> {
         let update_id = BEU64::new(update_id);
         self.updates_results.put(writer, &update_id, update_result)
     }
@@ -31,8 +30,7 @@ impl UpdatesResults {
         &self,
         reader: &zlmdb::RoTxn,
         update_id: u64,
-    ) -> ZResult<Option<UpdateResult>>
-    {
+    ) -> ZResult<Option<UpdateResult>> {
         let update_id = BEU64::new(update_id);
         self.updates_results.get(reader, &update_id)
     }

@@ -1,5 +1,5 @@
-use serde::Serialize;
 use serde::ser;
+use serde::Serialize;
 
 use super::SerializerError;
 
@@ -17,7 +17,9 @@ impl ser::Serializer for ConvertToString {
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
     fn serialize_bool(self, _value: bool) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { type_name: "boolean" })
+        Err(SerializerError::UnserializableType {
+            type_name: "boolean",
+        })
     }
 
     fn serialize_char(self, value: char) -> Result<Self::Ok, Self::Error> {
@@ -73,13 +75,18 @@ impl ser::Serializer for ConvertToString {
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { type_name: "Option" })
+        Err(SerializerError::UnserializableType {
+            type_name: "Option",
+        })
     }
 
     fn serialize_some<T: ?Sized>(self, _value: &T) -> Result<Self::Ok, Self::Error>
-    where T: Serialize,
+    where
+        T: Serialize,
     {
-        Err(SerializerError::UnserializableType { type_name: "Option" })
+        Err(SerializerError::UnserializableType {
+            type_name: "Option",
+        })
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
@@ -87,25 +94,29 @@ impl ser::Serializer for ConvertToString {
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType { type_name: "unit struct" })
+        Err(SerializerError::UnserializableType {
+            type_name: "unit struct",
+        })
     }
 
     fn serialize_unit_variant(
         self,
         _name: &'static str,
         _variant_index: u32,
-        _variant: &'static str
-    ) -> Result<Self::Ok, Self::Error>
-    {
-        Err(SerializerError::UnserializableType { type_name: "unit variant" })
+        _variant: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
+        Err(SerializerError::UnserializableType {
+            type_name: "unit variant",
+        })
     }
 
     fn serialize_newtype_struct<T: ?Sized>(
         self,
         _name: &'static str,
-        value: &T
+        value: &T,
     ) -> Result<Self::Ok, Self::Error>
-    where T: Serialize,
+    where
+        T: Serialize,
     {
         value.serialize(self)
     }
@@ -115,15 +126,20 @@ impl ser::Serializer for ConvertToString {
         _name: &'static str,
         _variant_index: u32,
         _variant: &'static str,
-        _value: &T
+        _value: &T,
     ) -> Result<Self::Ok, Self::Error>
-    where T: Serialize,
+    where
+        T: Serialize,
     {
-        Err(SerializerError::UnserializableType { type_name: "newtype variant" })
+        Err(SerializerError::UnserializableType {
+            type_name: "newtype variant",
+        })
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        Err(SerializerError::UnserializableType { type_name: "sequence" })
+        Err(SerializerError::UnserializableType {
+            type_name: "sequence",
+        })
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
@@ -133,10 +149,11 @@ impl ser::Serializer for ConvertToString {
     fn serialize_tuple_struct(
         self,
         _name: &'static str,
-        _len: usize
-    ) -> Result<Self::SerializeTupleStruct, Self::Error>
-    {
-        Err(SerializerError::UnserializableType { type_name: "tuple struct" })
+        _len: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        Err(SerializerError::UnserializableType {
+            type_name: "tuple struct",
+        })
     }
 
     fn serialize_tuple_variant(
@@ -144,10 +161,11 @@ impl ser::Serializer for ConvertToString {
         _name: &'static str,
         _variant_index: u32,
         _variant: &'static str,
-        _len: usize
-    ) -> Result<Self::SerializeTupleVariant, Self::Error>
-    {
-        Err(SerializerError::UnserializableType { type_name: "tuple variant" })
+        _len: usize,
+    ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+        Err(SerializerError::UnserializableType {
+            type_name: "tuple variant",
+        })
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
@@ -157,10 +175,11 @@ impl ser::Serializer for ConvertToString {
     fn serialize_struct(
         self,
         _name: &'static str,
-        _len: usize
-    ) -> Result<Self::SerializeStruct, Self::Error>
-    {
-        Err(SerializerError::UnserializableType { type_name: "struct" })
+        _len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
+        Err(SerializerError::UnserializableType {
+            type_name: "struct",
+        })
     }
 
     fn serialize_struct_variant(
@@ -168,9 +187,10 @@ impl ser::Serializer for ConvertToString {
         _name: &'static str,
         _variant_index: u32,
         _variant: &'static str,
-        _len: usize
-    ) -> Result<Self::SerializeStructVariant, Self::Error>
-    {
-        Err(SerializerError::UnserializableType { type_name: "struct variant" })
+        _len: usize,
+    ) -> Result<Self::SerializeStructVariant, Self::Error> {
+        Err(SerializerError::UnserializableType {
+            type_name: "struct variant",
+        })
     }
 }

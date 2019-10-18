@@ -2,17 +2,17 @@ use hashbrown::HashMap;
 use std::mem;
 use std::ops::Range;
 use std::rc::Rc;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 use fst::{IntoStreamer, Streamer};
 use sdset::SetBuf;
 use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::automaton::{Automaton, AutomatonProducer, QueryEnhancer};
-use crate::distinct_map::{DistinctMap, BufferedDistinctMap};
-use crate::raw_document::{RawDocument, raw_documents_from};
-use crate::{Document, DocumentId, Highlight, TmpMatch, criterion::Criteria};
-use crate::{store, MResult, reordered_attrs::ReorderedAttrs};
+use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
+use crate::raw_document::{raw_documents_from, RawDocument};
+use crate::{criterion::Criteria, Document, DocumentId, Highlight, TmpMatch};
+use crate::{reordered_attrs::ReorderedAttrs, store, MResult};
 
 pub struct QueryBuilder<'c, 'f, 'd> {
     criteria: Criteria<'c>,
@@ -29,8 +29,7 @@ pub struct QueryBuilder<'c, 'f, 'd> {
 fn multiword_rewrite_matches(
     mut matches: Vec<(DocumentId, TmpMatch)>,
     query_enhancer: &QueryEnhancer,
-) -> SetBuf<(DocumentId, TmpMatch)>
-{
+) -> SetBuf<(DocumentId, TmpMatch)> {
     let mut padded_matches = Vec::with_capacity(matches.len());
 
     // we sort the matches by word index to make them rewritable
@@ -38,7 +37,6 @@ fn multiword_rewrite_matches(
 
     // for each attribute of each document
     for same_document_attribute in matches.linear_group_by_key(|(id, m)| (*id, m.attribute)) {
-
         // padding will only be applied
         // to word indices in the same attribute
         let mut padding = 0;
@@ -47,18 +45,20 @@ fn multiword_rewrite_matches(
         // for each match at the same position
         // in this document attribute
         while let Some(same_word_index) = iter.next() {
-
             // find the biggest padding
             let mut biggest = 0;
             for (id, match_) in same_word_index {
-
                 let mut replacement = query_enhancer.replacement(match_.query_index);
                 let replacement_len = replacement.len();
                 let nexts = iter.remainder().linear_group_by_key(|(_, m)| m.word_index);
 
                 if let Some(query_index) = replacement.next() {
                     let word_index = match_.word_index + padding as u16;
-                    let match_ = TmpMatch { query_index, word_index, ..match_.clone() };
+                    let match_ = TmpMatch {
+                        query_index,
+                        word_index,
+                        ..match_.clone()
+                    };
                     padded_matches.push((*id, match_));
                 }
 
@@ -67,22 +67,30 @@ fn multiword_rewrite_matches(
                 // look ahead and if there already is a match
                 // corresponding to this padding word, abort the padding
                 'padding: for (x, next_group) in nexts.enumerate() {
-
                     for (i, query_index) in replacement.clone().enumerate().skip(x) {
                         let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
-                        let padmatch = TmpMatch { query_index, word_index, ..match_.clone() };
+                        let padmatch = TmpMatch {
+                            query_index,
+                            word_index,
+                            ..match_.clone()
+                        };
 
                         for (_, nmatch_) in next_group {
                             let mut rep = query_enhancer.replacement(nmatch_.query_index);
                             let query_index = rep.next().unwrap();
                             if query_index == padmatch.query_index {
-
                                 if !found {
                                     // if we find a corresponding padding for the
                                     // first time we must push preceding paddings
-                                    for (i, query_index) in replacement.clone().enumerate().take(i) {
-                                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
-                                        let match_ = TmpMatch { query_index, word_index, ..match_.clone() };
+                                    for (i, query_index) in replacement.clone().enumerate().take(i)
+                                    {
+                                        let word_index =
+                                            match_.word_index + padding as u16 + (i + 1) as u16;
+                                        let match_ = TmpMatch {
+                                            query_index,
+                                            word_index,
+                                            ..match_.clone()
+                                        };
                                         padded_matches.push((*id, match_));
                                         biggest = biggest.max(i + 1);
                                     }
@@ -97,7 +105,7 @@ fn multiword_rewrite_matches(
 
                     // if we do not find a corresponding padding in the
                     // next groups so stop here and pad what was found
-                    break
+                    break;
                 }
 
                 if !found {
@@ -105,7 +113,11 @@ fn multiword_rewrite_matches(
                     // we must insert the entire padding
                     for (i, query_index) in replacement.enumerate() {
                         let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
-                        let match_ = TmpMatch { query_index, word_index, ..match_.clone() };
+                        let match_ = TmpMatch {
+                            query_index,
+                            word_index,
+                            ..match_.clone()
+                        };
                         padded_matches.push((*id, match_));
                     }
 
@@ -132,13 +144,17 @@ fn fetch_raw_documents(
     main_store: &store::Main,
     postings_lists_store: &store::PostingsLists,
     documents_fields_counts_store: &store::DocumentsFieldsCounts,
-) -> MResult<Vec<RawDocument>>
-{
+) -> MResult<Vec<RawDocument>> {
     let mut matches = Vec::new();
     let mut highlights = Vec::new();
 
     for automaton in automatons {
-        let Automaton { index, is_exact, query_len, .. } = automaton;
+        let Automaton {
+            index,
+            is_exact,
+            query_len,
+            ..
+        } = automaton;
         let dfa = automaton.dfa();
 
         let words = match main_store.words_fst(reader)? {
@@ -210,8 +226,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         postings_lists: store::PostingsLists,
         documents_fields_counts: store::DocumentsFieldsCounts,
         synonyms: store::Synonyms,
-    ) -> QueryBuilder<'c, 'f, 'd>
-    {
+    ) -> QueryBuilder<'c, 'f, 'd> {
         QueryBuilder::with_criteria(
             main,
             postings_lists,
@@ -227,8 +242,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         documents_fields_counts: store::DocumentsFieldsCounts,
         synonyms: store::Synonyms,
         criteria: Criteria<'c>,
-    ) -> QueryBuilder<'c, 'f, 'd>
-    {
+    ) -> QueryBuilder<'c, 'f, 'd> {
         QueryBuilder {
             criteria,
             searchable_attrs: None,
@@ -245,7 +259,8 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
 
 impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
     pub fn with_filter<F>(&mut self, function: F)
-    where F: Fn(DocumentId) -> bool + 'f,
+    where
+        F: Fn(DocumentId) -> bool + 'f,
     {
         self.filter = Some(Box::new(function))
     }
@@ -255,13 +270,16 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
     }
 
     pub fn with_distinct<F, K>(&mut self, function: F, size: usize)
-    where F: Fn(DocumentId) -> Option<u64> + 'd,
+    where
+        F: Fn(DocumentId) -> Option<u64> + 'd,
     {
         self.distinct = Some((Box::new(function), size))
     }
 
     pub fn add_searchable_attribute(&mut self, attribute: u16) {
-        let reorders = self.searchable_attrs.get_or_insert_with(ReorderedAttrs::new);
+        let reorders = self
+            .searchable_attrs
+            .get_or_insert_with(ReorderedAttrs::new);
         reorders.insert_attribute(attribute);
     }
 
@@ -270,41 +288,36 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         reader: &zlmdb::RoTxn,
         query: &str,
         range: Range<usize>,
-    ) -> MResult<Vec<Document>>
-    {
+    ) -> MResult<Vec<Document>> {
         match self.distinct {
-            Some((distinct, distinct_size)) => {
-                raw_query_with_distinct(
-                    reader,
-                    query,
-                    range,
-                    self.filter,
-                    distinct,
-                    distinct_size,
-                    self.timeout,
-                    self.criteria,
-                    self.searchable_attrs,
-                    self.main_store,
-                    self.postings_lists_store,
-                    self.documents_fields_counts_store,
-                    self.synonyms_store,
-                )
-            },
-            None => {
-                raw_query(
-                    reader,
-                    query,
-                    range,
-                    self.filter,
-                    self.timeout,
-                    self.criteria,
-                    self.searchable_attrs,
-                    self.main_store,
-                    self.postings_lists_store,
-                    self.documents_fields_counts_store,
-                    self.synonyms_store,
-                )
-            }
+            Some((distinct, distinct_size)) => raw_query_with_distinct(
+                reader,
+                query,
+                range,
+                self.filter,
+                distinct,
+                distinct_size,
+                self.timeout,
+                self.criteria,
+                self.searchable_attrs,
+                self.main_store,
+                self.postings_lists_store,
+                self.documents_fields_counts_store,
+                self.synonyms_store,
+            ),
+            None => raw_query(
+                reader,
+                query,
+                range,
+                self.filter,
+                self.timeout,
+                self.criteria,
+                self.searchable_attrs,
+                self.main_store,
+                self.postings_lists_store,
+                self.documents_fields_counts_store,
+                self.synonyms_store,
+            ),
         }
     }
 }
@@ -326,7 +339,8 @@ fn raw_query<'c, FI>(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
 ) -> MResult<Vec<Document>>
-where FI: Fn(DocumentId) -> bool,
+where
+    FI: Fn(DocumentId) -> bool,
 {
     // We delegate the filter work to the distinct query builder,
     // specifying a distinct rule that has no effect.
@@ -347,18 +361,14 @@ where FI: Fn(DocumentId) -> bool,
             postings_lists_store,
             documents_fields_counts_store,
             synonyms_store,
-        )
+        );
     }
 
     let start_processing = Instant::now();
     let mut raw_documents_processed = Vec::with_capacity(range.len());
 
-    let (automaton_producer, query_enhancer) = AutomatonProducer::new(
-        reader,
-        query,
-        main_store,
-        synonyms_store,
-    )?;
+    let (automaton_producer, query_enhancer) =
+        AutomatonProducer::new(reader, query, main_store, synonyms_store)?;
 
     let mut automaton_producer = automaton_producer.into_iter();
     let mut automatons = Vec::new();
@@ -382,7 +392,7 @@ where FI: Fn(DocumentId) -> bool,
         // stop processing when time is running out
         if let Some(timeout) = timeout {
             if !raw_documents_processed.is_empty() && start_processing.elapsed() > timeout {
-                break
+                break;
             }
         }
 
@@ -409,20 +419,27 @@ where FI: Fn(DocumentId) -> bool,
 
                     // we have sort enough documents if the last document sorted is after
                     // the end of the requested range, we can continue to the next criterion
-                    if documents_seen >= range.end { continue 'criteria }
+                    if documents_seen >= range.end {
+                        continue 'criteria;
+                    }
                 }
             }
         }
 
         // once we classified the documents related to the current
         // automatons we save that as the next valid result
-        let iter = raw_documents.into_iter().skip(range.start).take(range.len());
+        let iter = raw_documents
+            .into_iter()
+            .skip(range.start)
+            .take(range.len());
         raw_documents_processed.clear();
         raw_documents_processed.extend(iter);
 
         // stop processing when time is running out
         if let Some(timeout) = timeout {
-            if start_processing.elapsed() > timeout { break }
+            if start_processing.elapsed() > timeout {
+                break;
+            }
         }
     }
 
@@ -456,18 +473,15 @@ fn raw_query_with_distinct<'c, FI, FD>(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
 ) -> MResult<Vec<Document>>
-where FI: Fn(DocumentId) -> bool,
-      FD: Fn(DocumentId) -> Option<u64>,
+where
+    FI: Fn(DocumentId) -> bool,
+    FD: Fn(DocumentId) -> Option<u64>,
 {
     let start_processing = Instant::now();
     let mut raw_documents_processed = Vec::new();
 
-    let (automaton_producer, query_enhancer) = AutomatonProducer::new(
-        reader,
-        query,
-        main_store,
-        synonyms_store,
-    )?;
+    let (automaton_producer, query_enhancer) =
+        AutomatonProducer::new(reader, query, main_store, synonyms_store)?;
 
     let mut automaton_producer = automaton_producer.into_iter();
     let mut automatons = Vec::new();
@@ -491,7 +505,7 @@ where FI: Fn(DocumentId) -> bool,
         // stop processing when time is running out
         if let Some(timeout) = timeout {
             if !raw_documents_processed.is_empty() && start_processing.elapsed() > timeout {
-                break
+                break;
             }
         }
 
@@ -528,7 +542,7 @@ where FI: Fn(DocumentId) -> bool,
                             Some(filter) => {
                                 let entry = filter_map.entry(document.id);
                                 *entry.or_insert_with(|| (filter)(document.id))
-                            },
+                            }
                             None => true,
                         };
 
@@ -543,7 +557,9 @@ where FI: Fn(DocumentId) -> bool,
                         }
 
                         // the requested range end is reached: stop computing distinct
-                        if buf_distinct.len() >= range.end { break }
+                        if buf_distinct.len() >= range.end {
+                            break;
+                        }
                     }
 
                     documents_seen += group.len();
@@ -558,7 +574,9 @@ where FI: Fn(DocumentId) -> bool,
 
                     // we have sort enough documents if the last document sorted is after
                     // the end of the requested range, we can continue to the next criterion
-                    if buf_distinct.len() >= range.end { continue 'criteria }
+                    if buf_distinct.len() >= range.end {
+                        continue 'criteria;
+                    }
                 }
             }
         }
@@ -583,14 +601,18 @@ where FI: Fn(DocumentId) -> bool,
 
                 if distinct_accepted && seen.len() > range.start {
                     raw_documents_processed.push(document);
-                    if raw_documents_processed.len() == range.len() { break }
+                    if raw_documents_processed.len() == range.len() {
+                        break;
+                    }
                 }
             }
         }
 
         // stop processing when time is running out
         if let Some(timeout) = timeout {
-            if start_processing.elapsed() > timeout { break }
+            if start_processing.elapsed() > timeout {
+                break;
+            }
         }
     }
 
@@ -611,20 +633,20 @@ mod tests {
     use std::collections::{BTreeSet, HashMap};
     use std::iter::FromIterator;
 
-    use fst::{Set, IntoStreamer};
+    use fst::{IntoStreamer, Set};
+    use meilidb_schema::SchemaAttr;
     use sdset::SetBuf;
     use tempfile::TempDir;
-    use meilidb_schema::SchemaAttr;
 
     use crate::automaton::normalize_str;
     use crate::database::Database;
-    use crate::DocIndex;
     use crate::store::Index;
+    use crate::DocIndex;
 
     fn set_from_stream<'f, I, S>(stream: I) -> Set
     where
-        I: for<'a> fst::IntoStreamer<'a, Into=S, Item=&'a [u8]>,
-        S: 'f + for<'a> fst::Streamer<'a, Item=&'a [u8]>,
+        I: for<'a> fst::IntoStreamer<'a, Into = S, Item = &'a [u8]>,
+        S: 'f + for<'a> fst::Streamer<'a, Item = &'a [u8]>,
     {
         let mut builder = fst::SetBuilder::memory();
         builder.extend_stream(stream).unwrap();
@@ -687,14 +709,23 @@ mod tests {
 
             let word = word.to_lowercase();
 
-            let alternatives = match self.index.synonyms.synonyms(&writer, word.as_bytes()).unwrap() {
+            let alternatives = match self
+                .index
+                .synonyms
+                .synonyms(&writer, word.as_bytes())
+                .unwrap()
+            {
                 Some(alternatives) => alternatives,
                 None => fst::Set::default(),
             };
 
             let new = sdset_into_fstset(&new);
-            let new_alternatives = set_from_stream(alternatives.op().add(new.into_stream()).r#union());
-            self.index.synonyms.put_synonyms(&mut writer, word.as_bytes(), &new_alternatives).unwrap();
+            let new_alternatives =
+                set_from_stream(alternatives.op().add(new.into_stream()).r#union());
+            self.index
+                .synonyms
+                .put_synonyms(&mut writer, word.as_bytes(), &new_alternatives)
+                .unwrap();
 
             let synonyms = match self.index.main.synonyms_fst(&writer).unwrap() {
                 Some(synonyms) => synonyms,
@@ -702,14 +733,17 @@ mod tests {
             };
 
             let synonyms_fst = insert_key(&synonyms, word.as_bytes());
-            self.index.main.put_synonyms_fst(&mut writer, &synonyms_fst).unwrap();
+            self.index
+                .main
+                .put_synonyms_fst(&mut writer, &synonyms_fst)
+                .unwrap();
 
             writer.commit().unwrap();
         }
     }
 
     impl<'a> FromIterator<(&'a str, &'a [DocIndex])> for TempDatabase {
-        fn from_iter<I: IntoIterator<Item=(&'a str, &'a [DocIndex])>>(iter: I) -> Self {
+        fn from_iter<I: IntoIterator<Item = (&'a str, &'a [DocIndex])>>(iter: I) -> Self {
             let tempdir = TempDir::new().unwrap();
             let database = Database::open_or_create(&tempdir).unwrap();
             let index = database.create_index("default").unwrap();
@@ -724,7 +758,10 @@ mod tests {
             for (word, indexes) in iter {
                 let word = word.to_lowercase().into_bytes();
                 words_fst.insert(word.clone());
-                postings_lists.entry(word).or_insert_with(Vec::new).extend_from_slice(indexes);
+                postings_lists
+                    .entry(word)
+                    .or_insert_with(Vec::new)
+                    .extend_from_slice(indexes);
                 for idx in indexes {
                     fields_counts.insert((idx.document_id, idx.attribute, idx.word_index), 1);
                 }
@@ -736,31 +773,33 @@ mod tests {
 
             for (word, postings_list) in postings_lists {
                 let postings_list = SetBuf::from_dirty(postings_list);
-                index.postings_lists.put_postings_list(&mut writer, &word, &postings_list).unwrap();
+                index
+                    .postings_lists
+                    .put_postings_list(&mut writer, &word, &postings_list)
+                    .unwrap();
             }
 
             for ((docid, attr, _), count) in fields_counts {
-                let prev = index.documents_fields_counts
-                    .document_field_count(
-                        &mut writer,
-                        docid,
-                        SchemaAttr(attr),
-                    ).unwrap();
+                let prev = index
+                    .documents_fields_counts
+                    .document_field_count(&mut writer, docid, SchemaAttr(attr))
+                    .unwrap();
 
                 let prev = prev.unwrap_or(0);
 
-                index.documents_fields_counts
-                    .put_document_field_count(
-                        &mut writer,
-                        docid,
-                        SchemaAttr(attr),
-                        prev + count,
-                    ).unwrap();
+                index
+                    .documents_fields_counts
+                    .put_document_field_count(&mut writer, docid, SchemaAttr(attr), prev + count)
+                    .unwrap();
             }
 
             writer.commit().unwrap();
 
-            TempDatabase { database, index, _tempdir: tempdir }
+            TempDatabase {
+                database,
+                index,
+                _tempdir: tempdir,
+            }
         }
     }
 
@@ -768,8 +807,8 @@ mod tests {
     fn simple() {
         let store = TempDatabase::from_iter(vec![
             ("iphone", &[doc_char_index(0, 0, 0)][..]),
-            ("from",   &[doc_char_index(0, 1, 1)][..]),
-            ("apple",  &[doc_char_index(0, 2, 2)][..]),
+            ("from", &[doc_char_index(0, 1, 1)][..]),
+            ("apple", &[doc_char_index(0, 2, 2)][..]),
         ]);
 
         let env = &store.database.env;
@@ -791,9 +830,7 @@ mod tests {
 
     #[test]
     fn simple_synonyms() {
-        let mut store = TempDatabase::from_iter(vec![
-            ("hello", &[doc_index(0, 0)][..]),
-        ]);
+        let mut store = TempDatabase::from_iter(vec![("hello", &[doc_index(0, 0)][..])]);
 
         store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello"]));
 
@@ -825,9 +862,7 @@ mod tests {
 
     #[test]
     fn prefix_synonyms() {
-        let mut store = TempDatabase::from_iter(vec![
-            ("hello", &[doc_index(0, 0)][..]),
-        ]);
+        let mut store = TempDatabase::from_iter(vec![("hello", &[doc_index(0, 0)][..])]);
 
         store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello"]));
         store.add_synonym("salut", SetBuf::from_dirty(vec!["hello"]));
@@ -872,9 +907,7 @@ mod tests {
 
     #[test]
     fn levenshtein_synonyms() {
-        let mut store = TempDatabase::from_iter(vec![
-            ("hello", &[doc_index(0, 0)][..]),
-        ]);
+        let mut store = TempDatabase::from_iter(vec![("hello", &[doc_index(0, 0)][..])]);
 
         store.add_synonym("salutation", SetBuf::from_dirty(vec!["hello"]));
 
@@ -907,9 +940,9 @@ mod tests {
     #[test]
     fn harder_synonyms() {
         let mut store = TempDatabase::from_iter(vec![
-            ("hello",   &[doc_index(0, 0)][..]),
+            ("hello", &[doc_index(0, 0)][..]),
             ("bonjour", &[doc_index(1, 3)]),
-            ("salut",   &[doc_index(2, 5)]),
+            ("salut", &[doc_index(2, 5)]),
         ]);
 
         store.add_synonym("hello", SetBuf::from_dirty(vec!["bonjour", "salut"]));
@@ -987,17 +1020,22 @@ mod tests {
     /// Unique word has multi-word synonyms
     fn unique_to_multiword_synonyms() {
         let mut store = TempDatabase::from_iter(vec![
-            ("new",    &[doc_char_index(0, 0, 0)][..]),
-            ("york",   &[doc_char_index(0, 1, 1)][..]),
-            ("city",   &[doc_char_index(0, 2, 2)][..]),
+            ("new", &[doc_char_index(0, 0, 0)][..]),
+            ("york", &[doc_char_index(0, 1, 1)][..]),
+            ("city", &[doc_char_index(0, 2, 2)][..]),
             ("subway", &[doc_char_index(0, 3, 3)][..]),
-
-            ("NY",     &[doc_char_index(1, 0, 0)][..]),
+            ("NY", &[doc_char_index(1, 0, 0)][..]),
             ("subway", &[doc_char_index(1, 1, 1)][..]),
         ]);
 
-        store.add_synonym("NY",  SetBuf::from_dirty(vec!["NYC", "new york", "new york city"]));
-        store.add_synonym("NYC", SetBuf::from_dirty(vec!["NY",  "new york", "new york city"]));
+        store.add_synonym(
+            "NY",
+            SetBuf::from_dirty(vec!["NYC", "new york", "new york city"]),
+        );
+        store.add_synonym(
+            "NYC",
+            SetBuf::from_dirty(vec!["NY", "new york", "new york city"]),
+        );
 
         let env = &store.database.env;
         let reader = env.read_txn().unwrap();
@@ -1056,20 +1094,18 @@ mod tests {
     #[test]
     fn unique_to_multiword_synonyms_words_proximity() {
         let mut store = TempDatabase::from_iter(vec![
-            ("new",    &[doc_char_index(0, 0, 0)][..]),
-            ("york",   &[doc_char_index(0, 1, 1)][..]),
-            ("city",   &[doc_char_index(0, 2, 2)][..]),
+            ("new", &[doc_char_index(0, 0, 0)][..]),
+            ("york", &[doc_char_index(0, 1, 1)][..]),
+            ("city", &[doc_char_index(0, 2, 2)][..]),
             ("subway", &[doc_char_index(0, 3, 3)][..]),
-
-            ("york",   &[doc_char_index(1, 0, 0)][..]),
-            ("new",    &[doc_char_index(1, 1, 1)][..]),
+            ("york", &[doc_char_index(1, 0, 0)][..]),
+            ("new", &[doc_char_index(1, 1, 1)][..]),
             ("subway", &[doc_char_index(1, 2, 2)][..]),
-
-            ("NY",     &[doc_char_index(2, 0, 0)][..]),
+            ("NY", &[doc_char_index(2, 0, 0)][..]),
             ("subway", &[doc_char_index(2, 1, 1)][..]),
         ]);
 
-        store.add_synonym("NY",  SetBuf::from_dirty(vec!["york new"]));
+        store.add_synonym("NY", SetBuf::from_dirty(vec!["york new"]));
 
         let env = &store.database.env;
         let reader = env.read_txn().unwrap();
@@ -1120,11 +1156,10 @@ mod tests {
     #[test]
     fn unique_to_multiword_synonyms_cumulative_word_index() {
         let mut store = TempDatabase::from_iter(vec![
-            ("NY",     &[doc_char_index(0, 0, 0)][..]),
+            ("NY", &[doc_char_index(0, 0, 0)][..]),
             ("subway", &[doc_char_index(0, 1, 1)][..]),
-
-            ("new",    &[doc_char_index(1, 0, 0)][..]),
-            ("york",   &[doc_char_index(1, 1, 1)][..]),
+            ("new", &[doc_char_index(1, 0, 0)][..]),
+            ("york", &[doc_char_index(1, 1, 1)][..]),
             ("subway", &[doc_char_index(1, 2, 2)][..]),
         ]);
 
@@ -1175,20 +1210,25 @@ mod tests {
     /// Unique word has multi-word synonyms
     fn harder_unique_to_multiword_synonyms_one() {
         let mut store = TempDatabase::from_iter(vec![
-            ("new",     &[doc_char_index(0, 0, 0)][..]),
-            ("york",    &[doc_char_index(0, 1, 1)][..]),
-            ("city",    &[doc_char_index(0, 2, 2)][..]),
-            ("yellow",  &[doc_char_index(0, 3, 3)][..]),
-            ("subway",  &[doc_char_index(0, 4, 4)][..]),
-            ("broken",  &[doc_char_index(0, 5, 5)][..]),
-
-            ("NY",      &[doc_char_index(1, 0, 0)][..]),
-            ("blue",    &[doc_char_index(1, 1, 1)][..]),
-            ("subway",  &[doc_char_index(1, 2, 2)][..]),
+            ("new", &[doc_char_index(0, 0, 0)][..]),
+            ("york", &[doc_char_index(0, 1, 1)][..]),
+            ("city", &[doc_char_index(0, 2, 2)][..]),
+            ("yellow", &[doc_char_index(0, 3, 3)][..]),
+            ("subway", &[doc_char_index(0, 4, 4)][..]),
+            ("broken", &[doc_char_index(0, 5, 5)][..]),
+            ("NY", &[doc_char_index(1, 0, 0)][..]),
+            ("blue", &[doc_char_index(1, 1, 1)][..]),
+            ("subway", &[doc_char_index(1, 2, 2)][..]),
         ]);
 
-        store.add_synonym("NY",  SetBuf::from_dirty(vec!["NYC", "new york", "new york city"]));
-        store.add_synonym("NYC", SetBuf::from_dirty(vec!["NY",  "new york", "new york city"]));
+        store.add_synonym(
+            "NY",
+            SetBuf::from_dirty(vec!["NYC", "new york", "new york city"]),
+        );
+        store.add_synonym(
+            "NYC",
+            SetBuf::from_dirty(vec!["NY", "new york", "new york city"]),
+        );
 
         let env = &store.database.env;
         let reader = env.read_txn().unwrap();
@@ -1249,21 +1289,26 @@ mod tests {
     /// Unique word has multi-word synonyms
     fn even_harder_unique_to_multiword_synonyms() {
         let mut store = TempDatabase::from_iter(vec![
-            ("new",         &[doc_char_index(0, 0, 0)][..]),
-            ("york",        &[doc_char_index(0, 1, 1)][..]),
-            ("city",        &[doc_char_index(0, 2, 2)][..]),
-            ("yellow",      &[doc_char_index(0, 3, 3)][..]),
+            ("new", &[doc_char_index(0, 0, 0)][..]),
+            ("york", &[doc_char_index(0, 1, 1)][..]),
+            ("city", &[doc_char_index(0, 2, 2)][..]),
+            ("yellow", &[doc_char_index(0, 3, 3)][..]),
             ("underground", &[doc_char_index(0, 4, 4)][..]),
-            ("train",       &[doc_char_index(0, 5, 5)][..]),
-            ("broken",      &[doc_char_index(0, 6, 6)][..]),
-
-            ("NY",      &[doc_char_index(1, 0, 0)][..]),
-            ("blue",    &[doc_char_index(1, 1, 1)][..]),
-            ("subway",  &[doc_char_index(1, 2, 2)][..]),
+            ("train", &[doc_char_index(0, 5, 5)][..]),
+            ("broken", &[doc_char_index(0, 6, 6)][..]),
+            ("NY", &[doc_char_index(1, 0, 0)][..]),
+            ("blue", &[doc_char_index(1, 1, 1)][..]),
+            ("subway", &[doc_char_index(1, 2, 2)][..]),
         ]);
 
-        store.add_synonym("NY",  SetBuf::from_dirty(vec!["NYC", "new york", "new york city"]));
-        store.add_synonym("NYC", SetBuf::from_dirty(vec!["NY",  "new york", "new york city"]));
+        store.add_synonym(
+            "NY",
+            SetBuf::from_dirty(vec!["NYC", "new york", "new york city"]),
+        );
+        store.add_synonym(
+            "NYC",
+            SetBuf::from_dirty(vec!["NY", "new york", "new york city"]),
+        );
         store.add_synonym("subway", SetBuf::from_dirty(vec!["underground train"]));
 
         let env = &store.database.env;
@@ -1330,30 +1375,36 @@ mod tests {
     /// Multi-word has multi-word synonyms
     fn multiword_to_multiword_synonyms() {
         let mut store = TempDatabase::from_iter(vec![
-            ("NY",      &[doc_char_index(0, 0, 0)][..]),
-            ("subway",  &[doc_char_index(0, 1, 1)][..]),
-
-            ("NYC",     &[doc_char_index(1, 0, 0)][..]),
-            ("blue",    &[doc_char_index(1, 1, 1)][..]),
-            ("subway",  &[doc_char_index(1, 2, 2)][..]),
-            ("broken",  &[doc_char_index(1, 3, 3)][..]),
-
-            ("new",         &[doc_char_index(2, 0, 0)][..]),
-            ("york",        &[doc_char_index(2, 1, 1)][..]),
+            ("NY", &[doc_char_index(0, 0, 0)][..]),
+            ("subway", &[doc_char_index(0, 1, 1)][..]),
+            ("NYC", &[doc_char_index(1, 0, 0)][..]),
+            ("blue", &[doc_char_index(1, 1, 1)][..]),
+            ("subway", &[doc_char_index(1, 2, 2)][..]),
+            ("broken", &[doc_char_index(1, 3, 3)][..]),
+            ("new", &[doc_char_index(2, 0, 0)][..]),
+            ("york", &[doc_char_index(2, 1, 1)][..]),
             ("underground", &[doc_char_index(2, 2, 2)][..]),
-            ("train",       &[doc_char_index(2, 3, 3)][..]),
-            ("broken",      &[doc_char_index(2, 4, 4)][..]),
+            ("train", &[doc_char_index(2, 3, 3)][..]),
+            ("broken", &[doc_char_index(2, 4, 4)][..]),
         ]);
 
-        store.add_synonym("new york", SetBuf::from_dirty(vec![          "NYC", "NY", "new york city" ]));
-        store.add_synonym("new york city", SetBuf::from_dirty(vec![     "NYC", "NY", "new york"      ]));
-        store.add_synonym("underground train", SetBuf::from_dirty(vec![ "subway"                     ]));
+        store.add_synonym(
+            "new york",
+            SetBuf::from_dirty(vec!["NYC", "NY", "new york city"]),
+        );
+        store.add_synonym(
+            "new york city",
+            SetBuf::from_dirty(vec!["NYC", "NY", "new york"]),
+        );
+        store.add_synonym("underground train", SetBuf::from_dirty(vec!["subway"]));
 
         let env = &store.database.env;
         let reader = env.read_txn().unwrap();
 
         let builder = store.query_builder();
-        let results = builder.query(&reader, "new york underground train broken", 0..20).unwrap();
+        let results = builder
+            .query(&reader, "new york underground train broken", 0..20)
+            .unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches, .. }) => {
@@ -1390,7 +1441,9 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let results = builder.query(&reader, "new york city underground train broken", 0..20).unwrap();
+        let results = builder
+            .query(&reader, "new york city underground train broken", 0..20)
+            .unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches, .. }) => {
@@ -1436,14 +1489,14 @@ mod tests {
     #[test]
     fn intercrossed_multiword_synonyms() {
         let mut store = TempDatabase::from_iter(vec![
-            ("new",   &[doc_index(0, 0)][..]),
-            ("york",  &[doc_index(0, 1)][..]),
-            ("big",   &[doc_index(0, 2)][..]),
-            ("city",  &[doc_index(0, 3)][..]),
+            ("new", &[doc_index(0, 0)][..]),
+            ("york", &[doc_index(0, 1)][..]),
+            ("big", &[doc_index(0, 2)][..]),
+            ("city", &[doc_index(0, 3)][..]),
         ]);
 
-        store.add_synonym("new york", SetBuf::from_dirty(vec![      "new york city" ]));
-        store.add_synonym("new york city", SetBuf::from_dirty(vec![ "new york"      ]));
+        store.add_synonym("new york", SetBuf::from_dirty(vec!["new york city"]));
+        store.add_synonym("new york city", SetBuf::from_dirty(vec!["new york"]));
 
         let env = &store.database.env;
         let reader = env.read_txn().unwrap();
@@ -1469,16 +1522,14 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let mut store = TempDatabase::from_iter(vec![
-            ("NY",     &[doc_index(0, 0)][..]),
-            ("city",   &[doc_index(0, 1)][..]),
+            ("NY", &[doc_index(0, 0)][..]),
+            ("city", &[doc_index(0, 1)][..]),
             ("subway", &[doc_index(0, 2)][..]),
-
-            ("NY",     &[doc_index(1, 0)][..]),
+            ("NY", &[doc_index(1, 0)][..]),
             ("subway", &[doc_index(1, 1)][..]),
-
-            ("NY",     &[doc_index(2, 0)][..]),
-            ("york",   &[doc_index(2, 1)][..]),
-            ("city",   &[doc_index(2, 2)][..]),
+            ("NY", &[doc_index(2, 0)][..]),
+            ("york", &[doc_index(2, 1)][..]),
+            ("city", &[doc_index(2, 2)][..]),
             ("subway", &[doc_index(2, 3)][..]),
         ]);
 
@@ -1525,20 +1576,22 @@ mod tests {
     #[test]
     fn cumulative_word_indices() {
         let mut store = TempDatabase::from_iter(vec![
-            ("NYC",    &[doc_index(0, 0)][..]),
-            ("long",   &[doc_index(0, 1)][..]),
+            ("NYC", &[doc_index(0, 0)][..]),
+            ("long", &[doc_index(0, 1)][..]),
             ("subway", &[doc_index(0, 2)][..]),
-            ("cool",   &[doc_index(0, 3)][..]),
+            ("cool", &[doc_index(0, 3)][..]),
         ]);
 
         store.add_synonym("new york city", SetBuf::from_dirty(vec!["NYC"]));
-        store.add_synonym("subway",        SetBuf::from_dirty(vec!["underground train"]));
+        store.add_synonym("subway", SetBuf::from_dirty(vec!["underground train"]));
 
         let env = &store.database.env;
         let reader = env.read_txn().unwrap();
 
         let builder = store.query_builder();
-        let results = builder.query(&reader, "new york city long subway cool ", 0..20).unwrap();
+        let results = builder
+            .query(&reader, "new york city long subway cool ", 0..20)
+            .unwrap();
         let mut iter = results.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -1560,8 +1613,7 @@ mod tests {
         let mut store = TempDatabase::from_iter(vec![
             ("telephone", &[doc_index(0, 0)][..]), // meilidb indexes the unidecoded
             ("téléphone", &[doc_index(0, 0)][..]), // and the original words on the same DocIndex
-
-            ("iphone",    &[doc_index(1, 0)][..]),
+            ("iphone", &[doc_index(1, 0)][..]),
         ]);
 
         store.add_synonym("téléphone", SetBuf::from_dirty(vec!["iphone"]));
@@ -1624,8 +1676,8 @@ mod tests {
     #[test]
     fn simple_concatenation() {
         let store = TempDatabase::from_iter(vec![
-            ("iphone",  &[doc_index(0, 0)][..]),
-            ("case",    &[doc_index(0, 1)][..]),
+            ("iphone", &[doc_index(0, 0)][..]),
+            ("case", &[doc_index(0, 1)][..]),
         ]);
 
         let env = &store.database.env;

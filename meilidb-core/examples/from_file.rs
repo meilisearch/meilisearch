@@ -4,15 +4,15 @@ use std::error::Error;
 use std::io::Write;
 use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 use std::{fs, io, sync::mpsc};
 
-use rustyline::{Editor, Config};
-use serde::{Serialize, Deserialize};
+use rustyline::{Config, Editor};
+use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-use meilidb_core::{Highlight, Database, UpdateResult};
+use meilidb_core::{Database, Highlight, UpdateResult};
 use meilidb_schema::SchemaAttr;
 
 const INDEX_NAME: &str = "default";
@@ -91,7 +91,7 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     let update_fn = move |update: UpdateResult| sender.send(update.update_id).unwrap();
     let index = match database.open_index(INDEX_NAME) {
         Some(index) => index,
-        None => database.create_index(INDEX_NAME).unwrap()
+        None => database.create_index(INDEX_NAME).unwrap(),
     };
 
     let done = database.set_update_callback(INDEX_NAME, Box::new(update_fn));
@@ -108,14 +108,14 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     match index.main.schema(&writer)? {
         Some(current_schema) => {
             if current_schema != schema {
-                return Err(meilidb_core::Error::SchemaDiffer.into())
+                return Err(meilidb_core::Error::SchemaDiffer.into());
             }
             writer.abort();
-        },
+        }
         None => {
             index.schema_update(&mut writer, schema)?;
             writer.commit().unwrap();
-        },
+        }
     }
 
     let mut rdr = csv::Reader::from_path(command.csv_data_path)?;
@@ -131,7 +131,9 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
         loop {
             end_of_file = !rdr.read_record(&mut raw_record)?;
-            if end_of_file { break }
+            if end_of_file {
+                break;
+            }
 
             let document: Document = match raw_record.deserialize(Some(&headers)) {
                 Ok(document) => document,
@@ -147,7 +149,9 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
             i += 1;
 
             if let Some(group_size) = command.update_group_size {
-                if i % group_size == 0 { break }
+                if i % group_size == 0 {
+                    break;
+                }
             }
         }
 
@@ -163,15 +167,25 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
     println!("Waiting for update {}", max_update_id);
     for id in receiver {
-        if id == max_update_id { break }
+        if id == max_update_id {
+            break;
+        }
     }
 
-    println!("database created in {:.2?} at: {:?}", start.elapsed(), command.database_path);
+    println!(
+        "database created in {:.2?} at: {:?}",
+        start.elapsed(),
+        command.database_path
+    );
 
     if let Some(path) = command.compact_to_path {
         let start = Instant::now();
         let _file = database.copy_and_compact_to_path(&path)?;
-        println!("database compacted in {:.2?} at: {:?}", start.elapsed(), path);
+        println!(
+            "database compacted in {:.2?} at: {:?}",
+            start.elapsed(),
+            path
+        );
     }
 
     Ok(())
@@ -182,7 +196,10 @@ fn display_highlights(text: &str, ranges: &[usize]) -> io::Result<()> {
     let mut highlighted = false;
 
     for range in ranges.windows(2) {
-        let [start, end] = match range { [start, end] => [*start, *end], _ => unreachable!() };
+        let [start, end] = match range {
+            [start, end] => [*start, *end],
+            _ => unreachable!(),
+        };
         if highlighted {
             stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
         }
@@ -221,12 +238,14 @@ fn create_highlight_areas(text: &str, highlights: &[Highlight]) -> Vec<usize> {
         let (byte_index, byte_length) = char_to_byte_range(char_index, char_length, text);
 
         match byte_indexes.entry(byte_index) {
-            Entry::Vacant(entry) => { entry.insert(byte_length); },
+            Entry::Vacant(entry) => {
+                entry.insert(byte_length);
+            }
             Entry::Occupied(mut entry) => {
                 if *entry.get() < byte_length {
                     entry.insert(byte_length);
                 }
-            },
+            }
         }
     }
 
@@ -252,22 +271,23 @@ fn create_highlight_areas(text: &str, highlights: &[Highlight]) -> Vec<usize> {
 /// ```
 fn crop_text(
     text: &str,
-    highlights: impl IntoIterator<Item=Highlight>,
+    highlights: impl IntoIterator<Item = Highlight>,
     context: usize,
-) -> (String, Vec<Highlight>)
-{
+) -> (String, Vec<Highlight>) {
     let mut highlights = highlights.into_iter().peekable();
 
-    let char_index = highlights.peek().map(|m| m.char_index as usize).unwrap_or(0);
+    let char_index = highlights
+        .peek()
+        .map(|m| m.char_index as usize)
+        .unwrap_or(0);
     let start = char_index.saturating_sub(context);
     let text = text.chars().skip(start).take(context * 2).collect();
 
     let highlights = highlights
-        .take_while(|m| {
-            (m.char_index as usize) + (m.char_length as usize) <= start + (context * 2)
-        })
-        .map(|highlight| {
-            Highlight { char_index: highlight.char_index - start as u16, ..highlight }
+        .take_while(|m| (m.char_index as usize) + (m.char_length as usize) <= start + (context * 2))
+        .map(|highlight| Highlight {
+            char_index: highlight.char_index - start as u16,
+            ..highlight
         })
         .collect();
 
@@ -276,7 +296,9 @@ fn crop_text(
 
 fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<dyn Error>> {
     let env = &database.env;
-    let index = database.open_index(INDEX_NAME).expect("Could not find index");
+    let index = database
+        .open_index(INDEX_NAME)
+        .expect("Could not find index");
 
     let reader = env.read_txn().unwrap();
     let schema = index.main.schema(&reader)?;
@@ -312,10 +334,15 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                         (true, filter)
                     };
 
-                    let attr = schema.attribute(&filter).expect("Could not find filtered attribute");
+                    let attr = schema
+                        .attribute(&filter)
+                        .expect("Could not find filtered attribute");
 
                     builder.with_filter(move |document_id| {
-                        let string: String = ref_index.document_attribute(ref_reader, document_id, attr).unwrap().unwrap();
+                        let string: String = ref_index
+                            .document_attribute(ref_reader, document_id, attr)
+                            .unwrap()
+                            .unwrap();
                         (string == "true") == positive
                     });
                 }
@@ -326,8 +353,8 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
 
                 let number_of_documents = documents.len();
                 for mut doc in documents {
-
-                    doc.highlights.sort_unstable_by_key(|m| (m.char_index, m.char_length));
+                    doc.highlights
+                        .sort_unstable_by_key(|m| (m.char_index, m.char_length));
 
                     let start_retrieve = Instant::now();
                     let result = index.document::<Document>(&reader, Some(&fields), doc.id);
@@ -340,15 +367,18 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                                 print!("{}: ", name);
 
                                 let attr = schema.attribute(&name).unwrap();
-                                let highlights = doc.highlights.iter()
-                                                .filter(|m| SchemaAttr::new(m.attribute) == attr)
-                                                .cloned();
-                                let (text, highlights) = crop_text(&text, highlights, command.char_context);
+                                let highlights = doc
+                                    .highlights
+                                    .iter()
+                                    .filter(|m| SchemaAttr::new(m.attribute) == attr)
+                                    .cloned();
+                                let (text, highlights) =
+                                    crop_text(&text, highlights, command.char_context);
                                 let areas = create_highlight_areas(&text, &highlights);
                                 display_highlights(&text, &areas)?;
                                 println!();
                             }
-                        },
+                        }
                         Ok(None) => eprintln!("missing document"),
                         Err(e) => eprintln!("{}", e),
                     }
@@ -366,12 +396,19 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     println!();
                 }
 
-                eprintln!("whole documents fields retrieve took {:.2?}", retrieve_duration);
-                eprintln!("===== Found {} results in {:.2?} =====", number_of_documents, start_total.elapsed());
-            },
+                eprintln!(
+                    "whole documents fields retrieve took {:.2?}",
+                    retrieve_duration
+                );
+                eprintln!(
+                    "===== Found {} results in {:.2?} =====",
+                    number_of_documents,
+                    start_total.elapsed()
+                );
+            }
             Err(err) => {
                 println!("Error: {:?}", err);
-                break
+                break;
             }
         }
     }

@@ -1,13 +1,13 @@
-use std::collections::{HashMap, HashSet, BTreeSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use fst::{SetBuilder, Streamer};
 use meilidb_schema::Schema;
-use sdset::{SetBuf, SetOperation, duo::DifferenceByKey};
+use sdset::{duo::DifferenceByKey, SetBuf, SetOperation};
 
-use crate::{DocumentId, RankedMap, MResult, Error};
 use crate::serde::extract_document_id;
-use crate::update::{Update, next_update_id};
 use crate::store;
+use crate::update::{next_update_id, Update};
+use crate::{DocumentId, Error, MResult, RankedMap};
 
 pub struct DocumentsDeletion {
     updates_store: store::Updates,
@@ -21,8 +21,7 @@ impl DocumentsDeletion {
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
         updates_notifier: crossbeam_channel::Sender<()>,
-    ) -> DocumentsDeletion
-    {
+    ) -> DocumentsDeletion {
         DocumentsDeletion {
             updates_store,
             updates_results_store,
@@ -36,7 +35,8 @@ impl DocumentsDeletion {
     }
 
     pub fn delete_document<D>(&mut self, schema: &Schema, document: D) -> MResult<()>
-    where D: serde::Serialize,
+    where
+        D: serde::Serialize,
     {
         let identifier = schema.identifier_name();
         let document_id = match extract_document_id(identifier, &document)? {
@@ -62,7 +62,7 @@ impl DocumentsDeletion {
 }
 
 impl Extend<DocumentId> for DocumentsDeletion {
-    fn extend<T: IntoIterator<Item=DocumentId>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = DocumentId>>(&mut self, iter: T) {
         self.documents.extend(iter)
     }
 }
@@ -72,8 +72,7 @@ pub fn push_documents_deletion(
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     deletion: Vec<DocumentId>,
-) -> MResult<u64>
-{
+) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = Update::DocumentsDeletion(deletion);
@@ -91,8 +90,7 @@ pub fn apply_documents_deletion(
     docs_words_store: store::DocsWords,
     mut ranked_map: RankedMap,
     deletion: Vec<DocumentId>,
-) -> MResult<()>
-{
+) -> MResult<()> {
     let idset = SetBuf::from_dirty(deletion);
 
     let schema = match main_store.schema(writer)? {
@@ -101,10 +99,17 @@ pub fn apply_documents_deletion(
     };
 
     // collect the ranked attributes according to the schema
-    let ranked_attrs: Vec<_> = schema.iter()
-        .filter_map(|(_, attr, prop)| {
-            if prop.is_ranked() { Some(attr) } else { None }
-        })
+    let ranked_attrs: Vec<_> = schema
+        .iter()
+        .filter_map(
+            |(_, attr, prop)| {
+                if prop.is_ranked() {
+                    Some(attr)
+                } else {
+                    None
+                }
+            },
+        )
         .collect();
 
     let mut words_document_ids = HashMap::new();
@@ -118,7 +123,10 @@ pub fn apply_documents_deletion(
             let mut stream = words.stream();
             while let Some(word) = stream.next() {
                 let word = word.to_vec();
-                words_document_ids.entry(word).or_insert_with(Vec::new).push(id);
+                words_document_ids
+                    .entry(word)
+                    .or_insert_with(Vec::new)
+                    .push(id);
             }
         }
     }
@@ -167,7 +175,7 @@ pub fn apply_documents_deletion(
                 .into_inner()
                 .and_then(fst::Set::from_bytes)
                 .unwrap()
-        },
+        }
         None => fst::Set::default(),
     };
 

@@ -1,24 +1,20 @@
-mod sum_of_typos;
+mod document_id;
+mod exact;
 mod number_of_words;
-mod words_proximity;
+mod sort_by_attr;
+mod sum_of_typos;
 mod sum_of_words_attribute;
 mod sum_of_words_position;
-mod exact;
-mod sort_by_attr;
-mod document_id;
+mod words_proximity;
 
-use std::cmp::Ordering;
 use crate::RawDocument;
+use std::cmp::Ordering;
 
 pub use self::{
-    sum_of_typos::SumOfTypos,
-    number_of_words::NumberOfWords,
+    document_id::DocumentId, exact::Exact, number_of_words::NumberOfWords,
+    sort_by_attr::SortByAttr, sum_of_typos::SumOfTypos,
+    sum_of_words_attribute::SumOfWordsAttribute, sum_of_words_position::SumOfWordsPosition,
     words_proximity::WordsProximity,
-    sum_of_words_attribute::SumOfWordsAttribute,
-    sum_of_words_position::SumOfWordsPosition,
-    exact::Exact,
-    sort_by_attr::SortByAttr,
-    document_id::DocumentId,
 };
 
 pub trait Criterion: Send + Sync {
@@ -62,17 +58,18 @@ impl<T: Criterion + ?Sized> Criterion for Box<T> {
 
 #[derive(Default)]
 pub struct CriteriaBuilder<'a> {
-    inner: Vec<Box<dyn Criterion + 'a>>
+    inner: Vec<Box<dyn Criterion + 'a>>,
 }
 
-impl<'a> CriteriaBuilder<'a>
-{
+impl<'a> CriteriaBuilder<'a> {
     pub fn new() -> CriteriaBuilder<'a> {
         CriteriaBuilder { inner: Vec::new() }
     }
 
     pub fn with_capacity(capacity: usize) -> CriteriaBuilder<'a> {
-        CriteriaBuilder { inner: Vec::with_capacity(capacity) }
+        CriteriaBuilder {
+            inner: Vec::with_capacity(capacity),
+        }
     }
 
     pub fn reserve(&mut self, additional: usize) {
@@ -80,14 +77,16 @@ impl<'a> CriteriaBuilder<'a>
     }
 
     pub fn add<C: 'a>(mut self, criterion: C) -> CriteriaBuilder<'a>
-    where C: Criterion,
+    where
+        C: Criterion,
     {
         self.push(criterion);
         self
     }
 
     pub fn push<C: 'a>(&mut self, criterion: C)
-    where C: Criterion,
+    where
+        C: Criterion,
     {
         self.inner.push(Box::new(criterion));
     }

@@ -1,9 +1,9 @@
 use meilidb_schema::SchemaAttr;
-use zlmdb::types::{OwnedType, ByteSlice};
+use zlmdb::types::{ByteSlice, OwnedType};
 use zlmdb::Result as ZResult;
 
-use crate::DocumentId;
 use super::DocumentAttrKey;
+use crate::DocumentId;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFields {
@@ -17,8 +17,7 @@ impl DocumentsFields {
         document_id: DocumentId,
         attribute: SchemaAttr,
         value: &[u8],
-    ) -> ZResult<()>
-    {
+    ) -> ZResult<()> {
         let key = DocumentAttrKey::new(document_id, attribute);
         self.documents_fields.put(writer, &key, value)
     }
@@ -27,8 +26,7 @@ impl DocumentsFields {
         &self,
         writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
-    ) -> ZResult<usize>
-    {
+    ) -> ZResult<usize> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
         let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
         self.documents_fields.delete_range(writer, start..=end)
@@ -39,8 +37,7 @@ impl DocumentsFields {
         reader: &'txn zlmdb::RoTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
-    ) -> ZResult<Option<&'txn [u8]>>
-    {
+    ) -> ZResult<Option<&'txn [u8]>> {
         let key = DocumentAttrKey::new(document_id, attribute);
         self.documents_fields.get(reader, &key)
     }
@@ -49,8 +46,7 @@ impl DocumentsFields {
         &self,
         reader: &'txn zlmdb::RoTxn,
         document_id: DocumentId,
-    ) -> ZResult<DocumentFieldsIter<'txn>>
-    {
+    ) -> ZResult<DocumentFieldsIter<'txn>> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
         let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
         let iter = self.documents_fields.range(reader, start..=end)?;
@@ -70,7 +66,7 @@ impl<'txn> Iterator for DocumentFieldsIter<'txn> {
             Some(Ok((key, bytes))) => {
                 let attr = SchemaAttr(key.attr.get());
                 Some(Ok((attr, bytes)))
-            },
+            }
             Some(Err(e)) => Some(Err(e.into())),
             None => None,
         }

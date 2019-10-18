@@ -1,7 +1,7 @@
-use std::cmp::{self, Ordering};
-use slice_group_by::GroupBy;
 use crate::criterion::Criterion;
 use crate::RawDocument;
+use slice_group_by::GroupBy;
+use std::cmp::{self, Ordering};
 
 const MAX_DISTANCE: u16 = 8;
 
@@ -19,7 +19,9 @@ fn index_proximity(lhs: u16, rhs: u16) -> u16 {
 }
 
 fn attribute_proximity((lattr, lwi): (u16, u16), (rattr, rwi): (u16, u16)) -> u16 {
-    if lattr != rattr { return MAX_DISTANCE }
+    if lattr != rattr {
+        return MAX_DISTANCE;
+    }
     index_proximity(lwi, rwi)
 }
 
@@ -42,15 +44,18 @@ fn matches_proximity(
     distance: &[u8],
     attribute: &[u16],
     word_index: &[u16],
-) -> u16
-{
+) -> u16 {
     let mut query_index_groups = query_index.linear_group();
     let mut proximity = 0;
     let mut index = 0;
 
     let get_attr_wi = |index: usize, group_len: usize| {
         // retrieve the first distance group (with the lowest values)
-        let len = distance[index..index + group_len].linear_group().next().unwrap().len();
+        let len = distance[index..index + group_len]
+            .linear_group()
+            .next()
+            .unwrap()
+            .len();
 
         let rattr = &attribute[index..index + len];
         let rwi = &word_index[index..index + len];
@@ -110,7 +115,6 @@ mod tests {
 
     #[test]
     fn three_different_attributes() {
-
         // "soup" "of the" "the day"
         //
         // { id: 0, attr: 0, attr_index: 0 }
@@ -120,19 +124,21 @@ mod tests {
         // { id: 3, attr: 3, attr_index: 1 }
 
         let query_index = &[0, 1, 2, 2, 3];
-        let distance    = &[0, 0, 0, 0, 0];
-        let attribute   = &[0, 1, 1, 2, 3];
-        let word_index  = &[0, 0, 1, 0, 1];
+        let distance = &[0, 0, 0, 0, 0];
+        let attribute = &[0, 1, 1, 2, 3];
+        let word_index = &[0, 0, 1, 0, 1];
 
         //   soup -> of = 8
         // + of -> the  = 1
         // + the -> day = 8 (not 1)
-        assert_eq!(matches_proximity(query_index, distance, attribute, word_index), 17);
+        assert_eq!(
+            matches_proximity(query_index, distance, attribute, word_index),
+            17
+        );
     }
 
     #[test]
     fn two_different_attributes() {
-
         // "soup day" "soup of the day"
         //
         // { id: 0, attr: 0, attr_index: 0 }
@@ -143,13 +149,16 @@ mod tests {
         // { id: 3, attr: 1, attr_index: 3 }
 
         let query_index = &[0, 0, 1, 2, 3, 3];
-        let distance    = &[0, 0, 0, 0, 0, 0];
-        let attribute   = &[0, 1, 1, 1, 0, 1];
-        let word_index  = &[0, 0, 1, 2, 1, 3];
+        let distance = &[0, 0, 0, 0, 0, 0];
+        let attribute = &[0, 1, 1, 1, 0, 1];
+        let word_index = &[0, 0, 1, 2, 1, 3];
 
         //   soup -> of = 1
         // + of -> the  = 1
         // + the -> day = 1
-        assert_eq!(matches_proximity(query_index, distance, attribute, word_index), 3);
+        assert_eq!(
+            matches_proximity(query_index, distance, attribute, word_index),
+            3
+        );
     }
 }

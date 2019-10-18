@@ -1,14 +1,26 @@
-use std::collections::{HashMap, BTreeMap};
-use std::{fmt, u16};
+use std::collections::{BTreeMap, HashMap};
 use std::ops::BitOr;
 use std::sync::Arc;
+use std::{fmt, u16};
 
-use serde::{Serialize, Deserialize};
 use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 
-pub const DISPLAYED: SchemaProps = SchemaProps { displayed: true,  indexed: false, ranked: false };
-pub const INDEXED: SchemaProps   = SchemaProps { displayed: false, indexed: true,  ranked: false };
-pub const RANKED: SchemaProps    = SchemaProps { displayed: false, indexed: false, ranked: true  };
+pub const DISPLAYED: SchemaProps = SchemaProps {
+    displayed: true,
+    indexed: false,
+    ranked: false,
+};
+pub const INDEXED: SchemaProps = SchemaProps {
+    displayed: false,
+    indexed: true,
+    ranked: false,
+};
+pub const RANKED: SchemaProps = SchemaProps {
+    displayed: false,
+    indexed: false,
+    ranked: true,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaProps {
@@ -80,7 +92,13 @@ impl SchemaBuilder {
         }
 
         let identifier = self.identifier;
-        Schema { inner: Arc::new(InnerSchema { identifier, attrs, props }) }
+        Schema {
+            inner: Arc::new(InnerSchema {
+                identifier,
+                attrs,
+                props,
+            }),
+        }
     }
 }
 
@@ -100,7 +118,10 @@ impl Schema {
     fn to_builder(&self) -> SchemaBuilder {
         let identifier = self.inner.identifier.clone();
         let attributes = self.attributes_ordered();
-        SchemaBuilder { identifier, attributes }
+        SchemaBuilder {
+            identifier,
+            attributes,
+        }
     }
 
     fn attributes_ordered(&self) -> IndexMap<String, SchemaProps> {
@@ -136,18 +157,18 @@ impl Schema {
         name
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item=(&str, SchemaAttr, SchemaProps)> + 'a {
-        self.inner.props.iter()
-            .map(move |(name, prop)| {
-                let attr = self.inner.attrs.get(name).unwrap();
-                (name.as_str(), *attr, *prop)
-            })
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (&str, SchemaAttr, SchemaProps)> + 'a {
+        self.inner.props.iter().map(move |(name, prop)| {
+            let attr = self.inner.attrs.get(name).unwrap();
+            (name.as_str(), *attr, *prop)
+        })
     }
 }
 
 impl Serialize for Schema {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: serde::ser::Serializer,
+    where
+        S: serde::ser::Serializer,
     {
         self.to_builder().serialize(serializer)
     }
@@ -155,15 +176,15 @@ impl Serialize for Schema {
 
 impl<'de> Deserialize<'de> for Schema {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where D: serde::de::Deserializer<'de>,
+    where
+        D: serde::de::Deserializer<'de>,
     {
         let builder = SchemaBuilder::deserialize(deserializer)?;
         Ok(builder.build())
     }
 }
 
-#[derive(Serialize, Deserialize)]
-#[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct SchemaAttr(pub u16);
 
 impl SchemaAttr {

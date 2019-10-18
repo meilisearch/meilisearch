@@ -1,12 +1,12 @@
 use std::collections::HashSet;
 use std::io::Cursor;
-use std::{fmt, error::Error};
+use std::{error::Error, fmt};
 
 use meilidb_schema::{Schema, SchemaAttr};
-use serde_json::Error as SerdeJsonError;
-use serde_json::Deserializer as SerdeJsonDeserializer;
-use serde_json::de::IoRead as SerdeJsonIoRead;
 use serde::{de, forward_to_deserialize_any};
+use serde_json::de::IoRead as SerdeJsonIoRead;
+use serde_json::Deserializer as SerdeJsonDeserializer;
+use serde_json::Error as SerdeJsonError;
 
 use crate::store::DocumentsFields;
 use crate::DocumentId;
@@ -60,7 +60,8 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
     type Error = DeserializerError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: de::Visitor<'de>
+    where
+        V: de::Visitor<'de>,
     {
         self.deserialize_map(visitor)
     }
@@ -72,16 +73,21 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
     }
 
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: de::Visitor<'de>
+    where
+        V: de::Visitor<'de>,
     {
         let mut error = None;
 
-        let iter = self.documents_fields
+        let iter = self
+            .documents_fields
             .document_fields(self.reader, self.document_id)?
             .filter_map(|result| {
                 let (attr, value) = match result {
                     Ok(value) => value,
-                    Err(e) => { error = Some(e); return None },
+                    Err(e) => {
+                        error = Some(e);
+                        return None;
+                    }
                 };
 
                 let is_displayed = self.schema.props(attr).is_displayed();
@@ -99,7 +105,9 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
             });
 
         let map_deserializer = de::value::MapDeserializer::new(iter);
-        let result = visitor.visit_map(map_deserializer).map_err(DeserializerError::from);
+        let result = visitor
+            .visit_map(map_deserializer)
+            .map_err(DeserializerError::from);
 
         match error.take() {
             Some(error) => Err(error.into()),
@@ -122,7 +130,8 @@ impl<'de> de::Deserializer<'de> for Value {
     type Error = SerdeJsonError;
 
     fn deserialize_any<V>(mut self, visitor: V) -> Result<V::Value, Self::Error>
-    where V: de::Visitor<'de>
+    where
+        V: de::Visitor<'de>,
     {
         self.0.deserialize_any(visitor)
     }

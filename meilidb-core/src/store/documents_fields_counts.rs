@@ -1,8 +1,8 @@
+use super::DocumentAttrKey;
+use crate::DocumentId;
 use meilidb_schema::SchemaAttr;
 use zlmdb::types::OwnedType;
 use zlmdb::Result as ZResult;
-use crate::DocumentId;
-use super::DocumentAttrKey;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFieldsCounts {
@@ -16,8 +16,7 @@ impl DocumentsFieldsCounts {
         document_id: DocumentId,
         attribute: SchemaAttr,
         value: u64,
-    ) -> ZResult<()>
-    {
+    ) -> ZResult<()> {
         let key = DocumentAttrKey::new(document_id, attribute);
         self.documents_fields_counts.put(writer, &key, &value)
     }
@@ -26,11 +25,11 @@ impl DocumentsFieldsCounts {
         &self,
         writer: &mut zlmdb::RwTxn,
         document_id: DocumentId,
-    ) -> ZResult<usize>
-    {
+    ) -> ZResult<usize> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
         let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
-        self.documents_fields_counts.delete_range(writer, start..=end)
+        self.documents_fields_counts
+            .delete_range(writer, start..=end)
     }
 
     pub fn document_field_count(
@@ -38,8 +37,7 @@ impl DocumentsFieldsCounts {
         reader: &zlmdb::RoTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
-    ) -> ZResult<Option<u64>>
-    {
+    ) -> ZResult<Option<u64>> {
         let key = DocumentAttrKey::new(document_id, attribute);
         match self.documents_fields_counts.get(reader, &key)? {
             Some(count) => Ok(Some(count)),
@@ -51,8 +49,7 @@ impl DocumentsFieldsCounts {
         &self,
         reader: &'txn zlmdb::RoTxn,
         document_id: DocumentId,
-    ) -> ZResult<DocumentFieldsCountsIter<'txn>>
-    {
+    ) -> ZResult<DocumentFieldsCountsIter<'txn>> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
         let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
         let iter = self.documents_fields_counts.range(reader, start..=end)?;
@@ -62,17 +59,18 @@ impl DocumentsFieldsCounts {
     pub fn documents_ids<'txn>(
         &self,
         reader: &'txn zlmdb::RoTxn,
-    ) -> ZResult<DocumentsIdsIter<'txn>>
-    {
+    ) -> ZResult<DocumentsIdsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
-        Ok(DocumentsIdsIter { last_seen_id: None, iter })
+        Ok(DocumentsIdsIter {
+            last_seen_id: None,
+            iter,
+        })
     }
 
     pub fn all_documents_fields_counts<'txn>(
         &self,
         reader: &'txn zlmdb::RoTxn,
-    ) -> ZResult<AllDocumentsFieldsCountsIter<'txn>>
-    {
+    ) -> ZResult<AllDocumentsFieldsCountsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
         Ok(AllDocumentsFieldsCountsIter { iter })
     }
@@ -90,7 +88,7 @@ impl Iterator for DocumentFieldsCountsIter<'_> {
             Some(Ok((key, count))) => {
                 let attr = SchemaAttr(key.attr.get());
                 Some(Ok((attr, count)))
-            },
+            }
             Some(Err(e)) => Some(Err(e.into())),
             None => None,
         }
@@ -112,9 +110,9 @@ impl Iterator for DocumentsIdsIter<'_> {
                     let document_id = DocumentId(key.docid.get());
                     if Some(document_id) != self.last_seen_id {
                         self.last_seen_id = Some(document_id);
-                        return Some(Ok(document_id))
+                        return Some(Ok(document_id));
                     }
-                },
+                }
                 Err(e) => return Some(Err(e.into())),
             }
         }
@@ -135,7 +133,7 @@ impl<'r> Iterator for AllDocumentsFieldsCountsIter<'r> {
                 let docid = DocumentId(key.docid.get());
                 let attr = SchemaAttr(key.attr.get());
                 Some(Ok((docid, attr, count)))
-            },
+            }
             Some(Err(e)) => Some(Err(e.into())),
             None => None,
         }

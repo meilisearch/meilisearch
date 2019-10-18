@@ -1,8 +1,5 @@
+use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use once_cell::sync::OnceCell;
-use levenshtein_automata::{
-    LevenshteinAutomatonBuilder as LevBuilder,
-    DFA,
-};
 
 static LEVDIST0: OnceCell<LevBuilder> = OnceCell::new();
 static LEVDIST1: OnceCell<LevBuilder> = OnceCell::new();
@@ -15,30 +12,30 @@ enum PrefixSetting {
 }
 
 fn build_dfa_with_setting(query: &str, setting: PrefixSetting) -> DFA {
-    use PrefixSetting::{Prefix, NoPrefix};
+    use PrefixSetting::{NoPrefix, Prefix};
 
     match query.len() {
-        0 ..= 4 => {
+        0..=4 => {
             let builder = LEVDIST0.get_or_init(|| LevBuilder::new(0, true));
             match setting {
-                Prefix   => builder.build_prefix_dfa(query),
+                Prefix => builder.build_prefix_dfa(query),
                 NoPrefix => builder.build_dfa(query),
             }
-        },
-        5 ..= 8 => {
+        }
+        5..=8 => {
             let builder = LEVDIST1.get_or_init(|| LevBuilder::new(1, true));
             match setting {
-                Prefix   => builder.build_prefix_dfa(query),
+                Prefix => builder.build_prefix_dfa(query),
                 NoPrefix => builder.build_dfa(query),
             }
-        },
+        }
         _ => {
             let builder = LEVDIST2.get_or_init(|| LevBuilder::new(2, true));
             match setting {
-                Prefix   => builder.build_prefix_dfa(query),
+                Prefix => builder.build_prefix_dfa(query),
                 NoPrefix => builder.build_dfa(query),
             }
-        },
+        }
     }
 }
 

@@ -8,8 +8,10 @@ mod updates;
 mod updates_results;
 
 pub use self::docs_words::DocsWords;
-pub use self::documents_fields::{DocumentsFields, DocumentFieldsIter};
-pub use self::documents_fields_counts::{DocumentsFieldsCounts, DocumentFieldsCountsIter, DocumentsIdsIter};
+pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
+pub use self::documents_fields_counts::{
+    DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter,
+};
 pub use self::main::Main;
 pub use self::postings_lists::PostingsLists;
 pub use self::synonyms::Synonyms;
@@ -25,19 +27,24 @@ use zlmdb::Result as ZResult;
 
 use crate::criterion::Criteria;
 use crate::serde::Deserializer;
-use crate::{update, query_builder::QueryBuilder, DocumentId, MResult, Error};
+use crate::{query_builder::QueryBuilder, update, DocumentId, Error, MResult};
 
 type BEU64 = zerocopy::U64<byteorder::BigEndian>;
 type BEU16 = zerocopy::U16<byteorder::BigEndian>;
 
-#[derive(Debug, Copy, Clone)]
-#[derive(AsBytes, FromBytes)]
+#[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]
-pub struct DocumentAttrKey { docid: BEU64, attr: BEU16 }
+pub struct DocumentAttrKey {
+    docid: BEU64,
+    attr: BEU16,
+}
 
 impl DocumentAttrKey {
     fn new(docid: DocumentId, attr: SchemaAttr) -> DocumentAttrKey {
-        DocumentAttrKey { docid: BEU64::new(docid.0), attr: BEU16::new(attr.0) }
+        DocumentAttrKey {
+            docid: BEU64::new(docid.0),
+            attr: BEU16::new(attr.0),
+        }
     }
 }
 
@@ -93,13 +100,15 @@ impl Index {
         reader: &zlmdb::RoTxn,
         attributes: Option<&HashSet<&str>>,
         document_id: DocumentId,
-    ) -> MResult<Option<T>>
-    {
+    ) -> MResult<Option<T>> {
         let schema = self.main.schema(reader)?;
         let schema = schema.ok_or(Error::SchemaMissing)?;
 
         let attributes = match attributes {
-            Some(attributes) => attributes.into_iter().map(|name| schema.attribute(name)).collect(),
+            Some(attributes) => attributes
+                .into_iter()
+                .map(|name| schema.attribute(name))
+                .collect(),
             None => None,
         };
 
@@ -121,9 +130,10 @@ impl Index {
         reader: &zlmdb::RoTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
-    ) -> MResult<Option<T>>
-    {
-        let bytes = self.documents_fields.document_attribute(reader, document_id, attribute)?;
+    ) -> MResult<Option<T>> {
+        let bytes = self
+            .documents_fields
+            .document_attribute(reader, document_id, attribute)?;
         match bytes {
             Some(bytes) => Ok(Some(serde_json::from_slice(bytes)?)),
             None => Ok(None),
@@ -183,14 +193,8 @@ impl Index {
         &self,
         reader: &zlmdb::RoTxn,
         update_id: u64,
-    ) -> MResult<update::UpdateStatus>
-    {
-        update::update_status(
-            reader,
-            self.updates,
-            self.updates_results,
-            update_id,
-        )
+    ) -> MResult<update::UpdateStatus> {
+        update::update_status(reader, self.updates, self.updates_results, update_id)
     }
 
     pub fn query_builder(&self) -> QueryBuilder {
@@ -205,8 +209,7 @@ impl Index {
     pub fn query_builder_with_criteria<'c, 'f, 'd>(
         &self,
         criteria: Criteria<'c>,
-    ) -> QueryBuilder<'c, 'f, 'd>
-    {
+    ) -> QueryBuilder<'c, 'f, 'd> {
         QueryBuilder::with_criteria(
             self.main,
             self.postings_lists,
@@ -221,8 +224,7 @@ pub fn create(
     env: &zlmdb::Env,
     name: &str,
     updates_notifier: crossbeam_channel::Sender<()>,
-) -> MResult<Index>
-{
+) -> MResult<Index> {
     // create all the store names
     let main_name = main_name(name);
     let postings_lists_name = postings_lists_name(name);
@@ -247,7 +249,9 @@ pub fn create(
         main: Main { main },
         postings_lists: PostingsLists { postings_lists },
         documents_fields: DocumentsFields { documents_fields },
-        documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
+        documents_fields_counts: DocumentsFieldsCounts {
+            documents_fields_counts,
+        },
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
         updates: Updates { updates },
@@ -260,8 +264,7 @@ pub fn open(
     env: &zlmdb::Env,
     name: &str,
     updates_notifier: crossbeam_channel::Sender<()>,
-) -> MResult<Option<Index>>
-{
+) -> MResult<Option<Index>> {
     // create all the store names
     let main_name = main_name(name);
     let postings_lists_name = postings_lists_name(name);
@@ -310,7 +313,9 @@ pub fn open(
         main: Main { main },
         postings_lists: PostingsLists { postings_lists },
         documents_fields: DocumentsFields { documents_fields },
-        documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
+        documents_fields_counts: DocumentsFieldsCounts {
+            documents_fields_counts,
+        },
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
         updates: Updates { updates },
