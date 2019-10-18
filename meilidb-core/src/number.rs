@@ -1,12 +1,11 @@
-use std::num::{ParseIntError, ParseFloatError};
-use std::str::FromStr;
 use std::fmt;
+use std::num::{ParseFloatError, ParseIntError};
+use std::str::FromStr;
 
 use ordered_float::OrderedFloat;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Number {
     Unsigned(u64),
     Signed(i64),
@@ -32,7 +31,11 @@ impl FromStr for Number {
             Err(error) => error,
         };
 
-        Err(ParseNumberError { uint_error, int_error, float_error })
+        Err(ParseNumberError {
+            uint_error,
+            int_error,
+            float_error,
+        })
     }
 }
 
@@ -46,10 +49,17 @@ pub struct ParseNumberError {
 impl fmt::Display for ParseNumberError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.uint_error == self.int_error {
-            write!(f, "can not parse number: {}, {}", self.uint_error, self.float_error)
+            write!(
+                f,
+                "can not parse number: {}, {}",
+                self.uint_error, self.float_error
+            )
         } else {
-            write!(f, "can not parse number: {}, {}, {}",
-                self.uint_error, self.int_error, self.float_error)
+            write!(
+                f,
+                "can not parse number: {}, {}, {}",
+                self.uint_error, self.int_error, self.float_error
+            )
         }
     }
 }

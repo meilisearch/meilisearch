@@ -1,10 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 
+use crate::{DocIndex, DocumentId};
 use deunicode::deunicode_with_tofu;
-use crate::{DocumentId, DocIndex};
 use meilidb_schema::SchemaAttr;
-use meilidb_tokenizer::{is_cjk, Tokenizer, SeqTokenizer, Token};
+use meilidb_tokenizer::{is_cjk, SeqTokenizer, Token, Tokenizer};
 use sdset::SetBuf;
 
 type Word = Vec<u8>; // TODO make it be a SmallVec
@@ -60,7 +60,9 @@ impl RawIndexer {
                     &mut self.docs_words,
                 );
 
-                if !must_continue { break }
+                if !must_continue {
+                    break;
+                }
 
                 number_of_words += 1;
             }
@@ -70,8 +72,9 @@ impl RawIndexer {
     }
 
     pub fn index_text_seq<'a, I, IT>(&mut self, id: DocumentId, attr: SchemaAttr, iter: I)
-    where I: IntoIterator<Item=&'a str, IntoIter=IT>,
-          IT: Iterator<Item = &'a str> + Clone,
+    where
+        I: IntoIterator<Item = &'a str, IntoIter = IT>,
+        IT: Iterator<Item = &'a str> + Clone,
     {
         // TODO serialize this to one call to the SeqTokenizer loop
 
@@ -88,14 +91,25 @@ impl RawIndexer {
                 &mut self.docs_words,
             );
 
-            if !must_continue { break }
+            if !must_continue {
+                break;
+            }
         }
 
-        let deunicoded: Vec<_> = lowercased.into_iter().map(|lowercase_text| {
-            if lowercase_text.contains(is_cjk) { return lowercase_text }
-            let deunicoded = deunicode_with_tofu(&lowercase_text, "");
-            if lowercase_text != deunicoded { deunicoded } else { lowercase_text }
-        }).collect();
+        let deunicoded: Vec<_> = lowercased
+            .into_iter()
+            .map(|lowercase_text| {
+                if lowercase_text.contains(is_cjk) {
+                    return lowercase_text;
+                }
+                let deunicoded = deunicode_with_tofu(&lowercase_text, "");
+                if lowercase_text != deunicoded {
+                    deunicoded
+                } else {
+                    lowercase_text
+                }
+            })
+            .collect();
         let iter = deunicoded.iter().map(|t| t.as_str());
 
         for token in SeqTokenizer::new(iter) {
@@ -108,17 +122,21 @@ impl RawIndexer {
                 &mut self.docs_words,
             );
 
-            if !must_continue { break }
+            if !must_continue {
+                break;
+            }
         }
     }
 
     pub fn build(self) -> Indexed {
-        let words_doc_indexes = self.words_doc_indexes
+        let words_doc_indexes = self
+            .words_doc_indexes
             .into_iter()
             .map(|(word, indexes)| (word, SetBuf::from_dirty(indexes)))
             .collect();
 
-        let docs_words = self.docs_words
+        let docs_words = self
+            .docs_words
             .into_iter()
             .map(|(id, mut words)| {
                 words.sort_unstable();
@@ -127,7 +145,16 @@ impl RawIndexer {
             })
             .collect();
 
-        Indexed { words_doc_indexes, docs_words }
+        Indexed {
+            words_doc_indexes,
+            docs_words,
+        }
+    }
+}
+
+impl Default for RawIndexer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -138,16 +165,20 @@ fn index_token(
     word_limit: usize,
     words_doc_indexes: &mut BTreeMap<Word, Vec<DocIndex>>,
     docs_words: &mut HashMap<DocumentId, Vec<Word>>,
-) -> bool
-{
-    if token.word_index >= word_limit { return false }
+) -> bool {
+    if token.word_index >= word_limit {
+        return false;
+    }
 
     match token_to_docindex(id, attr, token) {
         Some(docindex) => {
             let word = Vec::from(token.word);
-            words_doc_indexes.entry(word.clone()).or_insert_with(Vec::new).push(docindex);
+            words_doc_indexes
+                .entry(word.clone())
+                .or_insert_with(Vec::new)
+                .push(docindex);
             docs_words.entry(id).or_insert_with(Vec::new).push(word);
-        },
+        }
         None => return false,
     }
 
@@ -183,7 +214,9 @@ mod tests {
         let text = "Zut, l’aspirateur, j’ai oublié de l’éteindre !";
         indexer.index_text(docid, attr, text);
 
-        let Indexed { words_doc_indexes, .. } = indexer.build();
+        let Indexed {
+            words_doc_indexes, ..
+        } = indexer.build();
 
         assert!(words_doc_indexes.get(&b"l"[..]).is_some());
         assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
@@ -191,7 +224,9 @@ mod tests {
         assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
 
         // with the ugly apostrophe...
-        assert!(words_doc_indexes.get(&"l’éteindre".to_owned().into_bytes()).is_some());
+        assert!(words_doc_indexes
+            .get(&"l’éteindre".to_owned().into_bytes())
+            .is_some());
     }
 
     #[test]
@@ -203,7 +238,9 @@ mod tests {
         let text = vec!["Zut, l’aspirateur, j’ai oublié de l’éteindre !"];
         indexer.index_text_seq(docid, attr, text);
 
-        let Indexed { words_doc_indexes, .. } = indexer.build();
+        let Indexed {
+            words_doc_indexes, ..
+        } = indexer.build();
 
         assert!(words_doc_indexes.get(&b"l"[..]).is_some());
         assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
@@ -211,6 +248,8 @@ mod tests {
         assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
 
         // with the ugly apostrophe...
-        assert!(words_doc_indexes.get(&"l’éteindre".to_owned().into_bytes()).is_some());
+        assert!(words_doc_indexes
+            .get(&"l’éteindre".to_owned().into_bytes())
+            .is_some());
     }
 }

@@ -1,13 +1,13 @@
-use std::collections::hash_map::{HashMap, Entry};
+use std::collections::hash_map::{Entry, HashMap};
 use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
-use zlmdb::{Result as ZResult, CompactionOption};
-use zlmdb::types::{Str, Unit};
 use crossbeam_channel::Receiver;
 use log::{debug, error};
+use zlmdb::types::{Str, Unit};
+use zlmdb::{CompactionOption, Result as ZResult};
 
 use crate::{store, update, Index, MResult};
 
@@ -32,20 +32,32 @@ fn update_awaiter(
         loop {
             let mut writer = match env.write_txn() {
                 Ok(writer) => writer,
-                Err(e) => { error!("LMDB writer transaction begin failed: {}", e); break }
+                Err(e) => {
+                    error!("LMDB writer transaction begin failed: {}", e);
+                    break;
+                }
             };
 
             match update::update_task(&mut writer, index.clone()) {
                 Ok(Some(status)) => {
-                    if let Err(e) = writer.commit() { error!("update transaction failed: {}", e) }
+                    if let Err(e) = writer.commit() {
+                        error!("update transaction failed: {}", e)
+                    }
 
                     if let Some(ref callback) = *update_fn.load() {
                         (callback)(status);
                     }
-                },
+                }
                 // no more updates to handle for now
-                Ok(None) => { debug!("no more updates"); writer.abort(); break },
-                Err(e) => { error!("update task failed: {}", e); writer.abort() },
+                Ok(None) => {
+                    debug!("no more updates");
+                    writer.abort();
+                    break;
+                }
+                Err(e) => {
+                    error!("update task failed: {}", e);
+                    writer.abort()
+                }
             }
         }
     }
@@ -76,14 +88,16 @@ impl Database {
         // open the previously aggregated indexes
         let mut indexes = HashMap::new();
         for index_name in must_open {
-
             let (sender, receiver) = crossbeam_channel::bounded(100);
             let index = match store::open(&env, &index_name, sender.clone())? {
                 Some(index) => index,
                 None => {
-                    log::warn!("the index {} doesn't exist or has not all the databases", index_name);
+                    log::warn!(
+                        "the index {} doesn't exist or has not all the databases",
+                        index_name
+                    );
                     continue;
-                },
+                }
             };
             let update_fn = Arc::new(ArcSwapFn::empty());
 
@@ -100,10 +114,18 @@ impl Database {
             sender.send(()).unwrap();
 
             let result = indexes.insert(index_name, (index, update_fn, handle));
-            assert!(result.is_none(), "The index should not have been already open");
+            assert!(
+                result.is_none(),
+                "The index should not have been already open"
+            );
         }
 
-        Ok(Database { env, common_store, indexes_store, indexes: RwLock::new(indexes) })
+        Ok(Database {
+            env,
+            common_store,
+            indexes_store,
+            indexes: RwLock::new(indexes),
+        })
     }
 
     pub fn open_index(&self, name: impl AsRef<str>) -> Option<Index> {
@@ -152,7 +174,7 @@ impl Database {
                 let update_fn = Some(Arc::new(update_fn));
                 current_update_fn.swap(update_fn);
                 true
-            },
+            }
             None => false,
         }
     }
@@ -160,7 +182,10 @@ impl Database {
     pub fn unset_update_callback(&self, name: impl AsRef<str>) -> bool {
         let indexes_lock = self.indexes.read().unwrap();
         match indexes_lock.get(name.as_ref()) {
-            Some((_, current_update_fn, _)) => { current_update_fn.swap(None); true },
+            Some((_, current_update_fn, _)) => {
+                current_update_fn.swap(None);
+                true
+            }
             None => false,
         }
     }

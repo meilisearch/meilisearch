@@ -2,18 +2,21 @@ use std::io::{Read, Write};
 
 use hashbrown::HashMap;
 use meilidb_schema::SchemaAttr;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{DocumentId, Number};
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RankedMap(HashMap<(DocumentId, SchemaAttr), Number>);
 
 impl RankedMap {
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     pub fn insert(&mut self, document: DocumentId, attribute: SchemaAttr, number: Number) {

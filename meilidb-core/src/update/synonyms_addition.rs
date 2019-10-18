@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
-use fst::{SetBuilder, set::OpBuilder};
+use fst::{set::OpBuilder, SetBuilder};
 use sdset::SetBuf;
 
 use crate::automaton::normalize_str;
-use crate::update::{Update, next_update_id};
+use crate::update::{next_update_id, Update};
 use crate::{store, MResult};
 
 pub struct SynonymsAddition {
@@ -19,8 +19,7 @@ impl SynonymsAddition {
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
         updates_notifier: crossbeam_channel::Sender<()>,
-    ) -> SynonymsAddition
-    {
+    ) -> SynonymsAddition {
         SynonymsAddition {
             updates_store,
             updates_results_store,
@@ -30,13 +29,17 @@ impl SynonymsAddition {
     }
 
     pub fn add_synonym<S, T, I>(&mut self, synonym: S, alternatives: I)
-    where S: AsRef<str>,
-          T: AsRef<str>,
-          I: IntoIterator<Item=T>,
+    where
+        S: AsRef<str>,
+        T: AsRef<str>,
+        I: IntoIterator<Item = T>,
     {
         let synonym = normalize_str(synonym.as_ref());
         let alternatives = alternatives.into_iter().map(|s| s.as_ref().to_lowercase());
-        self.synonyms.entry(synonym).or_insert_with(Vec::new).extend(alternatives);
+        self.synonyms
+            .entry(synonym)
+            .or_insert_with(Vec::new)
+            .extend(alternatives);
     }
 
     pub fn finalize(self, writer: &mut zlmdb::RwTxn) -> MResult<u64> {
@@ -56,8 +59,7 @@ pub fn push_synonyms_addition(
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     addition: BTreeMap<String, Vec<String>>,
-) -> MResult<u64>
-{
+) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = Update::SynonymsAddition(addition);
@@ -71,8 +73,7 @@ pub fn apply_synonyms_addition(
     main_store: store::Main,
     synonyms_store: store::Synonyms,
     addition: BTreeMap<String, Vec<String>>,
-) -> MResult<()>
-{
+) -> MResult<()> {
     let mut synonyms_builder = SetBuilder::memory();
 
     for (word, alternatives) in addition {
@@ -107,7 +108,7 @@ pub fn apply_synonyms_addition(
                 .into_inner()
                 .and_then(fst::Set::from_bytes)
                 .unwrap()
-        },
+        }
         None => delta_synonyms,
     };
 

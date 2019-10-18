@@ -13,13 +13,17 @@ jobs:
     steps:
       - script: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
-        displayName: 'Install rustc'
+          $HOME/.cargo/bin/rustup component add rustfmt
+        displayName: 'Install rustc and components'
       - script: |
           $HOME/.cargo/bin/cargo check
         displayName: 'Check MeiliDB'
       - script: |
           $HOME/.cargo/bin/cargo test
         displayName: 'Test MeiliDB'
+      - script: |
+          $HOME/.cargo/bin/cargo fmt --all -- --check
+        displayName: 'Fmt MeiliDB'
 
   - job: build
     dependsOn:
@@ -31,7 +35,8 @@ jobs:
     steps:
       - script: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
-        displayName: 'Install rustc'
+          $HOME/.cargo/bin/rustup component add rustfmt
+        displayName: 'Install rustc and components'
       - script: |
           $HOME/.cargo/bin/cargo build --release
         displayName: 'Build MeiliDB'

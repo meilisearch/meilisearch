@@ -2,9 +2,9 @@ use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 
-use meilidb_schema::{Schema, SchemaAttr};
 use crate::criterion::Criterion;
-use crate::{RawDocument, RankedMap};
+use crate::{RankedMap, RawDocument};
+use meilidb_schema::{Schema, SchemaAttr};
 
 /// An helper struct that permit to sort documents by
 /// some of their stored attributes.
@@ -51,8 +51,7 @@ impl<'a> SortByAttr<'a> {
         ranked_map: &'a RankedMap,
         schema: &Schema,
         attr_name: &str,
-    ) -> Result<SortByAttr<'a>, SortByAttrError>
-    {
+    ) -> Result<SortByAttr<'a>, SortByAttrError> {
         SortByAttr::new(ranked_map, schema, attr_name, false)
     }
 
@@ -60,8 +59,7 @@ impl<'a> SortByAttr<'a> {
         ranked_map: &'a RankedMap,
         schema: &Schema,
         attr_name: &str,
-    ) -> Result<SortByAttr<'a>, SortByAttrError>
-    {
+    ) -> Result<SortByAttr<'a>, SortByAttrError> {
         SortByAttr::new(ranked_map, schema, attr_name, true)
     }
 
@@ -70,8 +68,7 @@ impl<'a> SortByAttr<'a> {
         schema: &Schema,
         attr_name: &str,
         reversed: bool,
-    ) -> Result<SortByAttr<'a>, SortByAttrError>
-    {
+    ) -> Result<SortByAttr<'a>, SortByAttrError> {
         let attr = match schema.attribute(attr_name) {
             Some(attr) => attr,
             None => return Err(SortByAttrError::AttributeNotFound),
@@ -81,7 +78,11 @@ impl<'a> SortByAttr<'a> {
             return Err(SortByAttrError::AttributeNotRegisteredForRanking);
         }
 
-        Ok(SortByAttr { ranked_map, attr, reversed })
+        Ok(SortByAttr {
+            ranked_map,
+            attr,
+            reversed,
+        })
     }
 }
 
@@ -93,11 +94,15 @@ impl<'a> Criterion for SortByAttr<'a> {
         match (lhs, rhs) {
             (Some(lhs), Some(rhs)) => {
                 let order = lhs.cmp(&rhs);
-                if self.reversed { order.reverse() } else { order }
-            },
-            (None,    Some(_)) => Ordering::Greater,
-            (Some(_), None)    => Ordering::Less,
-            (None,    None)    => Ordering::Equal,
+                if self.reversed {
+                    order.reverse()
+                } else {
+                    order
+                }
+            }
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (None, None) => Ordering::Equal,
         }
     }
 
@@ -122,4 +127,4 @@ impl fmt::Display for SortByAttrError {
     }
 }
 
-impl Error for SortByAttrError { }
+impl Error for SortByAttrError {}

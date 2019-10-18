@@ -11,10 +11,10 @@ use crate::RawDocument;
 #[inline]
 fn custom_log10(n: u8) -> f32 {
     match n {
-        0 => 0.0,       // log(1)
-        1 => 0.30102,   // log(2)
-        2 => 0.47712,   // log(3)
-        3 => 0.60205,   // log(4)
+        0 => 0.0,     // log(1)
+        1 => 0.30102, // log(2)
+        2 => 0.47712, // log(3)
+        3 => 0.60205, // log(4)
         _ => panic!("invalid number"),
     }
 }

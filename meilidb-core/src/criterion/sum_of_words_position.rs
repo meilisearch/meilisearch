@@ -1,7 +1,7 @@
-use std::cmp::Ordering;
-use slice_group_by::GroupBy;
 use crate::criterion::Criterion;
 use crate::RawDocument;
+use slice_group_by::GroupBy;
+use std::cmp::Ordering;
 
 #[inline]
 fn sum_matches_attribute_index(query_index: &[u32], word_index: &[u16]) -> usize {

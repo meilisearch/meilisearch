@@ -1,6 +1,6 @@
-use std::{error, fmt, io};
+use crate::serde::{DeserializerError, SerializerError};
 use serde_json::Error as SerdeJsonError;
-use crate::serde::{SerializerError, DeserializerError};
+use std::{error, fmt, io};
 
 pub type MResult<T> = Result<T, Error>;
 
@@ -90,7 +90,7 @@ impl fmt::Display for Error {
     }
 }
 
-impl error::Error for Error { }
+impl error::Error for Error {}
 
 #[derive(Debug)]
 pub enum UnsupportedOperation {

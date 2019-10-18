@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 use std::iter::FromIterator;
 
-use fst::{SetBuilder, set::OpBuilder};
+use fst::{set::OpBuilder, SetBuilder};
 use sdset::SetBuf;
 
 use crate::automaton::normalize_str;
-use crate::update::{Update, next_update_id};
+use crate::update::{next_update_id, Update};
 use crate::{store, MResult};
 
 pub struct SynonymsDeletion {
@@ -20,8 +20,7 @@ impl SynonymsDeletion {
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
         updates_notifier: crossbeam_channel::Sender<()>,
-    ) -> SynonymsDeletion
-    {
+    ) -> SynonymsDeletion {
         SynonymsDeletion {
             updates_store,
             updates_results_store,
@@ -36,9 +35,10 @@ impl SynonymsDeletion {
     }
 
     pub fn delete_specific_alternatives_of<S, T, I>(&mut self, synonym: S, alternatives: I)
-    where S: AsRef<str>,
-          T: AsRef<str>,
-          I: Iterator<Item=T>,
+    where
+        S: AsRef<str>,
+        T: AsRef<str>,
+        I: Iterator<Item = T>,
     {
         let synonym = normalize_str(synonym.as_ref());
         let value = self.synonyms.entry(synonym).or_insert(None);
@@ -66,8 +66,7 @@ pub fn push_synonyms_deletion(
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     deletion: BTreeMap<String, Option<Vec<String>>>,
-) -> MResult<u64>
-{
+) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = Update::SynonymsDeletion(deletion);
@@ -81,8 +80,7 @@ pub fn apply_synonyms_deletion(
     main_store: store::Main,
     synonyms_store: store::Synonyms,
     deletion: BTreeMap<String, Option<Vec<String>>>,
-) -> MResult<()>
-{
+) -> MResult<()> {
     let mut delete_whole_synonym_builder = SetBuilder::memory();
 
     for (synonym, alternatives) in deletion {
@@ -98,9 +96,7 @@ pub fn apply_synonyms_deletion(
                     let alternatives = SetBuf::from_dirty(alternatives);
                     let mut builder = SetBuilder::memory();
                     builder.extend_iter(alternatives).unwrap();
-                    builder.into_inner()
-                        .and_then(fst::Set::from_bytes)
-                        .unwrap()
+                    builder.into_inner().and_then(fst::Set::from_bytes).unwrap()
                 };
 
                 let op = OpBuilder::new()
@@ -124,7 +120,7 @@ pub fn apply_synonyms_deletion(
                 } else {
                     synonyms_store.put_synonyms(writer, synonym.as_bytes(), &alternatives)?;
                 }
-            },
+            }
             None => {
                 delete_whole_synonym_builder.insert(&synonym).unwrap();
                 synonyms_store.del_synonyms(writer, synonym.as_bytes())?;
@@ -150,7 +146,7 @@ pub fn apply_synonyms_deletion(
                 .into_inner()
                 .and_then(fst::Set::from_bytes)
                 .unwrap()
-        },
+        }
         None => fst::Set::default(),
     };
 

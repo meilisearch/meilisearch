@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 
+use meilidb_schema::SchemaAttr;
 use sdset::Set;
 use slice_group_by::GroupBy;
-use meilidb_schema::SchemaAttr;
 
 use crate::criterion::Criterion;
 use crate::RawDocument;
@@ -13,8 +13,7 @@ fn number_exact_matches(
     attribute: &[u16],
     is_exact: &[bool],
     fields_counts: &Set<(SchemaAttr, u64)>,
-) -> usize
-{
+) -> usize {
     let mut count = 0;
     let mut index = 0;
 
@@ -22,12 +21,16 @@ fn number_exact_matches(
         let len = group.len();
 
         let mut found_exact = false;
-        for (pos, _) in is_exact[index..index + len].iter().filter(|x| **x).enumerate() {
+        for (pos, _) in is_exact[index..index + len]
+            .iter()
+            .filter(|x| **x)
+            .enumerate()
+        {
             found_exact = true;
             if let Ok(pos) = fields_counts.binary_search_by_key(&attribute[pos], |(a, _)| a.0) {
                 let (_, count) = fields_counts[pos];
                 if count == 1 {
-                    return usize::max_value()
+                    return usize::max_value();
                 }
             }
         }
@@ -81,18 +84,18 @@ mod tests {
     #[test]
     fn easy_case() {
         let doc0 = {
-            let query_index   = &[0];
-            let attribute     = &[0];
-            let is_exact      = &[true];
+            let query_index = &[0];
+            let attribute = &[0];
+            let is_exact = &[true];
             let fields_counts = Set::new(&[(SchemaAttr(0), 2)]).unwrap();
 
             number_exact_matches(query_index, attribute, is_exact, fields_counts)
         };
 
         let doc1 = {
-            let query_index   = &[0];
-            let attribute     = &[0];
-            let is_exact      = &[false];
+            let query_index = &[0];
+            let attribute = &[0];
+            let is_exact = &[false];
             let fields_counts = Set::new(&[(SchemaAttr(0), 2)]).unwrap();
 
             number_exact_matches(query_index, attribute, is_exact, fields_counts)
@@ -108,18 +111,18 @@ mod tests {
     #[test]
     fn basic() {
         let doc0 = {
-            let query_index   = &[0];
-            let attribute     = &[0];
-            let is_exact      = &[true];
+            let query_index = &[0];
+            let attribute = &[0];
+            let is_exact = &[true];
             let fields_counts = Set::new(&[(SchemaAttr(0), 1)]).unwrap();
 
             number_exact_matches(query_index, attribute, is_exact, fields_counts)
         };
 
         let doc1 = {
-            let query_index   = &[0];
-            let attribute     = &[0];
-            let is_exact      = &[true];
+            let query_index = &[0];
+            let attribute = &[0];
+            let is_exact = &[true];
             let fields_counts = Set::new(&[(SchemaAttr(0), 4)]).unwrap();
 
             number_exact_matches(query_index, attribute, is_exact, fields_counts)

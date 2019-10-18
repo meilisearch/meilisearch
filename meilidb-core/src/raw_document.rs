@@ -1,11 +1,11 @@
-use std::sync::Arc;
 use std::fmt;
+use std::sync::Arc;
 
 use meilidb_schema::SchemaAttr;
 use sdset::SetBuf;
 use slice_group_by::GroupBy;
 
-use crate::{TmpMatch, DocumentId, Highlight};
+use crate::{DocumentId, Highlight, TmpMatch};
 
 #[derive(Clone)]
 pub struct RawDocument {
@@ -20,7 +20,13 @@ impl RawDocument {
         let r = self.matches.range;
         // it is safe because construction/modifications
         // can only be done in this module
-        unsafe { &self.matches.matches.query_index.get_unchecked(r.start..r.end) }
+        unsafe {
+            &self
+                .matches
+                .matches
+                .query_index
+                .get_unchecked(r.start..r.end)
+        }
     }
 
     pub fn distance(&self) -> &[u8] {
@@ -41,7 +47,13 @@ impl RawDocument {
         let r = self.matches.range;
         // it is safe because construction/modifications
         // can only be done in this module
-        unsafe { &self.matches.matches.word_index.get_unchecked(r.start..r.end) }
+        unsafe {
+            &self
+                .matches
+                .matches
+                .word_index
+                .get_unchecked(r.start..r.end)
+        }
     }
 
     pub fn is_exact(&self) -> &[bool] {
@@ -55,12 +67,32 @@ impl RawDocument {
 impl fmt::Debug for RawDocument {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("RawDocument {\r\n")?;
-        f.write_fmt(format_args!("{:>15}: {:?},\r\n",    "id",          self.id))?;
-        f.write_fmt(format_args!("{:>15}: {:^5?},\r\n",  "query_index", self.query_index()))?;
-        f.write_fmt(format_args!("{:>15}: {:^5?},\r\n",  "distance",    self.distance()))?;
-        f.write_fmt(format_args!("{:>15}: {:^5?},\r\n",  "attribute",   self.attribute()))?;
-        f.write_fmt(format_args!("{:>15}: {:^5?},\r\n",  "word_index",  self.word_index()))?;
-        f.write_fmt(format_args!("{:>15}: {:^5?},\r\n",  "is_exact",    self.is_exact()))?;
+        f.write_fmt(format_args!("{:>15}: {:?},\r\n", "id", self.id))?;
+        f.write_fmt(format_args!(
+            "{:>15}: {:^5?},\r\n",
+            "query_index",
+            self.query_index()
+        ))?;
+        f.write_fmt(format_args!(
+            "{:>15}: {:^5?},\r\n",
+            "distance",
+            self.distance()
+        ))?;
+        f.write_fmt(format_args!(
+            "{:>15}: {:^5?},\r\n",
+            "attribute",
+            self.attribute()
+        ))?;
+        f.write_fmt(format_args!(
+            "{:>15}: {:^5?},\r\n",
+            "word_index",
+            self.word_index()
+        ))?;
+        f.write_fmt(format_args!(
+            "{:>15}: {:^5?},\r\n",
+            "is_exact",
+            self.is_exact()
+        ))?;
         f.write_str("}")?;
         Ok(())
     }
@@ -70,8 +102,7 @@ pub fn raw_documents_from(
     matches: SetBuf<(DocumentId, TmpMatch)>,
     highlights: SetBuf<(DocumentId, Highlight)>,
     fields_counts: SetBuf<(DocumentId, SchemaAttr, u64)>,
-) -> Vec<RawDocument>
-{
+) -> Vec<RawDocument> {
     let mut docs_ranges: Vec<(_, Range, _, _)> = Vec::new();
     let mut matches2 = Matches::with_capacity(matches.len());
 
@@ -94,10 +125,21 @@ pub fn raw_documents_from(
     }
 
     let matches = Arc::new(matches2);
-    docs_ranges.into_iter().map(|(id, range, highlights, fields_counts)| {
-        let matches = SharedMatches { range, matches: matches.clone() };
-        RawDocument { id, matches, highlights, fields_counts }
-    }).collect()
+    docs_ranges
+        .into_iter()
+        .map(|(id, range, highlights, fields_counts)| {
+            let matches = SharedMatches {
+                range,
+                matches: matches.clone(),
+            };
+            RawDocument {
+                id,
+                matches,
+                highlights,
+                fields_counts,
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Copy, Clone)]

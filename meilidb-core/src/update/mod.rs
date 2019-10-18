@@ -6,21 +6,21 @@ mod synonyms_addition;
 mod synonyms_deletion;
 
 pub use self::customs_update::{apply_customs_update, push_customs_update};
-pub use self::documents_addition::{DocumentsAddition, apply_documents_addition};
-pub use self::documents_deletion::{DocumentsDeletion, apply_documents_deletion};
+pub use self::documents_addition::{apply_documents_addition, DocumentsAddition};
+pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
 pub use self::schema_update::{apply_schema_update, push_schema_update};
-pub use self::synonyms_addition::{SynonymsAddition, apply_synonyms_addition};
-pub use self::synonyms_deletion::{SynonymsDeletion, apply_synonyms_deletion};
+pub use self::synonyms_addition::{apply_synonyms_addition, SynonymsAddition};
+pub use self::synonyms_deletion::{apply_synonyms_deletion, SynonymsDeletion};
 
-use std::time::{Duration, Instant};
-use std::collections::BTreeMap;
 use std::cmp;
+use std::collections::BTreeMap;
+use std::time::{Duration, Instant};
 
 use log::debug;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use zlmdb::Result as ZResult;
 
-use crate::{store, MResult, DocumentId, RankedMap};
+use crate::{store, DocumentId, MResult, RankedMap};
 use meilidb_schema::Schema;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,8 +68,7 @@ pub fn update_status(
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     update_id: u64,
-) -> MResult<UpdateStatus>
-{
+) -> MResult<UpdateStatus> {
     match updates_results_store.update_result(reader, update_id)? {
         Some(result) => Ok(UpdateStatus::Processed(result)),
         None => {
@@ -86,8 +85,7 @@ pub fn next_update_id(
     writer: &mut zlmdb::RwTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-) -> ZResult<u64>
-{
+) -> ZResult<u64> {
     let last_update_id = updates_store.last_update_id(writer)?;
     let last_update_id = last_update_id.map(|(n, _)| n);
 
@@ -100,7 +98,10 @@ pub fn next_update_id(
     Ok(new_update_id)
 }
 
-pub fn update_task(writer: &mut zlmdb::RwTxn, index: store::Index) -> MResult<Option<UpdateResult>> {
+pub fn update_task(
+    writer: &mut zlmdb::RwTxn,
+    index: store::Index,
+) -> MResult<Option<UpdateResult>> {
     let (update_id, update) = match index.updates.pop_front(writer)? {
         Some(value) => value,
         None => return Ok(None),
@@ -112,11 +113,13 @@ pub fn update_task(writer: &mut zlmdb::RwTxn, index: store::Index) -> MResult<Op
         Update::Schema(schema) => {
             let start = Instant::now();
 
-            let update_type = UpdateType::Schema { schema: schema.clone() };
+            let update_type = UpdateType::Schema {
+                schema: schema.clone(),
+            };
             let result = apply_schema_update(writer, index.main, &schema);
 
             (update_type, result, start.elapsed())
-        },
+        }
         Update::Customs(customs) => {
             let start = Instant::now();
 
@@ -133,7 +136,9 @@ pub fn update_task(writer: &mut zlmdb::RwTxn, index: store::Index) -> MResult<Op
                 None => RankedMap::default(),
             };
 
-            let update_type = UpdateType::DocumentsAddition { number: documents.len() };
+            let update_type = UpdateType::DocumentsAddition {
+                number: documents.len(),
+            };
 
             let result = apply_documents_addition(
                 writer,
@@ -147,7 +152,7 @@ pub fn update_task(writer: &mut zlmdb::RwTxn, index: store::Index) -> MResult<Op
             );
 
             (update_type, result, start.elapsed())
-        },
+        }
         Update::DocumentsDeletion(documents) => {
             let start = Instant::now();
 
@@ -156,7 +161,9 @@ pub fn update_task(writer: &mut zlmdb::RwTxn, index: store::Index) -> MResult<Op
                 None => RankedMap::default(),
             };
 
-            let update_type = UpdateType::DocumentsDeletion { number: documents.len() };
+            let update_type = UpdateType::DocumentsDeletion {
+                number: documents.len(),
+            };
 
             let result = apply_documents_deletion(
                 writer,
@@ -170,38 +177,35 @@ pub fn update_task(writer: &mut zlmdb::RwTxn, index: store::Index) -> MResult<Op
             );
 
             (update_type, result, start.elapsed())
-        },
+        }
         Update::SynonymsAddition(synonyms) => {
             let start = Instant::now();
 
-            let update_type = UpdateType::SynonymsAddition { number: synonyms.len() };
+            let update_type = UpdateType::SynonymsAddition {
+                number: synonyms.len(),
+            };
 
-            let result = apply_synonyms_addition(
-                writer,
-                index.main,
-                index.synonyms,
-                synonyms,
-            );
+            let result = apply_synonyms_addition(writer, index.main, index.synonyms, synonyms);
 
             (update_type, result, start.elapsed())
-        },
+        }
         Update::SynonymsDeletion(synonyms) => {
             let start = Instant::now();
 
-            let update_type = UpdateType::SynonymsDeletion { number: synonyms.len() };
+            let update_type = UpdateType::SynonymsDeletion {
+                number: synonyms.len(),
+            };
 
-            let result = apply_synonyms_deletion(
-                writer,
-                index.main,
-                index.synonyms,
-                synonyms,
-            );
+            let result = apply_synonyms_deletion(writer, index.main, index.synonyms, synonyms);
 
             (update_type, result, start.elapsed())
-        },
+        }
     };
 
-    debug!("Processed update number {} {:?} {:?}", update_id, update_type, result);
+    debug!(
+        "Processed update number {} {:?} {:?}",
+        update_id, update_type, result
+    );
 
     let detailed_duration = DetailedDuration { main: duration };
     let status = UpdateResult {
@@ -211,7 +215,9 @@ pub fn update_task(writer: &mut zlmdb::RwTxn, index: store::Index) -> MResult<Op
         detailed_duration,
     };
 
-    index.updates_results.put_update_result(writer, update_id, &status)?;
+    index
+        .updates_results
+        .put_update_result(writer, update_id, &status)?;
 
     Ok(Some(status))
 }

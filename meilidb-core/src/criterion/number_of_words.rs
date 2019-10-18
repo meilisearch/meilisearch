@@ -1,7 +1,7 @@
-use std::cmp::Ordering;
-use slice_group_by::GroupBy;
 use crate::criterion::Criterion;
 use crate::RawDocument;
+use slice_group_by::GroupBy;
+use std::cmp::Ordering;
 
 #[inline]
 fn number_of_query_words(query_index: &[u32]) -> usize {
