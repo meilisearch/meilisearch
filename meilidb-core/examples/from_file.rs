@@ -33,6 +33,9 @@ struct IndexCommand {
 
     #[structopt(long)]
     update_group_size: Option<usize>,
+
+    #[structopt(long, parse(from_os_str))]
+    compact_to_path: Option<PathBuf>,
 }
 
 #[derive(Debug, StructOpt)]
@@ -164,6 +167,12 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     }
 
     println!("database created in {:.2?} at: {:?}", start.elapsed(), command.database_path);
+
+    if let Some(path) = command.compact_to_path {
+        let start = Instant::now();
+        let _file = database.copy_and_compact_to_path(&path)?;
+        println!("database compacted in {:.2?} at: {:?}", start.elapsed(), path);
+    }
 
     Ok(())
 }

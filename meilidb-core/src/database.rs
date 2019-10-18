@@ -1,8 +1,10 @@
 use std::collections::hash_map::{HashMap, Entry};
+use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
+use zlmdb::{Result as ZResult, CompactionOption};
 use zlmdb::types::{Str, Unit};
 use crossbeam_channel::Receiver;
 use log::{debug, error};
@@ -161,6 +163,10 @@ impl Database {
             Some((_, current_update_fn, _)) => { current_update_fn.swap(None); true },
             None => false,
         }
+    }
+
+    pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> ZResult<File> {
+        self.env.copy_to_path(path, CompactionOption::Enabled)
     }
 
     pub fn indexes_names(&self) -> MResult<Vec<String>> {
