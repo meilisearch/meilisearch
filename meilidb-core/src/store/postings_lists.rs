@@ -23,6 +23,10 @@ impl PostingsLists {
         self.postings_lists.delete(writer, word)
     }
 
+    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.postings_lists.clear(writer)
+    }
+
     pub fn postings_list<'txn>(
         self,
         reader: &'txn heed::RoTxn,

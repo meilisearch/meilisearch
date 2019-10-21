@@ -121,7 +121,7 @@ pub struct AllDocumentsFieldsCountsIter<'txn> {
     iter: heed::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
 }
 
-impl<'r> Iterator for AllDocumentsFieldsCountsIter<'r> {
+impl Iterator for AllDocumentsFieldsCountsIter<'_> {
     type Item = ZResult<(DocumentId, SchemaAttr, u64)>;
 
     fn next(&mut self) -> Option<Self::Item> {
