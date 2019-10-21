@@ -16,9 +16,9 @@ use std::cmp;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
+use heed::Result as ZResult;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use zlmdb::Result as ZResult;
 
 use crate::{store, DocumentId, MResult, RankedMap};
 use meilidb_schema::Schema;
@@ -64,7 +64,7 @@ pub enum UpdateStatus {
 }
 
 pub fn update_status(
-    reader: &zlmdb::RoTxn,
+    reader: &heed::RoTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     update_id: u64,
@@ -82,7 +82,7 @@ pub fn update_status(
 }
 
 pub fn next_update_id(
-    writer: &mut zlmdb::RwTxn,
+    writer: &mut heed::RwTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
 ) -> ZResult<u64> {
@@ -98,10 +98,7 @@ pub fn next_update_id(
     Ok(new_update_id)
 }
 
-pub fn update_task(
-    writer: &mut zlmdb::RwTxn,
-    index: store::Index,
-) -> MResult<Option<UpdateResult>> {
+pub fn update_task(writer: &mut heed::RwTxn, index: store::Index) -> MResult<Option<UpdateResult>> {
     let (update_id, update) = match index.updates.pop_front(writer)? {
         Some(value) => value,
         None => return Ok(None),

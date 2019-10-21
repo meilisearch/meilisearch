@@ -3,7 +3,7 @@ use crate::{error::UnsupportedOperation, store, MResult};
 use meilidb_schema::Schema;
 
 pub fn apply_schema_update(
-    writer: &mut zlmdb::RwTxn,
+    writer: &mut heed::RwTxn,
     main_store: store::Main,
     new_schema: &Schema,
 ) -> MResult<()> {
@@ -17,7 +17,7 @@ pub fn apply_schema_update(
 }
 
 pub fn push_schema_update(
-    writer: &mut zlmdb::RwTxn,
+    writer: &mut heed::RwTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     schema: Schema,

@@ -20,10 +20,10 @@ pub use self::updates_results::UpdatesResults;
 
 use std::collections::HashSet;
 
+use heed::Result as ZResult;
 use meilidb_schema::{Schema, SchemaAttr};
 use serde::de;
 use zerocopy::{AsBytes, FromBytes};
-use zlmdb::Result as ZResult;
 
 use crate::criterion::Criteria;
 use crate::serde::Deserializer;
@@ -97,7 +97,7 @@ pub struct Index {
 impl Index {
     pub fn document<T: de::DeserializeOwned>(
         &self,
-        reader: &zlmdb::RoTxn,
+        reader: &heed::RoTxn,
         attributes: Option<&HashSet<&str>>,
         document_id: DocumentId,
     ) -> MResult<Option<T>> {
@@ -127,7 +127,7 @@ impl Index {
 
     pub fn document_attribute<T: de::DeserializeOwned>(
         &self,
-        reader: &zlmdb::RoTxn,
+        reader: &heed::RoTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
     ) -> MResult<Option<T>> {
@@ -140,12 +140,12 @@ impl Index {
         }
     }
 
-    pub fn schema_update(&self, writer: &mut zlmdb::RwTxn, schema: Schema) -> MResult<u64> {
+    pub fn schema_update(&self, writer: &mut heed::RwTxn, schema: Schema) -> MResult<u64> {
         let _ = self.updates_notifier.send(());
         update::push_schema_update(writer, self.updates, self.updates_results, schema)
     }
 
-    pub fn customs_update(&self, writer: &mut zlmdb::RwTxn, customs: Vec<u8>) -> ZResult<u64> {
+    pub fn customs_update(&self, writer: &mut heed::RwTxn, customs: Vec<u8>) -> ZResult<u64> {
         let _ = self.updates_notifier.send(());
         update::push_customs_update(writer, self.updates, self.updates_results, customs)
     }
@@ -182,7 +182,7 @@ impl Index {
         )
     }
 
-    pub fn current_update_id(&self, reader: &zlmdb::RoTxn) -> MResult<Option<u64>> {
+    pub fn current_update_id(&self, reader: &heed::RoTxn) -> MResult<Option<u64>> {
         match self.updates.last_update_id(reader)? {
             Some((id, _)) => Ok(Some(id)),
             None => Ok(None),
@@ -191,7 +191,7 @@ impl Index {
 
     pub fn update_status(
         &self,
-        reader: &zlmdb::RoTxn,
+        reader: &heed::RoTxn,
         update_id: u64,
     ) -> MResult<update::UpdateStatus> {
         update::update_status(reader, self.updates, self.updates_results, update_id)
@@ -221,7 +221,7 @@ impl Index {
 }
 
 pub fn create(
-    env: &zlmdb::Env,
+    env: &heed::Env,
     name: &str,
     updates_notifier: crossbeam_channel::Sender<()>,
 ) -> MResult<Index> {
@@ -261,7 +261,7 @@ pub fn create(
 }
 
 pub fn open(
-    env: &zlmdb::Env,
+    env: &heed::Env,
     name: &str,
     updates_notifier: crossbeam_channel::Sender<()>,
 ) -> MResult<Option<Index>> {

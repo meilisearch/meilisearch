@@ -1,18 +1,18 @@
 use super::BEU64;
 use crate::DocumentId;
+use heed::types::{ByteSlice, OwnedType};
+use heed::Result as ZResult;
 use std::sync::Arc;
-use zlmdb::types::{ByteSlice, OwnedType};
-use zlmdb::Result as ZResult;
 
 #[derive(Copy, Clone)]
 pub struct DocsWords {
-    pub(crate) docs_words: zlmdb::Database<OwnedType<BEU64>, ByteSlice>,
+    pub(crate) docs_words: heed::Database<OwnedType<BEU64>, ByteSlice>,
 }
 
 impl DocsWords {
     pub fn put_doc_words(
         self,
-        writer: &mut zlmdb::RwTxn,
+        writer: &mut heed::RwTxn,
         document_id: DocumentId,
         words: &fst::Set,
     ) -> ZResult<()> {
@@ -21,18 +21,14 @@ impl DocsWords {
         self.docs_words.put(writer, &document_id, bytes)
     }
 
-    pub fn del_doc_words(
-        self,
-        writer: &mut zlmdb::RwTxn,
-        document_id: DocumentId,
-    ) -> ZResult<bool> {
+    pub fn del_doc_words(self, writer: &mut heed::RwTxn, document_id: DocumentId) -> ZResult<bool> {
         let document_id = BEU64::new(document_id.0);
         self.docs_words.delete(writer, &document_id)
     }
 
     pub fn doc_words(
         self,
-        reader: &zlmdb::RoTxn,
+        reader: &heed::RoTxn,
         document_id: DocumentId,
     ) -> ZResult<Option<fst::Set>> {
         let document_id = BEU64::new(document_id.0);

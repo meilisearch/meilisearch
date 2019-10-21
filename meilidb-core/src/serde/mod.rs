@@ -35,7 +35,7 @@ use crate::{DocumentId, ParseNumberError};
 pub enum SerializerError {
     DocumentIdNotFound,
     InvalidDocumentIdType,
-    Zlmdb(zlmdb::Error),
+    Zlmdb(heed::Error),
     SerdeJson(SerdeJsonError),
     ParseNumber(ParseNumberError),
     UnserializableType { type_name: &'static str },
@@ -59,7 +59,7 @@ impl fmt::Display for SerializerError {
             SerializerError::InvalidDocumentIdType => {
                 f.write_str("document identifier can only be of type string or number")
             }
-            SerializerError::Zlmdb(e) => write!(f, "zlmdb related error: {}", e),
+            SerializerError::Zlmdb(e) => write!(f, "heed related error: {}", e),
             SerializerError::SerdeJson(e) => write!(f, "serde json error: {}", e),
             SerializerError::ParseNumber(e) => {
                 write!(f, "error while trying to parse a number: {}", e)
@@ -92,8 +92,8 @@ impl From<SerdeJsonError> for SerializerError {
     }
 }
 
-impl From<zlmdb::Error> for SerializerError {
-    fn from(error: zlmdb::Error) -> SerializerError {
+impl From<heed::Error> for SerializerError {
+    fn from(error: heed::Error) -> SerializerError {
         SerializerError::Zlmdb(error)
     }
 }

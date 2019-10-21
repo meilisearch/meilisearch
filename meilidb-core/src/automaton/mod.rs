@@ -23,7 +23,7 @@ pub struct AutomatonProducer {
 
 impl AutomatonProducer {
     pub fn new(
-        reader: &zlmdb::RoTxn,
+        reader: &heed::RoTxn,
         query: &str,
         main_store: store::Main,
         synonyms_store: store::Synonyms,
@@ -103,7 +103,7 @@ pub fn normalize_str(string: &str) -> String {
 }
 
 fn generate_automatons(
-    reader: &zlmdb::RoTxn,
+    reader: &heed::RoTxn,
     query: &str,
     main_store: store::Main,
     synonym_store: store::Synonyms,
