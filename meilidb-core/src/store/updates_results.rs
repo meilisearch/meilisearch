@@ -1,15 +1,15 @@
 use super::BEU64;
 use crate::update::UpdateResult;
-use zlmdb::types::{OwnedType, Serde};
-use zlmdb::Result as ZResult;
+use heed::types::{OwnedType, SerdeBincode};
+use heed::Result as ZResult;
 
 #[derive(Copy, Clone)]
 pub struct UpdatesResults {
-    pub(crate) updates_results: zlmdb::Database<OwnedType<BEU64>, Serde<UpdateResult>>,
+    pub(crate) updates_results: heed::Database<OwnedType<BEU64>, SerdeBincode<UpdateResult>>,
 }
 
 impl UpdatesResults {
-    pub fn last_update_id(self, reader: &zlmdb::RoTxn) -> ZResult<Option<(u64, UpdateResult)>> {
+    pub fn last_update_id(self, reader: &heed::RoTxn) -> ZResult<Option<(u64, UpdateResult)>> {
         match self.updates_results.last(reader)? {
             Some((key, data)) => Ok(Some((key.get(), data))),
             None => Ok(None),
@@ -18,7 +18,7 @@ impl UpdatesResults {
 
     pub fn put_update_result(
         self,
-        writer: &mut zlmdb::RwTxn,
+        writer: &mut heed::RwTxn,
         update_id: u64,
         update_result: &UpdateResult,
     ) -> ZResult<()> {
@@ -28,7 +28,7 @@ impl UpdatesResults {
 
     pub fn update_result(
         self,
-        reader: &zlmdb::RoTxn,
+        reader: &heed::RoTxn,
         update_id: u64,
     ) -> ZResult<Option<UpdateResult>> {
         let update_id = BEU64::new(update_id);

@@ -14,7 +14,7 @@ use crate::DocumentId;
 #[derive(Debug)]
 pub enum DeserializerError {
     SerdeJson(SerdeJsonError),
-    Zlmdb(zlmdb::Error),
+    Zlmdb(heed::Error),
     Custom(String),
 }
 
@@ -28,7 +28,7 @@ impl fmt::Display for DeserializerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             DeserializerError::SerdeJson(e) => write!(f, "serde json related error: {}", e),
-            DeserializerError::Zlmdb(e) => write!(f, "zlmdb related error: {}", e),
+            DeserializerError::Zlmdb(e) => write!(f, "heed related error: {}", e),
             DeserializerError::Custom(s) => f.write_str(s),
         }
     }
@@ -42,15 +42,15 @@ impl From<SerdeJsonError> for DeserializerError {
     }
 }
 
-impl From<zlmdb::Error> for DeserializerError {
-    fn from(error: zlmdb::Error) -> DeserializerError {
+impl From<heed::Error> for DeserializerError {
+    fn from(error: heed::Error) -> DeserializerError {
         DeserializerError::Zlmdb(error)
     }
 }
 
 pub struct Deserializer<'a> {
     pub document_id: DocumentId,
-    pub reader: &'a zlmdb::RoTxn,
+    pub reader: &'a heed::RoTxn,
     pub documents_fields: DocumentsFields,
     pub schema: &'a Schema,
     pub attributes: Option<&'a HashSet<SchemaAttr>>,

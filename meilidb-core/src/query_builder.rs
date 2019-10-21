@@ -137,7 +137,7 @@ fn multiword_rewrite_matches(
 }
 
 fn fetch_raw_documents(
-    reader: &zlmdb::RoTxn,
+    reader: &heed::RoTxn,
     automatons: &[Automaton],
     query_enhancer: &QueryEnhancer,
     searchables: Option<&ReorderedAttrs>,
@@ -285,7 +285,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
 
     pub fn query(
         self,
-        reader: &zlmdb::RoTxn,
+        reader: &heed::RoTxn,
         query: &str,
         range: Range<usize>,
     ) -> MResult<Vec<Document>> {
@@ -323,7 +323,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
 }
 
 fn raw_query<'c, FI>(
-    reader: &zlmdb::RoTxn,
+    reader: &heed::RoTxn,
 
     query: &str,
     range: Range<usize>,
@@ -454,7 +454,7 @@ where
 }
 
 fn raw_query_with_distinct<'c, FI, FD>(
-    reader: &zlmdb::RoTxn,
+    reader: &heed::RoTxn,
 
     query: &str,
     range: Range<usize>,

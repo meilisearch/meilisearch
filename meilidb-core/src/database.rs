@@ -5,9 +5,9 @@ use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
 use crossbeam_channel::Receiver;
+use heed::types::{Str, Unit};
+use heed::{CompactionOption, Result as ZResult};
 use log::{debug, error};
-use zlmdb::types::{Str, Unit};
-use zlmdb::{CompactionOption, Result as ZResult};
 
 use crate::{store, update, Index, MResult};
 
@@ -15,18 +15,13 @@ pub type BoxUpdateFn = Box<dyn Fn(update::UpdateResult) + Send + Sync + 'static>
 type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
 
 pub struct Database {
-    pub env: zlmdb::Env,
-    common_store: zlmdb::DynDatabase,
-    indexes_store: zlmdb::Database<Str, Unit>,
+    pub env: heed::Env,
+    common_store: heed::PolyDatabase,
+    indexes_store: heed::Database<Str, Unit>,
     indexes: RwLock<HashMap<String, (Index, Arc<ArcSwapFn>, thread::JoinHandle<()>)>>,
 }
 
-fn update_awaiter(
-    receiver: Receiver<()>,
-    env: zlmdb::Env,
-    update_fn: Arc<ArcSwapFn>,
-    index: Index,
-) {
+fn update_awaiter(receiver: Receiver<()>, env: heed::Env, update_fn: Arc<ArcSwapFn>, index: Index) {
     for () in receiver {
         // consume all updates in order (oldest first)
         loop {
@@ -67,7 +62,7 @@ impl Database {
     pub fn open_or_create(path: impl AsRef<Path>) -> MResult<Database> {
         fs::create_dir_all(path.as_ref())?;
 
-        let env = zlmdb::EnvOpenOptions::new()
+        let env = heed::EnvOpenOptions::new()
             .map_size(10 * 1024 * 1024 * 1024) // 10GB
             .max_dbs(3000)
             .open(path)?;
@@ -199,7 +194,7 @@ impl Database {
         Ok(indexes.keys().cloned().collect())
     }
 
-    pub fn common_store(&self) -> zlmdb::DynDatabase {
+    pub fn common_store(&self) -> heed::PolyDatabase {
         self.common_store
     }
 }

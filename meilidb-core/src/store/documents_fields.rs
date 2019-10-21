@@ -1,19 +1,19 @@
+use heed::types::{ByteSlice, OwnedType};
+use heed::Result as ZResult;
 use meilidb_schema::SchemaAttr;
-use zlmdb::types::{ByteSlice, OwnedType};
-use zlmdb::Result as ZResult;
 
 use super::DocumentAttrKey;
 use crate::DocumentId;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFields {
-    pub(crate) documents_fields: zlmdb::Database<OwnedType<DocumentAttrKey>, ByteSlice>,
+    pub(crate) documents_fields: heed::Database<OwnedType<DocumentAttrKey>, ByteSlice>,
 }
 
 impl DocumentsFields {
     pub fn put_document_field(
         self,
-        writer: &mut zlmdb::RwTxn,
+        writer: &mut heed::RwTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
         value: &[u8],
@@ -24,7 +24,7 @@ impl DocumentsFields {
 
     pub fn del_all_document_fields(
         self,
-        writer: &mut zlmdb::RwTxn,
+        writer: &mut heed::RwTxn,
         document_id: DocumentId,
     ) -> ZResult<usize> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
@@ -34,7 +34,7 @@ impl DocumentsFields {
 
     pub fn document_attribute<'txn>(
         self,
-        reader: &'txn zlmdb::RoTxn,
+        reader: &'txn heed::RoTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
     ) -> ZResult<Option<&'txn [u8]>> {
@@ -44,7 +44,7 @@ impl DocumentsFields {
 
     pub fn document_fields<'txn>(
         self,
-        reader: &'txn zlmdb::RoTxn,
+        reader: &'txn heed::RoTxn,
         document_id: DocumentId,
     ) -> ZResult<DocumentFieldsIter<'txn>> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
@@ -55,7 +55,7 @@ impl DocumentsFields {
 }
 
 pub struct DocumentFieldsIter<'txn> {
-    iter: zlmdb::RoRange<'txn, OwnedType<DocumentAttrKey>, ByteSlice>,
+    iter: heed::RoRange<'txn, OwnedType<DocumentAttrKey>, ByteSlice>,
 }
 
 impl<'txn> Iterator for DocumentFieldsIter<'txn> {

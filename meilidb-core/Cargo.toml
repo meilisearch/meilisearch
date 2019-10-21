@@ -12,6 +12,7 @@ crossbeam-channel = "0.3.9"
 deunicode = "1.0.0"
 env_logger = "0.7.0"
 hashbrown = { version = "0.6.0", features = ["serde"] }
+heed = "0.1.0"
 log = "0.4.8"
 meilidb-schema = { path = "../meilidb-schema", version = "0.1.0" }
 meilidb-tokenizer = { path = "../meilidb-tokenizer", version = "0.1.0" }
@@ -23,11 +24,6 @@ serde_json = "1.0.41"
 siphasher = "0.3.0"
 slice-group-by = "0.2.6"
 zerocopy = "0.2.8"
-
-[dependencies.zlmdb]
-package = "zerocopy-lmdb"
-git = "https://github.com/Kerollmops/zerocopy-lmdb.git"
-branch = "master"
 
 [dependencies.levenshtein_automata]
 git = "https://github.com/Kerollmops/levenshtein-automata.git"

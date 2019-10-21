@@ -1,18 +1,18 @@
 use super::DocumentAttrKey;
 use crate::DocumentId;
+use heed::types::OwnedType;
+use heed::Result as ZResult;
 use meilidb_schema::SchemaAttr;
-use zlmdb::types::OwnedType;
-use zlmdb::Result as ZResult;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFieldsCounts {
-    pub(crate) documents_fields_counts: zlmdb::Database<OwnedType<DocumentAttrKey>, OwnedType<u64>>,
+    pub(crate) documents_fields_counts: heed::Database<OwnedType<DocumentAttrKey>, OwnedType<u64>>,
 }
 
 impl DocumentsFieldsCounts {
     pub fn put_document_field_count(
         self,
-        writer: &mut zlmdb::RwTxn,
+        writer: &mut heed::RwTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
         value: u64,
@@ -23,7 +23,7 @@ impl DocumentsFieldsCounts {
 
     pub fn del_all_document_fields_counts(
         self,
-        writer: &mut zlmdb::RwTxn,
+        writer: &mut heed::RwTxn,
         document_id: DocumentId,
     ) -> ZResult<usize> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
@@ -34,7 +34,7 @@ impl DocumentsFieldsCounts {
 
     pub fn document_field_count(
         self,
-        reader: &zlmdb::RoTxn,
+        reader: &heed::RoTxn,
         document_id: DocumentId,
         attribute: SchemaAttr,
     ) -> ZResult<Option<u64>> {
@@ -47,7 +47,7 @@ impl DocumentsFieldsCounts {
 
     pub fn document_fields_counts<'txn>(
         self,
-        reader: &'txn zlmdb::RoTxn,
+        reader: &'txn heed::RoTxn,
         document_id: DocumentId,
     ) -> ZResult<DocumentFieldsCountsIter<'txn>> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
@@ -56,10 +56,7 @@ impl DocumentsFieldsCounts {
         Ok(DocumentFieldsCountsIter { iter })
     }
 
-    pub fn documents_ids<'txn>(
-        self,
-        reader: &'txn zlmdb::RoTxn,
-    ) -> ZResult<DocumentsIdsIter<'txn>> {
+    pub fn documents_ids<'txn>(self, reader: &'txn heed::RoTxn) -> ZResult<DocumentsIdsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
         Ok(DocumentsIdsIter {
             last_seen_id: None,
@@ -69,7 +66,7 @@ impl DocumentsFieldsCounts {
 
     pub fn all_documents_fields_counts<'txn>(
         self,
-        reader: &'txn zlmdb::RoTxn,
+        reader: &'txn heed::RoTxn,
     ) -> ZResult<AllDocumentsFieldsCountsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
         Ok(AllDocumentsFieldsCountsIter { iter })
@@ -77,7 +74,7 @@ impl DocumentsFieldsCounts {
 }
 
 pub struct DocumentFieldsCountsIter<'txn> {
-    iter: zlmdb::RoRange<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
+    iter: heed::RoRange<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
 }
 
 impl Iterator for DocumentFieldsCountsIter<'_> {
@@ -97,7 +94,7 @@ impl Iterator for DocumentFieldsCountsIter<'_> {
 
 pub struct DocumentsIdsIter<'txn> {
     last_seen_id: Option<DocumentId>,
-    iter: zlmdb::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
+    iter: heed::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
 }
 
 impl Iterator for DocumentsIdsIter<'_> {
@@ -121,7 +118,7 @@ impl Iterator for DocumentsIdsIter<'_> {
 }
 
 pub struct AllDocumentsFieldsCountsIter<'txn> {
-    iter: zlmdb::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
+    iter: heed::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
 }
 
 impl<'r> Iterator for AllDocumentsFieldsCountsIter<'r> {

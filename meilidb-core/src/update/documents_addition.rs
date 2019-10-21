@@ -35,7 +35,7 @@ impl<D> DocumentsAddition<D> {
         self.documents.push(document);
     }
 
-    pub fn finalize(self, writer: &mut zlmdb::RwTxn) -> MResult<u64>
+    pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64>
     where
         D: serde::Serialize,
     {
@@ -57,7 +57,7 @@ impl<D> Extend<D> for DocumentsAddition<D> {
 }
 
 pub fn push_documents_addition<D: serde::Serialize>(
-    writer: &mut zlmdb::RwTxn,
+    writer: &mut heed::RwTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     addition: Vec<D>,
@@ -78,7 +78,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
 }
 
 pub fn apply_documents_addition(
-    writer: &mut zlmdb::RwTxn,
+    writer: &mut heed::RwTxn,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
     documents_fields_counts_store: store::DocumentsFieldsCounts,

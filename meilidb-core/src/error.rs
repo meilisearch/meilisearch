@@ -12,7 +12,7 @@ pub enum Error {
     SchemaMissing,
     WordIndexMissing,
     MissingDocumentId,
-    Zlmdb(zlmdb::Error),
+    Zlmdb(heed::Error),
     Fst(fst::Error),
     SerdeJson(SerdeJsonError),
     Bincode(bincode::Error),
@@ -27,8 +27,8 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<zlmdb::Error> for Error {
-    fn from(error: zlmdb::Error) -> Error {
+impl From<heed::Error> for Error {
+    fn from(error: heed::Error) -> Error {
         Error::Zlmdb(error)
     }
 }
@@ -79,7 +79,7 @@ impl fmt::Display for Error {
             SchemaMissing => write!(f, "this index does not have a schema"),
             WordIndexMissing => write!(f, "this index does not have a word index"),
             MissingDocumentId => write!(f, "document id is missing"),
-            Zlmdb(e) => write!(f, "zlmdb error; {}", e),
+            Zlmdb(e) => write!(f, "heed error; {}", e),
             Fst(e) => write!(f, "fst error; {}", e),
             SerdeJson(e) => write!(f, "serde json error; {}", e),
             Bincode(e) => write!(f, "bincode error; {}", e),
