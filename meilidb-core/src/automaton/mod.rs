@@ -2,7 +2,7 @@ mod dfa;
 mod query_enhancer;
 
 use std::cmp::Reverse;
-use std::vec;
+use std::{cmp, vec};
 
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
@@ -18,7 +18,7 @@ use self::query_enhancer::QueryEnhancerBuilder;
 const NGRAMS: usize = 3;
 
 pub struct AutomatonProducer {
-    automatons: Vec<Vec<Automaton>>,
+    automatons: Vec<AutomatonGroup>,
 }
 
 impl AutomatonProducer {
@@ -26,17 +26,24 @@ impl AutomatonProducer {
         reader: &heed::RoTxn,
         query: &str,
         main_store: store::Main,
+        postings_list_store: store::PostingsLists,
         synonyms_store: store::Synonyms,
     ) -> MResult<(AutomatonProducer, QueryEnhancer)> {
         let (automatons, query_enhancer) =
-            generate_automatons(reader, query, main_store, synonyms_store)?;
+            generate_automatons(reader, query, main_store, postings_list_store, synonyms_store)?;
 
         Ok((AutomatonProducer { automatons }, query_enhancer))
     }
 
-    pub fn into_iter(self) -> vec::IntoIter<Vec<Automaton>> {
+    pub fn into_iter(self) -> vec::IntoIter<AutomatonGroup> {
         self.automatons.into_iter()
     }
+}
+
+#[derive(Debug)]
+pub enum AutomatonGroup {
+    Normal(Vec<Automaton>),
+    PhraseQuery(Vec<Automaton>),
 }
 
 #[derive(Debug)]
@@ -102,12 +109,42 @@ pub fn normalize_str(string: &str) -> String {
     string
 }
 
+fn split_best_frequency<'a>(
+    reader: &heed::RoTxn,
+    word: &'a str,
+    postings_lists_store: store::PostingsLists,
+) -> MResult<Option<(&'a str, &'a str)>> {
+    let chars = word.char_indices().skip(1);
+    let mut best = None;
+
+    for (i, _) in chars {
+        let (left, right) = word.split_at(i);
+
+        let left_freq = postings_lists_store
+            .postings_list(reader, left.as_ref())?
+            .map_or(0, |i| i.len());
+
+        let right_freq = postings_lists_store
+            .postings_list(reader, right.as_ref())?
+            .map_or(0, |i| i.len());
+
+        let min_freq = cmp::min(left_freq, right_freq);
+        if min_freq != 0 && best.map_or(true, |(old, _, _)| min_freq > old) {
+            best = Some((min_freq, left, right));
+        }
+    }
+
+    Ok(best.map(|(_, l, r)| (l, r)))
+}
+
 fn generate_automatons(
     reader: &heed::RoTxn,
     query: &str,
     main_store: store::Main,
+    postings_lists_store: store::PostingsLists,
     synonym_store: store::Synonyms,
-) -> MResult<(Vec<Vec<Automaton>>, QueryEnhancer)> {
+) -> MResult<(Vec<AutomatonGroup>, QueryEnhancer)>
+{
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
     let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
     let synonyms = match main_store.synonyms_fst(reader)? {
@@ -136,7 +173,7 @@ fn generate_automatons(
         original_automatons.push(automaton);
     }
 
-    automatons.push(original_automatons);
+    automatons.push(AutomatonGroup::Normal(original_automatons));
 
     for n in 1..=NGRAMS {
         let mut ngrams = query_words.windows(n).enumerate().peekable();
@@ -188,13 +225,25 @@ fn generate_automatons(
                                 Automaton::non_exact(automaton_index, n, synonym)
                             };
                             automaton_index += 1;
-                            automatons.push(vec![automaton]);
+                            automatons.push(AutomatonGroup::Normal(vec![automaton]));
                         }
                     }
                 }
             }
 
-            if n != 1 {
+            if n == 1 {
+                if let Some((left, right)) = split_best_frequency(reader, &normalized, postings_lists_store)? {
+                    let a = Automaton::exact(automaton_index, 1, left);
+                    enhancer_builder.declare(query_range.clone(), automaton_index, &[left]);
+                    automaton_index += 1;
+
+                    let b = Automaton::exact(automaton_index, 1, right);
+                    enhancer_builder.declare(query_range.clone(), automaton_index, &[left]);
+                    automaton_index += 1;
+
+                    automatons.push(AutomatonGroup::PhraseQuery(vec![a, b]));
+                }
+            } else {
                 // automaton of concatenation of query words
                 let concat = ngram_slice.concat();
                 let normalized = normalize_str(&concat);
@@ -204,15 +253,18 @@ fn generate_automatons(
 
                 let automaton = Automaton::exact(automaton_index, n, &normalized);
                 automaton_index += 1;
-                automatons.push(vec![automaton]);
+                automatons.push(AutomatonGroup::Normal(vec![automaton]));
             }
         }
     }
 
     // order automatons, the most important first,
     // we keep the original automatons at the front.
-    automatons[1..].sort_by_key(|a| {
-        let a = a.first().unwrap();
+    automatons[1..].sort_by_key(|group| {
+        let a = match group {
+            AutomatonGroup::Normal(group) => group.first().unwrap(),
+            AutomatonGroup::PhraseQuery(group) => group.first().unwrap(),
+        };
         (Reverse(a.is_exact), a.ngram)
     });
 
