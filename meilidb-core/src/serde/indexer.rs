@@ -20,7 +20,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
     type SerializeTupleStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeMap = MapIndexer<'a>;
-    type SerializeStruct = StructSerializer<'a>;
+    type SerializeStruct = StructIndexer<'a>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
     fn serialize_bool(self, _value: bool) -> Result<Self::Ok, Self::Error> {
@@ -302,14 +302,14 @@ impl<'a> ser::SerializeMap for MapIndexer<'a> {
     }
 }
 
-pub struct StructSerializer<'a> {
+pub struct StructIndexer<'a> {
     attribute: SchemaAttr,
     document_id: DocumentId,
     indexer: &'a mut RawIndexer,
     texts: Vec<String>,
 }
 
-impl<'a> ser::SerializeStruct for StructSerializer<'a> {
+impl<'a> ser::SerializeStruct for StructIndexer<'a> {
     type Ok = Option<usize>;
     type Error = SerializerError;
 
