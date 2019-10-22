@@ -20,16 +20,14 @@ pub use self::convert_to_string::ConvertToString;
 pub use self::deserializer::{Deserializer, DeserializerError};
 pub use self::extract_document_id::{compute_document_id, extract_document_id, value_to_string};
 pub use self::indexer::Indexer;
-pub use self::serializer::Serializer;
+pub use self::serializer::{serialize_value, Serializer};
 
-use std::collections::BTreeMap;
 use std::{error::Error, fmt};
 
-use meilidb_schema::SchemaAttr;
 use serde::ser;
 use serde_json::Error as SerdeJsonError;
 
-use crate::{DocumentId, ParseNumberError};
+use crate::ParseNumberError;
 
 #[derive(Debug)]
 pub enum SerializerError {
@@ -101,27 +99,5 @@ impl From<heed::Error> for SerializerError {
 impl From<ParseNumberError> for SerializerError {
     fn from(error: ParseNumberError) -> SerializerError {
         SerializerError::ParseNumber(error)
-    }
-}
-
-pub struct RamDocumentStore(BTreeMap<(DocumentId, SchemaAttr), Vec<u8>>);
-
-impl RamDocumentStore {
-    pub fn new() -> RamDocumentStore {
-        RamDocumentStore(BTreeMap::new())
-    }
-
-    pub fn set_document_field(&mut self, id: DocumentId, attr: SchemaAttr, value: Vec<u8>) {
-        self.0.insert((id, attr), value);
-    }
-
-    pub fn into_inner(self) -> BTreeMap<(DocumentId, SchemaAttr), Vec<u8>> {
-        self.0
-    }
-}
-
-impl Default for RamDocumentStore {
-    fn default() -> Self {
-        Self::new()
     }
 }

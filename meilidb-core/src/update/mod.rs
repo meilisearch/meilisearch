@@ -20,7 +20,7 @@ use heed::Result as ZResult;
 use log::debug;
 use serde::{Deserialize, Serialize};
 
-use crate::{store, DocumentId, MResult, RankedMap};
+use crate::{store, DocumentId, MResult};
 use meilidb_schema::Schema;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,7 +113,15 @@ pub fn update_task(writer: &mut heed::RwTxn, index: store::Index) -> MResult<Opt
             let update_type = UpdateType::Schema {
                 schema: schema.clone(),
             };
-            let result = apply_schema_update(writer, index.main, &schema);
+            let result = apply_schema_update(
+                writer,
+                &schema,
+                index.main,
+                index.documents_fields,
+                index.documents_fields_counts,
+                index.postings_lists,
+                index.docs_words,
+            );
 
             (update_type, result, start.elapsed())
         }
@@ -128,11 +136,6 @@ pub fn update_task(writer: &mut heed::RwTxn, index: store::Index) -> MResult<Opt
         Update::DocumentsAddition(documents) => {
             let start = Instant::now();
 
-            let ranked_map = match index.main.ranked_map(writer)? {
-                Some(ranked_map) => ranked_map,
-                None => RankedMap::default(),
-            };
-
             let update_type = UpdateType::DocumentsAddition {
                 number: documents.len(),
             };
@@ -144,7 +147,6 @@ pub fn update_task(writer: &mut heed::RwTxn, index: store::Index) -> MResult<Opt
                 index.documents_fields_counts,
                 index.postings_lists,
                 index.docs_words,
-                ranked_map,
                 documents,
             );
 
@@ -152,11 +154,6 @@ pub fn update_task(writer: &mut heed::RwTxn, index: store::Index) -> MResult<Opt
         }
         Update::DocumentsDeletion(documents) => {
             let start = Instant::now();
-
-            let ranked_map = match index.main.ranked_map(writer)? {
-                Some(ranked_map) => ranked_map,
-                None => RankedMap::default(),
-            };
 
             let update_type = UpdateType::DocumentsDeletion {
                 number: documents.len(),
@@ -169,7 +166,6 @@ pub fn update_task(writer: &mut heed::RwTxn, index: store::Index) -> MResult<Opt
                 index.documents_fields_counts,
                 index.postings_lists,
                 index.docs_words,
-                ranked_map,
                 documents,
             );
 

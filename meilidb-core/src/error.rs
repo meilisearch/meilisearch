@@ -12,6 +12,7 @@ pub enum Error {
     SchemaMissing,
     WordIndexMissing,
     MissingDocumentId,
+    DuplicateDocument,
     Zlmdb(heed::Error),
     Fst(fst::Error),
     SerdeJson(SerdeJsonError),
@@ -79,6 +80,7 @@ impl fmt::Display for Error {
             SchemaMissing => write!(f, "this index does not have a schema"),
             WordIndexMissing => write!(f, "this index does not have a word index"),
             MissingDocumentId => write!(f, "document id is missing"),
+            DuplicateDocument => write!(f, "update contains documents with the same id"),
             Zlmdb(e) => write!(f, "heed error; {}", e),
             Fst(e) => write!(f, "fst error; {}", e),
             SerdeJson(e) => write!(f, "serde json error; {}", e),
@@ -95,6 +97,10 @@ impl error::Error for Error {}
 #[derive(Debug)]
 pub enum UnsupportedOperation {
     SchemaAlreadyExists,
+    CannotUpdateSchemaIdentifier,
+    CannotReorderSchemaAttribute,
+    CannotIntroduceNewSchemaAttribute,
+    CannotRemoveSchemaAttribute,
 }
 
 impl fmt::Display for UnsupportedOperation {
@@ -102,6 +108,12 @@ impl fmt::Display for UnsupportedOperation {
         use self::UnsupportedOperation::*;
         match self {
             SchemaAlreadyExists => write!(f, "Cannot update index which already have a schema"),
+            CannotUpdateSchemaIdentifier => write!(f, "Cannot update the identifier of a schema"),
+            CannotReorderSchemaAttribute => write!(f, "Cannot reorder the attributes of a schema"),
+            CannotIntroduceNewSchemaAttribute => {
+                write!(f, "Cannot introduce new attributes in a schema")
+            }
+            CannotRemoveSchemaAttribute => write!(f, "Cannot remove attributes from a schema"),
         }
     }
 }

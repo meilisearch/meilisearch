@@ -1,17 +1,17 @@
-use meilidb_schema::{Schema, SchemaAttr};
+use meilidb_schema::{Schema, SchemaAttr, SchemaProps};
 use serde::ser;
-use std::collections::HashMap;
 
 use crate::raw_indexer::RawIndexer;
-use crate::serde::RamDocumentStore;
+use crate::store::{DocumentsFields, DocumentsFieldsCounts};
 use crate::{DocumentId, RankedMap};
 
 use super::{ConvertToNumber, ConvertToString, Indexer, SerializerError};
 
 pub struct Serializer<'a> {
+    pub txn: &'a mut heed::RwTxn,
     pub schema: &'a Schema,
-    pub document_store: &'a mut RamDocumentStore,
-    pub document_fields_counts: &'a mut HashMap<(DocumentId, SchemaAttr), u64>,
+    pub document_store: DocumentsFields,
+    pub document_fields_counts: DocumentsFieldsCounts,
     pub indexer: &'a mut RawIndexer,
     pub ranked_map: &'a mut RankedMap,
     pub document_id: DocumentId,
@@ -150,6 +150,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         Ok(MapSerializer {
+            txn: self.txn,
             schema: self.schema,
             document_id: self.document_id,
             document_store: self.document_store,
@@ -166,6 +167,7 @@ impl<'a> ser::Serializer for Serializer<'a> {
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         Ok(StructSerializer {
+            txn: self.txn,
             schema: self.schema,
             document_id: self.document_id,
             document_store: self.document_store,
@@ -189,10 +191,11 @@ impl<'a> ser::Serializer for Serializer<'a> {
 }
 
 pub struct MapSerializer<'a> {
+    txn: &'a mut heed::RwTxn,
     schema: &'a Schema,
     document_id: DocumentId,
-    document_store: &'a mut RamDocumentStore,
-    document_fields_counts: &'a mut HashMap<(DocumentId, SchemaAttr), u64>,
+    document_store: DocumentsFields,
+    document_fields_counts: DocumentsFieldsCounts,
     indexer: &'a mut RawIndexer,
     ranked_map: &'a mut RankedMap,
     current_key_name: Option<String>,
@@ -229,17 +232,20 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
         V: ser::Serialize,
     {
         let key = key.serialize(ConvertToString)?;
-
-        serialize_value(
-            self.schema,
-            self.document_id,
-            self.document_store,
-            self.document_fields_counts,
-            self.indexer,
-            self.ranked_map,
-            &key,
-            value,
-        )
+        match self.schema.attribute(&key) {
+            Some(attribute) => serialize_value(
+                self.txn,
+                attribute,
+                self.schema.props(attribute),
+                self.document_id,
+                self.document_store,
+                self.document_fields_counts,
+                self.indexer,
+                self.ranked_map,
+                value,
+            ),
+            None => Ok(()),
+        }
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -248,10 +254,11 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
 }
 
 pub struct StructSerializer<'a> {
+    txn: &'a mut heed::RwTxn,
     schema: &'a Schema,
     document_id: DocumentId,
-    document_store: &'a mut RamDocumentStore,
-    document_fields_counts: &'a mut HashMap<(DocumentId, SchemaAttr), u64>,
+    document_store: DocumentsFields,
+    document_fields_counts: DocumentsFieldsCounts,
     indexer: &'a mut RawIndexer,
     ranked_map: &'a mut RankedMap,
 }
@@ -268,16 +275,20 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
     where
         T: ser::Serialize,
     {
-        serialize_value(
-            self.schema,
-            self.document_id,
-            self.document_store,
-            self.document_fields_counts,
-            self.indexer,
-            self.ranked_map,
-            key,
-            value,
-        )
+        match self.schema.attribute(key) {
+            Some(attribute) => serialize_value(
+                self.txn,
+                attribute,
+                self.schema.props(attribute),
+                self.document_id,
+                self.document_store,
+                self.document_fields_counts,
+                self.indexer,
+                self.ranked_map,
+                value,
+            ),
+            None => Ok(()),
+        }
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -285,40 +296,42 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
     }
 }
 
-fn serialize_value<T: ?Sized>(
-    schema: &Schema,
+pub fn serialize_value<T: ?Sized>(
+    txn: &mut heed::RwTxn,
+    attribute: SchemaAttr,
+    props: SchemaProps,
     document_id: DocumentId,
-    document_store: &mut RamDocumentStore,
-    documents_fields_counts: &mut HashMap<(DocumentId, SchemaAttr), u64>,
+    document_store: DocumentsFields,
+    documents_fields_counts: DocumentsFieldsCounts,
     indexer: &mut RawIndexer,
     ranked_map: &mut RankedMap,
-    key: &str,
     value: &T,
 ) -> Result<(), SerializerError>
 where
     T: ser::Serialize,
 {
-    if let Some(attribute) = schema.attribute(key) {
-        let props = schema.props(attribute);
+    let serialized = serde_json::to_vec(value)?;
+    document_store.put_document_field(txn, document_id, attribute, &serialized)?;
 
-        let serialized = serde_json::to_vec(value)?;
-        document_store.set_document_field(document_id, attribute, serialized);
-
-        if props.is_indexed() {
-            let indexer = Indexer {
-                attribute,
-                indexer,
+    if props.is_indexed() {
+        let indexer = Indexer {
+            attribute,
+            indexer,
+            document_id,
+        };
+        if let Some(number_of_words) = value.serialize(indexer)? {
+            documents_fields_counts.put_document_field_count(
+                txn,
                 document_id,
-            };
-            if let Some(number_of_words) = value.serialize(indexer)? {
-                documents_fields_counts.insert((document_id, attribute), number_of_words as u64);
-            }
+                attribute,
+                number_of_words as u64,
+            )?;
         }
+    }
 
-        if props.is_ranked() {
-            let number = value.serialize(ConvertToNumber)?;
-            ranked_map.insert(document_id, attribute, number);
-        }
+    if props.is_ranked() {
+        let number = value.serialize(ConvertToNumber)?;
+        ranked_map.insert(document_id, attribute, number);
     }
 
     Ok(())

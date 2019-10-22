@@ -88,7 +88,6 @@ pub fn apply_documents_deletion(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    mut ranked_map: RankedMap,
     deletion: Vec<DocumentId>,
 ) -> MResult<()> {
     let idset = SetBuf::from_dirty(deletion);
@@ -96,6 +95,11 @@ pub fn apply_documents_deletion(
     let schema = match main_store.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
+    };
+
+    let mut ranked_map = match main_store.ranked_map(writer)? {
+        Some(ranked_map) => ranked_map,
+        None => RankedMap::default(),
     };
 
     // collect the ranked attributes according to the schema
@@ -181,7 +185,6 @@ pub fn apply_documents_deletion(
 
     main_store.put_words_fst(writer, &words)?;
     main_store.put_ranked_map(writer, &ranked_map)?;
-
     main_store.put_number_of_documents(writer, |old| old - deleted_documents_len)?;
 
     Ok(())
