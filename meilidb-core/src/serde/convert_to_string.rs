@@ -12,8 +12,8 @@ impl ser::Serializer for ConvertToString {
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeMap = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeStruct = ser::Impossible<Self::Ok, Self::Error>;
+    type SerializeMap = MapConvertToString;
+    type SerializeStruct = StructConvertToString;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
     fn serialize_bool(self, _value: bool) -> Result<Self::Ok, Self::Error> {
@@ -169,7 +169,9 @@ impl ser::Serializer for ConvertToString {
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        Err(SerializerError::UnserializableType { type_name: "map" })
+        Ok(MapConvertToString {
+            text: String::new(),
+        })
     }
 
     fn serialize_struct(
@@ -177,8 +179,8 @@ impl ser::Serializer for ConvertToString {
         _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        Err(SerializerError::UnserializableType {
-            type_name: "struct",
+        Ok(StructConvertToString {
+            text: String::new(),
         })
     }
 
@@ -192,5 +194,65 @@ impl ser::Serializer for ConvertToString {
         Err(SerializerError::UnserializableType {
             type_name: "struct variant",
         })
+    }
+}
+
+pub struct MapConvertToString {
+    text: String,
+}
+
+impl ser::SerializeMap for MapConvertToString {
+    type Ok = String;
+    type Error = SerializerError;
+
+    fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
+    where
+        T: ser::Serialize,
+    {
+        let text = key.serialize(ConvertToString)?;
+        self.text.push_str(&text);
+        self.text.push_str(" ");
+        Ok(())
+    }
+
+    fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: ser::Serialize,
+    {
+        let text = value.serialize(ConvertToString)?;
+        self.text.push_str(&text);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.text)
+    }
+}
+
+pub struct StructConvertToString {
+    text: String,
+}
+
+impl ser::SerializeStruct for StructConvertToString {
+    type Ok = String;
+    type Error = SerializerError;
+
+    fn serialize_field<T: ?Sized>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error>
+    where
+        T: ser::Serialize,
+    {
+        let value = value.serialize(ConvertToString)?;
+        self.text.push_str(key);
+        self.text.push_str(" ");
+        self.text.push_str(&value);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.text)
     }
 }
