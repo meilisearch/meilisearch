@@ -32,6 +32,10 @@ impl DocumentsFields {
         self.documents_fields.delete_range(writer, start..=end)
     }
 
+    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.documents_fields.clear(writer)
+    }
+
     pub fn document_attribute<'txn>(
         self,
         reader: &'txn heed::RoTxn,

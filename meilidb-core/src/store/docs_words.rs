@@ -26,6 +26,10 @@ impl DocsWords {
         self.docs_words.delete(writer, &document_id)
     }
 
+    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.docs_words.clear(writer)
+    }
+
     pub fn doc_words(
         self,
         reader: &heed::RoTxn,
