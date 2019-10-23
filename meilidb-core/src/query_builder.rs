@@ -149,127 +149,91 @@ fn fetch_raw_documents(
     let mut highlights = Vec::new();
 
     for group in automatons_groups {
-        match group {
-            AutomatonGroup::Normal(automatons) => {
-                for automaton in automatons {
-                    let Automaton { index, is_exact, query_len, .. } = automaton;
-                    let dfa = automaton.dfa();
+        let AutomatonGroup {
+            is_phrase_query,
+            automatons,
+        } = group;
+        let phrase_query_len = automatons.len();
 
-                    let words = match main_store.words_fst(reader)? {
-                        Some(words) => words,
-                        None => return Ok(Vec::new()),
-                    };
+        let mut tmp_matches = Vec::new();
+        for (id, automaton) in automatons.into_iter().enumerate() {
+            let Automaton {
+                index,
+                is_exact,
+                query_len,
+                ..
+            } = automaton;
+            let dfa = automaton.dfa();
 
-                    let mut stream = words.search(&dfa).into_stream();
-                    while let Some(input) = stream.next() {
-                        let distance = dfa.eval(input).to_u8();
-                        let is_exact = *is_exact && distance == 0 && input.len() == *query_len;
+            let words = match main_store.words_fst(reader)? {
+                Some(words) => words,
+                None => return Ok(Vec::new()),
+            };
 
-                        let doc_indexes = match postings_lists_store.postings_list(reader, input)? {
-                            Some(doc_indexes) => doc_indexes,
-                            None => continue,
+            let mut stream = words.search(&dfa).into_stream();
+            while let Some(input) = stream.next() {
+                let distance = dfa.eval(input).to_u8();
+                let is_exact = *is_exact && distance == 0 && input.len() == *query_len;
+
+                let doc_indexes = match postings_lists_store.postings_list(reader, input)? {
+                    Some(doc_indexes) => doc_indexes,
+                    None => continue,
+                };
+
+                tmp_matches.reserve(doc_indexes.len());
+
+                for di in doc_indexes.as_ref() {
+                    let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
+                    if let Some(attribute) = attribute {
+                        let match_ = TmpMatch {
+                            query_index: *index as u32,
+                            distance,
+                            attribute,
+                            word_index: di.word_index,
+                            is_exact,
                         };
 
-                        matches.reserve(doc_indexes.len());
-                        highlights.reserve(doc_indexes.len());
-
-                        for di in doc_indexes.as_ref() {
-                            let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
-                            if let Some(attribute) = attribute {
-                                let match_ = TmpMatch {
-                                    query_index: *index as u32,
-                                    distance,
-                                    attribute,
-                                    word_index: di.word_index,
-                                    is_exact,
-                                };
-
-                                let highlight = Highlight {
-                                    attribute: di.attribute,
-                                    char_index: di.char_index,
-                                    char_length: di.char_length,
-                                };
-
-                                matches.push((di.document_id, match_));
-                                highlights.push((di.document_id, highlight));
-                            }
-                        }
-                    }
-                }
-            },
-            AutomatonGroup::PhraseQuery(automatons) => {
-                let mut tmp_matches = Vec::new();
-                let phrase_query_len = automatons.len();
-
-                for (id, automaton) in automatons.into_iter().enumerate() {
-                    let Automaton { index, is_exact, query_len, .. } = automaton;
-                    let dfa = automaton.dfa();
-
-                    let words = match main_store.words_fst(reader)? {
-                        Some(words) => words,
-                        None => return Ok(Vec::new()),
-                    };
-
-                    let mut stream = words.search(&dfa).into_stream();
-                    while let Some(input) = stream.next() {
-                        let distance = dfa.eval(input).to_u8();
-                        let is_exact = *is_exact && distance == 0 && input.len() == *query_len;
-
-                        let doc_indexes = match postings_lists_store.postings_list(reader, input)? {
-                            Some(doc_indexes) => doc_indexes,
-                            None => continue,
+                        let highlight = Highlight {
+                            attribute: di.attribute,
+                            char_index: di.char_index,
+                            char_length: di.char_length,
                         };
 
-                        tmp_matches.reserve(doc_indexes.len());
+                        tmp_matches.push((di.document_id, id, match_, highlight));
+                    }
+                }
+            }
+        }
 
-                        for di in doc_indexes.as_ref() {
-                            let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
-                            if let Some(attribute) = attribute {
-                                let match_ = TmpMatch {
-                                    query_index: *index as u32,
-                                    distance,
-                                    attribute,
-                                    word_index: di.word_index,
-                                    is_exact,
-                                };
+        if *is_phrase_query {
+            tmp_matches.sort_unstable_by_key(|(id, _, m, _)| (*id, m.attribute, m.word_index));
+            for group in tmp_matches.linear_group_by_key(|(id, _, m, _)| (*id, m.attribute)) {
+                for window in group.windows(2) {
+                    let (ida, ia, ma, ha) = window[0];
+                    let (idb, ib, mb, hb) = window[1];
 
-                                let highlight = Highlight {
-                                    attribute: di.attribute,
-                                    char_index: di.char_index,
-                                    char_length: di.char_length,
-                                };
+                    debug_assert_eq!(ida, idb);
 
-                                tmp_matches.push((di.document_id, id, match_, highlight));
-                            }
+                    // if matches must follow and actually follows themselves
+                    if ia + 1 == ib && ma.word_index + 1 == mb.word_index {
+                        // TODO we must make it work for phrase query longer than 2
+                        // if the second match is the last phrase query word
+                        if ib + 1 == phrase_query_len {
+                            // insert first match
+                            matches.push((ida, ma));
+                            highlights.push((ida, ha));
+
+                            // insert second match
+                            matches.push((idb, mb));
+                            highlights.push((idb, hb));
                         }
                     }
                 }
-
-                tmp_matches.sort_unstable_by_key(|(id, _, m, _)| (*id, m.attribute, m.word_index));
-                for group in tmp_matches.linear_group_by_key(|(id, _, m, _)| (*id, m.attribute)) {
-                    for window in group.windows(2) {
-                        let (ida, ia, ma, ha) = window[0];
-                        let (idb, ib, mb, hb) = window[1];
-
-                        debug_assert_eq!(ida, idb);
-
-                        // if matches must follow and actually follows themselves
-                        if ia + 1 == ib && ma.word_index + 1 == mb.word_index {
-
-                            // TODO we must make it work for phrase query longer than 2
-                            // if the second match is the last phrase query word
-                            if ib + 1 == phrase_query_len {
-                                // insert first match
-                                matches.push((ida, ma));
-                                highlights.push((ida, ha));
-
-                                // insert second match
-                                matches.push((idb, mb));
-                                highlights.push((idb, hb));
-                            }
-                        }
-                    }
-                }
+            }
+        } else {
+            for (id, _, match_, highlight) in tmp_matches {
+                matches.push((id, match_));
+                highlights.push((id, highlight));
             }
         }
     }
@@ -442,8 +406,13 @@ where
     let start_processing = Instant::now();
     let mut raw_documents_processed = Vec::with_capacity(range.len());
 
-    let (automaton_producer, query_enhancer) =
-        AutomatonProducer::new(reader, query, main_store, postings_lists_store, synonyms_store)?;
+    let (automaton_producer, query_enhancer) = AutomatonProducer::new(
+        reader,
+        query,
+        main_store,
+        postings_lists_store,
+        synonyms_store,
+    )?;
 
     let automaton_producer = automaton_producer.into_iter();
     let mut automatons = Vec::new();
@@ -555,8 +524,13 @@ where
     let start_processing = Instant::now();
     let mut raw_documents_processed = Vec::new();
 
-    let (automaton_producer, query_enhancer) =
-        AutomatonProducer::new(reader, query, main_store, postings_lists_store, synonyms_store)?;
+    let (automaton_producer, query_enhancer) = AutomatonProducer::new(
+        reader,
+        query,
+        main_store,
+        postings_lists_store,
+        synonyms_store,
+    )?;
 
     let automaton_producer = automaton_producer.into_iter();
     let mut automatons = Vec::new();
@@ -1778,9 +1752,8 @@ mod tests {
         let store = TempDatabase::from_iter(vec![
             ("search", &[doc_index(0, 0)][..]),
             ("engine", &[doc_index(0, 1)][..]),
-
             ("search", &[doc_index(1, 0)][..]),
-            ("slow",   &[doc_index(1, 1)][..]),
+            ("slow", &[doc_index(1, 1)][..]),
             ("engine", &[doc_index(1, 2)][..]),
         ]);
 
@@ -1806,15 +1779,13 @@ mod tests {
             ("search", &[doc_index(0, 0)][..]),
             ("search", &[doc_index(0, 1)][..]),
             ("engine", &[doc_index(0, 2)][..]),
-
             ("search", &[doc_index(1, 0)][..]),
-            ("slow",   &[doc_index(1, 1)][..]),
+            ("slow", &[doc_index(1, 1)][..]),
             ("search", &[doc_index(1, 2)][..]),
             ("engine", &[doc_index(1, 3)][..]),
-
             ("search", &[doc_index(1, 0)][..]),
             ("search", &[doc_index(1, 1)][..]),
-            ("slow",   &[doc_index(1, 2)][..]),
+            ("slow", &[doc_index(1, 2)][..]),
             ("engine", &[doc_index(1, 3)][..]),
         ]);
 

@@ -29,8 +29,13 @@ impl AutomatonProducer {
         postings_list_store: store::PostingsLists,
         synonyms_store: store::Synonyms,
     ) -> MResult<(AutomatonProducer, QueryEnhancer)> {
-        let (automatons, query_enhancer) =
-            generate_automatons(reader, query, main_store, postings_list_store, synonyms_store)?;
+        let (automatons, query_enhancer) = generate_automatons(
+            reader,
+            query,
+            main_store,
+            postings_list_store,
+            synonyms_store,
+        )?;
 
         Ok((AutomatonProducer { automatons }, query_enhancer))
     }
@@ -41,9 +46,25 @@ impl AutomatonProducer {
 }
 
 #[derive(Debug)]
-pub enum AutomatonGroup {
-    Normal(Vec<Automaton>),
-    PhraseQuery(Vec<Automaton>),
+pub struct AutomatonGroup {
+    pub is_phrase_query: bool,
+    pub automatons: Vec<Automaton>,
+}
+
+impl AutomatonGroup {
+    fn normal(automatons: Vec<Automaton>) -> AutomatonGroup {
+        AutomatonGroup {
+            is_phrase_query: false,
+            automatons,
+        }
+    }
+
+    fn phrase_query(automatons: Vec<Automaton>) -> AutomatonGroup {
+        AutomatonGroup {
+            is_phrase_query: true,
+            automatons,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -143,8 +164,7 @@ fn generate_automatons(
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     synonym_store: store::Synonyms,
-) -> MResult<(Vec<AutomatonGroup>, QueryEnhancer)>
-{
+) -> MResult<(Vec<AutomatonGroup>, QueryEnhancer)> {
     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
     let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
     let synonyms = match main_store.synonyms_fst(reader)? {
@@ -173,7 +193,7 @@ fn generate_automatons(
         original_automatons.push(automaton);
     }
 
-    automatons.push(AutomatonGroup::Normal(original_automatons));
+    automatons.push(AutomatonGroup::normal(original_automatons));
 
     for n in 1..=NGRAMS {
         let mut ngrams = query_words.windows(n).enumerate().peekable();
@@ -225,14 +245,16 @@ fn generate_automatons(
                                 Automaton::non_exact(automaton_index, n, synonym)
                             };
                             automaton_index += 1;
-                            automatons.push(AutomatonGroup::Normal(vec![automaton]));
+                            automatons.push(AutomatonGroup::normal(vec![automaton]));
                         }
                     }
                 }
             }
 
             if n == 1 {
-                if let Some((left, right)) = split_best_frequency(reader, &normalized, postings_lists_store)? {
+                if let Some((left, right)) =
+                    split_best_frequency(reader, &normalized, postings_lists_store)?
+                {
                     let a = Automaton::exact(automaton_index, 1, left);
                     enhancer_builder.declare(query_range.clone(), automaton_index, &[left]);
                     automaton_index += 1;
@@ -241,7 +263,7 @@ fn generate_automatons(
                     enhancer_builder.declare(query_range.clone(), automaton_index, &[left]);
                     automaton_index += 1;
 
-                    automatons.push(AutomatonGroup::PhraseQuery(vec![a, b]));
+                    automatons.push(AutomatonGroup::phrase_query(vec![a, b]));
                 }
             } else {
                 // automaton of concatenation of query words
@@ -253,7 +275,7 @@ fn generate_automatons(
 
                 let automaton = Automaton::exact(automaton_index, n, &normalized);
                 automaton_index += 1;
-                automatons.push(AutomatonGroup::Normal(vec![automaton]));
+                automatons.push(AutomatonGroup::normal(vec![automaton]));
             }
         }
     }
@@ -261,10 +283,7 @@ fn generate_automatons(
     // order automatons, the most important first,
     // we keep the original automatons at the front.
     automatons[1..].sort_by_key(|group| {
-        let a = match group {
-            AutomatonGroup::Normal(group) => group.first().unwrap(),
-            AutomatonGroup::PhraseQuery(group) => group.first().unwrap(),
-        };
+        let a = group.automatons.first().unwrap();
         (Reverse(a.is_exact), a.ngram)
     });
 
