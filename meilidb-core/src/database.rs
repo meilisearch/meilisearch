@@ -35,8 +35,10 @@ fn update_awaiter(receiver: Receiver<()>, env: heed::Env, update_fn: Arc<ArcSwap
 
             match update::update_task(&mut writer, index.clone()) {
                 Ok(Some(status)) => {
-                    if let Err(e) = writer.commit() {
-                        error!("update transaction failed: {}", e)
+                    if status.result.is_ok() {
+                        if let Err(e) = writer.commit() {
+                            error!("update transaction failed: {}", e)
+                        }
                     }
 
                     if let Some(ref callback) = *update_fn.load() {
