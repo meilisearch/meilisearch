@@ -32,6 +32,10 @@ impl DocumentsFieldsCounts {
             .delete_range(writer, start..=end)
     }
 
+    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.documents_fields_counts.clear(writer)
+    }
+
     pub fn document_field_count(
         self,
         reader: &heed::RoTxn,

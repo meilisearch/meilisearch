@@ -1,3 +1,4 @@
+mod clear_all;
 mod customs_update;
 mod documents_addition;
 mod documents_deletion;
@@ -5,6 +6,7 @@ mod schema_update;
 mod synonyms_addition;
 mod synonyms_deletion;
 
+pub use self::clear_all::{apply_clear_all, push_clear_all};
 pub use self::customs_update::{apply_customs_update, push_customs_update};
 pub use self::documents_addition::{apply_documents_addition, DocumentsAddition};
 pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
@@ -25,6 +27,7 @@ use meilidb_schema::Schema;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Update {
+    ClearAll,
     Schema(Schema),
     Customs(Vec<u8>),
     DocumentsAddition(Vec<serde_json::Value>),
@@ -35,6 +38,7 @@ pub enum Update {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateType {
+    ClearAll,
     Schema { schema: Schema },
     Customs,
     DocumentsAddition { number: usize },
@@ -107,6 +111,21 @@ pub fn update_task(writer: &mut heed::RwTxn, index: store::Index) -> MResult<Opt
     debug!("Processing update number {}", update_id);
 
     let (update_type, result, duration) = match update {
+        Update::ClearAll => {
+            let start = Instant::now();
+
+            let update_type = UpdateType::ClearAll;
+            let result = apply_clear_all(
+                writer,
+                index.main,
+                index.documents_fields,
+                index.documents_fields_counts,
+                index.postings_lists,
+                index.docs_words,
+            );
+
+            (update_type, result, start.elapsed())
+        }
         Update::Schema(schema) => {
             let start = Instant::now();
 

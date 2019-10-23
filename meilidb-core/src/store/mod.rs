@@ -166,6 +166,10 @@ impl Index {
         )
     }
 
+    pub fn clear_all(&self, writer: &mut heed::RwTxn) -> MResult<u64> {
+        update::push_clear_all(writer, self.updates, self.updates_results)
+    }
+
     pub fn synonyms_addition(&self) -> update::SynonymsAddition {
         update::SynonymsAddition::new(
             self.updates,

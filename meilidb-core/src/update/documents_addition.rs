@@ -184,6 +184,7 @@ pub fn reindex_all_documents(
     main_store.put_ranked_map(writer, &ranked_map)?;
     main_store.put_number_of_documents(writer, |_| 0)?;
     postings_lists_store.clear(writer)?;
+    docs_words_store.clear(writer)?;
 
     // 3. re-index one document by one document (otherwise we make the borrow checker unhappy)
     let mut indexer = RawIndexer::new();
