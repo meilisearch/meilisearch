@@ -1,8 +1,5 @@
-use meilidb_schema::{Diff, Schema};
-
-use crate::update::documents_addition::reindex_all_documents;
 use crate::update::{next_update_id, Update};
-use crate::{error::UnsupportedOperation, store, MResult, RankedMap};
+use crate::{store, MResult, RankedMap};
 
 pub fn apply_clear_all(
     writer: &mut heed::RwTxn,

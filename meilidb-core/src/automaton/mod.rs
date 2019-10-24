@@ -284,7 +284,11 @@ fn generate_automatons(
     // we keep the original automatons at the front.
     automatons[1..].sort_by_key(|group| {
         let a = group.automatons.first().unwrap();
-        (Reverse(a.is_exact), a.ngram)
+        (
+            Reverse(a.is_exact),
+            a.ngram,
+            Reverse(group.automatons.len()),
+        )
     });
 
     Ok((automatons, enhancer_builder.build()))
