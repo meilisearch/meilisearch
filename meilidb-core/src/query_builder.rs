@@ -1,4 +1,5 @@
 use hashbrown::HashMap;
+use std::convert::TryFrom;
 use std::mem;
 use std::ops::Range;
 use std::rc::Rc;
@@ -196,7 +197,7 @@ fn fetch_raw_documents(
                         let highlight = Highlight {
                             attribute: di.attribute,
                             char_index: di.char_index,
-                            char_length: di.char_length,
+                            char_length: u16::try_from(*query_len).unwrap_or(u16::max_value()),
                         };
 
                         tmp_matches.push((di.document_id, id, match_, highlight));
