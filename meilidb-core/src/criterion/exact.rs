@@ -21,16 +21,15 @@ fn number_exact_matches(
         let len = group.len();
 
         let mut found_exact = false;
-        for (pos, _) in is_exact[index..index + len]
-            .iter()
-            .filter(|x| **x)
-            .enumerate()
-        {
-            found_exact = true;
-            if let Ok(pos) = fields_counts.binary_search_by_key(&attribute[pos], |(a, _)| a.0) {
-                let (_, count) = fields_counts[pos];
-                if count == 1 {
-                    return usize::max_value();
+        for (pos, is_exact) in is_exact[index..index + len].iter().enumerate() {
+            if *is_exact {
+                found_exact = true;
+                let attr = &attribute[index + pos];
+                if let Ok(pos) = fields_counts.binary_search_by_key(attr, |(a, _)| a.0) {
+                    let (_, count) = fields_counts[pos];
+                    if count == 1 {
+                        return usize::max_value();
+                    }
                 }
             }
         }
