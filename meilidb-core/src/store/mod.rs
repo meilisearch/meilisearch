@@ -167,6 +167,7 @@ impl Index {
     }
 
     pub fn clear_all(&self, writer: &mut heed::RwTxn) -> MResult<u64> {
+        let _ = self.updates_notifier.send(());
         update::push_clear_all(writer, self.updates, self.updates_results)
     }
 
