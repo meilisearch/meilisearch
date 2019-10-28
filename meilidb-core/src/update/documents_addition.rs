@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use fst::{set::OpBuilder, SetBuilder};
 use sdset::{duo::Union, SetOperation};
@@ -86,7 +86,7 @@ pub fn apply_documents_addition(
     docs_words_store: store::DocsWords,
     addition: Vec<serde_json::Value>,
 ) -> MResult<()> {
-    let mut documents_ids = HashSet::new();
+    let mut documents_additions = HashMap::new();
     let mut indexer = RawIndexer::new();
 
     let schema = match main_store.schema(writer)? {
@@ -97,19 +97,18 @@ pub fn apply_documents_addition(
     let identifier = schema.identifier_name();
 
     // 1. store documents ids for future deletion
-    for document in addition.iter() {
+    for document in addition {
         let document_id = match extract_document_id(identifier, &document)? {
             Some(id) => id,
             None => return Err(Error::MissingDocumentId),
         };
 
-        if !documents_ids.insert(document_id) {
-            return Err(Error::DuplicateDocument);
-        }
+        documents_additions.insert(document_id, document);
     }
 
     // 2. remove the documents posting lists
-    let number_of_inserted_documents = documents_ids.len();
+    let number_of_inserted_documents = documents_additions.len();
+    let documents_ids = documents_additions.iter().map(|(id, _)| *id).collect();
     apply_documents_deletion(
         writer,
         main_store,
@@ -117,7 +116,7 @@ pub fn apply_documents_addition(
         documents_fields_counts_store,
         postings_lists_store,
         docs_words_store,
-        documents_ids.into_iter().collect(),
+        documents_ids,
     )?;
 
     let mut ranked_map = match main_store.ranked_map(writer)? {
@@ -126,12 +125,7 @@ pub fn apply_documents_addition(
     };
 
     // 3. index the documents fields in the stores
-    for document in addition {
-        let document_id = match extract_document_id(identifier, &document)? {
-            Some(id) => id,
-            None => return Err(Error::MissingDocumentId),
-        };
-
+    for (document_id, document) in documents_additions {
         let serializer = Serializer {
             txn: writer,
             schema: &schema,
