@@ -40,7 +40,7 @@ struct IndexCommand {
 
 #[derive(Debug, StructOpt)]
 struct SearchCommand {
-    /// The destination where the database must be created.
+    /// The path of the database to work with.
     #[structopt(parse(from_os_str))]
     database_path: PathBuf,
 
@@ -66,9 +66,17 @@ struct SearchCommand {
 }
 
 #[derive(Debug, StructOpt)]
+struct ShowUpdatesCommand {
+    /// The path of the database to work with.
+    #[structopt(parse(from_os_str))]
+    database_path: PathBuf,
+}
+
+#[derive(Debug, StructOpt)]
 enum Command {
     Index(IndexCommand),
     Search(SearchCommand),
+    ShowUpdates(ShowUpdatesCommand),
 }
 
 impl Command {
@@ -76,6 +84,7 @@ impl Command {
         match self {
             Command::Index(command) => &command.database_path,
             Command::Search(command) => &command.database_path,
+            Command::ShowUpdates(command) => &command.database_path,
         }
     }
 }
@@ -303,6 +312,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
     let reader = env.read_txn().unwrap();
     let schema = index.main.schema(&reader)?;
     reader.abort();
+
     let schema = schema.ok_or(meilidb_core::Error::SchemaMissing)?;
 
     let fields = command.displayed_fields.iter().map(String::as_str);
@@ -418,6 +428,23 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
     Ok(())
 }
 
+fn show_updates_command(
+    _command: ShowUpdatesCommand,
+    database: Database,
+) -> Result<(), Box<dyn Error>> {
+    let env = &database.env;
+    let index = database
+        .open_index(INDEX_NAME)
+        .expect("Could not find index");
+
+    let reader = env.read_txn().unwrap();
+    let updates = index.all_updates_status(&reader)?;
+    println!("{:#?}", updates);
+    reader.abort();
+
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
@@ -427,5 +454,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     match opt {
         Command::Index(command) => index_command(command, database),
         Command::Search(command) => search_command(command, database),
+        Command::ShowUpdates(command) => show_updates_command(command, database),
     }
 }
