@@ -187,6 +187,22 @@ impl Index {
         )
     }
 
+    pub fn stop_words_addition(&self) -> update::StopWordsAddition {
+        update::StopWordsAddition::new(
+            self.updates,
+            self.updates_results,
+            self.updates_notifier.clone(),
+        )
+    }
+
+    pub fn stop_words_deletion(&self) -> update::StopWordsDeletion {
+        update::StopWordsDeletion::new(
+            self.updates,
+            self.updates_results,
+            self.updates_notifier.clone(),
+        )
+    }
+
     pub fn current_update_id(&self, reader: &heed::RoTxn) -> MResult<Option<u64>> {
         match self.updates.last_update_id(reader)? {
             Some((id, _)) => Ok(Some(id)),

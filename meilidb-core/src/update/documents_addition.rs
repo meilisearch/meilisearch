@@ -87,7 +87,6 @@ pub fn apply_documents_addition(
     addition: Vec<serde_json::Value>,
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
-    let mut indexer = RawIndexer::new();
 
     let schema = match main_store.schema(writer)? {
         Some(schema) => schema,
@@ -124,7 +123,14 @@ pub fn apply_documents_addition(
         None => RankedMap::default(),
     };
 
+    let stop_words = match main_store.stop_words_fst(writer)? {
+        Some(stop_words) => stop_words,
+        None => fst::Set::default(),
+    };
+
     // 3. index the documents fields in the stores
+    let mut indexer = RawIndexer::new(stop_words);
+
     for (document_id, document) in documents_additions {
         let serializer = Serializer {
             txn: writer,
@@ -180,8 +186,13 @@ pub fn reindex_all_documents(
     postings_lists_store.clear(writer)?;
     docs_words_store.clear(writer)?;
 
+    let stop_words = match main_store.stop_words_fst(writer)? {
+        Some(stop_words) => stop_words,
+        None => fst::Set::default(),
+    };
+
     // 3. re-index one document by one document (otherwise we make the borrow checker unhappy)
-    let mut indexer = RawIndexer::new();
+    let mut indexer = RawIndexer::new(stop_words);
     let mut ram_store = HashMap::new();
 
     for document_id in documents_ids_to_reindex {
