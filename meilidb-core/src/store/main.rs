@@ -9,6 +9,7 @@ const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY: &str = "ranked-map";
 const SCHEMA_KEY: &str = "schema";
 const SYNONYMS_KEY: &str = "synonyms";
+const STOP_WORDS_KEY: &str = "stop-words";
 const WORDS_KEY: &str = "words";
 
 #[derive(Copy, Clone)]
@@ -61,6 +62,24 @@ impl Main {
 
     pub fn synonyms_fst(self, reader: &heed::RoTxn) -> ZResult<Option<fst::Set>> {
         match self.main.get::<Str, ByteSlice>(reader, SYNONYMS_KEY)? {
+            Some(bytes) => {
+                let len = bytes.len();
+                let bytes = Arc::from(bytes);
+                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
+                Ok(Some(fst::Set::from(fst)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    pub fn put_stop_words_fst(self, writer: &mut heed::RwTxn, fst: &fst::Set) -> ZResult<()> {
+        let bytes = fst.as_fst().as_bytes();
+        self.main
+            .put::<Str, ByteSlice>(writer, STOP_WORDS_KEY, bytes)
+    }
+
+    pub fn stop_words_fst(self, reader: &heed::RoTxn) -> ZResult<Option<fst::Set>> {
+        match self.main.get::<Str, ByteSlice>(reader, STOP_WORDS_KEY)? {
             Some(bytes) => {
                 let len = bytes.len();
                 let bytes = Arc::from(bytes);
