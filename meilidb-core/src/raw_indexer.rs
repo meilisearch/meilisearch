@@ -11,6 +11,7 @@ type Word = Vec<u8>; // TODO make it be a SmallVec
 
 pub struct RawIndexer {
     word_limit: usize, // the maximum number of indexed words
+    stop_words: fst::Set,
     words_doc_indexes: BTreeMap<Word, Vec<DocIndex>>,
     docs_words: HashMap<DocumentId, Vec<Word>>,
 }
@@ -21,13 +22,14 @@ pub struct Indexed {
 }
 
 impl RawIndexer {
-    pub fn new() -> RawIndexer {
-        RawIndexer::with_word_limit(1000)
+    pub fn new(stop_words: fst::Set) -> RawIndexer {
+        RawIndexer::with_word_limit(stop_words, 1000)
     }
 
-    pub fn with_word_limit(limit: usize) -> RawIndexer {
+    pub fn with_word_limit(stop_words: fst::Set, limit: usize) -> RawIndexer {
         RawIndexer {
             word_limit: limit,
+            stop_words,
             words_doc_indexes: BTreeMap::new(),
             docs_words: HashMap::new(),
         }
@@ -56,6 +58,7 @@ impl RawIndexer {
                     id,
                     attr,
                     self.word_limit,
+                    &self.stop_words,
                     &mut self.words_doc_indexes,
                     &mut self.docs_words,
                 );
@@ -87,6 +90,7 @@ impl RawIndexer {
                 id,
                 attr,
                 self.word_limit,
+                &self.stop_words,
                 &mut self.words_doc_indexes,
                 &mut self.docs_words,
             );
@@ -118,6 +122,7 @@ impl RawIndexer {
                 id,
                 attr,
                 self.word_limit,
+                &self.stop_words,
                 &mut self.words_doc_indexes,
                 &mut self.docs_words,
             );
@@ -152,21 +157,20 @@ impl RawIndexer {
     }
 }
 
-impl Default for RawIndexer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 fn index_token(
     token: Token,
     id: DocumentId,
     attr: SchemaAttr,
     word_limit: usize,
+    stop_words: &fst::Set,
     words_doc_indexes: &mut BTreeMap<Word, Vec<DocIndex>>,
     docs_words: &mut HashMap<DocumentId, Vec<Word>>,
 ) -> bool {
     if token.word_index >= word_limit {
+        return false;
+    }
+
+    if stop_words.contains(&token.word) {
         return false;
     }
 
@@ -207,7 +211,7 @@ mod tests {
 
     #[test]
     fn strange_apostrophe() {
-        let mut indexer = RawIndexer::new();
+        let mut indexer = RawIndexer::new(fst::Set::default());
 
         let docid = DocumentId(0);
         let attr = SchemaAttr(0);
@@ -231,7 +235,7 @@ mod tests {
 
     #[test]
     fn strange_apostrophe_in_sequence() {
-        let mut indexer = RawIndexer::new();
+        let mut indexer = RawIndexer::new(fst::Set::default());
 
         let docid = DocumentId(0);
         let attr = SchemaAttr(0);
