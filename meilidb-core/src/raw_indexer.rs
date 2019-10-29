@@ -170,20 +170,18 @@ fn index_token(
         return false;
     }
 
-    if stop_words.contains(&token.word) {
-        return false;
-    }
-
-    match token_to_docindex(id, attr, token) {
-        Some(docindex) => {
-            let word = Vec::from(token.word);
-            words_doc_indexes
-                .entry(word.clone())
-                .or_insert_with(Vec::new)
-                .push(docindex);
-            docs_words.entry(id).or_insert_with(Vec::new).push(word);
+    if !stop_words.contains(&token.word) {
+        match token_to_docindex(id, attr, token) {
+            Some(docindex) => {
+                let word = Vec::from(token.word);
+                words_doc_indexes
+                    .entry(word.clone())
+                    .or_insert_with(Vec::new)
+                    .push(docindex);
+                docs_words.entry(id).or_insert_with(Vec::new).push(word);
+            }
+            None => return false,
         }
-        None => return false,
     }
 
     true
@@ -249,6 +247,35 @@ mod tests {
         assert!(words_doc_indexes.get(&b"l"[..]).is_some());
         assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
         assert!(words_doc_indexes.get(&b"ai"[..]).is_some());
+        assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
+
+        // with the ugly apostrophe...
+        assert!(words_doc_indexes
+            .get(&"l’éteindre".to_owned().into_bytes())
+            .is_some());
+    }
+
+    #[test]
+    fn basic_stop_words() {
+        let stop_words = sdset::SetBuf::from_dirty(vec!["l", "j", "ai", "de"]);
+        let stop_words = fst::Set::from_iter(stop_words).unwrap();
+
+        let mut indexer = RawIndexer::new(stop_words);
+
+        let docid = DocumentId(0);
+        let attr = SchemaAttr(0);
+        let text = "Zut, l’aspirateur, j’ai oublié de l’éteindre !";
+        indexer.index_text(docid, attr, text);
+
+        let Indexed {
+            words_doc_indexes, ..
+        } = indexer.build();
+
+        assert!(words_doc_indexes.get(&b"l"[..]).is_none());
+        assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
+        assert!(words_doc_indexes.get(&b"j"[..]).is_none());
+        assert!(words_doc_indexes.get(&b"ai"[..]).is_none());
+        assert!(words_doc_indexes.get(&b"de"[..]).is_none());
         assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
 
         // with the ugly apostrophe...
