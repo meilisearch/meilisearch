@@ -150,7 +150,7 @@ pub fn apply_documents_addition(
         main_store,
         postings_lists_store,
         docs_words_store,
-        ranked_map,
+        &ranked_map,
         number_of_inserted_documents,
         indexer,
     )
@@ -179,54 +179,58 @@ pub fn reindex_all_documents(
     }
 
     // 2. remove the documents posting lists
-    let number_of_inserted_documents = documents_ids_to_reindex.len();
     main_store.put_words_fst(writer, &fst::Set::default())?;
     main_store.put_ranked_map(writer, &ranked_map)?;
     main_store.put_number_of_documents(writer, |_| 0)?;
     postings_lists_store.clear(writer)?;
     docs_words_store.clear(writer)?;
 
-    let stop_words = match main_store.stop_words_fst(writer)? {
-        Some(stop_words) => stop_words,
-        None => fst::Set::default(),
-    };
+    // 3. re-index chunks of documents (otherwise we make the borrow checker unhappy)
+    for documents_ids in documents_ids_to_reindex.chunks(100) {
+        let stop_words = match main_store.stop_words_fst(writer)? {
+            Some(stop_words) => stop_words,
+            None => fst::Set::default(),
+        };
 
-    // 3. re-index one document by one document (otherwise we make the borrow checker unhappy)
-    let mut indexer = RawIndexer::new(stop_words);
-    let mut ram_store = HashMap::new();
+        let number_of_inserted_documents = documents_ids.len();
+        let mut indexer = RawIndexer::new(stop_words);
+        let mut ram_store = HashMap::new();
 
-    for document_id in documents_ids_to_reindex {
-        for result in documents_fields_store.document_fields(writer, document_id)? {
-            let (attr, bytes) = result?;
-            let value: serde_json::Value = serde_json::from_slice(bytes)?;
-            ram_store.insert((document_id, attr), value);
+        for document_id in documents_ids {
+            for result in documents_fields_store.document_fields(writer, *document_id)? {
+                let (attr, bytes) = result?;
+                let value: serde_json::Value = serde_json::from_slice(bytes)?;
+                ram_store.insert((document_id, attr), value);
+            }
+
+            for ((docid, attr), value) in ram_store.drain() {
+                serialize_value(
+                    writer,
+                    attr,
+                    schema.props(attr),
+                    *docid,
+                    documents_fields_store,
+                    documents_fields_counts_store,
+                    &mut indexer,
+                    &mut ranked_map,
+                    &value,
+                )?;
+            }
         }
 
-        for ((docid, attr), value) in ram_store.drain() {
-            serialize_value(
-                writer,
-                attr,
-                schema.props(attr),
-                docid,
-                documents_fields_store,
-                documents_fields_counts_store,
-                &mut indexer,
-                &mut ranked_map,
-                &value,
-            )?;
-        }
+        // 4. write the new index in the main store
+        write_documents_addition_index(
+            writer,
+            main_store,
+            postings_lists_store,
+            docs_words_store,
+            &ranked_map,
+            number_of_inserted_documents,
+            indexer,
+        )?;
     }
 
-    // 4. write the new index in the main store
-    write_documents_addition_index(
-        writer,
-        main_store,
-        postings_lists_store,
-        docs_words_store,
-        ranked_map,
-        number_of_inserted_documents,
-        indexer,
-    )
+    Ok(())
 }
 
 pub fn write_documents_addition_index(
@@ -234,7 +238,7 @@ pub fn write_documents_addition_index(
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    ranked_map: RankedMap,
+    ranked_map: &RankedMap,
     number_of_inserted_documents: usize,
     indexer: RawIndexer,
 ) -> MResult<()> {
@@ -279,7 +283,7 @@ pub fn write_documents_addition_index(
     };
 
     main_store.put_words_fst(writer, &words)?;
-    main_store.put_ranked_map(writer, &ranked_map)?;
+    main_store.put_ranked_map(writer, ranked_map)?;
     main_store.put_number_of_documents(writer, |old| old + number_of_inserted_documents as u64)?;
 
     Ok(())
