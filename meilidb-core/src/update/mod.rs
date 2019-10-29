@@ -47,12 +47,12 @@ pub enum UpdateType {
     SynonymsDeletion { number: usize },
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetailedDuration {
     pub main: Duration,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateResult {
     pub update_id: u64,
     pub update_type: UpdateType,
@@ -60,7 +60,7 @@ pub struct UpdateResult {
     pub detailed_duration: DetailedDuration,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateStatus {
     Enqueued,
     Processed(UpdateResult),

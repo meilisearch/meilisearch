@@ -202,6 +202,20 @@ impl Index {
         update::update_status(reader, self.updates, self.updates_results, update_id)
     }
 
+    pub fn all_updates_status(&self, reader: &heed::RoTxn) -> MResult<Vec<update::UpdateStatus>> {
+        match self.updates_results.last_update_id(reader)? {
+            Some((last_id, _)) => {
+                let mut updates = Vec::with_capacity(last_id as usize + 1);
+                for id in 0..=last_id {
+                    let update = self.update_status(reader, id)?;
+                    updates.push(update);
+                }
+                Ok(updates)
+            }
+            None => Ok(Vec::new()),
+        }
+    }
+
     pub fn query_builder(&self) -> QueryBuilder {
         QueryBuilder::new(
             self.main,
