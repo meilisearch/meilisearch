@@ -4,6 +4,7 @@ mod documents_addition;
 mod documents_deletion;
 mod schema_update;
 mod stop_words_addition;
+mod stop_words_deletion;
 mod synonyms_addition;
 mod synonyms_deletion;
 
@@ -13,6 +14,7 @@ pub use self::documents_addition::{apply_documents_addition, DocumentsAddition};
 pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
 pub use self::schema_update::{apply_schema_update, push_schema_update};
 pub use self::stop_words_addition::{apply_stop_words_addition, StopWordsAddition};
+pub use self::stop_words_deletion::{apply_stop_words_deletion, StopWordsDeletion};
 pub use self::synonyms_addition::{apply_synonyms_addition, SynonymsAddition};
 pub use self::synonyms_deletion::{apply_synonyms_deletion, SynonymsDeletion};
 
@@ -37,6 +39,7 @@ pub enum Update {
     SynonymsAddition(BTreeMap<String, Vec<String>>),
     SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
     StopWordsAddition(BTreeSet<String>),
+    StopWordsDeletion(BTreeSet<String>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +52,7 @@ pub enum UpdateType {
     SynonymsAddition { number: usize },
     SynonymsDeletion { number: usize },
     StopWordsAddition { number: usize },
+    StopWordsDeletion { number: usize },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -225,6 +229,25 @@ pub fn update_task(writer: &mut heed::RwTxn, index: store::Index) -> MResult<Opt
 
             let result =
                 apply_stop_words_addition(writer, index.main, index.postings_lists, stop_words);
+
+            (update_type, result, start.elapsed())
+        }
+        Update::StopWordsDeletion(stop_words) => {
+            let start = Instant::now();
+
+            let update_type = UpdateType::StopWordsDeletion {
+                number: stop_words.len(),
+            };
+
+            let result = apply_stop_words_deletion(
+                writer,
+                index.main,
+                index.documents_fields,
+                index.documents_fields_counts,
+                index.postings_lists,
+                index.docs_words,
+                stop_words,
+            );
 
             (update_type, result, start.elapsed())
         }

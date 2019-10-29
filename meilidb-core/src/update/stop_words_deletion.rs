@@ -3,23 +3,24 @@ use std::collections::BTreeSet;
 use fst::{set::OpBuilder, SetBuilder};
 
 use crate::automaton::normalize_str;
+use crate::update::documents_addition::reindex_all_documents;
 use crate::update::{next_update_id, Update};
 use crate::{store, MResult};
 
-pub struct StopWordsAddition {
+pub struct StopWordsDeletion {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     updates_notifier: crossbeam_channel::Sender<()>,
     stop_words: BTreeSet<String>,
 }
 
-impl StopWordsAddition {
+impl StopWordsDeletion {
     pub fn new(
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
         updates_notifier: crossbeam_channel::Sender<()>,
-    ) -> StopWordsAddition {
-        StopWordsAddition {
+    ) -> StopWordsDeletion {
+        StopWordsDeletion {
             updates_store,
             updates_results_store,
             updates_notifier,
@@ -27,14 +28,14 @@ impl StopWordsAddition {
         }
     }
 
-    pub fn add_stop_word<S: AsRef<str>>(&mut self, stop_word: S) {
+    pub fn delete_stop_word<S: AsRef<str>>(&mut self, stop_word: S) {
         let stop_word = normalize_str(stop_word.as_ref());
         self.stop_words.insert(stop_word);
     }
 
     pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64> {
         let _ = self.updates_notifier.send(());
-        let update_id = push_stop_words_addition(
+        let update_id = push_stop_words_deletion(
             writer,
             self.updates_store,
             self.updates_results_store,
@@ -44,32 +45,33 @@ impl StopWordsAddition {
     }
 }
 
-pub fn push_stop_words_addition(
+pub fn push_stop_words_deletion(
     writer: &mut heed::RwTxn,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-    addition: BTreeSet<String>,
+    deletion: BTreeSet<String>,
 ) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
-    let update = Update::StopWordsAddition(addition);
+    let update = Update::StopWordsDeletion(deletion);
     updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
 }
 
-pub fn apply_stop_words_addition(
+pub fn apply_stop_words_deletion(
     writer: &mut heed::RwTxn,
     main_store: store::Main,
+    documents_fields_store: store::DocumentsFields,
+    documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
-    addition: BTreeSet<String>,
+    docs_words_store: store::DocsWords,
+    deletion: BTreeSet<String>,
 ) -> MResult<()> {
     let mut stop_words_builder = SetBuilder::memory();
 
-    for word in addition {
+    for word in deletion {
         stop_words_builder.insert(&word).unwrap();
-        // we remove every posting list associated to a new stop word
-        postings_lists_store.del_postings_list(writer, word.as_bytes())?;
     }
 
     // create the new delta stop words fst
@@ -78,30 +80,13 @@ pub fn apply_stop_words_addition(
         .and_then(fst::Set::from_bytes)
         .unwrap();
 
-    // we also need to remove all the stop words from the main fst
-    if let Some(word_fst) = main_store.words_fst(writer)? {
-        let op = OpBuilder::new()
-            .add(&word_fst)
-            .add(&delta_stop_words)
-            .difference();
-
-        let mut word_fst_builder = SetBuilder::memory();
-        word_fst_builder.extend_stream(op).unwrap();
-        let word_fst = word_fst_builder
-            .into_inner()
-            .and_then(fst::Set::from_bytes)
-            .unwrap();
-
-        main_store.put_words_fst(writer, &word_fst)?;
-    }
-
-    // now we add all of these stop words from the main store
+    // now we delete all of these stop words from the main store
     let stop_words_fst = main_store.stop_words_fst(writer)?.unwrap_or_default();
 
     let op = OpBuilder::new()
         .add(&stop_words_fst)
         .add(&delta_stop_words)
-        .r#union();
+        .difference();
 
     let mut stop_words_builder = SetBuilder::memory();
     stop_words_builder.extend_stream(op).unwrap();
@@ -111,6 +96,17 @@ pub fn apply_stop_words_addition(
         .unwrap();
 
     main_store.put_stop_words_fst(writer, &stop_words_fst)?;
+
+    // now that we have setup the stop words
+    // lets reindex everything...
+    reindex_all_documents(
+        writer,
+        main_store,
+        documents_fields_store,
+        documents_fields_counts_store,
+        postings_lists_store,
+        docs_words_store,
+    )?;
 
     Ok(())
 }
