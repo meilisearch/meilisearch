@@ -179,7 +179,7 @@ fn fetch_raw_documents(
                 let is_exact = *is_exact && distance == 0 && input.len() == *query_len;
 
                 let covered_area = if query.len() > input.len() {
-                    query.len()
+                    input.len()
                 } else {
                     prefix_damerau_levenshtein(query.as_bytes(), input).1
                 };
