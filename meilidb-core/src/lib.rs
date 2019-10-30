@@ -7,6 +7,7 @@ pub mod criterion;
 mod database;
 mod distinct_map;
 mod error;
+mod levenshtein;
 mod number;
 mod query_builder;
 mod ranked_map;

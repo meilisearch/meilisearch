@@ -11,6 +11,7 @@ use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::automaton::{Automaton, AutomatonGroup, AutomatonProducer, QueryEnhancer};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
+use crate::levenshtein::prefix_damerau_levenshtein;
 use crate::raw_document::{raw_documents_from, RawDocument};
 use crate::{criterion::Criteria, Document, DocumentId, Highlight, TmpMatch};
 use crate::{reordered_attrs::ReorderedAttrs, store, MResult};
@@ -162,6 +163,7 @@ fn fetch_raw_documents(
                 index,
                 is_exact,
                 query_len,
+                query,
                 ..
             } = automaton;
             let dfa = automaton.dfa();
@@ -175,6 +177,12 @@ fn fetch_raw_documents(
             while let Some(input) = stream.next() {
                 let distance = dfa.eval(input).to_u8();
                 let is_exact = *is_exact && distance == 0 && input.len() == *query_len;
+
+                let covered_area = if query.len() > input.len() {
+                    query.len()
+                } else {
+                    prefix_damerau_levenshtein(query.as_bytes(), input).1
+                };
 
                 let doc_indexes = match postings_lists_store.postings_list(reader, input)? {
                     Some(doc_indexes) => doc_indexes,
@@ -197,7 +205,7 @@ fn fetch_raw_documents(
                         let highlight = Highlight {
                             attribute: di.attribute,
                             char_index: di.char_index,
-                            char_length: u16::try_from(*query_len).unwrap_or(u16::max_value()),
+                            char_length: u16::try_from(covered_area).unwrap_or(u16::max_value()),
                         };
 
                         tmp_matches.push((di.document_id, id, match_, highlight));
