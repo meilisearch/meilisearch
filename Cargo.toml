@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "meilidb-core",
+    "meilidb-http",
     "meilidb-schema",
     "meilidb-tokenizer",
 ]
