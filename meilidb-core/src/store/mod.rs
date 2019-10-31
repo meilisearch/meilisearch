@@ -283,7 +283,7 @@ pub fn create(
     let updates_results_name = updates_results_name(name);
 
     // open all the stores
-    let main = env.create_dyn_database(Some(&main_name))?;
+    let main = env.create_poly_database(Some(&main_name))?;
     let postings_lists = env.create_database(Some(&postings_lists_name))?;
     let documents_fields = env.create_database(Some(&documents_fields_name))?;
     let documents_fields_counts = env.create_database(Some(&documents_fields_counts_name))?;
@@ -323,7 +323,7 @@ pub fn open(
     let updates_results_name = updates_results_name(name);
 
     // open all the stores
-    let main = match env.open_dyn_database(Some(&main_name))? {
+    let main = match env.open_poly_database(Some(&main_name))? {
         Some(main) => main,
         None => return Ok(None),
     };

@@ -29,7 +29,7 @@ impl DocumentsFieldsCounts {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
         let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
         self.documents_fields_counts
-            .delete_range(writer, start..=end)
+            .delete_range(writer, &(start..=end))
     }
 
     pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
@@ -56,7 +56,7 @@ impl DocumentsFieldsCounts {
     ) -> ZResult<DocumentFieldsCountsIter<'txn>> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
         let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
-        let iter = self.documents_fields_counts.range(reader, start..=end)?;
+        let iter = self.documents_fields_counts.range(reader, &(start..=end))?;
         Ok(DocumentFieldsCountsIter { iter })
     }
 

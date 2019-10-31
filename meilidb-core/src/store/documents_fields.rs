@@ -29,7 +29,7 @@ impl DocumentsFields {
     ) -> ZResult<usize> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
         let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
-        self.documents_fields.delete_range(writer, start..=end)
+        self.documents_fields.delete_range(writer, &(start..=end))
     }
 
     pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
@@ -53,7 +53,7 @@ impl DocumentsFields {
     ) -> ZResult<DocumentFieldsIter<'txn>> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
         let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
-        let iter = self.documents_fields.range(reader, start..=end)?;
+        let iter = self.documents_fields.range(reader, &(start..=end))?;
         Ok(DocumentFieldsIter { iter })
     }
 }
