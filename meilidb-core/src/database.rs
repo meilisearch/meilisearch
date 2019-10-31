@@ -72,7 +72,7 @@ impl Database {
             .max_dbs(3000)
             .open(path)?;
 
-        let common_store = env.create_dyn_database(Some("common"))?;
+        let common_store = env.create_poly_database(Some("common"))?;
         let indexes_store = env.create_database::<Str, Unit>(Some("indexes"))?;
 
         // list all indexes that needs to be opened
