@@ -28,34 +28,63 @@ fn update_awaiter(receiver: Receiver<()>, env: heed::Env, update_fn: Arc<ArcSwap
             let mut writer = match env.write_txn() {
                 Ok(writer) => writer,
                 Err(e) => {
-                    error!("LMDB writer transaction begin failed: {}", e);
+                    error!("LMDB write transaction begin failed: {}", e);
                     break;
                 }
             };
 
-            match update::update_task(&mut writer, index.clone()) {
-                Ok(Some(status)) => {
-                    match status.result {
-                        Ok(_) => {
-                            if let Err(e) = writer.commit() {
-                                error!("update transaction failed: {}", e)
-                            }
-                        }
-                        Err(_) => writer.abort(),
-                    }
-
-                    if let Some(ref callback) = *update_fn.load() {
-                        (callback)(status);
-                    }
-                }
-                // no more updates to handle for now
+            let (update_id, update) = match index.updates.pop_front(&mut writer) {
+                Ok(Some(value)) => value,
                 Ok(None) => {
                     debug!("no more updates");
                     writer.abort();
                     break;
                 }
                 Err(e) => {
+                    error!("pop front update failed: {}", e);
+                    break;
+                }
+            };
+
+            let mut nested_writer = match unsafe { env.nested_write_txn(&writer) } {
+                Ok(writer) => writer,
+                Err(e) => {
+                    error!("LMDB nested write transaction begin failed: {}", e);
+                    break;
+                }
+            };
+
+            match update::update_task(&mut nested_writer, index.clone(), update_id, update) {
+                Ok(status) => {
+                    match &status.result {
+                        Ok(_) => {
+                            if let Err(e) = nested_writer.commit() {
+                                error!("update nested transaction failed: {}", e);
+                            }
+                        }
+                        Err(_) => nested_writer.abort(),
+                    }
+
+                    let result =
+                        index
+                            .updates_results
+                            .put_update_result(&mut writer, update_id, &status);
+
+                    if let Err(e) = result {
+                        error!("update result store commit failed: {}", e);
+                    }
+
+                    if let Err(e) = writer.commit() {
+                        error!("update parent transaction failed: {}", e);
+                    }
+
+                    if let Some(ref callback) = *update_fn.load() {
+                        (callback)(status);
+                    }
+                }
+                Err(e) => {
                     error!("update task failed: {}", e);
+                    nested_writer.abort();
                     writer.abort()
                 }
             }
