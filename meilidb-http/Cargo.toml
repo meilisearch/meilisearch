@@ -22,13 +22,12 @@ main_error = "0.1.0"
 meilidb-core = { path = "../meilidb-core", version = "0.6.0" }
 meilidb-schema = { path = "../meilidb-schema", version = "0.6.0" }
 pretty-bytes = "0.2.2"
+rand = "0.7.2"
 rayon = "1.2.0"
-rust-crypto = "0.2.36"
 serde = { version = "1.0.101", features = ["derive"] }
 serde_json = { version = "1.0.41", features = ["preserve_order"] }
 structopt = "0.3.3"
 sysinfo = "0.9.5"
-uuid = { version = "0.8.1", features = ["v4"] }
 walkdir = "2.2.9"
 
 [dependencies.async-compression]

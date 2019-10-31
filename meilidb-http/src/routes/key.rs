@@ -1,13 +1,11 @@
 use chrono::serde::ts_seconds;
 use chrono::{DateTime, Utc};
-use crypto::digest::Digest;
-use crypto::sha1::Sha1;
 use heed::types::{SerdeBincode, Str};
 use http::StatusCode;
+use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use tide::response::IntoResponse;
 use tide::{Context, Response};
-use uuid::Uuid;
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::ContextExt;
@@ -16,9 +14,12 @@ use crate::models::token::*;
 use crate::Data;
 
 fn generate_api_key() -> String {
-    let mut hasher = Sha1::new();
-    hasher.input_str(&Uuid::new_v4().to_string());
-    hasher.result_str().to_string()
+    let mut rng = rand::thread_rng();
+    let sample = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    sample
+        .choose_multiple(&mut rng, 40)
+        .map(|c| *c as char)
+        .collect()
 }
 
 pub async fn list(ctx: Context<Data>) -> SResult<Response> {
