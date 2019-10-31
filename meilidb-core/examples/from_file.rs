@@ -15,13 +15,14 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use meilidb_core::{Database, Highlight, ProcessedUpdateResult};
 use meilidb_schema::SchemaAttr;
 
-const INDEX_NAME: &str = "default";
-
 #[derive(Debug, StructOpt)]
 struct IndexCommand {
     /// The destination where the database must be created.
     #[structopt(parse(from_os_str))]
     database_path: PathBuf,
+
+    #[structopt(long, default_value = "default")]
+    index_name: String,
 
     /// The csv file to index.
     #[structopt(parse(from_os_str))]
@@ -43,6 +44,9 @@ struct SearchCommand {
     /// The path of the database to work with.
     #[structopt(parse(from_os_str))]
     database_path: PathBuf,
+
+    #[structopt(long, default_value = "default")]
+    index_name: String,
 
     /// Timeout after which the search will return results.
     #[structopt(long)]
@@ -70,6 +74,9 @@ struct ShowUpdatesCommand {
     /// The path of the database to work with.
     #[structopt(parse(from_os_str))]
     database_path: PathBuf,
+
+    #[structopt(long, default_value = "default")]
+    index_name: String,
 }
 
 #[derive(Debug, StructOpt)]
@@ -98,12 +105,12 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
     let (sender, receiver) = mpsc::sync_channel(100);
     let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
-    let index = match database.open_index(INDEX_NAME) {
+    let index = match database.open_index(&command.index_name) {
         Some(index) => index,
-        None => database.create_index(INDEX_NAME).unwrap(),
+        None => database.create_index(&command.index_name).unwrap(),
     };
 
-    let done = database.set_update_callback(INDEX_NAME, Box::new(update_fn));
+    let done = database.set_update_callback(&command.index_name, Box::new(update_fn));
     assert!(done, "could not set the index update function");
 
     let env = &database.env;
@@ -306,7 +313,7 @@ fn crop_text(
 fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<dyn Error>> {
     let env = &database.env;
     let index = database
-        .open_index(INDEX_NAME)
+        .open_index(&command.index_name)
         .expect("Could not find index");
 
     let reader = env.read_txn().unwrap();
@@ -429,12 +436,12 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
 }
 
 fn show_updates_command(
-    _command: ShowUpdatesCommand,
+    command: ShowUpdatesCommand,
     database: Database,
 ) -> Result<(), Box<dyn Error>> {
     let env = &database.env;
     let index = database
-        .open_index(INDEX_NAME)
+        .open_index(&command.index_name)
         .expect("Could not find index");
 
     let reader = env.read_txn().unwrap();
