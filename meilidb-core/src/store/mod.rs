@@ -219,17 +219,29 @@ impl Index {
     }
 
     pub fn all_updates_status(&self, reader: &heed::RoTxn) -> MResult<Vec<update::UpdateStatus>> {
-        match self.updates_results.last_update_id(reader)? {
-            Some((last_id, _)) => {
-                let mut updates = Vec::with_capacity(last_id as usize + 1);
-                for id in 0..=last_id {
-                    let update = self.update_status(reader, id)?;
-                    updates.push(update);
-                }
-                Ok(updates)
+        let mut updates = Vec::new();
+        let mut last_update_result_id = 0;
+
+        // retrieve all updates results
+        if let Some((last_id, _)) = self.updates_results.last_update_id(reader)? {
+            updates.reserve(last_id as usize);
+
+            for id in 0..=last_id {
+                let update = self.update_status(reader, id)?;
+                updates.push(update);
+                last_update_result_id = id;
             }
-            None => Ok(Vec::new()),
         }
+
+        // retrieve all enqueued updates
+        if let Some((last_id, _)) = self.updates.last_update_id(reader)? {
+            for id in last_update_result_id + 1..last_id {
+                let update = self.update_status(reader, id)?;
+                updates.push(update);
+            }
+        }
+
+        Ok(updates)
     }
 
     pub fn query_builder(&self) -> QueryBuilder {

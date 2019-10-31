@@ -11,7 +11,7 @@ use log::{debug, error};
 
 use crate::{store, update, Index, MResult};
 
-pub type BoxUpdateFn = Box<dyn Fn(update::UpdateResult) + Send + Sync + 'static>;
+pub type BoxUpdateFn = Box<dyn Fn(update::ProcessedUpdateResult) + Send + Sync + 'static>;
 type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
 
 pub struct Database {

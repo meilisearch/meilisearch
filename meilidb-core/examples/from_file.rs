@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-use meilidb_core::{Database, Highlight, UpdateResult};
+use meilidb_core::{Database, Highlight, ProcessedUpdateResult};
 use meilidb_schema::SchemaAttr;
 
 const INDEX_NAME: &str = "default";
@@ -97,7 +97,7 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     let start = Instant::now();
 
     let (sender, receiver) = mpsc::sync_channel(100);
-    let update_fn = move |update: UpdateResult| sender.send(update.update_id).unwrap();
+    let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
     let index = match database.open_index(INDEX_NAME) {
         Some(index) => index,
         None => database.create_index(INDEX_NAME).unwrap(),

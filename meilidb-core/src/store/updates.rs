@@ -26,9 +26,9 @@ impl Updates {
     }
 
     // TODO do not trigger deserialize if possible
-    pub fn contains(self, reader: &heed::RoTxn, update_id: u64) -> ZResult<bool> {
+    pub fn get(self, reader: &heed::RoTxn, update_id: u64) -> ZResult<Option<Update>> {
         let update_id = BEU64::new(update_id);
-        self.updates.get(reader, &update_id).map(|v| v.is_some())
+        self.updates.get(reader, &update_id)
     }
 
     pub fn put_update(
