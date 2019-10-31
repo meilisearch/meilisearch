@@ -42,6 +42,36 @@ pub enum Update {
     StopWordsDeletion(BTreeSet<String>),
 }
 
+impl Update {
+    pub fn update_type(&self) -> UpdateType {
+        match self {
+            Update::ClearAll => UpdateType::ClearAll,
+            Update::Schema(schema) => UpdateType::Schema {
+                schema: schema.clone(),
+            },
+            Update::Customs(_) => UpdateType::Customs,
+            Update::DocumentsAddition(addition) => UpdateType::DocumentsAddition {
+                number: addition.len(),
+            },
+            Update::DocumentsDeletion(deletion) => UpdateType::DocumentsDeletion {
+                number: deletion.len(),
+            },
+            Update::SynonymsAddition(addition) => UpdateType::SynonymsAddition {
+                number: addition.len(),
+            },
+            Update::SynonymsDeletion(deletion) => UpdateType::SynonymsDeletion {
+                number: deletion.len(),
+            },
+            Update::StopWordsAddition(addition) => UpdateType::StopWordsAddition {
+                number: addition.len(),
+            },
+            Update::StopWordsDeletion(deletion) => UpdateType::StopWordsDeletion {
+                number: deletion.len(),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateType {
     ClearAll,
@@ -61,7 +91,7 @@ pub struct DetailedDuration {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateResult {
+pub struct ProcessedUpdateResult {
     pub update_id: u64,
     pub update_type: UpdateType,
     pub result: Result<(), String>,
@@ -69,9 +99,15 @@ pub struct UpdateResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnqueuedUpdateResult {
+    pub update_id: u64,
+    pub update_type: UpdateType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateStatus {
-    Enqueued,
-    Processed(UpdateResult),
+    Enqueued(EnqueuedUpdateResult),
+    Processed(ProcessedUpdateResult),
     Unknown,
 }
 
@@ -84,8 +120,11 @@ pub fn update_status(
     match updates_results_store.update_result(reader, update_id)? {
         Some(result) => Ok(UpdateStatus::Processed(result)),
         None => {
-            if updates_store.contains(reader, update_id)? {
-                Ok(UpdateStatus::Enqueued)
+            if let Some(update) = updates_store.get(reader, update_id)? {
+                Ok(UpdateStatus::Enqueued(EnqueuedUpdateResult {
+                    update_id,
+                    update_type: update.update_type(),
+                }))
             } else {
                 Ok(UpdateStatus::Unknown)
             }
@@ -110,7 +149,10 @@ pub fn next_update_id(
     Ok(new_update_id)
 }
 
-pub fn update_task(writer: &mut heed::RwTxn, index: store::Index) -> MResult<Option<UpdateResult>> {
+pub fn update_task(
+    writer: &mut heed::RwTxn,
+    index: store::Index,
+) -> MResult<Option<ProcessedUpdateResult>> {
     let (update_id, update) = match index.updates.pop_front(writer)? {
         Some(value) => value,
         None => return Ok(None),
@@ -259,7 +301,7 @@ pub fn update_task(writer: &mut heed::RwTxn, index: store::Index) -> MResult<Opt
     );
 
     let detailed_duration = DetailedDuration { main: duration };
-    let status = UpdateResult {
+    let status = ProcessedUpdateResult {
         update_id,
         update_type,
         result: result.map_err(|e| e.to_string()),

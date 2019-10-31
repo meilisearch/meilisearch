@@ -24,7 +24,7 @@ pub use self::number::{Number, ParseNumberError};
 pub use self::ranked_map::RankedMap;
 pub use self::raw_document::RawDocument;
 pub use self::store::Index;
-pub use self::update::{UpdateResult, UpdateStatus, UpdateType};
+pub use self::update::{EnqueuedUpdateResult, ProcessedUpdateResult, UpdateStatus, UpdateType};
 
 use ::serde::{Deserialize, Serialize};
 use zerocopy::{AsBytes, FromBytes};
