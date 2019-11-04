@@ -21,72 +21,62 @@ pub struct Database {
     indexes: RwLock<HashMap<String, (Index, Arc<ArcSwapFn>, thread::JoinHandle<()>)>>,
 }
 
+macro_rules! r#break_try {
+    ($expr:expr, $msg:tt) => {
+        match $expr {
+            core::result::Result::Ok(val) => val,
+            core::result::Result::Err(err) => {
+                log::error!(concat!($msg, ": {}"), err);
+                break;
+            }
+        }
+    };
+}
+
 fn update_awaiter(receiver: Receiver<()>, env: heed::Env, update_fn: Arc<ArcSwapFn>, index: Index) {
     for () in receiver {
         // consume all updates in order (oldest first)
         loop {
-            let mut writer = match env.write_txn() {
-                Ok(writer) => writer,
-                Err(e) => {
-                    error!("LMDB write transaction begin failed: {}", e);
-                    break;
-                }
-            };
+            // instantiate a main/parent transaction
+            let mut writer = break_try!(env.write_txn(), "LMDB write transaction begin failed");
 
-            let (update_id, update) = match index.updates.pop_front(&mut writer) {
-                Ok(Some(value)) => value,
-                Ok(None) => {
+            // retrieve the update that needs to be processed
+            let result = index.updates.pop_front(&mut writer);
+            let (update_id, update) = match break_try!(result, "pop front update failed") {
+                Some(value) => value,
+                None => {
                     debug!("no more updates");
                     writer.abort();
                     break;
                 }
-                Err(e) => {
-                    error!("pop front update failed: {}", e);
-                    break;
-                }
             };
 
-            let mut nested_writer = match env.nested_write_txn(&mut writer) {
-                Ok(writer) => writer,
-                Err(e) => {
-                    error!("LMDB nested write transaction begin failed: {}", e);
-                    break;
-                }
-            };
+            // instantiate a nested transaction
+            let result = env.nested_write_txn(&mut writer);
+            let mut nested_writer = break_try!(result, "LMDB nested write transaction failed");
 
-            match update::update_task(&mut nested_writer, index.clone(), update_id, update) {
-                Ok(status) => {
-                    match &status.result {
-                        Ok(_) => {
-                            if let Err(e) = nested_writer.commit() {
-                                error!("update nested transaction failed: {}", e);
-                            }
-                        }
-                        Err(_) => nested_writer.abort(),
-                    }
+            // try to apply the update to the database using the nested transaction
+            let result = update::update_task(&mut nested_writer, index.clone(), update_id, update);
+            let status = break_try!(result, "update task failed");
 
-                    let result =
-                        index
-                            .updates_results
-                            .put_update_result(&mut writer, update_id, &status);
+            // commit the nested transaction if the update was successful, abort it otherwise
+            if status.result.is_ok() {
+                break_try!(nested_writer.commit(), "commit nested transaction failed");
+            } else {
+                nested_writer.abort()
+            }
 
-                    if let Err(e) = result {
-                        error!("update result store commit failed: {}", e);
-                    }
+            // write the result of the update in the updates-results store
+            let updates_results = index.updates_results;
+            let result = updates_results.put_update_result(&mut writer, update_id, &status);
 
-                    if let Err(e) = writer.commit() {
-                        error!("update parent transaction failed: {}", e);
-                    }
+            // always commit the main/parent transaction, even if the update was unsuccessful
+            break_try!(result, "update result store commit failed");
+            break_try!(writer.commit(), "update parent transaction failed");
 
-                    if let Some(ref callback) = *update_fn.load() {
-                        (callback)(status);
-                    }
-                }
-                Err(e) => {
-                    error!("update task failed: {}", e);
-                    nested_writer.abort();
-                    writer.abort()
-                }
+            // call the user callback when the update and the result are written consistently
+            if let Some(ref callback) = *update_fn.load() {
+                (callback)(status);
             }
         }
     }
