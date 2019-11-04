@@ -7,8 +7,8 @@ use crate::{DocumentId, RankedMap};
 
 use super::{ConvertToNumber, ConvertToString, Indexer, SerializerError};
 
-pub struct Serializer<'a> {
-    pub txn: &'a mut heed::RwTxn,
+pub struct Serializer<'a, 'b> {
+    pub txn: &'a mut heed::RwTxn<'b>,
     pub schema: &'a Schema,
     pub document_store: DocumentsFields,
     pub document_fields_counts: DocumentsFieldsCounts,
@@ -17,15 +17,15 @@ pub struct Serializer<'a> {
     pub document_id: DocumentId,
 }
 
-impl<'a> ser::Serializer for Serializer<'a> {
+impl<'a, 'b> ser::Serializer for Serializer<'a, 'b> {
     type Ok = ();
     type Error = SerializerError;
     type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
-    type SerializeMap = MapSerializer<'a>;
-    type SerializeStruct = StructSerializer<'a>;
+    type SerializeMap = MapSerializer<'a, 'b>;
+    type SerializeStruct = StructSerializer<'a, 'b>;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
     forward_to_unserializable_type! {
@@ -190,8 +190,8 @@ impl<'a> ser::Serializer for Serializer<'a> {
     }
 }
 
-pub struct MapSerializer<'a> {
-    txn: &'a mut heed::RwTxn,
+pub struct MapSerializer<'a, 'b> {
+    txn: &'a mut heed::RwTxn<'b>,
     schema: &'a Schema,
     document_id: DocumentId,
     document_store: DocumentsFields,
@@ -201,7 +201,7 @@ pub struct MapSerializer<'a> {
     current_key_name: Option<String>,
 }
 
-impl<'a> ser::SerializeMap for MapSerializer<'a> {
+impl<'a, 'b> ser::SerializeMap for MapSerializer<'a, 'b> {
     type Ok = ();
     type Error = SerializerError;
 
@@ -253,8 +253,8 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     }
 }
 
-pub struct StructSerializer<'a> {
-    txn: &'a mut heed::RwTxn,
+pub struct StructSerializer<'a, 'b> {
+    txn: &'a mut heed::RwTxn<'b>,
     schema: &'a Schema,
     document_id: DocumentId,
     document_store: DocumentsFields,
@@ -263,7 +263,7 @@ pub struct StructSerializer<'a> {
     ranked_map: &'a mut RankedMap,
 }
 
-impl<'a> ser::SerializeStruct for StructSerializer<'a> {
+impl<'a, 'b> ser::SerializeStruct for StructSerializer<'a, 'b> {
     type Ok = ();
     type Error = SerializerError;
 

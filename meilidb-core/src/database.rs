@@ -7,7 +7,7 @@ use std::{fs, thread};
 use crossbeam_channel::Receiver;
 use heed::types::{Str, Unit};
 use heed::{CompactionOption, Result as ZResult};
-use log::{debug, error};
+use log::debug;
 
 use crate::{store, update, Index, MResult};
 
@@ -21,43 +21,62 @@ pub struct Database {
     indexes: RwLock<HashMap<String, (Index, Arc<ArcSwapFn>, thread::JoinHandle<()>)>>,
 }
 
+macro_rules! r#break_try {
+    ($expr:expr, $msg:tt) => {
+        match $expr {
+            core::result::Result::Ok(val) => val,
+            core::result::Result::Err(err) => {
+                log::error!(concat!($msg, ": {}"), err);
+                break;
+            }
+        }
+    };
+}
+
 fn update_awaiter(receiver: Receiver<()>, env: heed::Env, update_fn: Arc<ArcSwapFn>, index: Index) {
     for () in receiver {
         // consume all updates in order (oldest first)
         loop {
-            let mut writer = match env.write_txn() {
-                Ok(writer) => writer,
-                Err(e) => {
-                    error!("LMDB writer transaction begin failed: {}", e);
-                    break;
-                }
-            };
+            // instantiate a main/parent transaction
+            let mut writer = break_try!(env.write_txn(), "LMDB write transaction begin failed");
 
-            match update::update_task(&mut writer, index.clone()) {
-                Ok(Some(status)) => {
-                    match status.result {
-                        Ok(_) => {
-                            if let Err(e) = writer.commit() {
-                                error!("update transaction failed: {}", e)
-                            }
-                        }
-                        Err(_) => writer.abort(),
-                    }
-
-                    if let Some(ref callback) = *update_fn.load() {
-                        (callback)(status);
-                    }
-                }
-                // no more updates to handle for now
-                Ok(None) => {
+            // retrieve the update that needs to be processed
+            let result = index.updates.pop_front(&mut writer);
+            let (update_id, update) = match break_try!(result, "pop front update failed") {
+                Some(value) => value,
+                None => {
                     debug!("no more updates");
                     writer.abort();
                     break;
                 }
-                Err(e) => {
-                    error!("update task failed: {}", e);
-                    writer.abort()
-                }
+            };
+
+            // instantiate a nested transaction
+            let result = env.nested_write_txn(&mut writer);
+            let mut nested_writer = break_try!(result, "LMDB nested write transaction failed");
+
+            // try to apply the update to the database using the nested transaction
+            let result = update::update_task(&mut nested_writer, index.clone(), update_id, update);
+            let status = break_try!(result, "update task failed");
+
+            // commit the nested transaction if the update was successful, abort it otherwise
+            if status.result.is_ok() {
+                break_try!(nested_writer.commit(), "commit nested transaction failed");
+            } else {
+                nested_writer.abort()
+            }
+
+            // write the result of the update in the updates-results store
+            let updates_results = index.updates_results;
+            let result = updates_results.put_update_result(&mut writer, update_id, &status);
+
+            // always commit the main/parent transaction, even if the update was unsuccessful
+            break_try!(result, "update result store commit failed");
+            break_try!(writer.commit(), "update parent transaction failed");
+
+            // call the user callback when the update and the result are written consistently
+            if let Some(ref callback) = *update_fn.load() {
+                (callback)(status);
             }
         }
     }
@@ -201,5 +220,143 @@ impl Database {
 
     pub fn common_store(&self) -> heed::PolyDatabase {
         self.common_store
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::update::{ProcessedUpdateResult, UpdateStatus};
+    use std::sync::mpsc;
+
+    #[test]
+    fn valid_updates() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let database = Database::open_or_create(dir.path()).unwrap();
+        let env = &database.env;
+
+        let (sender, receiver) = mpsc::sync_channel(100);
+        let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+        let index = database.create_index("test").unwrap();
+
+        let done = database.set_update_callback("test", Box::new(update_fn));
+        assert!(done, "could not set the index update function");
+
+        let schema = {
+            let data = r#"
+                identifier = "id"
+
+                [attributes."name"]
+                displayed = true
+                indexed = true
+
+                [attributes."description"]
+                displayed = true
+                indexed = true
+            "#;
+            toml::from_str(data).unwrap()
+        };
+
+        let mut writer = env.write_txn().unwrap();
+        let _update_id = index.schema_update(&mut writer, schema).unwrap();
+
+        // don't forget to commit...
+        writer.commit().unwrap();
+
+        let mut additions = index.documents_addition();
+
+        let doc1 = serde_json::json!({
+            "id": 123,
+            "name": "Marvin",
+            "description": "My name is Marvin",
+        });
+
+        let doc2 = serde_json::json!({
+            "id": 234,
+            "name": "Kevin",
+            "description": "My name is Kevin",
+        });
+
+        additions.update_document(doc1);
+        additions.update_document(doc2);
+
+        let mut writer = env.write_txn().unwrap();
+        let update_id = additions.finalize(&mut writer).unwrap();
+
+        // don't forget to commit...
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.into_iter().find(|id| *id == update_id);
+
+        let reader = env.read_txn().unwrap();
+        let result = index.update_status(&reader, update_id).unwrap();
+        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+    }
+
+    #[test]
+    fn invalid_updates() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let database = Database::open_or_create(dir.path()).unwrap();
+        let env = &database.env;
+
+        let (sender, receiver) = mpsc::sync_channel(100);
+        let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+        let index = database.create_index("test").unwrap();
+
+        let done = database.set_update_callback("test", Box::new(update_fn));
+        assert!(done, "could not set the index update function");
+
+        let schema = {
+            let data = r#"
+                identifier = "id"
+
+                [attributes."name"]
+                displayed = true
+                indexed = true
+
+                [attributes."description"]
+                displayed = true
+                indexed = true
+            "#;
+            toml::from_str(data).unwrap()
+        };
+
+        let mut writer = env.write_txn().unwrap();
+        let _update_id = index.schema_update(&mut writer, schema).unwrap();
+
+        // don't forget to commit...
+        writer.commit().unwrap();
+
+        let mut additions = index.documents_addition();
+
+        let doc1 = serde_json::json!({
+            "id": 123,
+            "name": "Marvin",
+            "description": "My name is Marvin",
+        });
+
+        let doc2 = serde_json::json!({
+            "name": "Kevin",
+            "description": "My name is Kevin",
+        });
+
+        additions.update_document(doc1);
+        additions.update_document(doc2);
+
+        let mut writer = env.write_txn().unwrap();
+        let update_id = additions.finalize(&mut writer).unwrap();
+
+        // don't forget to commit...
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.into_iter().find(|id| *id == update_id);
+
+        let reader = env.read_txn().unwrap();
+        let result = index.update_status(&reader, update_id).unwrap();
+        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_err());
     }
 }

@@ -149,15 +149,12 @@ pub fn next_update_id(
     Ok(new_update_id)
 }
 
-pub fn update_task(
-    writer: &mut heed::RwTxn,
+pub fn update_task<'a, 'b>(
+    writer: &'a mut heed::RwTxn<'b>,
     index: store::Index,
-) -> MResult<Option<ProcessedUpdateResult>> {
-    let (update_id, update) = match index.updates.pop_front(writer)? {
-        Some(value) => value,
-        None => return Ok(None),
-    };
-
+    update_id: u64,
+    update: Update,
+) -> MResult<ProcessedUpdateResult> {
     debug!("Processing update number {}", update_id);
 
     let (update_type, result, duration) = match update {
@@ -308,9 +305,5 @@ pub fn update_task(
         detailed_duration,
     };
 
-    index
-        .updates_results
-        .put_update_result(writer, update_id, &status)?;
-
-    Ok(Some(status))
+    Ok(status)
 }

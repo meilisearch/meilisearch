@@ -77,8 +77,8 @@ pub fn push_documents_addition<D: serde::Serialize>(
     Ok(last_update_id)
 }
 
-pub fn apply_documents_addition(
-    writer: &mut heed::RwTxn,
+pub fn apply_documents_addition<'a, 'b>(
+    writer: &'a mut heed::RwTxn<'b>,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
