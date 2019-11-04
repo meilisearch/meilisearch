@@ -199,10 +199,8 @@ mod tests {
         assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
         assert!(words_doc_indexes.get(&b"ai"[..]).is_some());
         assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
-
-        // with the ugly apostrophe...
         assert!(words_doc_indexes
-            .get(&"l’éteindre".to_owned().into_bytes())
+            .get(&"éteindre".to_owned().into_bytes())
             .is_some());
     }
 
@@ -223,10 +221,8 @@ mod tests {
         assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
         assert!(words_doc_indexes.get(&b"ai"[..]).is_some());
         assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
-
-        // with the ugly apostrophe...
         assert!(words_doc_indexes
-            .get(&"l’éteindre".to_owned().into_bytes())
+            .get(&"éteindre".to_owned().into_bytes())
             .is_some());
     }
 
@@ -252,10 +248,8 @@ mod tests {
         assert!(words_doc_indexes.get(&b"ai"[..]).is_none());
         assert!(words_doc_indexes.get(&b"de"[..]).is_none());
         assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
-
-        // with the ugly apostrophe...
         assert!(words_doc_indexes
-            .get(&"l’éteindre".to_owned().into_bytes())
+            .get(&"éteindre".to_owned().into_bytes())
             .is_some());
     }
 }
