@@ -37,54 +37,8 @@ impl RawIndexer {
 
     pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) -> usize {
         let mut number_of_words = 0;
-        let lowercase_text = text.to_lowercase();
-        let deunicoded = deunicode_with_tofu(&lowercase_text, "");
 
-        // TODO compute the deunicoded version after the cjk check
-        let next = if !lowercase_text.contains(is_cjk) && lowercase_text != deunicoded {
-            Some(deunicoded)
-        } else {
-            None
-        };
-        let iter = Some(lowercase_text).into_iter().chain(next);
-
-        for text in iter {
-            // we must not count 2 times the same words
-            number_of_words = 0;
-
-            for token in Tokenizer::new(&text) {
-                let must_continue = index_token(
-                    token,
-                    id,
-                    attr,
-                    self.word_limit,
-                    &self.stop_words,
-                    &mut self.words_doc_indexes,
-                    &mut self.docs_words,
-                );
-
-                if !must_continue {
-                    break;
-                }
-
-                number_of_words += 1;
-            }
-        }
-
-        number_of_words
-    }
-
-    pub fn index_text_seq<'a, I, IT>(&mut self, id: DocumentId, attr: SchemaAttr, iter: I)
-    where
-        I: IntoIterator<Item = &'a str, IntoIter = IT>,
-        IT: Iterator<Item = &'a str> + Clone,
-    {
-        // TODO serialize this to one call to the SeqTokenizer loop
-
-        let lowercased: Vec<_> = iter.into_iter().map(str::to_lowercase).collect();
-        let iter = lowercased.iter().map(|t| t.as_str());
-
-        for token in SeqTokenizer::new(iter) {
+        for token in Tokenizer::new(text) {
             let must_continue = index_token(
                 token,
                 id,
@@ -95,27 +49,21 @@ impl RawIndexer {
                 &mut self.docs_words,
             );
 
+            number_of_words += 1;
+
             if !must_continue {
                 break;
             }
         }
 
-        let deunicoded: Vec<_> = lowercased
-            .into_iter()
-            .map(|lowercase_text| {
-                if lowercase_text.contains(is_cjk) {
-                    return lowercase_text;
-                }
-                let deunicoded = deunicode_with_tofu(&lowercase_text, "");
-                if lowercase_text != deunicoded {
-                    deunicoded
-                } else {
-                    lowercase_text
-                }
-            })
-            .collect();
-        let iter = deunicoded.iter().map(|t| t.as_str());
+        number_of_words
+    }
 
+    pub fn index_text_seq<'a, I>(&mut self, id: DocumentId, attr: SchemaAttr, iter: I)
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        let iter = iter.into_iter();
         for token in SeqTokenizer::new(iter) {
             let must_continue = index_token(
                 token,
@@ -170,6 +118,12 @@ fn index_token(
         return false;
     }
 
+    let lower = token.word.to_lowercase();
+    let token = Token {
+        word: &lower,
+        ..token
+    };
+
     if !stop_words.contains(&token.word) {
         match token_to_docindex(id, attr, token) {
             Some(docindex) => {
@@ -181,6 +135,27 @@ fn index_token(
                 docs_words.entry(id).or_insert_with(Vec::new).push(word);
             }
             None => return false,
+        }
+
+        if !lower.contains(is_cjk) {
+            let unidecoded = deunicode_with_tofu(&lower, "");
+            if unidecoded != lower {
+                let token = Token {
+                    word: &unidecoded,
+                    ..token
+                };
+                match token_to_docindex(id, attr, token) {
+                    Some(docindex) => {
+                        let word = Vec::from(token.word);
+                        words_doc_indexes
+                            .entry(word.clone())
+                            .or_insert_with(Vec::new)
+                            .push(docindex);
+                        docs_words.entry(id).or_insert_with(Vec::new).push(word);
+                    }
+                    None => return false,
+                }
+            }
         }
     }
 
