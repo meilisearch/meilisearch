@@ -139,11 +139,12 @@ fn index_token(
 
         if !lower.contains(is_cjk) {
             let unidecoded = deunicode_with_tofu(&lower, "");
-            if unidecoded != lower {
+            if unidecoded != lower && !unidecoded.is_empty() {
                 let token = Token {
                     word: &unidecoded,
                     ..token
                 };
+
                 match token_to_docindex(id, attr, token) {
                     Some(docindex) => {
                         let word = Vec::from(token.word);
@@ -250,6 +251,24 @@ mod tests {
         assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
         assert!(words_doc_indexes
             .get(&"éteindre".to_owned().into_bytes())
+            .is_some());
+    }
+
+    #[test]
+    fn no_empty_unidecode() {
+        let mut indexer = RawIndexer::new(fst::Set::default());
+
+        let docid = DocumentId(0);
+        let attr = SchemaAttr(0);
+        let text = "🇯🇵";
+        indexer.index_text(docid, attr, text);
+
+        let Indexed {
+            words_doc_indexes, ..
+        } = indexer.build();
+
+        assert!(words_doc_indexes
+            .get(&"🇯🇵".to_owned().into_bytes())
             .is_some());
     }
 }
