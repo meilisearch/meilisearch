@@ -1,4 +1,5 @@
 use self::SeparatorCategory::*;
+use deunicode::deunicode_char;
 use slice_group_by::StrGroupBy;
 use std::iter::Peekable;
 
@@ -43,7 +44,10 @@ fn is_separator(c: char) -> bool {
 
 fn classify_separator(c: char) -> Option<SeparatorCategory> {
     match c {
-        ' ' | '-' | '_' | '\'' | ':' | '"' => Some(Soft),
+        c if c.is_whitespace() => Some(Soft), // whitespaces
+        c if deunicode_char(c) == Some("'") => Some(Soft), // quotes
+        c if deunicode_char(c) == Some("\"") => Some(Soft), // double quotes
+        '-' | '_' | '\'' | ':' => Some(Soft),
         '.' | ';' | ',' | '!' | '?' | '(' | ')' => Some(Hard),
         _ => None,
     }
