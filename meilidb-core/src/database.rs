@@ -46,7 +46,7 @@ fn update_awaiter(receiver: Receiver<()>, env: heed::Env, update_fn: Arc<ArcSwap
                 }
             };
 
-            let mut nested_writer = match unsafe { env.nested_write_txn(&writer) } {
+            let mut nested_writer = match env.nested_write_txn(&mut writer) {
                 Ok(writer) => writer,
                 Err(e) => {
                     error!("LMDB nested write transaction begin failed: {}", e);
