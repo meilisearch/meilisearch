@@ -1,6 +1,6 @@
 [package]
 name = "meilidb-tokenizer"
-version = "0.6.0"
+version = "0.6.1"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
 edition = "2018"
 
