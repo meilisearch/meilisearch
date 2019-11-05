@@ -22,7 +22,7 @@ use std::collections::HashSet;
 
 use heed::Result as ZResult;
 use meilidb_schema::{Schema, SchemaAttr};
-use serde::de;
+use serde::de::{self, Deserialize};
 use zerocopy::{AsBytes, FromBytes};
 
 use crate::criterion::Criteria;
@@ -120,9 +120,7 @@ impl Index {
             attributes: attributes.as_ref(),
         };
 
-        // TODO: currently we return an error if all document fields are missing,
-        //       returning None would have been better
-        Ok(T::deserialize(&mut deserializer).map(Some)?)
+        Ok(Option::<T>::deserialize(&mut deserializer)?)
     }
 
     pub fn document_attribute<T: de::DeserializeOwned>(
@@ -152,6 +150,14 @@ impl Index {
 
     pub fn documents_addition<D>(&self) -> update::DocumentsAddition<D> {
         update::DocumentsAddition::new(
+            self.updates,
+            self.updates_results,
+            self.updates_notifier.clone(),
+        )
+    }
+
+    pub fn documents_partial_addition<D>(&self) -> update::DocumentsAddition<D> {
+        update::DocumentsAddition::new_partial(
             self.updates,
             self.updates_results,
             self.updates_notifier.clone(),
