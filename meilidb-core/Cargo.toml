@@ -1,6 +1,6 @@
 [package]
 name = "meilidb-core"
-version = "0.6.3"
+version = "0.6.4"
 authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
 
