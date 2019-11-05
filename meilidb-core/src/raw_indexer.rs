@@ -133,30 +133,20 @@ fn index_token(
                     .or_insert_with(Vec::new)
                     .push(docindex);
                 docs_words.entry(id).or_insert_with(Vec::new).push(word);
-            }
-            None => return false,
-        }
 
-        if !lower.contains(is_cjk) {
-            let unidecoded = deunicode_with_tofu(&lower, "");
-            if unidecoded != lower && !unidecoded.is_empty() {
-                let token = Token {
-                    word: &unidecoded,
-                    ..token
-                };
-
-                match token_to_docindex(id, attr, token) {
-                    Some(docindex) => {
-                        let word = Vec::from(token.word);
+                if !lower.contains(is_cjk) {
+                    let unidecoded = deunicode_with_tofu(&lower, "");
+                    if unidecoded != lower && !unidecoded.is_empty() {
+                        let word = Vec::from(unidecoded);
                         words_doc_indexes
                             .entry(word.clone())
                             .or_insert_with(Vec::new)
                             .push(docindex);
                         docs_words.entry(id).or_insert_with(Vec::new).push(word);
                     }
-                    None => return false,
                 }
             }
+            None => return false,
         }
     }
 
