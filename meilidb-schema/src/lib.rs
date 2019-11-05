@@ -169,6 +169,10 @@ impl Schema {
         attributes
     }
 
+    pub fn number_of_attributes(&self) -> usize {
+        self.inner.attrs.len()
+    }
+
     pub fn props(&self, attr: SchemaAttr) -> SchemaProps {
         let (_, props) = self.inner.props[attr.0 as usize];
         props

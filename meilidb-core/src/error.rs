@@ -97,7 +97,7 @@ pub enum UnsupportedOperation {
     SchemaAlreadyExists,
     CannotUpdateSchemaIdentifier,
     CannotReorderSchemaAttribute,
-    CannotIntroduceNewSchemaAttribute,
+    CanOnlyIntroduceNewSchemaAttributesAtEnd,
     CannotRemoveSchemaAttribute,
 }
 
@@ -108,8 +108,8 @@ impl fmt::Display for UnsupportedOperation {
             SchemaAlreadyExists => write!(f, "Cannot update index which already have a schema"),
             CannotUpdateSchemaIdentifier => write!(f, "Cannot update the identifier of a schema"),
             CannotReorderSchemaAttribute => write!(f, "Cannot reorder the attributes of a schema"),
-            CannotIntroduceNewSchemaAttribute => {
-                write!(f, "Cannot introduce new attributes in a schema")
+            CanOnlyIntroduceNewSchemaAttributesAtEnd => {
+                write!(f, "Can only introduce new attributes at end of a schema")
             }
             CannotRemoveSchemaAttribute => write!(f, "Cannot remove attributes from a schema"),
         }
