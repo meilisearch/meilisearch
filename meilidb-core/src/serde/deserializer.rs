@@ -63,13 +63,14 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
     where
         V: de::Visitor<'de>,
     {
-        self.deserialize_map(visitor)
+        self.deserialize_option(visitor)
     }
 
-    forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
-        bytes byte_buf option unit unit_struct newtype_struct seq tuple
-        tuple_struct struct enum identifier ignored_any
+    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: de::Visitor<'de>,
+    {
+        self.deserialize_map(visitor)
     }
 
     fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -104,15 +105,28 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
                 }
             });
 
-        let map_deserializer = de::value::MapDeserializer::new(iter);
-        let result = visitor
-            .visit_map(map_deserializer)
-            .map_err(DeserializerError::from);
+        let mut iter = iter.peekable();
+
+        let result = match iter.peek() {
+            Some(_) => {
+                let map_deserializer = de::value::MapDeserializer::new(iter);
+                visitor
+                    .visit_some(map_deserializer)
+                    .map_err(DeserializerError::from)
+            }
+            None => visitor.visit_none(),
+        };
 
         match error.take() {
             Some(error) => Err(error.into()),
             None => result,
         }
+    }
+
+    forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf unit unit_struct newtype_struct seq tuple
+        tuple_struct struct enum identifier ignored_any
     }
 }
 
