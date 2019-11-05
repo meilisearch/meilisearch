@@ -14,7 +14,7 @@ pub fn apply_schema_update(
     docs_words_store: store::DocsWords,
 ) -> MResult<()> {
     use UnsupportedOperation::{
-        CannotIntroduceNewSchemaAttribute, CannotRemoveSchemaAttribute,
+        CanOnlyIntroduceNewSchemaAttributesAtEnd, CannotRemoveSchemaAttribute,
         CannotReorderSchemaAttribute, CannotUpdateSchemaIdentifier,
     };
 
@@ -33,7 +33,12 @@ pub fn apply_schema_update(
                         need_full_reindexing = true;
                     }
                 }
-                Diff::NewAttr { .. } => return Err(CannotIntroduceNewSchemaAttribute.into()),
+                Diff::NewAttr { pos, .. } => {
+                    // new attribute not at the end of the schema
+                    if pos < old_schema.number_of_attributes() {
+                        return Err(CanOnlyIntroduceNewSchemaAttributesAtEnd.into());
+                    }
+                }
                 Diff::RemovedAttr { .. } => return Err(CannotRemoveSchemaAttribute.into()),
             }
         }

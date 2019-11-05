@@ -359,4 +359,174 @@ mod tests {
         let result = index.update_status(&reader, update_id).unwrap();
         assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_err());
     }
+
+    #[test]
+    fn add_schema_attributes_at_end() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let database = Database::open_or_create(dir.path()).unwrap();
+        let env = &database.env;
+
+        let (sender, receiver) = mpsc::sync_channel(100);
+        let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+        let index = database.create_index("test").unwrap();
+
+        let done = database.set_update_callback("test", Box::new(update_fn));
+        assert!(done, "could not set the index update function");
+
+        let schema = {
+            let data = r#"
+                identifier = "id"
+
+                [attributes."name"]
+                displayed = true
+                indexed = true
+
+                [attributes."description"]
+                displayed = true
+                indexed = true
+            "#;
+            toml::from_str(data).unwrap()
+        };
+
+        let mut writer = env.write_txn().unwrap();
+        let _update_id = index.schema_update(&mut writer, schema).unwrap();
+        writer.commit().unwrap();
+
+        let mut additions = index.documents_addition();
+
+        let doc1 = serde_json::json!({
+            "id": 123,
+            "name": "Marvin",
+            "description": "My name is Marvin",
+        });
+
+        let doc2 = serde_json::json!({
+            "id": 234,
+            "name": "Kevin",
+            "description": "My name is Kevin",
+        });
+
+        additions.update_document(doc1);
+        additions.update_document(doc2);
+
+        let mut writer = env.write_txn().unwrap();
+        let _update_id = additions.finalize(&mut writer).unwrap();
+        writer.commit().unwrap();
+
+        let schema = {
+            let data = r#"
+                identifier = "id"
+
+                [attributes."name"]
+                displayed = true
+                indexed = true
+
+                [attributes."description"]
+                displayed = true
+                indexed = true
+
+                [attributes."age"]
+                displayed = true
+                indexed = true
+
+                [attributes."sex"]
+                displayed = true
+                indexed = true
+            "#;
+            toml::from_str(data).unwrap()
+        };
+
+        let mut writer = env.write_txn().unwrap();
+        let update_id = index.schema_update(&mut writer, schema).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
+        // check if it has been accepted
+        let reader = env.read_txn().unwrap();
+        let result = index.update_status(&reader, update_id).unwrap();
+        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+        reader.abort();
+
+        let mut additions = index.documents_addition();
+
+        let doc1 = serde_json::json!({
+            "id": 123,
+            "name": "Marvin",
+            "description": "My name is Marvin",
+            "age": 21,
+            "sex": "Male",
+        });
+
+        let doc2 = serde_json::json!({
+            "id": 234,
+            "name": "Kevin",
+            "description": "My name is Kevin",
+            "age": 23,
+            "sex": "Male",
+        });
+
+        additions.update_document(doc1);
+        additions.update_document(doc2);
+
+        let mut writer = env.write_txn().unwrap();
+        let update_id = additions.finalize(&mut writer).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
+        // check if it has been accepted
+        let reader = env.read_txn().unwrap();
+        let result = index.update_status(&reader, update_id).unwrap();
+        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+
+        // even try to search for a document
+        let results = index.query_builder().query(&reader, "21 ", 0..20).unwrap();
+        assert_matches!(results.len(), 1);
+
+        reader.abort();
+
+        // try to introduce attributes in the middle of the schema
+        let schema = {
+            let data = r#"
+                identifier = "id"
+
+                [attributes."name"]
+                displayed = true
+                indexed = true
+
+                [attributes."description"]
+                displayed = true
+                indexed = true
+
+                [attributes."city"]
+                displayed = true
+                indexed = true
+
+                [attributes."age"]
+                displayed = true
+                indexed = true
+
+                [attributes."sex"]
+                displayed = true
+                indexed = true
+            "#;
+            toml::from_str(data).unwrap()
+        };
+
+        let mut writer = env.write_txn().unwrap();
+        let update_id = index.schema_update(&mut writer, schema).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
+        // check if it has been accepted
+        let reader = env.read_txn().unwrap();
+        let result = index.update_status(&reader, update_id).unwrap();
+        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_err());
+    }
 }
