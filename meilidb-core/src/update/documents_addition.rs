@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 use fst::{set::OpBuilder, SetBuilder};
 use sdset::{duo::Union, SetOperation};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::raw_indexer::RawIndexer;
-use crate::serde::{extract_document_id, serialize_value, Serializer};
+use crate::serde::{extract_document_id, serialize_value, Deserializer, Serializer};
 use crate::store;
 use crate::update::{apply_documents_deletion, next_update_id, Update};
 use crate::{Error, MResult, RankedMap};
@@ -15,6 +15,7 @@ pub struct DocumentsAddition<D> {
     updates_results_store: store::UpdatesResults,
     updates_notifier: crossbeam_channel::Sender<()>,
     documents: Vec<D>,
+    is_partial: bool,
 }
 
 impl<D> DocumentsAddition<D> {
@@ -28,6 +29,21 @@ impl<D> DocumentsAddition<D> {
             updates_results_store,
             updates_notifier,
             documents: Vec::new(),
+            is_partial: false,
+        }
+    }
+
+    pub fn new_partial(
+        updates_store: store::Updates,
+        updates_results_store: store::UpdatesResults,
+        updates_notifier: crossbeam_channel::Sender<()>,
+    ) -> DocumentsAddition<D> {
+        DocumentsAddition {
+            updates_store,
+            updates_results_store,
+            updates_notifier,
+            documents: Vec::new(),
+            is_partial: true,
         }
     }
 
@@ -45,6 +61,7 @@ impl<D> DocumentsAddition<D> {
             self.updates_store,
             self.updates_results_store,
             self.documents,
+            self.is_partial,
         )?;
         Ok(update_id)
     }
@@ -61,6 +78,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     addition: Vec<D>,
+    is_partial: bool,
 ) -> MResult<u64> {
     let mut values = Vec::with_capacity(addition.len());
     for add in addition {
@@ -71,7 +89,12 @@ pub fn push_documents_addition<D: serde::Serialize>(
 
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
-    let update = Update::DocumentsAddition(values);
+    let update = if is_partial {
+        Update::DocumentsPartial(values)
+    } else {
+        Update::DocumentsAddition(values)
+    };
+
     updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
@@ -84,7 +107,7 @@ pub fn apply_documents_addition<'a, 'b>(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    addition: Vec<serde_json::Value>,
+    addition: Vec<HashMap<String, serde_json::Value>>,
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
 
@@ -101,6 +124,102 @@ pub fn apply_documents_addition<'a, 'b>(
             Some(id) => id,
             None => return Err(Error::MissingDocumentId),
         };
+
+        documents_additions.insert(document_id, document);
+    }
+
+    // 2. remove the documents posting lists
+    let number_of_inserted_documents = documents_additions.len();
+    let documents_ids = documents_additions.iter().map(|(id, _)| *id).collect();
+    apply_documents_deletion(
+        writer,
+        main_store,
+        documents_fields_store,
+        documents_fields_counts_store,
+        postings_lists_store,
+        docs_words_store,
+        documents_ids,
+    )?;
+
+    let mut ranked_map = match main_store.ranked_map(writer)? {
+        Some(ranked_map) => ranked_map,
+        None => RankedMap::default(),
+    };
+
+    let stop_words = match main_store.stop_words_fst(writer)? {
+        Some(stop_words) => stop_words,
+        None => fst::Set::default(),
+    };
+
+    // 3. index the documents fields in the stores
+    let mut indexer = RawIndexer::new(stop_words);
+
+    for (document_id, document) in documents_additions {
+        let serializer = Serializer {
+            txn: writer,
+            schema: &schema,
+            document_store: documents_fields_store,
+            document_fields_counts: documents_fields_counts_store,
+            indexer: &mut indexer,
+            ranked_map: &mut ranked_map,
+            document_id,
+        };
+
+        document.serialize(serializer)?;
+    }
+
+    write_documents_addition_index(
+        writer,
+        main_store,
+        postings_lists_store,
+        docs_words_store,
+        &ranked_map,
+        number_of_inserted_documents,
+        indexer,
+    )
+}
+
+pub fn apply_documents_partial_addition<'a, 'b>(
+    writer: &'a mut heed::RwTxn<'b>,
+    main_store: store::Main,
+    documents_fields_store: store::DocumentsFields,
+    documents_fields_counts_store: store::DocumentsFieldsCounts,
+    postings_lists_store: store::PostingsLists,
+    docs_words_store: store::DocsWords,
+    addition: Vec<HashMap<String, serde_json::Value>>,
+) -> MResult<()> {
+    let mut documents_additions = HashMap::new();
+
+    let schema = match main_store.schema(writer)? {
+        Some(schema) => schema,
+        None => return Err(Error::SchemaMissing),
+    };
+
+    let identifier = schema.identifier_name();
+
+    // 1. store documents ids for future deletion
+    for mut document in addition {
+        let document_id = match extract_document_id(identifier, &document)? {
+            Some(id) => id,
+            None => return Err(Error::MissingDocumentId),
+        };
+
+        let mut deserializer = Deserializer {
+            document_id,
+            reader: writer,
+            documents_fields: documents_fields_store,
+            schema: &schema,
+            attributes: None,
+        };
+
+        // retrieve the old document and
+        // update the new one with missing keys found in the old one
+        let result = Option::<HashMap<String, serde_json::Value>>::deserialize(&mut deserializer)?;
+        if let Some(old_document) = result {
+            for (key, value) in old_document {
+                document.entry(key).or_insert(value);
+            }
+        }
 
         documents_additions.insert(document_id, document);
     }

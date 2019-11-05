@@ -156,6 +156,14 @@ impl Index {
         )
     }
 
+    pub fn documents_partial_addition<D>(&self) -> update::DocumentsAddition<D> {
+        update::DocumentsAddition::new_partial(
+            self.updates,
+            self.updates_results,
+            self.updates_notifier.clone(),
+        )
+    }
+
     pub fn documents_deletion(&self) -> update::DocumentsDeletion {
         update::DocumentsDeletion::new(
             self.updates,

@@ -10,7 +10,9 @@ mod synonyms_deletion;
 
 pub use self::clear_all::{apply_clear_all, push_clear_all};
 pub use self::customs_update::{apply_customs_update, push_customs_update};
-pub use self::documents_addition::{apply_documents_addition, DocumentsAddition};
+pub use self::documents_addition::{
+    apply_documents_addition, apply_documents_partial_addition, DocumentsAddition,
+};
 pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
 pub use self::schema_update::{apply_schema_update, push_schema_update};
 pub use self::stop_words_addition::{apply_stop_words_addition, StopWordsAddition};
@@ -19,7 +21,7 @@ pub use self::synonyms_addition::{apply_synonyms_addition, SynonymsAddition};
 pub use self::synonyms_deletion::{apply_synonyms_deletion, SynonymsDeletion};
 
 use std::cmp;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::{Duration, Instant};
 
 use heed::Result as ZResult;
@@ -34,7 +36,8 @@ pub enum Update {
     ClearAll,
     Schema(Schema),
     Customs(Vec<u8>),
-    DocumentsAddition(Vec<serde_json::Value>),
+    DocumentsAddition(Vec<HashMap<String, serde_json::Value>>),
+    DocumentsPartial(Vec<HashMap<String, serde_json::Value>>),
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsAddition(BTreeMap<String, Vec<String>>),
     SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
@@ -51,6 +54,9 @@ impl Update {
             },
             Update::Customs(_) => UpdateType::Customs,
             Update::DocumentsAddition(addition) => UpdateType::DocumentsAddition {
+                number: addition.len(),
+            },
+            Update::DocumentsPartial(addition) => UpdateType::DocumentsPartial {
                 number: addition.len(),
             },
             Update::DocumentsDeletion(deletion) => UpdateType::DocumentsDeletion {
@@ -78,6 +84,7 @@ pub enum UpdateType {
     Schema { schema: Schema },
     Customs,
     DocumentsAddition { number: usize },
+    DocumentsPartial { number: usize },
     DocumentsDeletion { number: usize },
     SynonymsAddition { number: usize },
     SynonymsDeletion { number: usize },
@@ -207,6 +214,25 @@ pub fn update_task<'a, 'b>(
             };
 
             let result = apply_documents_addition(
+                writer,
+                index.main,
+                index.documents_fields,
+                index.documents_fields_counts,
+                index.postings_lists,
+                index.docs_words,
+                documents,
+            );
+
+            (update_type, result, start.elapsed())
+        }
+        Update::DocumentsPartial(documents) => {
+            let start = Instant::now();
+
+            let update_type = UpdateType::DocumentsPartial {
+                number: documents.len(),
+            };
+
+            let result = apply_documents_partial_addition(
                 writer,
                 index.main,
                 index.documents_fields,
