@@ -1,9 +1,9 @@
 use hashbrown::HashMap;
 use std::convert::TryFrom;
-use std::mem;
 use std::ops::Range;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+use std::{cmp, mem};
 
 use fst::{IntoStreamer, Streamer};
 use sdset::SetBuf;
@@ -178,7 +178,7 @@ fn fetch_raw_documents(
                 let distance = dfa.eval(input).to_u8();
                 let is_exact = *is_exact && distance == 0 && input.len() == *query_len;
 
-                let covered_area = if query.len() > input.len() {
+                let covered_area = if *query_len > input.len() {
                     input.len()
                 } else {
                     prefix_damerau_levenshtein(query.as_bytes(), input).1
@@ -202,10 +202,13 @@ fn fetch_raw_documents(
                             is_exact,
                         };
 
+                        let covered_area = u16::try_from(covered_area).unwrap_or(u16::max_value());
+                        let covered_area = cmp::min(covered_area, di.char_length);
+
                         let highlight = Highlight {
                             attribute: di.attribute,
                             char_index: di.char_index,
-                            char_length: u16::try_from(covered_area).unwrap_or(u16::max_value()),
+                            char_length: covered_area,
                         };
 
                         tmp_matches.push((di.document_id, id, match_, highlight));

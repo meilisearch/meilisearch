@@ -217,7 +217,11 @@ fn display_highlights(text: &str, ranges: &[usize]) -> io::Result<()> {
             _ => unreachable!(),
         };
         if highlighted {
-            stdout.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)))?;
+            stdout.set_color(
+                ColorSpec::new()
+                    .set_fg(Some(Color::Yellow))
+                    .set_underline(true),
+            )?;
         }
         write!(&mut stdout, "{}", &text[start..end])?;
         stdout.reset()?;
