@@ -22,7 +22,7 @@ pub const RANKED: SchemaProps = SchemaProps {
     ranked: true,
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaProps {
     #[serde(default)]
     pub displayed: bool,
@@ -57,6 +57,36 @@ impl BitOr for SchemaProps {
             indexed: self.indexed | other.indexed,
             ranked: self.ranked | other.ranked,
         }
+    }
+}
+
+impl fmt::Debug for SchemaProps {
+    #[allow(non_camel_case_types)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[derive(Debug)]
+        struct DISPLAYED;
+
+        #[derive(Debug)]
+        struct INDEXED;
+
+        #[derive(Debug)]
+        struct RANKED;
+
+        let mut debug_set = f.debug_set();
+
+        if self.displayed {
+            debug_set.entry(&DISPLAYED);
+        }
+
+        if self.indexed {
+            debug_set.entry(&INDEXED);
+        }
+
+        if self.ranked {
+            debug_set.entry(&RANKED);
+        }
+
+        debug_set.finish()
     }
 }
 
@@ -102,12 +132,12 @@ impl SchemaBuilder {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Schema {
     inner: Arc<InnerSchema>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct InnerSchema {
     identifier: String,
     attrs: HashMap<String, SchemaAttr>,
@@ -181,6 +211,16 @@ impl<'de> Deserialize<'de> for Schema {
     {
         let builder = SchemaBuilder::deserialize(deserializer)?;
         Ok(builder.build())
+    }
+}
+
+impl fmt::Debug for Schema {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let builder = self.to_builder();
+        f.debug_struct("Schema")
+            .field("identifier", &builder.identifier)
+            .field("attributes", &builder.attributes)
+            .finish()
     }
 }
 
@@ -446,5 +486,44 @@ mod tests {
         assert_eq!(schema, schema2);
 
         Ok(())
+    }
+
+    #[test]
+    fn debug_output() {
+        use std::fmt::Write as _;
+
+        let mut builder = SchemaBuilder::with_identifier("id");
+        builder.new_attribute("alpha", DISPLAYED);
+        builder.new_attribute("beta", DISPLAYED | INDEXED);
+        builder.new_attribute("gamma", INDEXED);
+        let schema = builder.build();
+
+        let mut output = String::new();
+        let _ = write!(&mut output, "{:#?}", schema);
+
+        let expected = r#"Schema {
+    identifier: "id",
+    attributes: {
+        "alpha": {
+            DISPLAYED,
+        },
+        "beta": {
+            DISPLAYED,
+            INDEXED,
+        },
+        "gamma": {
+            INDEXED,
+        },
+    },
+}"#;
+
+        assert_eq!(output, expected);
+
+        let mut output = String::new();
+        let _ = write!(&mut output, "{:?}", schema);
+
+        let expected = r#"Schema { identifier: "id", attributes: {"alpha": {DISPLAYED}, "beta": {DISPLAYED, INDEXED}, "gamma": {INDEXED}} }"#;
+
+        assert_eq!(output, expected);
     }
 }
