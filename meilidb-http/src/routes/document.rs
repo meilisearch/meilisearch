@@ -151,7 +151,7 @@ fn infered_schema(document: &IndexMap<String, Value>) -> Option<meilidb_schema::
     }
 }
 
-pub async fn add_or_update_multiple_documents(mut ctx: Context<Data>) -> SResult<Response> {
+async fn update_multiple_documents(mut ctx: Context<Data>, is_partial: bool) -> SResult<Response> {
     ctx.is_allowed(DocumentsWrite)?;
 
     if !ctx.state().accept_updates() {
@@ -179,7 +179,11 @@ pub async fn add_or_update_multiple_documents(mut ctx: Context<Data>) -> SResult
         }
     }
 
-    let mut document_addition = index.documents_addition();
+    let mut document_addition = if is_partial {
+        index.documents_partial_addition()
+    } else {
+        index.documents_addition()
+    };
 
     for document in data {
         document_addition.update_document(document);
@@ -195,6 +199,14 @@ pub async fn add_or_update_multiple_documents(mut ctx: Context<Data>) -> SResult
     Ok(tide::response::json(response_body)
         .with_status(StatusCode::ACCEPTED)
         .into_response())
+}
+
+pub async fn add_or_replace_multiple_documents(ctx: Context<Data>) -> SResult<Response> {
+    update_multiple_documents(ctx, false).await
+}
+
+pub async fn add_or_update_multiple_documents(ctx: Context<Data>) -> SResult<Response> {
+    update_multiple_documents(ctx, true).await
 }
 
 pub async fn delete_multiple_documents(mut ctx: Context<Data>) -> SResult<Response> {
