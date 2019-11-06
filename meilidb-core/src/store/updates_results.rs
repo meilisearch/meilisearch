@@ -38,4 +38,8 @@ impl UpdatesResults {
         let update_id = BEU64::new(update_id);
         self.updates_results.get(reader, &update_id)
     }
+
+    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.updates_results.clear(writer)
+    }
 }

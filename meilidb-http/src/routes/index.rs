@@ -188,15 +188,19 @@ pub async fn get_all_updates_status(ctx: Context<Data>) -> SResult<Response> {
 
 pub async fn delete_index(ctx: Context<Data>) -> SResult<StatusCode> {
     ctx.is_allowed(IndexesWrite)?;
-    let _index_name = ctx.url_param("index")?;
-    let _index = ctx.index()?;
+    let index_name = ctx.url_param("index")?;
 
-    // ctx.state()
-    //     .db
-    //     .delete_index(&index_name)
-    //     .map_err(ResponseError::internal)?;
+    let found = ctx
+        .state()
+        .db
+        .delete_index(&index_name)
+        .map_err(ResponseError::internal)?;
 
-    Ok(StatusCode::NOT_IMPLEMENTED)
+    if found {
+        Ok(StatusCode::OK)
+    } else {
+        Ok(StatusCode::NOT_FOUND)
+    }
 }
 
 pub fn index_update_callback(index_name: &str, data: &Data, _status: ProcessedUpdateResult) {

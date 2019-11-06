@@ -4,6 +4,7 @@ use fst::{SetBuilder, Streamer};
 use meilidb_schema::Schema;
 use sdset::{duo::DifferenceByKey, SetBuf, SetOperation};
 
+use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::serde::extract_document_id;
 use crate::store;
 use crate::update::{next_update_id, Update};
@@ -12,7 +13,7 @@ use crate::{DocumentId, Error, MResult, RankedMap};
 pub struct DocumentsDeletion {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-    updates_notifier: crossbeam_channel::Sender<()>,
+    updates_notifier: UpdateEventsEmitter,
     documents: Vec<DocumentId>,
 }
 
@@ -20,7 +21,7 @@ impl DocumentsDeletion {
     pub fn new(
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
-        updates_notifier: crossbeam_channel::Sender<()>,
+        updates_notifier: UpdateEventsEmitter,
     ) -> DocumentsDeletion {
         DocumentsDeletion {
             updates_store,
@@ -50,7 +51,7 @@ impl DocumentsDeletion {
     }
 
     pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64> {
-        let _ = self.updates_notifier.send(());
+        let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         let update_id = push_documents_deletion(
             writer,
             self.updates_store,

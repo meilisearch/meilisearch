@@ -26,6 +26,7 @@ use serde::de::{self, Deserialize};
 use zerocopy::{AsBytes, FromBytes};
 
 use crate::criterion::Criteria;
+use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::serde::Deserializer;
 use crate::{query_builder::QueryBuilder, update, DocumentId, Error, MResult};
 
@@ -91,7 +92,7 @@ pub struct Index {
 
     pub updates: Updates,
     pub updates_results: UpdatesResults,
-    updates_notifier: crossbeam_channel::Sender<()>,
+    updates_notifier: UpdateEventsEmitter,
 }
 
 impl Index {
@@ -139,12 +140,12 @@ impl Index {
     }
 
     pub fn schema_update(&self, writer: &mut heed::RwTxn, schema: Schema) -> MResult<u64> {
-        let _ = self.updates_notifier.send(());
+        let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         update::push_schema_update(writer, self.updates, self.updates_results, schema)
     }
 
     pub fn customs_update(&self, writer: &mut heed::RwTxn, customs: Vec<u8>) -> ZResult<u64> {
-        let _ = self.updates_notifier.send(());
+        let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         update::push_customs_update(writer, self.updates, self.updates_results, customs)
     }
 
@@ -173,7 +174,7 @@ impl Index {
     }
 
     pub fn clear_all(&self, writer: &mut heed::RwTxn) -> MResult<u64> {
-        let _ = self.updates_notifier.send(());
+        let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         update::push_clear_all(writer, self.updates, self.updates_results)
     }
 
@@ -276,7 +277,7 @@ impl Index {
 pub fn create(
     env: &heed::Env,
     name: &str,
-    updates_notifier: crossbeam_channel::Sender<()>,
+    updates_notifier: UpdateEventsEmitter,
 ) -> MResult<Index> {
     // create all the store names
     let main_name = main_name(name);
@@ -316,7 +317,7 @@ pub fn create(
 pub fn open(
     env: &heed::Env,
     name: &str,
-    updates_notifier: crossbeam_channel::Sender<()>,
+    updates_notifier: UpdateEventsEmitter,
 ) -> MResult<Option<Index>> {
     // create all the store names
     let main_name = main_name(name);
@@ -375,4 +376,20 @@ pub fn open(
         updates_results: UpdatesResults { updates_results },
         updates_notifier,
     }))
+}
+
+pub fn clear(writer: &mut heed::RwTxn, index: &Index) -> MResult<()> {
+    // send a stop event to the update loop of the index
+    index.updates_notifier.send(UpdateEvent::MustStop).unwrap();
+
+    // clear all the stores
+    index.main.clear(writer)?;
+    index.postings_lists.clear(writer)?;
+    index.documents_fields.clear(writer)?;
+    index.documents_fields_counts.clear(writer)?;
+    index.synonyms.clear(writer)?;
+    index.docs_words.clear(writer)?;
+    index.updates.clear(writer)?;
+    index.updates_results.clear(writer)?;
+    Ok(())
 }

@@ -22,6 +22,10 @@ impl Synonyms {
         self.synonyms.delete(writer, word)
     }
 
+    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.synonyms.clear(writer)
+    }
+
     pub fn synonyms(self, reader: &heed::RoTxn, word: &[u8]) -> ZResult<Option<fst::Set>> {
         match self.synonyms.get(reader, word)? {
             Some(bytes) => {

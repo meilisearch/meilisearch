@@ -4,6 +4,7 @@ use fst::{set::OpBuilder, SetBuilder};
 use sdset::{duo::Union, SetOperation};
 use serde::{Deserialize, Serialize};
 
+use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::raw_indexer::RawIndexer;
 use crate::serde::{extract_document_id, serialize_value, Deserializer, Serializer};
 use crate::store;
@@ -13,7 +14,7 @@ use crate::{Error, MResult, RankedMap};
 pub struct DocumentsAddition<D> {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-    updates_notifier: crossbeam_channel::Sender<()>,
+    updates_notifier: UpdateEventsEmitter,
     documents: Vec<D>,
     is_partial: bool,
 }
@@ -22,7 +23,7 @@ impl<D> DocumentsAddition<D> {
     pub fn new(
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
-        updates_notifier: crossbeam_channel::Sender<()>,
+        updates_notifier: UpdateEventsEmitter,
     ) -> DocumentsAddition<D> {
         DocumentsAddition {
             updates_store,
@@ -36,7 +37,7 @@ impl<D> DocumentsAddition<D> {
     pub fn new_partial(
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
-        updates_notifier: crossbeam_channel::Sender<()>,
+        updates_notifier: UpdateEventsEmitter,
     ) -> DocumentsAddition<D> {
         DocumentsAddition {
             updates_store,
@@ -55,7 +56,7 @@ impl<D> DocumentsAddition<D> {
     where
         D: serde::Serialize,
     {
-        let _ = self.updates_notifier.send(());
+        let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         let update_id = push_documents_addition(
             writer,
             self.updates_store,

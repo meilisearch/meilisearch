@@ -3,13 +3,14 @@ use std::collections::BTreeSet;
 use fst::{set::OpBuilder, SetBuilder};
 
 use crate::automaton::normalize_str;
+use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::update::{next_update_id, Update};
 use crate::{store, MResult};
 
 pub struct StopWordsAddition {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-    updates_notifier: crossbeam_channel::Sender<()>,
+    updates_notifier: UpdateEventsEmitter,
     stop_words: BTreeSet<String>,
 }
 
@@ -17,7 +18,7 @@ impl StopWordsAddition {
     pub fn new(
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
-        updates_notifier: crossbeam_channel::Sender<()>,
+        updates_notifier: UpdateEventsEmitter,
     ) -> StopWordsAddition {
         StopWordsAddition {
             updates_store,
@@ -33,7 +34,7 @@ impl StopWordsAddition {
     }
 
     pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64> {
-        let _ = self.updates_notifier.send(());
+        let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         let update_id = push_stop_words_addition(
             writer,
             self.updates_store,

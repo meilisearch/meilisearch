@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use heed::types::{Str, Unit};
 use heed::{CompactionOption, Result as ZResult};
 use log::debug;
@@ -33,9 +33,17 @@ macro_rules! r#break_try {
     };
 }
 
-fn update_awaiter(receiver: Receiver<()>, env: heed::Env, update_fn: Arc<ArcSwapFn>, index: Index) {
-    for () in receiver {
-        // consume all updates in order (oldest first)
+pub enum UpdateEvent {
+    NewUpdate,
+    MustStop,
+}
+
+pub type UpdateEvents = Receiver<UpdateEvent>;
+pub type UpdateEventsEmitter = Sender<UpdateEvent>;
+
+fn update_awaiter(receiver: UpdateEvents, env: heed::Env, update_fn: Arc<ArcSwapFn>, index: Index) {
+    let mut receiver = receiver.into_iter();
+    while let Some(UpdateEvent::NewUpdate) = receiver.next() {
         loop {
             // instantiate a main/parent transaction
             let mut writer = break_try!(env.write_txn(), "LMDB write transaction begin failed");
@@ -80,6 +88,8 @@ fn update_awaiter(receiver: Receiver<()>, env: heed::Env, update_fn: Arc<ArcSwap
             }
         }
     }
+
+    debug!("update loop system stopped");
 }
 
 impl Database {
@@ -130,7 +140,7 @@ impl Database {
 
             // send an update notification to make sure that
             // possible pre-boot updates are consumed
-            sender.send(()).unwrap();
+            sender.send(UpdateEvent::NewUpdate).unwrap();
 
             let result = indexes.insert(index_name, (index, update_fn, handle));
             assert!(
@@ -183,6 +193,28 @@ impl Database {
 
                 Ok(index)
             }
+        }
+    }
+
+    pub fn delete_index(&self, name: impl AsRef<str>) -> MResult<bool> {
+        let name = name.as_ref();
+        let mut indexes_lock = self.indexes.write().unwrap();
+
+        match indexes_lock.remove_entry(name) {
+            Some((name, (index, _fn, handle))) => {
+                // remove the index name from the list of indexes
+                // and clear all the LMDB dbi
+                let mut writer = self.env.write_txn()?;
+                self.indexes_store.delete(&mut writer, &name)?;
+                store::clear(&mut writer, &index)?;
+                writer.commit()?;
+
+                // join the update loop thread to ensure it is stopped
+                handle.join().unwrap();
+
+                Ok(true)
+            }
+            None => Ok(false),
         }
     }
 
@@ -732,5 +764,19 @@ mod tests {
             "description": "I am the new Kevin",
         });
         assert_eq!(document, Some(new_doc2));
+    }
+
+    #[test]
+    fn delete_index() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let database = Database::open_or_create(dir.path()).unwrap();
+        let _index = database.create_index("test").unwrap();
+
+        let deleted = database.delete_index("test").unwrap();
+        assert!(deleted);
+
+        let result = database.open_index("test");
+        assert!(result.is_none());
     }
 }
