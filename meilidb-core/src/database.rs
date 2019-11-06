@@ -765,4 +765,18 @@ mod tests {
         });
         assert_eq!(document, Some(new_doc2));
     }
+
+    #[test]
+    fn delete_index() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let database = Database::open_or_create(dir.path()).unwrap();
+        let _index = database.create_index("test").unwrap();
+
+        let deleted = database.delete_index("test").unwrap();
+        assert!(deleted);
+
+        let result = database.open_index("test");
+        assert!(result.is_none());
+    }
 }
