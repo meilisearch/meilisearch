@@ -52,4 +52,8 @@ impl Updates {
             None => Ok(None),
         }
     }
+
+    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.updates.clear(writer)
+    }
 }

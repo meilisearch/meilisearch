@@ -4,13 +4,14 @@ use fst::{set::OpBuilder, SetBuilder};
 use sdset::SetBuf;
 
 use crate::automaton::normalize_str;
+use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::update::{next_update_id, Update};
 use crate::{store, MResult};
 
 pub struct SynonymsAddition {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-    updates_notifier: crossbeam_channel::Sender<()>,
+    updates_notifier: UpdateEventsEmitter,
     synonyms: BTreeMap<String, Vec<String>>,
 }
 
@@ -18,7 +19,7 @@ impl SynonymsAddition {
     pub fn new(
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
-        updates_notifier: crossbeam_channel::Sender<()>,
+        updates_notifier: UpdateEventsEmitter,
     ) -> SynonymsAddition {
         SynonymsAddition {
             updates_store,
@@ -43,7 +44,7 @@ impl SynonymsAddition {
     }
 
     pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64> {
-        let _ = self.updates_notifier.send(());
+        let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         let update_id = push_synonyms_addition(
             writer,
             self.updates_store,

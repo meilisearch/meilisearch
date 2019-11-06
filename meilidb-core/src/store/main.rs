@@ -18,6 +18,10 @@ pub struct Main {
 }
 
 impl Main {
+    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.main.clear(writer)
+    }
+
     pub fn put_words_fst(self, writer: &mut heed::RwTxn, fst: &fst::Set) -> ZResult<()> {
         let bytes = fst.as_fst().as_bytes();
         self.main.put::<Str, ByteSlice>(writer, WORDS_KEY, bytes)
