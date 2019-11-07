@@ -40,7 +40,7 @@ Now that our movie dataset has been indexed, you can try out the search engine w
 curl 'http://127.0.0.1:8080/indexes/myindex/search?q=botman'
 ```
 
-```json
+```
 {
   "hits": [
     {
