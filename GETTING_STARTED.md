@@ -1,22 +1,22 @@
-# Getting Started
+## Getting Started
 
 Download the [movies dataset](#lien_vers_movie_dataset) to try our example.
 
-## Install & Run
+### Install & Run
 
 ```bash
 cargo run --release
 Server is listening on: http://127.0.0.1:8080
 ```
 
-## Index documents
+### Index documents
 
-**Create an [index](#index_doc)** whitout defining the [document](#link_to_documents_doc) [schema](#link_to_schema_doc).
+Create an [index](#index_doc) without defining the [document](#link_to_documents_doc) [schema](#link_to_schema_doc).
 ```bash
 curl --request POST 'http://127.0.0.1:8080/indexes/myindex'
 ```
 
-**Add documents**. [Learn how to format your documents here](#link)
+Add documents and [learn how to format your documents](#link).
 
 
 ```bash
@@ -25,11 +25,9 @@ curl --request POST 'http://127.0.0.1:8080/indexes/myindex/documents' \
   --header 'content-type: application/json'
 ```
 
-You can track [updates](#link) with the provided update id's .
+You [can track updates](#link) with the provided update id's .
 
-When no [schema](#link_to_schema_doc) is defined MeiliDB will try to infer it based upon the first document you sent.
-
-## Search 
+### Search 
 Now that our movie dataset has been indexed, you can try out the search engine with for exemple `botman` as search query.
 ```bash
 curl 'http://127.0.0.1:8080/indexes/myindex/search?q=botman'
