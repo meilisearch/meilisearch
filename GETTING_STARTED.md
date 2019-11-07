@@ -1,4 +1,7 @@
 # Getting Started
+
+Download the [movies dataset](#lien_vers_movie_dataset) to try our example.
+
 ## Installation 
 
 ```
@@ -20,7 +23,6 @@ curl --request POST 'http://127.0.0.1:8080/indexes/myindex'
 
 **Add documents**. [Learn how to format your documents here](#link)
 
-Download the [movies dataset](#lien_vers_movie_dataset) to try our example.
 
 ```bash
 curl --request POST 'http://127.0.0.1:8080/indexes/myindex/documents' \
@@ -35,7 +37,7 @@ When no [schema](#link_to_schema_doc) is defined MeiliDB will try to infer it ba
 ## Search 
 Now that our movie dataset has been indexed, you can try out the search engine :
 ```bash
-curl --request GET 'http://127.0.0.1:8080/indexes/myindex/search?q=kun&limit=5'
+curl --request GET 'http://127.0.0.1:8080/indexes/myindex/search?q=kun&limit=2'
 ```
 
 ```json
@@ -54,31 +56,10 @@ curl --request GET 'http://127.0.0.1:8080/indexes/myindex/search?q=kun&limit=5'
       "poster": "https://image.tmdb.org/t/p/w1280/8UvKl3SZhE6McLK4Yv5w7fRIg9Y.jpg",
       "overview": "As Po looks for his lost action figures, the story of how the panda inadvertently helped create the Furious Five is told.",
       "release_date": "2016-01-05"
-    },
-    {
-      "id": "17108",
-      "title": "Kung Fu Dunk",
-      "poster": "https://image.tmdb.org/t/p/w1280/2xFGlI4MXH9rJunia0l2VmK3Mw1.jpg",
-      "overview": "Shi-Jie is a brilliant martial artist from the Kung Fu School. One day, he encounters a group of youths playing basketball and shows off how easy it is for him, with his martial arts training, to do a Slam Dunk. Watching him was Chen-Li, a shrewd businessman, who recruits him to play varsity basketball at the local university.",
-      "release_date": "2008-02-07"
-    },
-    {
-      "id": "383785",
-      "title": "Kung Fu Yoga",
-      "poster": "https://image.tmdb.org/t/p/w1280/rL6XM4fsr1cM5mN2flEhQ8jQter.jpg",
-      "overview": "Chinese archeology professor Jack teams up with beautiful Indian professor Ashmita and assistant Kyra to locate lost Magadha treasure. In a Tibetan ice cave, they find the remains of the royal army that had vanished together with the treasure, only to be ambushed by Randall, the descendent of a rebel army leader. When they free themselves, their next stop is Dubai where a diamond from the ice cave is to be auctioned. After a series of double-crosses and revelations about their past, Jack and his team travel to a mountain temple in India, using the diamond as a key to unlock the real treasure.",
-      "release_date": "2017-01-27"
-    },
-    {
-      "id": "560246",
-      "title": "Kung Paano Siya Nawala",
-      "poster": "https://image.tmdb.org/t/p/w1280/gj543vQE2eFTZ20H1osenT3308S.jpg",
-      "overview": "A young man suffering from face blindness and a young woman with a troubled past fall in love.",
-      "release_date": "2018-11-14"
     }
   ],
   "offset": 0,
-  "limit": 5,
+  "limit": 2,
   "processingTimeMs": 0,
   "query": "kun"
 }
