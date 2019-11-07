@@ -28,7 +28,7 @@ curl --request POST 'http://127.0.0.1:8080/indexes/myindex/documents' \
 You [can track updates](#link) with the provided update id's .
 
 ### Search 
-Now that our movie dataset has been indexed, you can try out the search engine with for exemple `botman` as search query.
+Now that our movie dataset has been indexed, you can try out the search engine with, for example, `botman` as a query.
 ```bash
 curl 'http://127.0.0.1:8080/indexes/myindex/search?q=botman'
 ```
