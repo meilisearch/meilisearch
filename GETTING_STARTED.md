@@ -1,23 +1,23 @@
-# GETTING STARTED
+# Getting Started
 
 MeiliDB is a full-text search database based on the fast [LMDB key-value store](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) and written in Rust. 
 
-MeiliDB provides a http interface.
+MeiliDB provides an http interface.
 
-It offers an easy to implement solution to search inside your documents. No configuration is needed but customization of search and indexation is possible.
+It offers an easy to use and deploy solution to search inside your documents. No configuration is needed but customization of search and indexation is possible.
 
-you can find more about the meiliDB [engine and features here](#link_to_engine_and_features).
+You can find more about the MeiliDB [engine and features here](#link_to_engine_and_features).
 
 ## Quick Start
 
-Once meiliDB has been compiled, run the binary :
+Once MeiliDB has been compiled, run the binary :
 
 ```bash
-$> ./meilidb-http
+cargo run --release
 Server is listening on: http://127.0.0.1:8080
 ```
 
-Once your meiliDB server is running it is accessible on port `8080`.
+Once your MeiliDB server is running it is accessible on port `8080`.
 
 ### Create an index and add Documents
 
@@ -26,17 +26,21 @@ Once your meiliDB server is running it is accessible on port `8080`.
 curl --request POST 'http://127.0.0.1:8080/indexes/myindex'
 ```
 
-**Add documents**. Any top-level array `json` with one or multiple json-object inside can be used (`[ {}, {}, ..]`). Each document must at least have one [identifier](#link) key in common. If no [schema](#link_to_schema_doc) has been defined, this common key must include the string `id` in his key-name (ex: `id`, `myId`, `_id`, ...) and each value of this key inside the batch must be unique.
+**Add documents**. Any top-level array `json` with one or multiple json-object inside can be used (`[ {}, {}, ..]`). Each document must at least have one [identifier](#link) key in common. If no [schema](#link_to_schema_doc) has been defined, this common key must include the string `id` in his key-name (e.g. `"id"`, `"myId"`, `"_id"`).
 
 Download the [movies dataset](#lien_vers_movie_dataset) to try our example.
 
 ```bash
-curl --request POST 'http://127.0.0.1:8080/indexes/myindex/documents' --data @movies.json
+curl --request POST 'http://127.0.0.1:8080/indexes/myindex/documents' \
+  --data @movies.json \
+  --header 'content-type: application/json'
 ```
-When no [schema](#link_to_schema_doc) is defined meiliDB will infere it based upon the document set you provided.
 
+You can track [updates](#link) with the provided update id's .
 
-Now that our movie dataset has been indexed inside meiliDB, we can try out the search engine :
+When no [schema](#link_to_schema_doc) is defined MeiliDB will try to infer it based upon the first document you sent.
+
+Now that our movie dataset has been indexed, you can try out the search engine :
 ```bash
 curl --request GET 'http://127.0.0.1:8080/indexes/myindex/search?q=kun&limit=5'
 ```
