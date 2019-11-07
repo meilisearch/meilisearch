@@ -4,11 +4,6 @@ Download the [movies dataset](#lien_vers_movie_dataset) to try our example.
 
 ## Install & Run
 
-```
-cargo build --release
-```
-
-## Run 
 ```bash
 cargo run --release
 Server is listening on: http://127.0.0.1:8080
