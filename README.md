@@ -31,6 +31,7 @@ The project is only a library yet. It means that there is no binary provided yet
 
 MeiliDB will be a binary in a near future so you will be able to use it as a database out-of-the-box. We should be able to query it using HTTP. This is our current goal, [see the milestones](https://github.com/meilisearch/MeiliDB/milestones). In the end, the binary will be a bunch of network protocols and wrappers around the library - which will also be published on [crates.io](https://crates.io). Both the binary and the library will follow the same update cycle.
 
+![crates.io demo gif](misc/crates-io-demo.gif)
 
 
 ## Performances
