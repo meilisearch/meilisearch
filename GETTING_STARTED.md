@@ -1,16 +1,9 @@
 # Getting Started
-
-MeiliDB is a full-text search database based on the fast [LMDB key-value store](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) and written in Rust. 
-
-MeiliDB provides an http interface.
-
-It offers an easy to use and deploy solution to search inside your documents. No configuration is needed but customization of search and indexation is possible.
-
-You can find more about the MeiliDB [engine and features here](#link_to_engine_and_features).
-
-## Quick Start
-
 ## Installation 
+
+```
+cargo build --release
+```
 
 ## Run 
 ```bash
