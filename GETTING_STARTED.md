@@ -21,8 +21,8 @@ Add documents and [learn how to format your documents](#link).
 
 ```bash
 curl --request POST 'http://127.0.0.1:8080/indexes/myindex/documents' \
-  --header 'content-type: application/json'
-  --data @movies.json \
+  --header 'content-type: application/json' \
+  --data @movies.json
 ```
 
 You [can track updates](#link) with the provided update id's .
