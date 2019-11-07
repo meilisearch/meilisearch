@@ -2,7 +2,7 @@
 
 Download the [movies dataset](#lien_vers_movie_dataset) to try our example.
 
-## Instal & Run
+## Install & Run
 
 ```
 cargo build --release
