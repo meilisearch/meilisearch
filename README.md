@@ -28,7 +28,7 @@
 
 ## Goal 
 
-Meili thrives in offering an **easy to use and deploy** solution for **full-text search**. No configuration is needed but customization of search and indexation is possible. 
+Meili is an **easy to use and deploy** solution for **full-text search**. No configuration is needed but customization of search and indexation is possible. 
 
 <br />
 
