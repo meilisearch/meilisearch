@@ -18,7 +18,9 @@
   </a>
 </p>
 <br />
-Meili thrives in offering an easy to use and deploy solution to search inside your data. No configuration is needed but customization of search and indexation is possible.
+Meili thrives in offering an easy to use and deploy solution for full-text search. No configuration is needed but customization of search and indexation is possible.
+<br />
+<br />
 
 ![Crates io with meili search](https://github.com/meilisearch/MeiliDB/raw/update-readme/misc/crates-io-demo.gif?raw=true "Crates io with meili search")
 
