@@ -17,16 +17,18 @@
     <img src="https://img.shields.io/badge/license-commons%20clause-lightgrey" alt="Travis Build Status" />
   </a>
 </p>
-<br />
+
+____
+<p align="center"> 
+  <img align="center" src="https://github.com/meilisearch/MeiliDB/raw/update-readme/misc/crates-io-demo.gif?raw=true" >
+</p>
+<p align="center"> Crates.io with Meili </p>
 
 Meili thrives in offering an **easy to use and deploy** solution for **full-text search**. No configuration is needed but customization of search and indexation is possible.
 
 <br />
-<br />
 
-![Crates io with meili search](https://github.com/meilisearch/MeiliDB/raw/update-readme/misc/crates-io-demo.gif?raw=true "Crates io with meili search")
 
-<p align="center"> Crates.io with Meili </p>
 
 
 ## Quickstart
