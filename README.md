@@ -16,7 +16,7 @@ Meili thrives in offering an easy to use and deploy solution to search inside yo
 
 ![Crates io with meili search](https://github.com/meilisearch/MeiliDB/raw/update-readme/misc/crates-io-demo.gif?raw=true "Crates io with meili search")
 
-<div style="font-style: italic; color: grey; text-align: center; width: 100%">Crates.io with meili</div>
+<p align="center" style="font-style: italic; color: grey; text-align: center; width: 100%">Crates.io with meili</p>
 
 
 ## Getting Started
