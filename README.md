@@ -20,7 +20,7 @@
   </a>
 </p>
 
-____
+-------
 <p align="center"> 
   <img align="center" src="https://github.com/meilisearch/MeiliDB/raw/update-readme/misc/crates-io-demo.gif?raw=true" >
 </p>
