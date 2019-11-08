@@ -31,7 +31,7 @@ cargo run --release
 
 The search engine is now listening on: `http://127.0.0.1:8080`. 
 
-You can check with `curl http://127.0.0.1:8080/health`
+> You can check with `curl -i http://127.0.0.1:8080/health`
 
 ### Index documents
 
