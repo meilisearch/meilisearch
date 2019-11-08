@@ -115,4 +115,4 @@ curl 'http://127.0.0.1:8080/indexes/myindex/search?q=botman'
 
 ## License 
 
-Common clause
+Meili is licensed under the [Commons Clause](LICENSE) license.
