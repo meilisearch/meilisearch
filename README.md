@@ -6,17 +6,23 @@
 <h3 align="center">Instant search API made simple.</h3>
 <p align="center">A instant search engine, working out-of-the-box for user-friendly search experience.</p>
 <br />
-
-[![Build Status](https://dev.azure.com/thomas0884/thomas/_apis/build/status/meilisearch.MeiliDB?branchName=master)](https://dev.azure.com/thomas0884/thomas/_build/latest?definitionId=1&branchName=master)
-[![dependency status](https://deps.rs/repo/github/meilisearch/MeiliDB/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliDB)
-[![License](https://img.shields.io/badge/license-commons%20clause-lightgrey)](https://commonsclause.com/)
-
-
+<p align="center">
+  <a href="https://dev.azure.com/thomas0884/thomas/_build/latest?definitionId=1&branchName=master">
+    <img src="https://dev.azure.com/thomas0884/thomas/_apis/build/status/meilisearch.MeiliDB?branchName=master" alt="NPM Version" />
+  </a>
+  <a href="https://deps.rs/repo/github/meilisearch/MeiliDB">
+    <img src="https://deps.rs/repo/github/meilisearch/MeiliDB/status.svg" alt="Monthly download on NPM" />
+  </a>
+  <a href="https://commonsclause.com/">
+    <img src="https://img.shields.io/badge/license-commons%20clause-lightgrey" alt="Travis Build Status" />
+  </a>
+</p>
+<br />
 Meili thrives in offering an easy to use and deploy solution to search inside your data. No configuration is needed but customization of search and indexation is possible.
 
 ![Crates io with meili search](https://github.com/meilisearch/MeiliDB/raw/update-readme/misc/crates-io-demo.gif?raw=true "Crates io with meili search")
 
-<p align="center">Crates.io with meili</p>
+<p align="center"> Crates.io with Meili </p>
 
 
 ## Quickstart
