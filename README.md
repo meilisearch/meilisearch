@@ -4,7 +4,9 @@
   </a>
 </p>
 <h3 align="center">Instant search API made simple.</h3>
-<p align="center">A instant search engine, working out-of-the-box for user-friendly search experience.</p>
+<p align="center">A instant search engine, working out-of-the-box for user-friendly search experience.
+
+</p>
 <br />
 <p align="center">
   <a href="https://dev.azure.com/thomas0884/thomas/_build/latest?definitionId=1&branchName=master">
@@ -24,16 +26,16 @@ ____
 </p>
 <p align="center"> Crates.io with Meili </p>
 
-Meili thrives in offering an **easy to use and deploy** solution for **full-text search**. No configuration is needed but customization of search and indexation is possible.
+## Goal 
+
+Meili thrives in offering an **easy to use and deploy** solution for **full-text search**. No configuration is needed but customization of search and indexation is possible. 
 
 <br />
 
 
-
-
 ## Quickstart
 
-Let's index a [dataset of movies](#lien_vers_movie_dataset) in which we will search.
+Let's index a [dataset of movies](#https://www.notion.so/meilisearch/A-movies-dataset-to-test-Meili-1cbf7c9cfa4247249c40edfa22d7ca87) in which we will search.
 
 ### Install & Run
 
@@ -47,12 +49,12 @@ The search engine is now listening on: `http://127.0.0.1:8080`.
 
 ### Index documents
 
-Create an [index](#index_doc) without defining the [document](#link_to_documents_doc) [schema](#link_to_schema_doc).
+Create an [index](#https://docs.meilisearch.com/indexes.html) without defining the [document](#https://docs.meilisearch.com/documents.html) [schema](#to_do_schema).
 ```bash
 curl --request POST 'http://127.0.0.1:8080/indexes/myindex'
 ```
 
-Add documents and [learn how to format your documents](#link).
+Add documents and [learn how to format your documents](#to_do_format).
 
 
 ```bash
@@ -61,7 +63,7 @@ curl --request POST 'http://127.0.0.1:8080/indexes/myindex/documents' \
   --data @movies.json
 ```
 
-You [can track updates](#link) with the provided update id's .
+You [can track updates](#to_do_updates) with the provided update id's .
 
 ### Search 
 Now that our movie dataset has been indexed, you can try out the search engine with, for example, `botman` as a query.
@@ -103,9 +105,14 @@ curl 'http://127.0.0.1:8080/indexes/myindex/search?q=botman'
 - Accepts query time search config like the [searchable attributes](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/query_builder.rs#L272-L275)
 - Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/store/mod.rs#L143-L173)
 
-## Contributing
+## Ressources
 
-Please read our [Contributing Guide](#link) before submitting a Pull Request to the project.
+* [Documentation](https://docs.meilisearch.com)
+* [Main concept](#to_do_main_concept)
+* [Deep dive](#link)
+* [Contributing](#link)
+* [SDK's](#link)
+
 
 ## License 
 
