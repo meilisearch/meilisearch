@@ -29,7 +29,7 @@ Let's index a [dataset of movies](#lien_vers_movie_dataset) in which we will sea
 cargo run --release
 ```
 
-The server is now listening on : `http://127.0.0.1:8080`
+The search engine is now listening on: `http://127.0.0.1:8080`. You can check with `curl http://127.0.0.1:8080/health`
 
 ### Index documents
 
