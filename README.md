@@ -1,10 +1,21 @@
 # MeiliDB
 
+<p align="center">
+  <a href="https://www.meilisearch.com">
+    <img src="https://www.meilisearch.com/assets/logo-59b9e6f726360eccac4b0cae0e268ef29b64fc9d386ad4a4e3c10c3e02240ade.svg" width="318px" alt="Strapi logo" />
+  </a>
+</p>
+<h3 align="center">Instant search API made simple.</h3>
+<p align="center">A instant search engine, working out-of-the-box for user-friendly search experience..</p>
+<br />
+<p align="center">
+  
+</p>
+
 [![Build Status](https://dev.azure.com/thomas0884/thomas/_apis/build/status/meilisearch.MeiliDB?branchName=master)](https://dev.azure.com/thomas0884/thomas/_build/latest?definitionId=1&branchName=master)
 [![dependency status](https://deps.rs/repo/github/meilisearch/MeiliDB/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliDB)
 [![License](https://img.shields.io/badge/license-commons%20clause-lightgrey)](https://commonsclause.com/)
 
-A _full-text search database_ based on the fast [LMDB key-value store](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
 
 ## Features
 
