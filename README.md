@@ -16,19 +16,20 @@ Meili thrives in offering an easy to use and deploy solution to search inside yo
 
 ![Crates io with meili search](https://github.com/meilisearch/MeiliDB/raw/update-readme/misc/crates-io-demo.gif?raw=true "Crates io with meili search")
 
-<p align="center" style="font-style: italic; color: grey; text-align: center; width: 100%">Crates.io with meili</p>
+<p align="center">Crates.io with meili</p>
 
 
-## Getting Started
+## Quickstart
 
-Download the [movies dataset](#lien_vers_movie_dataset) to try our example.
+Let's index a [dataset of movies](#lien_vers_movie_dataset) in which we will search.
 
 ### Install & Run
 
 ```bash
 cargo run --release
-Server is listening on: http://127.0.0.1:8080
 ```
+
+The server is now listening on : `http://127.0.0.1:8080`
 
 ### Index documents
 
