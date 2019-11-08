@@ -4,8 +4,10 @@
   </a>
 </p>
 <h3 align="center">Instant search API made simple.</h3>
-<p align="center">A instant search engine, working out-of-the-box for user-friendly search experience.
+<p align="center">An instant search engine, working out-of-the-box for user-friendly search experience.
 
+* [Our features](#llink)
+* [Deep dive](#llink)
 </p>
 <br />
 <p align="center">
@@ -35,6 +37,7 @@ Meili is an **easy to use and deploy** solution for **full-text search**. No con
 ## Quickstart
 
 Let's index a [dataset of movies](#https://www.notion.so/meilisearch/A-movies-dataset-to-test-Meili-1cbf7c9cfa4247249c40edfa22d7ca87) in which we will search.
+
 
 ### Install & Run
 
@@ -104,12 +107,30 @@ curl 'http://127.0.0.1:8080/indexes/myindex/search?q=botman'
 - Accepts query time search config like the [searchable attributes](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/query_builder.rs#L272-L275)
 - Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/store/mod.rs#L143-L173)
 
+
+## How it works
+
+Meili uses [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) as the internal key-value store. The key-value store allows us to handle updates and queries with small memory and CPU overheads. The whole ranking system is [data oriented](https://github.com/meilisearch/MeiliDB/issues/82) and provides great performances.
+
+You can [read the deep dive](deep-dive.md) if you want more information on the engine, it describes the whole process of generating updates and handling queries or you can take a look at the [typos and ranking rules](typos-ranking-rules.md) if you want to know the default rules used to sort the documents.
+
+## State 
+
+The project is only a library yet. It means that there is no binary provided yet. To get started, you can check the examples wich are made to work with the data located in the `datasets/` folder.
+
+MeiliDB will be a binary in a near future so you will be able to use it as a database out-of-the-box. We should be able to query it using HTTP. This is our current goal, [see the milestones](https://github.com/meilisearch/MeiliDB/milestones). In the end, the binary will be a bunch of network protocols and wrappers around the library - which will also be published on [crates.io](https://crates.io). Both the binary and the library will follow the same update cycle.
+
+## Contributing 
+
+We will be proud if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliDB/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+
+It is a good start!
+
+
 ## Ressources
 
 * [Documentation](https://docs.meilisearch.com)
 * [Main concept](#to_do_main_concept)
-* [Deep dive](#link)
-* [Contributing](#link)
 * [SDK's](#link)
 
 
