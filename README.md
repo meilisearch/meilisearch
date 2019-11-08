@@ -5,9 +5,6 @@
 </p>
 <h3 align="center">Instant search API made simple.</h3>
 <p align="center">An instant search engine, working out-of-the-box for user-friendly search experience.
-
-* [Our features](#llink)
-* [Deep dive](#llink)
 </p>
 <br />
 <p align="center">
