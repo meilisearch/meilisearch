@@ -1,5 +1,4 @@
 /target
-Cargo.lock
 **/*.csv
 **/*.json_lines
 **/*.rs.bk
