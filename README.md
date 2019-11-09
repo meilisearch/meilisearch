@@ -27,16 +27,84 @@ You can [read the deep dive](deep-dive.md) if you want more information on the e
 
 We will be proud if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliDB/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). It is a good start!
 
-The project is only a library yet. It means that there is no binary provided yet. To get started, you can check the examples wich are made to work with the data located in the `datasets/` folder.
+[![crates.io demo gif](misc/crates-io-demo.gif)](https://crates.meilisearch.com)
 
-MeiliDB will be a binary in a near future so you will be able to use it as a database out-of-the-box. We should be able to query it using HTTP. This is our current goal, [see the milestones](https://github.com/meilisearch/MeiliDB/milestones). In the end, the binary will be a bunch of network protocols and wrappers around the library - which will also be published on [crates.io](https://crates.io). Both the binary and the library will follow the same update cycle.
+> Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
+
+
+
+## Quick Start
+
+You can deploy your own instant, relevant and typo-tolerant MeiliDB search engine by yourself too.
+Something similar to the demo above can be achieve by following these little three steps first.
+You will need to create your own web front display to make it pretty though.
+
+### Deploy the Server
+
+You can deploy the server on your own machine, it will listen to HTTP requests on the 8080 port by default.
+
+```bash
+cargo run --release
+```
+
+### Create an Index and Upload Some Documents
+
+MeiliDB can serve multiple indexes, with different kinds of documents,
+therefore, it is required to create the index before sending documents to it.
+
+```bash
+curl -i -X POST 'http://127.0.0.1:8080/indexes/movies'
+```
+
+Now that the server knows about our brand new index, we can send it data.
+We provided you a little dataset, it is available in the `datasets/` directory.
+
+```bash
+curl -i -X POST 'http://127.0.0.1:8080/indexes/movies/documents' \
+  --header 'content-type: application/json' \
+  --data @datasets/movies/movies.json
+```
+
+### Search for Documents
+
+The search engine is now aware of our documents and can serve those via our HTTP server again.
+The [`jq` command line tool](https://stedolan.github.io/jq/) can greatly help you read the server responses.
+
+```bash
+curl 'http://127.0.0.1:8080/indexes/movies/search?q=botman'
+```
+
+```json
+{
+  "hits": [
+    {
+      "id": "29751",
+      "title": "Batman Unmasked: The Psychology of the Dark Knight",
+      "poster": "https://image.tmdb.org/t/p/w1280/jjHu128XLARc2k4cJrblAvZe0HE.jpg",
+      "overview": "Delve into the world of Batman and the vigilante justice tha",
+      "release_date": "2008-07-15"
+    },
+    {
+      "id": "471474",
+      "title": "Batman: Gotham by Gaslight",
+      "poster": "https://image.tmdb.org/t/p/w1280/7souLi5zqQCnpZVghaXv0Wowi0y.jpg",
+      "overview": "ve Victorian Age Gotham City, Batman begins his war on crime",
+      "release_date": "2018-01-12"
+    }
+  ],
+  "offset": 0,
+  "limit": 2,
+  "processingTimeMs": 1,
+  "query": "botman"
+}
+```
 
 
 
 ## Performances
 
-With a database composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed.
-So more than _300 000_ fields indexed for _35 million_ stored we can handle more than _2.8k req/sec_ with an average response time of _9 ms_ on an Intel i7-7700 (8) @ 4.2GHz.
+With a database composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed.
+So more than _300 000_ fields indexed for _35 million_ stored we can handle more than _2.8k req/sec_ with an average response time of _9 ms_ on an Intel i7-7700 (8) @ 4.2GHz.
 
 Requests are made using [wrk](https://github.com/wg/wrk) and scripted to simulate real users queries.
 
@@ -56,15 +124,16 @@ Transfer/sec:    759.17KB
 With Rust 1.32 the allocator has been [changed to use the system allocator](https://blog.rust-lang.org/2019/01/17/Rust-1.32.0.html#jemalloc-is-removed-by-default).
 We have seen much better performances when [using jemalloc as the global allocator](https://github.com/alexcrichton/jemallocator#documentation).
 
-## Usage and examples
+## Usage and Examples
 
-Currently MeiliDB do not provide an http server but you can run the example binary.
+MeiliDB also provides an example binary that is mostly used for features testing.
+Notice that the example binary is faster to index data as it does read direct CSV files and not JSON HTTP payloads.
 
 The _index_ subcommand has been made to create an index and inject documents into it. Using the command line below, the index will be named _movies_ and the _19 700_ movies of the `datasets/` will be injected in MeiliDB.
 
 ```bash
 cargo run --release --example from_file -- \
-    index example.mdb datasets/movies/data.csv \
+    index example.mdb datasets/movies/movies.csv \
     --schema datasets/movies/schema.toml
 ```
 
@@ -72,7 +141,7 @@ Once the first command is done, you can query the freshly created _movies_ index
 
 ```bash
 cargo run --release --example from_file -- \
-    search example.mdb
+    search example.mdb \
     --number 4 \
     --filter '!adult' \
     id popularity adult original_title
