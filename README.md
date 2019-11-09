@@ -29,12 +29,14 @@ We will be proud if you submit issues and pull requests. You can help to grow th
 
 [![crates.io demo gif](misc/crates-io-demo.gif)](https://crates.meilisearch.com)
 
+> Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
+
 
 
 ## Quick Start
 
 You can deploy your own instant, relevant and typo-tolerant MeiliDB search engine by yourself too.
-Something similar to the demo above can be achieved by following these little three steps first.
+Something similar to the demo above can be achieve by following these little three steps first.
 You will need to create your own web front display to make it pretty though.
 
 ### Deploy the Server
