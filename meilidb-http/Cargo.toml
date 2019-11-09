@@ -33,7 +33,7 @@ walkdir = "2.2.9"
 [dependencies.async-compression]
 default-features = false
 features = ["stream", "gzip", "zlib", "brotli", "zstd"]
-version = "0.1.0-alpha.7"
+version = "=0.1.0-alpha.7"
 
 [dependencies.tide]
 git = "https://github.com/rustasync/tide"
