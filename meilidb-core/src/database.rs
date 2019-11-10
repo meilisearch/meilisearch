@@ -388,6 +388,56 @@ mod tests {
     }
 
     #[test]
+    fn ignored_words_to_long() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let database = Database::open_or_create(dir.path()).unwrap();
+        let env = &database.env;
+
+        let (sender, receiver) = mpsc::sync_channel(100);
+        let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+        let index = database.create_index("test").unwrap();
+
+        let done = database.set_update_callback("test", Box::new(update_fn));
+        assert!(done, "could not set the index update function");
+
+        let schema = {
+            let data = r#"
+                identifier = "id"
+
+                [attributes."name"]
+                displayed = true
+                indexed = true
+            "#;
+            toml::from_str(data).unwrap()
+        };
+
+        let mut writer = env.write_txn().unwrap();
+        let _update_id = index.schema_update(&mut writer, schema).unwrap();
+        writer.commit().unwrap();
+
+        let mut additions = index.documents_addition();
+
+        let doc1 = serde_json::json!({
+            "id": 123,
+            "name": "s̷̡̢̡̧̺̜̞͕͉͉͕̜͔̟̼̥̝͍̟̖͔͔̪͉̲̹̝̣̖͎̞̤̥͓͎̭̩͕̙̩̿̀̋̅̈́̌́̏̍̄̽͂̆̾̀̿̕̚̚͜͠͠ͅͅļ̵̨̨̨̰̦̻̳̖̳͚̬̫͚̦͖͈̲̫̣̩̥̻̙̦̱̼̠̖̻̼̘̖͉̪̜̠̙͖̙̩͔̖̯̩̲̿̽͋̔̿̍̓͂̍̿͊͆̃͗̔̎͐͌̾̆͗́̆̒̔̾̅̚̚͜͜ͅͅī̵̛̦̅̔̓͂͌̾́͂͛̎̋͐͆̽̂̋̋́̾̀̉̓̏̽́̑̀͒̇͋͛̈́̃̉̏͊̌̄̽̿̏̇͘̕̚̕p̶̧̛̛̖̯̗͕̝̗̭̱͙̖̗̟̟̐͆̊̂͐̋̓̂̈́̓͊̆͌̾̾͐͋͗͌̆̿̅͆̈́̈́̉͋̍͊͗̌̓̅̈̎̇̃̎̈́̉̐̋͑̃͘̕͘d̴̢̨̛͕̘̯͖̭̮̝̝̐̊̈̅̐̀͒̀́̈́̀͌̽͛͆͑̀̽̿͛̃̋̇̎̀́̂́͘͠͝ǫ̵̨̛̮̩̘͚̬̯̖̱͍̼͑͑̓̐́̑̿̈́̔͌̂̄͐͝ģ̶̧̜͇̣̭̺̪̺̖̻͖̮̭̣̙̻͒͊͗̓̓͒̀̀ͅ",
+        });
+
+        additions.update_document(doc1);
+
+        let mut writer = env.write_txn().unwrap();
+        let update_id = additions.finalize(&mut writer).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.into_iter().find(|id| *id == update_id);
+
+        let reader = env.read_txn().unwrap();
+        let result = index.update_status(&reader, update_id).unwrap();
+        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+    }
+
+    #[test]
     fn add_schema_attributes_at_end() {
         let dir = tempfile::tempdir().unwrap();
 

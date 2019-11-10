@@ -7,6 +7,8 @@ use meilidb_schema::SchemaAttr;
 use meilidb_tokenizer::{is_cjk, SeqTokenizer, Token, Tokenizer};
 use sdset::SetBuf;
 
+const WORD_LENGTH_LIMIT: usize = 80;
+
 type Word = Vec<u8>; // TODO make it be a SmallVec
 
 pub struct RawIndexer {
@@ -128,21 +130,26 @@ fn index_token(
         match token_to_docindex(id, attr, token) {
             Some(docindex) => {
                 let word = Vec::from(token.word);
-                words_doc_indexes
-                    .entry(word.clone())
-                    .or_insert_with(Vec::new)
-                    .push(docindex);
-                docs_words.entry(id).or_insert_with(Vec::new).push(word);
 
-                if !lower.contains(is_cjk) {
-                    let unidecoded = deunicode_with_tofu(&lower, "");
-                    if unidecoded != lower && !unidecoded.is_empty() {
-                        let word = Vec::from(unidecoded);
-                        words_doc_indexes
-                            .entry(word.clone())
-                            .or_insert_with(Vec::new)
-                            .push(docindex);
-                        docs_words.entry(id).or_insert_with(Vec::new).push(word);
+                if word.len() <= WORD_LENGTH_LIMIT {
+                    words_doc_indexes
+                        .entry(word.clone())
+                        .or_insert_with(Vec::new)
+                        .push(docindex);
+                    docs_words.entry(id).or_insert_with(Vec::new).push(word);
+
+                    if !lower.contains(is_cjk) {
+                        let unidecoded = deunicode_with_tofu(&lower, "");
+                        if unidecoded != lower && !unidecoded.is_empty() {
+                            let word = Vec::from(unidecoded);
+                            if word.len() <= WORD_LENGTH_LIMIT {
+                                words_doc_indexes
+                                    .entry(word.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(docindex);
+                                docs_words.entry(id).or_insert_with(Vec::new).push(word);
+                            }
+                        }
                     }
                 }
             }
