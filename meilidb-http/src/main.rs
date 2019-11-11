@@ -13,6 +13,8 @@ use meilidb_http::routes;
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 pub fn main() -> Result<(), MainError> {
+    env_logger::init();
+
     let opt = Opt::new();
 
     let data = Data::new(opt.clone());

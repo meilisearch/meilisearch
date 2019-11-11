@@ -899,6 +899,7 @@ dependencies = [
  "bincode 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-channel 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "envconfig 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "envconfig_derive 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "heed 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",

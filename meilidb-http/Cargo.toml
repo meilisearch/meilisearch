@@ -11,6 +11,7 @@ edition = "2018"
 bincode = "1.2.0"
 chrono = { version = "0.4.9", features = ["serde"] }
 crossbeam-channel = "0.4.0"
+env_logger = "0.7.1"
 envconfig = "0.5.1"
 envconfig_derive = "0.5.1"
 heed = "0.5.0"
