@@ -22,7 +22,7 @@ pub use self::synonyms_deletion::{apply_synonyms_deletion, SynonymsDeletion};
 
 use std::cmp;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use heed::Result as ZResult;
 use log::debug;
@@ -49,9 +49,7 @@ impl Update {
     pub fn update_type(&self) -> UpdateType {
         match self {
             Update::ClearAll => UpdateType::ClearAll,
-            Update::Schema(schema) => UpdateType::Schema {
-                schema: schema.clone(),
-            },
+            Update::Schema(_) => UpdateType::Schema,
             Update::Customs(_) => UpdateType::Customs,
             Update::DocumentsAddition(addition) => UpdateType::DocumentsAddition {
                 number: addition.len(),
@@ -79,9 +77,10 @@ impl Update {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "name")]
 pub enum UpdateType {
     ClearAll,
-    Schema { schema: Schema },
+    Schema,
     Customs,
     DocumentsAddition { number: usize },
     DocumentsPartial { number: usize },
@@ -93,16 +92,13 @@ pub enum UpdateType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DetailedDuration {
-    pub main: Duration,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProcessedUpdateResult {
     pub update_id: u64,
+    #[serde(rename = "type")]
     pub update_type: UpdateType,
-    pub result: Result<(), String>,
-    pub detailed_duration: DetailedDuration,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub duration: f64, // in seconds
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,9 +108,16 @@ pub struct EnqueuedUpdateResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status")]
 pub enum UpdateStatus {
-    Enqueued(EnqueuedUpdateResult),
-    Processed(ProcessedUpdateResult),
+    Enqueued {
+        #[serde(flatten)]
+        content: EnqueuedUpdateResult
+    },
+    Processed {
+        #[serde(flatten)]
+        content: ProcessedUpdateResult
+    },
     Unknown,
 }
 
@@ -125,13 +128,13 @@ pub fn update_status(
     update_id: u64,
 ) -> MResult<UpdateStatus> {
     match updates_results_store.update_result(reader, update_id)? {
-        Some(result) => Ok(UpdateStatus::Processed(result)),
+        Some(result) => Ok(UpdateStatus::Processed { content: result }),
         None => {
             if let Some(update) = updates_store.get(reader, update_id)? {
-                Ok(UpdateStatus::Enqueued(EnqueuedUpdateResult {
+                Ok(UpdateStatus::Enqueued { content: EnqueuedUpdateResult {
                     update_id,
                     update_type: update.update_type(),
-                }))
+                }})
             } else {
                 Ok(UpdateStatus::Unknown)
             }
@@ -183,9 +186,7 @@ pub fn update_task<'a, 'b>(
         Update::Schema(schema) => {
             let start = Instant::now();
 
-            let update_type = UpdateType::Schema {
-                schema: schema.clone(),
-            };
+            let update_type = UpdateType::Schema;
             let result = apply_schema_update(
                 writer,
                 &schema,
@@ -323,12 +324,11 @@ pub fn update_task<'a, 'b>(
         update_id, update_type, result
     );
 
-    let detailed_duration = DetailedDuration { main: duration };
     let status = ProcessedUpdateResult {
         update_id,
         update_type,
-        result: result.map_err(|e| e.to_string()),
-        detailed_duration,
+        error: result.map_err(|e| e.to_string()).err(),
+        duration: duration.as_secs_f64(),
     };
 
     Ok(status)

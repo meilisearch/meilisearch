@@ -150,19 +150,16 @@ pub async fn get_update_status(ctx: Context<Data>) -> SResult<Response> {
         .map_err(ResponseError::internal)?;
 
     let response = match status {
-        UpdateStatus::Enqueued(data) => {
-            tide::response::json(json!({ "status": "enqueued", "data": data }))
+        UpdateStatus::Unknown => {
+            tide::response::json(json!({ "message": "unknown update id" }))
+                .with_status(StatusCode::NOT_FOUND)
+                .into_response()
+        }
+        status => {
+            tide::response::json(status)
                 .with_status(StatusCode::OK)
                 .into_response()
         }
-        UpdateStatus::Processed(data) => {
-            tide::response::json(json!({ "status": "processed", "data": data }))
-                .with_status(StatusCode::OK)
-                .into_response()
-        }
-        UpdateStatus::Unknown => tide::response::json(json!({ "message": "unknown update id" }))
-            .with_status(StatusCode::NOT_FOUND)
-            .into_response(),
     };
 
     Ok(response)
