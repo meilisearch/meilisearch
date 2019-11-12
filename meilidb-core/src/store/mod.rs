@@ -243,7 +243,7 @@ impl Index {
 
         // retrieve all enqueued updates
         if let Some((last_id, _)) = self.updates.last_update_id(reader)? {
-            for id in last_update_result_id + 1..last_id {
+            for id in last_update_result_id + 1..=last_id {
                 if let Some(update) = self.update_status(reader, id)? {
                     updates.push(update);
                 }
