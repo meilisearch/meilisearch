@@ -68,7 +68,7 @@ fn update_awaiter(receiver: UpdateEvents, env: heed::Env, update_fn: Arc<ArcSwap
             let status = break_try!(result, "update task failed");
 
             // commit the nested transaction if the update was successful, abort it otherwise
-            if status.result.is_ok() {
+            if status.error.is_none() {
                 break_try!(nested_writer.commit(), "commit nested transaction failed");
             } else {
                 nested_writer.abort()
@@ -323,7 +323,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
     }
 
     #[test]
@@ -384,11 +384,11 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_err());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_some());
     }
 
     #[test]
-    fn ignored_words_to_long() {
+    fn ignored_words_too_long() {
         let dir = tempfile::tempdir().unwrap();
 
         let database = Database::open_or_create(dir.path()).unwrap();
@@ -434,7 +434,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
     }
 
     #[test]
@@ -524,7 +524,7 @@ mod tests {
         // check if it has been accepted
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
         reader.abort();
 
         let mut additions = index.documents_addition();
@@ -558,7 +558,7 @@ mod tests {
         // check if it has been accepted
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
 
         // even try to search for a document
         let results = index.query_builder().query(&reader, "21 ", 0..20).unwrap();
@@ -604,7 +604,7 @@ mod tests {
         // check if it has been accepted
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_err());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_some());
     }
 
     #[test]
@@ -668,7 +668,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
 
         let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
         assert!(document.is_none());
@@ -748,7 +748,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
 
         let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
         assert!(document.is_none());
@@ -791,7 +791,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed(status) if status.result.is_ok());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
 
         let document: Option<serde_json::Value> = index
             .document(&reader, None, DocumentId(7900334843754999545))

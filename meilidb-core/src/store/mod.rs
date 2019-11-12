@@ -221,7 +221,7 @@ impl Index {
         &self,
         reader: &heed::RoTxn,
         update_id: u64,
-    ) -> MResult<update::UpdateStatus> {
+    ) -> MResult<Option<update::UpdateStatus>> {
         update::update_status(reader, self.updates, self.updates_results, update_id)
     }
 
@@ -234,17 +234,19 @@ impl Index {
             updates.reserve(last_id as usize);
 
             for id in 0..=last_id {
-                let update = self.update_status(reader, id)?;
-                updates.push(update);
-                last_update_result_id = id;
+                if let Some(update) = self.update_status(reader, id)? {
+                    updates.push(update);
+                    last_update_result_id = id;
+                }
             }
         }
 
         // retrieve all enqueued updates
         if let Some((last_id, _)) = self.updates.last_update_id(reader)? {
-            for id in last_update_result_id + 1..last_id {
-                let update = self.update_status(reader, id)?;
-                updates.push(update);
+            for id in last_update_result_id + 1..=last_id {
+                if let Some(update) = self.update_status(reader, id)? {
+                    updates.push(update);
+                }
             }
         }
 

@@ -91,9 +91,9 @@ pub fn push_documents_addition<D: serde::Serialize>(
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = if is_partial {
-        Update::DocumentsPartial(values)
+        Update::documents_partial(values)
     } else {
-        Update::DocumentsAddition(values)
+        Update::documents_addition(values)
     };
 
     updates_store.put_update(writer, last_update_id, &update)?;

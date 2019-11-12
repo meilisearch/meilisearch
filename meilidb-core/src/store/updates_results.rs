@@ -1,12 +1,11 @@
 use super::BEU64;
 use crate::update::ProcessedUpdateResult;
-use heed::types::{OwnedType, SerdeBincode};
+use heed::types::{OwnedType, SerdeJson};
 use heed::Result as ZResult;
 
 #[derive(Copy, Clone)]
 pub struct UpdatesResults {
-    pub(crate) updates_results:
-        heed::Database<OwnedType<BEU64>, SerdeBincode<ProcessedUpdateResult>>,
+    pub(crate) updates_results: heed::Database<OwnedType<BEU64>, SerdeJson<ProcessedUpdateResult>>,
 }
 
 impl UpdatesResults {

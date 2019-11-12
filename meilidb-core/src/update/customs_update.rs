@@ -18,7 +18,7 @@ pub fn push_customs_update(
 ) -> ZResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
-    let update = Update::Customs(customs);
+    let update = Update::customs(customs);
     updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
