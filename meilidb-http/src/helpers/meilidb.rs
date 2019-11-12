@@ -131,6 +131,12 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
+    pub fn add_attribute_to_search_in(&mut self, value: String) -> &SearchBuilder {
+        let attributes_to_search_in = self.attributes_to_search_in.get_or_insert(HashSet::new());
+        attributes_to_search_in.insert(value);
+        self
+    }
+
     pub fn attributes_to_highlight(&mut self, value: HashSet<String>) -> &SearchBuilder {
         self.attributes_to_highlight = Some(value);
         self
