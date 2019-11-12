@@ -56,7 +56,7 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
     }
     if let Some(attributes_to_search_in) = query.attributes_to_search_in {
         for attr in attributes_to_search_in.split(',') {
-            search_builder.add_retrievable_field(attr.to_string());
+            search_builder.add_attribute_to_search_in(attr.to_string());
         }
     }
     if let Some(attributes_to_crop) = query.attributes_to_crop {
