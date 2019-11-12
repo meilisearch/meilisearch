@@ -24,6 +24,7 @@ use std::cmp;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
 
+use chrono::{DateTime, Utc};
 use heed::Result as ZResult;
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -32,7 +33,85 @@ use crate::{store, DocumentId, MResult};
 use meilidb_schema::Schema;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Update {
+pub struct Update {
+    data: UpdateData,
+    enqueued_at: DateTime<Utc>,
+}
+
+impl Update {
+    fn clear_all() -> Update {
+        Update {
+            data: UpdateData::ClearAll,
+            enqueued_at: Utc::now(),
+        }
+    }
+
+    fn schema(data: Schema) -> Update {
+        Update {
+            data: UpdateData::Schema(data),
+            enqueued_at: Utc::now(),
+        }
+    }
+
+    fn customs(data: Vec<u8>) -> Update {
+        Update {
+            data: UpdateData::Customs(data),
+            enqueued_at: Utc::now(),
+        }
+    }
+
+    fn documents_addition(data: Vec<HashMap<String, serde_json::Value>>) -> Update {
+        Update {
+            data: UpdateData::DocumentsAddition(data),
+            enqueued_at: Utc::now(),
+        }
+    }
+
+    fn documents_partial(data: Vec<HashMap<String, serde_json::Value>>) -> Update {
+        Update {
+            data: UpdateData::DocumentsPartial(data),
+            enqueued_at: Utc::now(),
+        }
+    }
+
+    fn documents_deletion(data: Vec<DocumentId>) -> Update {
+        Update {
+            data: UpdateData::DocumentsDeletion(data),
+            enqueued_at: Utc::now(),
+        }
+    }
+
+    fn synonyms_addition(data: BTreeMap<String, Vec<String>>) -> Update {
+        Update {
+            data: UpdateData::SynonymsAddition(data),
+            enqueued_at: Utc::now(),
+        }
+    }
+
+    fn synonyms_deletion(data: BTreeMap<String, Option<Vec<String>>>) -> Update {
+        Update {
+            data: UpdateData::SynonymsDeletion(data),
+            enqueued_at: Utc::now(),
+        }
+    }
+
+    fn stop_words_addition(data: BTreeSet<String>) -> Update {
+        Update {
+            data: UpdateData::StopWordsAddition(data),
+            enqueued_at: Utc::now(),
+        }
+    }
+
+    fn stop_words_deletion(data: BTreeSet<String>) -> Update {
+        Update {
+            data: UpdateData::StopWordsDeletion(data),
+            enqueued_at: Utc::now(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum UpdateData {
     ClearAll,
     Schema(Schema),
     Customs(Vec<u8>),
@@ -45,31 +124,31 @@ pub enum Update {
     StopWordsDeletion(BTreeSet<String>),
 }
 
-impl Update {
+impl UpdateData {
     pub fn update_type(&self) -> UpdateType {
         match self {
-            Update::ClearAll => UpdateType::ClearAll,
-            Update::Schema(_) => UpdateType::Schema,
-            Update::Customs(_) => UpdateType::Customs,
-            Update::DocumentsAddition(addition) => UpdateType::DocumentsAddition {
+            UpdateData::ClearAll => UpdateType::ClearAll,
+            UpdateData::Schema(_) => UpdateType::Schema,
+            UpdateData::Customs(_) => UpdateType::Customs,
+            UpdateData::DocumentsAddition(addition) => UpdateType::DocumentsAddition {
                 number: addition.len(),
             },
-            Update::DocumentsPartial(addition) => UpdateType::DocumentsPartial {
+            UpdateData::DocumentsPartial(addition) => UpdateType::DocumentsPartial {
                 number: addition.len(),
             },
-            Update::DocumentsDeletion(deletion) => UpdateType::DocumentsDeletion {
+            UpdateData::DocumentsDeletion(deletion) => UpdateType::DocumentsDeletion {
                 number: deletion.len(),
             },
-            Update::SynonymsAddition(addition) => UpdateType::SynonymsAddition {
+            UpdateData::SynonymsAddition(addition) => UpdateType::SynonymsAddition {
                 number: addition.len(),
             },
-            Update::SynonymsDeletion(deletion) => UpdateType::SynonymsDeletion {
+            UpdateData::SynonymsDeletion(deletion) => UpdateType::SynonymsDeletion {
                 number: deletion.len(),
             },
-            Update::StopWordsAddition(addition) => UpdateType::StopWordsAddition {
+            UpdateData::StopWordsAddition(addition) => UpdateType::StopWordsAddition {
                 number: addition.len(),
             },
-            Update::StopWordsDeletion(deletion) => UpdateType::StopWordsDeletion {
+            UpdateData::StopWordsDeletion(deletion) => UpdateType::StopWordsDeletion {
                 number: deletion.len(),
             },
         }
@@ -99,26 +178,28 @@ pub struct ProcessedUpdateResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     pub duration: f64, // in seconds
+    pub enqueued_at: DateTime<Utc>,
+    pub processed_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnqueuedUpdateResult {
     pub update_id: u64,
     pub update_type: UpdateType,
+    pub enqueued_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "status")]
+#[serde(rename_all = "camelCase", tag = "status")]
 pub enum UpdateStatus {
     Enqueued {
         #[serde(flatten)]
-        content: EnqueuedUpdateResult
+        content: EnqueuedUpdateResult,
     },
     Processed {
         #[serde(flatten)]
-        content: ProcessedUpdateResult
+        content: ProcessedUpdateResult,
     },
-    Unknown,
 }
 
 pub fn update_status(
@@ -126,19 +207,19 @@ pub fn update_status(
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     update_id: u64,
-) -> MResult<UpdateStatus> {
+) -> MResult<Option<UpdateStatus>> {
     match updates_results_store.update_result(reader, update_id)? {
-        Some(result) => Ok(UpdateStatus::Processed { content: result }),
-        None => {
-            if let Some(update) = updates_store.get(reader, update_id)? {
-                Ok(UpdateStatus::Enqueued { content: EnqueuedUpdateResult {
+        Some(result) => Ok(Some(UpdateStatus::Processed { content: result })),
+        None => match updates_store.get(reader, update_id)? {
+            Some(update) => Ok(Some(UpdateStatus::Enqueued {
+                content: EnqueuedUpdateResult {
                     update_id,
-                    update_type: update.update_type(),
-                }})
-            } else {
-                Ok(UpdateStatus::Unknown)
-            }
-        }
+                    update_type: update.data.update_type(),
+                    enqueued_at: update.enqueued_at,
+                },
+            })),
+            None => Ok(None),
+        },
     }
 }
 
@@ -167,8 +248,10 @@ pub fn update_task<'a, 'b>(
 ) -> MResult<ProcessedUpdateResult> {
     debug!("Processing update number {}", update_id);
 
-    let (update_type, result, duration) = match update {
-        Update::ClearAll => {
+    let Update { enqueued_at, data } = update;
+
+    let (update_type, result, duration) = match data {
+        UpdateData::ClearAll => {
             let start = Instant::now();
 
             let update_type = UpdateType::ClearAll;
@@ -183,7 +266,7 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        Update::Schema(schema) => {
+        UpdateData::Schema(schema) => {
             let start = Instant::now();
 
             let update_type = UpdateType::Schema;
@@ -199,7 +282,7 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        Update::Customs(customs) => {
+        UpdateData::Customs(customs) => {
             let start = Instant::now();
 
             let update_type = UpdateType::Customs;
@@ -207,7 +290,7 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        Update::DocumentsAddition(documents) => {
+        UpdateData::DocumentsAddition(documents) => {
             let start = Instant::now();
 
             let update_type = UpdateType::DocumentsAddition {
@@ -226,7 +309,7 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        Update::DocumentsPartial(documents) => {
+        UpdateData::DocumentsPartial(documents) => {
             let start = Instant::now();
 
             let update_type = UpdateType::DocumentsPartial {
@@ -245,7 +328,7 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        Update::DocumentsDeletion(documents) => {
+        UpdateData::DocumentsDeletion(documents) => {
             let start = Instant::now();
 
             let update_type = UpdateType::DocumentsDeletion {
@@ -264,7 +347,7 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        Update::SynonymsAddition(synonyms) => {
+        UpdateData::SynonymsAddition(synonyms) => {
             let start = Instant::now();
 
             let update_type = UpdateType::SynonymsAddition {
@@ -275,7 +358,7 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        Update::SynonymsDeletion(synonyms) => {
+        UpdateData::SynonymsDeletion(synonyms) => {
             let start = Instant::now();
 
             let update_type = UpdateType::SynonymsDeletion {
@@ -286,7 +369,7 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        Update::StopWordsAddition(stop_words) => {
+        UpdateData::StopWordsAddition(stop_words) => {
             let start = Instant::now();
 
             let update_type = UpdateType::StopWordsAddition {
@@ -298,7 +381,7 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        Update::StopWordsDeletion(stop_words) => {
+        UpdateData::StopWordsDeletion(stop_words) => {
             let start = Instant::now();
 
             let update_type = UpdateType::StopWordsDeletion {
@@ -329,6 +412,8 @@ pub fn update_task<'a, 'b>(
         update_type,
         error: result.map_err(|e| e.to_string()).err(),
         duration: duration.as_secs_f64(),
+        enqueued_at,
+        processed_at: Utc::now(),
     };
 
     Ok(status)

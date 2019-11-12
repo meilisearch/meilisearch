@@ -26,7 +26,7 @@ pub fn push_clear_all(
     updates_results_store: store::UpdatesResults,
 ) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
-    let update = Update::ClearAll;
+    let update = Update::clear_all();
     updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)

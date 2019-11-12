@@ -5,8 +5,7 @@ use heed::Result as ZResult;
 
 #[derive(Copy, Clone)]
 pub struct UpdatesResults {
-    pub(crate) updates_results:
-        heed::Database<OwnedType<BEU64>, SerdeJson<ProcessedUpdateResult>>,
+    pub(crate) updates_results: heed::Database<OwnedType<BEU64>, SerdeJson<ProcessedUpdateResult>>,
 }
 
 impl UpdatesResults {

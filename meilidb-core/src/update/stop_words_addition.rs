@@ -53,7 +53,7 @@ pub fn push_stop_words_addition(
 ) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
-    let update = Update::StopWordsAddition(addition);
+    let update = Update::stop_words_addition(addition);
     updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)

@@ -323,7 +323,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed { content } if content.error.is_none());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
     }
 
     #[test]
@@ -384,7 +384,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed { content } if content.error.is_some());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_some());
     }
 
     #[test]
@@ -434,7 +434,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed { content } if content.error.is_none());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
     }
 
     #[test]
@@ -524,7 +524,7 @@ mod tests {
         // check if it has been accepted
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed { content } if content.error.is_none());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
         reader.abort();
 
         let mut additions = index.documents_addition();
@@ -558,7 +558,7 @@ mod tests {
         // check if it has been accepted
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed { content } if content.error.is_none());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
 
         // even try to search for a document
         let results = index.query_builder().query(&reader, "21 ", 0..20).unwrap();
@@ -604,7 +604,7 @@ mod tests {
         // check if it has been accepted
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed { content } if content.error.is_some());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_some());
     }
 
     #[test]
@@ -668,7 +668,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed { content } if content.error.is_none());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
 
         let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
         assert!(document.is_none());
@@ -748,7 +748,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed { content } if content.error.is_none());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
 
         let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
         assert!(document.is_none());
@@ -791,7 +791,7 @@ mod tests {
 
         let reader = env.read_txn().unwrap();
         let result = index.update_status(&reader, update_id).unwrap();
-        assert_matches!(result, UpdateStatus::Processed { content } if content.error.is_none());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
 
         let document: Option<serde_json::Value> = index
             .document(&reader, None, DocumentId(7900334843754999545))

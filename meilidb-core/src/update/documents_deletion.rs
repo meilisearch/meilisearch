@@ -76,7 +76,7 @@ pub fn push_documents_deletion(
 ) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
-    let update = Update::DocumentsDeletion(deletion);
+    let update = Update::documents_deletion(deletion);
     updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)

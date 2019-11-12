@@ -864,6 +864,7 @@ dependencies = [
  "assert_matches 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bincode 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-channel 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "csv 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "deunicode 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
