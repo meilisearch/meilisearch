@@ -44,6 +44,7 @@ You will need to create your own web front display to make it pretty though.
 You can deploy the server on your own machine, it will listen to HTTP requests on the 8080 port by default.
 
 ```bash
+rustup override set nightly
 cargo run --release
 ```
 
