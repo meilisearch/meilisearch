@@ -187,7 +187,7 @@ pub async fn delete_index(ctx: Context<Data>) -> SResult<StatusCode> {
         .map_err(ResponseError::internal)?;
 
     if found {
-        Ok(StatusCode::OK)
+        Ok(StatusCode::NO_CONTENT)
     } else {
         Ok(StatusCode::NOT_FOUND)
     }
