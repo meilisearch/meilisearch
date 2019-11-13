@@ -43,11 +43,17 @@ You will need to create your own web front display to make it pretty though.
 
 ### Deploy the Server
 
+If you have not installed Rust and its package manager `cargo` yet, go to [the installation page](https://www.rust-lang.org/tools/install).<br/>
 You can deploy the server on your own machine, it will listen to HTTP requests on the 8080 port by default.
 
 ```bash
 rustup override set nightly
 cargo run --release
+```
+
+For more logs during the execution, run:
+```bash
+RUST_LOG=info cargo run --release
 ```
 
 ### Create an Index and Upload Some Documents
