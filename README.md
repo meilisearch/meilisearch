@@ -4,7 +4,9 @@
 [![dependency status](https://deps.rs/repo/github/meilisearch/MeiliDB/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliDB)
 [![License](https://img.shields.io/badge/license-commons%20clause-lightgrey)](https://commonsclause.com/)
 
-A _full-text search database_ based on the fast [LMDB key-value store](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
+Ultra relevant and instant full-text search API.
+
+MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engine. The search and indexation are fully customizable and handles features like typo-tolerance, filters, and ranking.
 
 ## Features
 
