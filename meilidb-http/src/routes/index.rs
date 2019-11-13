@@ -66,9 +66,6 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
 
     let created_index = match db.create_index(&index_name) {
         Ok(index) => index,
-        Err(meilidb_core::Error::IndexAlreadyExists) => db.open_index(&index_name).ok_or(
-            ResponseError::internal("index not found but must have been found"),
-        )?,
         Err(e) => return Err(ResponseError::create_index(e)),
     };
 
