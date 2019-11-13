@@ -42,11 +42,11 @@ jobs:
         displayName: 'Build MeiliDB'
       - task: CopyFiles@2
         inputs:
-          contents: '$(System.DefaultWorkingDirectory)/target/release/libmeilidb.rlib'
+          contents: '$(System.DefaultWorkingDirectory)/target/release/meilidb-http'
           targetFolder: $(Build.ArtifactStagingDirectory)
         displayName: 'Copy build'
       - task: PublishBuildArtifacts@1
         inputs:
-          artifactName: libmeilidb.rlib
+          artifactName: meilidb
         displayName: 'Upload artifacts'
 
