@@ -277,7 +277,6 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
     index.main.put_ranked_map(writer, &ranked_map)?;
     index.main.put_number_of_documents(writer, |_| 0)?;
     index.postings_lists.clear(writer)?;
-    index.docs_words.clear(writer)?;
 
     // 3. re-index chunks of documents (otherwise we make the borrow checker unhappy)
     for documents_ids in documents_ids_to_reindex.chunks(100) {
@@ -334,10 +333,10 @@ pub fn write_documents_addition_index(
     number_of_inserted_documents: usize,
     indexer: RawIndexer,
 ) -> MResult<()> {
-    let indexed = indexer.build();
+    let words_doc_indexes = indexer.build();
     let mut delta_words_builder = SetBuilder::memory();
 
-    for (word, delta_set) in indexed.words_doc_indexes {
+    for (word, delta_set) in words_doc_indexes {
         delta_words_builder.insert(&word).unwrap();
 
         let set = match index.postings_lists.postings_list(writer, &word)? {
@@ -348,9 +347,6 @@ pub fn write_documents_addition_index(
         index.postings_lists.put_postings_list(writer, &word, &set)?;
     }
 
-    for (id, words) in indexed.docs_words {
-        index.docs_words.put_doc_words(writer, id, &words)?;
-    }
 
     let delta_words = delta_words_builder
         .into_inner()

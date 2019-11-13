@@ -1,13 +1,14 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::borrow::Cow;
+use std::collections::{BTreeSet, HashSet};
 
-use fst::{SetBuilder, Streamer};
+use fst::SetBuilder;
 use meilisearch_schema::Schema;
-use sdset::{duo::DifferenceByKey, SetBuf, SetOperation};
+use sdset::{duo::Difference, duo::DifferenceByKey, SetBuf, SetOperation};
 
 use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::serde::extract_document_id;
-use crate::store;
+use crate::store::{self, Postings};
 use crate::update::{next_update_id, compute_short_prefixes, Update};
 use crate::{DocumentId, Error, MResult, RankedMap};
 
@@ -114,55 +115,52 @@ pub fn apply_documents_deletion(
         )
         .collect();
 
-    let mut words_document_ids = HashMap::new();
-    for id in idset {
+    for id in idset.as_slice() {
         // remove all the ranked attributes from the ranked_map
         for ranked_attr in &ranked_attrs {
-            ranked_map.remove(id, *ranked_attr);
-        }
-
-        if let Some(words) = index.docs_words.doc_words(writer, id)? {
-            let mut stream = words.stream();
-            while let Some(word) = stream.next() {
-                let word = word.to_vec();
-                words_document_ids
-                    .entry(word)
-                    .or_insert_with(Vec::new)
-                    .push(id);
-            }
+            ranked_map.remove(*id, *ranked_attr);
         }
     }
 
     let mut deleted_documents = HashSet::new();
     let mut removed_words = BTreeSet::new();
-    for (word, document_ids) in words_document_ids {
-        let document_ids = SetBuf::from_dirty(document_ids);
 
-        if let Some(postings) = index.postings_lists.postings_list(writer, &word)? {
-            let op = DifferenceByKey::new(&postings.matches, &document_ids, |d| d.document_id, |id| *id);
-            let doc_indexes = op.into_set_buf();
+    // iter over every postings lists and remove the documents matches from those,
+    // delete the entire postings list entry when emptied
+    let mut iter = index.postings_lists.postings_lists.iter_mut(writer)?;
+    while let Some(result) = iter.next() {
+        let (word, postings_list) = result?;
 
-            if !doc_indexes.is_empty() {
-                index.postings_lists.put_postings_list(writer, &word, &doc_indexes)?;
-            } else {
-                index.postings_lists.del_postings_list(writer, &word)?;
-                removed_words.insert(word);
-            }
+        let Postings { docids, matches } = postings_list;
+        let new_docids: SetBuf<DocumentId> = Difference::new(&docids, &idset).into_set_buf();
+
+        let removed_docids: SetBuf<DocumentId> = Difference::new(&idset, &docids).into_set_buf();
+        deleted_documents.extend(removed_docids);
+
+        if new_docids.is_empty() {
+            iter.del_current()?;
+            removed_words.insert(word.to_owned());
+        } else {
+            let op = DifferenceByKey::new(&matches, &idset, |d| d.document_id, |id| *id);
+            let matches = op.into_set_buf();
+
+            let docids = Cow::Owned(new_docids);
+            let matches = Cow::Owned(matches);
+            let postings_list = Postings { docids, matches };
+
+            iter.put_current(word, &postings_list)?;
         }
+    }
 
-        for id in document_ids {
-            index.documents_fields_counts.del_all_document_fields_counts(writer, id)?;
-            if index.documents_fields.del_all_document_fields(writer, id)? != 0 {
-                deleted_documents.insert(id);
-            }
-        }
+    drop(iter);
+
+    // remove data associated to each deleted document
+    for id in idset {
+        index.documents_fields_counts.del_all_document_fields_counts(writer, id)?;
+        index.documents_fields.del_all_document_fields(writer, id)?;
     }
 
     let deleted_documents_len = deleted_documents.len() as u64;
-    for id in deleted_documents {
-        index.docs_words.del_doc_words(writer, id)?;
-    }
-
     let removed_words = fst::Set::from_iter(removed_words).unwrap();
     let words = match index.main.words_fst(writer)? {
         Some(words_set) => {

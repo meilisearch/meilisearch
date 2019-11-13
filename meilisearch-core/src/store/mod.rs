@@ -1,4 +1,3 @@
-mod docs_words;
 mod prefix_documents_cache;
 mod prefix_postings_lists_cache;
 mod documents_fields;
@@ -9,7 +8,6 @@ mod synonyms;
 mod updates;
 mod updates_results;
 
-pub use self::docs_words::DocsWords;
 pub use self::prefix_documents_cache::PrefixDocumentsCache;
 pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
 pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
@@ -160,10 +158,6 @@ fn synonyms_name(name: &str) -> String {
     format!("store-{}-synonyms", name)
 }
 
-fn docs_words_name(name: &str) -> String {
-    format!("store-{}-docs-words", name)
-}
-
 fn prefix_documents_cache_name(name: &str) -> String {
     format!("store-{}-prefix-documents-cache", name)
 }
@@ -187,7 +181,6 @@ pub struct Index {
     pub documents_fields: DocumentsFields,
     pub documents_fields_counts: DocumentsFieldsCounts,
     pub synonyms: Synonyms,
-    pub docs_words: DocsWords,
     pub prefix_documents_cache: PrefixDocumentsCache,
     pub prefix_postings_lists_cache: PrefixPostingsListsCache,
 
@@ -385,7 +378,6 @@ pub fn create(
     let documents_fields_name = documents_fields_name(name);
     let documents_fields_counts_name = documents_fields_counts_name(name);
     let synonyms_name = synonyms_name(name);
-    let docs_words_name = docs_words_name(name);
     let prefix_documents_cache_name = prefix_documents_cache_name(name);
     let prefix_postings_lists_cache_name = prefix_postings_lists_cache_name(name);
     let updates_name = updates_name(name);
@@ -397,7 +389,6 @@ pub fn create(
     let documents_fields = env.create_database(Some(&documents_fields_name))?;
     let documents_fields_counts = env.create_database(Some(&documents_fields_counts_name))?;
     let synonyms = env.create_database(Some(&synonyms_name))?;
-    let docs_words = env.create_database(Some(&docs_words_name))?;
     let prefix_documents_cache = env.create_database(Some(&prefix_documents_cache_name))?;
     let prefix_postings_lists_cache = env.create_database(Some(&prefix_postings_lists_cache_name))?;
     let updates = update_env.create_database(Some(&updates_name))?;
@@ -409,7 +400,6 @@ pub fn create(
         documents_fields: DocumentsFields { documents_fields },
         documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
         synonyms: Synonyms { synonyms },
-        docs_words: DocsWords { docs_words },
         prefix_postings_lists_cache: PrefixPostingsListsCache { prefix_postings_lists_cache },
         prefix_documents_cache: PrefixDocumentsCache { prefix_documents_cache },
         updates: Updates { updates },
@@ -430,7 +420,6 @@ pub fn open(
     let documents_fields_name = documents_fields_name(name);
     let documents_fields_counts_name = documents_fields_counts_name(name);
     let synonyms_name = synonyms_name(name);
-    let docs_words_name = docs_words_name(name);
     let prefix_documents_cache_name = prefix_documents_cache_name(name);
     let prefix_postings_lists_cache_name = prefix_postings_lists_cache_name(name);
     let updates_name = updates_name(name);
@@ -457,10 +446,6 @@ pub fn open(
         Some(synonyms) => synonyms,
         None => return Ok(None),
     };
-    let docs_words = match env.open_database(Some(&docs_words_name))? {
-        Some(docs_words) => docs_words,
-        None => return Ok(None),
-    };
     let prefix_documents_cache = match env.open_database(Some(&prefix_documents_cache_name))? {
         Some(prefix_documents_cache) => prefix_documents_cache,
         None => return Ok(None),
@@ -484,7 +469,6 @@ pub fn open(
         documents_fields: DocumentsFields { documents_fields },
         documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
         synonyms: Synonyms { synonyms },
-        docs_words: DocsWords { docs_words },
         prefix_documents_cache: PrefixDocumentsCache { prefix_documents_cache },
         prefix_postings_lists_cache: PrefixPostingsListsCache { prefix_postings_lists_cache },
         updates: Updates { updates },
@@ -504,7 +488,6 @@ pub fn clear(
     index.documents_fields.clear(writer)?;
     index.documents_fields_counts.clear(writer)?;
     index.synonyms.clear(writer)?;
-    index.docs_words.clear(writer)?;
     index.prefix_documents_cache.clear(writer)?;
     index.prefix_postings_lists_cache.clear(writer)?;
     index.updates.clear(update_writer)?;

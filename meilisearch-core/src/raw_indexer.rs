@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 use crate::{DocIndex, DocumentId};
@@ -15,12 +15,6 @@ pub struct RawIndexer {
     word_limit: usize, // the maximum number of indexed words
     stop_words: fst::Set,
     words_doc_indexes: BTreeMap<Word, Vec<DocIndex>>,
-    docs_words: HashMap<DocumentId, Vec<Word>>,
-}
-
-pub struct Indexed {
-    pub words_doc_indexes: BTreeMap<Word, SetBuf<DocIndex>>,
-    pub docs_words: HashMap<DocumentId, fst::Set>,
 }
 
 impl RawIndexer {
@@ -33,7 +27,6 @@ impl RawIndexer {
             word_limit: limit,
             stop_words,
             words_doc_indexes: BTreeMap::new(),
-            docs_words: HashMap::new(),
         }
     }
 
@@ -48,7 +41,6 @@ impl RawIndexer {
                 self.word_limit,
                 &self.stop_words,
                 &mut self.words_doc_indexes,
-                &mut self.docs_words,
             );
 
             number_of_words += 1;
@@ -74,7 +66,6 @@ impl RawIndexer {
                 self.word_limit,
                 &self.stop_words,
                 &mut self.words_doc_indexes,
-                &mut self.docs_words,
             );
 
             if !must_continue {
@@ -83,27 +74,12 @@ impl RawIndexer {
         }
     }
 
-    pub fn build(self) -> Indexed {
-        let words_doc_indexes = self
+    pub fn build(self) -> BTreeMap<Word, SetBuf<DocIndex>> {
+        self
             .words_doc_indexes
             .into_iter()
             .map(|(word, indexes)| (word, SetBuf::from_dirty(indexes)))
-            .collect();
-
-        let docs_words = self
-            .docs_words
-            .into_iter()
-            .map(|(id, mut words)| {
-                words.sort_unstable();
-                words.dedup();
-                (id, fst::Set::from_iter(words).unwrap())
-            })
-            .collect();
-
-        Indexed {
-            words_doc_indexes,
-            docs_words,
-        }
+            .collect()
     }
 }
 
@@ -114,7 +90,6 @@ fn index_token(
     word_limit: usize,
     stop_words: &fst::Set,
     words_doc_indexes: &mut BTreeMap<Word, Vec<DocIndex>>,
-    docs_words: &mut HashMap<DocumentId, Vec<Word>>,
 ) -> bool {
     if token.word_index >= word_limit {
         return false;
@@ -136,7 +111,6 @@ fn index_token(
                         .entry(word.clone())
                         .or_insert_with(Vec::new)
                         .push(docindex);
-                    docs_words.entry(id).or_insert_with(Vec::new).push(word);
 
                     if !lower.contains(is_cjk) {
                         let unidecoded = deunicode_with_tofu(&lower, "");
@@ -147,7 +121,6 @@ fn index_token(
                                     .entry(word.clone())
                                     .or_insert_with(Vec::new)
                                     .push(docindex);
-                                docs_words.entry(id).or_insert_with(Vec::new).push(word);
                             }
                         }
                     }
@@ -189,9 +162,7 @@ mod tests {
         let text = "Zut, l’aspirateur, j’ai oublié de l’éteindre !";
         indexer.index_text(docid, attr, text);
 
-        let Indexed {
-            words_doc_indexes, ..
-        } = indexer.build();
+        let words_doc_indexes = indexer.build();
 
         assert!(words_doc_indexes.get(&b"l"[..]).is_some());
         assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
@@ -211,9 +182,7 @@ mod tests {
         let text = vec!["Zut, l’aspirateur, j’ai oublié de l’éteindre !"];
         indexer.index_text_seq(docid, attr, text);
 
-        let Indexed {
-            words_doc_indexes, ..
-        } = indexer.build();
+        let words_doc_indexes = indexer.build();
 
         assert!(words_doc_indexes.get(&b"l"[..]).is_some());
         assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
@@ -236,9 +205,7 @@ mod tests {
         let text = "Zut, l’aspirateur, j’ai oublié de l’éteindre !";
         indexer.index_text(docid, attr, text);
 
-        let Indexed {
-            words_doc_indexes, ..
-        } = indexer.build();
+        let words_doc_indexes = indexer.build();
 
         assert!(words_doc_indexes.get(&b"l"[..]).is_none());
         assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
@@ -260,9 +227,7 @@ mod tests {
         let text = "🇯🇵";
         indexer.index_text(docid, attr, text);
 
-        let Indexed {
-            words_doc_indexes, ..
-        } = indexer.build();
+        let words_doc_indexes = indexer.build();
 
         assert!(words_doc_indexes
             .get(&"🇯🇵".to_owned().into_bytes())
