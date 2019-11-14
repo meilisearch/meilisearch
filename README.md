@@ -112,7 +112,7 @@ curl 'http://127.0.0.1:8080/indexes/movies/search?q=botman'
 
 ## Performances
 
-With a database composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed.
+With a dataset composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed.
 So more than _300 000_ fields indexed for _35 million_ stored we can handle more than _2.8k req/sec_ with an average response time of _9 ms_ on an Intel i7-7700 (8) @ 4.2GHz.
 
 Requests are made using [wrk](https://github.com/wg/wrk) and scripted to simulate real users queries.
@@ -127,6 +127,9 @@ Running 10s test @ http://localhost:2230
 Requests/sec:   2806.46
 Transfer/sec:    759.17KB
 ```
+
+We also indexed a dataset containing something like _12 millions_ cities names in _24 minutes_ on a machine with _8 cores_, _64 GB of RAM_ and a _300 GB NMVe_ SSD.<br/>
+The resulting database was _16 GB_ and search results were between _30 ms_ and _4 seconds_ for short prefix queries.
 
 ### Notes
 
@@ -151,7 +154,7 @@ Once the first command is done, you can query the freshly created _movies_ index
 ```bash
 cargo run --release --example from_file -- \
     search example.mdb \
-    --number 4 \
+    --number-results 4 \
     --filter '!adult' \
     id popularity adult original_title
 ```
