@@ -36,6 +36,12 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
     let env = &ctx.state().db.env;
     let reader = env.read_txn().map_err(ResponseError::internal)?;
 
+    let schema = index
+        .main
+        .schema(&reader)
+        .map_err(ResponseError::internal)?
+        .ok_or(ResponseError::open_index("No Schema found"))?;
+
     let query: SearchQuery = ctx
         .url_query()
         .map_err(|_| ResponseError::bad_request("invalid query parameter"))?;
@@ -61,18 +67,31 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
     }
     if let Some(attributes_to_crop) = query.attributes_to_crop {
         let crop_length = query.crop_length.unwrap_or(200);
-        let attributes_to_crop = attributes_to_crop
-            .split(',')
-            .map(|r| (r.to_string(), crop_length))
-            .collect();
-        search_builder.attributes_to_crop(attributes_to_crop);
+        if attributes_to_crop == "*" {
+            let attributes_to_crop = schema
+                .iter()
+                .map(|(attr, ..)| (attr.to_string(), crop_length))
+                .collect();
+            search_builder.attributes_to_crop(attributes_to_crop);
+        } else {
+            let attributes_to_crop = attributes_to_crop
+                .split(',')
+                .map(|r| (r.to_string(), crop_length))
+                .collect();
+            search_builder.attributes_to_crop(attributes_to_crop);
+        }
     }
 
     if let Some(attributes_to_highlight) = query.attributes_to_highlight {
-        let attributes_to_highlight = attributes_to_highlight
-            .split(',')
-            .map(ToString::to_string)
-            .collect();
+        let attributes_to_highlight = if attributes_to_highlight == "*" {
+            schema.iter().map(|(attr, ..)| attr.to_string()).collect()
+        } else {
+            attributes_to_highlight
+                .split(',')
+                .map(ToString::to_string)
+                .collect()
+        };
+
         search_builder.attributes_to_highlight(attributes_to_highlight);
     }
 

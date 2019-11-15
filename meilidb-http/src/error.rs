@@ -17,6 +17,7 @@ pub enum ResponseError {
     DocumentNotFound(String),
     MissingHeader(String),
     BadParameter(String, String),
+    OpenIndex(String),
     CreateIndex(String),
     Maintenance,
 }
@@ -52,6 +53,10 @@ impl ResponseError {
 
     pub fn bad_parameter(name: impl Display, message: impl Display) -> ResponseError {
         ResponseError::BadParameter(name.to_string(), message.to_string())
+    }
+
+    pub fn open_index(message: impl Display) -> ResponseError {
+        ResponseError::OpenIndex(message.to_string())
     }
 
     pub fn create_index(message: impl Display) -> ResponseError {
@@ -94,6 +99,10 @@ impl IntoResponse for ResponseError {
             ),
             ResponseError::CreateIndex(err) => error(
                 format!("Impossible to create index; {}", err),
+                StatusCode::BAD_REQUEST,
+            ),
+            ResponseError::OpenIndex(err) => error(
+                format!("Impossible to open index; {}", err),
                 StatusCode::BAD_REQUEST,
             ),
             ResponseError::Maintenance => error(

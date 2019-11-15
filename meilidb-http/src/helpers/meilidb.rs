@@ -235,43 +235,35 @@ impl<'a> SearchBuilder<'a> {
                 }
                 fields = Some(set);
             }
-            let mut document: IndexMap<String, Value> = self
+
+            let document: IndexMap<String, Value> = self
                 .index
                 .document(reader, fields.as_ref(), doc.id)
                 .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
                 .ok_or(Error::DocumentNotFound(doc.id.0))?;
 
+            let mut formatted = document.clone();
             let mut matches = doc.highlights.clone();
 
             // Crops fields if needed
-            if let Some(fields) = self.attributes_to_crop.clone() {
-                for (field, length) in fields {
-                    let _ = crop_document(&mut document, &mut matches, &schema, &field, length);
-                }
+            if let Some(fields) = &self.attributes_to_crop {
+                crop_document(&mut formatted, &mut matches, &schema, fields);
             }
 
             // Transform to readable matches
             let matches = calculate_matches(matches, self.attributes_to_retrieve.clone(), &schema);
 
             if !self.matches {
-                if let Some(attributes_to_highlight) = self.attributes_to_highlight.clone() {
-                    let highlights = calculate_highlights(
-                        document.clone(),
-                        matches.clone(),
-                        attributes_to_highlight,
-                    );
-                    for (key, value) in highlights {
-                        if let Some(content) = document.get_mut(&key) {
-                            *content = value;
-                        }
-                    }
+                if let Some(attributes_to_highlight) = &self.attributes_to_highlight {
+                    formatted = calculate_highlights(&formatted, &matches, attributes_to_highlight);
                 }
             }
 
             let matches_info = if self.matches { Some(matches) } else { None };
 
             let hit = SearchHit {
-                hit: document,
+                document,
+                formatted,
                 matches_info,
             };
 
@@ -388,7 +380,9 @@ pub type MatchesInfos = HashMap<String, Vec<MatchPosition>>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchHit {
     #[serde(flatten)]
-    pub hit: IndexMap<String, Value>,
+    pub document: IndexMap<String, Value>,
+    #[serde(rename = "_formatted", skip_serializing_if = "IndexMap::is_empty")]
+    pub formatted: IndexMap<String, Value>,
     #[serde(rename = "_matchesInfo", skip_serializing_if = "Option::is_none")]
     pub matches_info: Option<MatchesInfos>,
 }
@@ -431,32 +425,31 @@ fn crop_document(
     document: &mut IndexMap<String, Value>,
     matches: &mut Vec<Highlight>,
     schema: &Schema,
-    field: &str,
-    length: usize,
-) -> Result<(), Error> {
+    fields: &HashMap<String, usize>,
+) {
     matches.sort_unstable_by_key(|m| (m.char_index, m.char_length));
 
-    let attribute = schema
-        .attribute(field)
-        .ok_or(Error::AttributeNotFoundOnSchema(field.to_string()))?;
-    let selected_matches = matches
-        .iter()
-        .filter(|m| SchemaAttr::new(m.attribute) == attribute)
-        .cloned();
-    let original_text = match document.get(field) {
-        Some(Value::String(text)) => text,
-        Some(_) => return Err(Error::CropFieldWrongType(field.to_string())),
-        None => return Err(Error::AttributeNotFoundOnDocument(field.to_string())),
-    };
-    let (cropped_text, cropped_matches) = crop_text(&original_text, selected_matches, length);
+    for (field, length) in fields {
+        let attribute = match schema.attribute(field) {
+            Some(attribute) => attribute,
+            None => continue,
+        };
 
-    document.insert(
-        field.to_string(),
-        serde_json::value::Value::String(cropped_text),
-    );
-    matches.retain(|m| SchemaAttr::new(m.attribute) != attribute);
-    matches.extend_from_slice(&cropped_matches);
-    Ok(())
+        let selected_matches = matches
+            .iter()
+            .filter(|m| SchemaAttr::new(m.attribute) == attribute)
+            .cloned();
+
+        if let Some(Value::String(ref mut original_text)) = document.get_mut(field) {
+            let (cropped_text, cropped_matches) =
+                crop_text(original_text, selected_matches, *length);
+
+            *original_text = cropped_text;
+
+            matches.retain(|m| SchemaAttr::new(m.attribute) != attribute);
+            matches.extend_from_slice(&cropped_matches);
+        }
+    }
 }
 
 fn calculate_matches(
@@ -496,13 +489,14 @@ fn calculate_matches(
 }
 
 fn calculate_highlights(
-    document: IndexMap<String, Value>,
-    matches: MatchesInfos,
-    attributes_to_highlight: HashSet<String>,
-) -> HighlightInfos {
-    let mut highlight_result: HashMap<String, Value> = HashMap::new();
+    document: &IndexMap<String, Value>,
+    matches: &MatchesInfos,
+    attributes_to_highlight: &HashSet<String>,
+) -> IndexMap<String, Value> {
+    let mut highlight_result = IndexMap::new();
+
     for (attribute, matches) in matches.iter() {
-        if attributes_to_highlight.contains("*") || attributes_to_highlight.contains(attribute) {
+        if attributes_to_highlight.contains(attribute) {
             if let Some(Value::String(value)) = document.get(attribute) {
                 let value: Vec<_> = value.chars().collect();
                 let mut highlighted_value = String::new();
@@ -527,6 +521,7 @@ fn calculate_highlights(
             };
         }
     }
+
     highlight_result
 }
 
@@ -543,9 +538,10 @@ mod tests {
 
         let document: IndexMap<String, Value> = serde_json::from_str(data).unwrap();
         let mut attributes_to_highlight = HashSet::new();
-        attributes_to_highlight.insert("*".to_string());
+        attributes_to_highlight.insert("title".to_string());
+        attributes_to_highlight.insert("description".to_string());
 
-        let mut matches: HashMap<String, Vec<MatchPosition>> = HashMap::new();
+        let mut matches = HashMap::new();
 
         let mut m = Vec::new();
         m.push(MatchPosition {
@@ -560,9 +556,9 @@ mod tests {
             length: 9,
         });
         matches.insert("description".to_string(), m);
-        let result = super::calculate_highlights(document, matches, attributes_to_highlight);
+        let result = super::calculate_highlights(&document, &matches, &attributes_to_highlight);
 
-        let mut result_expected = HashMap::new();
+        let mut result_expected = IndexMap::new();
         result_expected.insert(
             "title".to_string(),
             Value::String("<em>Fondation</em> (Isaac ASIMOV)".to_string()),
