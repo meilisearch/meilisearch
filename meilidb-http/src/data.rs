@@ -174,16 +174,10 @@ impl Data {
             inner: Arc::new(inner_data),
         };
 
-        for index_name in db.indexes_names().unwrap() {
-            let callback_context = data.clone();
-            let callback_name = index_name.clone();
-            db.set_update_callback(
-                index_name,
-                Box::new(move |status| {
-                    index_update_callback(&callback_name, &callback_context, status);
-                }),
-            );
-        }
+        let callback_context = data.clone();
+        db.set_update_callback(Box::new(move |index_name, status| {
+            index_update_callback(&index_name, &callback_context, status);
+        }));
 
         data
     }
