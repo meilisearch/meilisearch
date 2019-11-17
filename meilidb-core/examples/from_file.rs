@@ -195,8 +195,9 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     );
 
     if let Some(path) = command.compact_to_path {
+        fs::create_dir_all(&path)?;
         let start = Instant::now();
-        let _file = database.copy_and_compact_to_path(&path)?;
+        let _file = database.copy_and_compact_to_path(path.join("data.mdb"))?;
         println!(
             "database compacted in {:.2?} at: {:?}",
             start.elapsed(),
