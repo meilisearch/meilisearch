@@ -4,6 +4,7 @@ members = [
     "meilidb-http",
     "meilidb-schema",
     "meilidb-tokenizer",
+    "meilidb-types",
 ]
 
 [profile.release]
