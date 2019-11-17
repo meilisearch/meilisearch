@@ -31,7 +31,7 @@ impl Main {
         match self.main.get::<Str, ByteSlice>(reader, WORDS_KEY)? {
             Some(bytes) => {
                 let len = bytes.len();
-                let bytes = Arc::from(bytes);
+                let bytes = Arc::new(bytes.to_owned());
                 let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
                 Ok(Some(fst::Set::from(fst)))
             }
@@ -68,7 +68,7 @@ impl Main {
         match self.main.get::<Str, ByteSlice>(reader, SYNONYMS_KEY)? {
             Some(bytes) => {
                 let len = bytes.len();
-                let bytes = Arc::from(bytes);
+                let bytes = Arc::new(bytes.to_owned());
                 let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
                 Ok(Some(fst::Set::from(fst)))
             }
@@ -86,7 +86,7 @@ impl Main {
         match self.main.get::<Str, ByteSlice>(reader, STOP_WORDS_KEY)? {
             Some(bytes) => {
                 let len = bytes.len();
-                let bytes = Arc::from(bytes);
+                let bytes = Arc::new(bytes.to_owned());
                 let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
                 Ok(Some(fst::Set::from(fst)))
             }

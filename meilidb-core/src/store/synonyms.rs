@@ -30,7 +30,7 @@ impl Synonyms {
         match self.synonyms.get(reader, word)? {
             Some(bytes) => {
                 let len = bytes.len();
-                let bytes = Arc::from(bytes);
+                let bytes = Arc::new(bytes.to_owned());
                 let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
                 Ok(Some(fst::Set::from(fst)))
             }
