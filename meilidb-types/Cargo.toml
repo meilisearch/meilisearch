@@ -4,6 +4,14 @@ version = "0.1.0"
 authors = ["Clément Renault <renault.cle@gmail.com>"]
 edition = "2018"
 
-[dependencies]
-serde = { version = "1.0.101", features = ["derive"] }
-zerocopy = "0.2.8"
+[dependencies.zerocopy]
+version = "0.2.8"
+optional = true
+
+[dependencies.serde]
+version = "1.0.101"
+features = ["derive"]
+optional = true
+
+[features]
+default = ["serde", "zerocopy"]
