@@ -440,8 +440,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "fst"
-version = "0.3.3"
-source = "git+https://github.com/Kerollmops/fst.git?branch=arc-byte-slice#374512e91e9de1cb84f29d89a318c53720387816"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -797,9 +797,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "levenshtein_automata"
 version = "0.1.1"
-source = "git+https://github.com/Kerollmops/levenshtein-automata.git?branch=arc-byte-slice#f85a32acf82727966191b81e1f921e041b5f970d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "fst 0.3.3 (git+https://github.com/Kerollmops/fst.git?branch=arc-byte-slice)",
+ "fst 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -869,11 +869,11 @@ dependencies = [
  "csv 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "deunicode 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "fst 0.3.3 (git+https://github.com/Kerollmops/fst.git?branch=arc-byte-slice)",
+ "fst 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "hashbrown 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "heed 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "indexmap 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "levenshtein_automata 0.1.1 (git+https://github.com/Kerollmops/levenshtein-automata.git?branch=arc-byte-slice)",
+ "levenshtein_automata 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "meilidb-schema 0.6.0",
  "meilidb-tokenizer 0.6.1",
@@ -2323,7 +2323,7 @@ dependencies = [
 "checksum flate2 1.0.12 (registry+https://github.com/rust-lang/crates.io-index)" = "ad3c5233c9a940c8719031b423d7e6c16af66e031cb0420b0896f5245bf181d3"
 "checksum fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "2fad85553e09a6f881f739c29f0b00b0f01357c743266d478b68951ce23285f3"
 "checksum fs_extra 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "5f2a4a2034423744d2cc7ca2068453168dcdb82c438419e639a26bd87839c674"
-"checksum fst 0.3.3 (git+https://github.com/Kerollmops/fst.git?branch=arc-byte-slice)" = "<none>"
+"checksum fst 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)" = "927fb434ff9f0115b215dc0efd2e4fbdd7448522a92a1aa37c77d6a2f8f1ebd6"
 "checksum fuchsia-cprng 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "a06f77d526c1a601b7c4cdd98f54b5eaabffc14d5f2f0296febdc7f357c6d3ba"
 "checksum fuchsia-zircon 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2e9763c69ebaae630ba35f74888db465e49e259ba1bc0eda7d06f4a067615d82"
 "checksum fuchsia-zircon-sys 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
@@ -2361,7 +2361,7 @@ dependencies = [
 "checksum jobserver 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)" = "f2b1d42ef453b30b7387e113da1c83ab1605d90c5b4e0eb8e96d016ed3b8c160"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
 "checksum lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
-"checksum levenshtein_automata 0.1.1 (git+https://github.com/Kerollmops/levenshtein-automata.git?branch=arc-byte-slice)" = "<none>"
+"checksum levenshtein_automata 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "73a004f877f468548d8d0ac4977456a249d8fabbdb8416c36db163dfc8f2e8ca"
 "checksum libc 0.2.65 (registry+https://github.com/rust-lang/crates.io-index)" = "1a31a0627fdf1f6a39ec0dd577e101440b7db22672c0901fe00a9a6fbb5c24e8"
 "checksum lmdb-rkv-sys 0.9.6 (registry+https://github.com/rust-lang/crates.io-index)" = "7982ba0460e939e26a52ee12c8075deab0ebd44ed21881f656841b70e021b7c8"
 "checksum lock_api 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "f8912e782533a93a167888781b836336a6ca5da6175c05944c86cf28c31104dc"
