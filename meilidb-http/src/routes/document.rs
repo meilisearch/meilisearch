@@ -45,10 +45,6 @@ pub struct IndexUpdateResponse {
 pub async fn delete_document(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(DocumentsWrite)?;
 
-    if !ctx.state().accept_updates() {
-        return Err(ResponseError::Maintenance);
-    }
-
     let index = ctx.index()?;
     let identifier = ctx.identifier()?;
     let document_id = meilidb_core::serde::compute_document_id(identifier.clone());
@@ -154,9 +150,6 @@ fn infered_schema(document: &IndexMap<String, Value>) -> Option<meilidb_schema::
 async fn update_multiple_documents(mut ctx: Context<Data>, is_partial: bool) -> SResult<Response> {
     ctx.is_allowed(DocumentsWrite)?;
 
-    if !ctx.state().accept_updates() {
-        return Err(ResponseError::Maintenance);
-    }
     let data: Vec<IndexMap<String, Value>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let index = ctx.index()?;
@@ -211,9 +204,7 @@ pub async fn add_or_update_multiple_documents(ctx: Context<Data>) -> SResult<Res
 
 pub async fn delete_multiple_documents(mut ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(DocumentsWrite)?;
-    if !ctx.state().accept_updates() {
-        return Err(ResponseError::Maintenance);
-    }
+
     let data: Vec<Value> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let index = ctx.index()?;
 
@@ -243,9 +234,7 @@ pub async fn delete_multiple_documents(mut ctx: Context<Data>) -> SResult<Respon
 
 pub async fn clear_all_documents(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(DocumentsWrite)?;
-    if !ctx.state().accept_updates() {
-        return Err(ResponseError::Maintenance);
-    }
+
     let index = ctx.index()?;
 
     let env = &ctx.state().db.env;

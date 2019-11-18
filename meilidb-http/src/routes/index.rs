@@ -69,15 +69,6 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
         Err(e) => return Err(ResponseError::create_index(e)),
     };
 
-    let callback_context = ctx.state().clone();
-    let callback_name = index_name.clone();
-    db.set_update_callback(
-        &index_name,
-        Box::new(move |status| {
-            index_update_callback(&callback_name, &callback_context, status);
-        }),
-    );
-
     let env = &db.env;
     let mut writer = env.write_txn().map_err(ResponseError::internal)?;
 

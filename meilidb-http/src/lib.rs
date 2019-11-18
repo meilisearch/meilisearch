@@ -8,4 +8,4 @@ pub mod models;
 pub mod option;
 pub mod routes;
 
-use self::data::Data;
+pub use self::data::Data;

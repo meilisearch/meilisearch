@@ -11,14 +11,15 @@ use log::debug;
 
 use crate::{store, update, Index, MResult};
 
-pub type BoxUpdateFn = Box<dyn Fn(update::ProcessedUpdateResult) + Send + Sync + 'static>;
+pub type BoxUpdateFn = Box<dyn Fn(&str, update::ProcessedUpdateResult) + Send + Sync + 'static>;
 type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
 
 pub struct Database {
     pub env: heed::Env,
     common_store: heed::PolyDatabase,
     indexes_store: heed::Database<Str, Unit>,
-    indexes: RwLock<HashMap<String, (Index, Arc<ArcSwapFn>, thread::JoinHandle<()>)>>,
+    indexes: RwLock<HashMap<String, (Index, thread::JoinHandle<()>)>>,
+    update_fn: Arc<ArcSwapFn>,
 }
 
 macro_rules! r#break_try {
@@ -41,7 +42,13 @@ pub enum UpdateEvent {
 pub type UpdateEvents = Receiver<UpdateEvent>;
 pub type UpdateEventsEmitter = Sender<UpdateEvent>;
 
-fn update_awaiter(receiver: UpdateEvents, env: heed::Env, update_fn: Arc<ArcSwapFn>, index: Index) {
+fn update_awaiter(
+    receiver: UpdateEvents,
+    env: heed::Env,
+    index_name: &str,
+    update_fn: Arc<ArcSwapFn>,
+    index: Index,
+) {
     let mut receiver = receiver.into_iter();
     while let Some(UpdateEvent::NewUpdate) = receiver.next() {
         loop {
@@ -84,7 +91,7 @@ fn update_awaiter(receiver: UpdateEvents, env: heed::Env, update_fn: Arc<ArcSwap
 
             // call the user callback when the update and the result are written consistently
             if let Some(ref callback) = *update_fn.load() {
-                (callback)(status);
+                (callback)(index_name, status);
             }
         }
     }
@@ -103,6 +110,7 @@ impl Database {
 
         let common_store = env.create_poly_database(Some("common"))?;
         let indexes_store = env.create_database::<Str, Unit>(Some("indexes"))?;
+        let update_fn = Arc::new(ArcSwapFn::empty());
 
         // list all indexes that needs to be opened
         let mut must_open = Vec::new();
@@ -128,21 +136,27 @@ impl Database {
                     continue;
                 }
             };
-            let update_fn = Arc::new(ArcSwapFn::empty());
 
             let env_clone = env.clone();
             let index_clone = index.clone();
+            let name_clone = index_name.clone();
             let update_fn_clone = update_fn.clone();
 
             let handle = thread::spawn(move || {
-                update_awaiter(receiver, env_clone, update_fn_clone, index_clone)
+                update_awaiter(
+                    receiver,
+                    env_clone,
+                    &name_clone,
+                    update_fn_clone,
+                    index_clone,
+                )
             });
 
             // send an update notification to make sure that
             // possible pre-boot updates are consumed
             sender.send(UpdateEvent::NewUpdate).unwrap();
 
-            let result = indexes.insert(index_name, (index, update_fn, handle));
+            let result = indexes.insert(index_name, (index, handle));
             assert!(
                 result.is_none(),
                 "The index should not have been already open"
@@ -154,6 +168,7 @@ impl Database {
             common_store,
             indexes_store,
             indexes: RwLock::new(indexes),
+            update_fn,
         })
     }
 
@@ -180,16 +195,21 @@ impl Database {
 
                 let env_clone = self.env.clone();
                 let index_clone = index.clone();
-
-                let no_update_fn = Arc::new(ArcSwapFn::empty());
-                let no_update_fn_clone = no_update_fn.clone();
+                let name_clone = name.to_owned();
+                let update_fn_clone = self.update_fn.clone();
 
                 let handle = thread::spawn(move || {
-                    update_awaiter(receiver, env_clone, no_update_fn_clone, index_clone)
+                    update_awaiter(
+                        receiver,
+                        env_clone,
+                        &name_clone,
+                        update_fn_clone,
+                        index_clone,
+                    )
                 });
 
                 writer.commit()?;
-                entry.insert((index.clone(), no_update_fn, handle));
+                entry.insert((index.clone(), handle));
 
                 Ok(index)
             }
@@ -201,7 +221,7 @@ impl Database {
         let mut indexes_lock = self.indexes.write().unwrap();
 
         match indexes_lock.remove_entry(name) {
-            Some((name, (index, _fn, handle))) => {
+            Some((name, (index, handle))) => {
                 // remove the index name from the list of indexes
                 // and clear all the LMDB dbi
                 let mut writer = self.env.write_txn()?;
@@ -218,27 +238,13 @@ impl Database {
         }
     }
 
-    pub fn set_update_callback(&self, name: impl AsRef<str>, update_fn: BoxUpdateFn) -> bool {
-        let indexes_lock = self.indexes.read().unwrap();
-        match indexes_lock.get(name.as_ref()) {
-            Some((_, current_update_fn, _)) => {
-                let update_fn = Some(Arc::new(update_fn));
-                current_update_fn.swap(update_fn);
-                true
-            }
-            None => false,
-        }
+    pub fn set_update_callback(&self, update_fn: BoxUpdateFn) {
+        let update_fn = Some(Arc::new(update_fn));
+        self.update_fn.swap(update_fn);
     }
 
-    pub fn unset_update_callback(&self, name: impl AsRef<str>) -> bool {
-        let indexes_lock = self.indexes.read().unwrap();
-        match indexes_lock.get(name.as_ref()) {
-            Some((_, current_update_fn, _)) => {
-                current_update_fn.swap(None);
-                true
-            }
-            None => false,
-        }
+    pub fn unset_update_callback(&self) {
+        self.update_fn.swap(None);
     }
 
     pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> ZResult<File> {
@@ -272,11 +278,12 @@ mod tests {
         let env = &database.env;
 
         let (sender, receiver) = mpsc::sync_channel(100);
-        let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+        let update_fn = move |_name: &str, update: ProcessedUpdateResult| {
+            sender.send(update.update_id).unwrap()
+        };
         let index = database.create_index("test").unwrap();
 
-        let done = database.set_update_callback("test", Box::new(update_fn));
-        assert!(done, "could not set the index update function");
+        database.set_update_callback(Box::new(update_fn));
 
         let schema = {
             let data = r#"
@@ -334,11 +341,12 @@ mod tests {
         let env = &database.env;
 
         let (sender, receiver) = mpsc::sync_channel(100);
-        let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+        let update_fn = move |_name: &str, update: ProcessedUpdateResult| {
+            sender.send(update.update_id).unwrap()
+        };
         let index = database.create_index("test").unwrap();
 
-        let done = database.set_update_callback("test", Box::new(update_fn));
-        assert!(done, "could not set the index update function");
+        database.set_update_callback(Box::new(update_fn));
 
         let schema = {
             let data = r#"
@@ -395,11 +403,12 @@ mod tests {
         let env = &database.env;
 
         let (sender, receiver) = mpsc::sync_channel(100);
-        let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+        let update_fn = move |_name: &str, update: ProcessedUpdateResult| {
+            sender.send(update.update_id).unwrap()
+        };
         let index = database.create_index("test").unwrap();
 
-        let done = database.set_update_callback("test", Box::new(update_fn));
-        assert!(done, "could not set the index update function");
+        database.set_update_callback(Box::new(update_fn));
 
         let schema = {
             let data = r#"
@@ -445,11 +454,12 @@ mod tests {
         let env = &database.env;
 
         let (sender, receiver) = mpsc::sync_channel(100);
-        let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+        let update_fn = move |_name: &str, update: ProcessedUpdateResult| {
+            sender.send(update.update_id).unwrap()
+        };
         let index = database.create_index("test").unwrap();
 
-        let done = database.set_update_callback("test", Box::new(update_fn));
-        assert!(done, "could not set the index update function");
+        database.set_update_callback(Box::new(update_fn));
 
         let schema = {
             let data = r#"
@@ -615,11 +625,12 @@ mod tests {
         let env = &database.env;
 
         let (sender, receiver) = mpsc::sync_channel(100);
-        let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+        let update_fn = move |_name: &str, update: ProcessedUpdateResult| {
+            sender.send(update.update_id).unwrap()
+        };
         let index = database.create_index("test").unwrap();
 
-        let done = database.set_update_callback("test", Box::new(update_fn));
-        assert!(done, "could not set the index update function");
+        database.set_update_callback(Box::new(update_fn));
 
         let schema = {
             let data = r#"
@@ -692,11 +703,12 @@ mod tests {
         let env = &database.env;
 
         let (sender, receiver) = mpsc::sync_channel(100);
-        let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+        let update_fn = move |_name: &str, update: ProcessedUpdateResult| {
+            sender.send(update.update_id).unwrap()
+        };
         let index = database.create_index("test").unwrap();
 
-        let done = database.set_update_callback("test", Box::new(update_fn));
-        assert!(done, "could not set the index update function");
+        database.set_update_callback(Box::new(update_fn));
 
         let schema = {
             let data = r#"

@@ -104,14 +104,14 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     let start = Instant::now();
 
     let (sender, receiver) = mpsc::sync_channel(100);
-    let update_fn = move |update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
+    let update_fn =
+        move |_name: &str, update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
     let index = match database.open_index(&command.index_name) {
         Some(index) => index,
         None => database.create_index(&command.index_name).unwrap(),
     };
 
-    let done = database.set_update_callback(&command.index_name, Box::new(update_fn));
-    assert!(done, "could not set the index update function");
+    database.set_update_callback(Box::new(update_fn));
 
     let env = &database.env;
 

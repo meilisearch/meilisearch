@@ -7,6 +7,7 @@ use tide_log::RequestLogger;
 use meilidb_http::data::Data;
 use meilidb_http::option::Opt;
 use meilidb_http::routes;
+use meilidb_http::routes::index::index_update_callback;
 
 #[cfg(not(target_os = "macos"))]
 #[global_allocator]
@@ -16,8 +17,13 @@ pub fn main() -> Result<(), MainError> {
     env_logger::init();
 
     let opt = Opt::new();
-
     let data = Data::new(opt.clone());
+
+    let data_cloned = data.clone();
+    data.db.set_update_callback(Box::new(move |name, status| {
+        index_update_callback(name, &data_cloned, status);
+    }));
+
     let mut app = tide::App::with_state(data);
 
     app.middleware(

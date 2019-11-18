@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
@@ -35,7 +34,6 @@ pub struct DataInner {
     pub db_path: String,
     pub admin_token: Option<String>,
     pub server_pid: Pid,
-    pub accept_updates: Arc<AtomicBool>,
 }
 
 impl DataInner {
@@ -68,25 +66,6 @@ impl DataInner {
             .common_store()
             .put::<Str, SerdeDatetime>(writer, &key, &Utc::now())
             .map_err(Into::into)
-    }
-
-    pub fn last_backup(&self, reader: &heed::RoTxn) -> MResult<Option<DateTime<Utc>>> {
-        match self
-            .db
-            .common_store()
-            .get::<Str, SerdeDatetime>(&reader, "last-backup")?
-        {
-            Some(datetime) => Ok(Some(datetime)),
-            None => Ok(None),
-        }
-    }
-
-    pub fn set_last_backup(&self, writer: &mut heed::RwTxn) -> MResult<()> {
-        self.db
-            .common_store()
-            .put::<Str, SerdeDatetime>(writer, "last-backup", &Utc::now())?;
-
-        Ok(())
     }
 
     pub fn fields_frequency(
@@ -143,14 +122,6 @@ impl DataInner {
 
         Ok(())
     }
-
-    pub fn stop_accept_updates(&self) {
-        self.accept_updates.store(false, Ordering::Relaxed);
-    }
-
-    pub fn accept_updates(&self) -> bool {
-        self.accept_updates.load(Ordering::Relaxed)
-    }
 }
 
 impl Data {
@@ -160,30 +131,22 @@ impl Data {
         let server_pid = sysinfo::get_current_pid().unwrap();
 
         let db = Arc::new(Database::open_or_create(opt.database_path.clone()).unwrap());
-        let accept_updates = Arc::new(AtomicBool::new(true));
 
         let inner_data = DataInner {
             db: db.clone(),
             db_path,
             admin_token,
             server_pid,
-            accept_updates,
         };
 
         let data = Data {
             inner: Arc::new(inner_data),
         };
 
-        for index_name in db.indexes_names().unwrap() {
-            let callback_context = data.clone();
-            let callback_name = index_name.clone();
-            db.set_update_callback(
-                index_name,
-                Box::new(move |status| {
-                    index_update_callback(&callback_name, &callback_context, status);
-                }),
-            );
-        }
+        let callback_context = data.clone();
+        db.set_update_callback(Box::new(move |index_name, status| {
+            index_update_callback(&index_name, &callback_context, status);
+        }));
 
         data
     }
