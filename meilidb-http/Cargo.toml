@@ -1,6 +1,6 @@
 [package]
 name = "meilidb-http"
-version = "0.2.0"
+version = "0.3.0"
 authors = [
     "Quentin de Quelen <quentin@dequelen.me>",
     "Clément Renault <clement@meilisearch.com>",
