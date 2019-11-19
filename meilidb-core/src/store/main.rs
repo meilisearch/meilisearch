@@ -13,6 +13,7 @@ const RANKED_MAP_KEY: &str = "ranked-map";
 const SCHEMA_KEY: &str = "schema";
 const STOP_WORDS_KEY: &str = "stop-words";
 const SYNONYMS_KEY: &str = "synonyms";
+const UPDATED_AT: &str = "updated-at";
 const WORDS_KEY: &str = "words";
 
 type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
@@ -41,6 +42,14 @@ impl Main {
 
     pub fn put_created_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
         self.main.put::<Str, SerdeDatetime>(writer, CREATED_AT, &Utc::now())
+    }
+
+    pub fn updated_at(self, reader: &heed::RoTxn) -> ZResult<Option<DateTime<Utc>>> {
+        self.main.get::<Str, SerdeDatetime>(reader, UPDATED_AT)
+    }
+
+    pub fn put_updated_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.main.put::<Str, SerdeDatetime>(writer, UPDATED_AT, &Utc::now())
     }
 
     pub fn put_words_fst(self, writer: &mut heed::RwTxn, fst: &fst::Set) -> ZResult<()> {

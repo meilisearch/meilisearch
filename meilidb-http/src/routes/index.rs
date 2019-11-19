@@ -102,6 +102,8 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
         .put_created_at(&mut writer)
         .map_err(ResponseError::internal)?;
     created_index.main
+        .put_updated_at(&mut writer)
+        .map_err(ResponseError::internal)?;
 
     let schema: Option<Schema> = body.schema.clone().map(|s| s.into());
     let mut response_update_id = None;
