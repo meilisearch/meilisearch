@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,6 @@ use crate::Data;
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SettingBody {
-    pub stop_words: Option<StopWords>,
     pub ranking_order: Option<RankingOrder>,
     pub distinct_field: Option<DistinctField>,
     pub ranking_rules: Option<RankingRules>,
@@ -27,7 +26,6 @@ pub enum RankingOrdering {
     Dsc,
 }
 
-pub type StopWords = HashSet<String>;
 pub type RankingOrder = Vec<String>;
 pub type DistinctField = String;
 pub type RankingRules = HashMap<String, RankingOrdering>;
@@ -61,10 +59,6 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
         Some(bytes) => bincode::deserialize(bytes).unwrap(),
         None => SettingBody::default(),
     };
-
-    if let Some(stop_words) = settings.stop_words {
-        current_settings.stop_words = Some(stop_words);
-    }
 
     if let Some(ranking_order) = settings.ranking_order {
         current_settings.ranking_order = Some(ranking_order);
