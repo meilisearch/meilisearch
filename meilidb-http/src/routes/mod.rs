@@ -13,7 +13,9 @@ pub mod synonym;
 pub fn load_routes(app: &mut tide::App<Data>) {
     app.at("").nest(|router| {
         router.at("/indexes").nest(|router| {
-            router.at("/").get(index::list_indexes);
+            router.at("/")
+                .get(index::list_indexes)
+                .post(index::create_index);
 
             router.at("/search").post(search::search_multi_index);
 
@@ -29,7 +31,6 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                 router
                     .at("/")
                     .get(index::get_index_schema)
-                    .post(index::create_index)
                     .put(index::update_schema)
                     .delete(index::delete_index);
 
