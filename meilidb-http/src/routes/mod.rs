@@ -30,9 +30,13 @@ pub fn load_routes(app: &mut tide::App<Data>) {
 
                 router
                     .at("/")
-                    .get(index::get_index_schema)
-                    .put(index::update_schema)
+                    .get(index::get_index)
                     .delete(index::delete_index);
+
+                router
+                    .at("/schema")
+                    .get(index::get_index_schema)
+                    .put(index::update_schema);
 
                 router.at("/documents").nest(|router| {
                     router
