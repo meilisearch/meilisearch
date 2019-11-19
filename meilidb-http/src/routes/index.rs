@@ -1,9 +1,11 @@
-use meilidb_schema::Schema;
+use chrono::{DateTime, Utc};
 use http::StatusCode;
 use meilidb_core::ProcessedUpdateResult;
+use meilidb_schema::Schema;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use tide::querystring::ContextExt as QSContextExt;
 use tide::response::IntoResponse;
 use tide::{Context, Response};
 use chrono::{DateTime, Utc};
@@ -39,7 +41,6 @@ pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
 struct GetIndexResponse {
     name: String,
     uid: String,
-    schema: Option<SchemaBody>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -56,9 +57,6 @@ pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
     let name = index.main.name(&mut reader)
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::internal("Name not found"))?;
-    let schema = index.main.schema(&mut reader)
-        .map_err(ResponseError::internal)?
-        .map(|schema| SchemaBody::from(schema));
     let created_at = index.main.created_at(&mut reader)
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::internal("Created date not found"))?;
@@ -69,7 +67,6 @@ pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
     let response_body = GetIndexResponse {
         name,
         uid,
-        schema,
         created_at,
         updated_at,
     };
@@ -77,10 +74,19 @@ pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
     Ok(tide::response::json(response_body))
 }
 
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GetSchemaParams {
+    raw: bool,
+}
+
 pub async fn get_index_schema(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesRead)?;
 
     let index = ctx.index()?;
+
+    // Tide doesn't support "no query param"
+    let params: GetSchemaParams = ctx.url_query().unwrap_or_default();
 
     let env = &ctx.state().db.env;
     let reader = env.read_txn().map_err(ResponseError::internal)?;
@@ -88,12 +94,15 @@ pub async fn get_index_schema(ctx: Context<Data>) -> SResult<Response> {
     let schema = index
         .main
         .schema(&reader)
-        .map_err(ResponseError::create_index)?;
+        .map_err(ResponseError::open_index)?;
 
     match schema {
         Some(schema) => {
-            let schema = SchemaBody::from(schema);
-            Ok(tide::response::json(schema))
+            if params.raw {
+                Ok(tide::response::json(schema.to_builder()))
+            } else {
+                Ok(tide::response::json(SchemaBody::from(schema)))
+            }
         }
         None => Ok(
             tide::response::json(json!({ "message": "missing index schema" }))
