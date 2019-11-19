@@ -125,6 +125,7 @@ struct IndexCreateResponse {
     name: String,
     uid: String,
     schema: Option<SchemaBody>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     update_id: Option<u64>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
