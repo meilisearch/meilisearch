@@ -23,7 +23,7 @@ struct IndexStatsResponse {
 
 pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
-    let index_name = ctx.url_param("index")?;
+    let index_uid = ctx.url_param("index")?;
     let index = ctx.index()?;
 
     let env = &ctx.state().db.env;
@@ -36,19 +36,19 @@ pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
 
     let fields_frequency = ctx
         .state()
-        .fields_frequency(&reader, &index_name)
+        .fields_frequency(&reader, &index_uid)
         .map_err(ResponseError::internal)?
         .unwrap_or_default();
 
     let is_indexing = ctx
         .state()
-        .is_indexing(&reader, &index_name)
+        .is_indexing(&reader, &index_uid)
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::not_found("Index not found"))?;
 
     let last_update = ctx
         .state()
-        .last_update(&reader, &index_name)
+        .last_update(&reader, &index_uid)
         .map_err(ResponseError::internal)?;
 
     let response = IndexStatsResponse {
@@ -73,11 +73,11 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
     let mut index_list = HashMap::new();
 
     if let Ok(indexes_set) = ctx.state().db.indexes_names() {
-        for index_name in indexes_set {
+        for index_uid in indexes_set {
             let db = &ctx.state().db;
             let env = &db.env;
 
-            let index = db.open_index(&index_name).unwrap();
+            let index = db.open_index(&index_uid).unwrap();
             let reader = env.read_txn().map_err(ResponseError::internal)?;
 
             let number_of_documents = index
@@ -87,19 +87,19 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
 
             let fields_frequency = ctx
                 .state()
-                .fields_frequency(&reader, &index_name)
+                .fields_frequency(&reader, &index_uid)
                 .map_err(ResponseError::internal)?
                 .unwrap_or_default();
 
             let is_indexing = ctx
                 .state()
-                .is_indexing(&reader, &index_name)
+                .is_indexing(&reader, &index_uid)
                 .map_err(ResponseError::internal)?
                 .ok_or(ResponseError::not_found("Index not found"))?;
 
             let last_update = ctx
                 .state()
-                .last_update(&reader, &index_name)
+                .last_update(&reader, &index_uid)
                 .map_err(ResponseError::internal)?;
 
             let response = IndexStatsResponse {
@@ -108,7 +108,7 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
                 last_update,
                 fields_frequency,
             };
-            index_list.insert(index_name, response);
+            index_list.insert(index_uid, response);
         }
     }
 

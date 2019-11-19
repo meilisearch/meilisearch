@@ -45,7 +45,7 @@ pub type UpdateEventsEmitter = Sender<UpdateEvent>;
 fn update_awaiter(
     receiver: UpdateEvents,
     env: heed::Env,
-    index_name: &str,
+    index_uid: &str,
     update_fn: Arc<ArcSwapFn>,
     index: Index,
 ) {
@@ -91,7 +91,7 @@ fn update_awaiter(
 
             // call the user callback when the update and the result are written consistently
             if let Some(ref callback) = *update_fn.load() {
-                (callback)(index_name, status);
+                (callback)(index_uid, status);
             }
         }
     }
@@ -116,22 +116,22 @@ impl Database {
         let mut must_open = Vec::new();
         let reader = env.read_txn()?;
         for result in indexes_store.iter(&reader)? {
-            let (index_name, _) = result?;
-            must_open.push(index_name.to_owned());
+            let (index_uid, _) = result?;
+            must_open.push(index_uid.to_owned());
         }
 
         reader.abort();
 
         // open the previously aggregated indexes
         let mut indexes = HashMap::new();
-        for index_name in must_open {
+        for index_uid in must_open {
             let (sender, receiver) = crossbeam_channel::bounded(100);
-            let index = match store::open(&env, &index_name, sender.clone())? {
+            let index = match store::open(&env, &index_uid, sender.clone())? {
                 Some(index) => index,
                 None => {
                     log::warn!(
                         "the index {} doesn't exist or has not all the databases",
-                        index_name
+                        index_uid
                     );
                     continue;
                 }
@@ -139,7 +139,7 @@ impl Database {
 
             let env_clone = env.clone();
             let index_clone = index.clone();
-            let name_clone = index_name.clone();
+            let name_clone = index_uid.clone();
             let update_fn_clone = update_fn.clone();
 
             let handle = thread::spawn(move || {
@@ -156,7 +156,7 @@ impl Database {
             // possible pre-boot updates are consumed
             sender.send(UpdateEvent::NewUpdate).unwrap();
 
-            let result = indexes.insert(index_name, (index, handle));
+            let result = indexes.insert(index_uid, (index, handle));
             assert!(
                 result.is_none(),
                 "The index should not have been already open"

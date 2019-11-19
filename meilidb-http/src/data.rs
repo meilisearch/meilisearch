@@ -47,9 +47,9 @@ impl DataInner {
     pub fn last_update(
         &self,
         reader: &heed::RoTxn,
-        index_name: &str,
+        index_uid: &str,
     ) -> MResult<Option<DateTime<Utc>>> {
-        let key = format!("last-update-{}", index_name);
+        let key = format!("last-update-{}", index_uid);
         match self
             .db
             .common_store()
@@ -60,8 +60,8 @@ impl DataInner {
         }
     }
 
-    pub fn set_last_update(&self, writer: &mut heed::RwTxn, index_name: &str) -> MResult<()> {
-        let key = format!("last-update-{}", index_name);
+    pub fn set_last_update(&self, writer: &mut heed::RwTxn, index_uid: &str) -> MResult<()> {
+        let key = format!("last-update-{}", index_uid);
         self.db
             .common_store()
             .put::<Str, SerdeDatetime>(writer, &key, &Utc::now())
@@ -71,9 +71,9 @@ impl DataInner {
     pub fn fields_frequency(
         &self,
         reader: &heed::RoTxn,
-        index_name: &str,
+        index_uid: &str,
     ) -> MResult<Option<FreqsMap>> {
-        let key = format!("fields-frequency-{}", index_name);
+        let key = format!("fields-frequency-{}", index_uid);
         match self
             .db
             .common_store()
@@ -84,11 +84,11 @@ impl DataInner {
         }
     }
 
-    pub fn compute_stats(&self, writer: &mut heed::RwTxn, index_name: &str) -> MResult<()> {
-        let index = match self.db.open_index(&index_name) {
+    pub fn compute_stats(&self, writer: &mut heed::RwTxn, index_uid: &str) -> MResult<()> {
+        let index = match self.db.open_index(&index_uid) {
             Some(index) => index,
             None => {
-                error!("Impossible to retrieve index {}", index_name);
+                error!("Impossible to retrieve index {}", index_uid);
                 return Ok(());
             }
         };
@@ -115,7 +115,7 @@ impl DataInner {
             .map(|(a, c)| (schema.attribute_name(a).to_owned(), c))
             .collect();
 
-        let key = format!("fields-frequency-{}", index_name);
+        let key = format!("fields-frequency-{}", index_uid);
         self.db
             .common_store()
             .put::<Str, SerdeFreqsMap>(writer, &key, &frequency)?;
@@ -144,8 +144,8 @@ impl Data {
         };
 
         let callback_context = data.clone();
-        db.set_update_callback(Box::new(move |index_name, status| {
-            index_update_callback(&index_name, &callback_context, status);
+        db.set_update_callback(Box::new(move |index_uid, status| {
+            index_update_callback(&index_uid, &callback_context, status);
         }));
 
         data

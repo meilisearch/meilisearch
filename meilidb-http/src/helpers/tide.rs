@@ -93,12 +93,12 @@ impl ContextExt for Context<Data> {
     }
 
     fn index(&self) -> Result<Index, ResponseError> {
-        let index_name = self.url_param("index")?;
+        let index_uid = self.url_param("index")?;
         let index = self
             .state()
             .db
-            .open_index(&index_name)
-            .ok_or(ResponseError::index_not_found(index_name))?;
+            .open_index(&index_uid)
+            .ok_or(ResponseError::index_not_found(index_uid))?;
         Ok(index)
     }
 

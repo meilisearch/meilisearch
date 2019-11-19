@@ -131,7 +131,7 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
 pub async fn update_schema(mut ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesWrite)?;
 
-    let index_name = ctx.url_param("index")?;
+    let index_uid = ctx.url_param("index")?;
 
     let schema = ctx
         .body_json::<SchemaBody>()
@@ -143,8 +143,8 @@ pub async fn update_schema(mut ctx: Context<Data>) -> SResult<Response> {
     let mut writer = env.write_txn().map_err(ResponseError::internal)?;
 
     let index = db
-        .open_index(&index_name)
-        .ok_or(ResponseError::index_not_found(index_name))?;
+        .open_index(&index_uid)
+        .ok_or(ResponseError::index_not_found(index_uid))?;
 
     let schema: meilidb_schema::Schema = schema.into();
     let update_id = index
@@ -206,12 +206,12 @@ pub async fn get_all_updates_status(ctx: Context<Data>) -> SResult<Response> {
 
 pub async fn delete_index(ctx: Context<Data>) -> SResult<StatusCode> {
     ctx.is_allowed(IndexesWrite)?;
-    let index_name = ctx.url_param("index")?;
+    let index_uid = ctx.url_param("index")?;
 
     let found = ctx
         .state()
         .db
-        .delete_index(&index_name)
+        .delete_index(&index_uid)
         .map_err(ResponseError::internal)?;
 
     if found {
@@ -221,12 +221,12 @@ pub async fn delete_index(ctx: Context<Data>) -> SResult<StatusCode> {
     }
 }
 
-pub fn index_update_callback(index_name: &str, data: &Data, _status: ProcessedUpdateResult) {
+pub fn index_update_callback(index_uid: &str, data: &Data, _status: ProcessedUpdateResult) {
     let env = &data.db.env;
     let mut writer = env.write_txn().unwrap();
 
-    data.compute_stats(&mut writer, &index_name).unwrap();
-    data.set_last_update(&mut writer, &index_name).unwrap();
+    data.compute_stats(&mut writer, &index_uid).unwrap();
+    data.set_last_update(&mut writer, &index_uid).unwrap();
 
     writer.commit().unwrap();
 }
