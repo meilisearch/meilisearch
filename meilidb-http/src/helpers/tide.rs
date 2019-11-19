@@ -17,13 +17,13 @@ pub trait ContextExt {
 
 impl ContextExt for Context<Data> {
     fn is_allowed(&self, acl: ACL) -> SResult<()> {
-        let admin_token = match &self.state().admin_token {
-            Some(admin_token) => admin_token,
+        let api_key = match &self.state().api_key {
+            Some(api_key) => api_key,
             None => return Ok(()),
         };
 
         let user_api_key = self.header("X-Meili-API-Key")?;
-        if user_api_key == *admin_token {
+        if user_api_key == *api_key {
             return Ok(());
         }
         let request_index: Option<String> = None; //self.param::<String>("index").ok();

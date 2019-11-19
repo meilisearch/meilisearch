@@ -32,7 +32,7 @@ impl Deref for Data {
 pub struct DataInner {
     pub db: Arc<Database>,
     pub db_path: String,
-    pub admin_token: Option<String>,
+    pub api_key: Option<String>,
     pub server_pid: Pid,
 }
 
@@ -126,16 +126,16 @@ impl DataInner {
 
 impl Data {
     pub fn new(opt: Opt) -> Data {
-        let db_path = opt.database_path.clone();
-        let admin_token = opt.admin_token.clone();
+        let db_path = opt.db_path.clone();
+        let api_key = opt.api_key.clone();
         let server_pid = sysinfo::get_current_pid().unwrap();
 
-        let db = Arc::new(Database::open_or_create(opt.database_path.clone()).unwrap());
+        let db = Arc::new(Database::open_or_create(opt.db_path.clone()).unwrap());
 
         let inner_data = DataInner {
             db: db.clone(),
             db_path,
-            admin_token,
+            api_key,
             server_pid,
         };
 
