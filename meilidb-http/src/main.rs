@@ -1,6 +1,7 @@
 use http::header::HeaderValue;
 use log::info;
 use main_error::MainError;
+use structopt::StructOpt;
 use tide::middleware::{CorsMiddleware, CorsOrigin};
 use tide_log::RequestLogger;
 
@@ -16,7 +17,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 pub fn main() -> Result<(), MainError> {
     env_logger::init();
 
-    let opt = Opt::new();
+    let opt = Opt::from_args();
     let data = Data::new(opt.clone());
 
     let data_cloned = data.clone();

@@ -69,6 +69,7 @@ struct StatsResult {
 
 pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
+
     let mut index_list = HashMap::new();
 
     if let Ok(indexes_set) = ctx.state().db.indexes_names() {
