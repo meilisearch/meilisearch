@@ -19,7 +19,7 @@ use crate::Data;
 
 fn generate_uid() -> String {
     let mut rng = rand::thread_rng();
-    let sample = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let sample = b"abcdefghijklmnopqrstuvwxyz0123456789";
     sample
         .choose_multiple(&mut rng, 8)
         .map(|c| *c as char)
