@@ -158,7 +158,7 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
             index_list = ctx
                 .state()
                 .db
-                .indexes_names()
+                .indexes_uids()
                 .map_err(ResponseError::internal)?
                 .into_iter()
                 .collect();

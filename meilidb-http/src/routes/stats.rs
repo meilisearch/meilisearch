@@ -72,7 +72,7 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
 
     let mut index_list = HashMap::new();
 
-    if let Ok(indexes_set) = ctx.state().db.indexes_names() {
+    if let Ok(indexes_set) = ctx.state().db.indexes_uids() {
         for index_uid in indexes_set {
             let db = &ctx.state().db;
             let env = &db.env;

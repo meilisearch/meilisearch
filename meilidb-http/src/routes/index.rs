@@ -29,9 +29,52 @@ pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
     let list = ctx
         .state()
         .db
-        .indexes_names()
+        .indexes_uids()
         .map_err(ResponseError::internal)?;
     Ok(tide::response::json(list))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct GetIndexResponse {
+    name: String,
+    uid: String,
+    schema: Option<SchemaBody>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
+    ctx.is_allowed(IndexesRead)?;
+
+    let index = ctx.index()?;
+
+    let env = &ctx.state().db.env;
+    let mut reader = env.read_txn().map_err(ResponseError::internal)?;
+
+    let uid = ctx.url_param("index")?.to_string();
+    let name = index.main.name(&mut reader)
+        .map_err(ResponseError::internal)?
+        .ok_or(ResponseError::internal("Name not found"))?;
+    let schema = index.main.schema(&mut reader)
+        .map_err(ResponseError::internal)?
+        .map(|schema| SchemaBody::from(schema));
+    let created_at = index.main.created_at(&mut reader)
+        .map_err(ResponseError::internal)?
+        .ok_or(ResponseError::internal("Created date not found"))?;
+    let updated_at = index.main.updated_at(&mut reader)
+        .map_err(ResponseError::internal)?
+        .ok_or(ResponseError::internal("Updated date not found"))?;
+
+    let response_body = GetIndexResponse {
+        name,
+        uid,
+        schema,
+        created_at,
+        updated_at,
+    };
+
+    Ok(tide::response::json(response_body))
 }
 
 pub async fn get_index_schema(ctx: Context<Data>) -> SResult<Response> {

@@ -251,7 +251,7 @@ impl Database {
         self.env.copy_to_path(path, CompactionOption::Enabled)
     }
 
-    pub fn indexes_names(&self) -> MResult<Vec<String>> {
+    pub fn indexes_uids(&self) -> MResult<Vec<String>> {
         let indexes = self.indexes.read().unwrap();
         Ok(indexes.keys().cloned().collect())
     }
