@@ -32,8 +32,7 @@ pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
     let indexes_uids = ctx
         .state()
         .db
-        .indexes_uids()
-        .map_err(ResponseError::internal)?;
+        .indexes_uids();
 
     let env = &ctx.state().db.env;
     let mut reader = env.read_txn().map_err(ResponseError::internal)?;

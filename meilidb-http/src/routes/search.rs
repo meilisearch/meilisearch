@@ -159,7 +159,6 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
                 .state()
                 .db
                 .indexes_uids()
-                .map_err(ResponseError::internal)?
                 .into_iter()
                 .collect();
         }
