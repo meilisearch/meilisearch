@@ -229,6 +229,73 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
         .into_response())
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UpdateIndexRequest {
+    name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UpdateIndexResponse {
+    name: String,
+    uid: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+pub async fn update_index(mut ctx: Context<Data>) -> SResult<Response> {
+    ctx.is_allowed(IndexesWrite)?;
+
+    let body = ctx
+        .body_json::<UpdateIndexRequest>()
+        .await
+        .map_err(ResponseError::bad_request)?;
+
+    let index_uid = ctx.url_param("index")?;
+    let index = ctx.index()?;
+
+    let db = &ctx.state().db;
+
+    let env = &db.env;
+    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+
+    index
+        .main
+        .put_name(&mut writer, &body.name)
+        .map_err(ResponseError::internal)?;
+
+    index
+        .main
+        .put_updated_at(&mut writer)
+        .map_err(ResponseError::internal)?;
+
+    writer.commit().map_err(ResponseError::internal)?;
+    let reader = env.read_txn().map_err(ResponseError::internal)?;
+
+    let created_at = index
+        .main
+        .created_at(&reader)
+        .map_err(ResponseError::internal)?
+        .ok_or(ResponseError::internal("Created date not found"))?;
+    let updated_at = index
+        .main
+        .updated_at(&reader)
+        .map_err(ResponseError::internal)?
+        .ok_or(ResponseError::internal("Updated date not found"))?;
+
+    let response_body = UpdateIndexResponse {
+        name: body.name,
+        uid: index_uid,
+        created_at,
+        updated_at,
+    };
+
+    Ok(tide::response::json(response_body)
+        .with_status(StatusCode::ACCEPTED)
+        .into_response())
+}
+
 pub async fn update_schema(mut ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesWrite)?;
 

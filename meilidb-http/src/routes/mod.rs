@@ -32,6 +32,7 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                 router
                     .at("/")
                     .get(index::get_index)
+                    .put(index::update_index)
                     .delete(index::delete_index);
 
                 router
