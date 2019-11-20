@@ -4,12 +4,14 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use heed::types::{SerdeBincode, Str};
-use log::*;
+use log::error;
 use meilidb_core::{Database, Error as MError, MResult};
 use sysinfo::Pid;
 
 use crate::option::Opt;
 use crate::routes::index::index_update_callback;
+
+const LAST_UPDATE_KEY: &str = "last-update";
 
 type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
 
@@ -46,7 +48,7 @@ impl DataInner {
         match self
             .db
             .common_store()
-            .get::<Str, SerdeDatetime>(&reader, "last-update")?
+            .get::<Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)?
         {
             Some(datetime) => Ok(Some(datetime)),
             None => Ok(None),
@@ -56,11 +58,11 @@ impl DataInner {
     pub fn set_last_update(&self, writer: &mut heed::RwTxn) -> MResult<()> {
         self.db
             .common_store()
-            .put::<Str, SerdeDatetime>(writer, "last-update", &Utc::now())
+            .put::<Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, &Utc::now())
             .map_err(Into::into)
     }
 
-    pub fn compute_stats(&self, mut writer: &mut heed::RwTxn, index_uid: &str) -> MResult<()> {
+    pub fn compute_stats(&self, writer: &mut heed::RwTxn, index_uid: &str) -> MResult<()> {
         let index = match self.db.open_index(&index_uid) {
             Some(index) => index,
             None => {
@@ -93,7 +95,7 @@ impl DataInner {
 
         index
             .main
-            .put_fields_frequency(&mut writer, &frequency)
+            .put_fields_frequency(writer, &frequency)
             .map_err(MError::Zlmdb)
     }
 }

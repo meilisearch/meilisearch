@@ -145,7 +145,7 @@ struct InnerSchema {
 }
 
 impl Schema {
-    pub fn to_builder(&self) -> SchemaBuilder {
+    fn to_builder(&self) -> SchemaBuilder {
         let identifier = self.inner.identifier.clone();
         let attributes = self.attributes_ordered();
         SchemaBuilder {

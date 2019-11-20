@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
+use log::error;
 use pretty_bytes::converter::convert;
 use serde::Serialize;
-use std::collections::HashMap;
 use sysinfo::{NetworkExt, Pid, ProcessExt, ProcessorExt, System, SystemExt};
 use tide::{Context, Response};
 use walkdir::WalkDir;
@@ -42,7 +44,7 @@ pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
         .state()
         .is_indexing(&reader, &index_uid)
         .map_err(ResponseError::internal)?
-        .ok_or(ResponseError::not_found("Index not found"))?;
+        .ok_or(ResponseError::internal("'is_indexing' date not found"))?;
 
     let response = IndexStatsResponse {
         number_of_documents,
@@ -71,31 +73,39 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
 
     let indexes_set = ctx.state().db.indexes_uids();
     for index_uid in indexes_set {
-        let index = db.open_index(&index_uid).unwrap();
+        let index = ctx.state().db.open_index(&index_uid);
 
-        let number_of_documents = index
-            .main
-            .number_of_documents(&reader)
-            .map_err(ResponseError::internal)?;
+        match index {
+            Some(index) => {
+                let number_of_documents = index
+                    .main
+                    .number_of_documents(&reader)
+                    .map_err(ResponseError::internal)?;
 
-        let fields_frequency = index
-            .main
-            .fields_frequency(&reader)
-            .map_err(ResponseError::internal)?
-            .unwrap_or_default();
+                let fields_frequency = index
+                    .main
+                    .fields_frequency(&reader)
+                    .map_err(ResponseError::internal)?
+                    .unwrap_or_default();
 
-        let is_indexing = ctx
-            .state()
-            .is_indexing(&reader, &index_uid)
-            .map_err(ResponseError::internal)?
-            .ok_or(ResponseError::not_found("Index not found"))?;
+                let is_indexing = ctx
+                    .state()
+                    .is_indexing(&reader, &index_uid)
+                    .map_err(ResponseError::internal)?
+                    .ok_or(ResponseError::internal("'is_indexing' date not found"))?;
 
-        let response = IndexStatsResponse {
-            number_of_documents,
-            is_indexing,
-            fields_frequency,
-        };
-        index_list.insert(index_uid, response);
+                let response = IndexStatsResponse {
+                    number_of_documents,
+                    is_indexing,
+                    fields_frequency,
+                };
+                index_list.insert(index_uid, response);
+            }
+            None => error!(
+                "Index {:?} is referenced in the indexes list but cannot be found",
+                index_uid
+            ),
+        }
     }
 
     let database_size = WalkDir::new(ctx.state().db_path.clone())

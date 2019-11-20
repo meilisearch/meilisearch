@@ -6,16 +6,16 @@ use meilidb_schema::Schema;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-const CREATED_AT: &str = "created-at";
+const CREATED_AT_KEY: &str = "created-at";
 const CUSTOMS_KEY: &str = "customs-key";
-const FIELDS_FREQUENCY: &str = "fields-frequency";
-const NAME: &str = "name";
+const FIELDS_FREQUENCY_KEY: &str = "fields-frequency";
+const NAME_KEY: &str = "name";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY: &str = "ranked-map";
 const SCHEMA_KEY: &str = "schema";
 const STOP_WORDS_KEY: &str = "stop-words";
 const SYNONYMS_KEY: &str = "synonyms";
-const UPDATED_AT: &str = "updated-at";
+const UPDATED_AT_KEY: &str = "updated-at";
 const WORDS_KEY: &str = "words";
 
 pub type FreqsMap = HashMap<String, usize>;
@@ -33,32 +33,32 @@ impl Main {
     }
 
     pub fn put_name(self, writer: &mut heed::RwTxn, name: &str) -> ZResult<()> {
-        self.main.put::<Str, Str>(writer, NAME, name)
+        self.main.put::<Str, Str>(writer, NAME_KEY, name)
     }
 
     pub fn name(self, reader: &heed::RoTxn) -> ZResult<Option<String>> {
         Ok(self
             .main
-            .get::<Str, Str>(reader, NAME)?
+            .get::<Str, Str>(reader, NAME_KEY)?
             .map(|name| name.to_owned()))
     }
 
     pub fn put_created_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
         self.main
-            .put::<Str, SerdeDatetime>(writer, CREATED_AT, &Utc::now())
+            .put::<Str, SerdeDatetime>(writer, CREATED_AT_KEY, &Utc::now())
     }
 
     pub fn created_at(self, reader: &heed::RoTxn) -> ZResult<Option<DateTime<Utc>>> {
-        self.main.get::<Str, SerdeDatetime>(reader, CREATED_AT)
+        self.main.get::<Str, SerdeDatetime>(reader, CREATED_AT_KEY)
     }
 
     pub fn put_updated_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
         self.main
-            .put::<Str, SerdeDatetime>(writer, UPDATED_AT, &Utc::now())
+            .put::<Str, SerdeDatetime>(writer, UPDATED_AT_KEY, &Utc::now())
     }
 
     pub fn updated_at(self, reader: &heed::RoTxn) -> ZResult<Option<DateTime<Utc>>> {
-        self.main.get::<Str, SerdeDatetime>(reader, UPDATED_AT)
+        self.main.get::<Str, SerdeDatetime>(reader, UPDATED_AT_KEY)
     }
 
     pub fn put_words_fst(self, writer: &mut heed::RwTxn, fst: &fst::Set) -> ZResult<()> {
@@ -159,13 +159,13 @@ impl Main {
         fields_frequency: &FreqsMap,
     ) -> ZResult<()> {
         self.main
-            .put::<Str, SerdeFreqsMap>(writer, FIELDS_FREQUENCY, fields_frequency)
+            .put::<Str, SerdeFreqsMap>(writer, FIELDS_FREQUENCY_KEY, fields_frequency)
     }
 
     pub fn fields_frequency(&self, reader: &heed::RoTxn) -> ZResult<Option<FreqsMap>> {
         match self
             .main
-            .get::<Str, SerdeFreqsMap>(&reader, FIELDS_FREQUENCY)?
+            .get::<Str, SerdeFreqsMap>(reader, FIELDS_FREQUENCY_KEY)?
         {
             Some(freqs) => Ok(Some(freqs)),
             None => Ok(None),
