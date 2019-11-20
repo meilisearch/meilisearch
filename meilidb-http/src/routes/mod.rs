@@ -60,7 +60,11 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                 });
 
                 router.at("/synonym").nest(|router| {
-                    router.at("/").get(synonym::list).post(synonym::create).delete(synonym::clear);
+                    router
+                        .at("/")
+                        .get(synonym::list)
+                        .post(synonym::create)
+                        .delete(synonym::clear);
 
                     router
                         .at("/:synonym")

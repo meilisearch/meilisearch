@@ -51,7 +51,7 @@ impl Main {
     pub fn created_at(self, reader: &heed::RoTxn) -> ZResult<Option<DateTime<Utc>>> {
         self.main.get::<Str, SerdeDatetime>(reader, CREATED_AT)
     }
-    
+
     pub fn put_updated_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
         self.main
             .put::<Str, SerdeDatetime>(writer, UPDATED_AT, &Utc::now())
