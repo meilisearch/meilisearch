@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use http::StatusCode;
+use log::*;
 use meilidb_core::ProcessedUpdateResult;
 use meilidb_schema::Schema;
 use rand::seq::SliceRandom;
@@ -313,6 +314,12 @@ pub fn index_update_callback(index_uid: &str, data: &Data, _status: ProcessedUpd
 
     data.compute_stats(&mut writer, &index_uid).unwrap();
     data.set_last_update(&mut writer).unwrap();
+
+    if let Some(index) = data.db.open_index(&index_uid) {
+        if let Err(e) = index.main.put_updated_at(&mut writer) {
+            error!("Impossible to update updated_at; {}", e)
+        }
+    }
 
     writer.commit().unwrap();
 }
