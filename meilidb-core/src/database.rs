@@ -226,8 +226,11 @@ impl Database {
                 // and clear all the LMDB dbi
                 let mut writer = self.env.write_txn()?;
                 self.indexes_store.delete(&mut writer, &name)?;
+
                 store::clear(&mut writer, &index)?;
                 writer.commit()?;
+
+                drop(indexes_lock);
 
                 // join the update loop thread to ensure it is stopped
                 handle.join().unwrap();
@@ -832,11 +835,70 @@ mod tests {
     fn delete_index() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
-        let _index = database.create_index("test").unwrap();
+        let database = Arc::new(Database::open_or_create(dir.path()).unwrap());
+        let env = &database.env;
 
+        let (sender, receiver) = mpsc::sync_channel(100);
+        let db_cloned = database.clone();
+        let update_fn = move |name: &str, update: ProcessedUpdateResult| {
+            // try to open index to trigger a lock
+            let _ = db_cloned.open_index(name);
+            sender.send(update.update_id).unwrap()
+        };
+
+        // create the index
+        let index = database.create_index("test").unwrap();
+
+        database.set_update_callback(Box::new(update_fn));
+
+        let schema = {
+            let data = r#"
+                identifier = "id"
+
+                [attributes."name"]
+                displayed = true
+                indexed = true
+
+                [attributes."description"]
+                displayed = true
+                indexed = true
+            "#;
+            toml::from_str(data).unwrap()
+        };
+
+        // add a schema to the index
+        let mut writer = env.write_txn().unwrap();
+        let _update_id = index.schema_update(&mut writer, schema).unwrap();
+        writer.commit().unwrap();
+
+        // add documents to the index
+        let mut additions = index.documents_addition();
+
+        let doc1 = serde_json::json!({
+            "id": 123,
+            "name": "Marvin",
+            "description": "My name is Marvin",
+        });
+
+        let doc2 = serde_json::json!({
+            "id": 234,
+            "name": "Kevin",
+            "description": "My name is Kevin",
+        });
+
+        additions.update_document(doc1);
+        additions.update_document(doc2);
+
+        let mut writer = env.write_txn().unwrap();
+        let update_id = additions.finalize(&mut writer).unwrap();
+        writer.commit().unwrap();
+
+        // delete the index
         let deleted = database.delete_index("test").unwrap();
         assert!(deleted);
+
+        // block until the transaction is processed
+        let _ = receiver.into_iter().find(|id| *id == update_id);
 
         let result = database.open_index("test");
         assert!(result.is_none());
