@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use chrono::{DateTime, Utc};
 use pretty_bytes::converter::convert;
 use serde::Serialize;
+use std::collections::HashMap;
 use sysinfo::{NetworkExt, Pid, ProcessExt, ProcessorExt, System, SystemExt};
 use tide::{Context, Response};
 use walkdir::WalkDir;
@@ -55,6 +56,7 @@ pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
 #[serde(rename_all = "camelCase")]
 struct StatsResult {
     database_size: u64,
+    last_update: Option<DateTime<Utc>>,
     indexes: HashMap<String, IndexStatsResponse>,
 }
 
@@ -63,38 +65,38 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
 
     let mut index_list = HashMap::new();
 
-    if let Ok(indexes_set) = ctx.state().db.indexes_uids() {
-        for index_uid in indexes_set {
-            let db = &ctx.state().db;
-            let env = &db.env;
+    
+    let db = &ctx.state().db;
+    let env = &db.env;
+    let reader = env.read_txn().map_err(ResponseError::internal)?;    
 
-            let index = db.open_index(&index_uid).unwrap();
-            let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let indexes_set = ctx.state().db.indexes_uids();
+    for index_uid in indexes_set {
+        let index = db.open_index(&index_uid).unwrap();
+        
+        let number_of_documents = index
+            .main
+            .number_of_documents(&reader)
+            .map_err(ResponseError::internal)?;
 
-            let number_of_documents = index
-                .main
-                .number_of_documents(&reader)
-                .map_err(ResponseError::internal)?;
+        let fields_frequency = index
+            .main
+            .fields_frequency(&reader)
+            .map_err(ResponseError::internal)?
+            .unwrap_or_default();
 
-            let fields_frequency = index
-                .main
-                .fields_frequency(&reader)
-                .map_err(ResponseError::internal)?
-                .unwrap_or_default();
+        let is_indexing = ctx
+            .state()
+            .is_indexing(&reader, &index_uid)
+            .map_err(ResponseError::internal)?
+            .ok_or(ResponseError::not_found("Index not found"))?;
 
-            let is_indexing = ctx
-                .state()
-                .is_indexing(&reader, &index_uid)
-                .map_err(ResponseError::internal)?
-                .ok_or(ResponseError::not_found("Index not found"))?;
-
-            let response = IndexStatsResponse {
-                number_of_documents,
-                is_indexing,
-                fields_frequency,
-            };
-            index_list.insert(index_uid, response);
-        }
+        let response = IndexStatsResponse {
+            number_of_documents,
+            is_indexing,
+            fields_frequency,
+        };
+        index_list.insert(index_uid, response);
     }
 
     let database_size = WalkDir::new(ctx.state().db_path.clone())
@@ -104,8 +106,14 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
         .filter(|metadata| metadata.is_file())
         .fold(0, |acc, m| acc + m.len());
 
+    let last_update = ctx
+        .state()
+        .last_update(&reader)
+        .map_err(ResponseError::internal)?;
+
     let response = StatsResult {
         database_size,
+        last_update,
         indexes: index_list,
     };
 
