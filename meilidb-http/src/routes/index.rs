@@ -8,7 +8,6 @@ use serde_json::json;
 use tide::querystring::ContextExt as QSContextExt;
 use tide::response::IntoResponse;
 use tide::{Context, Response};
-use chrono::{DateTime, Utc};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::ContextExt;
@@ -28,17 +27,49 @@ fn generate_uid() -> String {
 
 pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesRead)?;
-    let list = ctx
+    
+    let indexes_uids = ctx
         .state()
         .db
         .indexes_uids()
         .map_err(ResponseError::internal)?;
-    Ok(tide::response::json(list))
+
+    let env = &ctx.state().db.env;
+    let mut reader = env.read_txn().map_err(ResponseError::internal)?;
+
+    let mut response_body = Vec::new();
+
+    for index_uid in indexes_uids {
+        let index = ctx
+            .state()
+            .db
+            .open_index(&index_uid)
+            .ok_or(ResponseError::internal(&index_uid))?;
+        let name = index.main.name(&mut reader)
+            .map_err(ResponseError::internal)?
+            .ok_or(ResponseError::internal("Name not found"))?;
+        let created_at = index.main.created_at(&mut reader)
+            .map_err(ResponseError::internal)?
+            .ok_or(ResponseError::internal("Created date not found"))?;
+        let updated_at = index.main.updated_at(&mut reader)
+            .map_err(ResponseError::internal)?
+            .ok_or(ResponseError::internal("Updated date not found"))?;
+        
+        let index_reponse = IndexResponse {
+            name,
+            uid: index_uid,
+            created_at,
+            updated_at,
+        };
+        response_body.push(index_reponse);
+    }
+
+    Ok(tide::response::json(response_body))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct GetIndexResponse {
+struct IndexResponse {
     name: String,
     uid: String,
     created_at: DateTime<Utc>,
@@ -64,7 +95,7 @@ pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::internal("Updated date not found"))?;
 
-    let response_body = GetIndexResponse {
+    let response_body = IndexResponse {
         name,
         uid,
         created_at,
