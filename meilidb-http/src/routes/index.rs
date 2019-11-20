@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use http::StatusCode;
 use log::*;
 use meilidb_core::ProcessedUpdateResult;
-use meilidb_schema::Schema;
+use meilidb_schema::{Schema, SchemaBuilder};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -112,44 +112,6 @@ pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
     };
 
     Ok(tide::response::json(response_body))
-}
-
-#[derive(Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GetSchemaParams {
-    raw: bool,
-}
-
-pub async fn get_index_schema(ctx: Context<Data>) -> SResult<Response> {
-    ctx.is_allowed(IndexesRead)?;
-
-    let index = ctx.index()?;
-
-    // Tide doesn't support "no query param"
-    let params: GetSchemaParams = ctx.url_query().unwrap_or_default();
-
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
-
-    let schema = index
-        .main
-        .schema(&reader)
-        .map_err(ResponseError::open_index)?;
-
-    match schema {
-        Some(schema) => {
-            if params.raw {
-                Ok(tide::response::json(schema.to_builder()))
-            } else {
-                Ok(tide::response::json(SchemaBody::from(schema)))
-            }
-        }
-        None => Ok(
-            tide::response::json(json!({ "message": "missing index schema" }))
-                .with_status(StatusCode::NOT_FOUND)
-                .into_response(),
-        ),
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -296,15 +258,62 @@ pub async fn update_index(mut ctx: Context<Data>) -> SResult<Response> {
         .into_response())
 }
 
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SchemaParams {
+    raw: bool,
+}
+
+pub async fn get_index_schema(ctx: Context<Data>) -> SResult<Response> {
+    ctx.is_allowed(IndexesRead)?;
+
+    let index = ctx.index()?;
+
+    // Tide doesn't support "no query param"
+    let params: SchemaParams = ctx.url_query().unwrap_or_default();
+
+    let env = &ctx.state().db.env;
+    let reader = env.read_txn().map_err(ResponseError::internal)?;
+
+    let schema = index
+        .main
+        .schema(&reader)
+        .map_err(ResponseError::open_index)?;
+
+    match schema {
+        Some(schema) => {
+            if params.raw {
+                Ok(tide::response::json(schema.to_builder()))
+            } else {
+                Ok(tide::response::json(SchemaBody::from(schema)))
+            }
+        }
+        None => Ok(
+            tide::response::json(json!({ "message": "missing index schema" }))
+                .with_status(StatusCode::NOT_FOUND)
+                .into_response(),
+        ),
+    }
+}
+
 pub async fn update_schema(mut ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesWrite)?;
 
     let index_uid = ctx.url_param("index")?;
 
-    let schema = ctx
-        .body_json::<SchemaBody>()
-        .await
-        .map_err(ResponseError::bad_request)?;
+    let params: SchemaParams = ctx.url_query().unwrap_or_default();
+
+    let schema: Schema = if params.raw {
+        ctx.body_json::<SchemaBuilder>()
+            .await
+            .map_err(ResponseError::bad_request)?
+            .build()
+    } else {
+        ctx.body_json::<SchemaBody>()
+            .await
+            .map_err(ResponseError::bad_request)?
+            .into()
+    };
 
     let db = &ctx.state().db;
     let env = &db.env;
@@ -314,7 +323,6 @@ pub async fn update_schema(mut ctx: Context<Data>) -> SResult<Response> {
         .open_index(&index_uid)
         .ok_or(ResponseError::index_not_found(index_uid))?;
 
-    let schema: meilidb_schema::Schema = schema.into();
     let update_id = index
         .schema_update(&mut writer, schema.clone())
         .map_err(ResponseError::internal)?;
