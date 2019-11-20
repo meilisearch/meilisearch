@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use heed::types::{SerdeBincode, Str};
 use log::*;
-use meilidb_core::{Database, MResult, Error as MError};
+use meilidb_core::{Database, Error as MError, MResult};
 use sysinfo::Pid;
 
 use crate::option::Opt;
@@ -91,7 +91,10 @@ impl DataInner {
             .map(|(a, c)| (schema.attribute_name(a).to_owned(), c))
             .collect();
 
-        index.main.put_fields_frequency(&mut writer, &frequency).map_err(MError::Zlmdb)
+        index
+            .main
+            .put_fields_frequency(&mut writer, &frequency)
+            .map_err(MError::Zlmdb)
     }
 }
 

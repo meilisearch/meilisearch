@@ -155,12 +155,7 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
 
     for index in index_list.clone() {
         if index == "*" {
-            index_list = ctx
-                .state()
-                .db
-                .indexes_uids()
-                .into_iter()
-                .collect();
+            index_list = ctx.state().db.indexes_uids().into_iter().collect();
         }
     }
 

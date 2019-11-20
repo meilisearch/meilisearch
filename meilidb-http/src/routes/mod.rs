@@ -13,7 +13,8 @@ pub mod synonym;
 pub fn load_routes(app: &mut tide::App<Data>) {
     app.at("").nest(|router| {
         router.at("/indexes").nest(|router| {
-            router.at("/")
+            router
+                .at("/")
                 .get(index::list_indexes)
                 .post(index::create_index);
 

@@ -65,15 +65,14 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
 
     let mut index_list = HashMap::new();
 
-    
     let db = &ctx.state().db;
     let env = &db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;    
+    let reader = env.read_txn().map_err(ResponseError::internal)?;
 
     let indexes_set = ctx.state().db.indexes_uids();
     for index_uid in indexes_set {
         let index = db.open_index(&index_uid).unwrap();
-        
+
         let number_of_documents = index
             .main
             .number_of_documents(&reader)

@@ -28,11 +28,8 @@ fn generate_uid() -> String {
 
 pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesRead)?;
-    
-    let indexes_uids = ctx
-        .state()
-        .db
-        .indexes_uids();
+
+    let indexes_uids = ctx.state().db.indexes_uids();
 
     let env = &ctx.state().db.env;
     let mut reader = env.read_txn().map_err(ResponseError::internal)?;
@@ -45,16 +42,22 @@ pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
             .db
             .open_index(&index_uid)
             .ok_or(ResponseError::internal(&index_uid))?;
-        let name = index.main.name(&mut reader)
+        let name = index
+            .main
+            .name(&mut reader)
             .map_err(ResponseError::internal)?
             .ok_or(ResponseError::internal("Name not found"))?;
-        let created_at = index.main.created_at(&mut reader)
+        let created_at = index
+            .main
+            .created_at(&mut reader)
             .map_err(ResponseError::internal)?
             .ok_or(ResponseError::internal("Created date not found"))?;
-        let updated_at = index.main.updated_at(&mut reader)
+        let updated_at = index
+            .main
+            .updated_at(&mut reader)
             .map_err(ResponseError::internal)?
             .ok_or(ResponseError::internal("Updated date not found"))?;
-        
+
         let index_reponse = IndexResponse {
             name,
             uid: index_uid,
@@ -85,13 +88,19 @@ pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
     let mut reader = env.read_txn().map_err(ResponseError::internal)?;
 
     let uid = ctx.url_param("index")?.to_string();
-    let name = index.main.name(&mut reader)
+    let name = index
+        .main
+        .name(&mut reader)
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::internal("Name not found"))?;
-    let created_at = index.main.created_at(&mut reader)
+    let created_at = index
+        .main
+        .created_at(&mut reader)
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::internal("Created date not found"))?;
-    let updated_at = index.main.updated_at(&mut reader)
+    let updated_at = index
+        .main
+        .updated_at(&mut reader)
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::internal("Updated date not found"))?;
 
@@ -165,7 +174,10 @@ struct IndexCreateResponse {
 pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesWrite)?;
 
-    let body = ctx.body_json::<IndexCreateRequest>().await.map_err(ResponseError::bad_request)?;
+    let body = ctx
+        .body_json::<IndexCreateRequest>()
+        .await
+        .map_err(ResponseError::bad_request)?;
 
     let generated_uid = generate_uid();
 
@@ -179,13 +191,16 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
     let env = &db.env;
     let mut writer = env.write_txn().map_err(ResponseError::internal)?;
 
-    created_index.main
+    created_index
+        .main
         .put_name(&mut writer, &body.name)
         .map_err(ResponseError::internal)?;
-    created_index.main
+    created_index
+        .main
         .put_created_at(&mut writer)
         .map_err(ResponseError::internal)?;
-    created_index.main
+    created_index
+        .main
         .put_updated_at(&mut writer)
         .map_err(ResponseError::internal)?;
 
@@ -193,8 +208,8 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
     let mut response_update_id = None;
     if let Some(schema) = schema {
         let update_id = created_index
-                .schema_update(&mut writer, schema.clone())
-                .map_err(ResponseError::internal)?;
+            .schema_update(&mut writer, schema.clone())
+            .map_err(ResponseError::internal)?;
         response_update_id = Some(update_id)
     }
 
@@ -210,8 +225,8 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
     };
 
     Ok(tide::response::json(response_body)
-                .with_status(StatusCode::CREATED)
-                .into_response())
+        .with_status(StatusCode::CREATED)
+        .into_response())
 }
 
 pub async fn update_schema(mut ctx: Context<Data>) -> SResult<Response> {

@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 use crate::RankedMap;
-use heed::Result as ZResult;
+use chrono::{DateTime, Utc};
 use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
+use heed::Result as ZResult;
 use meilidb_schema::Schema;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 const CREATED_AT: &str = "created-at";
@@ -32,28 +32,33 @@ impl Main {
         self.main.clear(writer)
     }
 
-    pub fn name(self, reader: &heed::RoTxn) -> ZResult<Option<String>> {
-        Ok(self.main.get::<Str, Str>(reader, NAME)?.map(|name| name.to_owned()))
-    }
-
     pub fn put_name(self, writer: &mut heed::RwTxn, name: &str) -> ZResult<()> {
         self.main.put::<Str, Str>(writer, NAME, name)
+    }
+
+    pub fn name(self, reader: &heed::RoTxn) -> ZResult<Option<String>> {
+        Ok(self
+            .main
+            .get::<Str, Str>(reader, NAME)?
+            .map(|name| name.to_owned()))
+    }
+
+    pub fn put_created_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.main
+            .put::<Str, SerdeDatetime>(writer, CREATED_AT, &Utc::now())
     }
 
     pub fn created_at(self, reader: &heed::RoTxn) -> ZResult<Option<DateTime<Utc>>> {
         self.main.get::<Str, SerdeDatetime>(reader, CREATED_AT)
     }
-
-    pub fn put_created_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
-        self.main.put::<Str, SerdeDatetime>(writer, CREATED_AT, &Utc::now())
+    
+    pub fn put_updated_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+        self.main
+            .put::<Str, SerdeDatetime>(writer, UPDATED_AT, &Utc::now())
     }
 
     pub fn updated_at(self, reader: &heed::RoTxn) -> ZResult<Option<DateTime<Utc>>> {
         self.main.get::<Str, SerdeDatetime>(reader, UPDATED_AT)
-    }
-
-    pub fn put_updated_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
-        self.main.put::<Str, SerdeDatetime>(writer, UPDATED_AT, &Utc::now())
     }
 
     pub fn put_words_fst(self, writer: &mut heed::RwTxn, fst: &fst::Set) -> ZResult<()> {
@@ -148,7 +153,11 @@ impl Main {
         }
     }
 
-    pub fn put_fields_frequency(self, writer: &mut heed::RwTxn, fields_frequency: &FreqsMap) -> ZResult<()> {
+    pub fn put_fields_frequency(
+        self,
+        writer: &mut heed::RwTxn,
+        fields_frequency: &FreqsMap,
+    ) -> ZResult<()> {
         self.main
             .put::<Str, SerdeFreqsMap>(writer, FIELDS_FREQUENCY, fields_frequency)
     }
