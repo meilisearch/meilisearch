@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-
-use chrono::{DateTime, Utc};
 use pretty_bytes::converter::convert;
 use serde::Serialize;
 use sysinfo::{NetworkExt, Pid, ProcessExt, ProcessorExt, System, SystemExt};
@@ -17,7 +15,6 @@ use crate::Data;
 struct IndexStatsResponse {
     number_of_documents: u64,
     is_indexing: bool,
-    last_update: Option<DateTime<Utc>>,
     fields_frequency: HashMap<String, usize>,
 }
 
@@ -34,9 +31,9 @@ pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
         .number_of_documents(&reader)
         .map_err(ResponseError::internal)?;
 
-    let fields_frequency = ctx
-        .state()
-        .fields_frequency(&reader, &index_uid)
+    let fields_frequency = index
+        .main
+        .fields_frequency(&reader)
         .map_err(ResponseError::internal)?
         .unwrap_or_default();
 
@@ -46,15 +43,9 @@ pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::not_found("Index not found"))?;
 
-    let last_update = ctx
-        .state()
-        .last_update(&reader, &index_uid)
-        .map_err(ResponseError::internal)?;
-
     let response = IndexStatsResponse {
         number_of_documents,
         is_indexing,
-        last_update,
         fields_frequency,
     };
     Ok(tide::response::json(response))
@@ -85,9 +76,9 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
                 .number_of_documents(&reader)
                 .map_err(ResponseError::internal)?;
 
-            let fields_frequency = ctx
-                .state()
-                .fields_frequency(&reader, &index_uid)
+            let fields_frequency = index
+                .main
+                .fields_frequency(&reader)
                 .map_err(ResponseError::internal)?
                 .unwrap_or_default();
 
@@ -97,15 +88,9 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
                 .map_err(ResponseError::internal)?
                 .ok_or(ResponseError::not_found("Index not found"))?;
 
-            let last_update = ctx
-                .state()
-                .last_update(&reader, &index_uid)
-                .map_err(ResponseError::internal)?;
-
             let response = IndexStatsResponse {
                 number_of_documents,
                 is_indexing,
-                last_update,
                 fields_frequency,
             };
             index_list.insert(index_uid, response);

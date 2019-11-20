@@ -312,7 +312,7 @@ pub fn index_update_callback(index_uid: &str, data: &Data, _status: ProcessedUpd
     let mut writer = env.write_txn().unwrap();
 
     data.compute_stats(&mut writer, &index_uid).unwrap();
-    data.set_last_update(&mut writer, &index_uid).unwrap();
+    data.set_last_update(&mut writer).unwrap();
 
     writer.commit().unwrap();
 }
