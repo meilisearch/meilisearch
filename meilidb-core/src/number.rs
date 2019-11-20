@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt;
 use std::num::{ParseFloatError, ParseIntError};
 use std::str::FromStr;
@@ -5,7 +6,7 @@ use std::str::FromStr;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Hash)]
 pub enum Number {
     Unsigned(u64),
     Signed(i64),
@@ -36,6 +37,50 @@ impl FromStr for Number {
             int_error,
             float_error,
         })
+    }
+}
+
+impl PartialEq for Number {
+    fn eq(&self, other: &Number) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Number {}
+
+impl PartialOrd for Number {
+    fn partial_cmp(&self, other: &Number) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Number {
+    fn cmp(&self, other: &Self) -> Ordering {
+        use Number::{Float, Signed, Unsigned};
+
+        match (*self, *other) {
+            (Unsigned(a), Unsigned(b)) => a.cmp(&b),
+            (Unsigned(a), Signed(b)) => {
+                if b < 0 {
+                    Ordering::Greater
+                } else {
+                    a.cmp(&(b as u64))
+                }
+            }
+            (Unsigned(a), Float(b)) => (OrderedFloat(a as f64)).cmp(&b),
+            (Signed(a), Unsigned(b)) => {
+                if a < 0 {
+                    Ordering::Less
+                } else {
+                    (a as u64).cmp(&b)
+                }
+            }
+            (Signed(a), Signed(b)) => a.cmp(&b),
+            (Signed(a), Float(b)) => OrderedFloat(a as f64).cmp(&b),
+            (Float(a), Unsigned(b)) => a.cmp(&OrderedFloat(b as f64)),
+            (Float(a), Signed(b)) => a.cmp(&OrderedFloat(b as f64)),
+            (Float(a), Float(b)) => a.cmp(&b),
+        }
     }
 }
 
