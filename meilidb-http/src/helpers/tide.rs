@@ -38,9 +38,9 @@ impl ContextExt for Context<Data> {
             .common_store()
             .get::<Str, SerdeBincode<Token>>(&reader, &token_key)
             .map_err(ResponseError::internal)?
-            .ok_or(ResponseError::not_found(format!(
-                "token key: {}",
-                token_key
+            .ok_or(ResponseError::invalid_token(format!(
+                "token key does not exist: {}",
+                user_api_key
             )))?;
 
         if token_config.revoked {
