@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use crate::RankedMap;
 use heed::Result as ZResult;
@@ -7,6 +8,7 @@ use std::sync::Arc;
 
 const CREATED_AT: &str = "created-at";
 const CUSTOMS_KEY: &str = "customs-key";
+const FIELDS_FREQUENCY: &str = "fields-frequency";
 const NAME: &str = "name";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY: &str = "ranked-map";
@@ -16,6 +18,8 @@ const SYNONYMS_KEY: &str = "synonyms";
 const UPDATED_AT: &str = "updated-at";
 const WORDS_KEY: &str = "words";
 
+pub type FreqsMap = HashMap<String, usize>;
+type SerdeFreqsMap = SerdeBincode<FreqsMap>;
 type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
 
 #[derive(Copy, Clone)]
@@ -141,6 +145,21 @@ impl Main {
         {
             Some(value) => Ok(value),
             None => Ok(0),
+        }
+    }
+
+    pub fn put_fields_frequency(self, writer: &mut heed::RwTxn, fields_frequency: &FreqsMap) -> ZResult<()> {
+        self.main
+            .put::<Str, SerdeFreqsMap>(writer, FIELDS_FREQUENCY, fields_frequency)
+    }
+
+    pub fn fields_frequency(&self, reader: &heed::RoTxn) -> ZResult<Option<FreqsMap>> {
+        match self
+            .main
+            .get::<Str, SerdeFreqsMap>(&reader, FIELDS_FREQUENCY)?
+        {
+            Some(freqs) => Ok(Some(freqs)),
+            None => Ok(None),
         }
     }
 

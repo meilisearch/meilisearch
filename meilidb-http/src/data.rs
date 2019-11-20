@@ -5,14 +5,12 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use heed::types::{SerdeBincode, Str};
 use log::*;
-use meilidb_core::{Database, MResult};
+use meilidb_core::{Database, MResult, Error as MError};
 use sysinfo::Pid;
 
 use crate::option::Opt;
 use crate::routes::index::index_update_callback;
 
-pub type FreqsMap = HashMap<String, usize>;
-type SerdeFreqsMap = SerdeBincode<FreqsMap>;
 type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
 
 #[derive(Clone)]
@@ -44,47 +42,25 @@ impl DataInner {
         }
     }
 
-    pub fn last_update(
-        &self,
-        reader: &heed::RoTxn,
-        index_uid: &str,
-    ) -> MResult<Option<DateTime<Utc>>> {
-        let key = format!("last-update-{}", index_uid);
+    pub fn last_update(&self, reader: &heed::RoTxn) -> MResult<Option<DateTime<Utc>>> {
         match self
             .db
             .common_store()
-            .get::<Str, SerdeDatetime>(&reader, &key)?
+            .get::<Str, SerdeDatetime>(&reader, "last-update")?
         {
             Some(datetime) => Ok(Some(datetime)),
             None => Ok(None),
         }
     }
 
-    pub fn set_last_update(&self, writer: &mut heed::RwTxn, index_uid: &str) -> MResult<()> {
-        let key = format!("last-update-{}", index_uid);
+    pub fn set_last_update(&self, writer: &mut heed::RwTxn) -> MResult<()> {
         self.db
             .common_store()
-            .put::<Str, SerdeDatetime>(writer, &key, &Utc::now())
+            .put::<Str, SerdeDatetime>(writer, "last-update", &Utc::now())
             .map_err(Into::into)
     }
 
-    pub fn fields_frequency(
-        &self,
-        reader: &heed::RoTxn,
-        index_uid: &str,
-    ) -> MResult<Option<FreqsMap>> {
-        let key = format!("fields-frequency-{}", index_uid);
-        match self
-            .db
-            .common_store()
-            .get::<Str, SerdeFreqsMap>(&reader, &key)?
-        {
-            Some(freqs) => Ok(Some(freqs)),
-            None => Ok(None),
-        }
-    }
-
-    pub fn compute_stats(&self, writer: &mut heed::RwTxn, index_uid: &str) -> MResult<()> {
+    pub fn compute_stats(&self, mut writer: &mut heed::RwTxn, index_uid: &str) -> MResult<()> {
         let index = match self.db.open_index(&index_uid) {
             Some(index) => index,
             None => {
@@ -115,12 +91,7 @@ impl DataInner {
             .map(|(a, c)| (schema.attribute_name(a).to_owned(), c))
             .collect();
 
-        let key = format!("fields-frequency-{}", index_uid);
-        self.db
-            .common_store()
-            .put::<Str, SerdeFreqsMap>(writer, &key, &frequency)?;
-
-        Ok(())
+        index.main.put_fields_frequency(&mut writer, &frequency).map_err(MError::Zlmdb)
     }
 }
 
