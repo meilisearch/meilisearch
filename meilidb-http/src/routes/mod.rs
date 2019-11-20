@@ -76,7 +76,7 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                     router
                         .at("/")
                         .get(stop_words::list)
-                        .put(stop_words::add)
+                        .patch(stop_words::add)
                         .delete(stop_words::delete);
                 });
 
