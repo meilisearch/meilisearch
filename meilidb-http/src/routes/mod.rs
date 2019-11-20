@@ -42,7 +42,7 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                 router.at("/documents").nest(|router| {
                     router
                         .at("/")
-                        .get(document::browse_documents)
+                        .get(document::get_all_documents)
                         .post(document::add_or_replace_multiple_documents)
                         .put(document::add_or_update_multiple_documents)
                         .delete(document::clear_all_documents);
