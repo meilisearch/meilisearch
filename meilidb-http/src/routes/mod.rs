@@ -60,7 +60,7 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                 });
 
                 router.at("/synonym").nest(|router| {
-                    router.at("/").get(synonym::list).post(synonym::create);
+                    router.at("/").get(synonym::list).post(synonym::create).delete(synonym::clear);
 
                     router
                         .at("/:synonym")
@@ -69,7 +69,6 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                         .delete(synonym::delete);
 
                     router.at("/batch").post(synonym::batch_write);
-                    router.at("/clear").post(synonym::clear);
                 });
 
                 router.at("/stop-words").nest(|router| {
