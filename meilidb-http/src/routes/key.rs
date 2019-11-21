@@ -117,6 +117,8 @@ pub struct UpdatedRequest {
     description: Option<String>,
     acl: Option<Vec<ACL>>,
     indexes: Option<Vec<Wildcard>>,
+    expires_at: Option<DateTime<Utc>>,
+    revoked: Option<bool>,
 }
 
 pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
@@ -154,6 +156,14 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
         token_config.indexes = indexes;
     }
 
+    if let Some(expires_at) = data.expires_at {
+        token_config.expires_at = expires_at;
+    }
+
+    if let Some(revoked) = data.revoked {
+        token_config.revoked = revoked;
+    }
+
     token_config.updated_at = Utc::now();
 
     common_store
@@ -163,7 +173,7 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
     writer.commit().map_err(ResponseError::internal)?;
 
     Ok(tide::response::json(token_config)
-        .with_status(StatusCode::ACCEPTED)
+        .with_status(StatusCode::OK)
         .into_response())
 }
 
@@ -185,5 +195,5 @@ pub async fn delete(ctx: Context<Data>) -> SResult<StatusCode> {
 
     writer.commit().map_err(ResponseError::internal)?;
 
-    Ok(StatusCode::ACCEPTED)
+    Ok(StatusCode::NO_CONTENT)
 }
