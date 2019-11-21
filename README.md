@@ -158,3 +158,9 @@ cargo run --release --example from_file -- \
     --filter '!adult' \
     id popularity adult original_title
 ```
+
+### Analytic Events
+
+We send events to our Amplitude instance to be aware of the number of people who use MeiliSearch.<br/>
+We only send the platform on which the server runs once by day. No other information is sent.<br/>
+If you do not want us to send events, you can disable these analytics by using the `MEILI_NO_ANALYTICS` env variable.
