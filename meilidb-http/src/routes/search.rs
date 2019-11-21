@@ -155,13 +155,8 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
 
     for index in index_list.clone() {
         if index == "*" {
-            index_list = ctx
-                .state()
-                .db
-                .indexes_names()
-                .map_err(ResponseError::internal)?
-                .into_iter()
-                .collect();
+            index_list = ctx.state().db.indexes_uids().into_iter().collect();
+            break;
         }
     }
 
@@ -181,10 +176,10 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
     let par_body = body.clone();
     let responses_per_index: Vec<SResult<_>> = index_list
         .into_par_iter()
-        .map(move |index_name| {
+        .map(move |index_uid| {
             let index: Index = db
-                .open_index(&index_name)
-                .ok_or(ResponseError::index_not_found(&index_name))?;
+                .open_index(&index_uid)
+                .ok_or(ResponseError::index_not_found(&index_uid))?;
 
             let mut search_builder = index.new_search(par_body.query.clone());
 
@@ -221,7 +216,7 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
             let response = search_builder
                 .search(&reader)
                 .map_err(ResponseError::internal)?;
-            Ok((index_name, response))
+            Ok((index_uid, response))
         })
         .collect();
 
@@ -230,11 +225,11 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
     let mut max_query_time = 0;
 
     for response in responses_per_index {
-        if let Ok((index_name, response)) = response {
+        if let Ok((index_uid, response)) = response {
             if response.processing_time_ms > max_query_time {
                 max_query_time = response.processing_time_ms;
             }
-            hits_map.insert(index_name, response.hits);
+            hits_map.insert(index_uid, response.hits);
         }
     }
 

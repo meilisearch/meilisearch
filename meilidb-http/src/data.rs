@@ -4,15 +4,15 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use heed::types::{SerdeBincode, Str};
-use log::*;
-use meilidb_core::{Database, MResult};
+use log::error;
+use meilidb_core::{Database, Error as MError, MResult};
 use sysinfo::Pid;
 
 use crate::option::Opt;
 use crate::routes::index::index_update_callback;
 
-pub type FreqsMap = HashMap<String, usize>;
-type SerdeFreqsMap = SerdeBincode<FreqsMap>;
+const LAST_UPDATE_KEY: &str = "last-update";
+
 type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
 
 #[derive(Clone)]
@@ -44,51 +44,29 @@ impl DataInner {
         }
     }
 
-    pub fn last_update(
-        &self,
-        reader: &heed::RoTxn,
-        index_name: &str,
-    ) -> MResult<Option<DateTime<Utc>>> {
-        let key = format!("last-update-{}", index_name);
+    pub fn last_update(&self, reader: &heed::RoTxn) -> MResult<Option<DateTime<Utc>>> {
         match self
             .db
             .common_store()
-            .get::<Str, SerdeDatetime>(&reader, &key)?
+            .get::<Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)?
         {
             Some(datetime) => Ok(Some(datetime)),
             None => Ok(None),
         }
     }
 
-    pub fn set_last_update(&self, writer: &mut heed::RwTxn, index_name: &str) -> MResult<()> {
-        let key = format!("last-update-{}", index_name);
+    pub fn set_last_update(&self, writer: &mut heed::RwTxn) -> MResult<()> {
         self.db
             .common_store()
-            .put::<Str, SerdeDatetime>(writer, &key, &Utc::now())
+            .put::<Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, &Utc::now())
             .map_err(Into::into)
     }
 
-    pub fn fields_frequency(
-        &self,
-        reader: &heed::RoTxn,
-        index_name: &str,
-    ) -> MResult<Option<FreqsMap>> {
-        let key = format!("fields-frequency-{}", index_name);
-        match self
-            .db
-            .common_store()
-            .get::<Str, SerdeFreqsMap>(&reader, &key)?
-        {
-            Some(freqs) => Ok(Some(freqs)),
-            None => Ok(None),
-        }
-    }
-
-    pub fn compute_stats(&self, writer: &mut heed::RwTxn, index_name: &str) -> MResult<()> {
-        let index = match self.db.open_index(&index_name) {
+    pub fn compute_stats(&self, writer: &mut heed::RwTxn, index_uid: &str) -> MResult<()> {
+        let index = match self.db.open_index(&index_uid) {
             Some(index) => index,
             None => {
-                error!("Impossible to retrieve index {}", index_name);
+                error!("Impossible to retrieve index {}", index_uid);
                 return Ok(());
             }
         };
@@ -115,12 +93,10 @@ impl DataInner {
             .map(|(a, c)| (schema.attribute_name(a).to_owned(), c))
             .collect();
 
-        let key = format!("fields-frequency-{}", index_name);
-        self.db
-            .common_store()
-            .put::<Str, SerdeFreqsMap>(writer, &key, &frequency)?;
-
-        Ok(())
+        index
+            .main
+            .put_fields_frequency(writer, &frequency)
+            .map_err(MError::Zlmdb)
     }
 }
 
@@ -144,8 +120,8 @@ impl Data {
         };
 
         let callback_context = data.clone();
-        db.set_update_callback(Box::new(move |index_name, status| {
-            index_update_callback(&index_name, &callback_context, status);
+        db.set_update_callback(Box::new(move |index_uid, status| {
+            index_update_callback(&index_uid, &callback_context, status);
         }));
 
         data

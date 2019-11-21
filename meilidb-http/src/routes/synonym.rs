@@ -115,7 +115,7 @@ pub async fn create(mut ctx: Context<Data>) -> SResult<Response> {
 
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::response::json(response_body)
-        .with_status(StatusCode::CREATED)
+        .with_status(StatusCode::ACCEPTED)
         .into_response())
 }
 

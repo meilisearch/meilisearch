@@ -22,7 +22,7 @@ struct IndexCommand {
     database_path: PathBuf,
 
     #[structopt(long, default_value = "default")]
-    index_name: String,
+    index_uid: String,
 
     /// The csv file to index.
     #[structopt(parse(from_os_str))]
@@ -46,7 +46,7 @@ struct SearchCommand {
     database_path: PathBuf,
 
     #[structopt(long, default_value = "default")]
-    index_name: String,
+    index_uid: String,
 
     /// Timeout after which the search will return results.
     #[structopt(long)]
@@ -76,7 +76,7 @@ struct ShowUpdatesCommand {
     database_path: PathBuf,
 
     #[structopt(long, default_value = "default")]
-    index_name: String,
+    index_uid: String,
 }
 
 #[derive(Debug, StructOpt)]
@@ -106,9 +106,9 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     let (sender, receiver) = mpsc::sync_channel(100);
     let update_fn =
         move |_name: &str, update: ProcessedUpdateResult| sender.send(update.update_id).unwrap();
-    let index = match database.open_index(&command.index_name) {
+    let index = match database.open_index(&command.index_uid) {
         Some(index) => index,
-        None => database.create_index(&command.index_name).unwrap(),
+        None => database.create_index(&command.index_uid).unwrap(),
     };
 
     database.set_update_callback(Box::new(update_fn));
@@ -318,7 +318,7 @@ fn crop_text(
 fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<dyn Error>> {
     let env = &database.env;
     let index = database
-        .open_index(&command.index_name)
+        .open_index(&command.index_uid)
         .expect("Could not find index");
 
     let reader = env.read_txn().unwrap();
@@ -446,7 +446,7 @@ fn show_updates_command(
 ) -> Result<(), Box<dyn Error>> {
     let env = &database.env;
     let index = database
-        .open_index(&command.index_name)
+        .open_index(&command.index_uid)
         .expect("Could not find index");
 
     let reader = env.read_txn().unwrap();

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
+use log::error;
 use pretty_bytes::converter::convert;
 use serde::Serialize;
 use sysinfo::{NetworkExt, Pid, ProcessExt, ProcessorExt, System, SystemExt};
@@ -17,13 +18,12 @@ use crate::Data;
 struct IndexStatsResponse {
     number_of_documents: u64,
     is_indexing: bool,
-    last_update: Option<DateTime<Utc>>,
     fields_frequency: HashMap<String, usize>,
 }
 
 pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
-    let index_name = ctx.url_param("index")?;
+    let index_uid = ctx.url_param("index")?;
     let index = ctx.index()?;
 
     let env = &ctx.state().db.env;
@@ -34,27 +34,21 @@ pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
         .number_of_documents(&reader)
         .map_err(ResponseError::internal)?;
 
-    let fields_frequency = ctx
-        .state()
-        .fields_frequency(&reader, &index_name)
+    let fields_frequency = index
+        .main
+        .fields_frequency(&reader)
         .map_err(ResponseError::internal)?
         .unwrap_or_default();
 
     let is_indexing = ctx
         .state()
-        .is_indexing(&reader, &index_name)
+        .is_indexing(&reader, &index_uid)
         .map_err(ResponseError::internal)?
-        .ok_or(ResponseError::not_found("Index not found"))?;
-
-    let last_update = ctx
-        .state()
-        .last_update(&reader, &index_name)
-        .map_err(ResponseError::internal)?;
+        .ok_or(ResponseError::internal("'is_indexing' date not found"))?;
 
     let response = IndexStatsResponse {
         number_of_documents,
         is_indexing,
-        last_update,
         fields_frequency,
     };
     Ok(tide::response::json(response))
@@ -64,6 +58,7 @@ pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
 #[serde(rename_all = "camelCase")]
 struct StatsResult {
     database_size: u64,
+    last_update: Option<DateTime<Utc>>,
     indexes: HashMap<String, IndexStatsResponse>,
 }
 
@@ -72,43 +67,44 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
 
     let mut index_list = HashMap::new();
 
-    if let Ok(indexes_set) = ctx.state().db.indexes_names() {
-        for index_name in indexes_set {
-            let db = &ctx.state().db;
-            let env = &db.env;
+    let db = &ctx.state().db;
+    let env = &db.env;
+    let reader = env.read_txn().map_err(ResponseError::internal)?;
 
-            let index = db.open_index(&index_name).unwrap();
-            let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let indexes_set = ctx.state().db.indexes_uids();
+    for index_uid in indexes_set {
+        let index = ctx.state().db.open_index(&index_uid);
 
-            let number_of_documents = index
-                .main
-                .number_of_documents(&reader)
-                .map_err(ResponseError::internal)?;
+        match index {
+            Some(index) => {
+                let number_of_documents = index
+                    .main
+                    .number_of_documents(&reader)
+                    .map_err(ResponseError::internal)?;
 
-            let fields_frequency = ctx
-                .state()
-                .fields_frequency(&reader, &index_name)
-                .map_err(ResponseError::internal)?
-                .unwrap_or_default();
+                let fields_frequency = index
+                    .main
+                    .fields_frequency(&reader)
+                    .map_err(ResponseError::internal)?
+                    .unwrap_or_default();
 
-            let is_indexing = ctx
-                .state()
-                .is_indexing(&reader, &index_name)
-                .map_err(ResponseError::internal)?
-                .ok_or(ResponseError::not_found("Index not found"))?;
+                let is_indexing = ctx
+                    .state()
+                    .is_indexing(&reader, &index_uid)
+                    .map_err(ResponseError::internal)?
+                    .ok_or(ResponseError::internal("'is_indexing' date not found"))?;
 
-            let last_update = ctx
-                .state()
-                .last_update(&reader, &index_name)
-                .map_err(ResponseError::internal)?;
-
-            let response = IndexStatsResponse {
-                number_of_documents,
-                is_indexing,
-                last_update,
-                fields_frequency,
-            };
-            index_list.insert(index_name, response);
+                let response = IndexStatsResponse {
+                    number_of_documents,
+                    is_indexing,
+                    fields_frequency,
+                };
+                index_list.insert(index_uid, response);
+            }
+            None => error!(
+                "Index {:?} is referenced in the indexes list but cannot be found",
+                index_uid
+            ),
         }
     }
 
@@ -119,8 +115,14 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
         .filter(|metadata| metadata.is_file())
         .fold(0, |acc, m| acc + m.len());
 
+    let last_update = ctx
+        .state()
+        .last_update(&reader)
+        .map_err(ResponseError::internal)?;
+
     let response = StatsResult {
         database_size,
+        last_update,
         indexes: index_list,
     };
 

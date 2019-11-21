@@ -38,9 +38,9 @@ impl ContextExt for Context<Data> {
             .common_store()
             .get::<Str, SerdeBincode<Token>>(&reader, &token_key)
             .map_err(ResponseError::internal)?
-            .ok_or(ResponseError::not_found(format!(
-                "token key: {}",
-                token_key
+            .ok_or(ResponseError::invalid_token(format!(
+                "Api key does not exist: {}",
+                user_api_key
             )))?;
 
         if token_config.revoked {
@@ -93,12 +93,12 @@ impl ContextExt for Context<Data> {
     }
 
     fn index(&self) -> Result<Index, ResponseError> {
-        let index_name = self.url_param("index")?;
+        let index_uid = self.url_param("index")?;
         let index = self
             .state()
             .db
-            .open_index(&index_name)
-            .ok_or(ResponseError::index_not_found(index_name))?;
+            .open_index(&index_uid)
+            .ok_or(ResponseError::index_not_found(index_uid))?;
         Ok(index)
     }
 

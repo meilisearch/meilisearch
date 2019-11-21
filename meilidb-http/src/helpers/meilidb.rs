@@ -1,6 +1,6 @@
 use crate::routes::setting::{RankingOrdering, SettingBody};
 use indexmap::IndexMap;
-use log::*;
+use log::error;
 use meilidb_core::criterion::*;
 use meilidb_core::Highlight;
 use meilidb_core::{Index, RankedMap};

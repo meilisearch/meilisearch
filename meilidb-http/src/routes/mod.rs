@@ -13,7 +13,10 @@ pub mod synonym;
 pub fn load_routes(app: &mut tide::App<Data>) {
     app.at("").nest(|router| {
         router.at("/indexes").nest(|router| {
-            router.at("/").get(index::list_indexes);
+            router
+                .at("/")
+                .get(index::list_indexes)
+                .post(index::create_index);
 
             router.at("/search").post(search::search_multi_index);
 
@@ -28,15 +31,19 @@ pub fn load_routes(app: &mut tide::App<Data>) {
 
                 router
                     .at("/")
-                    .get(index::get_index_schema)
-                    .post(index::create_index)
-                    .put(index::update_schema)
+                    .get(index::get_index)
+                    .put(index::update_index)
                     .delete(index::delete_index);
+
+                router
+                    .at("/schema")
+                    .get(index::get_index_schema)
+                    .put(index::update_schema);
 
                 router.at("/documents").nest(|router| {
                     router
                         .at("/")
-                        .get(document::browse_documents)
+                        .get(document::get_all_documents)
                         .post(document::add_or_replace_multiple_documents)
                         .put(document::add_or_update_multiple_documents)
                         .delete(document::clear_all_documents);
@@ -53,8 +60,12 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                         .post(document::delete_multiple_documents);
                 });
 
-                router.at("/synonym").nest(|router| {
-                    router.at("/").get(synonym::list).post(synonym::create);
+                router.at("/synonyms").nest(|router| {
+                    router
+                        .at("/")
+                        .get(synonym::list)
+                        .post(synonym::create)
+                        .delete(synonym::clear);
 
                     router
                         .at("/:synonym")
@@ -63,14 +74,13 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                         .delete(synonym::delete);
 
                     router.at("/batch").post(synonym::batch_write);
-                    router.at("/clear").post(synonym::clear);
                 });
 
                 router.at("/stop-words").nest(|router| {
                     router
                         .at("/")
                         .get(stop_words::list)
-                        .put(stop_words::add)
+                        .patch(stop_words::add)
                         .delete(stop_words::delete);
                 });
 

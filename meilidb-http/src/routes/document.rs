@@ -74,7 +74,7 @@ struct BrowseQuery {
     attributes_to_retrieve: Option<String>,
 }
 
-pub async fn browse_documents(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_all_documents(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(DocumentsRead)?;
 
     let index = ctx.index()?;
@@ -114,15 +114,7 @@ pub async fn browse_documents(ctx: Context<Data>) -> SResult<Response> {
         }
     }
 
-    if response_body.is_empty() {
-        Ok(tide::response::json(response_body)
-            .with_status(StatusCode::NO_CONTENT)
-            .into_response())
-    } else {
-        Ok(tide::response::json(response_body)
-            .with_status(StatusCode::OK)
-            .into_response())
-    }
+    Ok(tide::response::json(response_body))
 }
 
 fn infered_schema(document: &IndexMap<String, Value>) -> Option<meilidb_schema::Schema> {
