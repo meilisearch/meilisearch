@@ -1,0 +1,20 @@
+---
+on:
+  push:
+    tags:
+      - '*'
+
+name: Publish tagged image to Docker Hub
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Publish to Registry
+        uses: elgohr/Publish-Docker-Github-Action@master
+        with:
+          name: getmeili/meilisearch
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          tags: true        

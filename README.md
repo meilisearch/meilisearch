@@ -1,6 +1,6 @@
 # MeiliDB
 
-[![Build Status](https://dev.azure.com/thomas0884/thomas/_apis/build/status/meilisearch.MeiliDB?branchName=master)](https://dev.azure.com/thomas0884/thomas/_build/latest?definitionId=1&branchName=master)
+[![Build Status](https://github.com/meilisearch/MeiliDB/workflows/Cargo%20test/badge.svg)](https://dev.azure.com/thomas0884/thomas/_build/latest?definitionId=1&branchName=master)
 [![dependency status](https://deps.rs/repo/github/meilisearch/MeiliDB/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliDB)
 [![License](https://img.shields.io/badge/license-commons%20clause-lightgrey)](https://commonsclause.com/)
 
@@ -27,7 +27,7 @@ It uses [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) a
 
 You can [read the deep dive](deep-dive.md) if you want more information on the engine, it describes the whole process of generating updates and handling queries or you can take a look at the [typos and ranking rules](typos-ranking-rules.md) if you want to know the default rules used to sort the documents.
 
-We will be proud if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliDB/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). It is a good start!
+We will be glad if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliDB/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). It is a good start!
 
 [![crates.io demo gif](misc/crates-io-demo.gif)](https://crates.meilisearch.com)
 
@@ -47,7 +47,6 @@ If you have not installed Rust and its package manager `cargo` yet, go to [the i
 You can deploy the server on your own machine, it will listen to HTTP requests on the 8080 port by default.
 
 ```bash
-rustup override set nightly
 cargo run --release
 ```
 
@@ -112,8 +111,8 @@ curl 'http://127.0.0.1:8080/indexes/movies/search?q=botman'
 
 ## Performances
 
-With a dataset composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed.
-So more than _300 000_ fields indexed for _35 million_ stored we can handle more than _2.8k req/sec_ with an average response time of _9 ms_ on an Intel i7-7700 (8) @ 4.2GHz.
+With a dataset composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed.
+So more than _300 000_ fields indexed for _35 million_ stored we can handle more than _2.8k req/sec_ with an average response time of _9 ms_ on an Intel i7-7700 (8) @ 4.2GHz.
 
 Requests are made using [wrk](https://github.com/wg/wrk) and scripted to simulate real users queries.
 
@@ -128,7 +127,7 @@ Requests/sec:   2806.46
 Transfer/sec:    759.17KB
 ```
 
-We also indexed a dataset containing something like _12 millions_ cities names in _24 minutes_ on a machine with _8 cores_, _64 GB of RAM_ and a _300 GB NMVe_ SSD.<br/>
+We also indexed a dataset containing something like _12 millions_ cities names in _24 minutes_ on a machine with _8 cores_, _64 GB of RAM_ and a _300 GB NMVe_ SSD.<br/>
 The resulting database was _16 GB_ and search results were between _30 ms_ and _4 seconds_ for short prefix queries.
 
 ### Notes
