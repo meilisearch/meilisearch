@@ -202,7 +202,7 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
                 search_builder.filters(filters);
             }
             if let Some(timeout_ms) = par_body.timeout_ms {
-                search_builder.timeout(Duration::from_secs(timeout_ms));
+                search_builder.timeout(Duration::from_millis(timeout_ms));
             }
             if let Some(matches) = par_body.matches {
                 if matches {
