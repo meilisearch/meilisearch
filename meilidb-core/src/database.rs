@@ -18,7 +18,7 @@ pub struct Database {
     pub env: heed::Env,
     common_store: heed::PolyDatabase,
     indexes_store: heed::Database<Str, Unit>,
-    indexes: RwLock<HashMap<String, (Index, thread::JoinHandle<()>)>>,
+    indexes: RwLock<HashMap<String, (Index, thread::JoinHandle<MResult<()>>)>>,
     update_fn: Arc<ArcSwapFn>,
 }
 
@@ -36,7 +36,7 @@ macro_rules! r#break_try {
 
 pub enum UpdateEvent {
     NewUpdate,
-    MustStop,
+    MustClear,
 }
 
 pub type UpdateEvents = Receiver<UpdateEvent>;
@@ -48,7 +48,7 @@ fn update_awaiter(
     index_uid: &str,
     update_fn: Arc<ArcSwapFn>,
     index: Index,
-) {
+) -> MResult<()> {
     let mut receiver = receiver.into_iter();
     while let Some(UpdateEvent::NewUpdate) = receiver.next() {
         loop {
@@ -97,6 +97,14 @@ fn update_awaiter(
     }
 
     debug!("update loop system stopped");
+
+    let mut writer = env.write_txn()?;
+    store::clear(&mut writer, &index)?;
+    writer.commit()?;
+
+    debug!("store {} cleared", index_uid);
+
+    Ok(())
 }
 
 impl Database {
@@ -226,14 +234,15 @@ impl Database {
                 // and clear all the LMDB dbi
                 let mut writer = self.env.write_txn()?;
                 self.indexes_store.delete(&mut writer, &name)?;
-
-                store::clear(&mut writer, &index)?;
                 writer.commit()?;
+
+                // send a stop event to the update loop of the index
+                index.updates_notifier.send(UpdateEvent::MustClear).unwrap();
 
                 drop(indexes_lock);
 
                 // join the update loop thread to ensure it is stopped
-                handle.join().unwrap();
+                handle.join().unwrap()?;
 
                 Ok(true)
             }

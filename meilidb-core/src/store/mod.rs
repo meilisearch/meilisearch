@@ -92,7 +92,7 @@ pub struct Index {
 
     pub updates: Updates,
     pub updates_results: UpdatesResults,
-    updates_notifier: UpdateEventsEmitter,
+    pub(crate) updates_notifier: UpdateEventsEmitter,
 }
 
 impl Index {
@@ -381,9 +381,6 @@ pub fn open(
 }
 
 pub fn clear(writer: &mut heed::RwTxn, index: &Index) -> MResult<()> {
-    // send a stop event to the update loop of the index
-    index.updates_notifier.send(UpdateEvent::MustStop).unwrap();
-
     // clear all the stores
     index.main.clear(writer)?;
     index.postings_lists.clear(writer)?;
