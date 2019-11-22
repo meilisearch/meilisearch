@@ -146,9 +146,14 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
         .await
         .map_err(ResponseError::bad_request)?;
 
-    let generated_uid = generate_uid();
-
     let db = &ctx.state().db;
+
+    let generated_uid = loop {
+        let uid = generate_uid();
+        if db.open_index(&uid).is_none() {
+            break uid;
+        }
+    };
 
     let created_index = match db.create_index(&generated_uid) {
         Ok(index) => index,
