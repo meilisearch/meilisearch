@@ -1,3 +1,6 @@
+use std::env::VarError::NotPresent;
+use std::{env, thread};
+
 use http::header::HeaderValue;
 use log::info;
 use main_error::MainError;
@@ -10,6 +13,8 @@ use meilidb_http::option::Opt;
 use meilidb_http::routes;
 use meilidb_http::routes::index::index_update_callback;
 
+mod analytics;
+
 #[cfg(not(target_os = "macos"))]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
@@ -19,6 +24,10 @@ pub fn main() -> Result<(), MainError> {
 
     let opt = Opt::from_args();
     let data = Data::new(opt.clone());
+
+    if env::var("MEILI_NO_ANALYTICS") == Err(NotPresent) {
+        thread::spawn(|| analytics::analytics_sender());
+    }
 
     let data_cloned = data.clone();
     data.db.set_update_callback(Box::new(move |name, status| {
