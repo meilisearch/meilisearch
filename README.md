@@ -62,7 +62,7 @@ MeiliDB can serve multiple indexes, with different kinds of documents,
 therefore, it is required to create the index before sending documents to it.
 
 ```bash
-curl -i -X POST 'http://127.0.0.1:8080/indexes/movies'
+curl -i -X POST 'http://127.0.0.1:8080/indexes' --data '{ "name": "Movies", "uid": "movies" }'
 ```
 
 Now that the server knows about our brand new index, we can send it data.

@@ -123,6 +123,7 @@ pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct IndexCreateRequest {
     name: String,
+    uid: Option<String>,
     schema: Option<SchemaBody>,
 }
 
@@ -146,11 +147,19 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
         .await
         .map_err(ResponseError::bad_request)?;
 
-    let generated_uid = generate_uid();
-
     let db = &ctx.state().db;
 
-    let created_index = match db.create_index(&generated_uid) {
+    let uid = match body.uid {
+        Some(uid) => uid,
+        None => loop {
+            let uid = generate_uid();
+            if db.open_index(&uid).is_none() {
+                break uid;
+            }
+        },
+    };
+
+    let created_index = match db.create_index(&uid) {
         Ok(index) => index,
         Err(e) => return Err(ResponseError::create_index(e)),
     };
@@ -184,7 +193,7 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
 
     let response_body = IndexCreateResponse {
         name: body.name,
-        uid: generated_uid,
+        uid,
         schema: body.schema,
         update_id: response_update_id,
         created_at: Utc::now(),
