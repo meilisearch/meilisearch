@@ -12,7 +12,7 @@ jobs:
     container: tpayet/chiquitita:latest
     steps:
       - script: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
           $HOME/.cargo/bin/rustup component add rustfmt
         displayName: 'Install rustc and components'
       - script: |
@@ -34,7 +34,7 @@ jobs:
     container: tpayet/chiquitita:latest
     steps:
       - script: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
           $HOME/.cargo/bin/rustup component add rustfmt
         displayName: 'Install rustc and components'
       - script: |
