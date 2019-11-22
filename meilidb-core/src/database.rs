@@ -277,8 +277,9 @@ impl Database {
 mod tests {
     use super::*;
 
+    use crate::criterion::{self, CriteriaBuilder};
     use crate::update::{ProcessedUpdateResult, UpdateStatus};
-    use crate::DocumentId;
+    use crate::{Document, DocumentId};
     use serde::de::IgnoredAny;
     use std::sync::mpsc;
 
@@ -911,5 +912,100 @@ mod tests {
 
         let result = database.open_index("test");
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn check_number_ordering() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let database = Database::open_or_create(dir.path()).unwrap();
+        let env = &database.env;
+
+        let (sender, receiver) = mpsc::sync_channel(100);
+        let update_fn = move |_name: &str, update: ProcessedUpdateResult| {
+            sender.send(update.update_id).unwrap()
+        };
+        let index = database.create_index("test").unwrap();
+
+        database.set_update_callback(Box::new(update_fn));
+
+        let schema = {
+            let data = r#"
+                identifier = "id"
+
+                [attributes."name"]
+                displayed = true
+                indexed = true
+
+                [attributes."release_date"]
+                displayed = true
+                ranked = true
+            "#;
+            toml::from_str(data).unwrap()
+        };
+
+        let mut writer = env.write_txn().unwrap();
+        let _update_id = index.schema_update(&mut writer, schema).unwrap();
+        writer.commit().unwrap();
+
+        let mut additions = index.documents_addition();
+
+        // DocumentId(7900334843754999545)
+        let doc1 = serde_json::json!({
+            "id": 123,
+            "name": "Kevin the first",
+            "release_date": -10000,
+        });
+
+        // DocumentId(8367468610878465872)
+        let doc2 = serde_json::json!({
+            "id": 234,
+            "name": "Kevin the second",
+            "release_date": 10000,
+        });
+
+        additions.update_document(doc1);
+        additions.update_document(doc2);
+
+        let mut writer = env.write_txn().unwrap();
+        let update_id = additions.finalize(&mut writer).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.into_iter().find(|id| *id == update_id);
+
+        let reader = env.read_txn().unwrap();
+
+        let schema = index.main.schema(&reader).unwrap().unwrap();
+        let ranked_map = index.main.ranked_map(&reader).unwrap().unwrap();
+
+        let criteria = CriteriaBuilder::new()
+            .add(
+                criterion::SortByAttr::lower_is_better(&ranked_map, &schema, "release_date")
+                    .unwrap(),
+            )
+            .add(criterion::DocumentId)
+            .build();
+
+        let builder = index.query_builder_with_criteria(criteria);
+
+        let results = builder.query(&reader, "Kevin", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(
+            iter.next(),
+            Some(Document {
+                id: DocumentId(7900334843754999545),
+                ..
+            })
+        );
+        assert_matches!(
+            iter.next(),
+            Some(Document {
+                id: DocumentId(8367468610878465872),
+                ..
+            })
+        );
+        assert_matches!(iter.next(), None);
     }
 }
