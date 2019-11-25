@@ -8,6 +8,4 @@
 
 - On each pull request, we are triggering `cargo test`.
 - On each commit on master, we are building the latest docker image.
-
-## TODO
-- On each tag, we should build the tagged docker image and the binaries for Debian & CentOS
+- On each tag, we are building the tagged docker image and the binaries for MacOS & Ubuntu.
