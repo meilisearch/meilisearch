@@ -25,4 +25,5 @@ RUN     apk add build-base
 
 COPY    --from=compiler /meilisearch/target/release/meilidb-http .
 
+ENV     MEILI_HTTP_ADDR 0.0.0.0:8080
 CMD     ./meilidb-http
