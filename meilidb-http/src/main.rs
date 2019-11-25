@@ -15,7 +15,7 @@ use meilidb_http::routes::index::index_update_callback;
 
 mod analytics;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
