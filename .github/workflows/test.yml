@@ -1,0 +1,20 @@
+---
+on: [pull_request]
+
+name: Cargo test
+
+jobs:
+  check:
+    name: MeiliDB
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
