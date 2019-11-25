@@ -1,6 +1,6 @@
 # MeiliDB
 
-[![Build Status](https://github.com/meilisearch/MeiliDB/workflows/Cargo%20test/badge.svg)](https://dev.azure.com/thomas0884/thomas/_build/latest?definitionId=1&branchName=master)
+[![Build Status](https://github.com/meilisearch/MeiliDB/workflows/Cargo%20test/badge.svg)](https://github.com/meilisearch/MeiliDB/actions)
 [![dependency status](https://deps.rs/repo/github/meilisearch/MeiliDB/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliDB)
 [![License](https://img.shields.io/badge/license-commons%20clause-lightgrey)](https://commonsclause.com/)
 
