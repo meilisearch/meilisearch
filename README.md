@@ -24,7 +24,6 @@ For more [details about those features go to our documentation](https://docs.mei
 
 [![crates.io demo gif](misc/crates-io-demo.gif)](https://crates.meilisearch.com)
 
-
 > Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
 
 ## In depth features
@@ -113,7 +112,6 @@ curl 'http://127.0.0.1:8080/indexes/movies/search?q=botman'
 }
 ```
 
-
 ## Performances
 
 With a dataset composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed.
@@ -172,10 +170,6 @@ You can [read the deep dive](deep-dive.md) if you want more information on the e
 ## Contributing
 
 We will be glad if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). It is a good start!
-
-
-
-
 
 ### Analytic Events
 
