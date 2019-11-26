@@ -7,6 +7,10 @@ authors = [
 ]
 edition = "2018"
 
+[[bin]]
+name = "meilisearch"
+path = "src/main.rs"
+
 [dependencies]
 bincode = "1.2.0"
 chrono = { version = "0.4.9", features = ["serde"] }

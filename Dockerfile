@@ -23,7 +23,7 @@ RUN     apk update --quiet
 RUN     apk add libressl
 RUN     apk add build-base
 
-COPY    --from=compiler /meilisearch/target/release/meilisearch-http .
+COPY    --from=compiler /meilisearch/target/release/meilisearch .
 
 ENV     MEILI_HTTP_ADDR 0.0.0.0:8080
-CMD     ./meilisearch-http
+CMD     ./meilisearch
