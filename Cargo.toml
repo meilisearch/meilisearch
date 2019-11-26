@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "meilidb-core",
-    "meilidb-http",
-    "meilidb-schema",
-    "meilidb-tokenizer",
-    "meilidb-types",
+    "meilisearch-core",
+    "meilisearch-http",
+    "meilisearch-schema",
+    "meilisearch-tokenizer",
+    "meilisearch-types",
 ]
 
 [profile.release]

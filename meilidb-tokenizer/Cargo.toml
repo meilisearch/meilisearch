@@ -1,9 +1,0 @@
-[package]
-name = "meilidb-tokenizer"
-version = "0.8.0"
-authors = ["Kerollmops <renault.cle@gmail.com>"]
-edition = "2018"
-
-[dependencies]
-deunicode = "1.0.0"
-slice-group-by = "0.2.4"

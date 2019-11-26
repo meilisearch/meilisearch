@@ -14,11 +14,11 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         include:
           - os: ubuntu-latest
-            artifact_name: meilidb-http
-            asset_name: meilidb-http-linux-amd64
+            artifact_name: meilisearch-http
+            asset_name: meilisearch-http-linux-amd64
           - os: macos-latest
-            artifact_name: meilidb-http
-            asset_name: meilidb-http-macos-amd64
+            artifact_name: meilisearch-http
+            asset_name: meilisearch-http-macos-amd64
 
     steps:
     - uses: hecrj/setup-rust-action@master

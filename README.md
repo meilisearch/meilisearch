@@ -1,7 +1,7 @@
-# MeiliDB
+# MeiliSearch
 
-[![Build Status](https://github.com/meilisearch/MeiliDB/workflows/Cargo%20test/badge.svg)](https://github.com/meilisearch/MeiliDB/actions)
-[![dependency status](https://deps.rs/repo/github/meilisearch/MeiliDB/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliDB)
+[![Build Status](https://github.com/meilisearch/MeiliSearch/workflows/Cargo%20test/badge.svg)](https://github.com/meilisearch/MeiliSearch/actions)
+[![dependency status](https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliSearch)
 [![License](https://img.shields.io/badge/license-commons%20clause-lightgrey)](https://commonsclause.com/)
 
 Ultra relevant and instant full-text search API.
@@ -10,24 +10,24 @@ MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engi
 
 ## Features
 
-- Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/criterion/mod.rs#L107-L113) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
-- Accepts [custom criteria](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/criterion/mod.rs#L24-L33) and can apply them in any custom order
-- Support [ranged queries](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/query_builder.rs#L283), useful for paginating results
-- Can [distinct](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/query_builder.rs#L265-L270) and [filter](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/query_builder.rs#L246-L259) returned documents based on context defined rules
-- Searches for [concatenated](https://github.com/meilisearch/MeiliDB/pull/164) and [splitted query words](https://github.com/meilisearch/MeiliDB/pull/232) to improve the search quality.
-- Can store complete documents or only [user schema specified fields](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-schema/src/lib.rs#L265-L279)
-- The [default tokenizer](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-tokenizer/src/lib.rs) can index latin and kanji based languages
-- Returns [the matching text areas](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/lib.rs#L66-L88), useful to highlight matched words in results
-- Accepts query time search config like the [searchable attributes](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/query_builder.rs#L272-L275)
-- Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliDB/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilidb-core/src/store/mod.rs#L143-L173)
+- Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/criterion/mod.rs#L107-L113) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
+- Accepts [custom criteria](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/criterion/mod.rs#L24-L33) and can apply them in any custom order
+- Support [ranged queries](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/query_builder.rs#L283), useful for paginating results
+- Can [distinct](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/query_builder.rs#L265-L270) and [filter](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/query_builder.rs#L246-L259) returned documents based on context defined rules
+- Searches for [concatenated](https://github.com/meilisearch/MeiliSearch/pull/164) and [splitted query words](https://github.com/meilisearch/MeiliSearch/pull/232) to improve the search quality.
+- Can store complete documents or only [user schema specified fields](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-schema/src/lib.rs#L265-L279)
+- The [default tokenizer](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-tokenizer/src/lib.rs) can index latin and kanji based languages
+- Returns [the matching text areas](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/lib.rs#L66-L88), useful to highlight matched words in results
+- Accepts query time search config like the [searchable attributes](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/query_builder.rs#L272-L275)
+- Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/store/mod.rs#L143-L173)
 
 
 
-It uses [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) as the internal key-value store. The key-value store allows us to handle updates and queries with small memory and CPU overheads. The whole ranking system is [data oriented](https://github.com/meilisearch/MeiliDB/issues/82) and provides great performances.
+It uses [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) as the internal key-value store. The key-value store allows us to handle updates and queries with small memory and CPU overheads. The whole ranking system is [data oriented](https://github.com/meilisearch/MeiliSearch/issues/82) and provides great performances.
 
 You can [read the deep dive](deep-dive.md) if you want more information on the engine, it describes the whole process of generating updates and handling queries or you can take a look at the [typos and ranking rules](typos-ranking-rules.md) if you want to know the default rules used to sort the documents.
 
-We will be glad if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliDB/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). It is a good start!
+We will be glad if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). It is a good start!
 
 [![crates.io demo gif](misc/crates-io-demo.gif)](https://crates.meilisearch.com)
 
@@ -37,7 +37,7 @@ We will be glad if you submit issues and pull requests. You can help to grow thi
 
 ## Quick Start
 
-You can deploy your own instant, relevant and typo-tolerant MeiliDB search engine by yourself too.
+You can deploy your own instant, relevant and typo-tolerant MeiliSearch search engine by yourself too.
 Something similar to the demo above can be achieve by following these little three steps first.
 You will need to create your own web front display to make it pretty though.
 
@@ -57,7 +57,7 @@ RUST_LOG=info cargo run --release
 
 ### Create an Index and Upload Some Documents
 
-MeiliDB can serve multiple indexes, with different kinds of documents,
+MeiliSearch can serve multiple indexes, with different kinds of documents,
 therefore, it is required to create the index before sending documents to it.
 
 ```bash
@@ -137,10 +137,10 @@ We have seen much better performances when [using jemalloc as the global allocat
 
 ## Usage and Examples
 
-MeiliDB also provides an example binary that is mostly used for features testing.
+MeiliSearch also provides an example binary that is mostly used for features testing.
 Notice that the example binary is faster to index data as it does read direct CSV files and not JSON HTTP payloads.
 
-The _index_ subcommand has been made to create an index and inject documents into it. Using the command line below, the index will be named _movies_ and the _19 700_ movies of the `datasets/` will be injected in MeiliDB.
+The _index_ subcommand has been made to create an index and inject documents into it. Using the command line below, the index will be named _movies_ and the _19 700_ movies of the `datasets/` will be injected in MeiliSearch.
 
 ```bash
 cargo run --release --example from_file -- \
