@@ -1,10 +1,10 @@
-# MeiliSearch
+# MeiliSearch 
 
 [![Build Status](https://github.com/meilisearch/MeiliSearch/workflows/Cargo%20test/badge.svg)](https://github.com/meilisearch/MeiliSearch/actions)
 [![dependency status](https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliSearch)
 [![License](https://img.shields.io/badge/license-commons%20clause-lightgrey)](https://commonsclause.com/)
 
-Ultra relevant and instant full-text search API.
+⚡ Ultra relevant and instant full-text search API. 🔍
 
 MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engine. The search and indexation are fully customizable and handles features like typo-tolerance, filters, and ranking.
 
@@ -14,8 +14,8 @@ MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engi
 * Typo tolerant (understands typos and spelling mistakes)
 * Support Kanji
 * Supports Synonym
-* Easy to install, deploy and maintain
-* Whole document returned
+* Easy to install, deploy, and maintain
+* Whole documents returned
 * Highly customizable
 * RESTfull API 
 
