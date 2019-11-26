@@ -9,16 +9,15 @@ Ultra relevant and instant full-text search API.
 MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engine. The search and indexation are fully customizable and handles features like typo-tolerance, filters, and ranking.
 
 ## What MeiliSearch has to offer
-* **Instant** Search (answers < 50ms)
-* Search **as you type** experience
-* **Full text** search
-* **Typo tolerance** (understands typo and spelling mistakes)
-* **Kanji** supported 
-* **Synonyms**
-* **Easy** to install, deploy and maintain
-* **Whole document returned**
-* Highly **customizable**
-* **RESTfull** API 
+* Search as you type experience (answers < 50ms)
+* Full-text search
+* Typo tolerant (understands typos and spelling mistakes)
+* Support Kanji
+* Supports Synonym
+* Easy to install, deploy and maintain
+* Whole document returned
+* Highly customizable
+* RESTfull API 
 
 For more [details about those features go to our documentation](https://docs.meilisearch.com/introduction/features.html).
 
