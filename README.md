@@ -8,7 +8,26 @@ Ultra relevant and instant full-text search API.
 
 MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engine. The search and indexation are fully customizable and handles features like typo-tolerance, filters, and ranking.
 
-## Features
+## What MeiliSearch has to offer
+* **Instant** Search (answers < 50ms)
+* Search **as you type** experience
+* **Full text** search
+* **Typo tolerance** (understands typo and spelling mistakes)
+* **Kanji** supported 
+* **Synonyms**
+* **Easy** to install, deploy and maintain
+* **Whole document returned**
+* Highly **customizable**
+* **RESTfull** API 
+
+For more [details about those features go to our documentation](https://docs.meilisearch.com/introduction/features.html).
+
+[![crates.io demo gif](misc/crates-io-demo.gif)](https://crates.meilisearch.com)
+
+
+> Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
+
+## In depth features
 
 - Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/criterion/mod.rs#L107-L113) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
 - Accepts [custom criteria](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/criterion/mod.rs#L24-L33) and can apply them in any custom order
@@ -20,19 +39,6 @@ MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engi
 - Returns [the matching text areas](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/lib.rs#L66-L88), useful to highlight matched words in results
 - Accepts query time search config like the [searchable attributes](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/query_builder.rs#L272-L275)
 - Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/store/mod.rs#L143-L173)
-
-
-
-It uses [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) as the internal key-value store. The key-value store allows us to handle updates and queries with small memory and CPU overheads. The whole ranking system is [data oriented](https://github.com/meilisearch/MeiliSearch/issues/82) and provides great performances.
-
-You can [read the deep dive](deep-dive.md) if you want more information on the engine, it describes the whole process of generating updates and handling queries or you can take a look at the [typos and ranking rules](typos-ranking-rules.md) if you want to know the default rules used to sort the documents.
-
-We will be glad if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). It is a good start!
-
-[![crates.io demo gif](misc/crates-io-demo.gif)](https://crates.meilisearch.com)
-
-> Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
-
 
 
 ## Quick Start
@@ -108,7 +114,6 @@ curl 'http://127.0.0.1:8080/indexes/movies/search?q=botman'
 ```
 
 
-
 ## Performances
 
 With a dataset composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed.
@@ -157,6 +162,20 @@ cargo run --release --example from_file -- \
     --filter '!adult' \
     id popularity adult original_title
 ```
+
+## How it works
+
+MeiliSearch uses [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) as the internal key-value store. The key-value store allows us to handle updates and queries with small memory and CPU overheads. The whole ranking system is [data oriented](https://github.com/meilisearch/MeiliSearch/issues/82) and provides great performances.
+
+You can [read the deep dive](deep-dive.md) if you want more information on the engine, it describes the whole process of generating updates and handling queries or you can take a look at the [typos and ranking rules](typos-ranking-rules.md) if you want to know the default rules used to sort the documents.
+
+## Contributing
+
+We will be glad if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). It is a good start!
+
+
+
+
 
 ### Analytic Events
 
