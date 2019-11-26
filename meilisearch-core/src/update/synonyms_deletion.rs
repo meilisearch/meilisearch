@@ -4,6 +4,7 @@ use std::iter::FromIterator;
 use fst::{set::OpBuilder, SetBuilder};
 use sdset::SetBuf;
 
+use crate::database::{MainT, UpdateT};
 use crate::automaton::normalize_str;
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::update::{next_update_id, Update};
@@ -50,7 +51,7 @@ impl SynonymsDeletion {
         }
     }
 
-    pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64> {
+    pub fn finalize(self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         let update_id = push_synonyms_deletion(
             writer,
@@ -63,7 +64,7 @@ impl SynonymsDeletion {
 }
 
 pub fn push_synonyms_deletion(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     deletion: BTreeMap<String, Option<Vec<String>>>,
@@ -77,7 +78,7 @@ pub fn push_synonyms_deletion(
 }
 
 pub fn apply_synonyms_deletion(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<MainT>,
     main_store: store::Main,
     synonyms_store: store::Synonyms,
     deletion: BTreeMap<String, Option<Vec<String>>>,

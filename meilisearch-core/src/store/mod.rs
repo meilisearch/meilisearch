@@ -27,6 +27,7 @@ use zerocopy::{AsBytes, FromBytes};
 
 use crate::criterion::Criteria;
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
+use crate::database::{MainT, UpdateT};
 use crate::serde::Deserializer;
 use crate::{query_builder::QueryBuilder, update, DocumentId, Error, MResult};
 
@@ -98,7 +99,7 @@ pub struct Index {
 impl Index {
     pub fn document<T: de::DeserializeOwned>(
         &self,
-        reader: &heed::RoTxn,
+        reader: &heed::RoTxn<MainT>,
         attributes: Option<&HashSet<&str>>,
         document_id: DocumentId,
     ) -> MResult<Option<T>> {
@@ -126,7 +127,7 @@ impl Index {
 
     pub fn document_attribute<T: de::DeserializeOwned>(
         &self,
-        reader: &heed::RoTxn,
+        reader: &heed::RoTxn<MainT>,
         document_id: DocumentId,
         attribute: SchemaAttr,
     ) -> MResult<Option<T>> {
@@ -139,12 +140,12 @@ impl Index {
         }
     }
 
-    pub fn schema_update(&self, writer: &mut heed::RwTxn, schema: Schema) -> MResult<u64> {
+    pub fn schema_update(&self, writer: &mut heed::RwTxn<UpdateT>, schema: Schema) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         update::push_schema_update(writer, self.updates, self.updates_results, schema)
     }
 
-    pub fn customs_update(&self, writer: &mut heed::RwTxn, customs: Vec<u8>) -> ZResult<u64> {
+    pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> ZResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         update::push_customs_update(writer, self.updates, self.updates_results, customs)
     }
@@ -173,7 +174,7 @@ impl Index {
         )
     }
 
-    pub fn clear_all(&self, writer: &mut heed::RwTxn) -> MResult<u64> {
+    pub fn clear_all(&self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         update::push_clear_all(writer, self.updates, self.updates_results)
     }
@@ -210,8 +211,8 @@ impl Index {
         )
     }
 
-    pub fn current_update_id(&self, reader: &heed::RoTxn) -> MResult<Option<u64>> {
-        match self.updates.last_update_id(reader)? {
+    pub fn current_update_id(&self, reader: &heed::RoTxn<UpdateT>) -> MResult<Option<u64>> {
+        match self.updates.last_update(reader)? {
             Some((id, _)) => Ok(Some(id)),
             None => Ok(None),
         }
@@ -219,18 +220,18 @@ impl Index {
 
     pub fn update_status(
         &self,
-        reader: &heed::RoTxn,
+        reader: &heed::RoTxn<UpdateT>,
         update_id: u64,
     ) -> MResult<Option<update::UpdateStatus>> {
         update::update_status(reader, self.updates, self.updates_results, update_id)
     }
 
-    pub fn all_updates_status(&self, reader: &heed::RoTxn) -> MResult<Vec<update::UpdateStatus>> {
+    pub fn all_updates_status(&self, reader: &heed::RoTxn<UpdateT>) -> MResult<Vec<update::UpdateStatus>> {
         let mut updates = Vec::new();
         let mut last_update_result_id = 0;
 
         // retrieve all updates results
-        if let Some((last_id, _)) = self.updates_results.last_update_id(reader)? {
+        if let Some((last_id, _)) = self.updates_results.last_update(reader)? {
             updates.reserve(last_id as usize);
 
             for id in 0..=last_id {
@@ -242,7 +243,7 @@ impl Index {
         }
 
         // retrieve all enqueued updates
-        if let Some((last_id, _)) = self.updates.last_update_id(reader)? {
+        if let Some((last_id, _)) = self.updates.last_update(reader)? {
             for id in last_update_result_id + 1..=last_id {
                 if let Some(update) = self.update_status(reader, id)? {
                     updates.push(update);
@@ -278,6 +279,7 @@ impl Index {
 
 pub fn create(
     env: &heed::Env,
+    update_env: &heed::Env,
     name: &str,
     updates_notifier: UpdateEventsEmitter,
 ) -> MResult<Index> {
@@ -298,8 +300,8 @@ pub fn create(
     let documents_fields_counts = env.create_database(Some(&documents_fields_counts_name))?;
     let synonyms = env.create_database(Some(&synonyms_name))?;
     let docs_words = env.create_database(Some(&docs_words_name))?;
-    let updates = env.create_database(Some(&updates_name))?;
-    let updates_results = env.create_database(Some(&updates_results_name))?;
+    let updates = update_env.create_database(Some(&updates_name))?;
+    let updates_results = update_env.create_database(Some(&updates_results_name))?;
 
     Ok(Index {
         main: Main { main },
@@ -318,6 +320,7 @@ pub fn create(
 
 pub fn open(
     env: &heed::Env,
+    update_env: &heed::Env,
     name: &str,
     updates_notifier: UpdateEventsEmitter,
 ) -> MResult<Option<Index>> {
@@ -356,11 +359,11 @@ pub fn open(
         Some(docs_words) => docs_words,
         None => return Ok(None),
     };
-    let updates = match env.open_database(Some(&updates_name))? {
+    let updates = match update_env.open_database(Some(&updates_name))? {
         Some(updates) => updates,
         None => return Ok(None),
     };
-    let updates_results = match env.open_database(Some(&updates_results_name))? {
+    let updates_results = match update_env.open_database(Some(&updates_results_name))? {
         Some(updates_results) => updates_results,
         None => return Ok(None),
     };
@@ -380,7 +383,11 @@ pub fn open(
     }))
 }
 
-pub fn clear(writer: &mut heed::RwTxn, index: &Index) -> MResult<()> {
+pub fn clear(
+    writer: &mut heed::RwTxn<MainT>,
+    update_writer: &mut heed::RwTxn<UpdateT>,
+    index: &Index,
+) -> MResult<()> {
     // clear all the stores
     index.main.clear(writer)?;
     index.postings_lists.clear(writer)?;
@@ -388,7 +395,7 @@ pub fn clear(writer: &mut heed::RwTxn, index: &Index) -> MResult<()> {
     index.documents_fields_counts.clear(writer)?;
     index.synonyms.clear(writer)?;
     index.docs_words.clear(writer)?;
-    index.updates.clear(writer)?;
-    index.updates_results.clear(writer)?;
+    index.updates.clear(update_writer)?;
+    index.updates_results.clear(update_writer)?;
     Ok(())
 }

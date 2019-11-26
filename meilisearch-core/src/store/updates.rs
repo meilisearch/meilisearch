@@ -1,4 +1,5 @@
 use super::BEU64;
+use crate::database::UpdateT;
 use crate::update::Update;
 use heed::types::{OwnedType, SerdeJson};
 use heed::Result as ZResult;
@@ -10,7 +11,7 @@ pub struct Updates {
 
 impl Updates {
     // TODO do not trigger deserialize if possible
-    pub fn last_update_id(self, reader: &heed::RoTxn) -> ZResult<Option<(u64, Update)>> {
+    pub fn last_update(self, reader: &heed::RoTxn<UpdateT>) -> ZResult<Option<(u64, Update)>> {
         match self.updates.last(reader)? {
             Some((key, data)) => Ok(Some((key.get(), data))),
             None => Ok(None),
@@ -18,7 +19,7 @@ impl Updates {
     }
 
     // TODO do not trigger deserialize if possible
-    fn first_update_id(self, reader: &heed::RoTxn) -> ZResult<Option<(u64, Update)>> {
+    pub fn first_update(self, reader: &heed::RoTxn<UpdateT>) -> ZResult<Option<(u64, Update)>> {
         match self.updates.first(reader)? {
             Some((key, data)) => Ok(Some((key.get(), data))),
             None => Ok(None),
@@ -26,14 +27,14 @@ impl Updates {
     }
 
     // TODO do not trigger deserialize if possible
-    pub fn get(self, reader: &heed::RoTxn, update_id: u64) -> ZResult<Option<Update>> {
+    pub fn get(self, reader: &heed::RoTxn<UpdateT>, update_id: u64) -> ZResult<Option<Update>> {
         let update_id = BEU64::new(update_id);
         self.updates.get(reader, &update_id)
     }
 
     pub fn put_update(
         self,
-        writer: &mut heed::RwTxn,
+        writer: &mut heed::RwTxn<UpdateT>,
         update_id: u64,
         update: &Update,
     ) -> ZResult<()> {
@@ -42,8 +43,13 @@ impl Updates {
         self.updates.put(writer, &update_id, update)
     }
 
-    pub fn pop_front(self, writer: &mut heed::RwTxn) -> ZResult<Option<(u64, Update)>> {
-        match self.first_update_id(writer)? {
+    pub fn del_update(self, writer: &mut heed::RwTxn<UpdateT>, update_id: u64) -> ZResult<bool> {
+        let update_id = BEU64::new(update_id);
+        self.updates.delete(writer, &update_id)
+    }
+
+    pub fn pop_front(self, writer: &mut heed::RwTxn<UpdateT>) -> ZResult<Option<(u64, Update)>> {
+        match self.first_update(writer)? {
             Some((update_id, update)) => {
                 let key = BEU64::new(update_id);
                 self.updates.delete(writer, &key)?;
@@ -53,7 +59,7 @@ impl Updates {
         }
     }
 
-    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+    pub fn clear(self, writer: &mut heed::RwTxn<UpdateT>) -> ZResult<()> {
         self.updates.clear(writer)
     }
 }

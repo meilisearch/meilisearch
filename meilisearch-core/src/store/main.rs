@@ -1,3 +1,4 @@
+use crate::database::MainT;
 use crate::RankedMap;
 use chrono::{DateTime, Utc};
 use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
@@ -28,46 +29,46 @@ pub struct Main {
 }
 
 impl Main {
-    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+    pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
         self.main.clear(writer)
     }
 
-    pub fn put_name(self, writer: &mut heed::RwTxn, name: &str) -> ZResult<()> {
-        self.main.put::<Str, Str>(writer, NAME_KEY, name)
+    pub fn put_name(self, writer: &mut heed::RwTxn<MainT>, name: &str) -> ZResult<()> {
+        self.main.put::<_, Str, Str>(writer, NAME_KEY, name)
     }
 
-    pub fn name(self, reader: &heed::RoTxn) -> ZResult<Option<String>> {
+    pub fn name(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<String>> {
         Ok(self
             .main
-            .get::<Str, Str>(reader, NAME_KEY)?
+            .get::<_, Str, Str>(reader, NAME_KEY)?
             .map(|name| name.to_owned()))
     }
 
-    pub fn put_created_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+    pub fn put_created_at(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
         self.main
-            .put::<Str, SerdeDatetime>(writer, CREATED_AT_KEY, &Utc::now())
+            .put::<_, Str, SerdeDatetime>(writer, CREATED_AT_KEY, &Utc::now())
     }
 
-    pub fn created_at(self, reader: &heed::RoTxn) -> ZResult<Option<DateTime<Utc>>> {
-        self.main.get::<Str, SerdeDatetime>(reader, CREATED_AT_KEY)
+    pub fn created_at(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<DateTime<Utc>>> {
+        self.main.get::<_, Str, SerdeDatetime>(reader, CREATED_AT_KEY)
     }
 
-    pub fn put_updated_at(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+    pub fn put_updated_at(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
         self.main
-            .put::<Str, SerdeDatetime>(writer, UPDATED_AT_KEY, &Utc::now())
+            .put::<_, Str, SerdeDatetime>(writer, UPDATED_AT_KEY, &Utc::now())
     }
 
-    pub fn updated_at(self, reader: &heed::RoTxn) -> ZResult<Option<DateTime<Utc>>> {
-        self.main.get::<Str, SerdeDatetime>(reader, UPDATED_AT_KEY)
+    pub fn updated_at(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<DateTime<Utc>>> {
+        self.main.get::<_, Str, SerdeDatetime>(reader, UPDATED_AT_KEY)
     }
 
-    pub fn put_words_fst(self, writer: &mut heed::RwTxn, fst: &fst::Set) -> ZResult<()> {
+    pub fn put_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
         let bytes = fst.as_fst().as_bytes();
-        self.main.put::<Str, ByteSlice>(writer, WORDS_KEY, bytes)
+        self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, bytes)
     }
 
-    pub fn words_fst(self, reader: &heed::RoTxn) -> ZResult<Option<fst::Set>> {
-        match self.main.get::<Str, ByteSlice>(reader, WORDS_KEY)? {
+    pub fn words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
+        match self.main.get::<_, Str, ByteSlice>(reader, WORDS_KEY)? {
             Some(bytes) => {
                 let len = bytes.len();
                 let bytes = Arc::new(bytes.to_owned());
@@ -78,33 +79,33 @@ impl Main {
         }
     }
 
-    pub fn put_schema(self, writer: &mut heed::RwTxn, schema: &Schema) -> ZResult<()> {
+    pub fn put_schema(self, writer: &mut heed::RwTxn<MainT>, schema: &Schema) -> ZResult<()> {
         self.main
-            .put::<Str, SerdeBincode<Schema>>(writer, SCHEMA_KEY, schema)
+            .put::<_, Str, SerdeBincode<Schema>>(writer, SCHEMA_KEY, schema)
     }
 
-    pub fn schema(self, reader: &heed::RoTxn) -> ZResult<Option<Schema>> {
+    pub fn schema(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<Schema>> {
         self.main
-            .get::<Str, SerdeBincode<Schema>>(reader, SCHEMA_KEY)
+            .get::<_, Str, SerdeBincode<Schema>>(reader, SCHEMA_KEY)
     }
 
-    pub fn put_ranked_map(self, writer: &mut heed::RwTxn, ranked_map: &RankedMap) -> ZResult<()> {
+    pub fn put_ranked_map(self, writer: &mut heed::RwTxn<MainT>, ranked_map: &RankedMap) -> ZResult<()> {
         self.main
-            .put::<Str, SerdeBincode<RankedMap>>(writer, RANKED_MAP_KEY, &ranked_map)
+            .put::<_, Str, SerdeBincode<RankedMap>>(writer, RANKED_MAP_KEY, &ranked_map)
     }
 
-    pub fn ranked_map(self, reader: &heed::RoTxn) -> ZResult<Option<RankedMap>> {
+    pub fn ranked_map(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<RankedMap>> {
         self.main
-            .get::<Str, SerdeBincode<RankedMap>>(reader, RANKED_MAP_KEY)
+            .get::<_, Str, SerdeBincode<RankedMap>>(reader, RANKED_MAP_KEY)
     }
 
-    pub fn put_synonyms_fst(self, writer: &mut heed::RwTxn, fst: &fst::Set) -> ZResult<()> {
+    pub fn put_synonyms_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
         let bytes = fst.as_fst().as_bytes();
-        self.main.put::<Str, ByteSlice>(writer, SYNONYMS_KEY, bytes)
+        self.main.put::<_, Str, ByteSlice>(writer, SYNONYMS_KEY, bytes)
     }
 
-    pub fn synonyms_fst(self, reader: &heed::RoTxn) -> ZResult<Option<fst::Set>> {
-        match self.main.get::<Str, ByteSlice>(reader, SYNONYMS_KEY)? {
+    pub fn synonyms_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
+        match self.main.get::<_, Str, ByteSlice>(reader, SYNONYMS_KEY)? {
             Some(bytes) => {
                 let len = bytes.len();
                 let bytes = Arc::new(bytes.to_owned());
@@ -115,14 +116,14 @@ impl Main {
         }
     }
 
-    pub fn put_stop_words_fst(self, writer: &mut heed::RwTxn, fst: &fst::Set) -> ZResult<()> {
+    pub fn put_stop_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
         let bytes = fst.as_fst().as_bytes();
         self.main
-            .put::<Str, ByteSlice>(writer, STOP_WORDS_KEY, bytes)
+            .put::<_, Str, ByteSlice>(writer, STOP_WORDS_KEY, bytes)
     }
 
-    pub fn stop_words_fst(self, reader: &heed::RoTxn) -> ZResult<Option<fst::Set>> {
-        match self.main.get::<Str, ByteSlice>(reader, STOP_WORDS_KEY)? {
+    pub fn stop_words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
+        match self.main.get::<_, Str, ByteSlice>(reader, STOP_WORDS_KEY)? {
             Some(bytes) => {
                 let len = bytes.len();
                 let bytes = Arc::new(bytes.to_owned());
@@ -133,20 +134,20 @@ impl Main {
         }
     }
 
-    pub fn put_number_of_documents<F>(self, writer: &mut heed::RwTxn, f: F) -> ZResult<u64>
+    pub fn put_number_of_documents<F>(self, writer: &mut heed::RwTxn<MainT>, f: F) -> ZResult<u64>
     where
         F: Fn(u64) -> u64,
     {
-        let new = self.number_of_documents(writer).map(f)?;
+        let new = self.number_of_documents(&*writer).map(f)?;
         self.main
-            .put::<Str, OwnedType<u64>>(writer, NUMBER_OF_DOCUMENTS_KEY, &new)?;
+            .put::<_, Str, OwnedType<u64>>(writer, NUMBER_OF_DOCUMENTS_KEY, &new)?;
         Ok(new)
     }
 
-    pub fn number_of_documents(self, reader: &heed::RoTxn) -> ZResult<u64> {
+    pub fn number_of_documents(self, reader: &heed::RoTxn<MainT>) -> ZResult<u64> {
         match self
             .main
-            .get::<Str, OwnedType<u64>>(reader, NUMBER_OF_DOCUMENTS_KEY)?
+            .get::<_, Str, OwnedType<u64>>(reader, NUMBER_OF_DOCUMENTS_KEY)?
         {
             Some(value) => Ok(value),
             None => Ok(0),
@@ -155,29 +156,29 @@ impl Main {
 
     pub fn put_fields_frequency(
         self,
-        writer: &mut heed::RwTxn,
+        writer: &mut heed::RwTxn<MainT>,
         fields_frequency: &FreqsMap,
     ) -> ZResult<()> {
         self.main
-            .put::<Str, SerdeFreqsMap>(writer, FIELDS_FREQUENCY_KEY, fields_frequency)
+            .put::<_, Str, SerdeFreqsMap>(writer, FIELDS_FREQUENCY_KEY, fields_frequency)
     }
 
-    pub fn fields_frequency(&self, reader: &heed::RoTxn) -> ZResult<Option<FreqsMap>> {
+    pub fn fields_frequency(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<FreqsMap>> {
         match self
             .main
-            .get::<Str, SerdeFreqsMap>(reader, FIELDS_FREQUENCY_KEY)?
+            .get::<_, Str, SerdeFreqsMap>(reader, FIELDS_FREQUENCY_KEY)?
         {
             Some(freqs) => Ok(Some(freqs)),
             None => Ok(None),
         }
     }
 
-    pub fn put_customs(self, writer: &mut heed::RwTxn, customs: &[u8]) -> ZResult<()> {
+    pub fn put_customs(self, writer: &mut heed::RwTxn<MainT>, customs: &[u8]) -> ZResult<()> {
         self.main
-            .put::<Str, ByteSlice>(writer, CUSTOMS_KEY, customs)
+            .put::<_, Str, ByteSlice>(writer, CUSTOMS_KEY, customs)
     }
 
-    pub fn customs<'txn>(self, reader: &'txn heed::RoTxn) -> ZResult<Option<&'txn [u8]>> {
-        self.main.get::<Str, ByteSlice>(reader, CUSTOMS_KEY)
+    pub fn customs<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<&'txn [u8]>> {
+        self.main.get::<_, Str, ByteSlice>(reader, CUSTOMS_KEY)
     }
 }

@@ -12,8 +12,8 @@ pub async fn list(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let stop_words_fst = index
         .main
@@ -35,8 +35,8 @@ pub async fn add(mut ctx: Context<Data>) -> SResult<Response> {
 
     let data: Vec<String> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let mut stop_words_addition = index.stop_words_addition();
     for stop_word in data {
@@ -61,8 +61,8 @@ pub async fn delete(mut ctx: Context<Data>) -> SResult<Response> {
 
     let data: Vec<String> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let mut stop_words_deletion = index.stop_words_deletion();
     for stop_word in data {

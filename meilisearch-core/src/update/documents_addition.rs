@@ -4,6 +4,7 @@ use fst::{set::OpBuilder, SetBuilder};
 use sdset::{duo::Union, SetOperation};
 use serde::{Deserialize, Serialize};
 
+use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::raw_indexer::RawIndexer;
 use crate::serde::{extract_document_id, serialize_value, Deserializer, Serializer};
@@ -52,7 +53,7 @@ impl<D> DocumentsAddition<D> {
         self.documents.push(document);
     }
 
-    pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64>
+    pub fn finalize(self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64>
     where
         D: serde::Serialize,
     {
@@ -75,7 +76,7 @@ impl<D> Extend<D> for DocumentsAddition<D> {
 }
 
 pub fn push_documents_addition<D: serde::Serialize>(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     addition: Vec<D>,
@@ -102,7 +103,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
 }
 
 pub fn apply_documents_addition<'a, 'b>(
-    writer: &'a mut heed::RwTxn<'b>,
+    writer: &'a mut heed::RwTxn<'b, MainT>,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
@@ -181,7 +182,7 @@ pub fn apply_documents_addition<'a, 'b>(
 }
 
 pub fn apply_documents_partial_addition<'a, 'b>(
-    writer: &'a mut heed::RwTxn<'b>,
+    writer: &'a mut heed::RwTxn<'b, MainT>,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
@@ -277,7 +278,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
 }
 
 pub fn reindex_all_documents(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<MainT>,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
@@ -354,7 +355,7 @@ pub fn reindex_all_documents(
 }
 
 pub fn write_documents_addition_index(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<MainT>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,

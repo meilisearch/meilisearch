@@ -21,8 +21,8 @@ pub async fn get_document(ctx: Context<Data>) -> SResult<Response> {
     let identifier = ctx.identifier()?;
     let document_id = meilisearch_core::serde::compute_document_id(identifier.clone());
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let response = index
         .document::<IndexMap<String, Value>>(&reader, None, document_id)
@@ -49,16 +49,16 @@ pub async fn delete_document(ctx: Context<Data>) -> SResult<Response> {
     let identifier = ctx.identifier()?;
     let document_id = meilisearch_core::serde::compute_document_id(identifier.clone());
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let mut update_writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let mut documents_deletion = index.documents_deletion();
     documents_deletion.delete_document_by_id(document_id);
     let update_id = documents_deletion
-        .finalize(&mut writer)
+        .finalize(&mut update_writer)
         .map_err(ResponseError::internal)?;
 
-    writer.commit().map_err(ResponseError::internal)?;
+    update_writer.commit().map_err(ResponseError::internal)?;
 
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::response::json(response_body)
@@ -83,8 +83,8 @@ pub async fn get_all_documents(ctx: Context<Data>) -> SResult<Response> {
     let offset = query.offset.unwrap_or(0);
     let limit = query.limit.unwrap_or(20);
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let documents_ids: Result<BTreeSet<_>, _> =
         match index.documents_fields_counts.documents_ids(&reader) {
@@ -146,18 +146,19 @@ async fn update_multiple_documents(mut ctx: Context<Data>, is_partial: bool) -> 
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let mut update_writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let current_schema = index
         .main
-        .schema(&writer)
+        .schema(&reader)
         .map_err(ResponseError::internal)?;
     if current_schema.is_none() {
         match data.first().and_then(infered_schema) {
             Some(schema) => {
                 index
-                    .schema_update(&mut writer, schema)
+                    .schema_update(&mut update_writer, schema)
                     .map_err(ResponseError::internal)?;
             }
             None => return Err(ResponseError::bad_request("Could not infer a schema")),
@@ -175,10 +176,10 @@ async fn update_multiple_documents(mut ctx: Context<Data>, is_partial: bool) -> 
     }
 
     let update_id = document_addition
-        .finalize(&mut writer)
+        .finalize(&mut update_writer)
         .map_err(ResponseError::internal)?;
 
-    writer.commit().map_err(ResponseError::internal)?;
+    update_writer.commit().map_err(ResponseError::internal)?;
 
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::response::json(response_body)
@@ -200,8 +201,8 @@ pub async fn delete_multiple_documents(mut ctx: Context<Data>) -> SResult<Respon
     let data: Vec<Value> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let mut documents_deletion = index.documents_deletion();
 
@@ -229,8 +230,9 @@ pub async fn clear_all_documents(ctx: Context<Data>) -> SResult<Response> {
 
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
+
     let update_id = index
         .clear_all(&mut writer)
         .map_err(ResponseError::internal)?;

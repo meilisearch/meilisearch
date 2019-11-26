@@ -1,4 +1,5 @@
 use super::BEU64;
+use crate::database::MainT;
 use crate::DocumentId;
 use heed::types::{ByteSlice, OwnedType};
 use heed::Result as ZResult;
@@ -12,7 +13,7 @@ pub struct DocsWords {
 impl DocsWords {
     pub fn put_doc_words(
         self,
-        writer: &mut heed::RwTxn,
+        writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
         words: &fst::Set,
     ) -> ZResult<()> {
@@ -21,18 +22,18 @@ impl DocsWords {
         self.docs_words.put(writer, &document_id, bytes)
     }
 
-    pub fn del_doc_words(self, writer: &mut heed::RwTxn, document_id: DocumentId) -> ZResult<bool> {
+    pub fn del_doc_words(self, writer: &mut heed::RwTxn<MainT>, document_id: DocumentId) -> ZResult<bool> {
         let document_id = BEU64::new(document_id.0);
         self.docs_words.delete(writer, &document_id)
     }
 
-    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+    pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
         self.docs_words.clear(writer)
     }
 
     pub fn doc_words(
         self,
-        reader: &heed::RoTxn,
+        reader: &heed::RoTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<Option<fst::Set>> {
         let document_id = BEU64::new(document_id.0);

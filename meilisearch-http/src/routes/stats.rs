@@ -26,8 +26,9 @@ pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
     let index_uid = ctx.url_param("index")?;
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let update_reader = db.update_read_txn().map_err(ResponseError::internal)?;
 
     let number_of_documents = index
         .main
@@ -42,7 +43,7 @@ pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
 
     let is_indexing = ctx
         .state()
-        .is_indexing(&reader, &index_uid)
+        .is_indexing(&update_reader, &index_uid)
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::internal("'is_indexing' date not found"))?;
 
@@ -68,8 +69,8 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
     let mut index_list = HashMap::new();
 
     let db = &ctx.state().db;
-    let env = &db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let update_reader = db.update_read_txn().map_err(ResponseError::internal)?;
 
     let indexes_set = ctx.state().db.indexes_uids();
     for index_uid in indexes_set {
@@ -90,7 +91,7 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
 
                 let is_indexing = ctx
                     .state()
-                    .is_indexing(&reader, &index_uid)
+                    .is_indexing(&update_reader, &index_uid)
                     .map_err(ResponseError::internal)?
                     .ok_or(ResponseError::internal("'is_indexing' date not found"))?;
 

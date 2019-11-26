@@ -31,8 +31,8 @@ pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
 
     let indexes_uids = ctx.state().db.indexes_uids();
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let mut response_body = Vec::new();
 
@@ -89,8 +89,8 @@ pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
 
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let uid = ctx.url_param("index")?;
     let name = index
@@ -164,8 +164,8 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
         Err(e) => return Err(ResponseError::create_index(e)),
     };
 
-    let env = &db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.main_write_txn().map_err(ResponseError::internal)?;
+    let mut update_writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     created_index
         .main
@@ -184,12 +184,13 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
     let mut response_update_id = None;
     if let Some(schema) = schema {
         let update_id = created_index
-            .schema_update(&mut writer, schema)
+            .schema_update(&mut update_writer, schema)
             .map_err(ResponseError::internal)?;
         response_update_id = Some(update_id)
     }
 
     writer.commit().map_err(ResponseError::internal)?;
+    update_writer.commit().map_err(ResponseError::internal)?;
 
     let response_body = IndexCreateResponse {
         name: body.name,
@@ -232,9 +233,7 @@ pub async fn update_index(mut ctx: Context<Data>) -> SResult<Response> {
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
-
-    let env = &db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.main_write_txn().map_err(ResponseError::internal)?;
 
     index
         .main
@@ -247,7 +246,7 @@ pub async fn update_index(mut ctx: Context<Data>) -> SResult<Response> {
         .map_err(ResponseError::internal)?;
 
     writer.commit().map_err(ResponseError::internal)?;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let created_at = index
         .main
@@ -286,8 +285,8 @@ pub async fn get_index_schema(ctx: Context<Data>) -> SResult<Response> {
     // Tide doesn't support "no query param"
     let params: SchemaParams = ctx.url_query().unwrap_or_default();
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let schema = index
         .main
@@ -326,8 +325,7 @@ pub async fn update_schema(mut ctx: Context<Data>) -> SResult<Response> {
     };
 
     let db = &ctx.state().db;
-    let env = &db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let index = db
         .open_index(&index_uid)
@@ -348,8 +346,8 @@ pub async fn update_schema(mut ctx: Context<Data>) -> SResult<Response> {
 pub async fn get_update_status(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesRead)?;
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.update_read_txn().map_err(ResponseError::internal)?;
 
     let update_id = ctx
         .param::<u64>("update_id")
@@ -375,8 +373,8 @@ pub async fn get_update_status(ctx: Context<Data>) -> SResult<Response> {
 pub async fn get_all_updates_status(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesRead)?;
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.update_read_txn().map_err(ResponseError::internal)?;
 
     let index = ctx.index()?;
     let all_status = index
@@ -413,8 +411,8 @@ pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpda
     }
 
     if let Some(index) = data.db.open_index(&index_uid) {
-        let env = &data.db.env;
-        let mut writer = match env.write_txn() {
+        let db = &data.db;
+        let mut writer = match db.main_write_txn() {
             Ok(writer) => writer,
             Err(e) => {
                 error!("Impossible to get write_txn; {}", e);

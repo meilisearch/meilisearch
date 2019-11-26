@@ -8,6 +8,7 @@ use serde_json::de::IoRead as SerdeJsonIoRead;
 use serde_json::Deserializer as SerdeJsonDeserializer;
 use serde_json::Error as SerdeJsonError;
 
+use crate::database::MainT;
 use crate::store::DocumentsFields;
 use crate::DocumentId;
 
@@ -50,7 +51,7 @@ impl From<heed::Error> for DeserializerError {
 
 pub struct Deserializer<'a> {
     pub document_id: DocumentId,
-    pub reader: &'a heed::RoTxn,
+    pub reader: &'a heed::RoTxn<MainT>,
     pub documents_fields: DocumentsFields,
     pub schema: &'a Schema,
     pub attributes: Option<&'a HashSet<SchemaAttr>>,

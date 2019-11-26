@@ -113,24 +113,25 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
     database.set_update_callback(Box::new(update_fn));
 
-    let env = &database.env;
+    let db = &database;
 
     let schema = {
         let string = fs::read_to_string(&command.schema)?;
         toml::from_str(&string).unwrap()
     };
 
-    let mut writer = env.write_txn().unwrap();
-    match index.main.schema(&writer)? {
+    let reader = db.main_read_txn().unwrap();
+    let mut update_writer = db.update_write_txn().unwrap();
+    match index.main.schema(&reader)? {
         Some(current_schema) => {
             if current_schema != schema {
                 return Err(meilisearch_core::Error::SchemaDiffer.into());
             }
-            writer.abort();
+            update_writer.abort();
         }
         None => {
-            index.schema_update(&mut writer, schema)?;
-            writer.commit().unwrap();
+            index.schema_update(&mut update_writer, schema)?;
+            update_writer.commit().unwrap();
         }
     }
 
@@ -173,10 +174,10 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
         println!();
 
-        let mut writer = env.write_txn().unwrap();
+        let mut update_writer = db.update_write_txn().unwrap();
         println!("committing update...");
-        let update_id = additions.finalize(&mut writer)?;
-        writer.commit().unwrap();
+        let update_id = additions.finalize(&mut update_writer)?;
+        update_writer.commit().unwrap();
         max_update_id = max_update_id.max(update_id);
         println!("committed update {}", update_id);
     }
@@ -316,12 +317,12 @@ fn crop_text(
 }
 
 fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<dyn Error>> {
-    let env = &database.env;
+    let db = &database;
     let index = database
         .open_index(&command.index_uid)
         .expect("Could not find index");
 
-    let reader = env.read_txn().unwrap();
+    let reader = db.main_read_txn().unwrap();
     let schema = index.main.schema(&reader)?;
     reader.abort();
 
@@ -339,7 +340,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
             Ok(query) => {
                 let start_total = Instant::now();
 
-                let reader = env.read_txn().unwrap();
+                let reader = db.main_read_txn().unwrap();
                 let ref_index = &index;
                 let ref_reader = &reader;
 
@@ -444,12 +445,12 @@ fn show_updates_command(
     command: ShowUpdatesCommand,
     database: Database,
 ) -> Result<(), Box<dyn Error>> {
-    let env = &database.env;
+    let db = &database;
     let index = database
         .open_index(&command.index_uid)
         .expect("Could not find index");
 
-    let reader = env.read_txn().unwrap();
+    let reader = db.update_read_txn().unwrap();
     let updates = index.all_updates_status(&reader)?;
     println!("{:#?}", updates);
     reader.abort();

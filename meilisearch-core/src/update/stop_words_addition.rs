@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use fst::{set::OpBuilder, SetBuilder};
 
+use crate::database::{MainT, UpdateT};
 use crate::automaton::normalize_str;
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::update::{next_update_id, Update};
@@ -33,7 +34,7 @@ impl StopWordsAddition {
         self.stop_words.insert(stop_word);
     }
 
-    pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64> {
+    pub fn finalize(self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         let update_id = push_stop_words_addition(
             writer,
@@ -46,7 +47,7 @@ impl StopWordsAddition {
 }
 
 pub fn push_stop_words_addition(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     addition: BTreeSet<String>,
@@ -60,7 +61,7 @@ pub fn push_stop_words_addition(
 }
 
 pub fn apply_stop_words_addition(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<MainT>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     addition: BTreeSet<String>,

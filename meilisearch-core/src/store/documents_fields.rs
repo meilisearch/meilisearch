@@ -1,4 +1,5 @@
 use heed::types::{ByteSlice, OwnedType};
+use crate::database::MainT;
 use heed::Result as ZResult;
 use meilisearch_schema::SchemaAttr;
 
@@ -13,7 +14,7 @@ pub struct DocumentsFields {
 impl DocumentsFields {
     pub fn put_document_field(
         self,
-        writer: &mut heed::RwTxn,
+        writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
         attribute: SchemaAttr,
         value: &[u8],
@@ -24,7 +25,7 @@ impl DocumentsFields {
 
     pub fn del_all_document_fields(
         self,
-        writer: &mut heed::RwTxn,
+        writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<usize> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
@@ -32,13 +33,13 @@ impl DocumentsFields {
         self.documents_fields.delete_range(writer, &(start..=end))
     }
 
-    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+    pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
         self.documents_fields.clear(writer)
     }
 
     pub fn document_attribute<'txn>(
         self,
-        reader: &'txn heed::RoTxn,
+        reader: &'txn heed::RoTxn<MainT>,
         document_id: DocumentId,
         attribute: SchemaAttr,
     ) -> ZResult<Option<&'txn [u8]>> {
@@ -48,7 +49,7 @@ impl DocumentsFields {
 
     pub fn document_fields<'txn>(
         self,
-        reader: &'txn heed::RoTxn,
+        reader: &'txn heed::RoTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<DocumentFieldsIter<'txn>> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());

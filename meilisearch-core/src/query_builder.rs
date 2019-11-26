@@ -9,6 +9,7 @@ use fst::{IntoStreamer, Streamer};
 use sdset::SetBuf;
 use slice_group_by::{GroupBy, GroupByMut};
 
+use crate::database::MainT;
 use crate::automaton::{Automaton, AutomatonGroup, AutomatonProducer, QueryEnhancer};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::levenshtein::prefix_damerau_levenshtein;
@@ -139,7 +140,7 @@ fn multiword_rewrite_matches(
 }
 
 fn fetch_raw_documents(
-    reader: &heed::RoTxn,
+    reader: &heed::RoTxn<MainT>,
     automatons_groups: &[AutomatonGroup],
     query_enhancer: &QueryEnhancer,
     searchables: Option<&ReorderedAttrs>,
@@ -336,7 +337,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
 
     pub fn query(
         self,
-        reader: &heed::RoTxn,
+        reader: &heed::RoTxn<MainT>,
         query: &str,
         range: Range<usize>,
     ) -> MResult<Vec<Document>> {
@@ -374,7 +375,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
 }
 
 fn raw_query<'c, FI>(
-    reader: &heed::RoTxn,
+    reader: &heed::RoTxn<MainT>,
 
     query: &str,
     range: Range<usize>,
@@ -510,7 +511,7 @@ where
 }
 
 fn raw_query_with_distinct<'c, FI, FD>(
-    reader: &heed::RoTxn,
+    reader: &heed::RoTxn<MainT>,
 
     query: &str,
     range: Range<usize>,
@@ -765,8 +766,8 @@ mod tests {
         }
 
         pub fn add_synonym(&mut self, word: &str, new: SetBuf<&str>) {
-            let env = &self.database.env;
-            let mut writer = env.write_txn().unwrap();
+            let db = &self.database;
+            let mut writer = db.main_write_txn().unwrap();
 
             let word = word.to_lowercase();
 
@@ -809,8 +810,8 @@ mod tests {
             let database = Database::open_or_create(&tempdir).unwrap();
             let index = database.create_index("default").unwrap();
 
-            let env = &database.env;
-            let mut writer = env.write_txn().unwrap();
+            let db = &database;
+            let mut writer = db.main_write_txn().unwrap();
 
             let mut words_fst = BTreeSet::new();
             let mut postings_lists = HashMap::new();
@@ -872,8 +873,8 @@ mod tests {
             ("apple", &[doc_char_index(0, 2, 2)][..]),
         ]);
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "iphone from apple", 0..20).unwrap();
@@ -895,8 +896,8 @@ mod tests {
 
         store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "hello", 0..20).unwrap();
@@ -928,8 +929,8 @@ mod tests {
         store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello"]));
         store.add_synonym("salut", SetBuf::from_dirty(vec!["hello"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "sal", 0..20).unwrap();
@@ -972,8 +973,8 @@ mod tests {
 
         store.add_synonym("salutation", SetBuf::from_dirty(vec!["hello"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "salutution", 0..20).unwrap();
@@ -1010,8 +1011,8 @@ mod tests {
         store.add_synonym("bonjour", SetBuf::from_dirty(vec!["hello", "salut"]));
         store.add_synonym("salut", SetBuf::from_dirty(vec!["hello", "bonjour"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "hello", 0..20).unwrap();
@@ -1098,8 +1099,8 @@ mod tests {
             SetBuf::from_dirty(vec!["NY", "new york", "new york city"]),
         );
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "NY subway", 0..20).unwrap();
@@ -1168,8 +1169,8 @@ mod tests {
 
         store.add_synonym("NY", SetBuf::from_dirty(vec!["york new"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "NY", 0..20).unwrap();
@@ -1226,8 +1227,8 @@ mod tests {
 
         store.add_synonym("new york", SetBuf::from_dirty(vec!["NY"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "NY subway", 0..20).unwrap();
@@ -1291,8 +1292,8 @@ mod tests {
             SetBuf::from_dirty(vec!["NY", "new york", "new york city"]),
         );
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "NY subway", 0..20).unwrap();
@@ -1372,8 +1373,8 @@ mod tests {
         );
         store.add_synonym("subway", SetBuf::from_dirty(vec!["underground train"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "NY subway broken", 0..20).unwrap();
@@ -1459,8 +1460,8 @@ mod tests {
         );
         store.add_synonym("underground train", SetBuf::from_dirty(vec!["subway"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder
@@ -1559,8 +1560,8 @@ mod tests {
         store.add_synonym("new york", SetBuf::from_dirty(vec!["new york city"]));
         store.add_synonym("new york city", SetBuf::from_dirty(vec!["new york"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "new york big ", 0..20).unwrap();
@@ -1596,8 +1597,8 @@ mod tests {
 
         store.add_synonym("NY", SetBuf::from_dirty(vec!["new york city story"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "NY subway ", 0..20).unwrap();
@@ -1646,8 +1647,8 @@ mod tests {
         store.add_synonym("new york city", SetBuf::from_dirty(vec!["NYC"]));
         store.add_synonym("subway", SetBuf::from_dirty(vec!["underground train"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder
@@ -1679,8 +1680,8 @@ mod tests {
 
         store.add_synonym("téléphone", SetBuf::from_dirty(vec!["iphone"]));
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "telephone", 0..20).unwrap();
@@ -1741,8 +1742,8 @@ mod tests {
             ("case", &[doc_index(0, 1)][..]),
         ]);
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "i phone case", 0..20).unwrap();
@@ -1769,8 +1770,8 @@ mod tests {
             ("engine", &[doc_index(1, 2)][..]),
         ]);
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "searchengine", 0..20).unwrap();
@@ -1801,8 +1802,8 @@ mod tests {
             ("engine", &[doc_index(1, 3)][..]),
         ]);
 
-        let env = &store.database.env;
-        let reader = env.read_txn().unwrap();
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
         let results = builder.query(&reader, "searchengine", 0..20).unwrap();

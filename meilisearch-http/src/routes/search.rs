@@ -33,8 +33,8 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
     // ctx.is_allowed(DocumentsRead)?;
 
     let index = ctx.index()?;
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let schema = index
         .main
@@ -210,9 +210,7 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
                 }
             }
 
-            let env = &db.env;
-            let reader = env.read_txn().map_err(ResponseError::internal)?;
-
+            let reader = db.main_read_txn().map_err(ResponseError::internal)?;
             let response = search_builder
                 .search(&reader)
                 .map_err(ResponseError::internal)?;

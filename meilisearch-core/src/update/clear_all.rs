@@ -1,8 +1,9 @@
+use crate::database::{MainT, UpdateT};
 use crate::update::{next_update_id, Update};
 use crate::{store, MResult, RankedMap};
 
 pub fn apply_clear_all(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<MainT>,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
@@ -21,7 +22,7 @@ pub fn apply_clear_all(
 }
 
 pub fn push_clear_all(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
 ) -> MResult<u64> {

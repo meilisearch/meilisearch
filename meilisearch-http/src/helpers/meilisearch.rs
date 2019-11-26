@@ -4,6 +4,7 @@ use log::error;
 use meilisearch_core::criterion::*;
 use meilisearch_core::Highlight;
 use meilisearch_core::{Index, RankedMap};
+use meilisearch_core::MainT;
 use meilisearch_schema::{Schema, SchemaAttr};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -157,7 +158,7 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn search(&self, reader: &heed::RoTxn) -> Result<SearchResult, Error> {
+    pub fn search(&self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, Error> {
         let schema = self.index.main.schema(reader);
         let schema = schema.map_err(|e| Error::Internal(e.to_string()))?;
         let schema = match schema {
@@ -285,7 +286,7 @@ impl<'a> SearchBuilder<'a> {
 
     pub fn get_criteria(
         &self,
-        reader: &heed::RoTxn,
+        reader: &heed::RoTxn<MainT>,
         ranked_map: &'a RankedMap,
         schema: &Schema,
     ) -> Result<Option<Criteria<'a>>, Error> {

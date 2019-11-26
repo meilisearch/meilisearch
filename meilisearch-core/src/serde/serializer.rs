@@ -1,6 +1,7 @@
 use meilisearch_schema::{Schema, SchemaAttr, SchemaProps};
 use serde::ser;
 
+use crate::database::MainT;
 use crate::raw_indexer::RawIndexer;
 use crate::store::{DocumentsFields, DocumentsFieldsCounts};
 use crate::{DocumentId, RankedMap};
@@ -8,7 +9,7 @@ use crate::{DocumentId, RankedMap};
 use super::{ConvertToNumber, ConvertToString, Indexer, SerializerError};
 
 pub struct Serializer<'a, 'b> {
-    pub txn: &'a mut heed::RwTxn<'b>,
+    pub txn: &'a mut heed::RwTxn<'b, MainT>,
     pub schema: &'a Schema,
     pub document_store: DocumentsFields,
     pub document_fields_counts: DocumentsFieldsCounts,
@@ -191,7 +192,7 @@ impl<'a, 'b> ser::Serializer for Serializer<'a, 'b> {
 }
 
 pub struct MapSerializer<'a, 'b> {
-    txn: &'a mut heed::RwTxn<'b>,
+    txn: &'a mut heed::RwTxn<'b, MainT>,
     schema: &'a Schema,
     document_id: DocumentId,
     document_store: DocumentsFields,
@@ -254,7 +255,7 @@ impl<'a, 'b> ser::SerializeMap for MapSerializer<'a, 'b> {
 }
 
 pub struct StructSerializer<'a, 'b> {
-    txn: &'a mut heed::RwTxn<'b>,
+    txn: &'a mut heed::RwTxn<'b, MainT>,
     schema: &'a Schema,
     document_id: DocumentId,
     document_store: DocumentsFields,
@@ -297,7 +298,7 @@ impl<'a, 'b> ser::SerializeStruct for StructSerializer<'a, 'b> {
 }
 
 pub fn serialize_value<T: ?Sized>(
-    txn: &mut heed::RwTxn,
+    txn: &mut heed::RwTxn<MainT>,
     attribute: SchemaAttr,
     props: SchemaProps,
     document_id: DocumentId,

@@ -1,11 +1,12 @@
 use meilisearch_schema::{Diff, Schema};
 
+use crate::database::{MainT, UpdateT};
 use crate::update::documents_addition::reindex_all_documents;
 use crate::update::{next_update_id, Update};
 use crate::{error::UnsupportedOperation, store, MResult};
 
 pub fn apply_schema_update(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<MainT>,
     new_schema: &Schema,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
@@ -61,7 +62,7 @@ pub fn apply_schema_update(
 }
 
 pub fn push_schema_update(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     schema: Schema,
