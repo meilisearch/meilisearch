@@ -1,6 +1,6 @@
 # Typo and Ranking rules
 
-This is an explanation of the default rules used in MeiliDB.
+This is an explanation of the default rules used in MeiliSearch.
 
 First we have to explain some terms that are used in this reading.
 
@@ -44,7 +44,7 @@ This means that "satuday", which is 7 characters long, use the second rule and e
 
 ## Ranking rules
 
-All documents that have been aggregated using the typo rules above can now be sorted. MeiliDB uses a bucket sort.
+All documents that have been aggregated using the typo rules above can now be sorted. MeiliSearch uses a bucket sort.
 
 What is a bucket sort? We sort all the documents with the first rule, for all documents that can't be separated we create a group and sort it using the second rule, and so on.
 
