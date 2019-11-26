@@ -4,11 +4,28 @@
 [![dependency status](https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliSearch)
 [![License](https://img.shields.io/badge/license-MIT-informational)](https://github.com/meilisearch/MeiliSearch/blob/master/LICENSE)
 
-Ultra relevant and instant full-text search API.
+⚡ Ultra relevant and instant full-text search API 🔍
 
-MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engine. The search and indexation are fully customizable and handles features like typo-tolerance, filters, and ranking.
+MeiliSearch is a powerful, fast, open-source, easy to use, and deploy search engine. The search and indexation are fully customizable and handles features like typo-tolerance, filters, and synonyms.
 
-## Features
+## What MeiliSearch has to offer
+* Search as-you-type experience (answers < 50ms)
+* Full-text search
+* Typo tolerant (understands typos and spelling mistakes)
+* Supports Kanji
+* Supports Synonym
+* Easy to install, deploy, and maintain
+* Whole documents returned
+* Highly customizable
+* RESTfull API 
+
+For more [details about those features, go to our documentation](https://docs.meilisearch.com/introduction/features.html).
+
+[![crates.io demo gif](misc/crates-io-demo.gif)](https://crates.meilisearch.com)
+
+> Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
+
+### In-depth features
 
 - Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/criterion/mod.rs#L107-L113) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
 - Accepts [custom criteria](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/criterion/mod.rs#L24-L33) and can apply them in any custom order
@@ -22,29 +39,16 @@ MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engi
 - Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/store/mod.rs#L143-L173)
 
 
-
-It uses [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) as the internal key-value store. The key-value store allows us to handle updates and queries with small memory and CPU overheads. The whole ranking system is [data oriented](https://github.com/meilisearch/MeiliSearch/issues/82) and provides great performances.
-
-You can [read the deep dive](deep-dive.md) if you want more information on the engine, it describes the whole process of generating updates and handling queries or you can take a look at the [typos and ranking rules](typos-ranking-rules.md) if you want to know the default rules used to sort the documents.
-
-We will be glad if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). It is a good start!
-
-[![crates.io demo gif](misc/crates-io-demo.gif)](https://crates.meilisearch.com)
-
-> Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
-
-
-
 ## Quick Start
 
-You can deploy your own instant, relevant and typo-tolerant MeiliSearch search engine by yourself too.
-Something similar to the demo above can be achieve by following these little three steps first.
-You will need to create your own web front display to make it pretty though.
+You can deploy your instant, relevant, and typo-tolerant MeiliSearch search engine by yourself too.
+Something similar to the demo above can be achieved by following these little three steps first.
+You still need to create your front-end to make it pretty, though.
 
 ### Deploy the Server
 
-If you have not installed Rust and its package manager `cargo` yet, go to [the installation page](https://www.rust-lang.org/tools/install).<br/>
-You can deploy the server on your own machine, it will listen to HTTP requests on the 8080 port by default.
+If you have not yet installed Rust and its package manager `cargo`, go to [the installation page](https://www.rust-lang.org/tools/install).<br/>
+You can deploy the server on your machine; it listens to HTTP requests on the 8080 port by default.
 
 ```bash
 cargo run --release
@@ -65,7 +69,7 @@ curl -i -X POST 'http://127.0.0.1:8080/indexes' --data '{ "name": "Movies", "uid
 ```
 
 Now that the server knows about our brand new index, we can send it data.
-We provided you a little dataset, it is available in the `datasets/` directory.
+We provided you a small dataset that is available in the `datasets/` directory.
 
 ```bash
 curl -i -X POST 'http://127.0.0.1:8080/indexes/movies/documents' \
@@ -76,7 +80,7 @@ curl -i -X POST 'http://127.0.0.1:8080/indexes/movies/documents' \
 ### Search for Documents
 
 The search engine is now aware of our documents and can serve those via our HTTP server again.
-The [`jq` command line tool](https://stedolan.github.io/jq/) can greatly help you read the server responses.
+The [`jq` command-line tool](https://stedolan.github.io/jq/) can significantly help you read the server responses.
 
 ```bash
 curl 'http://127.0.0.1:8080/indexes/movies/search?q=botman'
@@ -107,14 +111,12 @@ curl 'http://127.0.0.1:8080/indexes/movies/search?q=botman'
 }
 ```
 
-
-
 ## Performances
 
 With a dataset composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed.
 So more than _300 000_ fields indexed for _35 million_ stored we can handle more than _2.8k req/sec_ with an average response time of _9 ms_ on an Intel i7-7700 (8) @ 4.2GHz.
 
-Requests are made using [wrk](https://github.com/wg/wrk) and scripted to simulate real users queries.
+Requests are made using [wrk](https://github.com/wg/wrk) and scripted to simulate real users' queries.
 
 ```
 Running 10s test @ http://localhost:2230
@@ -127,7 +129,7 @@ Requests/sec:   2806.46
 Transfer/sec:    759.17KB
 ```
 
-We also indexed a dataset containing something like _12 millions_ cities names in _24 minutes_ on a machine with _8 cores_, _64 GB of RAM_ and a _300 GB NMVe_ SSD.<br/>
+We also indexed a dataset containing something like _12 millions_ cities names in _24 minutes_ on a machine with _8 cores_, _64 GB of RAM_, and a _300 GB NMVe_ SSD.<br/>
 The resulting database was _16 GB_ and search results were between _30 ms_ and _4 seconds_ for short prefix queries.
 
 ### Notes
@@ -135,28 +137,15 @@ The resulting database was _16 GB_ and search results were between _30 ms_ and _
 With Rust 1.32 the allocator has been [changed to use the system allocator](https://blog.rust-lang.org/2019/01/17/Rust-1.32.0.html#jemalloc-is-removed-by-default).
 We have seen much better performances when [using jemalloc as the global allocator](https://github.com/alexcrichton/jemallocator#documentation).
 
-## Usage and Examples
+## How it works
 
-MeiliSearch also provides an example binary that is mostly used for features testing.
-Notice that the example binary is faster to index data as it does read direct CSV files and not JSON HTTP payloads.
+MeiliSearch uses [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) as the internal key-value store. The key-value store allows us to handle updates and queries with small memory and CPU overheads. The whole ranking system is [data oriented](https://github.com/meilisearch/MeiliSearch/issues/82) and provides excellent great performances.
 
-The _index_ subcommand has been made to create an index and inject documents into it. Using the command line below, the index will be named _movies_ and the _19 700_ movies of the `datasets/` will be injected in MeiliSearch.
+You can [read the deep dive](deep-dive.md) if you want more information on the engine; it describes the whole process of generating updates and handling queries. Also, you can take a look at the [typos and ranking rules](typos-ranking-rules.md) if you want to know the default rules used to sort the documents.
 
-```bash
-cargo run --release --example from_file -- \
-    index example.mdb datasets/movies/movies.csv \
-    --schema datasets/movies/schema.toml
-```
+## Contributing
 
-Once the first command is done, you can query the freshly created _movies_ index using the _search_ subcomand. In this example we filtered the dataset to only show _non-adult_ movies using the non-definitive `!adult` syntax filter.
-
-```bash
-cargo run --release --example from_file -- \
-    search example.mdb \
-    --number-results 4 \
-    --filter '!adult' \
-    id popularity adult original_title
-```
+We will be glad if you submit issues and pull requests. You can help to grow this project and start contributing by checking [issues tagged "good-first-issue"](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). It is a good start!
 
 ### Analytic Events
 
