@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-types"
-version = "0.8.0"
+version = "0.8.1"
 authors = ["Clément Renault <renault.cle@gmail.com>"]
 edition = "2018"
 
