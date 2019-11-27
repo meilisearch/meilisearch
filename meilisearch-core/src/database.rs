@@ -55,7 +55,23 @@ fn update_awaiter(
     index: Index,
 ) -> MResult<()> {
     let mut receiver = receiver.into_iter();
-    while let Some(UpdateEvent::NewUpdate) = receiver.next() {
+    while let Some(event) = receiver.next() {
+
+        // if we receive a *MustClear* event, clear the index and break the loop
+        if let UpdateEvent::MustClear = event {
+            let mut writer = env.typed_write_txn::<MainT>()?;
+            let mut update_writer = update_env.typed_write_txn::<UpdateT>()?;
+
+            store::clear(&mut writer, &mut update_writer, &index)?;
+
+            writer.commit()?;
+            update_writer.commit()?;
+
+            debug!("store {} cleared", index_uid);
+
+            break
+        }
+
         loop {
             // We instantiate a *write* transaction to *block* the thread
             // until the *other*, notifiying, thread commits
@@ -114,14 +130,6 @@ fn update_awaiter(
     }
 
     debug!("update loop system stopped");
-
-    let mut writer = env.typed_write_txn::<MainT>()?;
-    let mut update_writer = update_env.typed_write_txn::<UpdateT>()?;
-    store::clear(&mut writer, &mut update_writer, &index)?;
-    writer.commit()?;
-    update_writer.commit()?;
-
-    debug!("store {} cleared", index_uid);
 
     Ok(())
 }
