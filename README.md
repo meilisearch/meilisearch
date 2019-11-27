@@ -12,7 +12,7 @@ MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engi
 * Search as you type experience (answers < 50ms)
 * Full-text search
 * Typo tolerant (understands typos and spelling mistakes)
-* Support Kanji
+* Supports Kanji
 * Supports Synonym
 * Easy to install, deploy, and maintain
 * Whole documents returned
