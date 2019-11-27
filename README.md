@@ -6,7 +6,7 @@
 
 ⚡ Ultra relevant and instant full-text search API 🔍
 
-MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engine. The search and indexation are fully customizable and handles features like typo-tolerance, filters, and ranking.
+MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engine. The search and indexation are fully customizable and handles features like typo-tolerance, filters, and synonyms.
 
 ## What MeiliSearch has to offer
 * Search as-you-type experience (answers < 50ms)
