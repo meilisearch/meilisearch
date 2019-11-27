@@ -29,14 +29,13 @@ impl ContextExt for Context<Data> {
         let request_index: Option<String> = None; //self.param::<String>("index").ok();
 
         let db = &self.state().db;
-        let env = &db.env;
-        let reader = env.read_txn().map_err(ResponseError::internal)?;
+        let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
         let token_key = format!("{}{}", TOKEN_PREFIX_KEY, user_api_key);
 
         let token_config = db
             .common_store()
-            .get::<Str, SerdeBincode<Token>>(&reader, &token_key)
+            .get::<_, Str, SerdeBincode<Token>>(&reader, &token_key)
             .map_err(ResponseError::internal)?
             .ok_or(ResponseError::invalid_token(format!(
                 "Api key does not exist: {}",

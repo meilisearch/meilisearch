@@ -1,9 +1,11 @@
-use crate::store;
-use crate::update::{next_update_id, Update};
 use heed::Result as ZResult;
 
+use crate::database::{MainT, UpdateT};
+use crate::store;
+use crate::update::{next_update_id, Update};
+
 pub fn apply_customs_update(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<MainT>,
     main_store: store::Main,
     customs: &[u8],
 ) -> ZResult<()> {
@@ -11,7 +13,7 @@ pub fn apply_customs_update(
 }
 
 pub fn push_customs_update(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     customs: Vec<u8>,

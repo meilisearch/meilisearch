@@ -30,6 +30,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::{store, DocumentId, MResult};
+use crate::database::{MainT, UpdateT};
 use meilisearch_schema::Schema;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,14 +204,14 @@ pub enum UpdateStatus {
 }
 
 pub fn update_status(
-    reader: &heed::RoTxn,
+    update_reader: &heed::RoTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     update_id: u64,
 ) -> MResult<Option<UpdateStatus>> {
-    match updates_results_store.update_result(reader, update_id)? {
+    match updates_results_store.update_result(update_reader, update_id)? {
         Some(result) => Ok(Some(UpdateStatus::Processed { content: result })),
-        None => match updates_store.get(reader, update_id)? {
+        None => match updates_store.get(update_reader, update_id)? {
             Some(update) => Ok(Some(UpdateStatus::Enqueued {
                 content: EnqueuedUpdateResult {
                     update_id,
@@ -224,25 +225,25 @@ pub fn update_status(
 }
 
 pub fn next_update_id(
-    writer: &mut heed::RwTxn,
+    update_writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
 ) -> ZResult<u64> {
-    let last_update_id = updates_store.last_update_id(writer)?;
-    let last_update_id = last_update_id.map(|(n, _)| n);
+    let last_update = updates_store.last_update(update_writer)?;
+    let last_update = last_update.map(|(n, _)| n);
 
-    let last_update_results_id = updates_results_store.last_update_id(writer)?;
+    let last_update_results_id = updates_results_store.last_update(update_writer)?;
     let last_update_results_id = last_update_results_id.map(|(n, _)| n);
 
-    let max_update_id = cmp::max(last_update_id, last_update_results_id);
+    let max_update_id = cmp::max(last_update, last_update_results_id);
     let new_update_id = max_update_id.map_or(0, |n| n + 1);
 
     Ok(new_update_id)
 }
 
 pub fn update_task<'a, 'b>(
-    writer: &'a mut heed::RwTxn<'b>,
-    index: store::Index,
+    writer: &'a mut heed::RwTxn<'b, MainT>,
+    index: &store::Index,
     update_id: u64,
     update: Update,
 ) -> MResult<ProcessedUpdateResult> {

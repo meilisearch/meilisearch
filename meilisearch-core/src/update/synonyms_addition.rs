@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use fst::{set::OpBuilder, SetBuilder};
 use sdset::SetBuf;
 
+use crate::database::{MainT, UpdateT};
 use crate::automaton::normalize_str;
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::update::{next_update_id, Update};
@@ -43,7 +44,7 @@ impl SynonymsAddition {
             .extend(alternatives);
     }
 
-    pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64> {
+    pub fn finalize(self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         let update_id = push_synonyms_addition(
             writer,
@@ -56,7 +57,7 @@ impl SynonymsAddition {
 }
 
 pub fn push_synonyms_addition(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     addition: BTreeMap<String, Vec<String>>,
@@ -70,7 +71,7 @@ pub fn push_synonyms_addition(
 }
 
 pub fn apply_synonyms_addition(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<MainT>,
     main_store: store::Main,
     synonyms_store: store::Synonyms,
     addition: BTreeMap<String, Vec<String>>,

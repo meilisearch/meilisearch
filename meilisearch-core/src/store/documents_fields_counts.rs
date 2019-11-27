@@ -1,4 +1,5 @@
 use super::DocumentAttrKey;
+use crate::database::MainT;
 use crate::DocumentId;
 use heed::types::OwnedType;
 use heed::Result as ZResult;
@@ -12,7 +13,7 @@ pub struct DocumentsFieldsCounts {
 impl DocumentsFieldsCounts {
     pub fn put_document_field_count(
         self,
-        writer: &mut heed::RwTxn,
+        writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
         attribute: SchemaAttr,
         value: u64,
@@ -23,7 +24,7 @@ impl DocumentsFieldsCounts {
 
     pub fn del_all_document_fields_counts(
         self,
-        writer: &mut heed::RwTxn,
+        writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<usize> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
@@ -32,13 +33,13 @@ impl DocumentsFieldsCounts {
             .delete_range(writer, &(start..=end))
     }
 
-    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+    pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
         self.documents_fields_counts.clear(writer)
     }
 
     pub fn document_field_count(
         self,
-        reader: &heed::RoTxn,
+        reader: &heed::RoTxn<MainT>,
         document_id: DocumentId,
         attribute: SchemaAttr,
     ) -> ZResult<Option<u64>> {
@@ -51,7 +52,7 @@ impl DocumentsFieldsCounts {
 
     pub fn document_fields_counts<'txn>(
         self,
-        reader: &'txn heed::RoTxn,
+        reader: &'txn heed::RoTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<DocumentFieldsCountsIter<'txn>> {
         let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
@@ -60,7 +61,7 @@ impl DocumentsFieldsCounts {
         Ok(DocumentFieldsCountsIter { iter })
     }
 
-    pub fn documents_ids<'txn>(self, reader: &'txn heed::RoTxn) -> ZResult<DocumentsIdsIter<'txn>> {
+    pub fn documents_ids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<DocumentsIdsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
         Ok(DocumentsIdsIter {
             last_seen_id: None,
@@ -70,7 +71,7 @@ impl DocumentsFieldsCounts {
 
     pub fn all_documents_fields_counts<'txn>(
         self,
-        reader: &'txn heed::RoTxn,
+        reader: &'txn heed::RoTxn<MainT>,
     ) -> ZResult<AllDocumentsFieldsCountsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
         Ok(AllDocumentsFieldsCountsIter { iter })

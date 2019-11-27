@@ -8,6 +8,7 @@ use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
 use meilisearch_tokenizer::{is_cjk, split_query_string};
 
+use crate::database::MainT;
 use crate::error::MResult;
 use crate::store;
 
@@ -23,7 +24,7 @@ pub struct AutomatonProducer {
 
 impl AutomatonProducer {
     pub fn new(
-        reader: &heed::RoTxn,
+        reader: &heed::RoTxn<MainT>,
         query: &str,
         main_store: store::Main,
         postings_list_store: store::PostingsLists,
@@ -131,7 +132,7 @@ pub fn normalize_str(string: &str) -> String {
 }
 
 fn split_best_frequency<'a>(
-    reader: &heed::RoTxn,
+    reader: &heed::RoTxn<MainT>,
     word: &'a str,
     postings_lists_store: store::PostingsLists,
 ) -> MResult<Option<(&'a str, &'a str)>> {
@@ -159,7 +160,7 @@ fn split_best_frequency<'a>(
 }
 
 fn generate_automatons(
-    reader: &heed::RoTxn,
+    reader: &heed::RoTxn<MainT>,
     query: &str,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,

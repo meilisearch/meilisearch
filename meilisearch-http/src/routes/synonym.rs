@@ -31,8 +31,8 @@ pub async fn list(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let synonyms_fst = index
         .main
@@ -65,8 +65,8 @@ pub async fn get(ctx: Context<Data>) -> SResult<Response> {
     let synonym = ctx.url_param("synonym")?;
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let synonym_list = index
         .synonyms
@@ -87,8 +87,8 @@ pub async fn create(mut ctx: Context<Data>) -> SResult<Response> {
 
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let mut synonyms_addition = index.synonyms_addition();
 
@@ -125,8 +125,8 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
     let index = ctx.index()?;
     let data: Vec<String> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let mut synonyms_addition = index.synonyms_addition();
     synonyms_addition.add_synonym(synonym.clone(), data.clone().into_iter());
@@ -147,8 +147,8 @@ pub async fn delete(ctx: Context<Data>) -> SResult<Response> {
     let synonym = ctx.url_param("synonym")?;
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let mut synonyms_deletion = index.synonyms_deletion();
     synonyms_deletion.delete_all_alternatives_of(synonym);
@@ -171,8 +171,8 @@ pub async fn batch_write(mut ctx: Context<Data>) -> SResult<Response> {
 
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let mut synonyms_addition = index.synonyms_addition();
     for raw in data {
@@ -207,12 +207,13 @@ pub async fn clear(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let synonyms_fst = index
         .main
-        .synonyms_fst(&writer)
+        .synonyms_fst(&reader)
         .map_err(ResponseError::internal)?;
 
     let synonyms_fst = synonyms_fst.unwrap_or_default();

@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use fst::{set::OpBuilder, SetBuilder};
 
+use crate::database::{MainT, UpdateT};
 use crate::automaton::normalize_str;
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::update::documents_addition::reindex_all_documents;
@@ -34,7 +35,7 @@ impl StopWordsDeletion {
         self.stop_words.insert(stop_word);
     }
 
-    pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64> {
+    pub fn finalize(self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         let update_id = push_stop_words_deletion(
             writer,
@@ -47,7 +48,7 @@ impl StopWordsDeletion {
 }
 
 pub fn push_stop_words_deletion(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     deletion: BTreeSet<String>,
@@ -61,7 +62,7 @@ pub fn push_stop_words_deletion(
 }
 
 pub fn apply_stop_words_deletion(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<MainT>,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
     documents_fields_counts_store: store::DocumentsFieldsCounts,

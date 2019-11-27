@@ -1,4 +1,5 @@
 use crate::DocIndex;
+use crate::database::MainT;
 use heed::types::{ByteSlice, CowSlice};
 use heed::Result as ZResult;
 use sdset::{Set, SetBuf};
@@ -12,24 +13,24 @@ pub struct PostingsLists {
 impl PostingsLists {
     pub fn put_postings_list(
         self,
-        writer: &mut heed::RwTxn,
+        writer: &mut heed::RwTxn<MainT>,
         word: &[u8],
         words_indexes: &Set<DocIndex>,
     ) -> ZResult<()> {
         self.postings_lists.put(writer, word, words_indexes)
     }
 
-    pub fn del_postings_list(self, writer: &mut heed::RwTxn, word: &[u8]) -> ZResult<bool> {
+    pub fn del_postings_list(self, writer: &mut heed::RwTxn<MainT>, word: &[u8]) -> ZResult<bool> {
         self.postings_lists.delete(writer, word)
     }
 
-    pub fn clear(self, writer: &mut heed::RwTxn) -> ZResult<()> {
+    pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
         self.postings_lists.clear(writer)
     }
 
     pub fn postings_list<'txn>(
         self,
-        reader: &'txn heed::RoTxn,
+        reader: &'txn heed::RoTxn<MainT>,
         word: &[u8],
     ) -> ZResult<Option<Cow<'txn, Set<DocIndex>>>> {
         match self.postings_lists.get(reader, word)? {

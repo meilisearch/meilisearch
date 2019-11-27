@@ -18,7 +18,7 @@ pub mod serde;
 pub mod store;
 mod update;
 
-pub use self::database::{BoxUpdateFn, Database};
+pub use self::database::{BoxUpdateFn, Database, MainT, UpdateT};
 pub use self::error::{Error, MResult};
 pub use self::number::{Number, ParseNumberError};
 pub use self::ranked_map::RankedMap;

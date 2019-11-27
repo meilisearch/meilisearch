@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use heed::types::{SerdeBincode, Str};
 use log::error;
-use meilisearch_core::{Database, Error as MError, MResult};
+use meilisearch_core::{Database, MainT, UpdateT, Error as MError, MResult};
 use sysinfo::Pid;
 
 use crate::option::Opt;
@@ -37,32 +37,32 @@ pub struct DataInner {
 }
 
 impl DataInner {
-    pub fn is_indexing(&self, reader: &heed::RoTxn, index: &str) -> MResult<Option<bool>> {
+    pub fn is_indexing(&self, reader: &heed::RoTxn<UpdateT>, index: &str) -> MResult<Option<bool>> {
         match self.db.open_index(&index) {
             Some(index) => index.current_update_id(&reader).map(|u| Some(u.is_some())),
             None => Ok(None),
         }
     }
 
-    pub fn last_update(&self, reader: &heed::RoTxn) -> MResult<Option<DateTime<Utc>>> {
+    pub fn last_update(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<DateTime<Utc>>> {
         match self
             .db
             .common_store()
-            .get::<Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)?
+            .get::<_, Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)?
         {
             Some(datetime) => Ok(Some(datetime)),
             None => Ok(None),
         }
     }
 
-    pub fn set_last_update(&self, writer: &mut heed::RwTxn) -> MResult<()> {
+    pub fn set_last_update(&self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
         self.db
             .common_store()
-            .put::<Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, &Utc::now())
+            .put::<_, Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, &Utc::now())
             .map_err(Into::into)
     }
 
-    pub fn compute_stats(&self, writer: &mut heed::RwTxn, index_uid: &str) -> MResult<()> {
+    pub fn compute_stats(&self, writer: &mut heed::RwTxn<MainT>, index_uid: &str) -> MResult<()> {
         let index = match self.db.open_index(&index_uid) {
             Some(index) => index,
             None => {

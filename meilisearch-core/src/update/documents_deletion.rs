@@ -4,6 +4,7 @@ use fst::{SetBuilder, Streamer};
 use meilisearch_schema::Schema;
 use sdset::{duo::DifferenceByKey, SetBuf, SetOperation};
 
+use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::serde::extract_document_id;
 use crate::store;
@@ -50,7 +51,7 @@ impl DocumentsDeletion {
         Ok(())
     }
 
-    pub fn finalize(self, writer: &mut heed::RwTxn) -> MResult<u64> {
+    pub fn finalize(self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         let update_id = push_documents_deletion(
             writer,
@@ -69,7 +70,7 @@ impl Extend<DocumentId> for DocumentsDeletion {
 }
 
 pub fn push_documents_deletion(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     deletion: Vec<DocumentId>,
@@ -83,7 +84,7 @@ pub fn push_documents_deletion(
 }
 
 pub fn apply_documents_deletion(
-    writer: &mut heed::RwTxn,
+    writer: &mut heed::RwTxn<MainT>,
     main_store: store::Main,
     documents_fields_store: store::DocumentsFields,
     documents_fields_counts_store: store::DocumentsFieldsCounts,

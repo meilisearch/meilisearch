@@ -34,8 +34,8 @@ pub async fn get(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let settings = match index.main.customs(&reader).unwrap() {
         Some(bytes) => bincode::deserialize(bytes).unwrap(),
@@ -52,10 +52,11 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
 
     let index = ctx.index()?;
 
-    let env = &ctx.state().db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let db = &ctx.state().db;
+    let reader = db.main_write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
-    let mut current_settings = match index.main.customs(&writer).unwrap() {
+    let mut current_settings = match index.main.customs(&reader).unwrap() {
         Some(bytes) => bincode::deserialize(bytes).unwrap(),
         None => SettingBody::default(),
     };

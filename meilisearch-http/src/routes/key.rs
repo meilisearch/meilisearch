@@ -26,15 +26,14 @@ pub async fn list(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
 
     let db = &ctx.state().db;
-    let env = &db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let common_store = db.common_store();
 
     let mut response: Vec<Token> = Vec::new();
 
     let iter = common_store
-        .prefix_iter::<Str, SerdeBincode<Token>>(&reader, TOKEN_PREFIX_KEY)
+        .prefix_iter::<_, Str, SerdeBincode<Token>>(&reader, TOKEN_PREFIX_KEY)
         .map_err(ResponseError::internal)?;
 
     for result in iter {
@@ -50,14 +49,13 @@ pub async fn get(ctx: Context<Data>) -> SResult<Response> {
     let request_key = ctx.url_param("key")?;
 
     let db = &ctx.state().db;
-    let env = &db.env;
-    let reader = env.read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
     let token_key = format!("{}{}", TOKEN_PREFIX_KEY, request_key);
 
     let token_config = db
         .common_store()
-        .get::<Str, SerdeBincode<Token>>(&reader, &token_key)
+        .get::<_, Str, SerdeBincode<Token>>(&reader, &token_key)
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::not_found(format!(
             "token key: {}",
@@ -97,11 +95,10 @@ pub async fn create(mut ctx: Context<Data>) -> SResult<Response> {
     };
 
     let db = &ctx.state().db;
-    let env = &db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.main_write_txn().map_err(ResponseError::internal)?;
 
     db.common_store()
-        .put::<Str, SerdeBincode<Token>>(&mut writer, &token_key, &token_definition)
+        .put::<_, Str, SerdeBincode<Token>>(&mut writer, &token_key, &token_definition)
         .map_err(ResponseError::internal)?;
 
     writer.commit().map_err(ResponseError::internal)?;
@@ -128,15 +125,14 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
     let data: UpdatedRequest = ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
     let db = &ctx.state().db;
-    let env = &db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.main_write_txn().map_err(ResponseError::internal)?;
 
     let common_store = db.common_store();
 
     let token_key = format!("{}{}", TOKEN_PREFIX_KEY, request_key);
 
     let mut token_config = common_store
-        .get::<Str, SerdeBincode<Token>>(&writer, &token_key)
+        .get::<_, Str, SerdeBincode<Token>>(&writer, &token_key)
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::not_found(format!(
             "token key: {}",
@@ -167,7 +163,7 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
     token_config.updated_at = Utc::now();
 
     common_store
-        .put::<Str, SerdeBincode<Token>>(&mut writer, &token_key, &token_config)
+        .put::<_, Str, SerdeBincode<Token>>(&mut writer, &token_key, &token_config)
         .map_err(ResponseError::internal)?;
 
     writer.commit().map_err(ResponseError::internal)?;
@@ -182,15 +178,14 @@ pub async fn delete(ctx: Context<Data>) -> SResult<StatusCode> {
     let request_key = ctx.url_param("key")?;
 
     let db = &ctx.state().db;
-    let env = &db.env;
-    let mut writer = env.write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.main_write_txn().map_err(ResponseError::internal)?;
 
     let common_store = db.common_store();
 
     let token_key = format!("{}{}", TOKEN_PREFIX_KEY, request_key);
 
     common_store
-        .delete::<Str>(&mut writer, &token_key)
+        .delete::<_, Str>(&mut writer, &token_key)
         .map_err(ResponseError::internal)?;
 
     writer.commit().map_err(ResponseError::internal)?;
