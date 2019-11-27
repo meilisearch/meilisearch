@@ -12,7 +12,7 @@ pub struct RawDocument {
     pub id: DocumentId,
     pub matches: SharedMatches,
     pub highlights: Vec<Highlight>,
-    pub fields_counts: SetBuf<(SchemaAttr, u64)>,
+    pub fields_counts: SetBuf<(SchemaAttr, u16)>,
 }
 
 impl RawDocument {
@@ -101,7 +101,7 @@ impl fmt::Debug for RawDocument {
 pub fn raw_documents_from(
     matches: SetBuf<(DocumentId, TmpMatch)>,
     highlights: SetBuf<(DocumentId, Highlight)>,
-    fields_counts: SetBuf<(DocumentId, SchemaAttr, u64)>,
+    fields_counts: SetBuf<(DocumentId, SchemaAttr, u16)>,
 ) -> Vec<RawDocument> {
     let mut docs_ranges: Vec<(_, Range, _, _)> = Vec::new();
     let mut matches2 = Matches::with_capacity(matches.len());

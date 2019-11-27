@@ -12,7 +12,7 @@ fn number_exact_matches(
     query_index: &[u32],
     attribute: &[u16],
     is_exact: &[bool],
-    fields_counts: &Set<(SchemaAttr, u64)>,
+    fields_counts: &Set<(SchemaAttr, u16)>,
 ) -> usize {
     let mut count = 0;
     let mut index = 0;

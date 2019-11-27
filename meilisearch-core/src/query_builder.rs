@@ -815,7 +815,7 @@ mod tests {
 
             let mut words_fst = BTreeSet::new();
             let mut postings_lists = HashMap::new();
-            let mut fields_counts = HashMap::<_, u64>::new();
+            let mut fields_counts = HashMap::<_, u16>::new();
 
             for (word, indexes) in iter {
                 let word = word.to_lowercase().into_bytes();
