@@ -25,7 +25,7 @@ For more [details about those features go to our documentation](https://docs.mei
 
 > Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
 
-## In depth features
+### In depth features
 
 - Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/criterion/mod.rs#L107-L113) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
 - Accepts [custom criteria](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/criterion/mod.rs#L24-L33) and can apply them in any custom order
