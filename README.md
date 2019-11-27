@@ -9,7 +9,7 @@
 MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engine. The search and indexation are fully customizable and handles features like typo-tolerance, filters, and ranking.
 
 ## What MeiliSearch has to offer
-* Search as you type experience (answers < 50ms)
+* Search as-you-type experience (answers < 50ms)
 * Full-text search
 * Typo tolerant (understands typos and spelling mistakes)
 * Supports Kanji
