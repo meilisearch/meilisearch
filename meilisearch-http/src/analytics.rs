@@ -58,14 +58,10 @@ pub fn analytics_sender() {
         };
 
         let body = qs::to_string(&request).unwrap();
-        match isahc::post("https://api.amplitude.com/httpapi", body) {
-            Ok(response) => {
-                if !response.status().is_success() {
-                    let body = response.into_body().text().unwrap();
-                    error!("Unsuccessful call to Amplitude: {}", body);
-                }
-            }
-            Err(e) => error!("Error while sending a request to Amplitude: {}", e),
+        let response = ureq::post("https://api.amplitude.com/httpapi").send_string(&body);
+        if !response.ok() {
+            let body = response.into_string().unwrap();
+            error!("Unsuccessful call to Amplitude: {}", body);
         }
 
         thread::sleep(Duration::from_secs(86_400)) // one day
