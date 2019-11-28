@@ -47,7 +47,7 @@ You will need to create your own web front display to make it pretty though.
 
 ### Deploy the Server
 
-If you have not installed Rust and its package manager `cargo` yet, go to [the installation page](https://www.rust-lang.org/tools/install).<br/>
+If you have not yet installed Rust and its package manager `cargo`, go to [the installation page](https://www.rust-lang.org/tools/install).<br/>
 You can deploy the server on your own machine, it will listen to HTTP requests on the 8080 port by default.
 
 ```bash
