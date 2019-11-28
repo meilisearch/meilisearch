@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/meilisearch/MeiliSearch/workflows/Cargo%20test/badge.svg)](https://github.com/meilisearch/MeiliSearch/actions)
 [![dependency status](https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliSearch)
-[![License](https://img.shields.io/badge/license-commons%20clause-lightgrey)](https://commonsclause.com/)
+[![License](https://img.shields.io/badge/license-MIT-informational)](https://github.com/meilisearch/MeiliSearch/blob/master/LICENSE)
 
 Ultra relevant and instant full-text search API.
 
