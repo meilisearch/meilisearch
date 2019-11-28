@@ -127,8 +127,8 @@ It is a good start!
 ## Ressources
 
 * [Documentation](https://docs.meilisearch.com)
-* [Main concept](#to_do_main_concept)
-* [SDK's](#link)
+* [Main concept](https://docs.meilisearch.com/main_concept/)
+* [SDK's](https://github.com/meilisearch)
 
 
 ## License 
