@@ -461,7 +461,7 @@ mod tests {
 
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
-        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_some());
+        assert_matches!(result, Some(UpdateStatus::Failed { content }) if content.error.is_some());
     }
 
     #[test]
@@ -685,7 +685,7 @@ mod tests {
         // check if it has been accepted
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
-        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_some());
+        assert_matches!(result, Some(UpdateStatus::Failed { content }) if content.error.is_some());
     }
 
     #[test]

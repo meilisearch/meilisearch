@@ -197,6 +197,10 @@ pub enum UpdateStatus {
         #[serde(flatten)]
         content: EnqueuedUpdateResult,
     },
+    Failed {
+        #[serde(flatten)]
+        content: ProcessedUpdateResult,
+    },
     Processed {
         #[serde(flatten)]
         content: ProcessedUpdateResult,
@@ -210,7 +214,13 @@ pub fn update_status(
     update_id: u64,
 ) -> MResult<Option<UpdateStatus>> {
     match updates_results_store.update_result(update_reader, update_id)? {
-        Some(result) => Ok(Some(UpdateStatus::Processed { content: result })),
+        Some(result) => {
+            if result.error.is_some() {
+                Ok(Some(UpdateStatus::Failed { content: result }))
+            } else {
+                Ok(Some(UpdateStatus::Processed { content: result }))
+            }
+        },
         None => match updates_store.get(update_reader, update_id)? {
             Some(update) => Ok(Some(UpdateStatus::Enqueued {
                 content: EnqueuedUpdateResult {
