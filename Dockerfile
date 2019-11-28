@@ -4,7 +4,6 @@ FROM    alpine:3.10 AS compiler
 RUN     apk update --quiet
 RUN     apk add curl
 RUN     apk add build-base
-RUN     apk add libressl-dev
 
 RUN     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
@@ -20,8 +19,7 @@ RUN     $HOME/.cargo/bin/cargo build --release
 FROM    alpine:3.10
 
 RUN     apk update --quiet
-RUN     apk add libressl
-RUN     apk add build-base
+RUN     apk add libgcc
 
 COPY    --from=compiler /meilisearch/target/release/meilisearch .
 
