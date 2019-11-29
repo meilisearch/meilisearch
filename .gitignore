@@ -1,4 +1,5 @@
 /target
+meilisearch-core/target
 **/*.csv
 **/*.json_lines
 **/*.rs.bk
