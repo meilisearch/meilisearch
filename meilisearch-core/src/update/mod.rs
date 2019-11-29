@@ -172,6 +172,7 @@ pub enum UpdateType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessedUpdateResult {
     pub update_id: u64,
     #[serde(rename = "type")]
@@ -184,8 +185,10 @@ pub struct ProcessedUpdateResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EnqueuedUpdateResult {
     pub update_id: u64,
+    #[serde(rename = "type")]
     pub update_type: UpdateType,
     pub enqueued_at: DateTime<Utc>,
 }
