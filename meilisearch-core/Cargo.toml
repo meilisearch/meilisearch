@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-core"
-version = "0.8.2"
+version = "0.8.3"
 authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
 
@@ -17,9 +17,9 @@ hashbrown = { version = "0.6.0", features = ["serde"] }
 heed = "0.6.0"
 levenshtein_automata = { version = "0.1.1", features = ["fst_automaton"] }
 log = "0.4.8"
-meilisearch-schema = { path = "../meilisearch-schema", version = "0.8.2" }
-meilisearch-tokenizer = { path = "../meilisearch-tokenizer", version = "0.8.2" }
-meilisearch-types = { path = "../meilisearch-types", version = "0.8.2" }
+meilisearch-schema = { path = "../meilisearch-schema", version = "0.8.3" }
+meilisearch-tokenizer = { path = "../meilisearch-tokenizer", version = "0.8.3" }
+meilisearch-types = { path = "../meilisearch-types", version = "0.8.3" }
 once_cell = "1.2.0"
 ordered-float = { version = "1.0.2", features = ["serde"] }
 sdset = "0.3.3"
