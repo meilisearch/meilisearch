@@ -48,7 +48,7 @@ You still need to create your front-end to make it pretty, though.
 ### Deploy the Server
 
 If you have not yet installed Rust and its package manager `cargo`, go to [the installation page](https://www.rust-lang.org/tools/install).<br/>
-You can deploy the server on your machine; it listens to HTTP requests on the 8080 port by default.
+You can deploy the server on your machine; it listens to HTTP requests on the 7700 port by default.
 
 ```bash
 cargo run --release
@@ -65,14 +65,14 @@ MeiliSearch can serve multiple indexes, with different kinds of documents,
 therefore, it is required to create the index before sending documents to it.
 
 ```bash
-curl -i -X POST 'http://127.0.0.1:8080/indexes' --data '{ "name": "Movies", "uid": "movies" }'
+curl -i -X POST 'http://127.0.0.1:7700/indexes' --data '{ "name": "Movies", "uid": "movies" }'
 ```
 
 Now that the server knows about our brand new index, we can send it data.
 We provided you a small dataset that is available in the `datasets/` directory.
 
 ```bash
-curl -i -X POST 'http://127.0.0.1:8080/indexes/movies/documents' \
+curl -i -X POST 'http://127.0.0.1:7700/indexes/movies/documents' \
   --header 'content-type: application/json' \
   --data @datasets/movies/movies.json
 ```
@@ -83,7 +83,7 @@ The search engine is now aware of our documents and can serve those via our HTTP
 The [`jq` command-line tool](https://stedolan.github.io/jq/) can significantly help you read the server responses.
 
 ```bash
-curl 'http://127.0.0.1:8080/indexes/movies/search?q=botman'
+curl 'http://127.0.0.1:7700/indexes/movies/search?q=botman'
 ```
 
 ```json
