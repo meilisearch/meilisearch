@@ -3,7 +3,7 @@ use structopt::StructOpt;
 #[derive(Debug, Clone, StructOpt)]
 pub struct Opt {
     /// The destination where the database must be created.
-    #[structopt(long, env = "MEILI_DB_PATH", default_value = "/tmp/meilisearch")]
+    #[structopt(long, env = "MEILI_DB_PATH", default_value = "./data.ms")]
     pub db_path: String,
 
     /// The address on which the http server will listen.
