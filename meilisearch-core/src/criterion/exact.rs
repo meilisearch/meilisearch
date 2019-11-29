@@ -1,18 +1,17 @@
 use std::cmp::Ordering;
 
-use meilisearch_schema::SchemaAttr;
 use sdset::Set;
 use slice_group_by::GroupBy;
 
 use crate::criterion::Criterion;
-use crate::RawDocument;
+use crate::{AttrCount, RawDocument};
 
 #[inline]
 fn number_exact_matches(
     query_index: &[u32],
     attribute: &[u16],
     is_exact: &[bool],
-    fields_counts: &Set<(SchemaAttr, u16)>,
+    fields_counts: &Set<AttrCount>,
 ) -> usize {
     let mut count = 0;
     let mut index = 0;
@@ -25,8 +24,8 @@ fn number_exact_matches(
             if *is_exact {
                 found_exact = true;
                 let attr = &attribute[index + pos];
-                if let Ok(pos) = fields_counts.binary_search_by_key(attr, |(a, _)| a.0) {
-                    let (_, count) = fields_counts[pos];
+                if let Ok(pos) = fields_counts.binary_search_by_key(attr, |ac| ac.attr) {
+                    let AttrCount { count, .. } = fields_counts[pos];
                     if count == 1 {
                         return usize::max_value();
                     }
@@ -50,7 +49,7 @@ impl Criterion for Exact {
             let query_index = lhs.query_index();
             let is_exact = lhs.is_exact();
             let attribute = lhs.attribute();
-            let fields_counts = &lhs.fields_counts;
+            let fields_counts = lhs.fields_counts.as_ref().unwrap();
 
             number_exact_matches(query_index, attribute, is_exact, fields_counts)
         };
@@ -59,7 +58,7 @@ impl Criterion for Exact {
             let query_index = rhs.query_index();
             let is_exact = rhs.is_exact();
             let attribute = rhs.attribute();
-            let fields_counts = &rhs.fields_counts;
+            let fields_counts = rhs.fields_counts.as_ref().unwrap();
 
             number_exact_matches(query_index, attribute, is_exact, fields_counts)
         };
@@ -86,7 +85,7 @@ mod tests {
             let query_index = &[0];
             let attribute = &[0];
             let is_exact = &[true];
-            let fields_counts = Set::new(&[(SchemaAttr(0), 2)]).unwrap();
+            let fields_counts = Set::new(&[AttrCount { attr: 0, count: 2 }]).unwrap();
 
             number_exact_matches(query_index, attribute, is_exact, fields_counts)
         };
@@ -95,7 +94,7 @@ mod tests {
             let query_index = &[0];
             let attribute = &[0];
             let is_exact = &[false];
-            let fields_counts = Set::new(&[(SchemaAttr(0), 2)]).unwrap();
+            let fields_counts = Set::new(&[AttrCount { attr: 0, count: 2 }]).unwrap();
 
             number_exact_matches(query_index, attribute, is_exact, fields_counts)
         };
@@ -113,7 +112,7 @@ mod tests {
             let query_index = &[0];
             let attribute = &[0];
             let is_exact = &[true];
-            let fields_counts = Set::new(&[(SchemaAttr(0), 1)]).unwrap();
+            let fields_counts = Set::new(&[AttrCount { attr: 0, count: 1 }]).unwrap();
 
             number_exact_matches(query_index, attribute, is_exact, fields_counts)
         };
@@ -122,7 +121,7 @@ mod tests {
             let query_index = &[0];
             let attribute = &[0];
             let is_exact = &[true];
-            let fields_counts = Set::new(&[(SchemaAttr(0), 4)]).unwrap();
+            let fields_counts = Set::new(&[AttrCount { attr: 0, count: 4 }]).unwrap();
 
             number_exact_matches(query_index, attribute, is_exact, fields_counts)
         };

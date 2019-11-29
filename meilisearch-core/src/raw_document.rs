@@ -1,18 +1,18 @@
 use std::fmt;
 use std::sync::Arc;
 
-use meilisearch_schema::SchemaAttr;
 use sdset::SetBuf;
 use slice_group_by::GroupBy;
+use log::debug;
 
-use crate::{DocumentId, Highlight, TmpMatch};
+use crate::{DocumentId, Highlight, TmpMatch, AttrCount};
 
 #[derive(Clone)]
 pub struct RawDocument {
     pub id: DocumentId,
     pub matches: SharedMatches,
     pub highlights: Vec<Highlight>,
-    pub fields_counts: SetBuf<(SchemaAttr, u16)>,
+    pub fields_counts: Option<SetBuf<AttrCount>>,
 }
 
 impl RawDocument {
@@ -100,44 +100,47 @@ impl fmt::Debug for RawDocument {
 
 pub fn raw_documents_from(
     matches: SetBuf<(DocumentId, TmpMatch)>,
-    highlights: SetBuf<(DocumentId, Highlight)>,
-    fields_counts: SetBuf<(DocumentId, SchemaAttr, u16)>,
+    highlights: SetBuf<(DocumentId, Highlight)>
 ) -> Vec<RawDocument> {
     let mut docs_ranges: Vec<(_, Range, _, _)> = Vec::new();
     let mut matches2 = Matches::with_capacity(matches.len());
 
     let matches = matches.linear_group_by_key(|(id, _)| *id);
     let highlights = highlights.linear_group_by_key(|(id, _)| *id);
-    let fields_counts = fields_counts.linear_group_by_key(|(id, _, _)| *id);
 
-    for ((mgroup, hgroup), fgroup) in matches.zip(highlights).zip(fields_counts) {
-        debug_assert_eq!(mgroup[0].0, hgroup[0].0);
-        debug_assert_eq!(mgroup[0].0, fgroup[0].0);
+    let mut loops_count = 0;
+
+    for (mgroup, hgroup) in matches.zip(highlights) {
+        loops_count += 1;
+        assert_eq!(mgroup[0].0, hgroup[0].0);
 
         let document_id = mgroup[0].0;
         let start = docs_ranges.last().map(|(_, r, _, _)| r.end).unwrap_or(0);
         let end = start + mgroup.len();
         let highlights = hgroup.iter().map(|(_, h)| *h).collect();
-        let fields_counts = SetBuf::new(fgroup.iter().map(|(_, a, c)| (*a, *c)).collect()).unwrap();
+        let fields_counts = None;
 
         docs_ranges.push((document_id, Range { start, end }, highlights, fields_counts));
+        // TODO we could try to keep both data
+        //  - the data oriented one and the raw one,
+        //  - the one that comes from the arguments of this function
+        // This way we would be able to only produce data oriented lazily.
+        //
+        // For example the default first criterion is `SumOfTypos`
+        // and just needs the `query_index` and the `distance` fields.
+        // It would probably be good to avoid wasting time sorting other fields of documents
+        // that will never ever reach the second criterion.
         matches2.extend_from_slice(mgroup);
     }
+
+    debug!("loops_counts number is {}", loops_count);
 
     let matches = Arc::new(matches2);
     docs_ranges
         .into_iter()
         .map(|(id, range, highlights, fields_counts)| {
-            let matches = SharedMatches {
-                range,
-                matches: matches.clone(),
-            };
-            RawDocument {
-                id,
-                matches,
-                highlights,
-                fields_counts,
-            }
+            let matches = SharedMatches { range, matches: matches.clone() };
+            RawDocument { id, matches, highlights, fields_counts }
         })
         .collect()
 }
