@@ -78,11 +78,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         query.get(0..count)
     });
 
-    let mut group = c.benchmark_group("searching in movies");
+    let mut group = c.benchmark_group("searching in movies (19654 docs)");
     group.sample_size(10);
 
     for query in iter {
-        let bench_name = BenchmarkId::new("query", format!("{:?}", query));
+        let bench_name = BenchmarkId::from_parameter(format!("{:?}", query));
         group.bench_with_input(bench_name, &query, |b, query| b.iter(|| {
             let builder = index.query_builder();
             builder.query(&reader, query, 0..20).unwrap();
