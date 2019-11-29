@@ -188,6 +188,7 @@ pub struct ProcessedUpdateResult {
 #[serde(rename_all = "camelCase")]
 pub struct EnqueuedUpdateResult {
     pub update_id: u64,
+    #[serde(rename = "type")]
     pub update_type: UpdateType,
     pub enqueued_at: DateTime<Utc>,
 }
