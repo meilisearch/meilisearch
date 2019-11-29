@@ -23,5 +23,5 @@ RUN     apk add libgcc
 
 COPY    --from=compiler /meilisearch/target/release/meilisearch .
 
-ENV     MEILI_HTTP_ADDR 0.0.0.0:8080
+ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 CMD     ./meilisearch
