@@ -4,3 +4,4 @@
 **/*.rs.bk
 /*.mdb
 /query-history.txt
+/data.ms
