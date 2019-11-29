@@ -2,7 +2,7 @@ mod dfa;
 mod query_enhancer;
 
 use std::cmp::Reverse;
-use std::{cmp, vec};
+use std::{cmp, fmt, vec};
 
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
@@ -68,7 +68,6 @@ impl AutomatonGroup {
     }
 }
 
-#[derive(Debug)]
 pub struct Automaton {
     pub index: usize,
     pub ngram: usize,
@@ -76,6 +75,14 @@ pub struct Automaton {
     pub is_exact: bool,
     pub is_prefix: bool,
     pub query: String,
+}
+
+impl fmt::Debug for Automaton {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Automaton")
+            .field("query", &self.query)
+            .finish()
+    }
 }
 
 impl Automaton {
