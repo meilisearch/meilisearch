@@ -58,6 +58,7 @@ where
 type Origin = usize;
 type RealLength = usize;
 
+#[derive(Debug)]
 struct FakeIntervalTree {
     intervals: Vec<(Range<usize>, (Origin, RealLength))>,
 }
@@ -154,6 +155,7 @@ impl<S: AsRef<str>> QueryEnhancerBuilder<'_, S> {
     }
 }
 
+#[derive(Debug)]
 pub struct QueryEnhancer {
     origins: Vec<usize>,
     real_to_origin: FakeIntervalTree,

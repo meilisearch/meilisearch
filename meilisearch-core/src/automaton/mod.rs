@@ -7,6 +7,7 @@ use std::{cmp, fmt, vec};
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
 use meilisearch_tokenizer::{is_cjk, split_query_string};
+use log::debug;
 
 use crate::database::MainT;
 use crate::error::MResult;
@@ -37,6 +38,10 @@ impl AutomatonProducer {
             postings_list_store,
             synonyms_store,
         )?;
+
+        for (i, group) in automatons.iter().enumerate() {
+            debug!("all automatons: group {} automatons {:?}", i, group.automatons);
+        }
 
         Ok((AutomatonProducer { automatons }, query_enhancer))
     }
@@ -80,7 +85,9 @@ pub struct Automaton {
 impl fmt::Debug for Automaton {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Automaton")
+            .field("index", &self.index)
             .field("query", &self.query)
+            .field("is_prefix", &self.is_prefix)
             .finish()
     }
 }
