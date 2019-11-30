@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use sdset::SetBuf;
 use slice_group_by::GroupBy;
-use log::debug;
 
 use crate::{DocumentId, Highlight, TmpMatch, AttrCount};
 
@@ -108,10 +107,7 @@ pub fn raw_documents_from(
     let matches = matches.linear_group_by_key(|(id, _)| *id);
     let highlights = highlights.linear_group_by_key(|(id, _)| *id);
 
-    let mut loops_count = 0;
-
     for (mgroup, hgroup) in matches.zip(highlights) {
-        loops_count += 1;
         assert_eq!(mgroup[0].0, hgroup[0].0);
 
         let document_id = mgroup[0].0;
@@ -122,8 +118,8 @@ pub fn raw_documents_from(
 
         docs_ranges.push((document_id, Range { start, end }, highlights, fields_counts));
         // TODO we could try to keep both data
-        //  - the data oriented one and the raw one,
-        //  - the one that comes from the arguments of this function
+        //  - the data oriented one and,
+        //  - the raw one, the one that comes from the arguments of this function
         // This way we would be able to only produce data oriented lazily.
         //
         // For example the default first criterion is `SumOfTypos`
@@ -132,8 +128,6 @@ pub fn raw_documents_from(
         // that will never ever reach the second criterion.
         matches2.extend_from_slice(mgroup);
     }
-
-    debug!("loops_counts number is {}", loops_count);
 
     let matches = Arc::new(matches2);
     docs_ranges

@@ -34,6 +34,14 @@ fn multiword_rewrite_matches(
     mut matches: Vec<(DocumentId, TmpMatch)>,
     query_enhancer: &QueryEnhancer,
 ) -> SetBuf<(DocumentId, TmpMatch)> {
+    if true {
+        let before_sort = Instant::now();
+        matches.sort_unstable();
+        let matches = SetBuf::new_unchecked(matches);
+        debug!("sorting dirty matches took {:.02?}", before_sort.elapsed());
+        return matches;
+    }
+
     let mut padded_matches = Vec::with_capacity(matches.len());
 
     // we sort the matches by word index to make them rewritable
@@ -137,6 +145,10 @@ fn multiword_rewrite_matches(
         document_matches.sort_unstable();
     }
 
+    // With this check we can see that the loop above takes something
+    // like 43% of the search time even when no rewrite is needed.
+    // assert_eq!(before_matches, padded_matches);
+
     SetBuf::new_unchecked(padded_matches)
 }
 
@@ -236,16 +248,28 @@ fn fetch_raw_documents(
                 }
             }
         } else {
+            let before_rerewrite = Instant::now();
             for (id, _, match_, highlight) in tmp_matches {
                 matches.push((id, match_));
                 highlights.push((id, highlight));
             }
+            debug!("rerewrite took {:.02?}", before_rerewrite.elapsed());
         }
     }
     debug!("automatons_groups_loop took {:.02?}", before_automatons_groups_loop.elapsed());
 
+    {
+        let mut cloned = matches.clone();
+        let before_sort_test = Instant::now();
+        cloned.sort_unstable_by_key(|(id, m)| (*id, m.query_index, m.distance));
+        debug!("sorting test took {:.02?}", before_sort_test.elapsed());
+    }
+
     let before_multiword_rewrite_matches = Instant::now();
+    debug!("number of matches before rewrite {}", matches.len());
+    debug!("{:?}", query_enhancer);
     let matches = multiword_rewrite_matches(matches, &query_enhancer);
+    debug!("number of matches after rewrite {}", matches.len());
     debug!("multiword_rewrite_matches took {:.02?}", before_multiword_rewrite_matches.elapsed());
 
     let before_highlight_sorting = Instant::now();
@@ -299,9 +323,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
             synonyms_store: synonyms,
         }
     }
-}
 
-impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
     pub fn with_filter<F>(&mut self, function: F)
     where
         F: Fn(DocumentId) -> bool + 'f,
@@ -479,11 +501,15 @@ where
                     }
                 }
 
+
                 group.sort_unstable_by(|a, b| criterion.evaluate(a, b));
 
                 for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b)) {
+                    debug!("criterion {} produced a group of size {}", criterion.name(), group.len());
+
                     documents_seen += group.len();
                     groups.push(group);
+
 
                     // we have sort enough documents if the last document sorted is after
                     // the end of the requested range, we can continue to the next criterion
