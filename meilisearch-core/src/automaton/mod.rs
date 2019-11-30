@@ -13,11 +13,11 @@ use crate::database::MainT;
 use crate::error::MResult;
 use crate::store;
 
-use self::dfa::{build_dfa, build_prefix_dfa};
+pub use self::dfa::{build_dfa, build_prefix_dfa};
 pub use self::query_enhancer::QueryEnhancer;
-use self::query_enhancer::QueryEnhancerBuilder;
+pub use self::query_enhancer::QueryEnhancerBuilder;
 
-const NGRAMS: usize = 3;
+pub const NGRAMS: usize = 3;
 
 pub struct AutomatonProducer {
     automatons: Vec<AutomatonGroup>,
@@ -145,7 +145,7 @@ pub fn normalize_str(string: &str) -> String {
     string
 }
 
-fn split_best_frequency<'a>(
+pub fn split_best_frequency<'a>(
     reader: &heed::RoTxn<MainT>,
     word: &'a str,
     postings_lists_store: store::PostingsLists,

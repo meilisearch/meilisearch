@@ -10,7 +10,7 @@ use log::debug;
 use sdset::SetBuf;
 use slice_group_by::{GroupBy, GroupByMut};
 
-use crate::database::MainT;
+use crate::{bucket_sort::bucket_sort, database::MainT};
 use crate::automaton::{Automaton, AutomatonGroup, AutomatonProducer, QueryEnhancer};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::levenshtein::prefix_damerau_levenshtein;
@@ -34,19 +34,14 @@ fn multiword_rewrite_matches(
     mut matches: Vec<(DocumentId, TmpMatch)>,
     query_enhancer: &QueryEnhancer,
 ) -> SetBuf<(DocumentId, TmpMatch)> {
-    if true {
-        let before_sort = Instant::now();
-        matches.sort_unstable();
-        let matches = SetBuf::new_unchecked(matches);
-        debug!("sorting dirty matches took {:.02?}", before_sort.elapsed());
-        return matches;
-    }
-
     let mut padded_matches = Vec::with_capacity(matches.len());
 
+    let before_sort = Instant::now();
     // we sort the matches by word index to make them rewritable
     matches.sort_unstable_by_key(|(id, match_)| (*id, match_.attribute, match_.word_index));
+    debug!("sorting dirty matches took {:.02?}", before_sort.elapsed());
 
+    let before_padding = Instant::now();
     // for each attribute of each document
     for same_document_attribute in matches.linear_group_by_key(|(id, m)| (*id, m.attribute)) {
         // padding will only be applied
@@ -145,6 +140,8 @@ fn multiword_rewrite_matches(
         document_matches.sort_unstable();
     }
 
+    debug!("padding matches took {:.02?}", before_padding.elapsed());
+
     // With this check we can see that the loop above takes something
     // like 43% of the search time even when no rewrite is needed.
     // assert_eq!(before_matches, padded_matches);
@@ -163,7 +160,18 @@ fn fetch_raw_documents(
     let mut matches = Vec::new();
     let mut highlights = Vec::new();
 
+    let words = match main_store.words_fst(reader)? {
+        Some(words) => words,
+        None => return Ok(Vec::new()),
+    };
+
     let before_automatons_groups_loop = Instant::now();
+    let mut doc_indexes_rewrite = Duration::default();
+    let mut retrieve_postings_lists = Duration::default();
+    let mut stream_reserve = Duration::default();
+    let mut covered_area_time = Duration::default();
+    let mut eval_time = Duration::default();
+
     for group in automatons_groups {
         let AutomatonGroup { is_phrase_query, automatons } = group;
         let phrase_query_len = automatons.len();
@@ -173,29 +181,39 @@ fn fetch_raw_documents(
             let Automaton { index, is_exact, query_len, query, .. } = automaton;
             let dfa = automaton.dfa();
 
-            let words = match main_store.words_fst(reader)? {
-                Some(words) => words,
-                None => return Ok(Vec::new()),
-            };
+            let before_stream_loop = Instant::now();
+            let mut stream_count = 0;
 
             let mut stream = words.search(&dfa).into_stream();
             while let Some(input) = stream.next() {
+                let before_eval_time = Instant::now();
                 let distance = dfa.eval(input).to_u8();
+                eval_time += before_eval_time.elapsed();
+
                 let is_exact = *is_exact && distance == 0 && input.len() == *query_len;
 
+                stream_count += 1;
+
+                let before_covered_area = Instant::now();
                 let covered_area = if *query_len > input.len() {
                     input.len()
                 } else {
                     prefix_damerau_levenshtein(query.as_bytes(), input).1
                 };
+                covered_area_time += before_covered_area.elapsed();
 
+                let before_retrieve_postings_lists = Instant::now();
                 let doc_indexes = match postings_lists_store.postings_list(reader, input)? {
                     Some(doc_indexes) => doc_indexes,
                     None => continue,
                 };
+                retrieve_postings_lists += before_retrieve_postings_lists.elapsed();
 
+                let before_stream_reserve = Instant::now();
                 tmp_matches.reserve(doc_indexes.len());
+                stream_reserve += before_stream_reserve.elapsed();
 
+                let before_doc_indexes_rewrite = Instant::now();
                 for di in doc_indexes.as_ref() {
                     let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
                     if let Some(attribute) = attribute {
@@ -219,7 +237,9 @@ fn fetch_raw_documents(
                         tmp_matches.push((di.document_id, id, match_, highlight));
                     }
                 }
+                doc_indexes_rewrite += before_doc_indexes_rewrite.elapsed();
             }
+            debug!("{:?} took {:.02?} ({} words)", query, before_stream_loop.elapsed(), stream_count);
         }
 
         if *is_phrase_query {
@@ -249,6 +269,10 @@ fn fetch_raw_documents(
             }
         } else {
             let before_rerewrite = Instant::now();
+
+            matches.reserve(tmp_matches.len());
+            highlights.reserve(tmp_matches.len());
+
             for (id, _, match_, highlight) in tmp_matches {
                 matches.push((id, match_));
                 highlights.push((id, highlight));
@@ -257,13 +281,18 @@ fn fetch_raw_documents(
         }
     }
     debug!("automatons_groups_loop took {:.02?}", before_automatons_groups_loop.elapsed());
+    debug!("doc_indexes_rewrite took {:.02?}", doc_indexes_rewrite);
+    debug!("retrieve_postings_lists took {:.02?}", retrieve_postings_lists);
+    debug!("stream reserve took {:.02?}", stream_reserve);
+    debug!("covered area took {:.02?}", covered_area_time);
+    debug!("eval value took {:.02?}", eval_time);
 
-    {
-        let mut cloned = matches.clone();
-        let before_sort_test = Instant::now();
-        cloned.sort_unstable_by_key(|(id, m)| (*id, m.query_index, m.distance));
-        debug!("sorting test took {:.02?}", before_sort_test.elapsed());
-    }
+    // {
+    //     let mut cloned = matches.clone();
+    //     let before_sort_test = Instant::now();
+    //     cloned.sort_unstable_by_key(|(id, m)| (*id, m.query_index, m.distance));
+    //     debug!("sorting test took {:.02?}", before_sort_test.elapsed());
+    // }
 
     let before_multiword_rewrite_matches = Instant::now();
     debug!("number of matches before rewrite {}", matches.len());
@@ -278,7 +307,6 @@ fn fetch_raw_documents(
         SetBuf::new_unchecked(highlights)
     };
     debug!("highlight_sorting {:.02?}", before_highlight_sorting.elapsed());
-
 
     let before_raw_documents = Instant::now();
     let raw_documents = raw_documents_from(matches, highlights);
@@ -356,29 +384,12 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         range: Range<usize>,
     ) -> MResult<Vec<Document>> {
         match self.distinct {
-            Some((distinct, distinct_size)) => raw_query_with_distinct(
+            Some((distinct, distinct_size)) => unimplemented!("distinct"),
+            None => bucket_sort(
                 reader,
                 query,
                 range,
-                self.filter,
-                distinct,
-                distinct_size,
-                self.timeout,
-                self.criteria,
-                self.searchable_attrs,
-                self.main_store,
-                self.postings_lists_store,
-                self.documents_fields_counts_store,
-                self.synonyms_store,
-            ),
-            None => raw_query(
-                reader,
-                query,
-                range,
-                self.filter,
-                self.timeout,
-                self.criteria,
-                self.searchable_attrs,
+                // self.criteria,
                 self.main_store,
                 self.postings_lists_store,
                 self.documents_fields_counts_store,
@@ -472,6 +483,8 @@ where
             }
         }
 
+        let before_bucket_sort = Instant::now();
+
         let mut groups = vec![raw_documents.as_mut_slice()];
 
         'criteria: for criterion in criteria.as_ref() {
@@ -519,6 +532,8 @@ where
                 }
             }
         }
+
+        debug!("bucket_sort took {:.02?}", before_bucket_sort.elapsed());
 
         // once we classified the documents related to the current
         // automatons we save that as the next valid result
