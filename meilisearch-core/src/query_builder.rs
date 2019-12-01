@@ -34,19 +34,14 @@ fn multiword_rewrite_matches(
     mut matches: Vec<(DocumentId, TmpMatch)>,
     query_enhancer: &QueryEnhancer,
 ) -> SetBuf<(DocumentId, TmpMatch)> {
-    if true {
-        let before_sort = Instant::now();
-        matches.sort_unstable();
-        let matches = SetBuf::new_unchecked(matches);
-        debug!("sorting dirty matches took {:.02?}", before_sort.elapsed());
-        return matches;
-    }
-
     let mut padded_matches = Vec::with_capacity(matches.len());
 
+    let before_sort = Instant::now();
     // we sort the matches by word index to make them rewritable
     matches.sort_unstable_by_key(|(id, match_)| (*id, match_.attribute, match_.word_index));
+    debug!("sorting dirty matches took {:.02?}", before_sort.elapsed());
 
+    let before_padding = Instant::now();
     // for each attribute of each document
     for same_document_attribute in matches.linear_group_by_key(|(id, m)| (*id, m.attribute)) {
         // padding will only be applied
@@ -144,6 +139,8 @@ fn multiword_rewrite_matches(
     for document_matches in padded_matches.linear_group_by_key_mut(|(id, _)| *id) {
         document_matches.sort_unstable();
     }
+
+    debug!("padding matches took {:.02?}", before_padding.elapsed());
 
     // With this check we can see that the loop above takes something
     // like 43% of the search time even when no rewrite is needed.
@@ -249,6 +246,10 @@ fn fetch_raw_documents(
             }
         } else {
             let before_rerewrite = Instant::now();
+
+            matches.reserve(tmp_matches.len());
+            highlights.reserve(tmp_matches.len());
+
             for (id, _, match_, highlight) in tmp_matches {
                 matches.push((id, match_));
                 highlights.push((id, highlight));
@@ -258,12 +259,12 @@ fn fetch_raw_documents(
     }
     debug!("automatons_groups_loop took {:.02?}", before_automatons_groups_loop.elapsed());
 
-    {
-        let mut cloned = matches.clone();
-        let before_sort_test = Instant::now();
-        cloned.sort_unstable_by_key(|(id, m)| (*id, m.query_index, m.distance));
-        debug!("sorting test took {:.02?}", before_sort_test.elapsed());
-    }
+    // {
+    //     let mut cloned = matches.clone();
+    //     let before_sort_test = Instant::now();
+    //     cloned.sort_unstable_by_key(|(id, m)| (*id, m.query_index, m.distance));
+    //     debug!("sorting test took {:.02?}", before_sort_test.elapsed());
+    // }
 
     let before_multiword_rewrite_matches = Instant::now();
     debug!("number of matches before rewrite {}", matches.len());
@@ -278,7 +279,6 @@ fn fetch_raw_documents(
         SetBuf::new_unchecked(highlights)
     };
     debug!("highlight_sorting {:.02?}", before_highlight_sorting.elapsed());
-
 
     let before_raw_documents = Instant::now();
     let raw_documents = raw_documents_from(matches, highlights);
@@ -472,6 +472,8 @@ where
             }
         }
 
+        let before_bucket_sort = Instant::now();
+
         let mut groups = vec![raw_documents.as_mut_slice()];
 
         'criteria: for criterion in criteria.as_ref() {
@@ -519,6 +521,8 @@ where
                 }
             }
         }
+
+        debug!("bucket_sort took {:.02?}", before_bucket_sort.elapsed());
 
         // once we classified the documents related to the current
         // automatons we save that as the next valid result
