@@ -160,7 +160,18 @@ fn fetch_raw_documents(
     let mut matches = Vec::new();
     let mut highlights = Vec::new();
 
+    let words = match main_store.words_fst(reader)? {
+        Some(words) => words,
+        None => return Ok(Vec::new()),
+    };
+
     let before_automatons_groups_loop = Instant::now();
+    let mut doc_indexes_rewrite = Duration::default();
+    let mut retrieve_postings_lists = Duration::default();
+    let mut stream_reserve = Duration::default();
+    let mut covered_area_time = Duration::default();
+    let mut eval_time = Duration::default();
+
     for group in automatons_groups {
         let AutomatonGroup { is_phrase_query, automatons } = group;
         let phrase_query_len = automatons.len();
@@ -170,29 +181,39 @@ fn fetch_raw_documents(
             let Automaton { index, is_exact, query_len, query, .. } = automaton;
             let dfa = automaton.dfa();
 
-            let words = match main_store.words_fst(reader)? {
-                Some(words) => words,
-                None => return Ok(Vec::new()),
-            };
+            let before_stream_loop = Instant::now();
+            let mut stream_count = 0;
 
             let mut stream = words.search(&dfa).into_stream();
             while let Some(input) = stream.next() {
+                let before_eval_time = Instant::now();
                 let distance = dfa.eval(input).to_u8();
+                eval_time += before_eval_time.elapsed();
+
                 let is_exact = *is_exact && distance == 0 && input.len() == *query_len;
 
+                stream_count += 1;
+
+                let before_covered_area = Instant::now();
                 let covered_area = if *query_len > input.len() {
                     input.len()
                 } else {
                     prefix_damerau_levenshtein(query.as_bytes(), input).1
                 };
+                covered_area_time += before_covered_area.elapsed();
 
+                let before_retrieve_postings_lists = Instant::now();
                 let doc_indexes = match postings_lists_store.postings_list(reader, input)? {
                     Some(doc_indexes) => doc_indexes,
                     None => continue,
                 };
+                retrieve_postings_lists += before_retrieve_postings_lists.elapsed();
 
+                let before_stream_reserve = Instant::now();
                 tmp_matches.reserve(doc_indexes.len());
+                stream_reserve += before_stream_reserve.elapsed();
 
+                let before_doc_indexes_rewrite = Instant::now();
                 for di in doc_indexes.as_ref() {
                     let attribute = searchables.map_or(Some(di.attribute), |r| r.get(di.attribute));
                     if let Some(attribute) = attribute {
@@ -216,7 +237,9 @@ fn fetch_raw_documents(
                         tmp_matches.push((di.document_id, id, match_, highlight));
                     }
                 }
+                doc_indexes_rewrite += before_doc_indexes_rewrite.elapsed();
             }
+            debug!("{:?} took {:.02?} ({} words)", query, before_stream_loop.elapsed(), stream_count);
         }
 
         if *is_phrase_query {
@@ -258,6 +281,11 @@ fn fetch_raw_documents(
         }
     }
     debug!("automatons_groups_loop took {:.02?}", before_automatons_groups_loop.elapsed());
+    debug!("doc_indexes_rewrite took {:.02?}", doc_indexes_rewrite);
+    debug!("retrieve_postings_lists took {:.02?}", retrieve_postings_lists);
+    debug!("stream reserve took {:.02?}", stream_reserve);
+    debug!("covered area took {:.02?}", covered_area_time);
+    debug!("eval value took {:.02?}", eval_time);
 
     // {
     //     let mut cloned = matches.clone();
