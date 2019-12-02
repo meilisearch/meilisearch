@@ -27,16 +27,16 @@ For more [details about those features, go to our documentation](https://docs.me
 
 ### In-depth features
 
-- Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/criterion/mod.rs#L107-L113) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
-- Accepts [custom criteria](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/criterion/mod.rs#L24-L33) and can apply them in any custom order
-- Support [ranged queries](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/query_builder.rs#L283), useful for paginating results
-- Can [distinct](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/query_builder.rs#L265-L270) and [filter](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/query_builder.rs#L246-L259) returned documents based on context defined rules
+- Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/criterion/mod.rs#L106-L111) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
+- Accepts [custom criteria](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/criterion/mod.rs#L20-L29) and can apply them in any custom order
+- Support [ranged queries](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L342), useful for paginating results
+- Can [distinct](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L324-L329) and [filter](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L313-L318) returned documents based on context defined rules
 - Searches for [concatenated](https://github.com/meilisearch/MeiliSearch/pull/164) and [splitted query words](https://github.com/meilisearch/MeiliSearch/pull/232) to improve the search quality.
-- Can store complete documents or only [user schema specified fields](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-schema/src/lib.rs#L265-L279)
-- The [default tokenizer](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-tokenizer/src/lib.rs) can index latin and kanji based languages
-- Returns [the matching text areas](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/lib.rs#L66-L88), useful to highlight matched words in results
-- Accepts query time search config like the [searchable attributes](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/query_builder.rs#L272-L275)
-- Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliSearch/blob/dc5c42821e1340e96cb90a3da472264624a26326/meilisearch-core/src/store/mod.rs#L143-L173)
+- Can store complete documents or only [user schema specified fields](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/datasets/movies/schema.toml)
+- The [default tokenizer](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-tokenizer/src/lib.rs) can index latin and kanji based languages
+- Returns [the matching text areas](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-types/src/lib.rs#L49-L65), useful to highlight matched words in results
+- Accepts query time search config like the [searchable attributes](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L331-L336)
+- Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/store/mod.rs#L143-L212)
 
 
 ## Quick Start
