@@ -27,18 +27,27 @@ For more [details about those features, go to our documentation](https://docs.me
 
 ### Deploy the Server
 
+#### Run it using Docker
+
 ```bash
-# If you have the Rust toolchain already installed, you can compile from the source
+docker run -it -p 7700:7700 --rm getmeili/MeiliSearch
+```
+
+#### Download the binary
+
+```bash
+curl -L https://install.meilisearch.com | sh
+./meilisearch
+```
+
+#### Compile and run it from sources
+
+If you have the Rust toolchain already installed, you can compile from the source
+
+```bash
 git clone https://github.com/meilisearch/MeiliSearch.git
 cd MeiliSearch
 cargo run --release
-
-# You can also use Docker
-docker run -it -p 7700:7700 --rm getmeili/MeiliSearch
-
-# You can also download the binary
-curl -L https://install.meilisearch.com | sh
-./meilisearch
 ```
 
 ### Create an Index and Upload Some Documents
