@@ -10,7 +10,7 @@ use log::debug;
 use sdset::SetBuf;
 use slice_group_by::{GroupBy, GroupByMut};
 
-use crate::database::MainT;
+use crate::{bucket_sort::bucket_sort, database::MainT};
 use crate::automaton::{Automaton, AutomatonGroup, AutomatonProducer, QueryEnhancer};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::levenshtein::prefix_damerau_levenshtein;
@@ -384,33 +384,15 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         range: Range<usize>,
     ) -> MResult<Vec<Document>> {
         match self.distinct {
-            Some((distinct, distinct_size)) => raw_query_with_distinct(
+            Some((distinct, distinct_size)) => unimplemented!("distinct"),
+            None => bucket_sort(
                 reader,
                 query,
                 range,
-                self.filter,
-                distinct,
-                distinct_size,
-                self.timeout,
-                self.criteria,
-                self.searchable_attrs,
+                // self.criteria,
                 self.main_store,
                 self.postings_lists_store,
                 self.documents_fields_counts_store,
-                self.synonyms_store,
-            ),
-            None => raw_query(
-                reader,
-                query,
-                range,
-                self.filter,
-                self.timeout,
-                self.criteria,
-                self.searchable_attrs,
-                self.main_store,
-                self.postings_lists_store,
-                self.documents_fields_counts_store,
-                self.synonyms_store,
             ),
         }
     }
