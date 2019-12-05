@@ -331,3 +331,30 @@ impl Criterion for Exact {
         lhs.cmp(&rhs).reverse()
     }
 }
+
+pub struct StableDocId;
+
+impl Criterion for StableDocId {
+    fn name(&self) -> &str { "stable document id" }
+
+    fn prepare(
+        &self,
+        documents: &mut [RawDocument],
+        postings_lists: &mut PostingsListsArena,
+    ) {
+        // ...
+    }
+
+    fn evaluate(
+        &self,
+        lhs: &RawDocument,
+        rhs: &RawDocument,
+        postings_lists: &PostingsListsArena,
+    ) -> Ordering
+    {
+        let lhs = &lhs.raw_matches[0].document_id;
+        let rhs = &rhs.raw_matches[0].document_id;
+
+        lhs.cmp(rhs)
+    }
+}

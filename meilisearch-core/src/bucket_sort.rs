@@ -17,6 +17,7 @@ use meilisearch_types::{DocIndex, Highlight};
 use sdset::Set;
 use slice_group_by::{GroupBy, GroupByMut};
 
+use crate::levenshtein::prefix_damerau_levenshtein;
 use crate::automaton::{build_dfa, build_prefix_dfa};
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
@@ -35,7 +36,7 @@ pub fn bucket_sort<'c>(
 
     let before_postings_lists_fetching = Instant::now();
     mk_arena!(arena);
-    let mut bare_matches = fetch_matches(reader, automatons, &mut arena, main_store, postings_lists_store)?;
+    let mut bare_matches = fetch_matches(reader, &automatons, &mut arena, main_store, postings_lists_store)?;
     debug!("bare matches ({}) retrieved in {:.02?}",
         bare_matches.len(),
         before_postings_lists_fetching.elapsed(),
@@ -44,9 +45,6 @@ pub fn bucket_sort<'c>(
     let before_raw_documents_presort = Instant::now();
     bare_matches.sort_unstable_by_key(|sm| sm.document_id);
     debug!("sort by documents ids took {:.02?}", before_raw_documents_presort.elapsed());
-
-    dbg!(mem::size_of::<BareMatch>());
-    dbg!(mem::size_of::<SimpleMatch>());
 
     let before_raw_documents_building = Instant::now();
     let mut raw_documents = Vec::new();
@@ -58,6 +56,9 @@ pub fn bucket_sort<'c>(
         before_raw_documents_building.elapsed(),
     );
 
+    dbg!(mem::size_of::<BareMatch>());
+    dbg!(mem::size_of::<SimpleMatch>());
+
     let mut groups = vec![raw_documents.as_mut_slice()];
 
     let criteria = [
@@ -67,6 +68,7 @@ pub fn bucket_sort<'c>(
         Box::new(Attribute),
         Box::new(WordsPosition),
         Box::new(Exact),
+        Box::new(StableDocId),
     ];
 
     'criteria: for criterion in &criteria {
@@ -74,16 +76,6 @@ pub fn bucket_sort<'c>(
         let mut documents_seen = 0;
 
         for mut group in tmp_groups {
-
-            // if criterion.name() == "attribute" {
-            //     for document in group.iter() {
-            //         println!("--- {} - {}",
-            //             document.raw_matches.len(),
-            //             document.raw_matches.iter().map(|x| arena[x.postings_list].len()).sum::<usize>(),
-            //         );
-            //     }
-            // }
-
             let before_criterion_preparation = Instant::now();
             criterion.prepare(&mut group, &mut arena);
             debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
@@ -111,12 +103,17 @@ pub fn bucket_sort<'c>(
     let iter = iter.map(|d| {
         let highlights = d.raw_matches.iter().flat_map(|sm| {
             let postings_list = &arena[sm.postings_list];
-            postings_list.iter().filter(|m| m.document_id == d.raw_matches[0].document_id).map(|m| {
-                Highlight { attribute: m.attribute, char_index: m.char_index, char_length: m.char_length }
+            let input = postings_list.input();
+            let query = &automatons[sm.query_index as usize].query;
+            postings_list.iter().map(move |m| {
+                let covered_area = if query.len() > input.len() {
+                    input.len()
+                } else {
+                    prefix_damerau_levenshtein(query.as_bytes(), input).1
+                };
+                Highlight { attribute: m.attribute, char_index: m.char_index, char_length: covered_area as u16 }
             })
         }).collect();
-
-        // let highlights = Default::default();
 
         Document {
             id: d.raw_matches[0].document_id,
@@ -153,25 +150,31 @@ pub struct SimpleMatch {
 
 #[derive(Clone)]
 pub struct PostingsListView<'txn> {
-    data: Rc<Cow<'txn, Set<DocIndex>>>,
+    input: Rc<[u8]>,
+    postings_list: Rc<Cow<'txn, Set<DocIndex>>>,
     offset: usize,
     len: usize,
 }
 
 impl<'txn> PostingsListView<'txn> {
-    pub fn new(data: Rc<Cow<'txn, Set<DocIndex>>>) -> PostingsListView<'txn> {
-        let len = data.len();
-        PostingsListView { data, offset: 0, len }
+    pub fn new(input: Rc<[u8]>, postings_list: Rc<Cow<'txn, Set<DocIndex>>>) -> PostingsListView<'txn> {
+        let len = postings_list.len();
+        PostingsListView { input, postings_list, offset: 0, len }
     }
 
     pub fn len(&self) -> usize {
         self.len
     }
 
+    pub fn input(&self) -> &[u8] {
+        &self.input
+    }
+
     pub fn range(&self, offset: usize, len: usize) -> PostingsListView<'txn> {
         assert!(offset + len <= self.len);
         PostingsListView {
-            data: self.data.clone(),
+            input: self.input.clone(),
+            postings_list: self.postings_list.clone(),
             offset: self.offset + offset,
             len: len,
         }
@@ -180,7 +183,7 @@ impl<'txn> PostingsListView<'txn> {
 
 impl AsRef<Set<DocIndex>> for PostingsListView<'_> {
     fn as_ref(&self) -> &Set<DocIndex> {
-        Set::new_unchecked(&self.data[self.offset..self.offset + self.len])
+        Set::new_unchecked(&self.postings_list[self.offset..self.offset + self.len])
     }
 }
 
@@ -188,13 +191,13 @@ impl Deref for PostingsListView<'_> {
     type Target = Set<DocIndex>;
 
     fn deref(&self) -> &Set<DocIndex> {
-        Set::new_unchecked(&self.data[self.offset..self.offset + self.len])
+        Set::new_unchecked(&self.postings_list[self.offset..self.offset + self.len])
     }
 }
 
 fn fetch_matches<'txn, 'tag>(
     reader: &'txn heed::RoTxn<MainT>,
-    automatons: Vec<QueryWordAutomaton>,
+    automatons: &[QueryWordAutomaton],
     arena: &mut SmallArena<'tag, PostingsListView<'txn>>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
@@ -213,7 +216,7 @@ fn fetch_matches<'txn, 'tag>(
     let mut stream_next_time = Duration::default();
     let mut postings_lists_fetching_time = Duration::default();
 
-    for (query_index, automaton) in automatons.into_iter().enumerate() {
+    for (query_index, automaton) in automatons.iter().enumerate() {
         let before_dfa = Instant::now();
         let dfa = automaton.dfa();
         let QueryWordAutomaton { query, is_exact, is_prefix } = automaton;
@@ -237,12 +240,14 @@ fn fetch_matches<'txn, 'tag>(
             number_of_words += 1;
 
             let distance = dfa.eval(input).to_u8();
-            let is_exact = is_exact && distance == 0 && input.len() == query.len();
+            let is_exact = *is_exact && distance == 0 && input.len() == query.len();
 
             let before_postings_lists_fetching = Instant::now();
             if let Some(postings_list) = postings_lists_store.postings_list(reader, input)? {
 
-                let postings_list_view = PostingsListView::new(Rc::new(postings_list));
+                let input = Rc::from(input);
+                let postings_list = Rc::new(postings_list);
+                let postings_list_view = PostingsListView::new(input, postings_list);
                 let mut offset = 0;
                 for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
 
