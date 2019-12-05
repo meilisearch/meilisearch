@@ -33,6 +33,14 @@ For more [details about those features, go to our documentation](https://docs.me
 docker run -it -p 7700:7700 --rm getmeili/MeiliSearch
 ```
 
+#### Installation using APT
+
+```bash
+echo "deb [trusted=yes] https://apt.fury.io/meilisearch/ /" > /etc/apt/sources.list.d/fury.list
+apt update && apt install meilisearch-http
+meilisearch
+```
+
 #### Download the binary
 
 ```bash
