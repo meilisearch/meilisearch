@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -45,11 +46,12 @@ pub fn bucket_sort<'c>(
     debug!("sort by documents ids took {:.02?}", before_raw_documents_presort.elapsed());
 
     dbg!(mem::size_of::<BareMatch>());
+    dbg!(mem::size_of::<SimpleMatch>());
 
     let before_raw_documents_building = Instant::now();
     let mut raw_documents = Vec::new();
-    for matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
-        raw_documents.push(RawDocument { matches });
+    for raw_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
+        raw_documents.push(RawDocument { raw_matches, processed_matches: None });
     }
     debug!("creating {} candidates documents took {:.02?}",
         raw_documents.len(),
@@ -61,7 +63,7 @@ pub fn bucket_sort<'c>(
     let criteria = [
         Box::new(Typo) as Box<dyn Criterion>,
         Box::new(Words),
-        // Box::new(Proximity),
+        Box::new(Proximity),
         Box::new(Attribute),
         Box::new(WordsPosition),
         Box::new(Exact),
@@ -72,16 +74,26 @@ pub fn bucket_sort<'c>(
         let mut documents_seen = 0;
 
         for mut group in tmp_groups {
+
+            // if criterion.name() == "attribute" {
+            //     for document in group.iter() {
+            //         println!("--- {} - {}",
+            //             document.raw_matches.len(),
+            //             document.raw_matches.iter().map(|x| arena[x.postings_list].len()).sum::<usize>(),
+            //         );
+            //     }
+            // }
+
             let before_criterion_preparation = Instant::now();
             criterion.prepare(&mut group, &mut arena);
-            debug!("preparing postings lists for {:?} took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
+            debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
 
             let before_criterion_sort = Instant::now();
             group.sort_unstable_by(|a, b| criterion.evaluate(a, b, &arena));
-            debug!("evaluation of {:?} took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
+            debug!("{:?} evaluation took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
 
             for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b, &arena)) {
-                debug!("criterion {} produced a group of size {}", criterion.name(), group.len());
+                debug!("{:?} produced a group of size {}", criterion.name(), group.len());
 
                 documents_seen += group.len();
                 groups.push(group);
@@ -95,15 +107,11 @@ pub fn bucket_sort<'c>(
         }
     }
 
-    println!("called 'attributes' {}x times",
-        crate::criterion2::ATTRIBUTE_CALLED_NUMBER.load(std::sync::atomic::Ordering::Relaxed),
-    );
-
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
     let iter = iter.map(|d| {
-        let highlights = d.matches.iter().flat_map(|sm| {
+        let highlights = d.raw_matches.iter().flat_map(|sm| {
             let postings_list = &arena[sm.postings_list];
-            postings_list.iter().filter(|m| m.document_id == d.matches[0].document_id).map(|m| {
+            postings_list.iter().filter(|m| m.document_id == d.raw_matches[0].document_id).map(|m| {
                 Highlight { attribute: m.attribute, char_index: m.char_index, char_length: m.char_length }
             })
         }).collect();
@@ -111,7 +119,7 @@ pub fn bucket_sort<'c>(
         // let highlights = Default::default();
 
         Document {
-            id: d.matches[0].document_id,
+            id: d.raw_matches[0].document_id,
             highlights,
             #[cfg(test)] matches: Vec::new(),
         }
@@ -121,7 +129,8 @@ pub fn bucket_sort<'c>(
 }
 
 pub struct RawDocument<'a, 'tag> {
-    pub matches: &'a mut [BareMatch<'tag>],
+    pub raw_matches: &'a mut [BareMatch<'tag>],
+    pub processed_matches: Option<Vec<SimpleMatch>>,
 }
 
 pub struct BareMatch<'tag> {
@@ -132,22 +141,61 @@ pub struct BareMatch<'tag> {
     pub postings_list: Idx32<'tag>,
 }
 
-pub struct RangedPostingsList<'a> {
-    postings_list: Rc<Cow<'a, Set<DocIndex>>>,
-    range: Range<usize>,
+// TODO remove that
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SimpleMatch {
+    pub query_index: u16,
+    pub distance: u8,
+    pub attribute: u16,
+    pub word_index: u16,
+    pub is_exact: bool,
 }
 
-impl AsRef<[DocIndex]> for RangedPostingsList<'_> {
-    fn as_ref(&self) -> &[DocIndex] {
-        let range = self.range.clone();
-        &self.postings_list[range]
+#[derive(Clone)]
+pub struct PostingsListView<'txn> {
+    data: Rc<Cow<'txn, Set<DocIndex>>>,
+    offset: usize,
+    len: usize,
+}
+
+impl<'txn> PostingsListView<'txn> {
+    pub fn new(data: Rc<Cow<'txn, Set<DocIndex>>>) -> PostingsListView<'txn> {
+        let len = data.len();
+        PostingsListView { data, offset: 0, len }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn range(&self, offset: usize, len: usize) -> PostingsListView<'txn> {
+        assert!(offset + len <= self.len);
+        PostingsListView {
+            data: self.data.clone(),
+            offset: self.offset + offset,
+            len: len,
+        }
+    }
+}
+
+impl AsRef<Set<DocIndex>> for PostingsListView<'_> {
+    fn as_ref(&self) -> &Set<DocIndex> {
+        Set::new_unchecked(&self.data[self.offset..self.offset + self.len])
+    }
+}
+
+impl Deref for PostingsListView<'_> {
+    type Target = Set<DocIndex>;
+
+    fn deref(&self) -> &Set<DocIndex> {
+        Set::new_unchecked(&self.data[self.offset..self.offset + self.len])
     }
 }
 
 fn fetch_matches<'txn, 'tag>(
     reader: &'txn heed::RoTxn<MainT>,
     automatons: Vec<QueryWordAutomaton>,
-    arena: &mut SmallArena<'tag, Cow<'txn, Set<DocIndex>>>,
+    arena: &mut SmallArena<'tag, PostingsListView<'txn>>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
 ) -> MResult<Vec<BareMatch<'tag>>>
@@ -194,8 +242,11 @@ fn fetch_matches<'txn, 'tag>(
             let before_postings_lists_fetching = Instant::now();
             if let Some(postings_list) = postings_lists_store.postings_list(reader, input)? {
 
-                let posting_list_index = arena.add(postings_list);
-                for group in arena[posting_list_index].linear_group_by_key(|di| di.document_id) {
+                let postings_list_view = PostingsListView::new(Rc::new(postings_list));
+                let mut offset = 0;
+                for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
+
+                    let posting_list_index = arena.add(postings_list_view.range(offset, group.len()));
                     let document_id = group[0].document_id;
                     let stuffed = BareMatch {
                         document_id,
@@ -206,6 +257,7 @@ fn fetch_matches<'txn, 'tag>(
                     };
 
                     total_postings_lists.push(stuffed);
+                    offset += group.len();
                 }
             }
             postings_lists_fetching_time += before_postings_lists_fetching.elapsed();

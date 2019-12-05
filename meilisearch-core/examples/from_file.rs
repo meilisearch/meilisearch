@@ -15,18 +15,22 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use meilisearch_core::{Database, Highlight, ProcessedUpdateResult};
 use meilisearch_schema::SchemaAttr;
 
+// #[cfg(target_os = "linux")]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 #[derive(Debug, StructOpt)]
 struct IndexCommand {
     /// The destination where the database must be created.
     #[structopt(parse(from_os_str))]
     database_path: PathBuf,
 
-    #[structopt(long, default_value = "default")]
-    index_uid: String,
-
     /// The csv file to index.
     #[structopt(parse(from_os_str))]
     csv_data_path: PathBuf,
+
+    #[structopt(long, default_value = "default")]
+    index_uid: String,
 
     /// The path to the schema.
     #[structopt(long, parse(from_os_str))]

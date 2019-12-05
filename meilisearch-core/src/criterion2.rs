@@ -7,10 +7,9 @@ use compact_arena::SmallArena;
 use sdset::Set;
 
 use crate::{DocIndex, DocumentId};
-use crate::bucket_sort::BareMatch;
-use crate::bucket_sort::RawDocument;
+use crate::bucket_sort::{BareMatch, SimpleMatch, RawDocument, PostingsListView};
 
-type PostingsListsArena<'tag, 'txn> = SmallArena<'tag, Cow<'txn, Set<DocIndex>>>;
+type PostingsListsArena<'tag, 'txn> = SmallArena<'tag, PostingsListView<'txn>>;
 
 pub trait Criterion {
     fn name(&self) -> &str;
@@ -51,7 +50,7 @@ impl Criterion for Typo {
         postings_lists: &mut PostingsListsArena,
     ) {
         for document in documents {
-            document.matches.sort_unstable_by_key(|bm| (bm.query_index, bm.distance));
+            document.raw_matches.sort_unstable_by_key(|bm| (bm.query_index, bm.distance));
         }
     }
 
@@ -89,8 +88,8 @@ impl Criterion for Typo {
             (number_words as f32 / (sum_typos + 1.0) * 1000.0) as usize
         }
 
-        let lhs = compute_typos(&lhs.matches);
-        let rhs = compute_typos(&rhs.matches);
+        let lhs = compute_typos(&lhs.raw_matches);
+        let rhs = compute_typos(&rhs.raw_matches);
 
         lhs.cmp(&rhs).reverse()
     }
@@ -107,7 +106,7 @@ impl Criterion for Words {
         postings_lists: &mut PostingsListsArena,
     ) {
         for document in documents {
-            document.matches.sort_unstable_by_key(|bm| bm.query_index);
+            document.raw_matches.sort_unstable_by_key(|bm| bm.query_index);
         }
     }
 
@@ -123,10 +122,39 @@ impl Criterion for Words {
             matches.linear_group_by_key(|bm| bm.query_index).count()
         }
 
-        let lhs = number_of_query_words(&lhs.matches);
-        let rhs = number_of_query_words(&rhs.matches);
+        let lhs = number_of_query_words(&lhs.raw_matches);
+        let rhs = number_of_query_words(&rhs.raw_matches);
 
         lhs.cmp(&rhs).reverse()
+    }
+}
+
+fn process_raw_matches<'a, 'tag, 'txn>(
+    documents: &mut [RawDocument<'a, 'tag>],
+    postings_lists: &mut PostingsListsArena<'tag, 'txn>,
+) {
+    for document in documents {
+        if document.processed_matches.is_some() { continue }
+
+        let mut processed = Vec::new();
+        let document_id = document.raw_matches[0].document_id;
+
+        for m in document.raw_matches.iter() {
+            let postings_list = &postings_lists[m.postings_list];
+            processed.reserve(postings_list.len());
+            for di in postings_list.as_ref() {
+                let simple_match = SimpleMatch {
+                    query_index: m.query_index,
+                    distance: m.distance,
+                    attribute: di.attribute,
+                    word_index: di.word_index,
+                    is_exact: m.is_exact,
+                };
+                processed.push(simple_match);
+            }
+        }
+        processed.sort_unstable();
+        document.processed_matches = Some(processed);
     }
 }
 
@@ -135,14 +163,12 @@ pub struct Proximity;
 impl Criterion for Proximity {
     fn name(&self) -> &str { "proximity" }
 
-    fn prepare(
+    fn prepare<'a, 'tag, 'txn>(
         &self,
-        documents: &mut [RawDocument],
-        postings_lists: &mut PostingsListsArena,
+        documents: &mut [RawDocument<'a, 'tag>],
+        postings_lists: &mut PostingsListsArena<'tag, 'txn>,
     ) {
-        for document in documents {
-            document.matches.sort_unstable_by_key(|bm| (bm.query_index, bm.distance));
-        }
+        process_raw_matches(documents, postings_lists);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -162,56 +188,53 @@ impl Criterion for Proximity {
             }
         }
 
-        fn attribute_proximity((lattr, lwi): (u16, u16), (rattr, rwi): (u16, u16)) -> u16 {
-            if lattr != rattr {
-                return MAX_DISTANCE;
-            }
-            index_proximity(lwi, rwi)
+        fn attribute_proximity(lhs: SimpleMatch, rhs: SimpleMatch) -> u16 {
+            if lhs.attribute != rhs.attribute { MAX_DISTANCE }
+            else { index_proximity(lhs.word_index, rhs.word_index) }
         }
 
-        // fn min_proximity<'tag, 'txn>(
-        //     lhs: &[BareMatch<'tag>],
-        //     rhs: &[BareMatch<'tag>],
-        //     postings_lists: &PostingsListsArena<'tag, 'txn>) -> u16
-        // {
-        //     let mut min_prox = u16::max_value();
+        fn min_proximity(lhs: &[SimpleMatch], rhs: &[SimpleMatch]) -> u16 {
+            let mut min_prox = u16::max_value();
+            for a in lhs {
+                for b in rhs {
+                    min_prox = cmp::min(min_prox, attribute_proximity(*a, *b));
+                }
+            }
+            min_prox
+        }
 
-        //     for a in lhs {
-        //         let pla = &postings_lists[a.postings_list];
-        //         for b in rhs {
-        //             let plb = &postings_lists[b.postings_list];
+        fn matches_proximity(matches: &[SimpleMatch],) -> u16 {
+            let mut proximity = 0;
+            let mut iter = matches.linear_group_by_key(|m| m.query_index);
 
-        //             // let a = (a.pos );
-        //             min_prox = cmp::min(min_prox, attribute_proximity(a, b));
-        //         }
-        //     }
+            // iterate over groups by windows of size 2
+            let mut last = iter.next();
+            while let (Some(lhs), Some(rhs)) = (last, iter.next()) {
+                proximity += min_proximity(lhs, rhs);
+                last = Some(rhs);
+            }
 
-        //     // for a in lattr.iter().zip(lwi) {
-        //     //     for b in rattr.iter().zip(rwi) {
-        //     //         let a = clone_tuple(a);
-        //     //         let b = clone_tuple(b);
-        //     //         min_prox = cmp::min(min_prox, attribute_proximity(a, b));
-        //     //     }
-        //     // }
+            proximity
+        }
 
-        //     min_prox
-        // }
+        let lhs = matches_proximity(&lhs.processed_matches.as_ref().unwrap());
+        let rhs = matches_proximity(&rhs.processed_matches.as_ref().unwrap());
 
-        unimplemented!()
+        lhs.cmp(&rhs)
     }
 }
-
-pub static ATTRIBUTE_CALLED_NUMBER: AtomicUsize = AtomicUsize::new(0);
 
 pub struct Attribute;
 
 impl Criterion for Attribute {
     fn name(&self) -> &str { "attribute" }
 
-    fn prepare(&self, documents: &mut [RawDocument], postings_lists: &mut PostingsListsArena) {
-        for document in documents {
-            document.matches.sort_unstable_by_key(|bm| bm.query_index);
-        }
+    fn prepare<'a, 'tag, 'txn>(
+        &self,
+        documents: &mut [RawDocument<'a, 'tag>],
+        postings_lists: &mut PostingsListsArena<'tag, 'txn>,
+    ) {
+        process_raw_matches(documents, postings_lists);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -222,30 +245,16 @@ impl Criterion for Attribute {
     ) -> Ordering
     {
         #[inline]
-        fn sum_attribute<'tag, 'txn>(
-            matches: &[BareMatch<'tag>],
-            postings_lists: &PostingsListsArena<'tag, 'txn>,
-        ) -> usize
-        {
+        fn sum_attribute(matches: &[SimpleMatch]) -> usize {
             let mut sum_attribute = 0;
-
             for group in matches.linear_group_by_key(|bm| bm.query_index) {
-                let document_id = &group[0].document_id;
-                let index = group[0].postings_list;
-                let postings_list = &postings_lists[index];
-                // sum_attribute += postings_list[0].attribute as usize;
-                if let Ok(index) = postings_list.binary_search_by_key(document_id, |p| p.document_id) {
-                    sum_attribute += postings_list[index].attribute as usize;
-                }
+                sum_attribute += group[0].attribute as usize;
             }
-
             sum_attribute
         }
 
-        ATTRIBUTE_CALLED_NUMBER.fetch_add(1, atomic::Ordering::SeqCst);
-
-        let lhs = sum_attribute(&lhs.matches, postings_lists);
-        let rhs = sum_attribute(&rhs.matches, postings_lists);
+        let lhs = sum_attribute(&lhs.processed_matches.as_ref().unwrap());
+        let rhs = sum_attribute(&rhs.processed_matches.as_ref().unwrap());
 
         lhs.cmp(&rhs)
     }
@@ -256,10 +265,12 @@ pub struct WordsPosition;
 impl Criterion for WordsPosition {
     fn name(&self) -> &str { "words position" }
 
-    fn prepare(&self, documents: &mut [RawDocument], postings_lists: &mut PostingsListsArena) {
-        for document in documents {
-            document.matches.sort_unstable_by_key(|bm| bm.query_index);
-        }
+    fn prepare<'a, 'tag, 'txn>(
+        &self,
+        documents: &mut [RawDocument<'a, 'tag>],
+        postings_lists: &mut PostingsListsArena<'tag, 'txn>,
+    ) {
+        process_raw_matches(documents, postings_lists);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -270,28 +281,16 @@ impl Criterion for WordsPosition {
     ) -> Ordering
     {
         #[inline]
-        fn sum_words_position<'tag, 'txn>(
-            matches: &[BareMatch<'tag>],
-            postings_lists: &PostingsListsArena<'tag, 'txn>,
-        ) -> usize
-        {
+        fn sum_words_position(matches: &[SimpleMatch]) -> usize {
             let mut sum_words_position = 0;
-
             for group in matches.linear_group_by_key(|bm| bm.query_index) {
-                let document_id = &group[0].document_id;
-                let index = group[0].postings_list;
-                let postings_list = &postings_lists[index];
-                // sum_words_position += postings_list[0].word_index as usize;
-                if let Ok(index) = postings_list.binary_search_by_key(document_id, |p| p.document_id) {
-                    sum_words_position += postings_list[index].word_index as usize;
-                }
+                sum_words_position += group[0].word_index as usize;
             }
-
             sum_words_position
         }
 
-        let lhs = sum_words_position(&lhs.matches, postings_lists);
-        let rhs = sum_words_position(&rhs.matches, postings_lists);
+        let lhs = sum_words_position(&lhs.processed_matches.as_ref().unwrap());
+        let rhs = sum_words_position(&rhs.processed_matches.as_ref().unwrap());
 
         lhs.cmp(&rhs)
     }
@@ -304,7 +303,7 @@ impl Criterion for Exact {
 
     fn prepare(&self, documents: &mut [RawDocument], postings_lists: &mut PostingsListsArena) {
         for document in documents {
-            document.matches.sort_unstable_by_key(|bm| (bm.query_index, Reverse(bm.is_exact)));
+            document.raw_matches.sort_unstable_by_key(|bm| (bm.query_index, Reverse(bm.is_exact)));
         }
     }
 
@@ -326,8 +325,8 @@ impl Criterion for Exact {
             sum_exact_query_words
         }
 
-        let lhs = sum_exact_query_words(&lhs.matches);
-        let rhs = sum_exact_query_words(&rhs.matches);
+        let lhs = sum_exact_query_words(&lhs.raw_matches);
+        let rhs = sum_exact_query_words(&rhs.raw_matches);
 
         lhs.cmp(&rhs).reverse()
     }
