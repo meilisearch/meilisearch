@@ -1,7 +1,7 @@
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::HashSet;
 use std::error::Error;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::iter::FromIterator;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -24,7 +24,7 @@ struct IndexCommand {
     #[structopt(long, default_value = "default")]
     index_uid: String,
 
-    /// The csv file to index.
+    /// The csv file path to index, you can also use `-` to specify the standard input.
     #[structopt(parse(from_os_str))]
     csv_data_path: PathBuf,
 
@@ -135,7 +135,13 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
         }
     }
 
-    let mut rdr = csv::Reader::from_path(command.csv_data_path)?;
+    let mut rdr = if command.csv_data_path.as_os_str() == "-" {
+        csv::Reader::from_reader(Box::new(io::stdin()) as Box<dyn Read>)
+    } else {
+        let file = std::fs::File::open(command.csv_data_path)?;
+        csv::Reader::from_reader(Box::new(file) as Box<dyn Read>)
+    };
+
     let mut raw_record = csv::StringRecord::new();
     let headers = rdr.headers()?.clone();
 
