@@ -4,10 +4,11 @@ use std::sync::atomic::{self, AtomicUsize};
 
 use slice_group_by::{GroupBy, GroupByMut};
 use compact_arena::SmallArena;
-use sdset::Set;
+use sdset::{Set, SetBuf};
 
 use crate::{DocIndex, DocumentId};
 use crate::bucket_sort::{BareMatch, SimpleMatch, RawDocument, PostingsListView};
+use crate::automaton::QueryEnhancer;
 
 type PostingsListsArena<'tag, 'txn> = SmallArena<'tag, PostingsListView<'txn>>;
 
@@ -197,7 +198,8 @@ impl Criterion for Proximity {
             let mut min_prox = u16::max_value();
             for a in lhs {
                 for b in rhs {
-                    min_prox = cmp::min(min_prox, attribute_proximity(*a, *b));
+                    let prox = attribute_proximity(*a, *b);
+                    min_prox = cmp::min(min_prox, prox);
                 }
             }
             min_prox
@@ -357,4 +359,107 @@ impl Criterion for StableDocId {
 
         lhs.cmp(rhs)
     }
+}
+
+pub fn multiword_rewrite_matches(
+    matches: &mut [SimpleMatch],
+    query_enhancer: &QueryEnhancer,
+) -> SetBuf<SimpleMatch>
+{
+    let mut padded_matches = Vec::with_capacity(matches.len());
+
+    // let before_sort = Instant::now();
+    // we sort the matches by word index to make them rewritable
+    matches.sort_unstable_by_key(|m| (m.attribute, m.word_index));
+    // debug!("sorting dirty matches took {:.02?}", before_sort.elapsed());
+
+    // let before_padding = Instant::now();
+    // for each attribute of each document
+    for same_document_attribute in matches.linear_group_by_key(|m| m.attribute) {
+        // padding will only be applied
+        // to word indices in the same attribute
+        let mut padding = 0;
+        let mut iter = same_document_attribute.linear_group_by_key(|m| m.word_index);
+
+        // for each match at the same position
+        // in this document attribute
+        while let Some(same_word_index) = iter.next() {
+            // find the biggest padding
+            let mut biggest = 0;
+            for match_ in same_word_index {
+                let mut replacement = query_enhancer.replacement(match_.query_index as u32);
+                let replacement_len = replacement.len();
+                let nexts = iter.remainder().linear_group_by_key(|m| m.word_index);
+
+                if let Some(query_index) = replacement.next() {
+                    let word_index = match_.word_index + padding as u16;
+                    let query_index = query_index as u16;
+                    let match_ = SimpleMatch { query_index, word_index, ..*match_ };
+                    padded_matches.push(match_);
+                }
+
+                let mut found = false;
+
+                // look ahead and if there already is a match
+                // corresponding to this padding word, abort the padding
+                'padding: for (x, next_group) in nexts.enumerate() {
+                    for (i, query_index) in replacement.clone().enumerate().skip(x) {
+                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
+                        let query_index = query_index as u16;
+                        let padmatch = SimpleMatch { query_index, word_index, ..*match_ };
+
+                        for nmatch_ in next_group {
+                            let mut rep = query_enhancer.replacement(nmatch_.query_index as u32);
+                            let query_index = rep.next().unwrap() as u16;
+                            if query_index == padmatch.query_index {
+                                if !found {
+                                    // if we find a corresponding padding for the
+                                    // first time we must push preceding paddings
+                                    for (i, query_index) in replacement.clone().enumerate().take(i)
+                                    {
+                                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
+                                        let query_index = query_index as u16;
+                                        let match_ = SimpleMatch { query_index, word_index, ..*match_ };
+                                        padded_matches.push(match_);
+                                        biggest = biggest.max(i + 1);
+                                    }
+                                }
+
+                                padded_matches.push(padmatch);
+                                found = true;
+                                continue 'padding;
+                            }
+                        }
+                    }
+
+                    // if we do not find a corresponding padding in the
+                    // next groups so stop here and pad what was found
+                    break;
+                }
+
+                if !found {
+                    // if no padding was found in the following matches
+                    // we must insert the entire padding
+                    for (i, query_index) in replacement.enumerate() {
+                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
+                        let query_index = query_index as u16;
+                        let match_ = SimpleMatch { query_index, word_index, ..*match_ };
+                        padded_matches.push(match_);
+                    }
+
+                    biggest = biggest.max(replacement_len - 1);
+                }
+            }
+
+            padding += biggest;
+        }
+    }
+
+    // debug!("padding matches took {:.02?}", before_padding.elapsed());
+
+    // With this check we can see that the loop above takes something
+    // like 43% of the search time even when no rewrite is needed.
+    // assert_eq!(before_matches, padded_matches);
+
+    SetBuf::new(padded_matches).unwrap()
 }

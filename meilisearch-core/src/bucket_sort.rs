@@ -17,11 +17,15 @@ use meilisearch_types::{DocIndex, Highlight};
 use sdset::Set;
 use slice_group_by::{GroupBy, GroupByMut};
 
-use crate::levenshtein::prefix_damerau_levenshtein;
+use crate::automaton::NGRAMS;
+use crate::automaton::{QueryEnhancer, QueryEnhancerBuilder};
 use crate::automaton::{build_dfa, build_prefix_dfa};
+use crate::automaton::{normalize_str, split_best_frequency};
+
+use crate::criterion2::*;
+use crate::levenshtein::prefix_damerau_levenshtein;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
-use crate::criterion2::*;
 
 pub fn bucket_sort<'c>(
     reader: &heed::RoTxn<MainT>,
@@ -30,9 +34,12 @@ pub fn bucket_sort<'c>(
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
+    synonyms_store: store::Synonyms,
 ) -> MResult<Vec<Document>>
 {
-    let automatons = construct_automatons(query);
+    // let automatons = construct_automatons(query);
+    let (automatons, query_enhancer) =
+        construct_automatons2(reader, query, main_store, postings_lists_store, synonyms_store)?;
 
     let before_postings_lists_fetching = Instant::now();
     mk_arena!(arena);
@@ -219,7 +226,7 @@ fn fetch_matches<'txn, 'tag>(
     for (query_index, automaton) in automatons.iter().enumerate() {
         let before_dfa = Instant::now();
         let dfa = automaton.dfa();
-        let QueryWordAutomaton { query, is_exact, is_prefix } = automaton;
+        let QueryWordAutomaton { index, query, is_exact, is_prefix } = automaton;
         dfa_time += before_dfa.elapsed();
 
         let mut number_of_words = 0;
@@ -280,6 +287,7 @@ fn fetch_matches<'txn, 'tag>(
 
 #[derive(Debug)]
 pub struct QueryWordAutomaton {
+    index: usize,
     query: String,
     /// Is it a word that must be considered exact
     /// or is it some derived word (i.e. a synonym)
@@ -288,12 +296,16 @@ pub struct QueryWordAutomaton {
 }
 
 impl QueryWordAutomaton {
-    pub fn exact(query: String) -> QueryWordAutomaton {
-        QueryWordAutomaton { query, is_exact: true, is_prefix: false }
+    pub fn exact(query: &str, index: usize) -> QueryWordAutomaton {
+        QueryWordAutomaton { index, query: query.to_string(), is_exact: true, is_prefix: false }
     }
 
-    pub fn exact_prefix(query: String) -> QueryWordAutomaton {
-        QueryWordAutomaton { query, is_exact: true, is_prefix: true }
+    pub fn exact_prefix(query: &str, index: usize) -> QueryWordAutomaton {
+        QueryWordAutomaton { index, query: query.to_string(), is_exact: true, is_prefix: true }
+    }
+
+    pub fn non_exact(query: &str, index: usize) -> QueryWordAutomaton {
+        QueryWordAutomaton { index, query: query.to_string(), is_exact: false, is_prefix: false }
     }
 
     pub fn dfa(&self) -> DFA {
@@ -305,23 +317,151 @@ impl QueryWordAutomaton {
     }
 }
 
-fn construct_automatons(query: &str) -> Vec<QueryWordAutomaton> {
-    let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
-    let mut original_words = split_query_string(query).map(str::to_lowercase).peekable();
-    let mut automatons = Vec::new();
+// fn construct_automatons(query: &str) -> Vec<QueryWordAutomaton> {
+//     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
+//     let mut original_words = split_query_string(query).map(str::to_lowercase).peekable();
+//     let mut automatons = Vec::new();
 
+//     while let Some(word) = original_words.next() {
+//         let has_following_word = original_words.peek().is_some();
+//         let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
+
+//         let automaton = if not_prefix_dfa {
+//             QueryWordAutomaton::exact(word)
+//         } else {
+//             QueryWordAutomaton::exact_prefix(word)
+//         };
+
+//         automatons.push(automaton);
+//     }
+
+//     automatons
+// }
+
+fn construct_automatons2(
+    reader: &heed::RoTxn<MainT>,
+    query: &str,
+    main_store: store::Main,
+    postings_lists_store: store::PostingsLists,
+    synonym_store: store::Synonyms,
+) -> MResult<(Vec<QueryWordAutomaton>, QueryEnhancer)> {
+    let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
+    let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
+    let synonyms = match main_store.synonyms_fst(reader)? {
+        Some(synonym) => synonym,
+        None => fst::Set::default(),
+    };
+
+    let mut automaton_index = 0;
+    let mut automatons = Vec::new();
+    let mut enhancer_builder = QueryEnhancerBuilder::new(&query_words);
+
+    // We must not declare the original words to the query enhancer
+    // *but* we need to push them in the automatons list first
+    let mut original_words = query_words.iter().peekable();
     while let Some(word) = original_words.next() {
         let has_following_word = original_words.peek().is_some();
         let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
 
         let automaton = if not_prefix_dfa {
-            QueryWordAutomaton::exact(word)
+            QueryWordAutomaton::exact(word, automaton_index)
         } else {
-            QueryWordAutomaton::exact_prefix(word)
+            QueryWordAutomaton::exact_prefix(word, automaton_index)
         };
-
+        automaton_index += 1;
         automatons.push(automaton);
     }
 
-    automatons
+    for n in 1..=NGRAMS {
+        let mut ngrams = query_words.windows(n).enumerate().peekable();
+        while let Some((query_index, ngram_slice)) = ngrams.next() {
+            let query_range = query_index..query_index + n;
+            let ngram_nb_words = ngram_slice.len();
+            let ngram = ngram_slice.join(" ");
+
+            let has_following_word = ngrams.peek().is_some();
+            let not_prefix_dfa =
+                has_following_word || has_end_whitespace || ngram.chars().all(is_cjk);
+
+            // automaton of synonyms of the ngrams
+            let normalized = normalize_str(&ngram);
+            let lev = if not_prefix_dfa {
+                build_dfa(&normalized)
+            } else {
+                build_prefix_dfa(&normalized)
+            };
+
+            let mut stream = synonyms.search(&lev).into_stream();
+            while let Some(base) = stream.next() {
+                // only trigger alternatives when the last word has been typed
+                // i.e. "new " do not but "new yo" triggers alternatives to "new york"
+                let base = std::str::from_utf8(base).unwrap();
+                let base_nb_words = split_query_string(base).count();
+                if ngram_nb_words != base_nb_words {
+                    continue;
+                }
+
+                if let Some(synonyms) = synonym_store.synonyms(reader, base.as_bytes())? {
+                    let mut stream = synonyms.into_stream();
+                    while let Some(synonyms) = stream.next() {
+                        let synonyms = std::str::from_utf8(synonyms).unwrap();
+                        let synonyms_words: Vec<_> = split_query_string(synonyms).collect();
+                        let nb_synonym_words = synonyms_words.len();
+
+                        let real_query_index = automaton_index;
+                        enhancer_builder.declare(query_range.clone(), real_query_index, &synonyms_words);
+
+                        for synonym in synonyms_words {
+                            let automaton = if nb_synonym_words == 1 {
+                                QueryWordAutomaton::exact(synonym, automaton_index)
+                            } else {
+                                QueryWordAutomaton::non_exact(synonym, automaton_index)
+                            };
+                            automaton_index += 1;
+                            automatons.push(automaton);
+                        }
+                    }
+                }
+            }
+
+            if n == 1 {
+                if let Some((left, right)) = split_best_frequency(reader, &normalized, postings_lists_store)? {
+                    let left_automaton = QueryWordAutomaton::exact(left, automaton_index);
+                    enhancer_builder.declare(query_range.clone(), automaton_index, &[left]);
+                    automaton_index += 1;
+                    automatons.push(left_automaton);
+
+                    let right_automaton = QueryWordAutomaton::exact(right, automaton_index);
+                    enhancer_builder.declare(query_range.clone(), automaton_index, &[right]);
+                    automaton_index += 1;
+                    automatons.push(right_automaton);
+
+                }
+            } else {
+                // automaton of concatenation of query words
+                let concat = ngram_slice.concat();
+                let normalized = normalize_str(&concat);
+
+                let real_query_index = automaton_index;
+                enhancer_builder.declare(query_range.clone(), real_query_index, &[&normalized]);
+
+                let automaton = QueryWordAutomaton::exact(&normalized, automaton_index);
+                automaton_index += 1;
+                automatons.push(automaton);
+            }
+        }
+    }
+
+    // // order automatons, the most important first,
+    // // we keep the original automatons at the front.
+    // automatons[1..].sort_by_key(|group| {
+    //     let a = group.automatons.first().unwrap();
+    //     (
+    //         Reverse(a.is_exact),
+    //         a.ngram,
+    //         Reverse(group.automatons.len()),
+    //     )
+    // });
+
+    Ok((automatons, enhancer_builder.build()))
 }

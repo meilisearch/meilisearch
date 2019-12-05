@@ -393,6 +393,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
                 self.main_store,
                 self.postings_lists_store,
                 self.documents_fields_counts_store,
+                self.synonyms_store,
             ),
         }
     }
