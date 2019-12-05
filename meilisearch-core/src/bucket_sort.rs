@@ -84,7 +84,7 @@ pub fn bucket_sort<'c>(
 
         for mut group in tmp_groups {
             let before_criterion_preparation = Instant::now();
-            criterion.prepare(&mut group, &mut arena);
+            criterion.prepare(&mut group, &mut arena, &query_enhancer);
             debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
 
             let before_criterion_sort = Instant::now();

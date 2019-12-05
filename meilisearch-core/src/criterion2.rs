@@ -19,6 +19,7 @@ pub trait Criterion {
         &self,
         documents: &mut [RawDocument<'a, 'tag>],
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
+        query_enhancer: &QueryEnhancer,
     );
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -49,6 +50,7 @@ impl Criterion for Typo {
         &self,
         documents: &mut [RawDocument],
         postings_lists: &mut PostingsListsArena,
+        query_enhancer: &QueryEnhancer,
     ) {
         for document in documents {
             document.raw_matches.sort_unstable_by_key(|bm| (bm.query_index, bm.distance));
@@ -105,6 +107,7 @@ impl Criterion for Words {
         &self,
         documents: &mut [RawDocument],
         postings_lists: &mut PostingsListsArena,
+        query_enhancer: &QueryEnhancer,
     ) {
         for document in documents {
             document.raw_matches.sort_unstable_by_key(|bm| bm.query_index);
@@ -133,6 +136,7 @@ impl Criterion for Words {
 fn process_raw_matches<'a, 'tag, 'txn>(
     documents: &mut [RawDocument<'a, 'tag>],
     postings_lists: &mut PostingsListsArena<'tag, 'txn>,
+    query_enhancer: &QueryEnhancer,
 ) {
     for document in documents {
         if document.processed_matches.is_some() { continue }
@@ -154,8 +158,9 @@ fn process_raw_matches<'a, 'tag, 'txn>(
                 processed.push(simple_match);
             }
         }
-        processed.sort_unstable();
-        document.processed_matches = Some(processed);
+
+        let processed = multiword_rewrite_matches(&mut processed, query_enhancer);
+        document.processed_matches = Some(processed.into_vec());
     }
 }
 
@@ -168,8 +173,9 @@ impl Criterion for Proximity {
         &self,
         documents: &mut [RawDocument<'a, 'tag>],
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
+        query_enhancer: &QueryEnhancer,
     ) {
-        process_raw_matches(documents, postings_lists);
+        process_raw_matches(documents, postings_lists, query_enhancer);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -235,8 +241,9 @@ impl Criterion for Attribute {
         &self,
         documents: &mut [RawDocument<'a, 'tag>],
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
+        query_enhancer: &QueryEnhancer,
     ) {
-        process_raw_matches(documents, postings_lists);
+        process_raw_matches(documents, postings_lists, query_enhancer);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -271,8 +278,9 @@ impl Criterion for WordsPosition {
         &self,
         documents: &mut [RawDocument<'a, 'tag>],
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
+        query_enhancer: &QueryEnhancer,
     ) {
-        process_raw_matches(documents, postings_lists);
+        process_raw_matches(documents, postings_lists, query_enhancer);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -303,7 +311,12 @@ pub struct Exact;
 impl Criterion for Exact {
     fn name(&self) -> &str { "exact" }
 
-    fn prepare(&self, documents: &mut [RawDocument], postings_lists: &mut PostingsListsArena) {
+    fn prepare(
+        &self,
+        documents: &mut [RawDocument],
+        postings_lists: &mut PostingsListsArena,
+        query_enhancer: &QueryEnhancer,
+    ) {
         for document in documents {
             document.raw_matches.sort_unstable_by_key(|bm| (bm.query_index, Reverse(bm.is_exact)));
         }
@@ -343,6 +356,7 @@ impl Criterion for StableDocId {
         &self,
         documents: &mut [RawDocument],
         postings_lists: &mut PostingsListsArena,
+        query_enhancer: &QueryEnhancer,
     ) {
         // ...
     }
@@ -461,5 +475,5 @@ pub fn multiword_rewrite_matches(
     // like 43% of the search time even when no rewrite is needed.
     // assert_eq!(before_matches, padded_matches);
 
-    SetBuf::new(padded_matches).unwrap()
+    SetBuf::from_dirty(padded_matches)
 }

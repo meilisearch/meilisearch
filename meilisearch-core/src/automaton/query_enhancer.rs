@@ -143,8 +143,7 @@ impl<S: AsRef<str>> QueryEnhancerBuilder<'_, S> {
         // we need to pad real query indices
         let real_range = real..real + replacement.len().max(range.len());
         let real_length = replacement.len();
-        self.real_to_origin
-            .push((real_range, (range.start, real_length)));
+        self.real_to_origin.push((real_range, (range.start, real_length)));
     }
 
     pub fn build(self) -> QueryEnhancer {
@@ -162,7 +161,7 @@ pub struct QueryEnhancer {
 }
 
 impl QueryEnhancer {
-    /// Returns the query indices to use to replace this real query index.
+    /// Returns the query indices that represent this real query index.
     pub fn replacement(&self, real: u32) -> Range<u32> {
         let real = real as usize;
 
