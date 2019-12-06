@@ -13,7 +13,7 @@ use crate::database::MainT;
 use crate::error::MResult;
 use crate::store;
 
-pub use self::dfa::{build_dfa, build_prefix_dfa};
+pub use self::dfa::{build_dfa, build_prefix_dfa, build_exact_dfa};
 pub use self::query_enhancer::QueryEnhancer;
 pub use self::query_enhancer::QueryEnhancerBuilder;
 

@@ -19,7 +19,7 @@ use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::automaton::NGRAMS;
 use crate::automaton::{QueryEnhancer, QueryEnhancerBuilder};
-use crate::automaton::{build_dfa, build_prefix_dfa};
+use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
 use crate::automaton::{normalize_str, split_best_frequency};
 
 use crate::criterion2::*;
@@ -40,6 +40,8 @@ pub fn bucket_sort<'c>(
     // let automatons = construct_automatons(query);
     let (automatons, query_enhancer) =
         construct_automatons2(reader, query, main_store, postings_lists_store, synonyms_store)?;
+
+    debug!("{:?}", query_enhancer);
 
     let before_postings_lists_fetching = Instant::now();
     mk_arena!(arena);
@@ -74,7 +76,7 @@ pub fn bucket_sort<'c>(
 
     let criteria = [
         Box::new(Typo) as Box<dyn Criterion>,
-        Box::new(Words),
+        Box::new(Words) as Box<dyn Criterion>,
         Box::new(Proximity),
         Box::new(Attribute),
         Box::new(WordsPosition),
@@ -88,7 +90,7 @@ pub fn bucket_sort<'c>(
 
         for mut group in tmp_groups {
             let before_criterion_preparation = Instant::now();
-            criterion.prepare(&mut group, &mut arena, &query_enhancer);
+            criterion.prepare(&mut group, &mut arena, &query_enhancer, &automatons);
             debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
 
             let before_criterion_sort = Instant::now();
@@ -116,6 +118,7 @@ pub fn bucket_sort<'c>(
             let postings_list = &arena[sm.postings_list];
             let input = postings_list.input();
             let query = &automatons[sm.query_index as usize].query;
+            debug!("{:?} contains {:?}", d.raw_matches[0].document_id, query);
             postings_list.iter().map(move |m| {
                 let covered_area = if query.len() > input.len() {
                     input.len()
@@ -125,6 +128,8 @@ pub fn bucket_sort<'c>(
                 Highlight { attribute: m.attribute, char_index: m.char_index, char_length: covered_area as u16 }
             })
         }).collect();
+
+        debug!("{:?} contains {:?}", d.raw_matches[0].document_id, d.processed_distances);
 
         Document {
             id: d.raw_matches[0].document_id,
@@ -233,7 +238,7 @@ fn fetch_matches<'txn, 'tag>(
     for (query_index, automaton) in automatons.iter().enumerate() {
         let before_dfa = Instant::now();
         let dfa = automaton.dfa();
-        let QueryWordAutomaton { query, is_exact, is_prefix } = automaton;
+        let QueryWordAutomaton { query, is_exact, is_prefix, .. } = automaton;
         dfa_time += before_dfa.elapsed();
 
         let mut number_of_words = 0;
@@ -294,28 +299,48 @@ fn fetch_matches<'txn, 'tag>(
 
 #[derive(Debug)]
 pub struct QueryWordAutomaton {
-    query: String,
+    pub query: String,
     /// Is it a word that must be considered exact
     /// or is it some derived word (i.e. a synonym)
-    is_exact: bool,
-    is_prefix: bool,
+    pub is_exact: bool,
+    pub is_prefix: bool,
+    /// If it's a phrase query and what is
+    /// its index an the length of the phrase
+    pub phrase_query: Option<(u16, u16)>,
 }
 
 impl QueryWordAutomaton {
     pub fn exact(query: &str) -> QueryWordAutomaton {
-        QueryWordAutomaton { query: query.to_string(), is_exact: true, is_prefix: false }
+        QueryWordAutomaton {
+            query: query.to_string(),
+            is_exact: true,
+            is_prefix: false,
+            phrase_query: None,
+        }
     }
 
     pub fn exact_prefix(query: &str) -> QueryWordAutomaton {
-        QueryWordAutomaton { query: query.to_string(), is_exact: true, is_prefix: true }
+        QueryWordAutomaton {
+            query: query.to_string(),
+            is_exact: true,
+            is_prefix: true,
+            phrase_query: None,
+        }
     }
 
     pub fn non_exact(query: &str) -> QueryWordAutomaton {
-        QueryWordAutomaton { query: query.to_string(), is_exact: false, is_prefix: false }
+        QueryWordAutomaton {
+            query: query.to_string(),
+            is_exact: false,
+            is_prefix: false,
+            phrase_query: None,
+        }
     }
 
     pub fn dfa(&self) -> DFA {
-        if self.is_prefix {
+        if self.phrase_query.is_some() {
+            build_exact_dfa(&self.query)
+        } else if self.is_prefix {
             build_prefix_dfa(&self.query)
         } else {
             build_dfa(&self.query)
@@ -411,16 +436,17 @@ fn construct_automatons2(
 
             if n == 1 {
                 if let Some((left, right)) = split_best_frequency(reader, &normalized, postings_lists_store)? {
-                    let left_automaton = QueryWordAutomaton::exact(left);
+                    let mut left_automaton = QueryWordAutomaton::exact(left);
+                    left_automaton.phrase_query = Some((0, 2));
                     enhancer_builder.declare(query_range.clone(), automaton_index, &[left]);
                     automaton_index += 1;
                     automatons.push(left_automaton);
 
-                    let right_automaton = QueryWordAutomaton::exact(right);
+                    let mut right_automaton = QueryWordAutomaton::exact(right);
+                    right_automaton.phrase_query = Some((1, 2));
                     enhancer_builder.declare(query_range.clone(), automaton_index, &[right]);
                     automaton_index += 1;
                     automatons.push(right_automaton);
-
                 }
             } else {
                 // automaton of concatenation of query words
