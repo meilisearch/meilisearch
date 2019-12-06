@@ -188,7 +188,7 @@ fn replacement(
 
         let n = real - range.start;
         let start = origins[origin];
-        let end = origins[new_origin + 1];
+        let end = origins.get(new_origin + 1)?;
         let remaining = (end - start) - n;
 
         Some(Range {
