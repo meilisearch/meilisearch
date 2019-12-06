@@ -46,3 +46,8 @@ pub fn build_prefix_dfa(query: &str) -> DFA {
 pub fn build_dfa(query: &str) -> DFA {
     build_dfa_with_setting(query, PrefixSetting::NoPrefix)
 }
+
+pub fn build_exact_dfa(query: &str) -> DFA {
+    let builder = LEVDIST0.get_or_init(|| LevBuilder::new(0, true));
+    builder.build_dfa(query)
+}

@@ -5,9 +5,10 @@ use std::sync::atomic::{self, AtomicUsize};
 use slice_group_by::{GroupBy, GroupByMut};
 use compact_arena::SmallArena;
 use sdset::{Set, SetBuf};
+use log::debug;
 
 use crate::{DocIndex, DocumentId};
-use crate::bucket_sort::{BareMatch, SimpleMatch, RawDocument, PostingsListView};
+use crate::bucket_sort::{BareMatch, SimpleMatch, RawDocument, PostingsListView, QueryWordAutomaton};
 use crate::automaton::QueryEnhancer;
 
 type PostingsListsArena<'tag, 'txn> = SmallArena<'tag, PostingsListView<'txn>>;
@@ -20,6 +21,7 @@ pub trait Criterion {
         documents: &mut [RawDocument<'a, 'tag>],
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
         query_enhancer: &QueryEnhancer,
+        automatons: &[QueryWordAutomaton],
     );
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -77,6 +79,7 @@ impl Criterion for Typo {
         documents: &mut [RawDocument],
         postings_lists: &mut PostingsListsArena,
         query_enhancer: &QueryEnhancer,
+        automatons: &[QueryWordAutomaton],
     ) {
         prepare_query_distances(documents, query_enhancer);
     }
@@ -134,6 +137,7 @@ impl Criterion for Words {
         documents: &mut [RawDocument],
         postings_lists: &mut PostingsListsArena,
         query_enhancer: &QueryEnhancer,
+        automatons: &[QueryWordAutomaton],
     ) {
         prepare_query_distances(documents, query_enhancer);
     }
@@ -161,6 +165,7 @@ fn prepare_raw_matches<'a, 'tag, 'txn>(
     documents: &mut [RawDocument<'a, 'tag>],
     postings_lists: &mut PostingsListsArena<'tag, 'txn>,
     query_enhancer: &QueryEnhancer,
+    automatons: &[QueryWordAutomaton],
 ) {
     for document in documents {
         if !document.processed_matches.is_empty() { continue }
@@ -181,7 +186,7 @@ fn prepare_raw_matches<'a, 'tag, 'txn>(
             }
         }
 
-        let processed = multiword_rewrite_matches(&mut processed, query_enhancer);
+        let processed = multiword_rewrite_matches(&mut processed, query_enhancer, automatons);
         document.processed_matches = processed.into_vec();
     }
 }
@@ -196,8 +201,9 @@ impl Criterion for Proximity {
         documents: &mut [RawDocument<'a, 'tag>],
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
         query_enhancer: &QueryEnhancer,
+        automatons: &[QueryWordAutomaton],
     ) {
-        prepare_raw_matches(documents, postings_lists, query_enhancer);
+        prepare_raw_matches(documents, postings_lists, query_enhancer, automatons);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -264,8 +270,9 @@ impl Criterion for Attribute {
         documents: &mut [RawDocument<'a, 'tag>],
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
         query_enhancer: &QueryEnhancer,
+        automatons: &[QueryWordAutomaton],
     ) {
-        prepare_raw_matches(documents, postings_lists, query_enhancer);
+        prepare_raw_matches(documents, postings_lists, query_enhancer, automatons);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -276,16 +283,16 @@ impl Criterion for Attribute {
     ) -> Ordering
     {
         #[inline]
-        fn sum_attribute(matches: &[SimpleMatch]) -> usize {
-            let mut sum_attribute = 0;
+        fn best_attribute(matches: &[SimpleMatch]) -> u16 {
+            let mut best_attribute = u16::max_value();
             for group in matches.linear_group_by_key(|bm| bm.query_index) {
-                sum_attribute += group[0].attribute as usize;
+                best_attribute = cmp::min(best_attribute, group[0].attribute);
             }
-            sum_attribute
+            best_attribute
         }
 
-        let lhs = sum_attribute(&lhs.processed_matches);
-        let rhs = sum_attribute(&rhs.processed_matches);
+        let lhs = best_attribute(&lhs.processed_matches);
+        let rhs = best_attribute(&rhs.processed_matches);
 
         lhs.cmp(&rhs)
     }
@@ -301,8 +308,9 @@ impl Criterion for WordsPosition {
         documents: &mut [RawDocument<'a, 'tag>],
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
         query_enhancer: &QueryEnhancer,
+        automatons: &[QueryWordAutomaton],
     ) {
-        prepare_raw_matches(documents, postings_lists, query_enhancer);
+        prepare_raw_matches(documents, postings_lists, query_enhancer, automatons);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -338,6 +346,7 @@ impl Criterion for Exact {
         documents: &mut [RawDocument],
         postings_lists: &mut PostingsListsArena,
         query_enhancer: &QueryEnhancer,
+        automatons: &[QueryWordAutomaton],
     ) {
         for document in documents {
             document.raw_matches.sort_unstable_by_key(|bm| (bm.query_index, Reverse(bm.is_exact)));
@@ -379,6 +388,7 @@ impl Criterion for StableDocId {
         documents: &mut [RawDocument],
         postings_lists: &mut PostingsListsArena,
         query_enhancer: &QueryEnhancer,
+        automatons: &[QueryWordAutomaton],
     ) {
         // ...
     }
@@ -398,16 +408,57 @@ impl Criterion for StableDocId {
 }
 
 pub fn multiword_rewrite_matches(
-    matches: &mut [SimpleMatch],
+    simple_matches: &mut [SimpleMatch],
     query_enhancer: &QueryEnhancer,
+    automatons: &[QueryWordAutomaton],
 ) -> SetBuf<SimpleMatch>
 {
-    let mut padded_matches = Vec::with_capacity(matches.len());
+    let mut matches = Vec::with_capacity(simple_matches.len());
 
     // let before_sort = Instant::now();
     // we sort the matches by word index to make them rewritable
-    matches.sort_unstable_by_key(|m| (m.attribute, m.word_index));
+    simple_matches.sort_unstable_by_key(|m| (m.attribute, m.query_index, m.word_index));
     // debug!("sorting dirty matches took {:.02?}", before_sort.elapsed());
+
+    for same_attribute in simple_matches.linear_group_by_key(|m| m.attribute) {
+        let iter = same_attribute.linear_group_by_key(|m| m.query_index);
+        let mut iter = iter.peekable();
+
+        while let Some(same_query_index) = iter.next() {
+            let query_index = same_query_index[0].query_index;
+
+            // TODO we need to support phrase query of longer length
+            if let Some((i, len)) = automatons[query_index as usize].phrase_query {
+                if i != 0 { continue }
+
+                // is the next query_index group the required one
+                if iter.peek().map_or(false, |g| g[0].query_index == query_index + 1) {
+                    if let Some(next) = iter.next() {
+                        for ma in same_query_index {
+                            for mb in next {
+                                if ma.word_index == mb.word_index + 1 {
+                                    matches.push(*ma);
+                                    matches.push(*mb);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                matches.extend_from_slice(same_query_index);
+            }
+        }
+    }
+
+    // let is_phrase_query = automatons[match_.query_index as usize].phrase_query_len.is_some();
+    // let next_query_index = match_.query_index + 1;
+    // if is_phrase_query && iter.remainder().iter().find(|m| m.query_index == next_query_index).is_none() {
+    //     continue
+    // }
+
+    matches.sort_unstable_by_key(|m| (m.attribute, m.word_index));
+
+    let mut padded_matches = Vec::with_capacity(matches.len());
 
     // let before_padding = Instant::now();
     // for each attribute of each document
