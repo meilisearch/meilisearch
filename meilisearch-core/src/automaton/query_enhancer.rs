@@ -147,63 +147,76 @@ impl<S: AsRef<str>> QueryEnhancerBuilder<'_, S> {
     }
 
     pub fn build(self) -> QueryEnhancer {
-        QueryEnhancer {
-            origins: self.origins,
-            real_to_origin: FakeIntervalTree::new(self.real_to_origin),
+        let interval_tree = FakeIntervalTree::new(self.real_to_origin);
+        let mut table = Vec::new();
+
+        for real in 0.. {
+            match replacement(&self.origins, &interval_tree, real) {
+                Some(range) => table.push(range),
+                None => break,
+            }
         }
+
+        QueryEnhancer { table }
+    }
+}
+
+/// Returns the query indices that represent this real query index.
+fn replacement(
+    origins: &[usize],
+    real_to_origin: &FakeIntervalTree,
+    real: u32,
+) -> Option<Range<u32>>
+{
+    let real = real as usize;
+
+    // query the fake interval tree with the real query index
+    let (range, (origin, real_length)) = real_to_origin.query(real)?;
+
+    // if `real` is the end bound of the range
+    if (range.start + real_length - 1) == real {
+        let mut count = range.len();
+        let mut new_origin = origin;
+        for (i, slice) in origins[new_origin..].windows(2).enumerate() {
+            let len = slice[1] - slice[0];
+            count = count.saturating_sub(len);
+            if count == 0 {
+                new_origin = origin + i;
+                break;
+            }
+        }
+
+        let n = real - range.start;
+        let start = origins[origin];
+        let end = origins[new_origin + 1];
+        let remaining = (end - start) - n;
+
+        Some(Range {
+            start: (start + n) as u32,
+            end: (start + n + remaining) as u32,
+        })
+    } else {
+        // just return the origin along with
+        // the real position of the word
+        let n = real as usize - range.start;
+        let origin = origins[origin];
+
+        Some(Range {
+            start: (origin + n) as u32,
+            end: (origin + n + 1) as u32,
+        })
     }
 }
 
 #[derive(Debug)]
 pub struct QueryEnhancer {
-    origins: Vec<usize>,
-    real_to_origin: FakeIntervalTree,
+    table: Vec<Range<u32>>,
 }
 
 impl QueryEnhancer {
     /// Returns the query indices that represent this real query index.
     pub fn replacement(&self, real: u32) -> Range<u32> {
-        let real = real as usize;
-
-        // query the fake interval tree with the real query index
-        let (range, (origin, real_length)) = self
-            .real_to_origin
-            .query(real)
-            .expect("real has never been declared");
-
-        // if `real` is the end bound of the range
-        if (range.start + real_length - 1) == real {
-            let mut count = range.len();
-            let mut new_origin = origin;
-            for (i, slice) in self.origins[new_origin..].windows(2).enumerate() {
-                let len = slice[1] - slice[0];
-                count = count.saturating_sub(len);
-                if count == 0 {
-                    new_origin = origin + i;
-                    break;
-                }
-            }
-
-            let n = real - range.start;
-            let start = self.origins[origin];
-            let end = self.origins[new_origin + 1];
-            let remaining = (end - start) - n;
-
-            Range {
-                start: (start + n) as u32,
-                end: (start + n + remaining) as u32,
-            }
-        } else {
-            // just return the origin along with
-            // the real position of the word
-            let n = real as usize - range.start;
-            let origin = self.origins[origin];
-
-            Range {
-                start: (origin + n) as u32,
-                end: (origin + n + 1) as u32,
-            }
-        }
+        self.table[real as usize].clone()
     }
 }
 
