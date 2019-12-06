@@ -56,7 +56,11 @@ pub fn bucket_sort<'c>(
     let before_raw_documents_building = Instant::now();
     let mut raw_documents = Vec::new();
     for raw_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
-        raw_documents.push(RawDocument { raw_matches, processed_matches: None });
+        raw_documents.push(RawDocument {
+            raw_matches,
+            processed_matches: Vec::new(),
+            processed_distances: Vec::new(),
+        });
     }
     debug!("creating {} candidates documents took {:.02?}",
         raw_documents.len(),
@@ -134,7 +138,10 @@ pub fn bucket_sort<'c>(
 
 pub struct RawDocument<'a, 'tag> {
     pub raw_matches: &'a mut [BareMatch<'tag>],
-    pub processed_matches: Option<Vec<SimpleMatch>>,
+    pub processed_matches: Vec<SimpleMatch>,
+    /// The list of minimum `distance` found
+    /// where the `query_index` is the index
+    pub processed_distances: Vec<Option<u8>>,
 }
 
 pub struct BareMatch<'tag> {
@@ -226,7 +233,7 @@ fn fetch_matches<'txn, 'tag>(
     for (query_index, automaton) in automatons.iter().enumerate() {
         let before_dfa = Instant::now();
         let dfa = automaton.dfa();
-        let QueryWordAutomaton { index, query, is_exact, is_prefix } = automaton;
+        let QueryWordAutomaton { query, is_exact, is_prefix } = automaton;
         dfa_time += before_dfa.elapsed();
 
         let mut number_of_words = 0;
@@ -287,7 +294,6 @@ fn fetch_matches<'txn, 'tag>(
 
 #[derive(Debug)]
 pub struct QueryWordAutomaton {
-    index: usize,
     query: String,
     /// Is it a word that must be considered exact
     /// or is it some derived word (i.e. a synonym)
@@ -296,16 +302,16 @@ pub struct QueryWordAutomaton {
 }
 
 impl QueryWordAutomaton {
-    pub fn exact(query: &str, index: usize) -> QueryWordAutomaton {
-        QueryWordAutomaton { index, query: query.to_string(), is_exact: true, is_prefix: false }
+    pub fn exact(query: &str) -> QueryWordAutomaton {
+        QueryWordAutomaton { query: query.to_string(), is_exact: true, is_prefix: false }
     }
 
-    pub fn exact_prefix(query: &str, index: usize) -> QueryWordAutomaton {
-        QueryWordAutomaton { index, query: query.to_string(), is_exact: true, is_prefix: true }
+    pub fn exact_prefix(query: &str) -> QueryWordAutomaton {
+        QueryWordAutomaton { query: query.to_string(), is_exact: true, is_prefix: true }
     }
 
-    pub fn non_exact(query: &str, index: usize) -> QueryWordAutomaton {
-        QueryWordAutomaton { index, query: query.to_string(), is_exact: false, is_prefix: false }
+    pub fn non_exact(query: &str) -> QueryWordAutomaton {
+        QueryWordAutomaton { query: query.to_string(), is_exact: false, is_prefix: false }
     }
 
     pub fn dfa(&self) -> DFA {
@@ -316,27 +322,6 @@ impl QueryWordAutomaton {
         }
     }
 }
-
-// fn construct_automatons(query: &str) -> Vec<QueryWordAutomaton> {
-//     let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
-//     let mut original_words = split_query_string(query).map(str::to_lowercase).peekable();
-//     let mut automatons = Vec::new();
-
-//     while let Some(word) = original_words.next() {
-//         let has_following_word = original_words.peek().is_some();
-//         let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
-
-//         let automaton = if not_prefix_dfa {
-//             QueryWordAutomaton::exact(word)
-//         } else {
-//             QueryWordAutomaton::exact_prefix(word)
-//         };
-
-//         automatons.push(automaton);
-//     }
-
-//     automatons
-// }
 
 fn construct_automatons2(
     reader: &heed::RoTxn<MainT>,
@@ -364,9 +349,9 @@ fn construct_automatons2(
         let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
 
         let automaton = if not_prefix_dfa {
-            QueryWordAutomaton::exact(word, automaton_index)
+            QueryWordAutomaton::exact(word)
         } else {
-            QueryWordAutomaton::exact_prefix(word, automaton_index)
+            QueryWordAutomaton::exact_prefix(word)
         };
         automaton_index += 1;
         automatons.push(automaton);
@@ -413,9 +398,9 @@ fn construct_automatons2(
 
                         for synonym in synonyms_words {
                             let automaton = if nb_synonym_words == 1 {
-                                QueryWordAutomaton::exact(synonym, automaton_index)
+                                QueryWordAutomaton::exact(synonym)
                             } else {
-                                QueryWordAutomaton::non_exact(synonym, automaton_index)
+                                QueryWordAutomaton::non_exact(synonym)
                             };
                             automaton_index += 1;
                             automatons.push(automaton);
@@ -426,12 +411,12 @@ fn construct_automatons2(
 
             if n == 1 {
                 if let Some((left, right)) = split_best_frequency(reader, &normalized, postings_lists_store)? {
-                    let left_automaton = QueryWordAutomaton::exact(left, automaton_index);
+                    let left_automaton = QueryWordAutomaton::exact(left);
                     enhancer_builder.declare(query_range.clone(), automaton_index, &[left]);
                     automaton_index += 1;
                     automatons.push(left_automaton);
 
-                    let right_automaton = QueryWordAutomaton::exact(right, automaton_index);
+                    let right_automaton = QueryWordAutomaton::exact(right);
                     enhancer_builder.declare(query_range.clone(), automaton_index, &[right]);
                     automaton_index += 1;
                     automatons.push(right_automaton);
@@ -445,23 +430,12 @@ fn construct_automatons2(
                 let real_query_index = automaton_index;
                 enhancer_builder.declare(query_range.clone(), real_query_index, &[&normalized]);
 
-                let automaton = QueryWordAutomaton::exact(&normalized, automaton_index);
+                let automaton = QueryWordAutomaton::exact(&normalized);
                 automaton_index += 1;
                 automatons.push(automaton);
             }
         }
     }
-
-    // // order automatons, the most important first,
-    // // we keep the original automatons at the front.
-    // automatons[1..].sort_by_key(|group| {
-    //     let a = group.automatons.first().unwrap();
-    //     (
-    //         Reverse(a.is_exact),
-    //         a.ngram,
-    //         Reverse(group.automatons.len()),
-    //     )
-    // });
 
     Ok((automatons, enhancer_builder.build()))
 }

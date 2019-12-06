@@ -41,6 +41,32 @@ pub trait Criterion {
     }
 }
 
+fn prepare_query_distances(
+    documents: &mut [RawDocument],
+    query_enhancer: &QueryEnhancer,
+) {
+    for document in documents {
+        if !document.processed_distances.is_empty() { continue }
+
+        let mut processed = Vec::new();
+        for m in document.raw_matches.iter() {
+            let range = query_enhancer.replacement(m.query_index as u32);
+            processed.resize(range.end as usize, None);
+
+            for index in range {
+                let index = index as usize;
+                processed[index] = match processed[index] {
+                    Some(distance) if distance > m.distance => Some(m.distance),
+                    Some(distance) => Some(distance),
+                    None => Some(m.distance),
+                };
+            }
+        }
+
+        document.processed_distances = processed;
+    }
+}
+
 pub struct Typo;
 
 impl Criterion for Typo {
@@ -52,9 +78,7 @@ impl Criterion for Typo {
         postings_lists: &mut PostingsListsArena,
         query_enhancer: &QueryEnhancer,
     ) {
-        for document in documents {
-            document.raw_matches.sort_unstable_by_key(|bm| (bm.query_index, bm.distance));
-        }
+        prepare_query_distances(documents, query_enhancer);
     }
 
     fn evaluate(
@@ -79,20 +103,22 @@ impl Criterion for Typo {
         }
 
         #[inline]
-        fn compute_typos(matches: &[BareMatch]) -> usize {
+        fn compute_typos(distances: &[Option<u8>]) -> usize {
             let mut number_words: usize = 0;
             let mut sum_typos = 0.0;
 
-            for group in matches.linear_group_by_key(|bm| bm.query_index) {
-                sum_typos += custom_log10(group[0].distance);
-                number_words += 1;
+            for distance in distances {
+                if let Some(distance) = distance {
+                    sum_typos += custom_log10(*distance);
+                    number_words += 1;
+                }
             }
 
             (number_words as f32 / (sum_typos + 1.0) * 1000.0) as usize
         }
 
-        let lhs = compute_typos(&lhs.raw_matches);
-        let rhs = compute_typos(&rhs.raw_matches);
+        let lhs = compute_typos(&lhs.processed_distances);
+        let rhs = compute_typos(&rhs.processed_distances);
 
         lhs.cmp(&rhs).reverse()
     }
@@ -109,9 +135,7 @@ impl Criterion for Words {
         postings_lists: &mut PostingsListsArena,
         query_enhancer: &QueryEnhancer,
     ) {
-        for document in documents {
-            document.raw_matches.sort_unstable_by_key(|bm| bm.query_index);
-        }
+        prepare_query_distances(documents, query_enhancer);
     }
 
     fn evaluate(
@@ -122,28 +146,26 @@ impl Criterion for Words {
     ) -> Ordering
     {
         #[inline]
-        fn number_of_query_words(matches: &[BareMatch]) -> usize {
-            matches.linear_group_by_key(|bm| bm.query_index).count()
+        fn number_of_query_words(distances: &[Option<u8>]) -> usize {
+            distances.iter().cloned().filter(Option::is_some).count()
         }
 
-        let lhs = number_of_query_words(&lhs.raw_matches);
-        let rhs = number_of_query_words(&rhs.raw_matches);
+        let lhs = number_of_query_words(&lhs.processed_distances);
+        let rhs = number_of_query_words(&rhs.processed_distances);
 
         lhs.cmp(&rhs).reverse()
     }
 }
 
-fn process_raw_matches<'a, 'tag, 'txn>(
+fn prepare_raw_matches<'a, 'tag, 'txn>(
     documents: &mut [RawDocument<'a, 'tag>],
     postings_lists: &mut PostingsListsArena<'tag, 'txn>,
     query_enhancer: &QueryEnhancer,
 ) {
     for document in documents {
-        if document.processed_matches.is_some() { continue }
+        if !document.processed_matches.is_empty() { continue }
 
         let mut processed = Vec::new();
-        let document_id = document.raw_matches[0].document_id;
-
         for m in document.raw_matches.iter() {
             let postings_list = &postings_lists[m.postings_list];
             processed.reserve(postings_list.len());
@@ -160,7 +182,7 @@ fn process_raw_matches<'a, 'tag, 'txn>(
         }
 
         let processed = multiword_rewrite_matches(&mut processed, query_enhancer);
-        document.processed_matches = Some(processed.into_vec());
+        document.processed_matches = processed.into_vec();
     }
 }
 
@@ -175,7 +197,7 @@ impl Criterion for Proximity {
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
         query_enhancer: &QueryEnhancer,
     ) {
-        process_raw_matches(documents, postings_lists, query_enhancer);
+        prepare_raw_matches(documents, postings_lists, query_enhancer);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -225,8 +247,8 @@ impl Criterion for Proximity {
             proximity
         }
 
-        let lhs = matches_proximity(&lhs.processed_matches.as_ref().unwrap());
-        let rhs = matches_proximity(&rhs.processed_matches.as_ref().unwrap());
+        let lhs = matches_proximity(&lhs.processed_matches);
+        let rhs = matches_proximity(&rhs.processed_matches);
 
         lhs.cmp(&rhs)
     }
@@ -243,7 +265,7 @@ impl Criterion for Attribute {
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
         query_enhancer: &QueryEnhancer,
     ) {
-        process_raw_matches(documents, postings_lists, query_enhancer);
+        prepare_raw_matches(documents, postings_lists, query_enhancer);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -262,8 +284,8 @@ impl Criterion for Attribute {
             sum_attribute
         }
 
-        let lhs = sum_attribute(&lhs.processed_matches.as_ref().unwrap());
-        let rhs = sum_attribute(&rhs.processed_matches.as_ref().unwrap());
+        let lhs = sum_attribute(&lhs.processed_matches);
+        let rhs = sum_attribute(&rhs.processed_matches);
 
         lhs.cmp(&rhs)
     }
@@ -280,7 +302,7 @@ impl Criterion for WordsPosition {
         postings_lists: &mut PostingsListsArena<'tag, 'txn>,
         query_enhancer: &QueryEnhancer,
     ) {
-        process_raw_matches(documents, postings_lists, query_enhancer);
+        prepare_raw_matches(documents, postings_lists, query_enhancer);
     }
 
     fn evaluate<'a, 'tag, 'txn>(
@@ -299,8 +321,8 @@ impl Criterion for WordsPosition {
             sum_words_position
         }
 
-        let lhs = sum_words_position(&lhs.processed_matches.as_ref().unwrap());
-        let rhs = sum_words_position(&rhs.processed_matches.as_ref().unwrap());
+        let lhs = sum_words_position(&lhs.processed_matches);
+        let rhs = sum_words_position(&rhs.processed_matches);
 
         lhs.cmp(&rhs)
     }
