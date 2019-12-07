@@ -46,14 +46,22 @@ pub trait Criterion {
 fn prepare_query_distances(
     documents: &mut [RawDocument],
     query_enhancer: &QueryEnhancer,
+    automatons: &[QueryWordAutomaton],
 ) {
     for document in documents {
         if !document.processed_distances.is_empty() { continue }
 
         let mut processed = Vec::new();
         for m in document.raw_matches.iter() {
+            // FIXME we really need to take splitted words into account
+            //       those must be seen at the same level as the non-splitteds
+            // if automatons[m.query_index as usize].phrase_query.is_some() {
+            //     continue
+            // }
+
             let range = query_enhancer.replacement(m.query_index as u32);
-            processed.resize(range.end as usize, None);
+            let new_len = cmp::max(range.end as usize, processed.len());
+            processed.resize(new_len, None);
 
             for index in range {
                 let index = index as usize;
@@ -81,7 +89,7 @@ impl Criterion for Typo {
         query_enhancer: &QueryEnhancer,
         automatons: &[QueryWordAutomaton],
     ) {
-        prepare_query_distances(documents, query_enhancer);
+        prepare_query_distances(documents, query_enhancer, automatons);
     }
 
     fn evaluate(
@@ -139,7 +147,7 @@ impl Criterion for Words {
         query_enhancer: &QueryEnhancer,
         automatons: &[QueryWordAutomaton],
     ) {
-        prepare_query_distances(documents, query_enhancer);
+        prepare_query_distances(documents, query_enhancer, automatons);
     }
 
     fn evaluate(
