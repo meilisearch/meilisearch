@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::fmt;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -145,7 +146,6 @@ pub struct RawDocument<'a, 'tag> {
     pub raw_matches: &'a mut [BareMatch<'tag>],
     pub processed_matches: Vec<SimpleMatch>,
     /// The list of minimum `distance` found
-    /// where the `query_index` is the index
     pub processed_distances: Vec<Option<u8>>,
 }
 
@@ -155,6 +155,17 @@ pub struct BareMatch<'tag> {
     pub distance: u8,
     pub is_exact: bool,
     pub postings_list: Idx32<'tag>,
+}
+
+impl fmt::Debug for BareMatch<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BareMatch")
+            .field("document_id", &self.document_id)
+            .field("query_index", &self.query_index)
+            .field("distance", &self.distance)
+            .field("is_exact", &self.is_exact)
+            .finish()
+    }
 }
 
 // TODO remove that
@@ -238,14 +249,11 @@ fn fetch_matches<'txn, 'tag>(
     for (query_index, automaton) in automatons.iter().enumerate() {
         let before_dfa = Instant::now();
         let dfa = automaton.dfa();
-        let QueryWordAutomaton { query, is_exact, is_prefix, .. } = automaton;
+        let QueryWordAutomaton { query, is_exact, is_prefix, phrase_query } = automaton;
         dfa_time += before_dfa.elapsed();
 
         let mut number_of_words = 0;
-
-        let before_fst_search = Instant::now();
         let mut stream = words.search(&dfa).into_stream();
-        debug!("fst search took {:.02?}", before_fst_search.elapsed());
 
         // while let Some(input) = stream.next() {
         loop {
@@ -272,7 +280,7 @@ fn fetch_matches<'txn, 'tag>(
 
                     let posting_list_index = arena.add(postings_list_view.range(offset, group.len()));
                     let document_id = group[0].document_id;
-                    let stuffed = BareMatch {
+                    let bare_match = BareMatch {
                         document_id,
                         query_index: query_index as u16,
                         distance,
@@ -280,7 +288,7 @@ fn fetch_matches<'txn, 'tag>(
                         postings_list: posting_list_index,
                     };
 
-                    total_postings_lists.push(stuffed);
+                    total_postings_lists.push(bare_match);
                     offset += group.len();
                 }
             }
@@ -434,7 +442,7 @@ fn construct_automatons2(
                 }
             }
 
-            if n == 1 {
+            if false && n == 1 {
                 if let Some((left, right)) = split_best_frequency(reader, &normalized, postings_lists_store)? {
                     let mut left_automaton = QueryWordAutomaton::exact(left);
                     left_automaton.phrase_query = Some((0, 2));
