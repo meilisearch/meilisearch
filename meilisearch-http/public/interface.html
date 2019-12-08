@@ -43,6 +43,24 @@
             box-shadow: 0 2px 8px rgba(59, 64, 69, 0.04);
             color: #44566C;
             margin-bottom: 30px;
+            display: flex;
+        }
+
+        .document ul {
+            flex: 0 0 75%;
+            max-width: 75%;
+            padding: 0;
+        }
+
+        .document .image {
+            max-width: 25%;
+            flex: 0 0 25%;
+            padding-left: 30px;
+            box-sizing: border-box;
+        }
+
+        .document .image img {
+            width: 100%;
         }
 
         .field {
@@ -56,8 +74,8 @@
         }
 
         .attribute {
-            flex: 0 0 15%;
-            max-width: 15%;
+            flex: 0 0 25%;
+            max-width: 25%;
             text-align: right;
             padding-right: 10px;
             box-sizing: border-box;
@@ -65,8 +83,8 @@
         }
 
         .content {
-            max-width: 85%;
-            flex: 0 0 85%;
+            max-width: 75%;
+            flex: 0 0 75%;
             box-sizing: border-box;
             padding-left: 10px;
         }
@@ -103,7 +121,6 @@
         }
 
         function triggerSearch() {
-            // TODO onchange would be a better fit
             var e = document.getElementById("index");
             var index = e.options[e.selectedIndex].value;
 
@@ -127,16 +144,46 @@
                         elem.classList.add("document");
 
                         const ul = document.createElement('ul');
+                        let image = undefined;
 
                         for (const prop in element) {
-                            const li = document.createElement('li');
-                            li.classList.add("field");
+                            // Check if property is an image url link.
+                            if (typeof result[prop] === 'string') {
+                                if (image == undefined && result[prop].match(/^(https|http):\/\/.*(jpe?g|png|gif)(\?.*)?$/g)) {
+                                    image = result[prop];
+                                }
+                            }
 
-                            li.innerHTML = `<div class="attribute">${prop}</div><div class="content">${element[prop]}</div>`;
-                            ul.appendChild(li);
+                            const field = document.createElement('li');
+                            field.classList.add("field");
+
+                            const attribute = document.createElement('div');
+                            attribute.classList.add("attribute");
+                            attribute.innerHTML = prop;
+
+                            const content = document.createElement('div');
+                            content.classList.add("content");
+                            content.innerHTML = element[prop];
+
+                            field.appendChild(attribute);
+                            field.appendChild(content);
+
+                            ul.appendChild(field);
                         }
 
                         elem.appendChild(ul);
+
+                        if (image != undefined) {
+                            const div = document.createElement('div');
+                            div.classList.add("image");
+
+                            const img = document.createElement('img');
+                            img.src = image;
+
+                            div.appendChild(img);
+                            elem.appendChild(div);
+                        }
+
                         results.appendChild(elem)
                     }
                 } else {
@@ -147,6 +194,7 @@
         }
 
         let baseUrl = window.location.origin;
+        // TODO we must not block here
         let result = JSON.parse(httpGet(`${baseUrl}/indexes`));
 
         let select = document.getElementById("index");
