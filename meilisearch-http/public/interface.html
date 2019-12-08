@@ -25,6 +25,27 @@
         #panel {
             max-width: 900px;
             margin: 30px auto;
+            font-size: 1.4em;
+            font-style: italic;
+            color: #44566CDE;
+        }
+
+        #search {
+            border: none;
+            font-style: inherit;
+            font-size: inherit;
+            color: inherit;
+            border-bottom: 1px solid;
+        }
+
+        #index {
+            -moz-appearance: none;
+            appearance: none;
+            border: none;
+            font-style: inherit;
+            font-size: inherit;
+            color: inherit;
+            border-bottom: 1px solid;
         }
 
         #results {
@@ -99,12 +120,7 @@
 
 <body>
     <div id="panel">
-        <select id="index">
-            <!-- indexes names -->
-        </select>
-
-        <input type="text" id="search" autofocus>
-
+        <p>I want to search for <input type="text" id="search" autofocus> in the index <select id="index"></select>.</p>
         <span id="time"></span>
     </div>
 
@@ -120,21 +136,27 @@
             return xmlHttp.responseText;
         }
 
+        let lastRequest = undefined;
+
         function triggerSearch() {
             var e = document.getElementById("index");
+            if (e.selectedIndex == -1) { return }
             var index = e.options[e.selectedIndex].value;
 
             let theUrl = `${baseUrl}/indexes/${index}/search?q=${search.value}&attributesToHighlight=*`;
-            var xhr = new XMLHttpRequest();
-            xhr.open("GET", theUrl, true);
-            xhr.onload = function (e) {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    let httpResults = JSON.parse(xhr.responseText);
+
+            if (lastRequest) { lastRequest.abort() }
+            lastRequest = new XMLHttpRequest();
+
+            lastRequest.open("GET", theUrl, true);
+            lastRequest.onload = function (e) {
+                if (lastRequest.readyState === 4 && lastRequest.status === 200) {
+                    let httpResults = JSON.parse(lastRequest.responseText);
                     results.innerHTML = '';
 
                     let processingTimeMs = httpResults.processingTimeMs;
                     let numberOfDocuments = httpResults.hits.length;
-                    time.innerHTML = `found ${numberOfDocuments} documents in ${processingTimeMs}ms`;
+                    time.innerHTML = `We found ${numberOfDocuments} documents in ${processingTimeMs}ms`;
 
                     for (result of httpResults.hits) {
                         const element = {...result, ...result._formatted };
@@ -187,10 +209,10 @@
                         results.appendChild(elem)
                     }
                 } else {
-                    console.error(xhr.statusText);
+                    console.error(lastRequest.statusText);
                 }
             };
-            xhr.send(null);
+            lastRequest.send(null);
         }
 
         let baseUrl = window.location.origin;
