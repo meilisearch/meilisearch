@@ -267,7 +267,7 @@ pub async fn update_index(mut ctx: Context<Data>) -> SResult<Response> {
     };
 
     Ok(tide::response::json(response_body)
-        .with_status(StatusCode::ACCEPTED)
+        .with_status(StatusCode::OK)
         .into_response())
 }
 
