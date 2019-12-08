@@ -22,32 +22,53 @@
 
         body { font-family: MyHelvetica, sans-serif; }
 
+        #panel {
+            max-width: 900px;
+            margin: 30px auto;
+        }
+
         #results {
             max-width: 900px;
             margin: 0 auto;
-            list-style-type: none;
+            list-style-type: decimal-leading-zero;
+            list-style-position: inside;
             padding: 0;
         }
 
         .document {
-            border: 1px solid #e6dfc6;
-            padding: 10px;
-            background-color: #FFF8DC3B;
+            border: 1px solid #e6e6e6;
+            padding: 20px 20px;
+            background-color: #FCFCFC;
             border-radius: 3px;
             box-shadow: 0 2px 8px rgba(59, 64, 69, 0.04);
-        }
-
-        .document:not(:last-child) {
+            color: #44566C;
             margin-bottom: 30px;
         }
 
-        #results li ul {
-            padding: 0;
+        .field {
+            list-style-type: none;
+            display: flex;
+            flex-wrap: wrap;
         }
 
-        #panel {
-            max-width: 900px;
-            margin: 30px auto;
+        .field:not(:last-child) {
+            margin-bottom: 7px;
+        }
+
+        .attribute {
+            flex: 0 0 15%;
+            max-width: 15%;
+            text-align: right;
+            padding-right: 10px;
+            box-sizing: border-box;
+            text-transform: uppercase;
+        }
+
+        .content {
+            max-width: 85%;
+            flex: 0 0 85%;
+            box-sizing: border-box;
+            padding-left: 10px;
         }
 
         em {
@@ -94,7 +115,9 @@
                     let httpResults = JSON.parse(xhr.responseText);
                     results.innerHTML = '';
 
-                    time.innerHTML = `${httpResults.processingTimeMs}ms`;
+                    let processingTimeMs = httpResults.processingTimeMs;
+                    let numberOfDocuments = httpResults.hits.length;
+                    time.innerHTML = `found ${numberOfDocuments} documents in ${processingTimeMs}ms`;
 
                     for (result of httpResults.hits) {
                         const element = {...result, ...result._formatted };
@@ -106,8 +129,10 @@
                         const ul = document.createElement('ul');
 
                         for (const prop in element) {
-                            const li = document.createElement('ul');
-                            li.innerHTML = `<strong>${prop}</strong>: ${element[prop]}`;
+                            const li = document.createElement('li');
+                            li.classList.add("field");
+
+                            li.innerHTML = `<div class="attribute">${prop}</div><div class="content">${element[prop]}</div>`;
                             ul.appendChild(li);
                         }
 
