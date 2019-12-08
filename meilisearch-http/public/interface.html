@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/bulma.min.css">
+    <title>MeiliSearch</title>
+    <style>
+      em {
+        color: hsl(204, 86%, 25%);
+        font-style: inherit;
+        background-color: hsl(204, 86%, 88%);
+      }
+
+      #results {
+        max-width: 900px;
+        margin: 20px auto 0 auto;
+        padding: 0;
+      }
+
+      .notification {
+        display: flex;
+        justify-content: center;
+      }
+
+      .level-left {
+        margin-right: 50px;
+      }
+
+      .document {
+        padding: 20px 20px;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+        margin-bottom: 20px;
+        display: flex;
+      }
+
+      .document ol {
+        flex: 0 0 75%;
+        max-width: 75%;
+        padding: 0;
+        margin: 0;
+      }
+
+      .document .image {
+        max-width: 25%;
+        flex: 0 0 25%;
+        padding-left: 30px;
+        box-sizing: border-box;
+      }
+
+      .document .image img {
+        width: 100%;
+      }
+
+      .field {
+        list-style-type: none;
+        display: flex;
+        flex-wrap: wrap;
+      }
+
+      .field:not(:last-child) {
+        margin-bottom: 7px;
+      }
+
+      .attribute {
+        flex: 0 0 25%;
+        max-width: 25%;
+        text-align: right;
+        padding-right: 10px;
+        box-sizing: border-box;
+        text-transform: uppercase;
+        color: rgba(0,0,0,.7);
+      }
+
+      .content {
+        max-width: 75%;
+        flex: 0 0 75%;
+        box-sizing: border-box;
+        padding-left: 10px;
+        color: rgba(0,0,0,.9);
+      }
+    </style>
+  </head>
+  <body>
+
+    <section class="hero is-light">
+      <div class="hero-body">
+        <div class="container">
+          <h1 class="title">
+            Welcome to MeiliSearch
+          </h1>
+          <h2 class="subtitle">
+            This dashboard will help you check the search results with ease.
+          </h2>
+        </div>
+      </div>
+    </section>
+
+    <section class="hero container">
+        <div class="notification" style="border-radius: 0 0 4px 4px;">
+
+          <nav class="level">
+            <!-- Left side -->
+            <div class="level-left">
+              <div class="level-item">
+                <div class="field has-addons has-addons-right">
+                  <p class="control">
+                    <span class="select">
+                      <select id="index">
+                        <!-- indexes names -->
+                      </select>
+                    </span>
+                  </p>
+                  <p class="control">
+                    <input id="search" class="input" type="text" autofocus placeholder="e.g. George Clooney">
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right side -->
+            <nav class="level-right">
+              <div class="level-item has-text-centered">
+                <div>
+                  <p class="heading">Documents</p>
+                  <p id="count" class="title">25</p>
+                </div>
+              </div>
+              <div class="level-item has-text-centered">
+                <div>
+                  <p class="heading">Time Spent</p>
+                  <p id="time" class="title">4ms</p>
+                </div>
+              </div>
+            </nav>
+          </nav>
+
+        </div>
+    </section>
+
+    <section>
+      <ol id="results" class="content">
+        <!-- documents matching resquests -->
+      </ol>
+    </section>
+  </body>
+
+  <script>
+    function httpGet(theUrl) {
+        var xmlHttp = new XMLHttpRequest();
+        xmlHttp.open("GET", theUrl, false); // false for synchronous request
+        xmlHttp.send(null);
+        return xmlHttp.responseText;
+    }
+
+    let lastRequest = undefined;
+
+    function triggerSearch() {
+        var e = document.getElementById("index");
+        if (e.selectedIndex == -1) { return }
+        var index = e.options[e.selectedIndex].value;
+
+        let theUrl = `${baseUrl}/indexes/${index}/search?q=${search.value}&attributesToHighlight=*`;
+
+        if (lastRequest) { lastRequest.abort() }
+        lastRequest = new XMLHttpRequest();
+
+        lastRequest.open("GET", theUrl, true);
+        lastRequest.onload = function (e) {
+            if (lastRequest.readyState === 4 && lastRequest.status === 200) {
+                let httpResults = JSON.parse(lastRequest.responseText);
+                results.innerHTML = '';
+
+                let processingTimeMs = httpResults.processingTimeMs;
+                let numberOfDocuments = httpResults.hits.length;
+                time.innerHTML = `${processingTimeMs}ms`;
+                count.innerHTML = `${numberOfDocuments}`;
+
+                for (result of httpResults.hits) {
+                    const element = {...result, ...result._formatted };
+                    delete element._formatted;
+
+                    const elem = document.createElement('li');
+                    elem.classList.add("document");
+
+                    const ol = document.createElement('ol');
+                    let image = undefined;
+
+                    for (const prop in element) {
+                        // Check if property is an image url link.
+                        if (typeof result[prop] === 'string') {
+                            if (image == undefined && result[prop].match(/^(https|http):\/\/.*(jpe?g|png|gif)(\?.*)?$/g)) {
+                                image = result[prop];
+                            }
+                        }
+
+                        const field = document.createElement('li');
+                        field.classList.add("field");
+
+                        const attribute = document.createElement('div');
+                        attribute.classList.add("attribute");
+                        attribute.innerHTML = prop;
+
+                        const content = document.createElement('div');
+                        content.classList.add("content");
+                        content.innerHTML = element[prop];
+
+                        field.appendChild(attribute);
+                        field.appendChild(content);
+
+                        ol.appendChild(field);
+                    }
+
+                    elem.appendChild(ol);
+
+                    if (image != undefined) {
+                        const div = document.createElement('div');
+                        div.classList.add("image");
+
+                        const img = document.createElement('img');
+                        img.src = image;
+
+                        div.appendChild(img);
+                        elem.appendChild(div);
+                    }
+
+                    results.appendChild(elem)
+                }
+            } else {
+                console.error(lastRequest.statusText);
+            }
+        };
+        lastRequest.send(null);
+    }
+
+    let baseUrl = window.location.origin;
+    // TODO we must not block here
+    let result = JSON.parse(httpGet(`${baseUrl}/indexes`));
+
+    let select = document.getElementById("index");
+    for (index of result) {
+        const option = document.createElement('option');
+        option.value = index.uid;
+        option.innerHTML = index.name;
+        select.appendChild(option);
+    }
+
+    search.oninput = triggerSearch;
+    select.onchange = triggerSearch;
+
+    triggerSearch();
+  </script>
+</html>
