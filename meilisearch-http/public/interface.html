@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>MeiliSearch</title>
+</head>
+
+<body>
+
+    <select name="index">
+        <!-- indexes names -->
+    </select>
+
+    <input type="text" id="search" autofocus>
+
+    <ul id="results">
+        <!-- search results -->
+    </ul>
+
+    <script>
+        function httpGet(theUrl) {
+            var xmlHttp = new XMLHttpRequest();
+            xmlHttp.open("GET", theUrl, false); // false for synchronous request
+            xmlHttp.send(null);
+            return xmlHttp.responseText;
+        }
+
+        let baseUrl = window.location.origin;
+        let result = JSON.parse(httpGet(`${baseUrl}/indexes`));
+        console.log(result);
+
+        let select = document.getElementsByName("index")[0];
+        for (index of result) {
+            const option = document.createElement('option');
+            option.value = index.uid;
+            option.innerHTML = index.name;
+            select.appendChild(option);
+        }
+
+        search.oninput = function() {
+            // TODO onchange would be a better fit
+            var e = document.getElementsByName("index")[0];
+            var index = e.options[e.selectedIndex].value;
+
+            let theUrl = `${baseUrl}/indexes/${index}/search?q=${search.value}&attributesToHighlight=*`;
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", theUrl, true);
+            xhr.onload = function (e) {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    let httpResults = JSON.parse(xhr.responseText);
+                    results.innerHTML = '';
+
+                    for (result of httpResults.hits) {
+                        const element = {...result, ...result._formatted };
+                        delete element._formatted;
+
+                        const elem = document.createElement('li');
+                        const ul = document.createElement('ul');
+
+                        for (const prop in element) {
+                            const li = document.createElement('ul');
+                            li.innerHTML = element[prop];
+                            ul.appendChild(li);
+                        }
+
+                        elem.appendChild(ul);
+                        results.appendChild(elem)
+                    }
+                } else {
+                    console.error(xhr.statusText);
+                }
+            };
+            xhr.send(null);
+        };
+    </script>
+
+</body>
+
+</html>

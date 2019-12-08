@@ -1,3 +1,4 @@
+use tide::Context;
 use crate::data::Data;
 
 pub mod document;
@@ -12,6 +13,8 @@ pub mod synonym;
 
 pub fn load_routes(app: &mut tide::App<Data>) {
     app.at("").nest(|router| {
+        router.at("/").get(front_view);
+
         router.at("/indexes").nest(|router| {
             router
                 .at("/")
@@ -119,4 +122,18 @@ pub fn load_routes(app: &mut tide::App<Data>) {
             .at("/sys-info/pretty")
             .get(stats::get_sys_info_pretty);
     });
+}
+
+pub async fn front_view(_ctx: Context<Data>) -> tide::http::Response<String> {
+    let content = if true {
+        // include_str!("../../public/interface.html");
+        std::fs::read_to_string("meilisearch-http/public/interface.html").unwrap()
+    } else {
+        include_str!("../../public/interface.html").to_owned()
+    };
+
+    tide::http::Response::builder()
+        .header(tide::http::header::CONTENT_TYPE, "text/html; charset=utf-8")
+        .status(tide::http::StatusCode::OK)
+        .body(content).unwrap()
 }
