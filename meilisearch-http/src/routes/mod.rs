@@ -102,14 +102,11 @@ pub fn load_routes(app: &mut tide::App<Data>) {
         });
     });
 
-    // Private
     app.at("").nest(|router| {
         router
             .at("/health")
             .get(health::get_health)
-            .post(health::set_healthy)
-            .put(health::change_healthyness)
-            .delete(health::set_unhealthy);
+            .put(health::change_healthyness);
 
         router.at("/stats").get(stats::get_stats);
         router.at("/stats/:index").get(stats::index_stat);
