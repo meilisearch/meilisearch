@@ -3,15 +3,71 @@
 
 <head>
     <title>MeiliSearch</title>
+
+    <style type="text/css">
+        @font-face {
+          font-family: MyHelvetica;
+          src: local("Helvetica Neue"),
+               local("HelveticaNeue"),
+               url(MgOpenModernaRegular.ttf);
+        }
+
+        @font-face {
+          font-family: MyHelvetica;
+          src: local("Helvetica Neue Bold"),
+               local("HelveticaNeue-Bold"),
+               url(MgOpenModernaBold.ttf);
+          font-weight: bold;
+        }
+
+        body { font-family: MyHelvetica, sans-serif; }
+
+        #results {
+            max-width: 900px;
+            margin: 0 auto;
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .document {
+            border: 1px solid #e6dfc6;
+            padding: 10px;
+            background-color: #FFF8DC3B;
+            border-radius: 3px;
+            box-shadow: 0 2px 8px rgba(59, 64, 69, 0.04);
+        }
+
+        .document:not(:last-child) {
+            margin-bottom: 30px;
+        }
+
+        #results li ul {
+            padding: 0;
+        }
+
+        #panel {
+            max-width: 900px;
+            margin: 30px auto;
+        }
+
+        em {
+            color: #F23C79;
+            font-style: inherit;
+            background-color: #F23C7921;
+        }
+    </style>
 </head>
 
 <body>
+    <div id="panel">
+        <select id="index">
+            <!-- indexes names -->
+        </select>
 
-    <select name="index">
-        <!-- indexes names -->
-    </select>
+        <input type="text" id="search" autofocus>
 
-    <input type="text" id="search" autofocus>
+        <span id="time"></span>
+    </div>
 
     <ul id="results">
         <!-- search results -->
@@ -25,21 +81,9 @@
             return xmlHttp.responseText;
         }
 
-        let baseUrl = window.location.origin;
-        let result = JSON.parse(httpGet(`${baseUrl}/indexes`));
-        console.log(result);
-
-        let select = document.getElementsByName("index")[0];
-        for (index of result) {
-            const option = document.createElement('option');
-            option.value = index.uid;
-            option.innerHTML = index.name;
-            select.appendChild(option);
-        }
-
-        search.oninput = function() {
+        function triggerSearch() {
             // TODO onchange would be a better fit
-            var e = document.getElementsByName("index")[0];
+            var e = document.getElementById("index");
             var index = e.options[e.selectedIndex].value;
 
             let theUrl = `${baseUrl}/indexes/${index}/search?q=${search.value}&attributesToHighlight=*`;
@@ -50,16 +94,20 @@
                     let httpResults = JSON.parse(xhr.responseText);
                     results.innerHTML = '';
 
+                    time.innerHTML = `${httpResults.processingTimeMs}ms`;
+
                     for (result of httpResults.hits) {
                         const element = {...result, ...result._formatted };
                         delete element._formatted;
 
                         const elem = document.createElement('li');
+                        elem.classList.add("document");
+
                         const ul = document.createElement('ul');
 
                         for (const prop in element) {
                             const li = document.createElement('ul');
-                            li.innerHTML = element[prop];
+                            li.innerHTML = `<strong>${prop}</strong>: ${element[prop]}`;
                             ul.appendChild(li);
                         }
 
@@ -71,9 +119,24 @@
                 }
             };
             xhr.send(null);
-        };
-    </script>
+        }
 
+        let baseUrl = window.location.origin;
+        let result = JSON.parse(httpGet(`${baseUrl}/indexes`));
+
+        let select = document.getElementById("index");
+        for (index of result) {
+            const option = document.createElement('option');
+            option.value = index.uid;
+            option.innerHTML = index.name;
+            select.appendChild(option);
+        }
+
+        search.oninput = triggerSearch;
+        select.onchange = triggerSearch;
+
+        triggerSearch();
+    </script>
 </body>
 
 </html>
