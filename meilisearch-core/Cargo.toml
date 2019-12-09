@@ -17,6 +17,7 @@ env_logger = "0.7.0"
 fst = { version = "0.3.5", default-features = false }
 hashbrown = { version = "0.6.0", features = ["serde"] }
 heed = "0.6.1"
+itertools = "0.8.2" # kill me please
 levenshtein_automata = { version = "0.1.1", features = ["fst_automaton"] }
 log = "0.4.8"
 meilisearch-schema = { path = "../meilisearch-schema", version = "0.8.4" }
