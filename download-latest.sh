@@ -1,12 +1,12 @@
 #!/bin/sh
 
 # COLORS
-RED="\033[31m"
-GREEN="\033[32m"
-DEFAULT="\033[0m"
+RED='\033[31m'
+GREEN='\033[32m'
+DEFAULT='\033[0m'
 
 # GLOBALS
-REGEXP_SEMVER='v[^0-9]*\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)\([0-9A-Za-z-]*\)'
+GREP_SEMVER_REGEXP='\"v\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)\"' # i.e. "v[number].[number].[number]"
 BINARY_NAME='meilisearch'
 
 # semverParseInto and semverLT from https://github.com/cloudflare/semver_bash/blob/master/semver.sh
@@ -103,7 +103,7 @@ esac
 
 # GET LATEST VERSION
 tags=$(curl -s 'https://api.github.com/repos/meilisearch/MeiliSearch/tags' \
-    | grep "$REGEXP_SEMVER" \
+    | grep "$GREP_SEMVER_REGEXP" \
     | grep 'name' \
     | tr -d '"' | tr -d ',' | cut -d 'v' -f 2)
 
