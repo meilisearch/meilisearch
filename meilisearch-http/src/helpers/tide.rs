@@ -4,7 +4,6 @@ use crate::Data;
 use chrono::Utc;
 use heed::types::{SerdeBincode, Str};
 use meilisearch_core::Index;
-use serde_json::Value;
 use tide::Context;
 
 pub trait ContextExt {
@@ -103,14 +102,8 @@ impl ContextExt for Context<Data> {
 
     fn identifier(&self) -> Result<String, ResponseError> {
         let name = self
-            .param::<Value>("identifier")
-            .as_ref()
-            .map(meilisearch_core::serde::value_to_string)
-            .map_err(|e| ResponseError::bad_parameter("identifier", e))?
-            .ok_or(ResponseError::bad_parameter(
-                "identifier",
-                "missing parameter",
-            ))?;
+            .param::<String>("identifier")
+            .map_err(|e| ResponseError::bad_parameter("identifier", e))?;
 
         Ok(name)
     }
