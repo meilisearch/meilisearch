@@ -57,14 +57,17 @@ pub fn bucket_sort<'c>(
     debug!("sort by documents ids took {:.02?}", before_raw_documents_presort.elapsed());
 
     let before_raw_documents_building = Instant::now();
+    let mut prefiltered_documents = 0;
     let mut raw_documents = Vec::new();
     for raw_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
+        prefiltered_documents += 1;
         if let Some(raw_document) = RawDocument::new(raw_matches, &automatons, &arena) {
             raw_documents.push(raw_document);
         }
     }
-    debug!("creating {} candidates documents took {:.02?}",
+    debug!("creating {} (original {}) candidates documents took {:.02?}",
         raw_documents.len(),
+        prefiltered_documents,
         before_raw_documents_building.elapsed(),
     );
 
