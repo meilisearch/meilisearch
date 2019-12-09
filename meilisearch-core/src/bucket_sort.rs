@@ -59,11 +59,9 @@ pub fn bucket_sort<'c>(
     let before_raw_documents_building = Instant::now();
     let mut raw_documents = Vec::new();
     for raw_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
-        raw_documents.push(RawDocument {
-            raw_matches,
-            processed_matches: Vec::new(),
-            processed_distances: Vec::new(),
-        });
+        if let Some(raw_document) = RawDocument::new(raw_matches, &automatons, &arena) {
+            raw_documents.push(raw_document);
+        }
     }
     debug!("creating {} candidates documents took {:.02?}",
         raw_documents.len(),
@@ -149,6 +147,57 @@ pub struct RawDocument<'a, 'tag> {
     pub processed_distances: Vec<Option<u8>>,
 }
 
+impl<'a, 'tag> RawDocument<'a, 'tag> {
+    fn new<'txn>(
+        raw_matches: &'a mut [BareMatch<'tag>],
+        automatons: &[QueryWordAutomaton],
+        postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
+    ) -> Option<RawDocument<'a, 'tag>>
+    {
+        raw_matches.sort_unstable_by_key(|m| m.query_index);
+
+        // debug!("{:?} {:?}", raw_matches[0].document_id, raw_matches);
+
+        let mut previous_word = None;
+        for i in 0..raw_matches.len() {
+            let a = &raw_matches[i];
+            let auta = &automatons[a.query_index as usize];
+
+            match auta.phrase_query {
+                Some((0, _)) => {
+                    previous_word = Some(a.query_index);
+                    let b = raw_matches.get(i + 1)?;
+                    if a.query_index + 1 != b.query_index {
+                        return None;
+                    }
+
+                    let pla = &postings_lists[a.postings_list];
+                    let plb = &postings_lists[b.postings_list];
+
+                    let mut iter = itertools::merge_join_by(pla.iter(), plb.iter(), |a, b| {
+                        a.attribute.cmp(&b.attribute).then((a.word_index + 1).cmp(&b.word_index))
+                    });
+
+                    if !iter.any(|eb| eb.is_both()) { return None }
+                },
+                Some((1, _)) => {
+                    if previous_word.take() != Some(a.query_index - 1) {
+                        return None;
+                    }
+                },
+                Some((_, _)) => unreachable!(),
+                None => (),
+            }
+        }
+
+        Some(RawDocument {
+            raw_matches,
+            processed_matches: Vec::new(),
+            processed_distances: Vec::new(),
+        })
+    }
+}
+
 pub struct BareMatch<'tag> {
     pub document_id: DocumentId,
     pub query_index: u16,
@@ -184,6 +233,15 @@ pub struct PostingsListView<'txn> {
     postings_list: Rc<Cow<'txn, Set<DocIndex>>>,
     offset: usize,
     len: usize,
+}
+
+impl fmt::Debug for PostingsListView<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PostingsListView")
+            .field("input", &std::str::from_utf8(&self.input).unwrap())
+            .field("postings_list", &self.as_ref())
+            .finish()
+    }
 }
 
 impl<'txn> PostingsListView<'txn> {
@@ -275,6 +333,7 @@ fn fetch_matches<'txn, 'tag>(
                 let input = Rc::from(input);
                 let postings_list = Rc::new(postings_list);
                 let postings_list_view = PostingsListView::new(input, postings_list);
+
                 let mut offset = 0;
                 for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
 
@@ -442,7 +501,7 @@ fn construct_automatons2(
                 }
             }
 
-            if false && n == 1 {
+            if true && n == 1 {
                 if let Some((left, right)) = split_best_frequency(reader, &normalized, postings_lists_store)? {
                     let mut left_automaton = QueryWordAutomaton::exact(left);
                     left_automaton.phrase_query = Some((0, 2));

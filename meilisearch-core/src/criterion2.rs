@@ -43,16 +43,42 @@ pub trait Criterion {
     }
 }
 
-fn prepare_query_distances(
-    documents: &mut [RawDocument],
+fn prepare_query_distances<'a, 'tag, 'txn>(
+    documents: &mut [RawDocument<'a, 'tag>],
     query_enhancer: &QueryEnhancer,
     automatons: &[QueryWordAutomaton],
+    postings_lists: &PostingsListsArena<'tag, 'txn>,
 ) {
     for document in documents {
         if !document.processed_distances.is_empty() { continue }
 
+        // debug!("{:?}", document.raw_matches[0].document_id);
+
         let mut processed = Vec::new();
-        for m in document.raw_matches.iter() {
+        let mut raw_matches = document.raw_matches.iter().peekable();
+        while let Some(m) = raw_matches.next() {
+
+            // let automaton = &automatons[m.query_index as usize];
+
+            // debug!("{:?} {:?}", m, automaton);
+            // debug!("{:?}", &postings_lists[m.postings_list]);
+
+            // match automaton.phrase_query {
+            //     Some((0, len)) => {
+            //         match raw_matches.peek() {
+            //             Some(BareMatch { query_index, .. }) => {
+            //                 if *query_index != m.query_index + 1 {
+            //                     raw_matches.next();
+            //                     continue
+            //                 }
+            //             },
+            //             None => continue,
+            //         }
+            //     },
+            //     Some((_, _)) => continue,
+            //     None => (),
+            // }
+
             // FIXME we really need to take splitted words into account
             //       those must be seen at the same level as the non-splitteds
             // if automatons[m.query_index as usize].phrase_query.is_some() {
@@ -73,6 +99,8 @@ fn prepare_query_distances(
             }
         }
 
+        // debug!("{:?}", processed);
+
         document.processed_distances = processed;
     }
 }
@@ -82,14 +110,14 @@ pub struct Typo;
 impl Criterion for Typo {
     fn name(&self) -> &str { "typo" }
 
-    fn prepare(
+    fn prepare<'a, 'tag, 'txn>(
         &self,
-        documents: &mut [RawDocument],
-        postings_lists: &mut PostingsListsArena,
+        documents: &mut [RawDocument<'a, 'tag>],
+        postings_lists: &mut PostingsListsArena<'tag, 'txn>,
         query_enhancer: &QueryEnhancer,
         automatons: &[QueryWordAutomaton],
     ) {
-        prepare_query_distances(documents, query_enhancer, automatons);
+        prepare_query_distances(documents, query_enhancer, automatons, postings_lists);
     }
 
     fn evaluate(
@@ -140,14 +168,14 @@ pub struct Words;
 impl Criterion for Words {
     fn name(&self) -> &str { "words" }
 
-    fn prepare(
+    fn prepare<'a, 'tag, 'txn>(
         &self,
-        documents: &mut [RawDocument],
-        postings_lists: &mut PostingsListsArena,
+        documents: &mut [RawDocument<'a, 'tag>],
+        postings_lists: &mut PostingsListsArena<'tag, 'txn>,
         query_enhancer: &QueryEnhancer,
         automatons: &[QueryWordAutomaton],
     ) {
-        prepare_query_distances(documents, query_enhancer, automatons);
+        prepare_query_distances(documents, query_enhancer, automatons, postings_lists);
     }
 
     fn evaluate(
