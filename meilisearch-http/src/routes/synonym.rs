@@ -40,7 +40,7 @@ pub async fn list(ctx: Context<Data>) -> SResult<Response> {
         .map_err(ResponseError::internal)?;
 
     let synonyms_fst = synonyms_fst.unwrap_or_default();
-    let synonyms_list = synonyms_fst.stream().into_strs().unwrap();
+    let synonyms_list = synonyms_fst.stream().into_strs().map_err(ResponseError::internal)?;
 
     let mut response = HashMap::new();
 
@@ -49,12 +49,12 @@ pub async fn list(ctx: Context<Data>) -> SResult<Response> {
     for synonym in synonyms_list {
         let alternative_list = index_synonyms
             .synonyms(&reader, synonym.as_bytes())
-            .unwrap()
-            .unwrap()
-            .stream()
-            .into_strs()
-            .unwrap();
-        response.insert(synonym, alternative_list);
+            .map_err(ResponseError::internal)?;
+
+        if let Some(list) = alternative_list {
+            let list = list.stream().into_strs().map_err(ResponseError::internal)?;
+            response.insert(synonym, list);
+        }
     }
 
     Ok(tide::response::json(response))
@@ -71,13 +71,14 @@ pub async fn get(ctx: Context<Data>) -> SResult<Response> {
     let synonym_list = index
         .synonyms
         .synonyms(&reader, synonym.as_bytes())
-        .unwrap()
-        .unwrap()
-        .stream()
-        .into_strs()
-        .unwrap();
+        .map_err(ResponseError::internal)?;
 
-    Ok(tide::response::json(synonym_list))
+    let list = match synonym_list {
+        Some(list) => list.stream().into_strs().map_err(ResponseError::internal)?,
+        None => Vec::new(),
+    };
+
+    Ok(tide::response::json(list))
 }
 
 pub async fn create(mut ctx: Context<Data>) -> SResult<Response> {
@@ -217,7 +218,7 @@ pub async fn clear(ctx: Context<Data>) -> SResult<Response> {
         .map_err(ResponseError::internal)?;
 
     let synonyms_fst = synonyms_fst.unwrap_or_default();
-    let synonyms_list = synonyms_fst.stream().into_strs().unwrap();
+    let synonyms_list = synonyms_fst.stream().into_strs().map_err(ResponseError::internal)?;
 
     let mut synonyms_deletion = index.synonyms_deletion();
     for synonym in synonyms_list {
