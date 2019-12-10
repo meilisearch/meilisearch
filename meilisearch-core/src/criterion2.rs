@@ -52,38 +52,9 @@ fn prepare_query_distances<'a, 'tag, 'txn>(
     for document in documents {
         if !document.processed_distances.is_empty() { continue }
 
-        // debug!("{:?}", document.raw_matches[0].document_id);
-
         let mut processed = Vec::new();
-        let mut raw_matches = document.raw_matches.iter().peekable();
-        while let Some(m) = raw_matches.next() {
-
-            // let automaton = &automatons[m.query_index as usize];
-
-            // debug!("{:?} {:?}", m, automaton);
-            // debug!("{:?}", &postings_lists[m.postings_list]);
-
-            // match automaton.phrase_query {
-            //     Some((0, len)) => {
-            //         match raw_matches.peek() {
-            //             Some(BareMatch { query_index, .. }) => {
-            //                 if *query_index != m.query_index + 1 {
-            //                     raw_matches.next();
-            //                     continue
-            //                 }
-            //             },
-            //             None => continue,
-            //         }
-            //     },
-            //     Some((_, _)) => continue,
-            //     None => (),
-            // }
-
-            // FIXME we really need to take splitted words into account
-            //       those must be seen at the same level as the non-splitteds
-            // if automatons[m.query_index as usize].phrase_query.is_some() {
-            //     continue
-            // }
+        for m in document.raw_matches.iter() {
+            if postings_lists[m.postings_list].is_empty() { continue }
 
             let range = query_enhancer.replacement(m.query_index as u32);
             let new_len = cmp::max(range.end as usize, processed.len());
@@ -98,8 +69,6 @@ fn prepare_query_distances<'a, 'tag, 'txn>(
                 };
             }
         }
-
-        // debug!("{:?}", processed);
 
         document.processed_distances = processed;
     }
@@ -444,54 +413,11 @@ impl Criterion for StableDocId {
 }
 
 pub fn multiword_rewrite_matches(
-    simple_matches: &mut [SimpleMatch],
+    matches: &mut [SimpleMatch],
     query_enhancer: &QueryEnhancer,
     automatons: &[QueryWordAutomaton],
 ) -> SetBuf<SimpleMatch>
 {
-    let mut matches = Vec::with_capacity(simple_matches.len());
-
-    // let before_sort = Instant::now();
-    // we sort the matches by word index to make them rewritable
-    simple_matches.sort_unstable_by_key(|m| (m.attribute, m.query_index, m.word_index));
-    // debug!("sorting dirty matches took {:.02?}", before_sort.elapsed());
-
-    for same_attribute in simple_matches.linear_group_by_key(|m| m.attribute) {
-        let iter = same_attribute.linear_group_by_key(|m| m.query_index);
-        let mut iter = iter.peekable();
-
-        while let Some(same_query_index) = iter.next() {
-            let query_index = same_query_index[0].query_index;
-
-            // TODO we need to support phrase query of longer length
-            if let Some((i, len)) = automatons[query_index as usize].phrase_query {
-                if i != 0 { continue }
-
-                // is the next query_index group the required one
-                if iter.peek().map_or(false, |g| g[0].query_index == query_index + 1) {
-                    if let Some(next) = iter.next() {
-                        for ma in same_query_index {
-                            for mb in next {
-                                if ma.word_index == mb.word_index + 1 {
-                                    matches.push(*ma);
-                                    matches.push(*mb);
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                matches.extend_from_slice(same_query_index);
-            }
-        }
-    }
-
-    // let is_phrase_query = automatons[match_.query_index as usize].phrase_query_len.is_some();
-    // let next_query_index = match_.query_index + 1;
-    // if is_phrase_query && iter.remainder().iter().find(|m| m.query_index == next_query_index).is_none() {
-    //     continue
-    // }
-
     matches.sort_unstable_by_key(|m| (m.attribute, m.word_index));
 
     let mut padded_matches = Vec::with_capacity(matches.len());
