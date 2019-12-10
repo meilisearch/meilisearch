@@ -15,8 +15,9 @@ use levenshtein_automata::DFA;
 use log::debug;
 use meilisearch_tokenizer::{is_cjk, split_query_string};
 use meilisearch_types::{DocIndex, Highlight};
-use sdset::Set;
+use sdset::{Set, SetBuf};
 use slice_group_by::{GroupBy, GroupByMut};
+use itertools::EitherOrBoth;
 
 use crate::automaton::NGRAMS;
 use crate::automaton::{QueryEnhancer, QueryEnhancerBuilder};
@@ -61,7 +62,7 @@ pub fn bucket_sort<'c>(
     let mut raw_documents = Vec::new();
     for raw_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
         prefiltered_documents += 1;
-        if let Some(raw_document) = RawDocument::new(raw_matches, &automatons, &arena) {
+        if let Some(raw_document) = RawDocument::new(raw_matches, &automatons, &mut arena) {
             raw_documents.push(raw_document);
         }
     }
@@ -78,7 +79,7 @@ pub fn bucket_sort<'c>(
 
     let criteria = [
         Box::new(Typo) as Box<dyn Criterion>,
-        Box::new(Words) as Box<dyn Criterion>,
+        Box::new(Words),
         Box::new(Proximity),
         Box::new(Attribute),
         Box::new(WordsPosition),
@@ -154,12 +155,10 @@ impl<'a, 'tag> RawDocument<'a, 'tag> {
     fn new<'txn>(
         raw_matches: &'a mut [BareMatch<'tag>],
         automatons: &[QueryWordAutomaton],
-        postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
+        postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
     ) -> Option<RawDocument<'a, 'tag>>
     {
         raw_matches.sort_unstable_by_key(|m| m.query_index);
-
-        // debug!("{:?} {:?}", raw_matches[0].document_id, raw_matches);
 
         let mut previous_word = None;
         for i in 0..raw_matches.len() {
@@ -168,10 +167,17 @@ impl<'a, 'tag> RawDocument<'a, 'tag> {
 
             match auta.phrase_query {
                 Some((0, _)) => {
-                    previous_word = Some(a.query_index);
-                    let b = raw_matches.get(i + 1)?;
+                    let b = match raw_matches.get(i + 1) {
+                        Some(b) => b,
+                        None => {
+                            postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(Vec::new()));
+                            continue;
+                        }
+                    };
+
                     if a.query_index + 1 != b.query_index {
-                        return None;
+                        postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(Vec::new()));
+                        continue
                     }
 
                     let pla = &postings_lists[a.postings_list];
@@ -181,16 +187,40 @@ impl<'a, 'tag> RawDocument<'a, 'tag> {
                         a.attribute.cmp(&b.attribute).then((a.word_index + 1).cmp(&b.word_index))
                     });
 
-                    if !iter.any(|eb| eb.is_both()) { return None }
+                    let mut newa = Vec::new();
+                    let mut newb = Vec::new();
+
+                    for eb in iter {
+                        if let EitherOrBoth::Both(a, b) = eb {
+                            newa.push(*a);
+                            newb.push(*b);
+                        }
+                    }
+
+
+                    if !newa.is_empty() {
+                        previous_word = Some(a.query_index);
+                        postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(newa));
+                        postings_lists[b.postings_list].rewrite_with(SetBuf::new_unchecked(newb));
+
+                    } else {
+                        // TODO use SetBuf::default when merged
+                        postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(Vec::new()));
+                        postings_lists[b.postings_list].rewrite_with(SetBuf::new_unchecked(Vec::new()));
+                    }
                 },
                 Some((1, _)) => {
                     if previous_word.take() != Some(a.query_index - 1) {
-                        return None;
+                        postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(Vec::new()));
                     }
                 },
                 Some((_, _)) => unreachable!(),
                 None => (),
             }
+        }
+
+        if raw_matches.iter().all(|rm| postings_lists[rm.postings_list].is_empty()) {
+            return None
         }
 
         Some(RawDocument {
@@ -231,50 +261,84 @@ pub struct SimpleMatch {
 }
 
 #[derive(Clone)]
-pub struct PostingsListView<'txn> {
-    input: Rc<[u8]>,
-    postings_list: Rc<Cow<'txn, Set<DocIndex>>>,
-    offset: usize,
-    len: usize,
+pub enum PostingsListView<'txn> {
+    Original {
+        input: Rc<[u8]>,
+        postings_list: Rc<Cow<'txn, Set<DocIndex>>>,
+        offset: usize,
+        len: usize,
+    },
+    Rewritten {
+        input: Rc<[u8]>,
+        postings_list: SetBuf<DocIndex>,
+    },
 }
 
 impl fmt::Debug for PostingsListView<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PostingsListView")
-            .field("input", &std::str::from_utf8(&self.input).unwrap())
+            .field("input", &std::str::from_utf8(&self.input()).unwrap())
             .field("postings_list", &self.as_ref())
             .finish()
     }
 }
 
 impl<'txn> PostingsListView<'txn> {
-    pub fn new(input: Rc<[u8]>, postings_list: Rc<Cow<'txn, Set<DocIndex>>>) -> PostingsListView<'txn> {
+    pub fn original(input: Rc<[u8]>, postings_list: Rc<Cow<'txn, Set<DocIndex>>>) -> PostingsListView<'txn> {
         let len = postings_list.len();
-        PostingsListView { input, postings_list, offset: 0, len }
+        PostingsListView::Original { input, postings_list, offset: 0, len }
+    }
+
+    pub fn rewritten(input: Rc<[u8]>, postings_list: SetBuf<DocIndex>) -> PostingsListView<'txn> {
+        PostingsListView::Rewritten { input, postings_list }
+    }
+
+    pub fn rewrite_with(&mut self, postings_list: SetBuf<DocIndex>) {
+        *self = match self {
+            PostingsListView::Original { input, .. } => {
+                PostingsListView::Rewritten { input: input.clone(), postings_list }
+            },
+            PostingsListView::Rewritten { input, .. } => {
+                PostingsListView::Rewritten { input: input.clone(), postings_list }
+            },
+        };
     }
 
     pub fn len(&self) -> usize {
-        self.len
+        match self {
+            PostingsListView::Original { len, .. } => *len,
+            PostingsListView::Rewritten { postings_list, .. } => postings_list.len(),
+        }
     }
 
     pub fn input(&self) -> &[u8] {
-        &self.input
+        match self {
+            PostingsListView::Original { ref input, .. } => input,
+            PostingsListView::Rewritten { ref input, .. } => input,
+        }
     }
 
-    pub fn range(&self, offset: usize, len: usize) -> PostingsListView<'txn> {
-        assert!(offset + len <= self.len);
-        PostingsListView {
-            input: self.input.clone(),
-            postings_list: self.postings_list.clone(),
-            offset: self.offset + offset,
-            len: len,
+    pub fn range(&self, range_offset: usize, range_len: usize) -> PostingsListView<'txn> {
+        match self {
+            PostingsListView::Original { input, postings_list, offset, len } => {
+                assert!(range_offset + range_len <= *len);
+                PostingsListView::Original {
+                    input: input.clone(),
+                    postings_list: postings_list.clone(),
+                    offset: offset + range_offset,
+                    len: range_len,
+                }
+            },
+            PostingsListView::Rewritten { .. } => {
+                panic!("Cannot create a range on a rewritten postings list view");
+            }
         }
     }
 }
 
 impl AsRef<Set<DocIndex>> for PostingsListView<'_> {
     fn as_ref(&self) -> &Set<DocIndex> {
-        Set::new_unchecked(&self.postings_list[self.offset..self.offset + self.len])
+        self
     }
 }
 
@@ -282,7 +346,12 @@ impl Deref for PostingsListView<'_> {
     type Target = Set<DocIndex>;
 
     fn deref(&self) -> &Set<DocIndex> {
-        Set::new_unchecked(&self.postings_list[self.offset..self.offset + self.len])
+        match *self {
+            PostingsListView::Original { ref postings_list, offset, len, .. } => {
+                Set::new_unchecked(&postings_list[offset..offset + len])
+            },
+            PostingsListView::Rewritten { ref postings_list, .. } => postings_list,
+        }
     }
 }
 
@@ -335,7 +404,7 @@ fn fetch_matches<'txn, 'tag>(
 
                 let input = Rc::from(input);
                 let postings_list = Rc::new(postings_list);
-                let postings_list_view = PostingsListView::new(input, postings_list);
+                let postings_list_view = PostingsListView::original(input, postings_list);
 
                 let mut offset = 0;
                 for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
