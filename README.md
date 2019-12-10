@@ -63,7 +63,7 @@ cargo run --release
 We provide a movie dataset that you can use for testing purposes.
 
 ```bash
-curl -L 'https://bit.ly/33MKvk4' -o movies.json
+curl -L 'https://bit.ly/2PAcw9l' -o movies.json
 ```
 
 MeiliSearch can serve multiple indexes, with different kinds of documents,
