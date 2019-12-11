@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use fst::{set::OpBuilder, SetBuilder};
+use fst::SetBuilder;
 use sdset::SetBuf;
 
 use crate::database::{MainT, UpdateT};
@@ -9,20 +9,20 @@ use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::update::{next_update_id, Update};
 use crate::{store, MResult};
 
-pub struct SynonymsAddition {
+pub struct SynonymsUpdate {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     updates_notifier: UpdateEventsEmitter,
     synonyms: BTreeMap<String, Vec<String>>,
 }
 
-impl SynonymsAddition {
+impl SynonymsUpdate {
     pub fn new(
         updates_store: store::Updates,
         updates_results_store: store::UpdatesResults,
         updates_notifier: UpdateEventsEmitter,
-    ) -> SynonymsAddition {
-        SynonymsAddition {
+    ) -> SynonymsUpdate {
+        SynonymsUpdate {
             updates_store,
             updates_results_store,
             updates_notifier,
@@ -46,7 +46,7 @@ impl SynonymsAddition {
 
     pub fn finalize(self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
-        let update_id = push_synonyms_addition(
+        let update_id = push_synonyms_update(
             writer,
             self.updates_store,
             self.updates_results_store,
@@ -56,7 +56,7 @@ impl SynonymsAddition {
     }
 }
 
-pub fn push_synonyms_addition(
+pub fn push_synonyms_update(
     writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
@@ -64,20 +64,20 @@ pub fn push_synonyms_addition(
 ) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
-    let update = Update::synonyms_addition(addition);
+    let update = Update::synonyms_update(addition);
     updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
 }
 
-pub fn apply_synonyms_addition(
+pub fn apply_synonyms_update(
     writer: &mut heed::RwTxn<MainT>,
     main_store: store::Main,
     synonyms_store: store::Synonyms,
     addition: BTreeMap<String, Vec<String>>,
 ) -> MResult<()> {
     let mut synonyms_builder = SetBuilder::memory();
-
+    synonyms_store.clear(writer)?;
     for (word, alternatives) in addition {
         synonyms_builder.insert(&word).unwrap();
 
@@ -92,27 +92,10 @@ pub fn apply_synonyms_addition(
         synonyms_store.put_synonyms(writer, word.as_bytes(), &alternatives)?;
     }
 
-    let delta_synonyms = synonyms_builder
+    let synonyms = synonyms_builder
         .into_inner()
         .and_then(fst::Set::from_bytes)
         .unwrap();
-
-    let synonyms = match main_store.synonyms_fst(writer)? {
-        Some(synonyms) => {
-            let op = OpBuilder::new()
-                .add(synonyms.stream())
-                .add(delta_synonyms.stream())
-                .r#union();
-
-            let mut synonyms_builder = SetBuilder::memory();
-            synonyms_builder.extend_stream(op).unwrap();
-            synonyms_builder
-                .into_inner()
-                .and_then(fst::Set::from_bytes)
-                .unwrap()
-        }
-        None => delta_synonyms,
-    };
 
     main_store.put_synonyms_fst(writer, &synonyms)?;
 

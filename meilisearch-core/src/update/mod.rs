@@ -5,8 +5,7 @@ mod documents_deletion;
 mod schema_update;
 mod stop_words_addition;
 mod stop_words_deletion;
-mod synonyms_addition;
-mod synonyms_deletion;
+mod synonyms_update;
 
 pub use self::clear_all::{apply_clear_all, push_clear_all};
 pub use self::customs_update::{apply_customs_update, push_customs_update};
@@ -17,8 +16,7 @@ pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
 pub use self::schema_update::{apply_schema_update, push_schema_update};
 pub use self::stop_words_addition::{apply_stop_words_addition, StopWordsAddition};
 pub use self::stop_words_deletion::{apply_stop_words_deletion, StopWordsDeletion};
-pub use self::synonyms_addition::{apply_synonyms_addition, SynonymsAddition};
-pub use self::synonyms_deletion::{apply_synonyms_deletion, SynonymsDeletion};
+pub use self::synonyms_update::{apply_synonyms_update, SynonymsUpdate};
 
 use std::cmp;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -82,16 +80,9 @@ impl Update {
         }
     }
 
-    fn synonyms_addition(data: BTreeMap<String, Vec<String>>) -> Update {
+    fn synonyms_update(data: BTreeMap<String, Vec<String>>) -> Update {
         Update {
-            data: UpdateData::SynonymsAddition(data),
-            enqueued_at: Utc::now(),
-        }
-    }
-
-    fn synonyms_deletion(data: BTreeMap<String, Option<Vec<String>>>) -> Update {
-        Update {
-            data: UpdateData::SynonymsDeletion(data),
+            data: UpdateData::SynonymsUpdate(data),
             enqueued_at: Utc::now(),
         }
     }
@@ -119,8 +110,7 @@ pub enum UpdateData {
     DocumentsAddition(Vec<HashMap<String, serde_json::Value>>),
     DocumentsPartial(Vec<HashMap<String, serde_json::Value>>),
     DocumentsDeletion(Vec<DocumentId>),
-    SynonymsAddition(BTreeMap<String, Vec<String>>),
-    SynonymsDeletion(BTreeMap<String, Option<Vec<String>>>),
+    SynonymsUpdate(BTreeMap<String, Vec<String>>),
     StopWordsAddition(BTreeSet<String>),
     StopWordsDeletion(BTreeSet<String>),
 }
@@ -140,11 +130,8 @@ impl UpdateData {
             UpdateData::DocumentsDeletion(deletion) => UpdateType::DocumentsDeletion {
                 number: deletion.len(),
             },
-            UpdateData::SynonymsAddition(addition) => UpdateType::SynonymsAddition {
+            UpdateData::SynonymsUpdate(addition) => UpdateType::SynonymsUpdate {
                 number: addition.len(),
-            },
-            UpdateData::SynonymsDeletion(deletion) => UpdateType::SynonymsDeletion {
-                number: deletion.len(),
             },
             UpdateData::StopWordsAddition(addition) => UpdateType::StopWordsAddition {
                 number: addition.len(),
@@ -165,8 +152,7 @@ pub enum UpdateType {
     DocumentsAddition { number: usize },
     DocumentsPartial { number: usize },
     DocumentsDeletion { number: usize },
-    SynonymsAddition { number: usize },
-    SynonymsDeletion { number: usize },
+    SynonymsUpdate { number: usize },
     StopWordsAddition { number: usize },
     StopWordsDeletion { number: usize },
 }
@@ -361,25 +347,14 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        UpdateData::SynonymsAddition(synonyms) => {
+        UpdateData::SynonymsUpdate(synonyms) => {
             let start = Instant::now();
 
-            let update_type = UpdateType::SynonymsAddition {
+            let update_type = UpdateType::SynonymsUpdate {
                 number: synonyms.len(),
             };
 
-            let result = apply_synonyms_addition(writer, index.main, index.synonyms, synonyms);
-
-            (update_type, result, start.elapsed())
-        }
-        UpdateData::SynonymsDeletion(synonyms) => {
-            let start = Instant::now();
-
-            let update_type = UpdateType::SynonymsDeletion {
-                number: synonyms.len(),
-            };
-
-            let result = apply_synonyms_deletion(writer, index.main, index.synonyms, synonyms);
+            let result = apply_synonyms_update(writer, index.main, index.synonyms, synonyms);
 
             (update_type, result, start.elapsed())
         }

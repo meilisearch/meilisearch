@@ -179,16 +179,8 @@ impl Index {
         update::push_clear_all(writer, self.updates, self.updates_results)
     }
 
-    pub fn synonyms_addition(&self) -> update::SynonymsAddition {
-        update::SynonymsAddition::new(
-            self.updates,
-            self.updates_results,
-            self.updates_notifier.clone(),
-        )
-    }
-
-    pub fn synonyms_deletion(&self) -> update::SynonymsDeletion {
-        update::SynonymsDeletion::new(
+    pub fn synonyms_update(&self) -> update::SynonymsUpdate {
+        update::SynonymsUpdate::new(
             self.updates,
             self.updates_results,
             self.updates_notifier.clone(),
