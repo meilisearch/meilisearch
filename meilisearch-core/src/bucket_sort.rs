@@ -1,9 +1,6 @@
 use std::ops::Deref;
 use std::fmt;
 use std::borrow::Cow;
-use std::cmp::Ordering;
-use std::collections::HashSet;
-use std::io::Write;
 use std::mem;
 use std::ops::Range;
 use std::rc::Rc;
@@ -17,15 +14,15 @@ use meilisearch_tokenizer::{is_cjk, split_query_string};
 use meilisearch_types::{DocIndex, Highlight};
 use sdset::{Set, SetBuf};
 use slice_group_by::{GroupBy, GroupByMut};
-use itertools::EitherOrBoth;
 
 use crate::automaton::NGRAMS;
 use crate::automaton::{QueryEnhancer, QueryEnhancerBuilder};
 use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
 use crate::automaton::{normalize_str, split_best_frequency};
 
-use crate::criterion2::*;
+use crate::criterion::Criteria;
 use crate::levenshtein::prefix_damerau_levenshtein;
+use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
 
@@ -33,6 +30,7 @@ pub fn bucket_sort<'c>(
     reader: &heed::RoTxn<MainT>,
     query: &str,
     range: Range<usize>,
+    criteria: Criteria<'c>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
@@ -76,17 +74,7 @@ pub fn bucket_sort<'c>(
 
     let mut groups = vec![raw_documents.as_mut_slice()];
 
-    let criteria = [
-        Box::new(Typo) as Box<dyn Criterion>,
-        Box::new(Words),
-        Box::new(Proximity),
-        Box::new(Attribute),
-        Box::new(WordsPosition),
-        Box::new(Exact),
-        Box::new(StableDocId),
-    ];
-
-    'criteria: for criterion in &criteria {
+    'criteria: for criterion in criteria.as_ref() {
         let tmp_groups = mem::replace(&mut groups, Vec::new());
         let mut documents_seen = 0;
 
@@ -131,95 +119,13 @@ pub fn bucket_sort<'c>(
         }).collect();
 
         Document {
-            id: d.raw_matches[0].document_id,
+            id: d.id,
             highlights,
             #[cfg(test)] matches: Vec::new(),
         }
     });
 
     Ok(iter.collect())
-}
-
-pub struct RawDocument<'a, 'tag> {
-    pub raw_matches: &'a mut [BareMatch<'tag>],
-    pub processed_matches: Vec<SimpleMatch>,
-    /// The list of minimum `distance` found
-    pub processed_distances: Vec<Option<u8>>,
-}
-
-impl<'a, 'tag> RawDocument<'a, 'tag> {
-    fn new<'txn>(
-        raw_matches: &'a mut [BareMatch<'tag>],
-        automatons: &[QueryWordAutomaton],
-        postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
-    ) -> Option<RawDocument<'a, 'tag>>
-    {
-        raw_matches.sort_unstable_by_key(|m| m.query_index);
-
-        let mut previous_word = None;
-        for i in 0..raw_matches.len() {
-            let a = &raw_matches[i];
-            let auta = &automatons[a.query_index as usize];
-
-            match auta.phrase_query {
-                Some((0, _)) => {
-                    let b = match raw_matches.get(i + 1) {
-                        Some(b) => b,
-                        None => {
-                            postings_lists[a.postings_list].rewrite_with(SetBuf::default());
-                            continue;
-                        }
-                    };
-
-                    if a.query_index + 1 != b.query_index {
-                        postings_lists[a.postings_list].rewrite_with(SetBuf::default());
-                        continue
-                    }
-
-                    let pla = &postings_lists[a.postings_list];
-                    let plb = &postings_lists[b.postings_list];
-
-                    let mut iter = itertools::merge_join_by(pla.iter(), plb.iter(), |a, b| {
-                        a.attribute.cmp(&b.attribute).then((a.word_index + 1).cmp(&b.word_index))
-                    });
-
-                    let mut newa = Vec::new();
-                    let mut newb = Vec::new();
-
-                    for eb in iter {
-                        if let EitherOrBoth::Both(a, b) = eb {
-                            newa.push(*a);
-                            newb.push(*b);
-                        }
-                    }
-
-                    if !newa.is_empty() {
-                        previous_word = Some(a.query_index);
-                    }
-
-                    postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(newa));
-                    postings_lists[b.postings_list].rewrite_with(SetBuf::new_unchecked(newb));
-                },
-                Some((1, _)) => {
-                    if previous_word.take() != Some(a.query_index - 1) {
-                        postings_lists[a.postings_list].rewrite_with(SetBuf::default());
-                    }
-                },
-                Some((_, _)) => unreachable!(),
-                None => (),
-            }
-        }
-
-        if raw_matches.iter().all(|rm| postings_lists[rm.postings_list].is_empty()) {
-            return None
-        }
-
-        Some(RawDocument {
-            raw_matches,
-            processed_matches: Vec::new(),
-            processed_distances: Vec::new(),
-        })
-    }
 }
 
 pub struct BareMatch<'tag> {

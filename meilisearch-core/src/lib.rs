@@ -20,7 +20,6 @@ mod update;
 
 // TODO replace
 mod bucket_sort;
-mod criterion2;
 
 pub use self::database::{BoxUpdateFn, Database, MainT, UpdateT};
 pub use self::error::{Error, MResult};
@@ -31,62 +30,13 @@ pub use self::store::Index;
 pub use self::update::{EnqueuedUpdateResult, ProcessedUpdateResult, UpdateStatus, UpdateType};
 pub use meilisearch_types::{DocIndex, DocumentId, Highlight, AttrCount};
 
-#[doc(hidden)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TmpMatch {
-    pub query_index: u32,
-    pub distance: u8,
-    pub attribute: u16,
-    pub word_index: u16,
-    pub is_exact: bool,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Document {
     pub id: DocumentId,
     pub highlights: Vec<Highlight>,
 
-    #[cfg(test)]
-    pub matches: Vec<TmpMatch>,
-}
-
-impl Document {
-    #[cfg(not(test))]
-    fn from_raw(raw: RawDocument) -> Document {
-        Document {
-            id: raw.id,
-            highlights: raw.highlights,
-        }
-    }
-
-    #[cfg(test)]
-    fn from_raw(raw: RawDocument) -> Document {
-        let len = raw.query_index().len();
-        let mut matches = Vec::with_capacity(len);
-
-        let query_index = raw.query_index();
-        let distance = raw.distance();
-        let attribute = raw.attribute();
-        let word_index = raw.word_index();
-        let is_exact = raw.is_exact();
-
-        for i in 0..len {
-            let match_ = TmpMatch {
-                query_index: query_index[i],
-                distance: distance[i],
-                attribute: attribute[i],
-                word_index: word_index[i],
-                is_exact: is_exact[i],
-            };
-            matches.push(match_);
-        }
-
-        Document {
-            id: raw.id,
-            matches,
-            highlights: raw.highlights,
-        }
-    }
+    // #[cfg(test)]
+    // pub matches: Vec<TmpMatch>,
 }
 
 #[cfg(test)]

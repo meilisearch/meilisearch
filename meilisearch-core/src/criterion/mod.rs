@@ -1,58 +1,58 @@
-mod document_id;
-mod exact;
-mod number_of_words;
-mod sort_by_attr;
-mod sum_of_typos;
-mod sum_of_words_attribute;
-mod sum_of_words_position;
-mod words_proximity;
+use std::cmp::{self, Ordering};
 
+use compact_arena::SmallArena;
+use sdset::SetBuf;
+use slice_group_by::GroupBy;
+
+use crate::automaton::QueryEnhancer;
+use crate::bucket_sort::{SimpleMatch, PostingsListView, QueryWordAutomaton};
 use crate::RawDocument;
-use std::cmp::Ordering;
 
-pub use self::{
-    document_id::DocumentId, exact::Exact, number_of_words::NumberOfWords,
-    sort_by_attr::SortByAttr, sum_of_typos::SumOfTypos,
-    sum_of_words_attribute::SumOfWordsAttribute, sum_of_words_position::SumOfWordsPosition,
-    words_proximity::WordsProximity,
-};
+mod typo;
+mod words;
+mod proximity;
+mod attribute;
+mod words_position;
+mod exact;
+mod document_id;
+mod sort_by_attr;
 
-pub trait Criterion: Send + Sync {
-    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering;
+pub use self::typo::Typo;
+pub use self::words::Words;
+pub use self::proximity::Proximity;
+pub use self::attribute::Attribute;
+pub use self::words_position::WordsPosition;
+pub use self::exact::Exact;
+pub use self::document_id::DocumentId;
+pub use self::sort_by_attr::SortByAttr;
 
+pub trait Criterion {
     fn name(&self) -> &str;
 
+    fn prepare<'a, 'tag, 'txn>(
+        &self,
+        documents: &mut [RawDocument<'a, 'tag>],
+        postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
+        query_enhancer: &QueryEnhancer,
+        automatons: &[QueryWordAutomaton],
+    );
+
+    fn evaluate<'a, 'tag, 'txn>(
+        &self,
+        lhs: &RawDocument<'a, 'tag>,
+        rhs: &RawDocument<'a, 'tag>,
+        postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
+    ) -> Ordering;
+
     #[inline]
-    fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
-        self.evaluate(lhs, rhs) == Ordering::Equal
-    }
-}
-
-impl<'a, T: Criterion + ?Sized + Send + Sync> Criterion for &'a T {
-    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
-        (**self).evaluate(lhs, rhs)
-    }
-
-    fn name(&self) -> &str {
-        (**self).name()
-    }
-
-    fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
-        (**self).eq(lhs, rhs)
-    }
-}
-
-impl<T: Criterion + ?Sized> Criterion for Box<T> {
-    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
-        (**self).evaluate(lhs, rhs)
-    }
-
-    fn name(&self) -> &str {
-        (**self).name()
-    }
-
-    fn eq(&self, lhs: &RawDocument, rhs: &RawDocument) -> bool {
-        (**self).eq(lhs, rhs)
+    fn eq<'a, 'tag, 'txn>(
+        &self,
+        lhs: &RawDocument<'a, 'tag>,
+        rhs: &RawDocument<'a, 'tag>,
+        postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
+    ) -> bool
+    {
+        self.evaluate(lhs, rhs, postings_lists) == Ordering::Equal
     }
 }
 
@@ -103,11 +103,11 @@ pub struct Criteria<'a> {
 impl<'a> Default for Criteria<'a> {
     fn default() -> Self {
         CriteriaBuilder::with_capacity(7)
-            .add(SumOfTypos)
-            .add(NumberOfWords)
-            .add(WordsProximity)
-            .add(SumOfWordsAttribute)
-            .add(SumOfWordsPosition)
+            .add(Typo)
+            .add(Words)
+            .add(Proximity)
+            .add(Attribute)
+            .add(WordsPosition)
             .add(Exact)
             .add(DocumentId)
             .build()
@@ -118,4 +118,166 @@ impl<'a> AsRef<[Box<dyn Criterion + 'a>]> for Criteria<'a> {
     fn as_ref(&self) -> &[Box<dyn Criterion + 'a>] {
         &self.inner
     }
+}
+
+fn prepare_query_distances<'a, 'tag, 'txn>(
+    documents: &mut [RawDocument<'a, 'tag>],
+    query_enhancer: &QueryEnhancer,
+    automatons: &[QueryWordAutomaton],
+    postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
+) {
+    for document in documents {
+        if !document.processed_distances.is_empty() { continue }
+
+        let mut processed = Vec::new();
+        for m in document.raw_matches.iter() {
+            if postings_lists[m.postings_list].is_empty() { continue }
+
+            let range = query_enhancer.replacement(m.query_index as u32);
+            let new_len = cmp::max(range.end as usize, processed.len());
+            processed.resize(new_len, None);
+
+            for index in range {
+                let index = index as usize;
+                processed[index] = match processed[index] {
+                    Some(distance) if distance > m.distance => Some(m.distance),
+                    Some(distance) => Some(distance),
+                    None => Some(m.distance),
+                };
+            }
+        }
+
+        document.processed_distances = processed;
+    }
+}
+
+fn prepare_raw_matches<'a, 'tag, 'txn>(
+    documents: &mut [RawDocument<'a, 'tag>],
+    postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
+    query_enhancer: &QueryEnhancer,
+    automatons: &[QueryWordAutomaton],
+) {
+    for document in documents {
+        if !document.processed_matches.is_empty() { continue }
+
+        let mut processed = Vec::new();
+        for m in document.raw_matches.iter() {
+            let postings_list = &postings_lists[m.postings_list];
+            processed.reserve(postings_list.len());
+            for di in postings_list.as_ref() {
+                let simple_match = SimpleMatch {
+                    query_index: m.query_index,
+                    distance: m.distance,
+                    attribute: di.attribute,
+                    word_index: di.word_index,
+                    is_exact: m.is_exact,
+                };
+                processed.push(simple_match);
+            }
+        }
+
+        let processed = multiword_rewrite_matches(&mut processed, query_enhancer, automatons);
+        document.processed_matches = processed.into_vec();
+    }
+}
+
+fn multiword_rewrite_matches(
+    matches: &mut [SimpleMatch],
+    query_enhancer: &QueryEnhancer,
+    automatons: &[QueryWordAutomaton],
+) -> SetBuf<SimpleMatch>
+{
+    matches.sort_unstable_by_key(|m| (m.attribute, m.word_index));
+
+    let mut padded_matches = Vec::with_capacity(matches.len());
+
+    // let before_padding = Instant::now();
+    // for each attribute of each document
+    for same_document_attribute in matches.linear_group_by_key(|m| m.attribute) {
+        // padding will only be applied
+        // to word indices in the same attribute
+        let mut padding = 0;
+        let mut iter = same_document_attribute.linear_group_by_key(|m| m.word_index);
+
+        // for each match at the same position
+        // in this document attribute
+        while let Some(same_word_index) = iter.next() {
+            // find the biggest padding
+            let mut biggest = 0;
+            for match_ in same_word_index {
+                let mut replacement = query_enhancer.replacement(match_.query_index as u32);
+                let replacement_len = replacement.len();
+                let nexts = iter.remainder().linear_group_by_key(|m| m.word_index);
+
+                if let Some(query_index) = replacement.next() {
+                    let word_index = match_.word_index + padding as u16;
+                    let query_index = query_index as u16;
+                    let match_ = SimpleMatch { query_index, word_index, ..*match_ };
+                    padded_matches.push(match_);
+                }
+
+                let mut found = false;
+
+                // look ahead and if there already is a match
+                // corresponding to this padding word, abort the padding
+                'padding: for (x, next_group) in nexts.enumerate() {
+                    for (i, query_index) in replacement.clone().enumerate().skip(x) {
+                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
+                        let query_index = query_index as u16;
+                        let padmatch = SimpleMatch { query_index, word_index, ..*match_ };
+
+                        for nmatch_ in next_group {
+                            let mut rep = query_enhancer.replacement(nmatch_.query_index as u32);
+                            let query_index = rep.next().unwrap() as u16;
+                            if query_index == padmatch.query_index {
+                                if !found {
+                                    // if we find a corresponding padding for the
+                                    // first time we must push preceding paddings
+                                    for (i, query_index) in replacement.clone().enumerate().take(i)
+                                    {
+                                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
+                                        let query_index = query_index as u16;
+                                        let match_ = SimpleMatch { query_index, word_index, ..*match_ };
+                                        padded_matches.push(match_);
+                                        biggest = biggest.max(i + 1);
+                                    }
+                                }
+
+                                padded_matches.push(padmatch);
+                                found = true;
+                                continue 'padding;
+                            }
+                        }
+                    }
+
+                    // if we do not find a corresponding padding in the
+                    // next groups so stop here and pad what was found
+                    break;
+                }
+
+                if !found {
+                    // if no padding was found in the following matches
+                    // we must insert the entire padding
+                    for (i, query_index) in replacement.enumerate() {
+                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
+                        let query_index = query_index as u16;
+                        let match_ = SimpleMatch { query_index, word_index, ..*match_ };
+                        padded_matches.push(match_);
+                    }
+
+                    biggest = biggest.max(replacement_len - 1);
+                }
+            }
+
+            padding += biggest;
+        }
+    }
+
+    // debug!("padding matches took {:.02?}", before_padding.elapsed());
+
+    // With this check we can see that the loop above takes something
+    // like 43% of the search time even when no rewrite is needed.
+    // assert_eq!(before_matches, padded_matches);
+
+    SetBuf::from_dirty(padded_matches)
 }
