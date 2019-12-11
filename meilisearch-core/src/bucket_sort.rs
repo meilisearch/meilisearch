@@ -121,7 +121,6 @@ pub fn bucket_sort<'c>(
             let postings_list = &arena[sm.postings_list];
             let input = postings_list.input();
             let query = &automatons[sm.query_index as usize].query;
-            debug!("{:?} contains {:?}", d.raw_matches[0].document_id, query);
             postings_list.iter().map(move |m| {
                 let covered_area = if query.len() > input.len() {
                     input.len()
@@ -131,8 +130,6 @@ pub fn bucket_sort<'c>(
                 Highlight { attribute: m.attribute, char_index: m.char_index, char_length: covered_area as u16 }
             })
         }).collect();
-
-        debug!("{:?} contains {:?}", d.raw_matches[0].document_id, d.processed_distances);
 
         Document {
             id: d.raw_matches[0].document_id,
@@ -170,13 +167,13 @@ impl<'a, 'tag> RawDocument<'a, 'tag> {
                     let b = match raw_matches.get(i + 1) {
                         Some(b) => b,
                         None => {
-                            postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(Vec::new()));
+                            postings_lists[a.postings_list].rewrite_with(SetBuf::default());
                             continue;
                         }
                     };
 
                     if a.query_index + 1 != b.query_index {
-                        postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(Vec::new()));
+                        postings_lists[a.postings_list].rewrite_with(SetBuf::default());
                         continue
                     }
 
@@ -197,21 +194,16 @@ impl<'a, 'tag> RawDocument<'a, 'tag> {
                         }
                     }
 
-
                     if !newa.is_empty() {
                         previous_word = Some(a.query_index);
-                        postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(newa));
-                        postings_lists[b.postings_list].rewrite_with(SetBuf::new_unchecked(newb));
-
-                    } else {
-                        // TODO use SetBuf::default when merged
-                        postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(Vec::new()));
-                        postings_lists[b.postings_list].rewrite_with(SetBuf::new_unchecked(Vec::new()));
                     }
+
+                    postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(newa));
+                    postings_lists[b.postings_list].rewrite_with(SetBuf::new_unchecked(newb));
                 },
                 Some((1, _)) => {
                     if previous_word.take() != Some(a.query_index - 1) {
-                        postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(Vec::new()));
+                        postings_lists[a.postings_list].rewrite_with(SetBuf::default());
                     }
                 },
                 Some((_, _)) => unreachable!(),
