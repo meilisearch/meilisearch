@@ -1,5 +1,5 @@
 use std::ops::Deref;
-use std::fmt;
+use std::{cmp, fmt};
 use std::borrow::Cow;
 use std::mem;
 use std::ops::Range;
@@ -8,43 +8,68 @@ use std::time::{Duration, Instant};
 
 use compact_arena::{SmallArena, Idx32, mk_arena};
 use fst::{IntoStreamer, Streamer};
+use hashbrown::HashMap;
 use levenshtein_automata::DFA;
 use log::debug;
 use meilisearch_tokenizer::{is_cjk, split_query_string};
-use meilisearch_types::{DocIndex, Highlight};
+use meilisearch_types::DocIndex;
 use sdset::{Set, SetBuf};
 use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::automaton::NGRAMS;
-use crate::automaton::{QueryEnhancer, QueryEnhancerBuilder};
 use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
-use crate::automaton::{normalize_str, split_best_frequency};
+use crate::automaton::normalize_str;
+use crate::automaton::{QueryEnhancer, QueryEnhancerBuilder};
 
 use crate::criterion::Criteria;
-use crate::levenshtein::prefix_damerau_levenshtein;
+use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
 
-pub fn bucket_sort<'c>(
+pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
     query: &str,
     range: Range<usize>,
+    filter: Option<FI>,
     criteria: Criteria<'c>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
 ) -> MResult<Vec<Document>>
+where
+    FI: Fn(DocumentId) -> bool,
 {
+    // We delegate the filter work to the distinct query builder,
+    // specifying a distinct rule that has no effect.
+    if filter.is_some() {
+        let distinct = |_| None;
+        let distinct_size = 1;
+        return bucket_sort_with_distinct(
+            reader,
+            query,
+            range,
+            filter,
+            distinct,
+            distinct_size,
+            criteria,
+            main_store,
+            postings_lists_store,
+            documents_fields_counts_store,
+            synonyms_store,
+        );
+    }
+
     let (automatons, query_enhancer) =
-        construct_automatons2(reader, query, main_store, postings_lists_store, synonyms_store)?;
+        construct_automatons(reader, query, main_store, postings_lists_store, synonyms_store)?;
 
     debug!("{:?}", query_enhancer);
 
     let before_postings_lists_fetching = Instant::now();
     mk_arena!(arena);
-    let mut bare_matches = fetch_matches(reader, &automatons, &mut arena, main_store, postings_lists_store)?;
+    let mut bare_matches =
+        fetch_matches(reader, &automatons, &mut arena, main_store, postings_lists_store)?;
     debug!("bare matches ({}) retrieved in {:.02?}",
         bare_matches.len(),
         before_postings_lists_fetching.elapsed(),
@@ -68,9 +93,6 @@ pub fn bucket_sort<'c>(
         prefiltered_documents,
         before_raw_documents_building.elapsed(),
     );
-
-    dbg!(mem::size_of::<BareMatch>());
-    dbg!(mem::size_of::<SimpleMatch>());
 
     let mut groups = vec![raw_documents.as_mut_slice()];
 
@@ -103,29 +125,164 @@ pub fn bucket_sort<'c>(
     }
 
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
-    let iter = iter.map(|d| {
-        let highlights = d.raw_matches.iter().flat_map(|sm| {
-            let postings_list = &arena[sm.postings_list];
-            let input = postings_list.input();
-            let query = &automatons[sm.query_index as usize].query;
-            postings_list.iter().map(move |m| {
-                let covered_area = if query.len() > input.len() {
-                    input.len()
-                } else {
-                    prefix_damerau_levenshtein(query.as_bytes(), input).1
-                };
-                Highlight { attribute: m.attribute, char_index: m.char_index, char_length: covered_area as u16 }
-            })
-        }).collect();
-
-        Document {
-            id: d.id,
-            highlights,
-            #[cfg(test)] matches: Vec::new(),
-        }
-    });
+    let iter = iter.map(|rd| Document::from_raw(rd, &automatons, &arena));
 
     Ok(iter.collect())
+}
+
+pub fn bucket_sort_with_distinct<'c, FI, FD>(
+    reader: &heed::RoTxn<MainT>,
+    query: &str,
+    range: Range<usize>,
+    filter: Option<FI>,
+    distinct: FD,
+    distinct_size: usize,
+    criteria: Criteria<'c>,
+    main_store: store::Main,
+    postings_lists_store: store::PostingsLists,
+    documents_fields_counts_store: store::DocumentsFieldsCounts,
+    synonyms_store: store::Synonyms,
+) -> MResult<Vec<Document>>
+where
+    FI: Fn(DocumentId) -> bool,
+    FD: Fn(DocumentId) -> Option<u64>,
+{
+    let (automatons, query_enhancer) =
+        construct_automatons(reader, query, main_store, postings_lists_store, synonyms_store)?;
+
+    let before_postings_lists_fetching = Instant::now();
+    mk_arena!(arena);
+    let mut bare_matches = fetch_matches(reader, &automatons, &mut arena, main_store, postings_lists_store)?;
+    debug!("bare matches ({}) retrieved in {:.02?}",
+        bare_matches.len(),
+        before_postings_lists_fetching.elapsed(),
+    );
+
+    let before_raw_documents_presort = Instant::now();
+    bare_matches.sort_unstable_by_key(|sm| sm.document_id);
+    debug!("sort by documents ids took {:.02?}", before_raw_documents_presort.elapsed());
+
+    let before_raw_documents_building = Instant::now();
+    let mut prefiltered_documents = 0;
+    let mut raw_documents = Vec::new();
+    for raw_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
+        prefiltered_documents += 1;
+        if let Some(raw_document) = RawDocument::new(raw_matches, &automatons, &mut arena) {
+            raw_documents.push(raw_document);
+        }
+    }
+    debug!("creating {} (original {}) candidates documents took {:.02?}",
+        raw_documents.len(),
+        prefiltered_documents,
+        before_raw_documents_building.elapsed(),
+    );
+
+    let mut groups = vec![raw_documents.as_mut_slice()];
+    let mut key_cache = HashMap::new();
+
+    let mut filter_map = HashMap::new();
+    // these two variables informs on the current distinct map and
+    // on the raw offset of the start of the group where the
+    // range.start bound is located according to the distinct function
+    let mut distinct_map = DistinctMap::new(distinct_size);
+    let mut distinct_raw_offset = 0;
+
+    'criteria: for criterion in criteria.as_ref() {
+        let tmp_groups = mem::replace(&mut groups, Vec::new());
+        let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
+        let mut documents_seen = 0;
+
+        for mut group in tmp_groups {
+            // if this group does not overlap with the requested range,
+            // push it without sorting and splitting it
+            if documents_seen + group.len() < distinct_raw_offset {
+                documents_seen += group.len();
+                groups.push(group);
+                continue;
+            }
+
+            let before_criterion_preparation = Instant::now();
+            criterion.prepare(&mut group, &mut arena, &query_enhancer, &automatons);
+            debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
+
+            let before_criterion_sort = Instant::now();
+            group.sort_unstable_by(|a, b| criterion.evaluate(a, b, &arena));
+            debug!("{:?} evaluation took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
+
+            for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b, &arena)) {
+                // we must compute the real distinguished len of this sub-group
+                for document in group.iter() {
+                    let filter_accepted = match &filter {
+                        Some(filter) => {
+                            let entry = filter_map.entry(document.id);
+                            *entry.or_insert_with(|| (filter)(document.id))
+                        }
+                        None => true,
+                    };
+
+                    if filter_accepted {
+                        let entry = key_cache.entry(document.id);
+                        let key = entry.or_insert_with(|| (distinct)(document.id).map(Rc::new));
+
+                        match key.clone() {
+                            Some(key) => buf_distinct.register(key),
+                            None => buf_distinct.register_without_key(),
+                        };
+                    }
+
+                    // the requested range end is reached: stop computing distinct
+                    if buf_distinct.len() >= range.end {
+                        break;
+                    }
+                }
+
+                documents_seen += group.len();
+                groups.push(group);
+
+                // if this sub-group does not overlap with the requested range
+                // we must update the distinct map and its start index
+                if buf_distinct.len() < range.start {
+                    buf_distinct.transfert_to_internal();
+                    distinct_raw_offset = documents_seen;
+                }
+
+                // we have sort enough documents if the last document sorted is after
+                // the end of the requested range, we can continue to the next criterion
+                if buf_distinct.len() >= range.end {
+                    continue 'criteria;
+                }
+            }
+        }
+    }
+
+    // once we classified the documents related to the current
+    // automatons we save that as the next valid result
+    let mut seen = BufferedDistinctMap::new(&mut distinct_map);
+
+    let mut documents = Vec::with_capacity(range.len());
+    for raw_document in raw_documents.into_iter().skip(distinct_raw_offset) {
+        let filter_accepted = match &filter {
+            Some(_) => filter_map.remove(&raw_document.id).unwrap(),
+            None => true,
+        };
+
+        if filter_accepted {
+            let key = key_cache.remove(&raw_document.id).unwrap();
+            let distinct_accepted = match key {
+                Some(key) => seen.register(key),
+                None => seen.register_without_key(),
+            };
+
+            if distinct_accepted && seen.len() > range.start {
+                documents.push(Document::from_raw(raw_document, &automatons, &arena));
+                if documents.len() == range.len() {
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(documents)
 }
 
 pub struct BareMatch<'tag> {
@@ -257,7 +414,7 @@ fn fetch_matches<'txn, 'tag>(
     postings_lists_store: store::PostingsLists,
 ) -> MResult<Vec<BareMatch<'tag>>>
 {
-    let mut before_words_fst = Instant::now();
+    let before_words_fst = Instant::now();
     let words = match main_store.words_fst(reader)? {
         Some(words) => words,
         None => return Ok(Vec::new()),
@@ -273,7 +430,7 @@ fn fetch_matches<'txn, 'tag>(
     for (query_index, automaton) in automatons.iter().enumerate() {
         let before_dfa = Instant::now();
         let dfa = automaton.dfa();
-        let QueryWordAutomaton { query, is_exact, is_prefix, phrase_query } = automaton;
+        let QueryWordAutomaton { query, is_exact, .. } = automaton;
         dfa_time += before_dfa.elapsed();
 
         let mut number_of_words = 0;
@@ -381,7 +538,35 @@ impl QueryWordAutomaton {
     }
 }
 
-fn construct_automatons2(
+fn split_best_frequency<'a>(
+    reader: &heed::RoTxn<MainT>,
+    word: &'a str,
+    postings_lists_store: store::PostingsLists,
+) -> MResult<Option<(&'a str, &'a str)>> {
+    let chars = word.char_indices().skip(1);
+    let mut best = None;
+
+    for (i, _) in chars {
+        let (left, right) = word.split_at(i);
+
+        let left_freq = postings_lists_store
+            .postings_list(reader, left.as_ref())?
+            .map_or(0, |i| i.len());
+
+        let right_freq = postings_lists_store
+            .postings_list(reader, right.as_ref())?
+            .map_or(0, |i| i.len());
+
+        let min_freq = cmp::min(left_freq, right_freq);
+        if min_freq != 0 && best.map_or(true, |(old, _, _)| min_freq > old) {
+            best = Some((min_freq, left, right));
+        }
+    }
+
+    Ok(best.map(|(_, l, r)| (l, r)))
+}
+
+fn construct_automatons(
     reader: &heed::RoTxn<MainT>,
     query: &str,
     main_store: store::Main,

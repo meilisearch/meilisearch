@@ -30,6 +30,10 @@ pub use self::store::Index;
 pub use self::update::{EnqueuedUpdateResult, ProcessedUpdateResult, UpdateStatus, UpdateType};
 pub use meilisearch_types::{DocIndex, DocumentId, Highlight, AttrCount};
 
+use compact_arena::SmallArena;
+use crate::bucket_sort::{QueryWordAutomaton, PostingsListView};
+use crate::levenshtein::prefix_damerau_levenshtein;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Document {
     pub id: DocumentId,
@@ -37,6 +41,36 @@ pub struct Document {
 
     // #[cfg(test)]
     // pub matches: Vec<TmpMatch>,
+}
+
+impl Document {
+    pub fn from_raw<'a, 'tag, 'txn>(
+        raw_document: RawDocument<'a, 'tag>,
+        automatons: &[QueryWordAutomaton],
+        arena: &SmallArena<'tag, PostingsListView<'txn>>,
+    ) -> Document
+    {
+        let highlights = raw_document.raw_matches.iter().flat_map(|sm| {
+            let postings_list = &arena[sm.postings_list];
+            let input = postings_list.input();
+            let query = &automatons[sm.query_index as usize].query;
+            postings_list.iter().map(move |m| {
+                let covered_area = if query.len() > input.len() {
+                    input.len()
+                } else {
+                    prefix_damerau_levenshtein(query.as_bytes(), input).1
+                };
+
+                Highlight {
+                    attribute: m.attribute,
+                    char_index: m.char_index,
+                    char_length: covered_area as u16,
+                }
+            })
+        }).collect();
+
+        Document { id: raw_document.id, highlights }
+    }
 }
 
 #[cfg(test)]

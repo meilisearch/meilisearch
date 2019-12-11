@@ -1,7 +1,8 @@
 use std::ops::Range;
 use std::time::Duration;
 
-use crate::{bucket_sort::bucket_sort, database::MainT};
+use crate::database::MainT;
+use crate::bucket_sort::{bucket_sort, bucket_sort_with_distinct};
 use crate::{criterion::Criteria, Document, DocumentId};
 use crate::{reordered_attrs::ReorderedAttrs, store, MResult};
 
@@ -85,11 +86,24 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         range: Range<usize>,
     ) -> MResult<Vec<Document>> {
         match self.distinct {
-            Some((distinct, distinct_size)) => unimplemented!("distinct"),
+            Some((distinct, distinct_size)) => bucket_sort_with_distinct(
+                reader,
+                query,
+                range,
+                self.filter,
+                distinct,
+                distinct_size,
+                self.criteria,
+                self.main_store,
+                self.postings_lists_store,
+                self.documents_fields_counts_store,
+                self.synonyms_store,
+            ),
             None => bucket_sort(
                 reader,
                 query,
                 range,
+                self.filter,
                 self.criteria,
                 self.main_store,
                 self.postings_lists_store,

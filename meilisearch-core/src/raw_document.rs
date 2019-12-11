@@ -44,7 +44,7 @@ impl<'a, 'tag> RawDocument<'a, 'tag> {
                     let pla = &postings_lists[a.postings_list];
                     let plb = &postings_lists[b.postings_list];
 
-                    let mut iter = itertools::merge_join_by(pla.iter(), plb.iter(), |a, b| {
+                    let iter = itertools::merge_join_by(pla.iter(), plb.iter(), |a, b| {
                         a.attribute.cmp(&b.attribute).then((a.word_index + 1).cmp(&b.word_index))
                     });
 
