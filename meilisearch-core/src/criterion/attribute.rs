@@ -1,4 +1,4 @@
-use std::cmp::{self, Ordering};
+use std::cmp::Ordering;
 
 use compact_arena::SmallArena;
 use slice_group_by::GroupBy;
@@ -32,16 +32,16 @@ impl Criterion for Attribute {
     ) -> Ordering
     {
         #[inline]
-        fn best_attribute(matches: &[SimpleMatch]) -> u16 {
-            let mut best_attribute = u16::max_value();
+        fn sum_of_attribute(matches: &[SimpleMatch]) -> usize {
+            let mut sum_of_attribute = 0;
             for group in matches.linear_group_by_key(|bm| bm.query_index) {
-                best_attribute = cmp::min(best_attribute, group[0].attribute);
+                sum_of_attribute += group[0].attribute as usize;
             }
-            best_attribute
+            sum_of_attribute
         }
 
-        let lhs = best_attribute(&lhs.processed_matches);
-        let rhs = best_attribute(&rhs.processed_matches);
+        let lhs = sum_of_attribute(&lhs.processed_matches);
+        let rhs = sum_of_attribute(&rhs.processed_matches);
 
         lhs.cmp(&rhs)
     }
