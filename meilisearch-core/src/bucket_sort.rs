@@ -39,7 +39,6 @@ pub fn bucket_sort<'c>(
     synonyms_store: store::Synonyms,
 ) -> MResult<Vec<Document>>
 {
-    // let automatons = construct_automatons(query);
     let (automatons, query_enhancer) =
         construct_automatons2(reader, query, main_store, postings_lists_store, synonyms_store)?;
 
@@ -286,14 +285,11 @@ impl<'txn> PostingsListView<'txn> {
     }
 
     pub fn rewrite_with(&mut self, postings_list: SetBuf<DocIndex>) {
-        *self = match self {
-            PostingsListView::Original { input, .. } => {
-                PostingsListView::Rewritten { input: input.clone(), postings_list }
-            },
-            PostingsListView::Rewritten { input, .. } => {
-                PostingsListView::Rewritten { input: input.clone(), postings_list }
-            },
+        let input = match self {
+            PostingsListView::Original { input, .. } => input.clone(),
+            PostingsListView::Rewritten { input, .. } => input.clone(),
         };
+        *self = PostingsListView::rewritten(input, postings_list);
     }
 
     pub fn len(&self) -> usize {
@@ -565,7 +561,8 @@ fn construct_automatons2(
                 }
             }
 
-            if true && n == 1 {
+            if n == 1 {
+                // automatons for splitted words
                 if let Some((left, right)) = split_best_frequency(reader, &normalized, postings_lists_store)? {
                     let mut left_automaton = QueryWordAutomaton::exact(left);
                     left_automaton.phrase_query = Some((0, 2));
