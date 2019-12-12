@@ -29,31 +29,43 @@ pub use self::sort_by_attr::SortByAttr;
 pub trait Criterion {
     fn name(&self) -> &str;
 
-    fn prepare<'a, 'tag, 'txn>(
+    fn prepare<'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        documents: &mut [RawDocument<'a, 'tag>],
-        postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
-        query_enhancer: &QueryEnhancer,
-        automatons: &[QueryWordAutomaton],
-    );
+        ctx: ContextMut<'p, 'tag, 'txn, 'q, 'a>,
+        documents: &mut [RawDocument<'r, 'tag>],
+    ) {
+        /* ... */
+    }
 
-    fn evaluate<'a, 'tag, 'txn>(
+    fn evaluate<'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        lhs: &RawDocument<'a, 'tag>,
-        rhs: &RawDocument<'a, 'tag>,
-        postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
+        ctx: &Context<'p, 'tag, 'txn, 'q, 'a>,
+        lhs: &RawDocument<'r, 'tag>,
+        rhs: &RawDocument<'r, 'tag>,
     ) -> Ordering;
 
     #[inline]
-    fn eq<'a, 'tag, 'txn>(
+    fn eq<'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        lhs: &RawDocument<'a, 'tag>,
-        rhs: &RawDocument<'a, 'tag>,
-        postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
+        ctx: &Context<'p, 'tag, 'txn, 'q, 'a>,
+        lhs: &RawDocument<'r, 'tag>,
+        rhs: &RawDocument<'r, 'tag>,
     ) -> bool
     {
-        self.evaluate(lhs, rhs, postings_lists) == Ordering::Equal
+        self.evaluate(ctx, lhs, rhs) == Ordering::Equal
     }
+}
+
+pub struct ContextMut<'p, 'tag, 'txn, 'q, 'a> {
+    pub postings_lists: &'p mut SmallArena<'tag, PostingsListView<'txn>>,
+    pub query_enhancer: &'q mut QueryEnhancer,
+    pub automatons: &'a mut [QueryWordAutomaton],
+}
+
+pub struct Context<'p, 'tag, 'txn, 'q, 'a> {
+    pub postings_lists: &'p SmallArena<'tag, PostingsListView<'txn>>,
+    pub query_enhancer: &'q QueryEnhancer,
+    pub automatons: &'a [QueryWordAutomaton],
 }
 
 #[derive(Default)]

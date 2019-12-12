@@ -6,30 +6,22 @@ use crate::automaton::QueryEnhancer;
 use crate::bucket_sort::{PostingsListView, QueryWordAutomaton};
 use crate::RawDocument;
 
-use super::{Criterion, prepare_query_distances};
+use super::{Criterion, Context, ContextMut, prepare_query_distances};
 
 pub struct Typo;
 
 impl Criterion for Typo {
     fn name(&self) -> &str { "typo" }
 
-    fn prepare<'a, 'tag, 'txn>(
+    fn prepare<'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        documents: &mut [RawDocument<'a, 'tag>],
-        postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
-        query_enhancer: &QueryEnhancer,
-        automatons: &[QueryWordAutomaton],
+        ctx: ContextMut<'p, 'tag, 'txn, 'q, 'a>,
+        documents: &mut [RawDocument<'r, 'tag>],
     ) {
-        prepare_query_distances(documents, query_enhancer, automatons, postings_lists);
+        prepare_query_distances(documents, ctx.query_enhancer, ctx.automatons, ctx.postings_lists);
     }
 
-    fn evaluate(
-        &self,
-        lhs: &RawDocument,
-        rhs: &RawDocument,
-        postings_lists: &SmallArena<PostingsListView>,
-    ) -> Ordering
-    {
+    fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
         // This function is a wrong logarithmic 10 function.
         // It is safe to panic on input number higher than 3,
         // the number of typos is never bigger than that.

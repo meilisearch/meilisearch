@@ -1,14 +1,9 @@
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
-
-use compact_arena::SmallArena;
 use meilisearch_schema::{Schema, SchemaAttr};
-
-use crate::automaton::QueryEnhancer;
-use crate::bucket_sort::{PostingsListView, QueryWordAutomaton};
-use crate::criterion::Criterion;
 use crate::{RankedMap, RawDocument};
+use super::{Criterion, Context};
 
 /// An helper struct that permit to sort documents by
 /// some of their stored attributes.
@@ -95,23 +90,7 @@ impl Criterion for SortByAttr<'_> {
         "sort by attribute"
     }
 
-    fn prepare<'a, 'tag, 'txn>(
-        &self,
-        documents: &mut [RawDocument<'a, 'tag>],
-        postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
-        query_enhancer: &QueryEnhancer,
-        automatons: &[QueryWordAutomaton],
-    ) {
-        // ...
-    }
-
-    fn evaluate<'a, 'tag, 'txn>(
-        &self,
-        lhs: &RawDocument<'a, 'tag>,
-        rhs: &RawDocument<'a, 'tag>,
-        postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
-    ) -> Ordering
-    {
+    fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
         let lhs = self.ranked_map.get(lhs.id, self.attr);
         let rhs = self.ranked_map.get(rhs.id, self.attr);
 

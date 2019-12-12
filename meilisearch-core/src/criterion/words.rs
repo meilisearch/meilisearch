@@ -1,35 +1,21 @@
 use std::cmp::Ordering;
-
-use compact_arena::SmallArena;
-
-use crate::automaton::QueryEnhancer;
-use crate::bucket_sort::{PostingsListView, QueryWordAutomaton};
 use crate::RawDocument;
-
-use super::{Criterion, prepare_query_distances};
+use super::{Criterion, Context, ContextMut, prepare_query_distances};
 
 pub struct Words;
 
 impl Criterion for Words {
     fn name(&self) -> &str { "words" }
 
-    fn prepare<'a, 'tag, 'txn>(
+    fn prepare<'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        documents: &mut [RawDocument<'a, 'tag>],
-        postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
-        query_enhancer: &QueryEnhancer,
-        automatons: &[QueryWordAutomaton],
+        ctx: ContextMut<'p, 'tag, 'txn, 'q, 'a>,
+        documents: &mut [RawDocument<'r, 'tag>],
     ) {
-        prepare_query_distances(documents, query_enhancer, automatons, postings_lists);
+        prepare_query_distances(documents, ctx.query_enhancer, ctx.automatons, ctx.postings_lists);
     }
 
-    fn evaluate(
-        &self,
-        lhs: &RawDocument,
-        rhs: &RawDocument,
-        postings_lists: &SmallArena<PostingsListView>,
-    ) -> Ordering
-    {
+    fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
         #[inline]
         fn number_of_query_words(distances: &[Option<u8>]) -> usize {
             distances.iter().cloned().filter(Option::is_some).count()
