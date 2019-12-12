@@ -1,6 +1,6 @@
 use crate::routes::setting::{RankingOrdering, SettingBody};
 use indexmap::IndexMap;
-use log::error;
+use log::{error, warn};
 use meilisearch_core::criterion::*;
 use meilisearch_core::Highlight;
 use meilisearch_core::{Index, RankedMap};
@@ -349,13 +349,19 @@ impl<'a> SearchBuilder<'a> {
                 for (rule, order) in ranking_rules.iter() {
                     let custom_ranking = match order {
                         RankingOrdering::Asc => {
-                            SortByAttr::lower_is_better(&ranked_map, &schema, &rule).unwrap()
+                            SortByAttr::lower_is_better(&ranked_map, &schema, &rule)
                         }
                         RankingOrdering::Dsc => {
-                            SortByAttr::higher_is_better(&ranked_map, &schema, &rule).unwrap()
+                            SortByAttr::higher_is_better(&ranked_map, &schema, &rule)
                         }
                     };
-                    builder.push(custom_ranking);
+                    if let Ok(custom_ranking) = custom_ranking {
+                        builder.push(custom_ranking);
+                    } else {
+                        // TODO push this warning to a log tree
+                        warn!("Custom ranking cannot be added; Attribute {} not registered for ranking", rule)
+                    }
+
                 }
                 builder.push(DocumentId);
                 return Ok(Some(builder.build()));
