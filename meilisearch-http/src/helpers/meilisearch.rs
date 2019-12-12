@@ -1,4 +1,4 @@
-use crate::routes::setting::{RankingOrdering, SettingBody};
+use crate::routes::setting::{RankingOrdering, Setting};
 use indexmap::IndexMap;
 use log::{error, warn};
 use meilisearch_core::criterion::*;
@@ -299,7 +299,7 @@ impl<'a> SearchBuilder<'a> {
     ) -> Result<Option<Criteria<'a>>, Error> {
         let current_settings = match self.index.main.customs(reader).unwrap() {
             Some(bytes) => bincode::deserialize(bytes).unwrap(),
-            None => SettingBody::default(),
+            None => Setting::default(),
         };
 
         let ranking_rules = &current_settings.ranking_rules;
