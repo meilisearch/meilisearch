@@ -24,9 +24,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
     fn serialize_bool(self, _value: bool) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnindexableType {
-            type_name: "boolean",
-        })
+        Ok(None)
     }
 
     fn serialize_char(self, value: char) -> Result<Self::Ok, Self::Error> {
@@ -96,9 +94,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnindexableType {
-            type_name: "Option",
-        })
+        Ok(None)
     }
 
     fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
@@ -113,13 +109,11 @@ impl<'a> ser::Serializer for Indexer<'a> {
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnindexableType { type_name: "()" })
+        Ok(None)
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnindexableType {
-            type_name: "unit struct",
-        })
+        Ok(None)
     }
 
     fn serialize_unit_variant(
@@ -128,9 +122,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
         _variant_index: u32,
         _variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnindexableType {
-            type_name: "unit variant",
-        })
+        Ok(None)
     }
 
     fn serialize_newtype_struct<T: ?Sized>(
@@ -219,9 +211,14 @@ impl<'a> ser::Serializer for Indexer<'a> {
         _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        Err(SerializerError::UnindexableType {
-            type_name: "struct",
-        })
+        let indexer = StructIndexer {
+            attribute: self.attribute,
+            document_id: self.document_id,
+            indexer: self.indexer,
+            texts: Vec::new(),
+        };
+
+        Ok(indexer)
     }
 
     fn serialize_struct_variant(
