@@ -1,34 +1,29 @@
 use std::cmp::Ordering;
 
-use compact_arena::SmallArena;
 use slice_group_by::GroupBy;
 
-use crate::automaton::QueryEnhancer;
-use crate::bucket_sort::{PostingsListView, SimpleMatch, QueryWordAutomaton};
 use crate::RawDocument;
-
-use super::{Criterion, prepare_raw_matches};
+use crate::bucket_sort::SimpleMatch;
+use super::{Criterion, Context, ContextMut, prepare_raw_matches};
 
 pub struct WordsPosition;
 
 impl Criterion for WordsPosition {
     fn name(&self) -> &str { "words position" }
 
-    fn prepare<'a, 'tag, 'txn>(
+    fn prepare<'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        documents: &mut [RawDocument<'a, 'tag>],
-        postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
-        query_enhancer: &QueryEnhancer,
-        automatons: &[QueryWordAutomaton],
+        ctx: ContextMut<'p, 'tag, 'txn, 'q, 'a>,
+        documents: &mut [RawDocument<'r, 'tag>],
     ) {
-        prepare_raw_matches(documents, postings_lists, query_enhancer, automatons);
+        prepare_raw_matches(documents, ctx.postings_lists, ctx.query_enhancer, ctx.automatons);
     }
 
-    fn evaluate<'a, 'tag, 'txn>(
+    fn evaluate<'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        lhs: &RawDocument<'a, 'tag>,
-        rhs: &RawDocument<'a, 'tag>,
-        postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
+        ctx: &Context<'p, 'tag, 'txn, 'q, 'a>,
+        lhs: &RawDocument<'r, 'tag>,
+        rhs: &RawDocument<'r, 'tag>,
     ) -> Ordering
     {
         #[inline]

@@ -1,38 +1,25 @@
 use std::cmp::{self, Ordering};
-
-use compact_arena::SmallArena;
 use slice_group_by::GroupBy;
-
-use crate::automaton::QueryEnhancer;
-use crate::bucket_sort::{PostingsListView, SimpleMatch, QueryWordAutomaton};
+use crate::bucket_sort::{SimpleMatch};
 use crate::RawDocument;
+use super::{Criterion, Context, ContextMut, prepare_raw_matches};
 
-use super::{Criterion, prepare_raw_matches};
+const MAX_DISTANCE: u16 = 8;
 
 pub struct Proximity;
 
 impl Criterion for Proximity {
     fn name(&self) -> &str { "proximity" }
 
-    fn prepare<'a, 'tag, 'txn>(
+    fn prepare<'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        documents: &mut [RawDocument<'a, 'tag>],
-        postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
-        query_enhancer: &QueryEnhancer,
-        automatons: &[QueryWordAutomaton],
+        ctx: ContextMut<'p, 'tag, 'txn, 'q, 'a>,
+        documents: &mut [RawDocument<'r, 'tag>],
     ) {
-        prepare_raw_matches(documents, postings_lists, query_enhancer, automatons);
+        prepare_raw_matches(documents, ctx.postings_lists, ctx.query_enhancer, ctx.automatons);
     }
 
-    fn evaluate<'a, 'tag, 'txn>(
-        &self,
-        lhs: &RawDocument<'a, 'tag>,
-        rhs: &RawDocument<'a, 'tag>,
-        postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
-    ) -> Ordering
-    {
-        const MAX_DISTANCE: u16 = 8;
-
+    fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
         fn index_proximity(lhs: u16, rhs: u16) -> u16 {
             if lhs < rhs {
                 cmp::min(rhs - lhs, MAX_DISTANCE)

@@ -21,7 +21,7 @@ use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
 use crate::automaton::normalize_str;
 use crate::automaton::{QueryEnhancer, QueryEnhancerBuilder};
 
-use crate::criterion::Criteria;
+use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
@@ -61,7 +61,7 @@ where
         );
     }
 
-    let (automatons, query_enhancer) =
+    let (mut automatons, mut query_enhancer) =
         construct_automatons(reader, query, main_store, postings_lists_store, synonyms_store)?;
 
     debug!("{:?}", query_enhancer);
@@ -102,14 +102,27 @@ where
 
         for mut group in tmp_groups {
             let before_criterion_preparation = Instant::now();
-            criterion.prepare(&mut group, &mut arena, &query_enhancer, &automatons);
+
+            let ctx = ContextMut {
+                postings_lists: &mut arena,
+                query_enhancer: &mut query_enhancer,
+                automatons: &mut automatons,
+            };
+
+            criterion.prepare(ctx, &mut group);
             debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
 
+            let ctx = Context {
+                postings_lists: &arena,
+                query_enhancer: &query_enhancer,
+                automatons: &automatons,
+            };
+
             let before_criterion_sort = Instant::now();
-            group.sort_unstable_by(|a, b| criterion.evaluate(a, b, &arena));
+            group.sort_unstable_by(|a, b| criterion.evaluate(&ctx, a, b));
             debug!("{:?} evaluation took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
 
-            for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b, &arena)) {
+            for group in group.binary_group_by_mut(|a, b| criterion.eq(&ctx, a, b)) {
                 debug!("{:?} produced a group of size {}", criterion.name(), group.len());
 
                 documents_seen += group.len();
@@ -147,7 +160,7 @@ where
     FI: Fn(DocumentId) -> bool,
     FD: Fn(DocumentId) -> Option<u64>,
 {
-    let (automatons, query_enhancer) =
+    let (mut automatons, mut query_enhancer) =
         construct_automatons(reader, query, main_store, postings_lists_store, synonyms_store)?;
 
     let before_postings_lists_fetching = Instant::now();
@@ -201,15 +214,27 @@ where
                 continue;
             }
 
+            let ctx = ContextMut {
+                postings_lists: &mut arena,
+                query_enhancer: &mut query_enhancer,
+                automatons: &mut automatons,
+            };
+
             let before_criterion_preparation = Instant::now();
-            criterion.prepare(&mut group, &mut arena, &query_enhancer, &automatons);
+            criterion.prepare(ctx, &mut group);
             debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
 
+            let ctx = Context {
+                postings_lists: &arena,
+                query_enhancer: &query_enhancer,
+                automatons: &automatons,
+            };
+
             let before_criterion_sort = Instant::now();
-            group.sort_unstable_by(|a, b| criterion.evaluate(a, b, &arena));
+            group.sort_unstable_by(|a, b| criterion.evaluate(&ctx, a, b));
             debug!("{:?} evaluation took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
 
-            for group in group.binary_group_by_mut(|a, b| criterion.eq(a, b, &arena)) {
+            for group in group.binary_group_by_mut(|a, b| criterion.eq(&ctx, a, b)) {
                 // we must compute the real distinguished len of this sub-group
                 for document in group.iter() {
                     let filter_accepted = match &filter {
