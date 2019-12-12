@@ -243,7 +243,14 @@ impl<'a> SearchBuilder<'a> {
                 .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
                 .ok_or(Error::DocumentNotFound(doc.id.0))?;
 
-            let mut formatted = document.clone();
+            let has_attributes_to_highlight = self.attributes_to_highlight.is_some();
+            let has_attributes_to_crop = self.attributes_to_crop.is_some();
+
+            let mut formatted = if has_attributes_to_highlight || has_attributes_to_crop {
+                document.clone()
+            } else {
+                IndexMap::new()
+            };
             let mut matches = doc.highlights.clone();
 
             // Crops fields if needed
@@ -494,7 +501,7 @@ fn calculate_highlights(
     matches: &MatchesInfos,
     attributes_to_highlight: &HashSet<String>,
 ) -> IndexMap<String, Value> {
-    let mut highlight_result = IndexMap::new();
+    let mut highlight_result = document.clone();
 
     for (attribute, matches) in matches.iter() {
         if attributes_to_highlight.contains(attribute) {
