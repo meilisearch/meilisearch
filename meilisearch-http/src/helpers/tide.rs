@@ -66,7 +66,7 @@ impl ContextExt for Context<Data> {
         }
 
         if !token_config.acl.contains(&acl) {
-            return Err(ResponseError::invalid_token("token do not have this ACL"));
+            return Err(ResponseError::invalid_token("no permission"));
         }
 
         Ok(())

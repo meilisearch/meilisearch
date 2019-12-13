@@ -1,6 +1,6 @@
-use crate::routes::setting::{RankingOrdering, SettingBody};
+use crate::routes::setting::{RankingOrdering, Setting};
 use indexmap::IndexMap;
-use log::error;
+use log::{error, warn};
 use meilisearch_core::criterion::*;
 use meilisearch_core::Highlight;
 use meilisearch_core::{Index, RankedMap};
@@ -243,7 +243,14 @@ impl<'a> SearchBuilder<'a> {
                 .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
                 .ok_or(Error::DocumentNotFound(doc.id.0))?;
 
-            let mut formatted = document.clone();
+            let has_attributes_to_highlight = self.attributes_to_highlight.is_some();
+            let has_attributes_to_crop = self.attributes_to_crop.is_some();
+
+            let mut formatted = if has_attributes_to_highlight || has_attributes_to_crop {
+                document.clone()
+            } else {
+                IndexMap::new()
+            };
             let mut matches = doc.highlights.clone();
 
             // Crops fields if needed
@@ -292,7 +299,7 @@ impl<'a> SearchBuilder<'a> {
     ) -> Result<Option<Criteria<'a>>, Error> {
         let current_settings = match self.index.main.customs(reader).unwrap() {
             Some(bytes) => bincode::deserialize(bytes).unwrap(),
-            None => SettingBody::default(),
+            None => Setting::default(),
         };
 
         let ranking_rules = &current_settings.ranking_rules;
@@ -342,13 +349,19 @@ impl<'a> SearchBuilder<'a> {
                 for (rule, order) in ranking_rules.iter() {
                     let custom_ranking = match order {
                         RankingOrdering::Asc => {
-                            SortByAttr::lower_is_better(&ranked_map, &schema, &rule).unwrap()
+                            SortByAttr::lower_is_better(&ranked_map, &schema, &rule)
                         }
                         RankingOrdering::Dsc => {
-                            SortByAttr::higher_is_better(&ranked_map, &schema, &rule).unwrap()
+                            SortByAttr::higher_is_better(&ranked_map, &schema, &rule)
                         }
                     };
-                    builder.push(custom_ranking);
+                    if let Ok(custom_ranking) = custom_ranking {
+                        builder.push(custom_ranking);
+                    } else {
+                        // TODO push this warning to a log tree
+                        warn!("Custom ranking cannot be added; Attribute {} not registered for ranking", rule)
+                    }
+
                 }
                 builder.push(DocumentId);
                 return Ok(Some(builder.build()));
@@ -494,7 +507,7 @@ fn calculate_highlights(
     matches: &MatchesInfos,
     attributes_to_highlight: &HashSet<String>,
 ) -> IndexMap<String, Value> {
-    let mut highlight_result = IndexMap::new();
+    let mut highlight_result = document.clone();
 
     for (attribute, matches) in matches.iter() {
         if attributes_to_highlight.contains(attribute) {

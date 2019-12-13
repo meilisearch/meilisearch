@@ -79,7 +79,7 @@ impl IntoResponse for ResponseError {
                 error(err, StatusCode::BAD_REQUEST)
             }
             ResponseError::InvalidToken(err) => {
-                error(format!("Invalid Token: {}", err), StatusCode::FORBIDDEN)
+                error(format!("Invalid API key: {}", err), StatusCode::FORBIDDEN)
             }
             ResponseError::NotFound(err) => error(err, StatusCode::NOT_FOUND),
             ResponseError::IndexNotFound(index) => {

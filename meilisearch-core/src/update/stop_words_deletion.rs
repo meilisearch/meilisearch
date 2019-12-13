@@ -101,14 +101,18 @@ pub fn apply_stop_words_deletion(
 
     // now that we have setup the stop words
     // lets reindex everything...
-    reindex_all_documents(
-        writer,
-        main_store,
-        documents_fields_store,
-        documents_fields_counts_store,
-        postings_lists_store,
-        docs_words_store,
-    )?;
+    if let Ok(number) = main_store.number_of_documents(writer) {
+        if number > 0 {
+            reindex_all_documents(
+                writer,
+                main_store,
+                documents_fields_store,
+                documents_fields_counts_store,
+                postings_lists_store,
+                docs_words_store,
+            )?;
+        }
+    }
 
     Ok(())
 }
