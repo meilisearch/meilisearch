@@ -28,7 +28,7 @@ pub use self::ranked_map::RankedMap;
 pub use self::raw_document::RawDocument;
 pub use self::store::Index;
 pub use self::update::{EnqueuedUpdateResult, ProcessedUpdateResult, UpdateStatus, UpdateType};
-pub use meilisearch_types::{DocIndex, DocumentId, Highlight, AttrCount};
+pub use meilisearch_types::{DocIndex, DocumentId, Highlight};
 
 use compact_arena::SmallArena;
 use crate::bucket_sort::{QueryWordAutomaton, PostingsListView};

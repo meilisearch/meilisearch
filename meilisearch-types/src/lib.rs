@@ -63,11 +63,3 @@ pub struct Highlight {
     /// without needing to run the tokenizer again.
     pub char_length: u16,
 }
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "zerocopy", derive(AsBytes, FromBytes))]
-#[repr(C)]
-pub struct AttrCount {
-    pub attr: u16,
-    pub count: u16,
-}
