@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use crate::RawDocument;
+use crate::{RawDocument, MResult};
 use super::{Criterion, Context, ContextMut, prepare_query_distances};
 
 pub struct Words;
@@ -7,12 +7,14 @@ pub struct Words;
 impl Criterion for Words {
     fn name(&self) -> &str { "words" }
 
-    fn prepare<'p, 'tag, 'txn, 'q, 'a, 'r>(
+    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        ctx: ContextMut<'p, 'tag, 'txn, 'q, 'a>,
+        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
         documents: &mut [RawDocument<'r, 'tag>],
-    ) {
-        prepare_query_distances(documents, ctx.query_enhancer, ctx.automatons, ctx.postings_lists);
+    ) -> MResult<()>
+    {
+        prepare_query_distances(documents, ctx.query_enhancer, ctx.postings_lists);
+        Ok(())
     }
 
     fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {

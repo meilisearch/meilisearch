@@ -4,9 +4,10 @@ use compact_arena::SmallArena;
 use sdset::SetBuf;
 use slice_group_by::GroupBy;
 
+use crate::{store, RawDocument, MResult};
 use crate::automaton::QueryEnhancer;
 use crate::bucket_sort::{SimpleMatch, PostingsListView, QueryWordAutomaton};
-use crate::RawDocument;
+use crate::database::MainT;
 
 mod typo;
 mod words;
@@ -29,12 +30,13 @@ pub use self::sort_by_attr::SortByAttr;
 pub trait Criterion {
     fn name(&self) -> &str;
 
-    fn prepare<'p, 'tag, 'txn, 'q, 'a, 'r>(
+    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        ctx: ContextMut<'p, 'tag, 'txn, 'q, 'a>,
-        documents: &mut [RawDocument<'r, 'tag>],
-    ) {
-        /* ... */
+        _ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
+        _documents: &mut [RawDocument<'r, 'tag>],
+    ) -> MResult<()>
+    {
+        Ok(())
     }
 
     fn evaluate<'p, 'tag, 'txn, 'q, 'a, 'r>(
@@ -56,10 +58,12 @@ pub trait Criterion {
     }
 }
 
-pub struct ContextMut<'p, 'tag, 'txn, 'q, 'a> {
+pub struct ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a> {
+    pub reader: &'h heed::RoTxn<MainT>,
     pub postings_lists: &'p mut SmallArena<'tag, PostingsListView<'txn>>,
     pub query_enhancer: &'q mut QueryEnhancer,
     pub automatons: &'a mut [QueryWordAutomaton],
+    pub documents_fields_counts_store: store::DocumentsFieldsCounts,
 }
 
 pub struct Context<'p, 'tag, 'txn, 'q, 'a> {
@@ -135,7 +139,6 @@ impl<'a> AsRef<[Box<dyn Criterion + 'a>]> for Criteria<'a> {
 fn prepare_query_distances<'a, 'tag, 'txn>(
     documents: &mut [RawDocument<'a, 'tag>],
     query_enhancer: &QueryEnhancer,
-    automatons: &[QueryWordAutomaton],
     postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
 ) {
     for document in documents {
@@ -167,7 +170,6 @@ fn prepare_raw_matches<'a, 'tag, 'txn>(
     documents: &mut [RawDocument<'a, 'tag>],
     postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
     query_enhancer: &QueryEnhancer,
-    automatons: &[QueryWordAutomaton],
 ) {
     for document in documents {
         if !document.processed_matches.is_empty() { continue }
@@ -188,7 +190,7 @@ fn prepare_raw_matches<'a, 'tag, 'txn>(
             }
         }
 
-        let processed = multiword_rewrite_matches(&mut processed, query_enhancer, automatons);
+        let processed = multiword_rewrite_matches(&mut processed, query_enhancer);
         document.processed_matches = processed.into_vec();
     }
 }
@@ -196,7 +198,6 @@ fn prepare_raw_matches<'a, 'tag, 'txn>(
 fn multiword_rewrite_matches(
     matches: &mut [SimpleMatch],
     query_enhancer: &QueryEnhancer,
-    automatons: &[QueryWordAutomaton],
 ) -> SetBuf<SimpleMatch>
 {
     matches.sort_unstable_by_key(|m| (m.attribute, m.word_index));

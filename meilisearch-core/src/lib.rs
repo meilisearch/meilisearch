@@ -34,13 +34,13 @@ use compact_arena::SmallArena;
 use crate::bucket_sort::{QueryWordAutomaton, PostingsListView};
 use crate::levenshtein::prefix_damerau_levenshtein;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Document {
     pub id: DocumentId,
     pub highlights: Vec<Highlight>,
 
-    // #[cfg(test)]
-    // pub matches: Vec<TmpMatch>,
+    #[cfg(test)]
+    pub matches: Vec<crate::bucket_sort::SimpleMatch>,
 }
 
 impl Document {
@@ -69,7 +69,16 @@ impl Document {
             })
         }).collect();
 
-        Document { id: raw_document.id, highlights }
+        #[cfg(not(test))]
+        {
+            Document { id: raw_document.id, highlights }
+        }
+
+        #[cfg(test)]
+        {
+            let matches = raw_document.processed_matches;
+            Document { id: raw_document.id, highlights, matches }
+        }
     }
 }
 

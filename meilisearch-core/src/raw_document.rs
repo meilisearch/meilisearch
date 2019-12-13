@@ -1,7 +1,6 @@
 use compact_arena::SmallArena;
 use itertools::EitherOrBoth;
 use sdset::SetBuf;
-
 use crate::bucket_sort::{SimpleMatch, BareMatch, QueryWordAutomaton, PostingsListView};
 
 pub struct RawDocument<'a, 'tag> {
@@ -10,6 +9,9 @@ pub struct RawDocument<'a, 'tag> {
     pub processed_matches: Vec<SimpleMatch>,
     /// The list of minimum `distance` found
     pub processed_distances: Vec<Option<u8>>,
+    /// Does this document contains a field
+    /// with one word that is exactly matching
+    pub contains_one_word_field: bool,
 }
 
 impl<'a, 'tag> RawDocument<'a, 'tag> {
@@ -84,6 +86,7 @@ impl<'a, 'tag> RawDocument<'a, 'tag> {
             raw_matches,
             processed_matches: Vec::new(),
             processed_distances: Vec::new(),
+            contains_one_word_field: false,
         })
     }
 }

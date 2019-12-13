@@ -1,9 +1,7 @@
 use std::cmp::Ordering;
-
 use slice_group_by::GroupBy;
-
-use crate::RawDocument;
 use crate::bucket_sort::SimpleMatch;
+use crate::{RawDocument, MResult};
 use super::{Criterion, Context, ContextMut, prepare_raw_matches};
 
 pub struct WordsPosition;
@@ -11,21 +9,17 @@ pub struct WordsPosition;
 impl Criterion for WordsPosition {
     fn name(&self) -> &str { "words position" }
 
-    fn prepare<'p, 'tag, 'txn, 'q, 'a, 'r>(
+    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        ctx: ContextMut<'p, 'tag, 'txn, 'q, 'a>,
+        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
         documents: &mut [RawDocument<'r, 'tag>],
-    ) {
-        prepare_raw_matches(documents, ctx.postings_lists, ctx.query_enhancer, ctx.automatons);
+    ) -> MResult<()>
+    {
+        prepare_raw_matches(documents, ctx.postings_lists, ctx.query_enhancer);
+        Ok(())
     }
 
-    fn evaluate<'p, 'tag, 'txn, 'q, 'a, 'r>(
-        &self,
-        ctx: &Context<'p, 'tag, 'txn, 'q, 'a>,
-        lhs: &RawDocument<'r, 'tag>,
-        rhs: &RawDocument<'r, 'tag>,
-    ) -> Ordering
-    {
+    fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
         #[inline]
         fn sum_words_position(matches: &[SimpleMatch]) -> usize {
             let mut sum_words_position = 0;

@@ -1,6 +1,6 @@
 use std::cmp::{Ordering, Reverse};
 use slice_group_by::GroupBy;
-use crate::RawDocument;
+use crate::{RawDocument, MResult};
 use crate::bucket_sort::BareMatch;
 use super::{Criterion, Context, ContextMut};
 
@@ -9,10 +9,16 @@ pub struct Exact;
 impl Criterion for Exact {
     fn name(&self) -> &str { "exact" }
 
-    fn prepare(&self, _ctx: ContextMut, documents: &mut [RawDocument]) {
+    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
+        &self,
+        _ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
+        documents: &mut [RawDocument<'r, 'tag>],
+    ) -> MResult<()>
+    {
         for document in documents {
             document.raw_matches.sort_unstable_by_key(|bm| (bm.query_index, Reverse(bm.is_exact)));
         }
+        Ok(())
     }
 
     fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
@@ -29,7 +35,6 @@ impl Criterion for Exact {
 
         let lhs = sum_exact_query_words(&lhs.raw_matches);
         let rhs = sum_exact_query_words(&rhs.raw_matches);
-
         lhs.cmp(&rhs).reverse()
     }
 }

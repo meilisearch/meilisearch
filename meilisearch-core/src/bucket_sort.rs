@@ -104,12 +104,14 @@ where
             let before_criterion_preparation = Instant::now();
 
             let ctx = ContextMut {
+                reader,
                 postings_lists: &mut arena,
                 query_enhancer: &mut query_enhancer,
                 automatons: &mut automatons,
+                documents_fields_counts_store,
             };
 
-            criterion.prepare(ctx, &mut group);
+            criterion.prepare(ctx, &mut group)?;
             debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
 
             let ctx = Context {
@@ -215,13 +217,15 @@ where
             }
 
             let ctx = ContextMut {
+                reader,
                 postings_lists: &mut arena,
                 query_enhancer: &mut query_enhancer,
                 automatons: &mut automatons,
+                documents_fields_counts_store,
             };
 
             let before_criterion_preparation = Instant::now();
-            criterion.prepare(ctx, &mut group);
+            criterion.prepare(ctx, &mut group)?;
             debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
 
             let ctx = Context {
@@ -329,7 +333,6 @@ impl fmt::Debug for BareMatch<'_> {
     }
 }
 
-// TODO remove that
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SimpleMatch {
     pub query_index: u16,

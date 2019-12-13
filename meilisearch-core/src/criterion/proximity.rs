@@ -1,7 +1,7 @@
 use std::cmp::{self, Ordering};
 use slice_group_by::GroupBy;
 use crate::bucket_sort::{SimpleMatch};
-use crate::RawDocument;
+use crate::{RawDocument, MResult};
 use super::{Criterion, Context, ContextMut, prepare_raw_matches};
 
 const MAX_DISTANCE: u16 = 8;
@@ -11,12 +11,14 @@ pub struct Proximity;
 impl Criterion for Proximity {
     fn name(&self) -> &str { "proximity" }
 
-    fn prepare<'p, 'tag, 'txn, 'q, 'a, 'r>(
+    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        ctx: ContextMut<'p, 'tag, 'txn, 'q, 'a>,
+        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
         documents: &mut [RawDocument<'r, 'tag>],
-    ) {
-        prepare_raw_matches(documents, ctx.postings_lists, ctx.query_enhancer, ctx.automatons);
+    ) -> MResult<()>
+    {
+        prepare_raw_matches(documents, ctx.postings_lists, ctx.query_enhancer);
+        Ok(())
     }
 
     fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {

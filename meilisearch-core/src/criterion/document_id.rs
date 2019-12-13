@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use compact_arena::SmallArena;
 use crate::RawDocument;
 use super::{Criterion, Context};
 
