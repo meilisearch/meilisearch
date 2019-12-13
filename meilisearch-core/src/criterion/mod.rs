@@ -145,7 +145,7 @@ fn prepare_query_distances<'a, 'tag, 'txn>(
         if !document.processed_distances.is_empty() { continue }
 
         let mut processed = Vec::new();
-        for m in document.raw_matches.iter() {
+        for m in document.bare_matches.iter() {
             if postings_lists[m.postings_list].is_empty() { continue }
 
             let range = query_enhancer.replacement(m.query_index as u32);
@@ -166,7 +166,7 @@ fn prepare_query_distances<'a, 'tag, 'txn>(
     }
 }
 
-fn prepare_raw_matches<'a, 'tag, 'txn>(
+fn prepare_bare_matches<'a, 'tag, 'txn>(
     documents: &mut [RawDocument<'a, 'tag>],
     postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
     query_enhancer: &QueryEnhancer,
@@ -175,7 +175,7 @@ fn prepare_raw_matches<'a, 'tag, 'txn>(
         if !document.processed_matches.is_empty() { continue }
 
         let mut processed = Vec::new();
-        for m in document.raw_matches.iter() {
+        for m in document.bare_matches.iter() {
             let postings_list = &postings_lists[m.postings_list];
             processed.reserve(postings_list.len());
             for di in postings_list.as_ref() {

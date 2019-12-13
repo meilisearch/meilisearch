@@ -48,7 +48,7 @@ impl Document {
         arena: &SmallArena<'tag, PostingsListView<'txn>>,
     ) -> Document
     {
-        let highlights = raw_document.raw_matches.iter().flat_map(|sm| {
+        let highlights = raw_document.bare_matches.iter().flat_map(|sm| {
             let postings_list = &arena[sm.postings_list];
             let input = postings_list.input();
             let query = &automatons[sm.query_index as usize].query;

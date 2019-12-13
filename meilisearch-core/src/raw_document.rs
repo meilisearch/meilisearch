@@ -5,7 +5,7 @@ use crate::bucket_sort::{SimpleMatch, BareMatch, QueryWordAutomaton, PostingsLis
 
 pub struct RawDocument<'a, 'tag> {
     pub id: crate::DocumentId,
-    pub raw_matches: &'a mut [BareMatch<'tag>],
+    pub bare_matches: &'a mut [BareMatch<'tag>],
     pub processed_matches: Vec<SimpleMatch>,
     /// The list of minimum `distance` found
     pub processed_distances: Vec<Option<u8>>,
@@ -16,21 +16,21 @@ pub struct RawDocument<'a, 'tag> {
 
 impl<'a, 'tag> RawDocument<'a, 'tag> {
     pub fn new<'txn>(
-        raw_matches: &'a mut [BareMatch<'tag>],
+        bare_matches: &'a mut [BareMatch<'tag>],
         automatons: &[QueryWordAutomaton],
         postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
     ) -> Option<RawDocument<'a, 'tag>>
     {
-        raw_matches.sort_unstable_by_key(|m| m.query_index);
+        bare_matches.sort_unstable_by_key(|m| m.query_index);
 
         let mut previous_word = None;
-        for i in 0..raw_matches.len() {
-            let a = &raw_matches[i];
+        for i in 0..bare_matches.len() {
+            let a = &bare_matches[i];
             let auta = &automatons[a.query_index as usize];
 
             match auta.phrase_query {
                 Some((0, _)) => {
-                    let b = match raw_matches.get(i + 1) {
+                    let b = match bare_matches.get(i + 1) {
                         Some(b) => b,
                         None => {
                             postings_lists[a.postings_list].rewrite_with(SetBuf::default());
@@ -77,13 +77,13 @@ impl<'a, 'tag> RawDocument<'a, 'tag> {
             }
         }
 
-        if raw_matches.iter().all(|rm| postings_lists[rm.postings_list].is_empty()) {
+        if bare_matches.iter().all(|rm| postings_lists[rm.postings_list].is_empty()) {
             return None
         }
 
         Some(RawDocument {
-            id: raw_matches[0].document_id,
-            raw_matches,
+            id: bare_matches[0].document_id,
+            bare_matches,
             processed_matches: Vec::new(),
             processed_distances: Vec::new(),
             contains_one_word_field: false,

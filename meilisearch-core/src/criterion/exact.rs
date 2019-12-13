@@ -21,11 +21,11 @@ impl Criterion for Exact {
         let reader = ctx.reader;
 
         'documents: for doc in documents {
-            doc.raw_matches.sort_unstable_by_key(|bm| (bm.query_index, Reverse(bm.is_exact)));
+            doc.bare_matches.sort_unstable_by_key(|bm| (bm.query_index, Reverse(bm.is_exact)));
 
             // mark the document if we find a "one word field" that matches
             let mut fields_counts = HashMap::new();
-            for group in doc.raw_matches.linear_group_by_key(|bm| bm.query_index) {
+            for group in doc.bare_matches.linear_group_by_key(|bm| bm.query_index) {
                 for group in group.linear_group_by_key(|bm| bm.is_exact) {
                     if !group[0].is_exact { break }
 
@@ -70,8 +70,8 @@ impl Criterion for Exact {
         lhs.contains_one_word_field.cmp(&rhs.contains_one_word_field).reverse()
         // if not, with document contains the more exact words
         .then_with(|| {
-            let lhs = sum_exact_query_words(&lhs.raw_matches);
-            let rhs = sum_exact_query_words(&rhs.raw_matches);
+            let lhs = sum_exact_query_words(&lhs.bare_matches);
+            let rhs = sum_exact_query_words(&rhs.bare_matches);
             lhs.cmp(&rhs).reverse()
         })
     }

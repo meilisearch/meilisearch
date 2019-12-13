@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use slice_group_by::GroupBy;
 use crate::bucket_sort::SimpleMatch;
 use crate::{RawDocument, MResult};
-use super::{Criterion, Context, ContextMut, prepare_raw_matches};
+use super::{Criterion, Context, ContextMut, prepare_bare_matches};
 
 pub struct WordsPosition;
 
@@ -15,7 +15,7 @@ impl Criterion for WordsPosition {
         documents: &mut [RawDocument<'r, 'tag>],
     ) -> MResult<()>
     {
-        prepare_raw_matches(documents, ctx.postings_lists, ctx.query_enhancer);
+        prepare_bare_matches(documents, ctx.postings_lists, ctx.query_enhancer);
         Ok(())
     }
 
