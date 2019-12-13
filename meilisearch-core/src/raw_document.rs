@@ -1,7 +1,9 @@
 use compact_arena::SmallArena;
 use itertools::EitherOrBoth;
 use sdset::SetBuf;
+use crate::DocIndex;
 use crate::bucket_sort::{SimpleMatch, BareMatch, QueryWordAutomaton, PostingsListView};
+use crate::reordered_attrs::ReorderedAttrs;
 
 pub struct RawDocument<'a, 'tag> {
     pub id: crate::DocumentId,
@@ -19,8 +21,25 @@ impl<'a, 'tag> RawDocument<'a, 'tag> {
         bare_matches: &'a mut [BareMatch<'tag>],
         automatons: &[QueryWordAutomaton],
         postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
+        searchable_attrs: Option<&ReorderedAttrs>,
     ) -> Option<RawDocument<'a, 'tag>>
     {
+        if let Some(reordered_attrs) = searchable_attrs {
+            for bm in bare_matches.iter() {
+                let postings_list = &postings_lists[bm.postings_list];
+
+                let mut rewritten = Vec::new();
+                for di in postings_list.iter() {
+                    if let Some(attribute) = reordered_attrs.get(di.attribute) {
+                        rewritten.push(DocIndex { attribute, ..*di });
+                    }
+                }
+
+                let new_postings = SetBuf::from_dirty(rewritten);
+                postings_lists[bm.postings_list].rewrite_with(new_postings);
+            }
+        }
+
         bare_matches.sort_unstable_by_key(|m| m.query_index);
 
         let mut previous_word = None;

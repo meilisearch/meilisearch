@@ -31,6 +31,7 @@ pub use meilisearch_types::{DocIndex, DocumentId, Highlight};
 use compact_arena::SmallArena;
 use crate::bucket_sort::{QueryWordAutomaton, PostingsListView};
 use crate::levenshtein::prefix_damerau_levenshtein;
+use crate::reordered_attrs::ReorderedAttrs;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Document {
@@ -41,42 +42,91 @@ pub struct Document {
     pub matches: Vec<crate::bucket_sort::SimpleMatch>,
 }
 
+fn highlights_from_raw_document<'a, 'tag, 'txn>(
+    raw_document: &RawDocument<'a, 'tag>,
+    automatons: &[QueryWordAutomaton],
+    arena: &SmallArena<'tag, PostingsListView<'txn>>,
+    searchable_attrs: Option<&ReorderedAttrs>,
+) -> Vec<Highlight>
+{
+    let mut highlights = Vec::new();
+
+    for bm in raw_document.bare_matches.iter() {
+        let postings_list = &arena[bm.postings_list];
+        let input = postings_list.input();
+        let query = &automatons[bm.query_index as usize].query;
+
+        for di in postings_list.iter() {
+            let covered_area = if query.len() > input.len() {
+                input.len()
+            } else {
+                prefix_damerau_levenshtein(query.as_bytes(), input).1
+            };
+
+            let attribute = searchable_attrs
+                .and_then(|sa| sa.reverse(di.attribute))
+                .unwrap_or(di.attribute);
+
+            let highlight = Highlight {
+                attribute: attribute,
+                char_index: di.char_index,
+                char_length: covered_area as u16,
+            };
+
+            highlights.push(highlight);
+        }
+    }
+
+    highlights
+}
+
 impl Document {
+    #[cfg(not(test))]
     pub fn from_raw<'a, 'tag, 'txn>(
         raw_document: RawDocument<'a, 'tag>,
         automatons: &[QueryWordAutomaton],
         arena: &SmallArena<'tag, PostingsListView<'txn>>,
+        searchable_attrs: Option<&ReorderedAttrs>,
     ) -> Document
     {
-        let highlights = raw_document.bare_matches.iter().flat_map(|sm| {
-            let postings_list = &arena[sm.postings_list];
-            let input = postings_list.input();
-            let query = &automatons[sm.query_index as usize].query;
-            postings_list.iter().map(move |m| {
-                let covered_area = if query.len() > input.len() {
-                    input.len()
-                } else {
-                    prefix_damerau_levenshtein(query.as_bytes(), input).1
-                };
+        let highlights = highlights_from_raw_document(
+            &raw_document,
+            automatons,
+            arena,
+            searchable_attrs,
+        );
 
-                Highlight {
-                    attribute: m.attribute,
-                    char_index: m.char_index,
-                    char_length: covered_area as u16,
-                }
-            })
-        }).collect();
+        Document { id: raw_document.id, highlights }
+    }
 
-        #[cfg(not(test))]
-        {
-            Document { id: raw_document.id, highlights }
+    #[cfg(test)]
+    pub fn from_raw<'a, 'tag, 'txn>(
+        raw_document: RawDocument<'a, 'tag>,
+        automatons: &[QueryWordAutomaton],
+        arena: &SmallArena<'tag, PostingsListView<'txn>>,
+        searchable_attrs: Option<&ReorderedAttrs>,
+    ) -> Document
+    {
+        use crate::bucket_sort::SimpleMatch;
+
+        let highlights = highlights_from_raw_document(
+            &raw_document,
+            automatons,
+            arena,
+            searchable_attrs,
+        );
+
+        let mut matches = Vec::new();
+        for sm in raw_document.processed_matches {
+            let attribute = searchable_attrs
+                .and_then(|sa| sa.reverse(sm.attribute))
+                .unwrap_or(sm.attribute);
+
+            matches.push(SimpleMatch { attribute, ..sm });
         }
+        matches.sort_unstable();
 
-        #[cfg(test)]
-        {
-            let matches = raw_document.processed_matches;
-            Document { id: raw_document.id, highlights, matches }
-        }
+        Document { id: raw_document.id, highlights, matches }
     }
 }
 

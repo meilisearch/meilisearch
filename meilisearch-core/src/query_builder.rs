@@ -73,9 +73,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
     }
 
     pub fn add_searchable_attribute(&mut self, attribute: u16) {
-        let reorders = self
-            .searchable_attrs
-            .get_or_insert_with(ReorderedAttrs::new);
+        let reorders = self.searchable_attrs.get_or_insert_with(ReorderedAttrs::new);
         reorders.insert_attribute(attribute);
     }
 
@@ -94,6 +92,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
                 distinct,
                 distinct_size,
                 self.criteria,
+                self.searchable_attrs,
                 self.main_store,
                 self.postings_lists_store,
                 self.documents_fields_counts_store,
@@ -105,6 +104,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
                 range,
                 self.filter,
                 self.criteria,
+                self.searchable_attrs,
                 self.main_store,
                 self.postings_lists_store,
                 self.documents_fields_counts_store,
@@ -177,6 +177,16 @@ mod tests {
             attribute: 0,
             word_index,
             char_index,
+            char_length: 0,
+        }
+    }
+
+    const fn doc_attr_index(document_id: u64, attribute: u16, word_index: u16) -> DocIndex {
+        DocIndex {
+            document_id: DocumentId(document_id),
+            attribute,
+            word_index,
+            char_index: 0,
             char_length: 0,
         }
     }
@@ -1257,6 +1267,75 @@ mod tests {
             let mut iter = matches.into_iter();
             assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 2, distance: 0, .. })); // search
             assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 3, distance: 0, .. })); // engine
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), None);
+    }
+
+    #[test]
+    fn searchable_attributes() {
+        let store = TempDatabase::from_iter(vec![
+            ("search", &[doc_attr_index(0, 0, 0)][..]),
+            ("engine", &[doc_attr_index(0, 0, 1)][..]),
+
+            ("search", &[doc_attr_index(1, 1, 0)][..]),
+            ("engine", &[doc_attr_index(1, 1, 1)][..]),
+        ]);
+
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "search engine", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 0, distance: 0, .. })); // search
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 1, word_index: 1, distance: 0, .. })); // engine
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 0, distance: 0, .. })); // search
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 1, word_index: 1, distance: 0, .. })); // engine
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), None);
+
+        // reorderer the searchable attributes
+        let mut builder = store.query_builder();
+        builder.add_searchable_attribute(1);
+        builder.add_searchable_attribute(0);
+
+        let results = builder.query(&reader, "search engine", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 0, distance: 0, .. })); // search
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 1, word_index: 1, distance: 0, .. })); // engine
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 0, distance: 0, .. })); // search
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 1, word_index: 1, distance: 0, .. })); // engine
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), None);
+
+        // remove a searchable attributes
+        let mut builder = store.query_builder();
+        builder.add_searchable_attribute(1);
+
+        let results = builder.query(&reader, "search engine", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 0, distance: 0, .. })); // search
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 1, word_index: 1, distance: 0, .. })); // engine
             assert_matches!(iter.next(), None);
         });
         assert_matches!(iter.next(), None);

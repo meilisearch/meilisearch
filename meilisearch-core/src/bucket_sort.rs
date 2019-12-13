@@ -33,6 +33,7 @@ pub fn bucket_sort<'c, FI>(
     range: Range<usize>,
     filter: Option<FI>,
     criteria: Criteria<'c>,
+    searchable_attrs: Option<ReorderedAttrs>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
@@ -54,6 +55,7 @@ where
             distinct,
             distinct_size,
             criteria,
+            searchable_attrs,
             main_store,
             postings_lists_store,
             documents_fields_counts_store,
@@ -84,7 +86,7 @@ where
     let mut raw_documents = Vec::new();
     for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
         prefiltered_documents += 1;
-        if let Some(raw_document) = RawDocument::new(bare_matches, &automatons, &mut arena) {
+        if let Some(raw_document) = RawDocument::new(bare_matches, &automatons, &mut arena, searchable_attrs.as_ref()) {
             raw_documents.push(raw_document);
         }
     }
@@ -140,7 +142,7 @@ where
     }
 
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
-    let iter = iter.map(|rd| Document::from_raw(rd, &automatons, &arena));
+    let iter = iter.map(|rd| Document::from_raw(rd, &automatons, &arena, searchable_attrs.as_ref()));
 
     Ok(iter.collect())
 }
@@ -153,6 +155,7 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     distinct: FD,
     distinct_size: usize,
     criteria: Criteria<'c>,
+    searchable_attrs: Option<ReorderedAttrs>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
@@ -182,7 +185,7 @@ where
     let mut raw_documents = Vec::new();
     for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
         prefiltered_documents += 1;
-        if let Some(raw_document) = RawDocument::new(bare_matches, &automatons, &mut arena) {
+        if let Some(raw_document) = RawDocument::new(bare_matches, &automatons, &mut arena, searchable_attrs.as_ref()) {
             raw_documents.push(raw_document);
         }
     }
@@ -303,7 +306,7 @@ where
             };
 
             if distinct_accepted && seen.len() > range.start {
-                documents.push(Document::from_raw(raw_document, &automatons, &arena));
+                documents.push(Document::from_raw(raw_document, &automatons, &arena, searchable_attrs.as_ref()));
                 if documents.len() == range.len() {
                     break;
                 }
