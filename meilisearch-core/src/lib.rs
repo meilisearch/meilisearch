@@ -3,7 +3,7 @@
 extern crate assert_matches;
 
 mod automaton;
-pub mod criterion;
+mod bucket_sort;
 mod database;
 mod distinct_map;
 mod error;
@@ -12,14 +12,12 @@ mod number;
 mod query_builder;
 mod ranked_map;
 mod raw_document;
-pub mod raw_indexer;
 mod reordered_attrs;
+mod update;
+pub mod criterion;
+pub mod raw_indexer;
 pub mod serde;
 pub mod store;
-mod update;
-
-// TODO replace
-mod bucket_sort;
 
 pub use self::database::{BoxUpdateFn, Database, MainT, UpdateT};
 pub use self::error::{Error, MResult};
