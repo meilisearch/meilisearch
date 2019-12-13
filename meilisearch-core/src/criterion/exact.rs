@@ -1,132 +1,78 @@
-use std::cmp::Ordering;
-
+use std::cmp::{Ordering, Reverse};
+use std::collections::hash_map::{HashMap, Entry};
 use meilisearch_schema::SchemaAttr;
-use sdset::Set;
 use slice_group_by::GroupBy;
+use crate::{RawDocument, MResult};
+use crate::bucket_sort::BareMatch;
+use super::{Criterion, Context, ContextMut};
 
-use crate::criterion::Criterion;
-use crate::RawDocument;
+pub struct Exact;
 
-#[inline]
-fn number_exact_matches(
-    query_index: &[u32],
-    attribute: &[u16],
-    is_exact: &[bool],
-    fields_counts: &Set<(SchemaAttr, u64)>,
-) -> usize {
-    let mut count = 0;
-    let mut index = 0;
+impl Criterion for Exact {
+    fn name(&self) -> &str { "exact" }
 
-    for group in query_index.linear_group() {
-        let len = group.len();
+    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
+        &self,
+        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
+        documents: &mut [RawDocument<'r, 'tag>],
+    ) -> MResult<()>
+    {
+        let store = ctx.documents_fields_counts_store;
+        let reader = ctx.reader;
 
-        let mut found_exact = false;
-        for (pos, is_exact) in is_exact[index..index + len].iter().enumerate() {
-            if *is_exact {
-                found_exact = true;
-                let attr = &attribute[index + pos];
-                if let Ok(pos) = fields_counts.binary_search_by_key(attr, |(a, _)| a.0) {
-                    let (_, count) = fields_counts[pos];
-                    if count == 1 {
-                        return usize::max_value();
+        'documents: for doc in documents {
+            doc.bare_matches.sort_unstable_by_key(|bm| (bm.query_index, Reverse(bm.is_exact)));
+
+            // mark the document if we find a "one word field" that matches
+            let mut fields_counts = HashMap::new();
+            for group in doc.bare_matches.linear_group_by_key(|bm| bm.query_index) {
+                for group in group.linear_group_by_key(|bm| bm.is_exact) {
+                    if !group[0].is_exact { break }
+
+                    for bm in group {
+                        for di in ctx.postings_lists[bm.postings_list].as_ref() {
+
+                            let attr = SchemaAttr(di.attribute);
+                            let count = match fields_counts.entry(attr) {
+                                Entry::Occupied(entry) => *entry.get(),
+                                Entry::Vacant(entry) => {
+                                    let count = store.document_field_count(reader, doc.id, attr)?;
+                                    *entry.insert(count)
+                                },
+                            };
+
+                            if count == Some(1) {
+                                doc.contains_one_word_field = true;
+                                continue 'documents
+                            }
+                        }
                     }
                 }
             }
         }
 
-        count += found_exact as usize;
-        index += len;
+        Ok(())
     }
 
-    count
-}
+    fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
+        #[inline]
+        fn sum_exact_query_words(matches: &[BareMatch]) -> usize {
+            let mut sum_exact_query_words = 0;
 
-#[derive(Debug, Clone, Copy)]
-pub struct Exact;
+            for group in matches.linear_group_by_key(|bm| bm.query_index) {
+                sum_exact_query_words += group[0].is_exact as usize;
+            }
 
-impl Criterion for Exact {
-    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
-        let lhs = {
-            let query_index = lhs.query_index();
-            let is_exact = lhs.is_exact();
-            let attribute = lhs.attribute();
-            let fields_counts = &lhs.fields_counts;
+            sum_exact_query_words
+        }
 
-            number_exact_matches(query_index, attribute, is_exact, fields_counts)
-        };
-
-        let rhs = {
-            let query_index = rhs.query_index();
-            let is_exact = rhs.is_exact();
-            let attribute = rhs.attribute();
-            let fields_counts = &rhs.fields_counts;
-
-            number_exact_matches(query_index, attribute, is_exact, fields_counts)
-        };
-
-        lhs.cmp(&rhs).reverse()
-    }
-
-    fn name(&self) -> &str {
-        "Exact"
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // typing: "soulier"
-    //
-    // doc0: "Soulier bleu"
-    // doc1: "souliereres rouge"
-    #[test]
-    fn easy_case() {
-        let doc0 = {
-            let query_index = &[0];
-            let attribute = &[0];
-            let is_exact = &[true];
-            let fields_counts = Set::new(&[(SchemaAttr(0), 2)]).unwrap();
-
-            number_exact_matches(query_index, attribute, is_exact, fields_counts)
-        };
-
-        let doc1 = {
-            let query_index = &[0];
-            let attribute = &[0];
-            let is_exact = &[false];
-            let fields_counts = Set::new(&[(SchemaAttr(0), 2)]).unwrap();
-
-            number_exact_matches(query_index, attribute, is_exact, fields_counts)
-        };
-
-        assert_eq!(doc0.cmp(&doc1).reverse(), Ordering::Less);
-    }
-
-    // typing: "soulier"
-    //
-    // doc0: { 0. "soulier" }
-    // doc1: { 0. "soulier bleu et blanc" }
-    #[test]
-    fn basic() {
-        let doc0 = {
-            let query_index = &[0];
-            let attribute = &[0];
-            let is_exact = &[true];
-            let fields_counts = Set::new(&[(SchemaAttr(0), 1)]).unwrap();
-
-            number_exact_matches(query_index, attribute, is_exact, fields_counts)
-        };
-
-        let doc1 = {
-            let query_index = &[0];
-            let attribute = &[0];
-            let is_exact = &[true];
-            let fields_counts = Set::new(&[(SchemaAttr(0), 4)]).unwrap();
-
-            number_exact_matches(query_index, attribute, is_exact, fields_counts)
-        };
-
-        assert_eq!(doc0.cmp(&doc1).reverse(), Ordering::Less);
+        // does it contains a "one word field"
+        lhs.contains_one_word_field.cmp(&rhs.contains_one_word_field).reverse()
+        // if not, with document contains the more exact words
+        .then_with(|| {
+            let lhs = sum_exact_query_words(&lhs.bare_matches);
+            let rhs = sum_exact_query_words(&rhs.bare_matches);
+            lhs.cmp(&rhs).reverse()
+        })
     }
 }

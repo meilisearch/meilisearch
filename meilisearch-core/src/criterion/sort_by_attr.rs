@@ -1,10 +1,9 @@
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
-
-use crate::criterion::Criterion;
-use crate::{RankedMap, RawDocument};
 use meilisearch_schema::{Schema, SchemaAttr};
+use crate::{RankedMap, RawDocument};
+use super::{Criterion, Context};
 
 /// An helper struct that permit to sort documents by
 /// some of their stored attributes.
@@ -28,11 +27,11 @@ use meilisearch_schema::{Schema, SchemaAttr};
 /// let custom_ranking = SortByAttr::lower_is_better(&ranked_map, &schema, "published_at")?;
 ///
 /// let builder = CriteriaBuilder::with_capacity(8)
-///        .add(SumOfTypos)
-///        .add(NumberOfWords)
-///        .add(WordsProximity)
-///        .add(SumOfWordsAttribute)
-///        .add(SumOfWordsPosition)
+///        .add(Typo)
+///        .add(Words)
+///        .add(Proximity)
+///        .add(Attribute)
+///        .add(WordsPosition)
 ///        .add(Exact)
 ///        .add(custom_ranking)
 ///        .add(DocumentId);
@@ -86,8 +85,12 @@ impl<'a> SortByAttr<'a> {
     }
 }
 
-impl<'a> Criterion for SortByAttr<'a> {
-    fn evaluate(&self, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
+impl Criterion for SortByAttr<'_> {
+    fn name(&self) -> &str {
+        "sort by attribute"
+    }
+
+    fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
         let lhs = self.ranked_map.get(lhs.id, self.attr);
         let rhs = self.ranked_map.get(rhs.id, self.attr);
 
@@ -104,10 +107,6 @@ impl<'a> Criterion for SortByAttr<'a> {
             (Some(_), None) => Ordering::Less,
             (None, None) => Ordering::Equal,
         }
-    }
-
-    fn name(&self) -> &str {
-        "SortByAttr"
     }
 }
 

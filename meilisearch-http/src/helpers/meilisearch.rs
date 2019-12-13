@@ -310,11 +310,11 @@ impl<'a> SearchBuilder<'a> {
             if let Some(ranking_rules_order) = ranking_order {
                 for rule in ranking_rules_order {
                     match rule.as_str() {
-                        "_sum_of_typos" => builder.push(SumOfTypos),
-                        "_number_of_words" => builder.push(NumberOfWords),
-                        "_word_proximity" => builder.push(WordsProximity),
-                        "_sum_of_words_attribute" => builder.push(SumOfWordsAttribute),
-                        "_sum_of_words_position" => builder.push(SumOfWordsPosition),
+                        "_typo" => builder.push(Typo),
+                        "_words" => builder.push(Words),
+                        "_proximity" => builder.push(Proximity),
+                        "_attribute" => builder.push(Attribute),
+                        "_words_position" => builder.push(WordsPosition),
                         "_exact" => builder.push(Exact),
                         _ => {
                             let order = match ranking_rules.get(rule.as_str()) {
@@ -340,11 +340,11 @@ impl<'a> SearchBuilder<'a> {
                 builder.push(DocumentId);
                 return Ok(Some(builder.build()));
             } else {
-                builder.push(SumOfTypos);
-                builder.push(NumberOfWords);
-                builder.push(WordsProximity);
-                builder.push(SumOfWordsAttribute);
-                builder.push(SumOfWordsPosition);
+                builder.push(Typo);
+                builder.push(Words);
+                builder.push(Proximity);
+                builder.push(Attribute);
+                builder.push(WordsPosition);
                 builder.push(Exact);
                 for (rule, order) in ranking_rules.iter() {
                     let custom_ranking = match order {

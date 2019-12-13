@@ -3,7 +3,7 @@
 extern crate assert_matches;
 
 mod automaton;
-pub mod criterion;
+mod bucket_sort;
 mod database;
 mod distinct_map;
 mod error;
@@ -12,11 +12,12 @@ mod number;
 mod query_builder;
 mod ranked_map;
 mod raw_document;
-pub mod raw_indexer;
 mod reordered_attrs;
+mod update;
+pub mod criterion;
+pub mod raw_indexer;
 pub mod serde;
 pub mod store;
-mod update;
 
 pub use self::database::{BoxUpdateFn, Database, MainT, UpdateT};
 pub use self::error::{Error, MResult};
@@ -27,61 +28,105 @@ pub use self::store::Index;
 pub use self::update::{EnqueuedUpdateResult, ProcessedUpdateResult, UpdateStatus, UpdateType};
 pub use meilisearch_types::{DocIndex, DocumentId, Highlight};
 
-#[doc(hidden)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TmpMatch {
-    pub query_index: u32,
-    pub distance: u8,
-    pub attribute: u16,
-    pub word_index: u16,
-    pub is_exact: bool,
-}
+use compact_arena::SmallArena;
+use crate::bucket_sort::{QueryWordAutomaton, PostingsListView};
+use crate::levenshtein::prefix_damerau_levenshtein;
+use crate::reordered_attrs::ReorderedAttrs;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Document {
     pub id: DocumentId,
     pub highlights: Vec<Highlight>,
 
     #[cfg(test)]
-    pub matches: Vec<TmpMatch>,
+    pub matches: Vec<crate::bucket_sort::SimpleMatch>,
+}
+
+fn highlights_from_raw_document<'a, 'tag, 'txn>(
+    raw_document: &RawDocument<'a, 'tag>,
+    automatons: &[QueryWordAutomaton],
+    arena: &SmallArena<'tag, PostingsListView<'txn>>,
+    searchable_attrs: Option<&ReorderedAttrs>,
+) -> Vec<Highlight>
+{
+    let mut highlights = Vec::new();
+
+    for bm in raw_document.bare_matches.iter() {
+        let postings_list = &arena[bm.postings_list];
+        let input = postings_list.input();
+        let query = &automatons[bm.query_index as usize].query;
+
+        for di in postings_list.iter() {
+            let covered_area = if query.len() > input.len() {
+                input.len()
+            } else {
+                prefix_damerau_levenshtein(query.as_bytes(), input).1
+            };
+
+            let attribute = searchable_attrs
+                .and_then(|sa| sa.reverse(di.attribute))
+                .unwrap_or(di.attribute);
+
+            let highlight = Highlight {
+                attribute: attribute,
+                char_index: di.char_index,
+                char_length: covered_area as u16,
+            };
+
+            highlights.push(highlight);
+        }
+    }
+
+    highlights
 }
 
 impl Document {
     #[cfg(not(test))]
-    fn from_raw(raw: RawDocument) -> Document {
-        Document {
-            id: raw.id,
-            highlights: raw.highlights,
-        }
+    pub fn from_raw<'a, 'tag, 'txn>(
+        raw_document: RawDocument<'a, 'tag>,
+        automatons: &[QueryWordAutomaton],
+        arena: &SmallArena<'tag, PostingsListView<'txn>>,
+        searchable_attrs: Option<&ReorderedAttrs>,
+    ) -> Document
+    {
+        let highlights = highlights_from_raw_document(
+            &raw_document,
+            automatons,
+            arena,
+            searchable_attrs,
+        );
+
+        Document { id: raw_document.id, highlights }
     }
 
     #[cfg(test)]
-    fn from_raw(raw: RawDocument) -> Document {
-        let len = raw.query_index().len();
-        let mut matches = Vec::with_capacity(len);
+    pub fn from_raw<'a, 'tag, 'txn>(
+        raw_document: RawDocument<'a, 'tag>,
+        automatons: &[QueryWordAutomaton],
+        arena: &SmallArena<'tag, PostingsListView<'txn>>,
+        searchable_attrs: Option<&ReorderedAttrs>,
+    ) -> Document
+    {
+        use crate::bucket_sort::SimpleMatch;
 
-        let query_index = raw.query_index();
-        let distance = raw.distance();
-        let attribute = raw.attribute();
-        let word_index = raw.word_index();
-        let is_exact = raw.is_exact();
+        let highlights = highlights_from_raw_document(
+            &raw_document,
+            automatons,
+            arena,
+            searchable_attrs,
+        );
 
-        for i in 0..len {
-            let match_ = TmpMatch {
-                query_index: query_index[i],
-                distance: distance[i],
-                attribute: attribute[i],
-                word_index: word_index[i],
-                is_exact: is_exact[i],
-            };
-            matches.push(match_);
+        let mut matches = Vec::new();
+        for sm in raw_document.processed_matches {
+            let attribute = searchable_attrs
+                .and_then(|sa| sa.reverse(sm.attribute))
+                .unwrap_or(sm.attribute);
+
+            matches.push(SimpleMatch { attribute, ..sm });
         }
+        matches.sort_unstable();
 
-        Document {
-            id: raw.id,
-            matches,
-            highlights: raw.highlights,
-        }
+        Document { id: raw_document.id, highlights, matches }
     }
 }
 

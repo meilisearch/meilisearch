@@ -1,5 +1,5 @@
-use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::HashSet;
+use std::collections::btree_map::{BTreeMap, Entry};
 use std::error::Error;
 use std::io::{Read, Write};
 use std::iter::FromIterator;
@@ -14,6 +14,10 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use meilisearch_core::{Database, Highlight, ProcessedUpdateResult};
 use meilisearch_schema::SchemaAttr;
+
+// #[cfg(target_os = "linux")]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 #[derive(Debug, StructOpt)]
 struct IndexCommand {

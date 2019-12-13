@@ -325,7 +325,7 @@ where
                 txn,
                 document_id,
                 attribute,
-                number_of_words as u64,
+                number_of_words as u16,
             )?;
         }
     }

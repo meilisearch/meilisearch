@@ -1,186 +1,111 @@
-use std::fmt;
-use std::sync::Arc;
-
-use meilisearch_schema::SchemaAttr;
+use compact_arena::SmallArena;
+use itertools::EitherOrBoth;
 use sdset::SetBuf;
-use slice_group_by::GroupBy;
+use crate::DocIndex;
+use crate::bucket_sort::{SimpleMatch, BareMatch, QueryWordAutomaton, PostingsListView};
+use crate::reordered_attrs::ReorderedAttrs;
 
-use crate::{DocumentId, Highlight, TmpMatch};
-
-#[derive(Clone)]
-pub struct RawDocument {
-    pub id: DocumentId,
-    pub matches: SharedMatches,
-    pub highlights: Vec<Highlight>,
-    pub fields_counts: SetBuf<(SchemaAttr, u64)>,
+pub struct RawDocument<'a, 'tag> {
+    pub id: crate::DocumentId,
+    pub bare_matches: &'a mut [BareMatch<'tag>],
+    pub processed_matches: Vec<SimpleMatch>,
+    /// The list of minimum `distance` found
+    pub processed_distances: Vec<Option<u8>>,
+    /// Does this document contains a field
+    /// with one word that is exactly matching
+    pub contains_one_word_field: bool,
 }
 
-impl RawDocument {
-    pub fn query_index(&self) -> &[u32] {
-        let r = self.matches.range;
-        // it is safe because construction/modifications
-        // can only be done in this module
-        unsafe {
-            &self
-                .matches
-                .matches
-                .query_index
-                .get_unchecked(r.start..r.end)
-        }
-    }
+impl<'a, 'tag> RawDocument<'a, 'tag> {
+    pub fn new<'txn>(
+        bare_matches: &'a mut [BareMatch<'tag>],
+        automatons: &[QueryWordAutomaton],
+        postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
+        searchable_attrs: Option<&ReorderedAttrs>,
+    ) -> Option<RawDocument<'a, 'tag>>
+    {
+        if let Some(reordered_attrs) = searchable_attrs {
+            for bm in bare_matches.iter() {
+                let postings_list = &postings_lists[bm.postings_list];
 
-    pub fn distance(&self) -> &[u8] {
-        let r = self.matches.range;
-        // it is safe because construction/modifications
-        // can only be done in this module
-        unsafe { &self.matches.matches.distance.get_unchecked(r.start..r.end) }
-    }
+                let mut rewritten = Vec::new();
+                for di in postings_list.iter() {
+                    if let Some(attribute) = reordered_attrs.get(di.attribute) {
+                        rewritten.push(DocIndex { attribute, ..*di });
+                    }
+                }
 
-    pub fn attribute(&self) -> &[u16] {
-        let r = self.matches.range;
-        // it is safe because construction/modifications
-        // can only be done in this module
-        unsafe { &self.matches.matches.attribute.get_unchecked(r.start..r.end) }
-    }
-
-    pub fn word_index(&self) -> &[u16] {
-        let r = self.matches.range;
-        // it is safe because construction/modifications
-        // can only be done in this module
-        unsafe {
-            &self
-                .matches
-                .matches
-                .word_index
-                .get_unchecked(r.start..r.end)
-        }
-    }
-
-    pub fn is_exact(&self) -> &[bool] {
-        let r = self.matches.range;
-        // it is safe because construction/modifications
-        // can only be done in this module
-        unsafe { &self.matches.matches.is_exact.get_unchecked(r.start..r.end) }
-    }
-}
-
-impl fmt::Debug for RawDocument {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str("RawDocument {\r\n")?;
-        f.write_fmt(format_args!("{:>15}: {:?},\r\n", "id", self.id))?;
-        f.write_fmt(format_args!(
-            "{:>15}: {:^5?},\r\n",
-            "query_index",
-            self.query_index()
-        ))?;
-        f.write_fmt(format_args!(
-            "{:>15}: {:^5?},\r\n",
-            "distance",
-            self.distance()
-        ))?;
-        f.write_fmt(format_args!(
-            "{:>15}: {:^5?},\r\n",
-            "attribute",
-            self.attribute()
-        ))?;
-        f.write_fmt(format_args!(
-            "{:>15}: {:^5?},\r\n",
-            "word_index",
-            self.word_index()
-        ))?;
-        f.write_fmt(format_args!(
-            "{:>15}: {:^5?},\r\n",
-            "is_exact",
-            self.is_exact()
-        ))?;
-        f.write_str("}")?;
-        Ok(())
-    }
-}
-
-pub fn raw_documents_from(
-    matches: SetBuf<(DocumentId, TmpMatch)>,
-    highlights: SetBuf<(DocumentId, Highlight)>,
-    fields_counts: SetBuf<(DocumentId, SchemaAttr, u64)>,
-) -> Vec<RawDocument> {
-    let mut docs_ranges: Vec<(_, Range, _, _)> = Vec::new();
-    let mut matches2 = Matches::with_capacity(matches.len());
-
-    let matches = matches.linear_group_by_key(|(id, _)| *id);
-    let highlights = highlights.linear_group_by_key(|(id, _)| *id);
-    let fields_counts = fields_counts.linear_group_by_key(|(id, _, _)| *id);
-
-    for ((mgroup, hgroup), fgroup) in matches.zip(highlights).zip(fields_counts) {
-        debug_assert_eq!(mgroup[0].0, hgroup[0].0);
-        debug_assert_eq!(mgroup[0].0, fgroup[0].0);
-
-        let document_id = mgroup[0].0;
-        let start = docs_ranges.last().map(|(_, r, _, _)| r.end).unwrap_or(0);
-        let end = start + mgroup.len();
-        let highlights = hgroup.iter().map(|(_, h)| *h).collect();
-        let fields_counts = SetBuf::new(fgroup.iter().map(|(_, a, c)| (*a, *c)).collect()).unwrap();
-
-        docs_ranges.push((document_id, Range { start, end }, highlights, fields_counts));
-        matches2.extend_from_slice(mgroup);
-    }
-
-    let matches = Arc::new(matches2);
-    docs_ranges
-        .into_iter()
-        .map(|(id, range, highlights, fields_counts)| {
-            let matches = SharedMatches {
-                range,
-                matches: matches.clone(),
-            };
-            RawDocument {
-                id,
-                matches,
-                highlights,
-                fields_counts,
+                let new_postings = SetBuf::from_dirty(rewritten);
+                postings_lists[bm.postings_list].rewrite_with(new_postings);
             }
+        }
+
+        bare_matches.sort_unstable_by_key(|m| m.query_index);
+
+        let mut previous_word = None;
+        for i in 0..bare_matches.len() {
+            let a = &bare_matches[i];
+            let auta = &automatons[a.query_index as usize];
+
+            match auta.phrase_query {
+                Some((0, _)) => {
+                    let b = match bare_matches.get(i + 1) {
+                        Some(b) => b,
+                        None => {
+                            postings_lists[a.postings_list].rewrite_with(SetBuf::default());
+                            continue;
+                        }
+                    };
+
+                    if a.query_index + 1 != b.query_index {
+                        postings_lists[a.postings_list].rewrite_with(SetBuf::default());
+                        continue
+                    }
+
+                    let pla = &postings_lists[a.postings_list];
+                    let plb = &postings_lists[b.postings_list];
+
+                    let iter = itertools::merge_join_by(pla.iter(), plb.iter(), |a, b| {
+                        a.attribute.cmp(&b.attribute).then((a.word_index + 1).cmp(&b.word_index))
+                    });
+
+                    let mut newa = Vec::new();
+                    let mut newb = Vec::new();
+
+                    for eb in iter {
+                        if let EitherOrBoth::Both(a, b) = eb {
+                            newa.push(*a);
+                            newb.push(*b);
+                        }
+                    }
+
+                    if !newa.is_empty() {
+                        previous_word = Some(a.query_index);
+                    }
+
+                    postings_lists[a.postings_list].rewrite_with(SetBuf::new_unchecked(newa));
+                    postings_lists[b.postings_list].rewrite_with(SetBuf::new_unchecked(newb));
+                },
+                Some((1, _)) => {
+                    if previous_word.take() != Some(a.query_index - 1) {
+                        postings_lists[a.postings_list].rewrite_with(SetBuf::default());
+                    }
+                },
+                Some((_, _)) => unreachable!(),
+                None => (),
+            }
+        }
+
+        if bare_matches.iter().all(|rm| postings_lists[rm.postings_list].is_empty()) {
+            return None
+        }
+
+        Some(RawDocument {
+            id: bare_matches[0].document_id,
+            bare_matches,
+            processed_matches: Vec::new(),
+            processed_distances: Vec::new(),
+            contains_one_word_field: false,
         })
-        .collect()
-}
-
-#[derive(Debug, Copy, Clone)]
-struct Range {
-    start: usize,
-    end: usize,
-}
-
-#[derive(Clone)]
-pub struct SharedMatches {
-    range: Range,
-    matches: Arc<Matches>,
-}
-
-#[derive(Clone)]
-struct Matches {
-    query_index: Vec<u32>,
-    distance: Vec<u8>,
-    attribute: Vec<u16>,
-    word_index: Vec<u16>,
-    is_exact: Vec<bool>,
-}
-
-impl Matches {
-    fn with_capacity(cap: usize) -> Matches {
-        Matches {
-            query_index: Vec::with_capacity(cap),
-            distance: Vec::with_capacity(cap),
-            attribute: Vec::with_capacity(cap),
-            word_index: Vec::with_capacity(cap),
-            is_exact: Vec::with_capacity(cap),
-        }
-    }
-
-    fn extend_from_slice(&mut self, matches: &[(DocumentId, TmpMatch)]) {
-        for (_, match_) in matches {
-            self.query_index.push(match_.query_index);
-            self.distance.push(match_.distance);
-            self.attribute.push(match_.attribute);
-            self.word_index.push(match_.word_index);
-            self.is_exact.push(match_.is_exact);
-        }
     }
 }

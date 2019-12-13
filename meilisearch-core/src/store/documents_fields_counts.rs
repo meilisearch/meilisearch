@@ -7,7 +7,7 @@ use meilisearch_schema::SchemaAttr;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFieldsCounts {
-    pub(crate) documents_fields_counts: heed::Database<OwnedType<DocumentAttrKey>, OwnedType<u64>>,
+    pub(crate) documents_fields_counts: heed::Database<OwnedType<DocumentAttrKey>, OwnedType<u16>>,
 }
 
 impl DocumentsFieldsCounts {
@@ -16,7 +16,7 @@ impl DocumentsFieldsCounts {
         writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
         attribute: SchemaAttr,
-        value: u64,
+        value: u16,
     ) -> ZResult<()> {
         let key = DocumentAttrKey::new(document_id, attribute);
         self.documents_fields_counts.put(writer, &key, &value)
@@ -42,7 +42,7 @@ impl DocumentsFieldsCounts {
         reader: &heed::RoTxn<MainT>,
         document_id: DocumentId,
         attribute: SchemaAttr,
-    ) -> ZResult<Option<u64>> {
+    ) -> ZResult<Option<u16>> {
         let key = DocumentAttrKey::new(document_id, attribute);
         match self.documents_fields_counts.get(reader, &key)? {
             Some(count) => Ok(Some(count)),
@@ -79,11 +79,11 @@ impl DocumentsFieldsCounts {
 }
 
 pub struct DocumentFieldsCountsIter<'txn> {
-    iter: heed::RoRange<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
+    iter: heed::RoRange<'txn, OwnedType<DocumentAttrKey>, OwnedType<u16>>,
 }
 
 impl Iterator for DocumentFieldsCountsIter<'_> {
-    type Item = ZResult<(SchemaAttr, u64)>;
+    type Item = ZResult<(SchemaAttr, u16)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
@@ -99,7 +99,7 @@ impl Iterator for DocumentFieldsCountsIter<'_> {
 
 pub struct DocumentsIdsIter<'txn> {
     last_seen_id: Option<DocumentId>,
-    iter: heed::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
+    iter: heed::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u16>>,
 }
 
 impl Iterator for DocumentsIdsIter<'_> {
@@ -123,11 +123,11 @@ impl Iterator for DocumentsIdsIter<'_> {
 }
 
 pub struct AllDocumentsFieldsCountsIter<'txn> {
-    iter: heed::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u64>>,
+    iter: heed::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u16>>,
 }
 
 impl Iterator for AllDocumentsFieldsCountsIter<'_> {
-    type Item = ZResult<(DocumentId, SchemaAttr, u64)>;
+    type Item = ZResult<(DocumentId, SchemaAttr, u16)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
