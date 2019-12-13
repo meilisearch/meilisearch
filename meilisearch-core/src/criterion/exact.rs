@@ -1,4 +1,6 @@
 use std::cmp::{Ordering, Reverse};
+use std::collections::hash_map::{HashMap, Entry};
+use meilisearch_schema::SchemaAttr;
 use slice_group_by::GroupBy;
 use crate::{RawDocument, MResult};
 use crate::bucket_sort::BareMatch;
@@ -11,13 +13,44 @@ impl Criterion for Exact {
 
     fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
         &self,
-        _ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
+        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
         documents: &mut [RawDocument<'r, 'tag>],
     ) -> MResult<()>
     {
-        for document in documents {
-            document.raw_matches.sort_unstable_by_key(|bm| (bm.query_index, Reverse(bm.is_exact)));
+        let store = ctx.documents_fields_counts_store;
+        let reader = ctx.reader;
+
+        'documents: for doc in documents {
+            doc.raw_matches.sort_unstable_by_key(|bm| (bm.query_index, Reverse(bm.is_exact)));
+
+            // mark the document if we find a "one word field" that matches
+            let mut fields_counts = HashMap::new();
+            for group in doc.raw_matches.linear_group_by_key(|bm| bm.query_index) {
+                for group in group.linear_group_by_key(|bm| bm.is_exact) {
+                    if !group[0].is_exact { break }
+
+                    for bm in group {
+                        for di in ctx.postings_lists[bm.postings_list].as_ref() {
+
+                            let attr = SchemaAttr(di.attribute);
+                            let count = match fields_counts.entry(attr) {
+                                Entry::Occupied(entry) => *entry.get(),
+                                Entry::Vacant(entry) => {
+                                    let count = store.document_field_count(reader, doc.id, attr)?;
+                                    *entry.insert(count)
+                                },
+                            };
+
+                            if count == Some(1) {
+                                doc.contains_one_word_field = true;
+                                continue 'documents
+                            }
+                        }
+                    }
+                }
+            }
         }
+
         Ok(())
     }
 
@@ -33,8 +66,13 @@ impl Criterion for Exact {
             sum_exact_query_words
         }
 
-        let lhs = sum_exact_query_words(&lhs.raw_matches);
-        let rhs = sum_exact_query_words(&rhs.raw_matches);
-        lhs.cmp(&rhs).reverse()
+        // does it contains a "one word field"
+        lhs.contains_one_word_field.cmp(&rhs.contains_one_word_field).reverse()
+        // if not, with document contains the more exact words
+        .then_with(|| {
+            let lhs = sum_exact_query_words(&lhs.raw_matches);
+            let rhs = sum_exact_query_words(&rhs.raw_matches);
+            lhs.cmp(&rhs).reverse()
+        })
     }
 }

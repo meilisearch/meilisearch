@@ -284,11 +284,7 @@ mod tests {
 
             writer.commit().unwrap();
 
-            TempDatabase {
-                database,
-                index,
-                _tempdir: tempdir,
-            }
+            TempDatabase { database, index, _tempdir: tempdir }
         }
     }
 
@@ -1157,6 +1153,46 @@ mod tests {
             assert_matches!(iter.next(), Some(SimpleMatch { query_index: 1, word_index: 1, distance: 0, .. })); // iphone
             assert_matches!(iter.next(), Some(SimpleMatch { query_index: 1, word_index: 0, distance: 1, .. })); // phone
             assert_matches!(iter.next(), Some(SimpleMatch { query_index: 2, word_index: 2, distance: 0, .. })); // case
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), None);
+    }
+
+    #[test]
+    fn exact_field_count_one_word() {
+        let store = TempDatabase::from_iter(vec![
+            ("searchengine", &[doc_index(0, 0)][..]),
+            ("searchengine", &[doc_index(1, 0)][..]),
+            ("blue",         &[doc_index(1, 1)][..]),
+            ("searchangine", &[doc_index(2, 0)][..]),
+            ("searchengine", &[doc_index(3, 0)][..]),
+        ]);
+
+        let db = &store.database;
+        let reader = db.main_read_txn().unwrap();
+
+        let builder = store.query_builder();
+        let results = builder.query(&reader, "searchengine", 0..20).unwrap();
+        let mut iter = results.into_iter();
+
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 0, distance: 0, .. })); // searchengine
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(3), matches, .. }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 0, distance: 0, .. })); // searchengine
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 0, distance: 0, .. })); // searchengine
+            assert_matches!(iter.next(), None);
+        });
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches, .. }) => {
+            let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, word_index: 0, distance: 1, .. })); // searchengine
             assert_matches!(iter.next(), None);
         });
         assert_matches!(iter.next(), None);
