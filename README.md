@@ -48,6 +48,10 @@ curl -L https://install.meilisearch.com | sh
 ./meilisearch
 ```
 
+#### Run it on heroku
+
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/meilisearch/MeiliSearch)
+
 #### Compile and run it from sources
 
 If you have the Rust toolchain already installed, you can compile from the source
