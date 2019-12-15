@@ -2,6 +2,7 @@
 members = [
     "meilisearch-core",
     "meilisearch-http",
+    "meilisearch-raft",
     "meilisearch-schema",
     "meilisearch-tokenizer",
     "meilisearch-types",
