@@ -12,6 +12,22 @@ pub mod synonym;
 
 pub fn load_routes(app: &mut tide::App<Data>) {
     app.at("").nest(|router| {
+        // expose the web interface static files
+        router.at("/").get(|_| async {
+            let content = include_str!("../../public/interface.html").to_owned();
+            tide::http::Response::builder()
+                .header(tide::http::header::CONTENT_TYPE, "text/html; charset=utf-8")
+                .status(tide::http::StatusCode::OK)
+                .body(content).unwrap()
+        });
+        router.at("/bulma.min.css").get(|_| async {
+            let content = include_str!("../../public/bulma.min.css");
+            tide::http::Response::builder()
+                .header(tide::http::header::CONTENT_TYPE, "text/css; charset=utf-8")
+                .status(tide::http::StatusCode::OK)
+                .body(content).unwrap()
+        });
+
         router.at("/indexes").nest(|router| {
             router
                 .at("/")
