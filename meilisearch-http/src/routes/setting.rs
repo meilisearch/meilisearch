@@ -72,7 +72,7 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
-    let reader = db.main_write_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
     let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     let mut current_settings = match index.main.customs(&reader).unwrap() {
