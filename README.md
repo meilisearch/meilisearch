@@ -88,6 +88,8 @@ curl -i -X POST 'http://127.0.0.1:7700/indexes/movies/documents' \
 
 ### Search for Documents
 
+#### In command line
+
 The search engine is now aware of our documents and can serve those via our HTTP server again.
 The [`jq` command-line tool](https://stedolan.github.io/jq/) can significantly help you read the server responses.
 
@@ -119,6 +121,12 @@ curl 'http://127.0.0.1:7700/indexes/movies/search?q=botman+robin&limit=2' | jq
   "query": "botman robin"
 }
 ```
+
+#### With the Web Interface
+
+MeiliSearch provides a simple web interface containing a search bar in order to quickly test the instant search experience with a given set of documents.
+
+This web interface is available in your browser at the root of the server. The default URL is [http://127.0.0.1:7700](http://127.0.0.1:7700).
 
 ### Documentation
 
