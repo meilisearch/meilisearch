@@ -57,13 +57,13 @@ pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
                     .map_err(ResponseError::internal)?
                     .ok_or(ResponseError::internal("'updated_at' date not found"))?;
 
-                let index_reponse = IndexResponse {
+                let index_response = IndexResponse {
                     name,
                     uid: index_uid,
                     created_at,
                     updated_at,
                 };
-                response_body.push(index_reponse);
+                response_body.push(index_response);
             }
             None => error!(
                 "Index {} is referenced in the indexes list but cannot be found",
@@ -170,14 +170,6 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
     created_index
         .main
         .put_name(&mut writer, &body.name)
-        .map_err(ResponseError::internal)?;
-    created_index
-        .main
-        .put_created_at(&mut writer)
-        .map_err(ResponseError::internal)?;
-    created_index
-        .main
-        .put_updated_at(&mut writer)
         .map_err(ResponseError::internal)?;
 
     let schema: Option<Schema> = body.schema.clone().map(Into::into);
