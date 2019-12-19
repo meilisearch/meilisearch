@@ -236,8 +236,12 @@ impl Database {
                 let (sender, receiver) = crossbeam_channel::bounded(100);
                 let index = store::create(&self.env, &self.update_env, name, sender)?;
 
-                let mut writer = self.env.write_txn()?;
+                let mut writer = self.env.typed_write_txn::<MainT>()?;
                 self.indexes_store.put(&mut writer, name, &())?;
+
+                index.main.put_name(&mut writer, name)?;
+                index.main.put_created_at(&mut writer)?;
+                index.main.put_updated_at(&mut writer)?;
 
                 let env_clone = self.env.clone();
                 let update_env_clone = self.update_env.clone();
