@@ -10,13 +10,7 @@ edition = "2018"
 actix-raft = "0.4.2"
 serde = "1.0.103"
 actix = "0.8.3"
-tonic = "0.1.0-alpha.6"
-bytes = "0.4"
-prost = "0.5"
 
 [dev-dependencies]
 structopt = "0.3.2"
 rustyline = "5.0.5"
-
-[build-dependencies]
-tonic-build = "0.1.0-alpha.6"

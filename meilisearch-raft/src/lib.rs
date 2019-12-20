@@ -4,10 +4,6 @@ pub mod metrics;
 pub mod network;
 pub mod storage;
 
-pub mod raftproto {
-    tonic::include_proto!("raft");
-}
-
 use actix::*;
 use actix_raft::Raft;
 use actix_raft::config::Config;
@@ -16,7 +12,6 @@ use error::Error;
 use metrics::AppMetrics;
 use network::AppNetwork;
 use storage::AppStorage;
-use raftproto::*;
 
 /// A type alias used to define an application's concrete Raft type.
 pub type AppRaft = Raft<Data, DataResponse, Error, AppNetwork, AppStorage>;
