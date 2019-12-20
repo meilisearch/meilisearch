@@ -456,7 +456,6 @@ fn fetch_matches<'txn, 'tag>(
     let mut total_postings_lists = Vec::new();
 
     let mut dfa_time = Duration::default();
-    let mut stream_next_time = Duration::default();
     let mut postings_lists_fetching_time = Duration::default();
     let automatons_loop = Instant::now();
 
@@ -466,6 +465,7 @@ fn fetch_matches<'txn, 'tag>(
         let QueryWordAutomaton { query, is_exact, .. } = automaton;
         dfa_time += before_dfa.elapsed();
 
+        let mut stream_next_time = Duration::default();
         let mut number_of_words = 0;
 
         let byte = query.as_bytes()[0];
@@ -517,10 +517,10 @@ fn fetch_matches<'txn, 'tag>(
         }
 
         debug!("{:?} gives {} words", query, number_of_words);
+        debug!("stream next took {:.02?}", stream_next_time);
     }
 
     debug!("automatons loop took {:.02?}", automatons_loop.elapsed());
-    debug!("stream next took {:.02?}", stream_next_time);
     debug!("postings lists fetching took {:.02?}", postings_lists_fetching_time);
     debug!("dfa creation took {:.02?}", dfa_time);
 
