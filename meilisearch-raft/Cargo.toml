@@ -12,5 +12,4 @@ serde = "1.0.103"
 actix = "0.8.3"
 
 [dev-dependencies]
-structopt = "0.3.2"
 rustyline = "5.0.5"

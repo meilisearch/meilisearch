@@ -1,20 +1,11 @@
 use std::error::Error;
 
-use structopt::StructOpt;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
 use meilisearch_raft::AppRaft;
 
-#[derive(Debug, StructOpt)]
-struct Opt {
-    addr: String,
-    master_addr: String,
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
-    let _opt = Opt::from_args();
-
     let mut rl = Editor::<()>::new();
     loop {
         let readline = rl.readline(">> ");
