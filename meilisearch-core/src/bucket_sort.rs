@@ -451,12 +451,14 @@ fn fetch_matches<'txn, 'tag>(
         None => return Ok(Vec::new()),
     };
     debug!("words fst took {:.02?}", before_words_fst.elapsed());
+    debug!("words fst len {} and size {}", words.len(), words.as_fst().as_bytes().len());
 
     let mut total_postings_lists = Vec::new();
 
     let mut dfa_time = Duration::default();
     let mut stream_next_time = Duration::default();
     let mut postings_lists_fetching_time = Duration::default();
+    let automatons_loop = Instant::now();
 
     for (query_index, automaton) in automatons.iter().enumerate() {
         let before_dfa = Instant::now();
@@ -470,11 +472,13 @@ fn fetch_matches<'txn, 'tag>(
         // while let Some(input) = stream.next() {
         loop {
             let before_stream_next = Instant::now();
-            let input = match stream.next() {
+            let value = stream.next();
+            stream_next_time += before_stream_next.elapsed();
+
+            let input = match value {
                 Some(input) => input,
                 None => break,
             };
-            stream_next_time += before_stream_next.elapsed();
 
             number_of_words += 1;
 
@@ -483,14 +487,12 @@ fn fetch_matches<'txn, 'tag>(
 
             let before_postings_lists_fetching = Instant::now();
             if let Some(postings_list) = postings_lists_store.postings_list(reader, input)? {
-
                 let input = Rc::from(input);
                 let postings_list = Rc::new(postings_list);
                 let postings_list_view = PostingsListView::original(input, postings_list);
 
                 let mut offset = 0;
                 for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
-
                     let posting_list_index = arena.add(postings_list_view.range(offset, group.len()));
                     let document_id = group[0].document_id;
                     let bare_match = BareMatch {
@@ -511,6 +513,7 @@ fn fetch_matches<'txn, 'tag>(
         debug!("{:?} gives {} words", query, number_of_words);
     }
 
+    debug!("automatons loop took {:.02?}", automatons_loop.elapsed());
     debug!("stream next took {:.02?}", stream_next_time);
     debug!("postings lists fetching took {:.02?}", postings_lists_fetching_time);
     debug!("dfa creation took {:.02?}", dfa_time);
