@@ -467,7 +467,13 @@ fn fetch_matches<'txn, 'tag>(
         dfa_time += before_dfa.elapsed();
 
         let mut number_of_words = 0;
-        let mut stream = words.search(&dfa).into_stream();
+
+        let byte = query.as_bytes()[0];
+        let mut stream = if byte == u8::max_value() {
+            words.search(&dfa).ge(&[byte]).into_stream()
+        } else {
+            words.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
+        };
 
         // while let Some(input) = stream.next() {
         loop {
