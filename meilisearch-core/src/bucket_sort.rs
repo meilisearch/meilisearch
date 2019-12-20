@@ -446,7 +446,7 @@ fn fetch_matches<'txn, 'tag>(
 ) -> MResult<Vec<BareMatch<'tag>>>
 {
     let before_words_fst = Instant::now();
-    let words = match main_store.words_fst(reader)? {
+    let words = match unsafe { main_store.static_words_fst(reader)? } {
         Some(words) => words,
         None => return Ok(Vec::new()),
     };

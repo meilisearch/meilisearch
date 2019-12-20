@@ -67,6 +67,17 @@ impl Main {
         self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, bytes)
     }
 
+    pub unsafe fn static_words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
+        match self.main.get::<_, Str, ByteSlice>(reader, WORDS_KEY)? {
+            Some(bytes) => {
+                let bytes: &'static [u8] = std::mem::transmute(bytes);
+                let set = fst::Set::from_static_slice(bytes).unwrap();
+                Ok(Some(set))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub fn words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
         match self.main.get::<_, Str, ByteSlice>(reader, WORDS_KEY)? {
             Some(bytes) => {
