@@ -13,6 +13,7 @@ pub fn apply_schema_update(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
+    prefix_cache_store: store::PrefixCache,
 ) -> MResult<()> {
     use UnsupportedOperation::{
         CanOnlyIntroduceNewSchemaAttributesAtEnd, CannotRemoveSchemaAttribute,
@@ -55,6 +56,7 @@ pub fn apply_schema_update(
             documents_fields_counts_store,
             postings_lists_store,
             docs_words_store,
+            prefix_cache_store,
         )?
     }
 

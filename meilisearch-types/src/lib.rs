@@ -46,6 +46,8 @@ pub struct DocIndex {
 /// The order of the field is important because it defines
 /// the way these structures are ordered between themselves.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "zerocopy", derive(AsBytes, FromBytes))]
+#[repr(C)]
 pub struct Highlight {
     /// The attribute in the document where the word was found
     /// along with the index in it.

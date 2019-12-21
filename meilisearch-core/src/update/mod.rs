@@ -23,12 +23,15 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
+use fst::{IntoStreamer, Streamer};
 use heed::Result as ZResult;
 use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::{store, DocumentId, MResult};
 use crate::database::{MainT, UpdateT};
+use crate::bucket_sort::bucket_sort;
+use crate::criterion::Criteria;
 use meilisearch_schema::Schema;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -278,6 +281,7 @@ pub fn update_task<'a, 'b>(
                 index.documents_fields_counts,
                 index.postings_lists,
                 index.docs_words,
+                index.prefix_cache,
             );
 
             (update_type, result, start.elapsed())
@@ -304,8 +308,62 @@ pub fn update_task<'a, 'b>(
                 index.documents_fields_counts,
                 index.postings_lists,
                 index.docs_words,
+                index.prefix_cache,
                 documents,
             );
+
+            let words_fst = index.main.words_fst(writer)?.unwrap();
+            let mut stream = words_fst.into_stream();
+            let mut previous_char = None;
+            while let Some(input) = stream.next() {
+                let (s, c) = match std::str::from_utf8(input) {
+                    Ok(s) => {
+                        let c = s.chars().next().unwrap();
+                        (&s[..c.len_utf8()], c)
+                    },
+                    Err(_) => continue,
+                };
+
+                match previous_char {
+                    Some(pc) if pc != c => {
+                        debug!("searching and caching {:?}", s);
+
+                        let documents = bucket_sort(
+                            writer,
+                            s,
+                            0..20,
+                            None as Option<fn(DocumentId) -> bool>,
+                            Criteria::default(),
+                            None,
+                            index.main,
+                            index.postings_lists,
+                            index.documents_fields_counts,
+                            index.synonyms,
+                            index.prefix_cache,
+                        ).unwrap();
+
+                        let mut prefix = [0; 4];
+                        let len = cmp::min(4, s.len());
+                        prefix[..len].copy_from_slice(&s.as_bytes()[..len]);
+
+                        for (i, document) in documents.into_iter().enumerate() {
+                            index.prefix_cache.put_prefix_document(
+                                writer,
+                                prefix,
+                                i,
+                                document.id,
+                                &document.highlights,
+                            ).unwrap();
+                        }
+
+                        previous_char = Some(c)
+                    },
+                    Some(_) => (),
+                    None => previous_char = Some(c),
+                }
+            }
+
+            // TODO we forget to do it for the last prefix char
 
             (update_type, result, start.elapsed())
         }
@@ -323,6 +381,7 @@ pub fn update_task<'a, 'b>(
                 index.documents_fields_counts,
                 index.postings_lists,
                 index.docs_words,
+                index.prefix_cache,
                 documents,
             );
 
@@ -384,6 +443,7 @@ pub fn update_task<'a, 'b>(
                 index.documents_fields_counts,
                 index.postings_lists,
                 index.docs_words,
+                index.prefix_cache,
                 stop_words,
             );
 

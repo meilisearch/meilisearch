@@ -82,6 +82,16 @@ fn highlights_from_raw_document<'a, 'tag, 'txn>(
 
 impl Document {
     #[cfg(not(test))]
+    pub fn from_highlights(id: DocumentId, highlights: &[Highlight]) -> Document {
+        Document { id, highlights: highlights.to_owned() }
+    }
+
+    #[cfg(test)]
+    pub fn from_highlights(id: DocumentId, highlights: &[Highlight]) -> Document {
+        Document { id, highlights: highlights.to_owned(), matches: Vec::new() }
+    }
+
+    #[cfg(not(test))]
     pub fn from_raw<'a, 'tag, 'txn>(
         raw_document: RawDocument<'a, 'tag>,
         automatons: &[QueryWordAutomaton],

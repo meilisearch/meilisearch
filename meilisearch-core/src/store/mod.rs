@@ -1,4 +1,5 @@
 mod docs_words;
+mod prefix_cache;
 mod documents_fields;
 mod documents_fields_counts;
 mod main;
@@ -8,6 +9,7 @@ mod updates;
 mod updates_results;
 
 pub use self::docs_words::DocsWords;
+pub use self::prefix_cache::PrefixCache;
 pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
 pub use self::documents_fields_counts::{
     DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter,
@@ -74,6 +76,10 @@ fn docs_words_name(name: &str) -> String {
     format!("store-{}-docs-words", name)
 }
 
+fn prefix_cache_name(name: &str) -> String {
+    format!("store-{}-prefix-cache", name)
+}
+
 fn updates_name(name: &str) -> String {
     format!("store-{}-updates", name)
 }
@@ -90,6 +96,7 @@ pub struct Index {
     pub documents_fields_counts: DocumentsFieldsCounts,
     pub synonyms: Synonyms,
     pub docs_words: DocsWords,
+    pub prefix_cache: PrefixCache,
 
     pub updates: Updates,
     pub updates_results: UpdatesResults,
@@ -252,6 +259,7 @@ impl Index {
             self.postings_lists,
             self.documents_fields_counts,
             self.synonyms,
+            self.prefix_cache,
         )
     }
 
@@ -264,6 +272,7 @@ impl Index {
             self.postings_lists,
             self.documents_fields_counts,
             self.synonyms,
+            self.prefix_cache,
             criteria,
         )
     }
@@ -282,6 +291,7 @@ pub fn create(
     let documents_fields_counts_name = documents_fields_counts_name(name);
     let synonyms_name = synonyms_name(name);
     let docs_words_name = docs_words_name(name);
+    let prefix_cache_name = prefix_cache_name(name);
     let updates_name = updates_name(name);
     let updates_results_name = updates_results_name(name);
 
@@ -292,6 +302,7 @@ pub fn create(
     let documents_fields_counts = env.create_database(Some(&documents_fields_counts_name))?;
     let synonyms = env.create_database(Some(&synonyms_name))?;
     let docs_words = env.create_database(Some(&docs_words_name))?;
+    let prefix_cache = env.create_database(Some(&prefix_cache_name))?;
     let updates = update_env.create_database(Some(&updates_name))?;
     let updates_results = update_env.create_database(Some(&updates_results_name))?;
 
@@ -304,6 +315,7 @@ pub fn create(
         },
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
+        prefix_cache: PrefixCache { prefix_cache },
         updates: Updates { updates },
         updates_results: UpdatesResults { updates_results },
         updates_notifier,
@@ -323,6 +335,7 @@ pub fn open(
     let documents_fields_counts_name = documents_fields_counts_name(name);
     let synonyms_name = synonyms_name(name);
     let docs_words_name = docs_words_name(name);
+    let prefix_cache_name = prefix_cache_name(name);
     let updates_name = updates_name(name);
     let updates_results_name = updates_results_name(name);
 
@@ -351,6 +364,10 @@ pub fn open(
         Some(docs_words) => docs_words,
         None => return Ok(None),
     };
+    let prefix_cache = match env.open_database(Some(&prefix_cache_name))? {
+        Some(prefix_cache) => prefix_cache,
+        None => return Ok(None),
+    };
     let updates = match update_env.open_database(Some(&updates_name))? {
         Some(updates) => updates,
         None => return Ok(None),
@@ -369,6 +386,7 @@ pub fn open(
         },
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
+        prefix_cache: PrefixCache { prefix_cache },
         updates: Updates { updates },
         updates_results: UpdatesResults { updates_results },
         updates_notifier,
@@ -387,6 +405,7 @@ pub fn clear(
     index.documents_fields_counts.clear(writer)?;
     index.synonyms.clear(writer)?;
     index.docs_words.clear(writer)?;
+    index.prefix_cache.clear(writer)?;
     index.updates.clear(update_writer)?;
     index.updates_results.clear(update_writer)?;
     Ok(())

@@ -38,6 +38,7 @@ pub fn bucket_sort<'c, FI>(
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
+    prefix_cache_store: store::PrefixCache,
 ) -> MResult<Vec<Document>>
 where
     FI: Fn(DocumentId) -> bool,
@@ -60,11 +61,31 @@ where
             postings_lists_store,
             documents_fields_counts_store,
             synonyms_store,
+            prefix_cache_store,
         );
     }
 
     let (mut automatons, mut query_enhancer) =
         construct_automatons(reader, query, main_store, postings_lists_store, synonyms_store)?;
+
+    if let [automaton] = &automatons[..] {
+        if automaton.is_prefix && automaton.query.len() <= 4 {
+            let mut prefix = [0; 4];
+            let len = cmp::min(4, automaton.query.len());
+            prefix[..len].copy_from_slice(&automaton.query.as_bytes()[..len]);
+
+            let mut documents = Vec::new();
+            let iter = prefix_cache_store.prefix_documents(reader, prefix)?;
+            for result in iter.skip(range.start).take(range.len()) {
+                let (docid, highlights) = result?;
+                documents.push(Document::from_highlights(docid, &highlights));
+            }
+
+            if !documents.is_empty() {
+                return Ok(documents);
+            }
+        }
+    }
 
     debug!("{:?}", query_enhancer);
 
@@ -160,6 +181,7 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
+    prefix_cache_store: store::PrefixCache,
 ) -> MResult<Vec<Document>>
 where
     FI: Fn(DocumentId) -> bool,
