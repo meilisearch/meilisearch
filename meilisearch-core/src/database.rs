@@ -141,13 +141,13 @@ impl Database {
 
         fs::create_dir_all(&main_path)?;
         let env = heed::EnvOpenOptions::new()
-            .map_size(10 * 1024 * 1024 * 1024) // 10GB
+            .map_size(100 * 1024 * 1024 * 1024) // 100GB
             .max_dbs(3000)
             .open(main_path)?;
 
         fs::create_dir_all(&update_path)?;
         let update_env = heed::EnvOpenOptions::new()
-            .map_size(10 * 1024 * 1024 * 1024) // 10GB
+            .map_size(100 * 1024 * 1024 * 1024) // 100GB
             .max_dbs(3000)
             .open(update_path)?;
 
