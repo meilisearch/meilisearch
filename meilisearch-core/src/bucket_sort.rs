@@ -65,6 +65,8 @@ where
         );
     }
 
+    let before_bucket_sort = Instant::now();
+
     let (mut automatons, mut query_enhancer) =
         construct_automatons(reader, query, main_store, postings_lists_store, synonyms_store)?;
 
@@ -167,8 +169,11 @@ where
 
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
     let iter = iter.map(|rd| Document::from_raw(rd, &automatons, &arena, searchable_attrs.as_ref()));
+    let documents = iter.collect();
 
-    Ok(iter.collect())
+    debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
+
+    Ok(documents)
 }
 
 pub fn bucket_sort_with_distinct<'c, FI, FD>(
