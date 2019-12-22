@@ -117,6 +117,7 @@ where
         before_raw_documents_building.elapsed(),
     );
 
+    let before_criterion_loop = Instant::now();
     let mut groups = vec![raw_documents.as_mut_slice()];
 
     'criteria: for criterion in criteria.as_ref() {
@@ -161,6 +162,8 @@ where
             }
         }
     }
+
+    debug!("criterion loop took {:.02?}", before_criterion_loop.elapsed());
 
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
     let iter = iter.map(|rd| Document::from_raw(rd, &automatons, &arena, searchable_attrs.as_ref()));
