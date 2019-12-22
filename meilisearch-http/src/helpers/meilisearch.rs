@@ -170,8 +170,6 @@ impl<'a> SearchBuilder<'a> {
         let ranked_map = ranked_map.map_err(|e| Error::Internal(e.to_string()))?;
         let ranked_map = ranked_map.unwrap_or_default();
 
-        let start = Instant::now();
-
         // Change criteria
         let mut query_builder = match self.get_criteria(reader, &ranked_map, &schema)? {
             Some(criteria) => self.index.query_builder_with_criteria(criteria),
@@ -222,8 +220,9 @@ impl<'a> SearchBuilder<'a> {
 
         query_builder.with_fetch_timeout(self.timeout);
 
-        let docs =
-            query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let start = Instant::now();
+        let docs = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let time_ms = start.elapsed().as_millis() as usize;
 
         let mut hits = Vec::with_capacity(self.limit);
         for doc in docs.map_err(|e| Error::SearchDocuments(e.to_string()))? {
@@ -277,8 +276,6 @@ impl<'a> SearchBuilder<'a> {
 
             hits.push(hit);
         }
-
-        let time_ms = start.elapsed().as_millis() as usize;
 
         let results = SearchResult {
             hits,
