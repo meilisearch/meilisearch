@@ -5,6 +5,7 @@ use std::mem;
 use std::ops::Range;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use compact_arena::{SmallArena, Idx32, mk_arena};
 use fst::{IntoStreamer, Streamer};
@@ -120,6 +121,8 @@ where
     );
 
     let before_criterion_loop = Instant::now();
+    let proximity_count = AtomicUsize::new(0);
+
     let mut groups = vec![raw_documents.as_mut_slice()];
 
     'criteria: for criterion in criteria.as_ref() {
@@ -146,8 +149,16 @@ where
                 automatons: &automatons,
             };
 
+            let must_count = criterion.name() == "proximity";
+
             let before_criterion_sort = Instant::now();
-            group.sort_unstable_by(|a, b| criterion.evaluate(&ctx, a, b));
+            group.sort_unstable_by(|a, b| {
+                if must_count {
+                    proximity_count.fetch_add(1, Ordering::SeqCst);
+                }
+
+                criterion.evaluate(&ctx, a, b)
+            });
             debug!("{:?} evaluation took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
 
             for group in group.binary_group_by_mut(|a, b| criterion.eq(&ctx, a, b)) {
@@ -166,6 +177,7 @@ where
     }
 
     debug!("criterion loop took {:.02?}", before_criterion_loop.elapsed());
+    debug!("proximity evaluation called {} times", proximity_count.load(Ordering::Relaxed));
 
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
     let iter = iter.map(|rd| Document::from_raw(rd, &automatons, &arena, searchable_attrs.as_ref()));
