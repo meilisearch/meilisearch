@@ -4,12 +4,19 @@ version = "0.1.0"
 authors = ["Quentin de Quelen <quentin@dequelen.me>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-actix-raft = "0.4.2"
-serde = "1.0.103"
-actix = "0.8.3"
+bytes = "0.4"
+env_logger = "0.7.0"
+futures = "0.1.29"
+grpcio = { version = "0.4.5", features = [ "secure" ] }
+log = "0.4.8"
+logger = "0.4.0"
+protobuf = "2.8.0"
+raft = "0.4.3"
+rand = "0.7.2"
+serde = { version = "1.0.103", features = ["derive"] }
+serde_json = "1.0.42"
 
 [dev-dependencies]
 rustyline = "5.0.5"
+structopt = "0.3.5"

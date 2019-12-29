@@ -1,0 +1,87 @@
+syntax = "proto3";
+package eraftpb;
+
+enum EntryType {
+  EntryNormal = 0;
+  EntryConfChange = 1;
+}
+
+message Entry {
+  EntryType entry_type = 1;
+  uint64 term = 2;
+  uint64 index = 3;
+  bytes data = 4;
+  bytes context = 6;
+}
+
+message SnapshotMetadata {
+  ConfState conf_state = 1;
+  uint64 index = 2;
+  uint64 term = 3;
+}
+
+message Snapshot {
+  bytes data = 1;
+  SnapshotMetadata metadata = 2;
+}
+
+enum MessageType {
+  MsgHup = 0;
+  MsgBeat = 1;
+  MsgPropose = 2;
+  MsgAppend = 3;
+  MsgAppendResponse = 4;
+  MsgRequestVote = 5;
+  MsgRequestVoteResponse = 6;
+  MsgSnapshot = 7;
+  MsgHeartbeat = 8;
+  MsgHeartbeatResponse = 9;
+  MsgUnreachable = 10;
+  MsgSnapStatus = 11;
+  MsgCheckQuorum = 12;
+  MsgTransferLeader = 13;
+  MsgTimeoutNow = 14;
+  MsgReadIndex = 15;
+  MsgReadIndexResp = 16;
+  MsgRequestPreVote = 17;
+  MsgRequestPreVoteResponse = 18;
+}
+
+message Message {
+  MessageType msg_type = 1;
+  uint64 to = 2;
+  uint64 from = 3;
+  uint64 term = 4;
+  uint64 log_term = 5;
+  uint64 index = 6;
+  repeated Entry entries = 7;
+  uint64 commit = 8;
+  Snapshot snapshot = 9;
+  bool reject = 10;
+  uint64 reject_hint = 11;
+  bytes context = 12;
+}
+
+message HardState {
+  uint64 term = 1;
+  uint64 vote = 2;
+  uint64 commit = 3;
+}
+
+message ConfState {
+  repeated uint64 nodes = 1;
+  repeated uint64 learners = 2;
+}
+
+enum ConfChangeType {
+  AddNode    = 0;
+  RemoveNode = 1;
+  AddLearnerNode = 2;
+}
+
+message ConfChange {
+  uint64 id = 1;
+  ConfChangeType change_type = 2;
+  uint64 node_id = 3;
+  bytes context = 4;
+}
