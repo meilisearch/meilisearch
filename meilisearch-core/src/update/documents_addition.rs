@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::borrow::Cow;
 
 use fst::{set::OpBuilder, SetBuilder, IntoStreamer, Streamer};
-use sdset::{duo::Union, SetOperation, SetBuf};
+use sdset::{duo::Union, SetOperation, Set, SetBuf};
 use serde::{Deserialize, Serialize};
 use log::debug;
 
@@ -196,34 +196,64 @@ pub fn apply_documents_addition<'a, 'b>(
     let pplc_store = prefix_postings_lists_cache_store;
     pplc_store.clear(writer)?;
 
-    const MAX_PREFIX_LENGTH: usize = 1;
+    let mut previous_prefix: Option<([u8; 4], Vec<_>)> = None;
 
     // compute prefixes and store those in the PrefixPostingsListsCache.
     let mut stream = words_fst.into_stream();
     while let Some(input) = stream.next() {
-        for i in 1..=MAX_PREFIX_LENGTH {
-            let prefix = &input[..i];
-            if let Some(postings_list) = postings_lists_store.postings_list(writer, prefix)? {
-                if let (Ok(input), Ok(prefix)) = (std::str::from_utf8(input), std::str::from_utf8(prefix)) {
-                    debug!("{:?} postings list (prefix {:?}) length {}", input, prefix, postings_list.len());
-                }
+        if let Some(postings_list) = postings_lists_store.postings_list(writer, input)?.map(Cow::into_owned) {
+            let prefix = &input[..1];
 
-                // compute the new prefix postings lists
-                let mut p = [0; 4];
-                let len = std::cmp::min(4, prefix.len());
-                p[..len].copy_from_slice(&prefix[..len]);
+            let mut arr = [0; 4];
+            let len = std::cmp::min(4, prefix.len());
+            arr[..len].copy_from_slice(prefix);
+            let arr_prefix = arr;
 
-                let previous = match pplc_store.prefix_postings_list(writer, p)? {
-                    Some(previous) => previous,
-                    None => Cow::Owned(SetBuf::default()),
-                };
+            // if let (Ok(input), Ok(prefix)) = (std::str::from_utf8(input), std::str::from_utf8(prefix)) {
+            //     debug!("{:?} postings list (prefix {:?}) length {}", input, prefix, postings_list.len());
+            // }
 
-                let new_postings_list = Union::new(&postings_list, &previous).into_set_buf();
-                pplc_store.put_prefix_postings_list(writer, p, &new_postings_list)?;
+            match previous_prefix {
+                Some((ref mut prev_prefix, ref mut prev_postings_list)) if *prev_prefix != arr_prefix => {
+                    prev_postings_list.sort_unstable();
+                    prev_postings_list.dedup();
 
-                debug!("new length {}", new_postings_list.len());
+                    if let Ok(prefix) = std::str::from_utf8(&prev_prefix[..1]) {
+                        debug!("writing the prefix of {:?} of length {}",
+                            prefix, prev_postings_list.len());
+                    }
+
+                    let pls = Set::new_unchecked(&prev_postings_list);
+                    pplc_store.put_prefix_postings_list(writer, *prev_prefix, &pls)?;
+
+                    *prev_prefix = arr_prefix;
+                    prev_postings_list.clear();
+                    prev_postings_list.extend_from_slice(&postings_list);
+                },
+                Some((_, ref mut prev_postings_list)) => {
+                    prev_postings_list.extend_from_slice(&postings_list);
+                },
+                None => {
+                    let mut arr = [0; 4];
+                    let len = std::cmp::min(4, prefix.len());
+                    arr[..len].copy_from_slice(&prefix[..len]);
+
+                    let prev_prefix = arr;
+                    previous_prefix = Some((prev_prefix, postings_list.to_vec()));
+                },
             }
+
+            // debug!("new length {}", new_postings_list.len());
         }
+    }
+
+    // write the last prefix postings lists
+    if let Some((prev_prefix, mut prev_postings_list)) = previous_prefix.take() {
+        prev_postings_list.sort_unstable();
+        prev_postings_list.dedup();
+
+        let pls = Set::new_unchecked(&prev_postings_list);
+        pplc_store.put_prefix_postings_list(writer, prev_prefix, &pls)?;
     }
 
     Ok(())

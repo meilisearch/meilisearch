@@ -1,11 +1,12 @@
-use std::ops::Deref;
-use std::{cmp, fmt};
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::mem;
+use std::ops::Deref;
 use std::ops::Range;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
+use std::{cmp, fmt};
 
 use compact_arena::{SmallArena, Idx32, mk_arena};
 use fst::{IntoStreamer, Streamer};
@@ -496,6 +497,7 @@ fn fetch_matches<'txn, 'tag>(
     debug!("words fst len {} and size {}", words.len(), words.as_fst().as_bytes().len());
 
     let mut total_postings_lists = Vec::new();
+    let mut documents_ids = HashSet::<DocumentId>::new();
 
     let mut dfa_time = Duration::default();
     let mut postings_lists_fetching_time = Duration::default();
@@ -509,6 +511,8 @@ fn fetch_matches<'txn, 'tag>(
 
         let mut stream_next_time = Duration::default();
         let mut number_of_words = 0;
+        let mut postings_lists_original_length = 0;
+        let mut postings_lists_length = 0;
 
         let byte = query.as_bytes()[0];
         let mut stream = if byte == u8::max_value() {
@@ -535,14 +539,22 @@ fn fetch_matches<'txn, 'tag>(
 
             let before_postings_lists_fetching = Instant::now();
             if let Some(postings_list) = postings_lists_store.postings_list(reader, input)? {
+                postings_lists_original_length += postings_list.len();
+
                 let input = Rc::from(input);
                 let postings_list = Rc::new(postings_list);
                 let postings_list_view = PostingsListView::original(input, postings_list);
 
                 let mut offset = 0;
                 for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
-                    let posting_list_index = arena.add(postings_list_view.range(offset, group.len()));
                     let document_id = group[0].document_id;
+
+                    if query_index != 0 && !documents_ids.contains(&document_id) { continue }
+                    documents_ids.insert(document_id);
+
+                    postings_lists_length += group.len();
+
+                    let posting_list_index = arena.add(postings_list_view.range(offset, group.len()));
                     let bare_match = BareMatch {
                         document_id,
                         query_index: query_index as u16,
@@ -559,6 +571,8 @@ fn fetch_matches<'txn, 'tag>(
         }
 
         debug!("{:?} gives {} words", query, number_of_words);
+        debug!("{:?} gives postings lists of length {} (original was {})",
+            query, postings_lists_length, postings_lists_original_length);
         debug!("stream next took {:.02?}", stream_next_time);
     }
 

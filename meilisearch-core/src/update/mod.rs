@@ -23,15 +23,12 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
-use fst::{IntoStreamer, Streamer};
 use heed::Result as ZResult;
 use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::{store, DocumentId, MResult};
 use crate::database::{MainT, UpdateT};
-use crate::bucket_sort::bucket_sort;
-use crate::criterion::Criteria;
 use meilisearch_schema::Schema;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
