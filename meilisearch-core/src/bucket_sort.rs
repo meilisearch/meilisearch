@@ -509,6 +509,7 @@ fn fetch_matches<'txn, 'tag>(
         let QueryWordAutomaton { query, is_exact, .. } = automaton;
         dfa_time += before_dfa.elapsed();
 
+        let before_word_postings_lists_fetching = Instant::now();
         let mut stream_next_time = Duration::default();
         let mut number_of_words = 0;
         let mut postings_lists_original_length = 0;
@@ -573,6 +574,8 @@ fn fetch_matches<'txn, 'tag>(
         debug!("{:?} gives {} words", query, number_of_words);
         debug!("{:?} gives postings lists of length {} (original was {})",
             query, postings_lists_length, postings_lists_original_length);
+        debug!("{:?} took {:.02?} to fetch postings lists",
+            query, before_word_postings_lists_fetching.elapsed());
         debug!("stream next took {:.02?}", stream_next_time);
     }
 
