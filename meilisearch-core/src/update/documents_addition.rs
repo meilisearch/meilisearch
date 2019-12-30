@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::borrow::Cow;
 
-use fst::{set::OpBuilder, SetBuilder};
-use sdset::{duo::Union, SetOperation};
+use fst::{set::OpBuilder, SetBuilder, IntoStreamer, Streamer};
+use sdset::{duo::Union, SetOperation, SetBuf};
 use serde::{Deserialize, Serialize};
+use log::debug;
 
 use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
@@ -110,6 +112,7 @@ pub fn apply_documents_addition<'a, 'b>(
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
     prefix_documents_cache_store: store::PrefixDocumentsCache,
+    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
     addition: Vec<HashMap<String, serde_json::Value>>,
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
@@ -180,7 +183,50 @@ pub fn apply_documents_addition<'a, 'b>(
         &ranked_map,
         number_of_inserted_documents,
         indexer,
-    )
+    )?;
+
+
+    // retrieve the words fst to compute all those prefixes
+    let words_fst = match main_store.words_fst(writer)? {
+        Some(fst) => fst,
+        None => return Ok(()),
+    };
+
+    // clear the prefixes
+    let pplc_store = prefix_postings_lists_cache_store;
+    pplc_store.clear(writer)?;
+
+    const MAX_PREFIX_LENGTH: usize = 1;
+
+    // compute prefixes and store those in the PrefixPostingsListsCache.
+    let mut stream = words_fst.into_stream();
+    while let Some(input) = stream.next() {
+        for i in 1..=MAX_PREFIX_LENGTH {
+            let prefix = &input[..i];
+            if let Some(postings_list) = postings_lists_store.postings_list(writer, prefix)? {
+                if let (Ok(input), Ok(prefix)) = (std::str::from_utf8(input), std::str::from_utf8(prefix)) {
+                    debug!("{:?} postings list (prefix {:?}) length {}", input, prefix, postings_list.len());
+                }
+
+                // compute the new prefix postings lists
+                let mut p = [0; 4];
+                let len = std::cmp::min(4, prefix.len());
+                p[..len].copy_from_slice(&prefix[..len]);
+
+                let previous = match pplc_store.prefix_postings_list(writer, p)? {
+                    Some(previous) => previous,
+                    None => Cow::Owned(SetBuf::default()),
+                };
+
+                let new_postings_list = Union::new(&postings_list, &previous).into_set_buf();
+                pplc_store.put_prefix_postings_list(writer, p, &new_postings_list)?;
+
+                debug!("new length {}", new_postings_list.len());
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn apply_documents_partial_addition<'a, 'b>(
