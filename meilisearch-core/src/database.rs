@@ -168,7 +168,7 @@ impl Database {
         // open the previously aggregated indexes
         let mut indexes = HashMap::new();
         for index_uid in must_open {
-            let (sender, receiver) = crossbeam_channel::bounded(100);
+            let (sender, receiver) = crossbeam_channel::unbounded();
             let index = match store::open(&env, &update_env, &index_uid, sender.clone())? {
                 Some(index) => index,
                 None => {
@@ -233,7 +233,7 @@ impl Database {
         match indexes_lock.entry(name.to_owned()) {
             Entry::Occupied(_) => Err(crate::Error::IndexAlreadyExists),
             Entry::Vacant(entry) => {
-                let (sender, receiver) = crossbeam_channel::bounded(100);
+                let (sender, receiver) = crossbeam_channel::unbounded();
                 let index = store::create(&self.env, &self.update_env, name, sender)?;
 
                 let mut writer = self.env.typed_write_txn::<MainT>()?;
