@@ -68,7 +68,7 @@ pub fn apply_stop_words_deletion(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    prefix_cache_store: store::PrefixCache,
+    prefix_documents_cache_store: store::PrefixDocumentsCache,
     deletion: BTreeSet<String>,
 ) -> MResult<()> {
     let mut stop_words_builder = SetBuilder::memory();
@@ -111,7 +111,7 @@ pub fn apply_stop_words_deletion(
                 documents_fields_counts_store,
                 postings_lists_store,
                 docs_words_store,
-                prefix_cache_store,
+                prefix_documents_cache_store,
             )?;
         }
     }

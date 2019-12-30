@@ -27,11 +27,11 @@ impl PrefixKey {
 }
 
 #[derive(Copy, Clone)]
-pub struct PrefixCache {
-    pub(crate) prefix_cache: heed::Database<OwnedType<PrefixKey>, CowSlice<Highlight>>,
+pub struct PrefixDocumentsCache {
+    pub(crate) prefix_documents_cache: heed::Database<OwnedType<PrefixKey>, CowSlice<Highlight>>,
 }
 
-impl PrefixCache {
+impl PrefixDocumentsCache {
     pub fn put_prefix_document(
         self,
         writer: &mut heed::RwTxn<MainT>,
@@ -41,11 +41,11 @@ impl PrefixCache {
         highlights: &[Highlight],
     ) -> ZResult<()> {
         let key = PrefixKey::new(prefix, index as u64, docid.0);
-        self.prefix_cache.put(writer, &key, highlights)
+        self.prefix_documents_cache.put(writer, &key, highlights)
     }
 
     pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
-        self.prefix_cache.clear(writer)
+        self.prefix_documents_cache.clear(writer)
     }
 
     pub fn prefix_documents<'txn>(
@@ -55,7 +55,7 @@ impl PrefixCache {
     ) -> ZResult<PrefixDocumentsIter<'txn>> {
         let start = PrefixKey::new(prefix, 0, 0);
         let end = PrefixKey::new(prefix, u64::max_value(), u64::max_value());
-        let iter = self.prefix_cache.range(reader, &(start..=end))?;
+        let iter = self.prefix_documents_cache.range(reader, &(start..=end))?;
         Ok(PrefixDocumentsIter { iter })
     }
 }

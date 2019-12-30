@@ -16,7 +16,7 @@ pub struct QueryBuilder<'c, 'f, 'd> {
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
-    prefix_cache_store: store::PrefixCache,
+    prefix_cache_store: store::PrefixDocumentsCache,
 }
 
 impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
@@ -25,7 +25,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         postings_lists: store::PostingsLists,
         documents_fields_counts: store::DocumentsFieldsCounts,
         synonyms: store::Synonyms,
-        prefix_cache: store::PrefixCache,
+        prefix_cache: store::PrefixDocumentsCache,
     ) -> QueryBuilder<'c, 'f, 'd> {
         QueryBuilder::with_criteria(
             main,
@@ -42,7 +42,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         postings_lists: store::PostingsLists,
         documents_fields_counts: store::DocumentsFieldsCounts,
         synonyms: store::Synonyms,
-        prefix_cache: store::PrefixCache,
+        prefix_cache: store::PrefixDocumentsCache,
         criteria: Criteria<'c>,
     ) -> QueryBuilder<'c, 'f, 'd> {
         QueryBuilder {

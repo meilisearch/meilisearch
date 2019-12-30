@@ -281,7 +281,7 @@ pub fn update_task<'a, 'b>(
                 index.documents_fields_counts,
                 index.postings_lists,
                 index.docs_words,
-                index.prefix_cache,
+                index.prefix_documents_cache,
             );
 
             (update_type, result, start.elapsed())
@@ -308,7 +308,7 @@ pub fn update_task<'a, 'b>(
                 index.documents_fields_counts,
                 index.postings_lists,
                 index.docs_words,
-                index.prefix_cache,
+                index.prefix_documents_cache,
                 documents,
             );
 
@@ -339,7 +339,7 @@ pub fn update_task<'a, 'b>(
                             index.postings_lists,
                             index.documents_fields_counts,
                             index.synonyms,
-                            index.prefix_cache,
+                            index.prefix_documents_cache,
                         ).unwrap();
 
                         let mut prefix = [0; 4];
@@ -347,7 +347,7 @@ pub fn update_task<'a, 'b>(
                         prefix[..len].copy_from_slice(&s.as_bytes()[..len]);
 
                         for (i, document) in documents.into_iter().enumerate() {
-                            index.prefix_cache.put_prefix_document(
+                            index.prefix_documents_cache.put_prefix_document(
                                 writer,
                                 prefix,
                                 i,
@@ -381,7 +381,7 @@ pub fn update_task<'a, 'b>(
                 index.documents_fields_counts,
                 index.postings_lists,
                 index.docs_words,
-                index.prefix_cache,
+                index.prefix_documents_cache,
                 documents,
             );
 
@@ -443,7 +443,7 @@ pub fn update_task<'a, 'b>(
                 index.documents_fields_counts,
                 index.postings_lists,
                 index.docs_words,
-                index.prefix_cache,
+                index.prefix_documents_cache,
                 stop_words,
             );
 

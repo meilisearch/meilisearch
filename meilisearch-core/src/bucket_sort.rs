@@ -39,7 +39,7 @@ pub fn bucket_sort<'c, FI>(
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
-    prefix_cache_store: store::PrefixCache,
+    prefix_documents_cache_store: store::PrefixDocumentsCache,
 ) -> MResult<Vec<Document>>
 where
     FI: Fn(DocumentId) -> bool,
@@ -62,7 +62,7 @@ where
             postings_lists_store,
             documents_fields_counts_store,
             synonyms_store,
-            prefix_cache_store,
+            prefix_documents_cache_store,
         );
     }
 
@@ -78,7 +78,7 @@ where
             prefix[..len].copy_from_slice(&automaton.query.as_bytes()[..len]);
 
             let mut documents = Vec::new();
-            let iter = prefix_cache_store.prefix_documents(reader, prefix)?;
+            let iter = prefix_documents_cache_store.prefix_documents(reader, prefix)?;
             for result in iter.skip(range.start).take(range.len()) {
                 let (docid, highlights) = result?;
                 documents.push(Document::from_highlights(docid, &highlights));
@@ -201,7 +201,7 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
-    prefix_cache_store: store::PrefixCache,
+    prefix_documents_cache_store: store::PrefixDocumentsCache,
 ) -> MResult<Vec<Document>>
 where
     FI: Fn(DocumentId) -> bool,

@@ -109,7 +109,7 @@ pub fn apply_documents_addition<'a, 'b>(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    prefix_cache_store: store::PrefixCache,
+    prefix_documents_cache_store: store::PrefixDocumentsCache,
     addition: Vec<HashMap<String, serde_json::Value>>,
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
@@ -176,7 +176,7 @@ pub fn apply_documents_addition<'a, 'b>(
         main_store,
         postings_lists_store,
         docs_words_store,
-        prefix_cache_store,
+        prefix_documents_cache_store,
         &ranked_map,
         number_of_inserted_documents,
         indexer,
@@ -190,7 +190,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    prefix_cache_store: store::PrefixCache,
+    prefix_documents_cache_store: store::PrefixDocumentsCache,
     addition: Vec<HashMap<String, serde_json::Value>>,
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
@@ -274,7 +274,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
         main_store,
         postings_lists_store,
         docs_words_store,
-        prefix_cache_store,
+        prefix_documents_cache_store,
         &ranked_map,
         number_of_inserted_documents,
         indexer,
@@ -288,7 +288,7 @@ pub fn reindex_all_documents(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    prefix_cache_store: store::PrefixCache,
+    prefix_documents_cache_store: store::PrefixDocumentsCache,
 ) -> MResult<()> {
     let schema = match main_store.schema(writer)? {
         Some(schema) => schema,
@@ -350,7 +350,7 @@ pub fn reindex_all_documents(
             main_store,
             postings_lists_store,
             docs_words_store,
-            prefix_cache_store,
+            prefix_documents_cache_store,
             &ranked_map,
             number_of_inserted_documents,
             indexer,
@@ -365,7 +365,7 @@ pub fn write_documents_addition_index(
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    prefix_cache_store: store::PrefixCache,
+    prefix_documents_cache_store: store::PrefixDocumentsCache,
     ranked_map: &RankedMap,
     number_of_inserted_documents: usize,
     indexer: RawIndexer,
