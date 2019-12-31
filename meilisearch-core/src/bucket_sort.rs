@@ -41,6 +41,7 @@ pub fn bucket_sort<'c, FI>(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
     prefix_documents_cache_store: store::PrefixDocumentsCache,
+    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
 ) -> MResult<Vec<Document>>
 where
     FI: Fn(DocumentId) -> bool,
@@ -64,6 +65,7 @@ where
             documents_fields_counts_store,
             synonyms_store,
             prefix_documents_cache_store,
+            prefix_postings_lists_cache_store,
         );
     }
 
@@ -96,7 +98,14 @@ where
     let before_postings_lists_fetching = Instant::now();
     mk_arena!(arena);
     let mut bare_matches =
-        fetch_matches(reader, &automatons, &mut arena, main_store, postings_lists_store)?;
+        fetch_matches(
+            reader,
+            &automatons,
+            &mut arena,
+            main_store,
+            postings_lists_store,
+            prefix_postings_lists_cache_store,
+        )?;
     debug!("bare matches ({}) retrieved in {:.02?}",
         bare_matches.len(),
         before_postings_lists_fetching.elapsed(),
@@ -203,6 +212,7 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
     prefix_documents_cache_store: store::PrefixDocumentsCache,
+    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
 ) -> MResult<Vec<Document>>
 where
     FI: Fn(DocumentId) -> bool,
@@ -213,7 +223,14 @@ where
 
     let before_postings_lists_fetching = Instant::now();
     mk_arena!(arena);
-    let mut bare_matches = fetch_matches(reader, &automatons, &mut arena, main_store, postings_lists_store)?;
+    let mut bare_matches = fetch_matches(
+        reader,
+        &automatons,
+        &mut arena,
+        main_store,
+        postings_lists_store,
+        prefix_postings_lists_cache_store,
+    )?;
     debug!("bare matches ({}) retrieved in {:.02?}",
         bare_matches.len(),
         before_postings_lists_fetching.elapsed(),
@@ -486,6 +503,7 @@ fn fetch_matches<'txn, 'tag>(
     arena: &mut SmallArena<'tag, PostingsListView<'txn>>,
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
+    pplc_store: store::PrefixPostingsListsCache,
 ) -> MResult<Vec<BareMatch<'tag>>>
 {
     let before_words_fst = Instant::now();
@@ -504,10 +522,7 @@ fn fetch_matches<'txn, 'tag>(
     let automatons_loop = Instant::now();
 
     for (query_index, automaton) in automatons.iter().enumerate() {
-        let before_dfa = Instant::now();
-        let dfa = automaton.dfa();
-        let QueryWordAutomaton { query, is_exact, .. } = automaton;
-        dfa_time += before_dfa.elapsed();
+        let QueryWordAutomaton { query, is_exact, is_prefix, .. } = automaton;
 
         let before_word_postings_lists_fetching = Instant::now();
         let mut stream_next_time = Duration::default();
@@ -515,34 +530,17 @@ fn fetch_matches<'txn, 'tag>(
         let mut postings_lists_original_length = 0;
         let mut postings_lists_length = 0;
 
-        let byte = query.as_bytes()[0];
-        let mut stream = if byte == u8::max_value() {
-            words.search(&dfa).ge(&[byte]).into_stream()
-        } else {
-            words.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
-        };
-
-        // while let Some(input) = stream.next() {
-        loop {
-            let before_stream_next = Instant::now();
-            let value = stream.next();
-            stream_next_time += before_stream_next.elapsed();
-
-            let input = match value {
-                Some(input) => input,
-                None => break,
-            };
+        if *is_prefix && query.len() == 1 {
+            let prefix = [query.as_bytes()[0], 0, 0, 0];
 
             number_of_words += 1;
 
-            let distance = dfa.eval(input).to_u8();
-            let is_exact = *is_exact && distance == 0 && input.len() == query.len();
-
             let before_postings_lists_fetching = Instant::now();
-            if let Some(postings_list) = postings_lists_store.postings_list(reader, input)? {
+            if let Some(postings_list) = pplc_store.prefix_postings_list(reader, prefix)? {
+                debug!("Found cached postings list for {:?}", query);
                 postings_lists_original_length += postings_list.len();
 
-                let input = Rc::from(input);
+                let input = Rc::from(&prefix[..]);
                 let postings_list = Rc::new(postings_list);
                 let postings_list_view = PostingsListView::original(input, postings_list);
 
@@ -550,8 +548,11 @@ fn fetch_matches<'txn, 'tag>(
                 for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
                     let document_id = group[0].document_id;
 
-                    if query_index != 0 && !documents_ids.contains(&document_id) { continue }
-                    documents_ids.insert(document_id);
+                    if query_index != 0 {
+                        if !documents_ids.contains(&document_id) { continue }
+                    } else {
+                        documents_ids.insert(document_id);
+                    }
 
                     postings_lists_length += group.len();
 
@@ -559,8 +560,8 @@ fn fetch_matches<'txn, 'tag>(
                     let bare_match = BareMatch {
                         document_id,
                         query_index: query_index as u16,
-                        distance,
-                        is_exact,
+                        distance: 0,
+                        is_exact: *is_exact,
                         postings_list: posting_list_index,
                     };
 
@@ -569,6 +570,70 @@ fn fetch_matches<'txn, 'tag>(
                 }
             }
             postings_lists_fetching_time += before_postings_lists_fetching.elapsed();
+        }
+        else {
+            let before_dfa = Instant::now();
+            let dfa = automaton.dfa();
+            dfa_time += before_dfa.elapsed();
+
+            let byte = query.as_bytes()[0];
+            let mut stream = if byte == u8::max_value() {
+                words.search(&dfa).ge(&[byte]).into_stream()
+            } else {
+                words.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
+            };
+
+            // while let Some(input) = stream.next() {
+            loop {
+                let before_stream_next = Instant::now();
+                let value = stream.next();
+                stream_next_time += before_stream_next.elapsed();
+
+                let input = match value {
+                    Some(input) => input,
+                    None => break,
+                };
+
+                number_of_words += 1;
+
+                let distance = dfa.eval(input).to_u8();
+                let is_exact = *is_exact && distance == 0 && input.len() == query.len();
+
+                let before_postings_lists_fetching = Instant::now();
+                if let Some(postings_list) = postings_lists_store.postings_list(reader, input)? {
+                    postings_lists_original_length += postings_list.len();
+
+                    let input = Rc::from(input);
+                    let postings_list = Rc::new(postings_list);
+                    let postings_list_view = PostingsListView::original(input, postings_list);
+
+                    let mut offset = 0;
+                    for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
+                        let document_id = group[0].document_id;
+
+                        if query_index != 0 {
+                            if !documents_ids.contains(&document_id) { continue }
+                        } else {
+                            documents_ids.insert(document_id);
+                        }
+
+                        postings_lists_length += group.len();
+
+                        let posting_list_index = arena.add(postings_list_view.range(offset, group.len()));
+                        let bare_match = BareMatch {
+                            document_id,
+                            query_index: query_index as u16,
+                            distance,
+                            is_exact,
+                            postings_list: posting_list_index,
+                        };
+
+                        total_postings_lists.push(bare_match);
+                        offset += group.len();
+                    }
+                }
+                postings_lists_fetching_time += before_postings_lists_fetching.elapsed();
+            }
         }
 
         debug!("{:?} gives {} words", query, number_of_words);

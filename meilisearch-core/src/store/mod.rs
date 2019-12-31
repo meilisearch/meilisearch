@@ -267,6 +267,7 @@ impl Index {
             self.documents_fields_counts,
             self.synonyms,
             self.prefix_documents_cache,
+            self.prefix_postings_lists_cache,
         )
     }
 
@@ -280,6 +281,7 @@ impl Index {
             self.documents_fields_counts,
             self.synonyms,
             self.prefix_documents_cache,
+            self.prefix_postings_lists_cache,
             criteria,
         )
     }

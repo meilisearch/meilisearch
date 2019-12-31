@@ -16,7 +16,8 @@ pub struct QueryBuilder<'c, 'f, 'd> {
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
-    prefix_cache_store: store::PrefixDocumentsCache,
+    prefix_documents_cache_store: store::PrefixDocumentsCache,
+    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
 }
 
 impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
@@ -25,14 +26,16 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         postings_lists: store::PostingsLists,
         documents_fields_counts: store::DocumentsFieldsCounts,
         synonyms: store::Synonyms,
-        prefix_cache: store::PrefixDocumentsCache,
+        prefix_documents_cache: store::PrefixDocumentsCache,
+        prefix_postings_lists_cache: store::PrefixPostingsListsCache,
     ) -> QueryBuilder<'c, 'f, 'd> {
         QueryBuilder::with_criteria(
             main,
             postings_lists,
             documents_fields_counts,
             synonyms,
-            prefix_cache,
+            prefix_documents_cache,
+            prefix_postings_lists_cache,
             Criteria::default(),
         )
     }
@@ -42,7 +45,8 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         postings_lists: store::PostingsLists,
         documents_fields_counts: store::DocumentsFieldsCounts,
         synonyms: store::Synonyms,
-        prefix_cache: store::PrefixDocumentsCache,
+        prefix_documents_cache: store::PrefixDocumentsCache,
+        prefix_postings_lists_cache: store::PrefixPostingsListsCache,
         criteria: Criteria<'c>,
     ) -> QueryBuilder<'c, 'f, 'd> {
         QueryBuilder {
@@ -55,7 +59,8 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
             postings_lists_store: postings_lists,
             documents_fields_counts_store: documents_fields_counts,
             synonyms_store: synonyms,
-            prefix_cache_store: prefix_cache,
+            prefix_documents_cache_store: prefix_documents_cache,
+            prefix_postings_lists_cache_store: prefix_postings_lists_cache,
         }
     }
 
@@ -102,7 +107,8 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
                 self.postings_lists_store,
                 self.documents_fields_counts_store,
                 self.synonyms_store,
-                self.prefix_cache_store,
+                self.prefix_documents_cache_store,
+                self.prefix_postings_lists_cache_store,
             ),
             None => bucket_sort(
                 reader,
@@ -115,7 +121,8 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
                 self.postings_lists_store,
                 self.documents_fields_counts_store,
                 self.synonyms_store,
-                self.prefix_cache_store,
+                self.prefix_documents_cache_store,
+                self.prefix_postings_lists_cache_store,
             ),
         }
     }
