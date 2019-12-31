@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
+use env_logger;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use structopt::StructOpt;
-use env_logger;
 
 use meilisearch_raft::IndexServer as Raft;
 
@@ -16,7 +16,7 @@ struct Opt {
     #[structopt(long, default_value = "7800")]
     port: u16,
     #[structopt(long)]
-    peer: Option<String>
+    peer: Option<String>,
 }
 
 fn main() {
@@ -27,34 +27,35 @@ fn main() {
     let mut map = HashMap::new();
     opt.peer.map(|peer| {
         let mut parts = peer.split("=");
-        map.insert(parts.next().unwrap().parse::<u64>().unwrap(), parts.next().unwrap().to_string());
+        map.insert(
+            parts.next().unwrap().parse::<u64>().unwrap(),
+            parts.next().unwrap().to_string(),
+        );
     });
 
-    let raft = Raft::start_server(opt.id, &opt.host, opt.port, map);
+    let mut raft = Raft::start_server(opt.id, &opt.host, opt.port, map);
     loop {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
                 rl.add_history_entry(line.as_str());
-                if &line == "probe" {
-                    println!("{}", raft.clerk().probe());
-                } else if &line == "peers" {
-                    println!("{}", raft.clerk().peers());
+                if &line == "peers" {
+                    println!("{}", raft.get_peers());
                 } else {
-                    raft.clerk().put("1", &line);
+                    raft.put_data("1", &line);
                 }
-            },
+            }
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");
-                break
-            },
+                break;
+            }
             Err(ReadlineError::Eof) => {
                 println!("CTRL-D");
-                break
-            },
+                break;
+            }
             Err(err) => {
                 println!("Error: {:?}", err);
-                break
+                break;
             }
         }
     }

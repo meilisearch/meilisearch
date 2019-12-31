@@ -1,12 +1,12 @@
-
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use log::*;
-use raft::eraftpb::{ConfChange, Entry, EntryType, Message};
-use raft::storage::MemStorage as PeerStorage;
-use raft::{self, RawNode, Config};
+use raft::eraftpb::{ConfChange, ConfState, Entry, EntryType, Message};
+use raft::storage::MemStorage;
+use raft::{self, Config, RawNode};
+use slog::{o, Drain};
 
 use crate::util;
 
@@ -17,19 +17,21 @@ pub enum PeerMessage {
 }
 
 pub struct Peer {
-    pub raft_group: RawNode<PeerStorage>,
+    pub node: RawNode<MemStorage>,
     apply_ch: SyncSender<Entry>,
 }
 
 impl Peer {
-    pub fn new(id: u64, apply_ch: SyncSender<Entry>, peers: Vec<u64>) -> Peer {
-        let cfg = default_raft_config(id, peers);
-        let storge = PeerStorage::new();
-        let peer = Peer {
-            raft_group: RawNode::new(&cfg, storge, vec![]).unwrap(),
+    pub fn new(id: u64, apply_ch: SyncSender<Entry>) -> Peer {
+        let cfg = default_raft_config(id);
+        let conf_state = ConfState::from((vec![id], vec![]));
+        let storge = MemStorage::new_with_conf_state(conf_state);
+        let logger = slog::Logger::root(slog_stdlog::StdLog.fuse(), o!());
+        let node = RawNode::new(&cfg, storge, &logger).unwrap();
+        Peer {
+            node,
             apply_ch,
-        };
-        peer
+        }
     }
 
     pub fn activate(mut peer: Peer, sender: SyncSender<Message>, receiver: Receiver<PeerMessage>) {
@@ -38,22 +40,23 @@ impl Peer {
         });
     }
 
+    // Ticking function
     fn listen_message(&mut self, sender: SyncSender<Message>, receiver: Receiver<PeerMessage>) {
         let mut t = Instant::now();
         let mut timeout = Duration::from_millis(100);
         loop {
             match receiver.recv_timeout(timeout) {
-                Ok(PeerMessage::Propose(p)) => match self.raft_group.propose(vec![], p) {
+                Ok(PeerMessage::Propose(p)) => match self.node.propose(vec![], p) {
                     Ok(_) => (),
-                    Err(_) => self.apply_message(Entry::new()),
+                    Err(_err) => self.apply_message(Entry::new()),
                 },
                 Ok(PeerMessage::ConfChange(cc)) => {
-                    match self.raft_group.propose_conf_change(vec![], cc.clone()) {
+                    match self.node.propose_conf_change(vec![], cc.clone()) {
                         Ok(_) => (),
-                        Err(_) => error!("conf change failed: {:?}", cc),
+                        Err(_err) => error!("conf change failed: {:?}", cc),
                     }
                 }
-                Ok(PeerMessage::Message(m)) => self.raft_group.step(m).unwrap(),
+                Ok(PeerMessage::Message(m)) => self.node.step(m).unwrap(),
                 Err(RecvTimeoutError::Timeout) => (),
                 Err(RecvTimeoutError::Disconnected) => return,
             }
@@ -62,7 +65,7 @@ impl Peer {
             if d >= timeout {
                 t = Instant::now();
                 timeout = Duration::from_millis(200);
-                self.raft_group.tick();
+                self.node.tick();
             } else {
                 timeout -= d;
             }
@@ -72,46 +75,40 @@ impl Peer {
     }
 
     pub fn is_leader(&self) -> bool {
-        self.raft_group.raft.leader_id == self.raft_group.raft.id
+        self.node.raft.leader_id == self.node.raft.id
     }
 
     fn on_ready(&mut self, sender: SyncSender<Message>) {
-        if !self.raft_group.has_ready() {
+        if !self.node.has_ready() {
             return;
         }
 
-        let mut ready = self.raft_group.ready();
-        let is_leader = self.raft_group.raft.leader_id == self.raft_group.raft.id;
+        let mut ready = self.node.ready();
+        let is_leader = self.node.raft.leader_id == self.node.raft.id;
         if is_leader {
-            // println!("I'm leader");
             let msgs = ready.messages.drain(..);
             for _msg in msgs {
                 Self::send_message(sender.clone(), _msg.clone());
             }
         }
 
-        if !raft::is_empty_snap(&ready.snapshot) {
-            self.raft_group
+        if !raft::is_empty_snap(&ready.snapshot()) {
+            self.node
                 .mut_store()
                 .wl()
-                .apply_snapshot(ready.snapshot.clone())
+                .apply_snapshot(ready.snapshot().clone())
                 .unwrap()
         }
 
-        if !ready.entries.is_empty() {
-            self.raft_group
-                .mut_store()
-                .wl()
-                .append(&ready.entries)
-                .unwrap();
+        if !ready.entries().is_empty() {
+            self.node.mut_store().wl().append(&ready.entries()).unwrap();
         }
 
-        if let Some(hs) = ready.hs.clone() {
-            self.raft_group.mut_store().wl().set_hardstate(hs.clone());
+        if let Some(hs) = ready.hs() {
+            self.node.mut_store().wl().set_hardstate(hs.clone());
         }
 
         if !is_leader {
-            // println!("I'm follower");
             let msgs = ready.messages.drain(..);
             for mut _msg in msgs {
                 for _entry in _msg.mut_entries().iter() {
@@ -138,16 +135,22 @@ impl Peer {
                     EntryType::EntryConfChange => {
                         let cc = util::parse_data(&entry.data);
                         debug!("config: {:?}", cc);
-                        self.raft_group.apply_conf_change(&cc);
-                        debug!("apply conf change");
+                        if let Err(err) = self.node.apply_conf_change(&cc) {
+                            warn!("conf change cannot be applied; {}", err);
+                        } else {
+                            debug!("apply conf change");
+                        };
                         self.apply_message(entry.clone());
+                    }
+                    EntryType::EntryConfChangeV2 => {
+                        unimplemented!();
                     }
                 }
             }
         }
 
         // Advance the Raft
-        self.raft_group.advance(ready);
+        self.node.advance(ready);
     }
 
     fn send_message(sender: SyncSender<Message>, msg: Message) {
@@ -168,12 +171,10 @@ impl Peer {
     }
 }
 
-
-pub fn default_raft_config(id: u64, peers: Vec<u64>) -> Config {
-    debug!("default_raft_config id:{} peers:{:?}", id, peers);
+pub fn default_raft_config(id: u64) -> Config {
+    debug!("default_raft_config id:{}", id);
     Config {
         id,
-        peers,
         election_tick: 10,
         heartbeat_tick: 1,
         max_size_per_msg: 1024 * 1024 * 1024,

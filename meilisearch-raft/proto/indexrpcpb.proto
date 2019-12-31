@@ -6,27 +6,12 @@ import "eraftpb.proto";
 enum RespErr {
     OK = 0;
     ErrWrongLeader = 1;
-    ErrProbeFailed = 2;
-    ErrPeerFailed = 3;
-    // ErrMetricsFailed = 4;
-    ErrGetFailed = 5;
-    ErrPutFailed = 6;
-    // ErrDeleteFailed = 7;
-    // ErrCommitFailed = 8;
-    // ErrRollbackFailed = 9;
-    // ErrMergeFailed = 10;
-    // ErrSearchFailed = 11;
-    // ErrSchemaFailed = 12;
 }
 
 enum ReqType {
     Join = 0;
     Leave = 1;
     Put = 2;
-    // Delete = 3;
-    // Commit = 4;
-    // Rollback = 5;
-    // Merge = 6;
 }
 
 message ApplyReq {
@@ -35,10 +20,6 @@ message ApplyReq {
     JoinReq join_req = 3;
     LeaveReq leave_req = 4;
     PutReq put_req = 5;
-    // DeleteReq delete_req = 6;
-    // CommitReq commit_req = 7;
-    // RollbackReq rollback_req = 8;
-    // MergeReq merge_req = 9;
 }
 
 message ConfChangeReq {
@@ -63,123 +44,9 @@ message LeaveReq {
     string peer_addr = 3;
 }
 
-message ProbeReq {
-    uint64 client_id = 1;
-    uint64 seq = 2;
-}
-
-message ProbeResp {
-    string value = 1;
-    RespErr err = 2;
-}
-
-message PeersReq {
-    uint64 client_id = 1;
-    uint64 seq = 2;
-}
-
-message PeersResp {
-    string value = 1;
-    RespErr err = 2;
-}
-
-// message MetricsReq {
-//     uint64 client_id = 1;
-//     uint64 seq = 2;
-// }
-
-// message MetricsResp {
-//     string value = 1;
-//     RespErr err = 2;
-// }
-
-message GetReq {
-    uint64 client_id = 1;
-    uint64 seq = 2;
-    string doc_id = 3;
-}
-
-message GetResp {
-    string value = 1;
-    RespErr err = 2;
-}
-
 message PutReq {
     uint64 client_id = 1;
     uint64 seq = 2;
     string doc_id = 3;
     string fields = 4;
 }
-
-message PutResp {
-    string value = 1;
-    RespErr err = 2;
-}
-
-// message DeleteReq {
-//     uint64 client_id = 1;
-//     uint64 seq = 2;
-//     string doc_id = 3;
-// }
-
-// message DeleteResp {
-//     string value = 1;
-//     RespErr err = 2;
-// }
-
-// message CommitReq {
-//     uint64 client_id = 1;
-//     uint64 seq = 2;
-// }
-
-// message CommitResp {
-//     string value = 1;
-//     RespErr err = 2;
-// }
-
-// message RollbackReq {
-//     uint64 client_id = 1;
-//     uint64 seq = 2;
-// }
-
-// message RollbackResp {
-//     string value = 1;
-//     RespErr err = 2;
-// }
-
-// message MergeReq {
-//     uint64 client_id = 1;
-//     uint64 seq = 2;
-// }
-
-// message MergeResp {
-//     string value = 1;
-//     RespErr err = 2;
-// }
-
-// message SearchReq {
-//     uint64 client_id = 1;
-//     uint64 seq = 2;
-//     string query = 3;
-//     uint64 from = 4;
-//     uint64 limit = 5;
-//     bool exclude_count = 6;
-//     bool exclude_docs = 7;
-//     string facet_field = 8;
-//     repeated string facet_prefixes = 9;
-// }
-
-// message SearchResp {
-//     string value = 1;
-//     RespErr err = 2;
-// }
-
-// message SchemaReq {
-//     uint64 client_id = 1;
-//     uint64 seq = 2;
-// }
-
-// message SchemaResp {
-//     string value = 1;
-//     RespErr err = 2;
-// }

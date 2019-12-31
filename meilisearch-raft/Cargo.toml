@@ -12,10 +12,15 @@ grpcio = { version = "0.4.5", features = [ "secure" ] }
 log = "0.4.8"
 logger = "0.4.0"
 protobuf = "2.8.0"
-raft = "0.4.3"
 rand = "0.7.2"
 serde = { version = "1.0.103", features = ["derive"] }
 serde_json = "1.0.42"
+slog = "2.5.2"
+slog-stdlog = "4.0.0"
+
+[dependencies.raft]
+git = "https://github.com/tikv/raft-rs"
+branch = "master"
 
 [dev-dependencies]
 rustyline = "5.0.5"

@@ -1,21 +1,22 @@
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 use futures::Future;
 use grpcio::{ChannelBuilder, EnvBuilder, Environment, RpcContext, ServerBuilder, UnarySink};
 use log::*;
-use protobuf::Message;
-use raft::eraftpb::{ConfChange, ConfChangeType, Entry, EntryType, Message as RaftMessage};
+use protobuf::Message as ProtoMessage;
+use raft::eraftpb::{ConfChange, ConfChangeType, Entry, EntryType, Message};
 
 use crate::client::{create_client, Clerk};
+use crate::peer::{Peer, PeerMessage};
 use crate::proto::indexpb_grpc::{self, Index as IndexService, IndexClient};
 use crate::proto::indexrpcpb::*;
-use crate::peer::{Peer, PeerMessage};
 use crate::util;
 
+#[derive(Debug)]
 struct NotifyArgs(u64, String, RespErr);
 
 #[derive(Clone)]
@@ -49,8 +50,6 @@ impl IndexServer {
         // Send/Receive Entry channel
         let (apply_sender, apply_receiver) = mpsc::sync_channel(100);
 
-        let peers_id = peers.keys().map(|id| *id).collect();
-
         let mut index_server = IndexServer {
             id,
             leader: false,
@@ -82,7 +81,7 @@ impl IndexServer {
             loop {}
         });
 
-        let peer = Peer::new(id, apply_sender, peers_id);
+        let peer = Peer::new(id, apply_sender);
         Peer::activate(peer, rpc_sender, rf_receiver);
 
         let mut servers: Vec<IndexClient> = Vec::new();
@@ -90,8 +89,8 @@ impl IndexServer {
             servers.push(value.clone());
         }
 
-        let client_id = rand::random();
-        let mut client = Clerk::new(&servers, client_id);
+        let mut client = Clerk::new(servers);
+
         client.join_with_retry(id, host, port, 10, Duration::from_secs(3));
 
         index_server
@@ -102,31 +101,29 @@ impl IndexServer {
         for (_, client) in self.peers.lock().unwrap().clone() {
             clients.push(client);
         }
-        Clerk::new(&clients, self.id)
+        Clerk::new(clients)
     }
 
-    fn async_rpc_sender(&mut self, receiver: Receiver<RaftMessage>) {
+    fn async_rpc_sender(&mut self, receiver: Receiver<Message>) {
         let l = self.peers.clone();
         thread::spawn(move || loop {
-            match receiver.recv() {
-                Ok(m) => {
-                    let peers = l.lock().unwrap();
-                    let op = peers.get(&m.to);
-                    if let Some(c) = op {
-                        let client = c.clone();
-                        thread::spawn(move || {
-                            client.raft(&m).unwrap_or_else(|e| {
-                                error!("send raft msg to {} failed: {:?}", m.to, e);
-                                RaftDone::new()
-                            });
+            if let Ok(message) = receiver.recv() {
+                let peers = l.lock().unwrap();
+                let op = peers.get(&message.to);
+                if let Some(c) = op {
+                    let client = c.clone();
+                    thread::spawn(move || {
+                        client.raft(&message).unwrap_or_else(|e| {
+                            error!("send raft msg to {} failed: {:?}", message.to, e);
+                            RaftDone::new()
                         });
-                    }
+                    });
                 }
-                Err(_) => (),
             }
         });
     }
 
+    // Send message to Peer
     fn start_op(&mut self, req: &ApplyReq) -> (RespErr, String) {
         let (sh, rh) = mpsc::sync_channel(0);
         {
@@ -144,14 +141,14 @@ impl IndexServer {
             });
         match rh.recv_timeout(Duration::from_millis(1000)) {
             Ok(args) => {
-                return (args.2, args.1);
+                (args.2, args.1)
             }
-            Err(_) => {
+            Err(_err) => {
                 {
                     let mut map = self.notify_ch_map.lock().unwrap();
                     map.remove(&req.get_client_id());
                 }
-                return (RespErr::ErrWrongLeader, String::from(""));
+                (RespErr::ErrWrongLeader, String::from(""))
             }
         }
     }
@@ -164,15 +161,15 @@ impl IndexServer {
         let index = self.index.clone();
 
         thread::spawn(move || loop {
-            match apply_receiver.recv() {
-                Ok(e) => match e.get_entry_type() {
+            if let Ok(entry) = apply_receiver.recv() {
+                match entry.get_entry_type() {
                     EntryType::EntryNormal => {
                         let result: NotifyArgs;
-                        let req: ApplyReq = util::parse_data(e.get_data());
+                        let req: ApplyReq = util::parse_data(entry.get_data());
                         let client_id = req.get_client_id();
-                        if e.data.len() > 0 {
+                        if entry.data.is_empty() {
                             result = Self::apply_entry(
-                                e.term,
+                                entry.term,
                                 &req,
                                 peers.clone(),
                                 peers_addr.clone(),
@@ -193,7 +190,7 @@ impl IndexServer {
                     }
                     EntryType::EntryConfChange => {
                         let result = NotifyArgs(0, String::from(""), RespErr::OK);
-                        let cc: ConfChange = util::parse_data(e.get_data());
+                        let cc: ConfChange = util::parse_data(entry.get_data());
                         let mut map = notify_ch_map.lock().unwrap();
                         if let Some(s) = map.get(&cc.get_node_id()) {
                             s.send(result).unwrap_or_else(|e| {
@@ -202,12 +199,15 @@ impl IndexServer {
                         }
                         map.remove(&cc.get_node_id());
                     }
-                },
-                Err(_) => (),
+                    EntryType::EntryConfChangeV2 => {
+                        unimplemented!();
+                    }
+                }
             }
         });
     }
 
+    // This function is the final one where all specifi usages finished.
     fn apply_entry(
         term: u64,
         req: &ApplyReq,
@@ -242,7 +242,6 @@ impl IndexServer {
             ReqType::Put => {
                 let doc_id = req.get_put_req().get_doc_id().to_string();
                 let fields = req.get_put_req().get_fields().to_string();
-                println!("apply: {} {}", doc_id, fields);
                 index.lock().unwrap().insert(doc_id, fields);
 
                 let mut ret = HashMap::new();
@@ -256,10 +255,24 @@ impl IndexServer {
     pub fn get_peers(&mut self) -> String {
         serde_json::to_string(&self.peers_addr.lock().unwrap().clone()).unwrap()
     }
+
+    pub fn put_data(&mut self, doc_id: &str, fields: &str) {
+        let mut put_req = PutReq::new();
+        put_req.set_client_id(self.id);
+        put_req.set_seq(0);
+        put_req.set_doc_id(doc_id.to_owned());
+        put_req.set_fields(fields.to_owned());
+
+        let mut req = ApplyReq::new();
+        req.set_client_id(self.id);
+        req.set_req_type(ReqType::Put);
+        req.set_put_req(put_req);
+        let (_err, _ret) = Self::start_op(self, &req);
+    }
 }
 
 impl IndexService for IndexServer {
-    fn raft(&mut self, ctx: RpcContext, req: RaftMessage, sink: UnarySink<RaftDone>) {
+    fn raft(&mut self, ctx: RpcContext, req: Message, sink: UnarySink<RaftDone>) {
         self.rf_message_ch
             .send(PeerMessage::Message(req.clone()))
             .unwrap_or_else(|e| {
@@ -299,6 +312,7 @@ impl IndexService for IndexServer {
                 apply_req.set_leave_req(leave_req);
             }
         }
+
         let (err, _) = self.start_op(&apply_req);
         match err {
             RespErr::OK => {
@@ -308,82 +322,15 @@ impl IndexService for IndexServer {
                     map.insert(cc.get_node_id(), sh);
                 }
                 self.rf_message_ch
-                    .send(PeerMessage::ConfChange(cc.clone()))
+                    .send(PeerMessage::ConfChange(cc))
                     .unwrap();
                 match rh.recv_timeout(Duration::from_millis(1000)) {
                     Ok(_) => resp.set_err(RespErr::OK),
-                    Err(_) => resp.set_err(RespErr::ErrWrongLeader),
+                    Err(_err) => resp.set_err(RespErr::ErrWrongLeader),
                 }
             }
             _ => resp.set_err(RespErr::ErrWrongLeader),
         }
-
-        debug!("response: {:?}", resp);
-
-        ctx.spawn(
-            sink.success(resp)
-                .map_err(move |e| error!("failed to reply {:?}: {:?}", req, e)),
-        )
-    }
-
-    fn probe(&mut self, ctx: RpcContext, req: ProbeReq, sink: UnarySink<ProbeResp>) {
-        debug!("request: {:?}", req);
-
-        let mut ret = HashMap::new();
-        ret.insert("health", "OK");
-
-        let mut resp = ProbeResp::new();
-        resp.set_err(RespErr::OK);
-        resp.set_value(serde_json::to_string(&ret).unwrap());
-
-        debug!("response: {:?}", resp);
-
-        ctx.spawn(
-            sink.success(resp)
-                .map_err(move |e| error!("failed to reply {:?}: {:?}", req, e)),
-        )
-    }
-
-    fn peers(&mut self, ctx: RpcContext, req: PeersReq, sink: UnarySink<PeersResp>) {
-        debug!("request: {:?}", req);
-
-        let mut resp = PeersResp::new();
-        resp.set_err(RespErr::OK);
-        resp.set_value(serde_json::to_string(&self.peers_addr.lock().unwrap().clone()).unwrap());
-
-        debug!("response: {:?}", resp);
-
-        ctx.spawn(
-            sink.success(resp)
-                .map_err(move |e| error!("failed to reply {:?}: {:?}", req, e)),
-        )
-    }
-
-    fn get(&mut self, ctx: RpcContext, req: GetReq, sink: UnarySink<GetResp>) {
-        debug!("request: {:?}", req);
-
-        let index = self.index.lock().unwrap();
-        let value = index.get(req.get_doc_id()).unwrap();
-
-        let mut resp = GetResp::new();
-        resp.set_err(RespErr::OK);
-        resp.set_value(value.to_string());
-
-        debug!("response: {:?}", resp);
-
-        ctx.spawn(
-            sink.success(resp)
-                .map_err(move |e| error!("failed to reply {:?}: {:?}", req, e)),
-        )
-    }
-
-    fn put(&mut self, ctx: RpcContext, req: ApplyReq, sink: UnarySink<PutResp>) {
-        debug!("request: {:?}", req);
-
-        let (err, ret) = Self::start_op(self, &req);
-        let mut resp = PutResp::new();
-        resp.set_err(err);
-        resp.set_value(ret);
 
         debug!("response: {:?}", resp);
 
