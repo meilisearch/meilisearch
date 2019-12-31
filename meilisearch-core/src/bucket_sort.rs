@@ -548,15 +548,16 @@ fn fetch_matches<'txn, 'tag>(
                 for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
                     let document_id = group[0].document_id;
 
-                    if query_index != 0 {
-                        if !documents_ids.contains(&document_id) { continue }
-                    } else {
-                        documents_ids.insert(document_id);
+                    if query_index != 0 && !documents_ids.contains(&document_id) {
+                        offset += group.len();
+                        continue
                     }
+                    documents_ids.insert(document_id);
 
                     postings_lists_length += group.len();
 
-                    let posting_list_index = arena.add(postings_list_view.range(offset, group.len()));
+                    let range = postings_list_view.range(offset, group.len());
+                    let posting_list_index = arena.add(range);
                     let bare_match = BareMatch {
                         document_id,
                         query_index: query_index as u16,
@@ -564,6 +565,7 @@ fn fetch_matches<'txn, 'tag>(
                         is_exact: *is_exact,
                         postings_list: posting_list_index,
                     };
+
 
                     total_postings_lists.push(bare_match);
                     offset += group.len();
@@ -611,15 +613,16 @@ fn fetch_matches<'txn, 'tag>(
                     for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
                         let document_id = group[0].document_id;
 
-                        if query_index != 0 {
-                            if !documents_ids.contains(&document_id) { continue }
-                        } else {
-                            documents_ids.insert(document_id);
+                        if query_index != 0 && !documents_ids.contains(&document_id) {
+                            offset += group.len();
+                            continue
                         }
+                        documents_ids.insert(document_id);
 
                         postings_lists_length += group.len();
 
-                        let posting_list_index = arena.add(postings_list_view.range(offset, group.len()));
+                        let range = postings_list_view.range(offset, group.len());
+                        let posting_list_index = arena.add(range);
                         let bare_match = BareMatch {
                             document_id,
                             query_index: query_index as u16,
