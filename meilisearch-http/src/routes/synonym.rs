@@ -71,3 +71,26 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
         .with_status(StatusCode::ACCEPTED)
         .into_response())
 }
+
+
+pub async fn delete(ctx: Context<Data>) -> SResult<Response> {
+    ctx.is_allowed(SettingsWrite)?;
+
+    let index = ctx.index()?;
+
+    let db = &ctx.state().db;
+    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
+
+    let synonyms_update = index.synonyms_update();
+
+    let update_id = synonyms_update
+        .finalize(&mut writer)
+        .map_err(ResponseError::internal)?;
+
+    writer.commit().map_err(ResponseError::internal)?;
+
+    let response_body = IndexUpdateResponse { update_id };
+    Ok(tide::response::json(response_body)
+        .with_status(StatusCode::ACCEPTED)
+        .into_response())
+}

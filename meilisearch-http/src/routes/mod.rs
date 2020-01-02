@@ -76,11 +76,12 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                         .post(document::delete_multiple_documents);
                 });
 
-                router.at("/synonyms")
-                    .get(synonym::get)
-                    .post(synonym::update);
-
                 router.at("/settings").nest(|router| {
+                        router.at("/synonyms")
+                            .get(synonym::get)
+                            .post(synonym::update)
+                            .delete(synonym::delete);
+
                         router.at("/stop-words")
                             .get(stop_words::get)
                             .post(stop_words::update)
