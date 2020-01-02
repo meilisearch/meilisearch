@@ -23,7 +23,13 @@ pub fn value_to_string(value: &Value) -> Option<String> {
         Value::Null => None,
         Value::Bool(_) => None,
         Value::Number(value) => Some(value.to_string()),
-        Value::String(value) => Some(value.to_string()),
+        Value::String(value) => {
+            if value.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
+                Some(value.to_string())
+            } else {
+                None
+            }
+        },
         Value::Array(_) => None,
         Value::Object(_) => None,
     }

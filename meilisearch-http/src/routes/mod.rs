@@ -72,7 +72,7 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                     });
 
                     router
-                        .at("/delete")
+                        .at("/delete-batch")
                         .post(document::delete_multiple_documents);
                 });
 

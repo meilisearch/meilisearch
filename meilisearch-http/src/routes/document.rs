@@ -117,13 +117,14 @@ pub async fn get_all_documents(ctx: Context<Data>) -> SResult<Response> {
     Ok(tide::response::json(response_body))
 }
 
-fn infered_schema(document: &IndexMap<String, Value>) -> Option<meilisearch_schema::Schema> {
+fn infered_schema(document: &IndexMap<String, Value>, identifier: Option<String>) -> Option<meilisearch_schema::Schema> {
     use meilisearch_schema::{SchemaBuilder, DISPLAYED, INDEXED};
 
-    let mut identifier = None;
+    let mut identifier = identifier;
     for key in document.keys() {
         if identifier.is_none() && key.to_lowercase().contains("id") {
-            identifier = Some(key);
+            identifier = Some(key.to_string());
+            break;
         }
     }
 
@@ -139,12 +140,21 @@ fn infered_schema(document: &IndexMap<String, Value>) -> Option<meilisearch_sche
     }
 }
 
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UpdateDocumentsQuery {
+    identifier: Option<String>,
+}
+
 async fn update_multiple_documents(mut ctx: Context<Data>, is_partial: bool) -> SResult<Response> {
     ctx.is_allowed(DocumentsWrite)?;
 
+    let index = ctx.index()?;
+
     let data: Vec<IndexMap<String, Value>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
-    let index = ctx.index()?;
+    let query: UpdateDocumentsQuery = ctx
+        .url_query().unwrap_or_default();
 
     let db = &ctx.state().db;
     let reader = db.main_read_txn().map_err(ResponseError::internal)?;
@@ -155,7 +165,7 @@ async fn update_multiple_documents(mut ctx: Context<Data>, is_partial: bool) -> 
         .schema(&reader)
         .map_err(ResponseError::internal)?;
     if current_schema.is_none() {
-        match data.first().and_then(infered_schema) {
+        match data.first().and_then(|docs| infered_schema(docs, query.identifier)) {
             Some(schema) => {
                 index
                     .schema_update(&mut update_writer, schema)
