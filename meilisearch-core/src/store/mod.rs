@@ -287,16 +287,8 @@ impl Index {
         )
     }
 
-    pub fn stop_words_addition(&self) -> update::StopWordsAddition {
-        update::StopWordsAddition::new(
-            self.updates,
-            self.updates_results,
-            self.updates_notifier.clone(),
-        )
-    }
-
-    pub fn stop_words_deletion(&self) -> update::StopWordsDeletion {
-        update::StopWordsDeletion::new(
+    pub fn stop_words_update(&self) -> update::StopWordsUpdate {
+        update::StopWordsUpdate::new(
             self.updates,
             self.updates_results,
             self.updates_notifier.clone(),

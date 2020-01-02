@@ -3,8 +3,7 @@ mod customs_update;
 mod documents_addition;
 mod documents_deletion;
 mod schema_update;
-mod stop_words_addition;
-mod stop_words_deletion;
+mod stop_words_update;
 mod synonyms_update;
 
 pub use self::clear_all::{apply_clear_all, push_clear_all};
@@ -14,8 +13,7 @@ pub use self::documents_addition::{
 };
 pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
 pub use self::schema_update::{apply_schema_update, push_schema_update};
-pub use self::stop_words_addition::{apply_stop_words_addition, StopWordsAddition};
-pub use self::stop_words_deletion::{apply_stop_words_deletion, StopWordsDeletion};
+pub use self::stop_words_update::{apply_stop_words_update, StopWordsUpdate};
 pub use self::synonyms_update::{apply_synonyms_update, SynonymsUpdate};
 
 use std::cmp;
@@ -89,16 +87,9 @@ impl Update {
         }
     }
 
-    fn stop_words_addition(data: BTreeSet<String>) -> Update {
+    fn stop_words_update(data: BTreeSet<String>) -> Update {
         Update {
-            data: UpdateData::StopWordsAddition(data),
-            enqueued_at: Utc::now(),
-        }
-    }
-
-    fn stop_words_deletion(data: BTreeSet<String>) -> Update {
-        Update {
-            data: UpdateData::StopWordsDeletion(data),
+            data: UpdateData::StopWordsUpdate(data),
             enqueued_at: Utc::now(),
         }
     }
@@ -113,8 +104,7 @@ pub enum UpdateData {
     DocumentsPartial(Vec<HashMap<String, serde_json::Value>>),
     DocumentsDeletion(Vec<DocumentId>),
     SynonymsUpdate(BTreeMap<String, Vec<String>>),
-    StopWordsAddition(BTreeSet<String>),
-    StopWordsDeletion(BTreeSet<String>),
+    StopWordsUpdate(BTreeSet<String>),
 }
 
 impl UpdateData {
@@ -135,11 +125,8 @@ impl UpdateData {
             UpdateData::SynonymsUpdate(addition) => UpdateType::SynonymsUpdate {
                 number: addition.len(),
             },
-            UpdateData::StopWordsAddition(addition) => UpdateType::StopWordsAddition {
-                number: addition.len(),
-            },
-            UpdateData::StopWordsDeletion(deletion) => UpdateType::StopWordsDeletion {
-                number: deletion.len(),
+            UpdateData::StopWordsUpdate(update) => UpdateType::StopWordsUpdate {
+                number: update.len(),
             },
         }
     }
@@ -155,8 +142,7 @@ pub enum UpdateType {
     DocumentsPartial { number: usize },
     DocumentsDeletion { number: usize },
     SynonymsUpdate { number: usize },
-    StopWordsAddition { number: usize },
-    StopWordsDeletion { number: usize },
+    StopWordsUpdate { number: usize },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -321,22 +307,10 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        UpdateData::StopWordsAddition(stop_words) => {
+        UpdateData::StopWordsUpdate(stop_words) => {
             let start = Instant::now();
 
-            let update_type = UpdateType::StopWordsAddition {
-                number: stop_words.len(),
-            };
-
-            let result =
-                apply_stop_words_addition(writer, index.main, index.postings_lists, stop_words);
-
-            (update_type, result, start.elapsed())
-        }
-        UpdateData::StopWordsDeletion(stop_words) => {
-            let start = Instant::now();
-
-            let update_type = UpdateType::StopWordsDeletion {
+            let update_type = UpdateType::StopWordsUpdate {
                 number: stop_words.len(),
             };
 

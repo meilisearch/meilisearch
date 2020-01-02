@@ -80,16 +80,12 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                     .get(synonym::get)
                     .post(synonym::update);
 
-                router.at("/stop-words").nest(|router| {
-                    router
-                        .at("/")
-                        .get(stop_words::list)
-                        .patch(stop_words::add)
-                        .post(stop_words::delete);
-                });
-
-                router
-                    .at("/settings")
+                router.at("/settings").nest(|router| {
+                        router.at("/stop-words")
+                            .get(stop_words::get)
+                            .post(stop_words::update)
+                            .delete(stop_words::delete);
+                    })
                     .get(setting::get)
                     .post(setting::update);
             });

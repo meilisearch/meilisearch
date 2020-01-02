@@ -8,7 +8,7 @@ use crate::models::token::ACL::*;
 use crate::routes::document::IndexUpdateResponse;
 use crate::Data;
 
-pub async fn list(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
@@ -29,7 +29,7 @@ pub async fn list(ctx: Context<Data>) -> SResult<Response> {
     Ok(tide::response::json(stop_words))
 }
 
-pub async fn add(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
@@ -38,12 +38,12 @@ pub async fn add(mut ctx: Context<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
-    let mut stop_words_addition = index.stop_words_addition();
+    let mut stop_words_update = index.stop_words_update();
     for stop_word in data {
-        stop_words_addition.add_stop_word(stop_word);
+        stop_words_update.add_stop_word(stop_word);
     }
 
-    let update_id = stop_words_addition
+    let update_id = stop_words_update
         .finalize(&mut writer)
         .map_err(ResponseError::internal)?;
 
@@ -55,19 +55,14 @@ pub async fn add(mut ctx: Context<Data>) -> SResult<Response> {
         .into_response())
 }
 
-pub async fn delete(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn delete(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
-
-    let data: Vec<String> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
     let db = &ctx.state().db;
     let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
-    let mut stop_words_deletion = index.stop_words_deletion();
-    for stop_word in data {
-        stop_words_deletion.delete_stop_word(stop_word);
-    }
+    let stop_words_deletion = index.stop_words_update();
 
     let update_id = stop_words_deletion
         .finalize(&mut writer)
