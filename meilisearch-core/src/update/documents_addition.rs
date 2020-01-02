@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeSet};
 
 use fst::{set::OpBuilder, SetBuilder};
 use sdset::{duo::Union, SetOperation};
 use serde::{Deserialize, Serialize};
+use meilisearch_schema::{Schema, DISPLAYED, INDEXED};
 
 use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
@@ -114,6 +115,11 @@ pub fn apply_documents_addition<'a, 'b>(
         None => return Err(Error::SchemaMissing),
     };
 
+    if let Some(new_schema) = lazy_new_schema(&schema, &addition) {
+        main_store.put_schema(writer, &new_schema)?;
+        schema = new_schema;
+    }
+
     let identifier = schema.identifier_name();
 
     // 1. store documents ids for future deletion
@@ -178,10 +184,15 @@ pub fn apply_documents_partial_addition<'a, 'b>(
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
 
-    let schema = match index.main.schema(writer)? {
+
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
+
+    if let Some(new_schema) = lazy_new_schema(&schema, &addition) {
+        main_store.put_schema(writer, &new_schema)?;
+        schema = new_schema;
+    }
 
     let identifier = schema.identifier_name();
 
@@ -381,4 +392,31 @@ pub fn write_documents_addition_index(
     compute_short_prefixes(writer, index)?;
 
     Ok(())
+}
+
+pub fn lazy_new_schema(
+    schema: &Schema,
+    documents: &[HashMap<String, serde_json::Value>],
+) -> Option<Schema> {
+    let mut attributes_to_add = BTreeSet::new();
+
+    for document in documents {
+        for (key, _) in document {
+            if schema.attribute(key).is_none() {
+                attributes_to_add.insert(key);
+            }
+        }
+    }
+
+    if attributes_to_add.is_empty() {
+        return None
+    }
+
+    let mut schema_builder = schema.to_builder();
+    for attribute in attributes_to_add {
+        schema_builder.new_attribute(attribute, DISPLAYED | INDEXED);
+    }
+    let schema = schema_builder.build();
+
+    Some(schema)
 }
