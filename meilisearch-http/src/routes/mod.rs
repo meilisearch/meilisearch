@@ -77,18 +77,21 @@ pub fn load_routes(app: &mut tide::App<Data>) {
                 });
 
                 router.at("/settings").nest(|router| {
-                        router.at("/synonyms")
-                            .get(synonym::get)
-                            .post(synonym::update)
-                            .delete(synonym::delete);
+                    router.at("/synonyms")
+                        .get(synonym::get)
+                        .post(synonym::update)
+                        .delete(synonym::delete);
 
-                        router.at("/stop-words")
-                            .get(stop_words::get)
-                            .post(stop_words::update)
-                            .delete(stop_words::delete);
-                    })
-                    .get(setting::get)
-                    .post(setting::update);
+                    router.at("/stop-words")
+                        .get(stop_words::get)
+                        .post(stop_words::update)
+                        .delete(stop_words::delete);
+                })
+                .get(setting::get)
+                .post(setting::update);
+
+
+                router.at("/stats").get(stats::index_stat);
             });
         });
 
@@ -110,7 +113,6 @@ pub fn load_routes(app: &mut tide::App<Data>) {
             .put(health::change_healthyness);
 
         router.at("/stats").get(stats::get_stats);
-        router.at("/stats/:index").get(stats::index_stat);
         router.at("/version").get(stats::get_version);
         router.at("/sys-info").get(stats::get_sys_info);
         router
