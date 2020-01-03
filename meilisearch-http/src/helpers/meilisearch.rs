@@ -77,7 +77,6 @@ impl IndexSearchExt for Index {
             limit: 20,
             attributes_to_crop: None,
             attributes_to_retrieve: None,
-            searchable_attributes: None,
             attributes_to_highlight: None,
             filters: None,
             timeout: Duration::from_millis(30),
@@ -93,7 +92,6 @@ pub struct SearchBuilder<'a> {
     limit: usize,
     attributes_to_crop: Option<HashMap<String, usize>>,
     attributes_to_retrieve: Option<HashSet<String>>,
-    searchable_attributes: Option<HashSet<String>>,
     attributes_to_highlight: Option<HashSet<String>>,
     filters: Option<String>,
     timeout: Duration,
@@ -124,17 +122,6 @@ impl<'a> SearchBuilder<'a> {
     pub fn add_retrievable_field(&mut self, value: String) -> &SearchBuilder {
         let attributes_to_retrieve = self.attributes_to_retrieve.get_or_insert(HashSet::new());
         attributes_to_retrieve.insert(value);
-        self
-    }
-
-    pub fn searchable_attributes(&mut self, value: HashSet<String>) -> &SearchBuilder {
-        self.searchable_attributes = Some(value);
-        self
-    }
-
-    pub fn add_attribute_to_search_in(&mut self, value: String) -> &SearchBuilder {
-        let searchable_attributes = self.searchable_attributes.get_or_insert(HashSet::new());
-        searchable_attributes.insert(value);
         self
     }
 
@@ -175,13 +162,6 @@ impl<'a> SearchBuilder<'a> {
             Some(criteria) => self.index.query_builder_with_criteria(criteria),
             None => self.index.query_builder(),
         };
-
-        // Filter searchable fields
-        if let Some(fields) = &self.searchable_attributes {
-            for attribute in fields.iter().filter_map(|f| schema.attribute(f)) {
-                query_builder.add_searchable_attribute(attribute.0);
-            }
-        }
 
         if let Some(filters) = &self.filters {
             let mut split = filters.split(':');

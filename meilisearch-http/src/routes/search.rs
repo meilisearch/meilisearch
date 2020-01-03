@@ -20,7 +20,6 @@ struct SearchQuery {
     offset: Option<usize>,
     limit: Option<usize>,
     attributes_to_retrieve: Option<String>,
-    searchable_attributes: Option<String>,
     attributes_to_crop: Option<String>,
     crop_length: Option<usize>,
     attributes_to_highlight: Option<String>,
@@ -60,11 +59,7 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
             search_builder.add_retrievable_field(attr.to_string());
         }
     }
-    if let Some(searchable_attributes) = query.searchable_attributes {
-        for attr in searchable_attributes.split(',') {
-            search_builder.add_attribute_to_search_in(attr.to_string());
-        }
-    }
+
     if let Some(attributes_to_crop) = query.attributes_to_crop {
         let crop_length = query.crop_length.unwrap_or(200);
         if attributes_to_crop == "*" {
@@ -188,9 +183,6 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
 
             if let Some(attributes_to_retrieve) = par_body.attributes_to_retrieve.clone() {
                 search_builder.attributes_to_retrieve(attributes_to_retrieve);
-            }
-            if let Some(searchable_attributes) = par_body.searchable_attributes.clone() {
-                search_builder.searchable_attributes(searchable_attributes);
             }
             if let Some(attributes_to_crop) = par_body.attributes_to_crop.clone() {
                 search_builder.attributes_to_crop(attributes_to_crop);
