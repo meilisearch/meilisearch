@@ -10,6 +10,7 @@ mod error;
 mod levenshtein;
 mod number;
 mod query_builder;
+mod query_tree;
 mod ranked_map;
 mod raw_document;
 mod reordered_attrs;

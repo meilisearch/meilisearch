@@ -28,6 +28,7 @@ use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
+use crate::query_tree::create_query_tree;
 
 pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
@@ -46,6 +47,9 @@ pub fn bucket_sort<'c, FI>(
 where
     FI: Fn(DocumentId) -> bool,
 {
+    let operation = create_query_tree(reader, postings_lists_store, synonyms_store, query).unwrap();
+    println!("{:?}", operation);
+
     // We delegate the filter work to the distinct query builder,
     // specifying a distinct rule that has no effect.
     if filter.is_some() {
