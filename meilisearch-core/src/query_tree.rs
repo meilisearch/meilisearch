@@ -204,22 +204,28 @@ pub fn create_query_tree(
     Ok(create_operation(ngrams, Operation::Or))
 }
 
-pub struct QueryResult<'q, 'c> {
-    pub docids: Cow<'c, Set<DocumentId>>,
-    pub queries: HashMap<&'q Query, Cow<'c, Set<DocIndex>>>,
+pub struct QueryResult<'o, 'txn> {
+    pub docids: SetBuf<DocumentId>,
+    pub queries: HashMap<&'o Query, Cow<'txn, Set<DocIndex>>>,
 }
 
-pub type Postings<'q, 'c> = HashMap<&'q Query, Cow<'c, Set<DocIndex>>>;
-pub type Cache<'o, 'c> = HashMap<&'o Operation, Cow<'c, Set<DocumentId>>>;
+pub type Postings<'o, 'txn> = HashMap<&'o Query, Cow<'txn, Set<DocIndex>>>;
+pub type Cache<'o, 'c> = HashMap<&'o Operation, SetBuf<DocumentId>>;
 
-pub fn traverse_query_tree<'a, 'c>(ctx: &'c Context, tree: &'a Operation) -> QueryResult<'a, 'c> {
-    fn execute_and<'o, 'c>(
-        ctx: &'c Context,
-        cache: &mut Cache<'o, 'c>,
-        postings: &mut Postings<'o, 'c>,
+pub fn traverse_query_tree<'o, 'txn>(
+    reader: &'txn heed::RoTxn<MainT>,
+    postings_lists: store::PostingsLists,
+    tree: &'o Operation,
+) -> MResult<QueryResult<'o, 'txn>>
+{
+    fn execute_and<'o, 'txn>(
+        reader: &'txn heed::RoTxn<MainT>,
+        pls: store::PostingsLists,
+        cache: &mut Cache<'o, 'txn>,
+        postings: &mut Postings<'o, 'txn>,
         depth: usize,
         operations: &'o [Operation],
-    ) -> Cow<'c, Set<DocumentId>>
+    ) -> MResult<SetBuf<DocumentId>>
     {
         println!("{:1$}AND", "", depth * 2);
 
@@ -229,9 +235,9 @@ pub fn traverse_query_tree<'a, 'c>(ctx: &'c Context, tree: &'a Operation) -> Que
         for op in operations {
             if cache.get(op).is_none() {
                 let docids = match op {
-                    Operation::And(ops) => execute_and(ctx, cache, postings, depth + 1, &ops),
-                    Operation::Or(ops) => execute_or(ctx, cache, postings, depth + 1, &ops),
-                    Operation::Query(query) => execute_query(ctx, postings, depth + 1, &query),
+                    Operation::And(ops) => execute_and(reader, pls, cache, postings, depth + 1, &ops)?,
+                    Operation::Or(ops) => execute_or(reader, pls, cache, postings, depth + 1, &ops)?,
+                    Operation::Query(query) => execute_query(reader, pls, postings, depth + 1, &query)?,
                 };
                 cache.insert(op, docids);
             }
@@ -245,20 +251,20 @@ pub fn traverse_query_tree<'a, 'c>(ctx: &'c Context, tree: &'a Operation) -> Que
 
         let op = sdset::multi::Intersection::new(results);
         let docids = op.into_set_buf();
-        let docids: Cow<Set<_>> = Cow::Owned(docids);
 
         println!("{:3$}--- AND fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
 
-        docids
+        Ok(docids)
     }
 
-    fn execute_or<'o, 'c>(
-        ctx: &'c Context,
-        cache: &mut Cache<'o, 'c>,
-        postings: &mut Postings<'o, 'c>,
+    fn execute_or<'o, 'txn>(
+        reader: &'txn heed::RoTxn<MainT>,
+        pls: store::PostingsLists,
+        cache: &mut Cache<'o, 'txn>,
+        postings: &mut Postings<'o, 'txn>,
         depth: usize,
         operations: &'o [Operation],
-    ) -> Cow<'c, Set<DocumentId>>
+    ) -> MResult<SetBuf<DocumentId>>
     {
         println!("{:1$}OR", "", depth * 2);
 
@@ -270,46 +276,47 @@ pub fn traverse_query_tree<'a, 'c>(ctx: &'c Context, tree: &'a Operation) -> Que
                 Some(docids) => docids,
                 None => {
                     let docids = match op {
-                        Operation::And(ops) => execute_and(ctx, cache, postings, depth + 1, &ops),
-                        Operation::Or(ops) => execute_or(ctx, cache, postings, depth + 1, &ops),
-                        Operation::Query(query) => execute_query(ctx, postings, depth + 1, &query),
+                        Operation::And(ops) => execute_and(reader, pls, cache, postings, depth + 1, &ops)?,
+                        Operation::Or(ops) => execute_or(reader, pls, cache, postings, depth + 1, &ops)?,
+                        Operation::Query(query) => execute_query(reader, pls, postings, depth + 1, &query)?,
                     };
                     cache.entry(op).or_insert(docids)
                 }
             };
 
-            ids.extend(docids.as_ref());
+            ids.extend_from_slice(docids.as_ref());
         }
 
         let docids = SetBuf::from_dirty(ids);
-        let docids: Cow<Set<_>> = Cow::Owned(docids);
 
         println!("{:3$}--- OR fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
 
-        docids
+        Ok(docids)
     }
 
-    fn execute_query<'o, 'c>(
-        ctx: &'c Context,
-        postings: &mut Postings<'o, 'c>,
+    fn execute_query<'o, 'txn>(
+        reader: &'txn heed::RoTxn<MainT>,
+        pls: store::PostingsLists,
+        postings: &mut Postings<'o, 'txn>,
         depth: usize,
         query: &'o Query,
-    ) -> Cow<'c, Set<DocumentId>>
+    ) -> MResult<SetBuf<DocumentId>>
     {
         let before = Instant::now();
         let (docids, matches) = match query {
             Query::Tolerant(_, word) | Query::Exact(_, word) | Query::Prefix(_, word) => {
-                if let Some(PostingsList { docids, matches }) = ctx.postings.get(word) {
-                    (Cow::Borrowed(docids.as_set()), Cow::Borrowed(matches.as_set()))
+                if let Some(docindexes) = pls.postings_list(reader, word.as_bytes())? {
+                    let mut docids: Vec<_> = docindexes.iter().map(|d| d.document_id).collect();
+                    docids.dedup();
+                    (SetBuf::new(docids).unwrap(), docindexes)
                 } else {
-                    (Cow::default(), Cow::default())
+                    (SetBuf::default(), Cow::default())
                 }
             },
             Query::Phrase(_, words) => {
                 if let [first, second] = words.as_slice() {
-                    let default = SetBuf::default();
-                    let first = ctx.postings.get(first).map(|pl| &pl.matches).unwrap_or(&default);
-                    let second = ctx.postings.get(second).map(|pl| &pl.matches).unwrap_or(&default);
+                    let first = pls.postings_list(reader, first.as_bytes())?.unwrap_or_default();
+                    let second = pls.postings_list(reader, second.as_bytes())?.unwrap_or_default();
 
                     let iter = merge_join_by(first.as_slice(), second.as_slice(), |a, b| {
                         let x = (a.document_id, a.attribute, (a.word_index as u32) + 1);
@@ -327,10 +334,10 @@ pub fn traverse_query_tree<'a, 'c>(ctx: &'c Context, tree: &'a Operation) -> Que
 
                     println!("{:2$}matches {:?}", "", matches, depth * 2);
 
-                    (Cow::Owned(SetBuf::new(docids).unwrap()), Cow::Owned(SetBuf::new(matches).unwrap()))
+                    (SetBuf::new(docids).unwrap(), Cow::Owned(SetBuf::new(matches).unwrap()))
                 } else {
                     println!("{:2$}{:?} skipped", "", words, depth * 2);
-                    (Cow::default(), Cow::default())
+                    (SetBuf::default(), Cow::default())
                 }
             },
         };
@@ -338,17 +345,17 @@ pub fn traverse_query_tree<'a, 'c>(ctx: &'c Context, tree: &'a Operation) -> Que
         println!("{:4$}{:?} fetched {:?} documents in {:.02?}", "", query, docids.len(), before.elapsed(), depth * 2);
 
         postings.insert(query, matches);
-        docids
+        Ok(docids)
     }
 
     let mut cache = Cache::new();
     let mut postings = Postings::new();
 
     let docids = match tree {
-        Operation::And(operations) => execute_and(ctx, &mut cache, &mut postings, 0, &operations),
-        Operation::Or(operations) => execute_or(ctx, &mut cache, &mut postings, 0, &operations),
-        Operation::Query(query) => execute_query(ctx, &mut postings, 0, &query),
+        Operation::And(ops) => execute_and(reader, postings_lists, &mut cache, &mut postings, 0, &ops)?,
+        Operation::Or(ops) => execute_or(reader, postings_lists, &mut cache, &mut postings, 0, &ops)?,
+        Operation::Query(query) => execute_query(reader, postings_lists, &mut postings, 0, &query)?,
     };
 
-    QueryResult { docids, queries: postings }
+    Ok(QueryResult { docids, queries: postings })
 }

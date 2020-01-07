@@ -15,7 +15,7 @@ use levenshtein_automata::DFA;
 use log::debug;
 use meilisearch_tokenizer::{is_cjk, split_query_string};
 use meilisearch_types::DocIndex;
-use sdset::{Set, SetBuf};
+use sdset::{Set, SetBuf, SetOperation};
 use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::automaton::NGRAMS;
@@ -28,7 +28,7 @@ use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
-use crate::query_tree::create_query_tree;
+use crate::query_tree::{create_query_tree, traverse_query_tree, QueryResult};
 
 pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
@@ -49,6 +49,21 @@ where
 {
     let operation = create_query_tree(reader, postings_lists_store, synonyms_store, query).unwrap();
     println!("{:?}", operation);
+
+    let QueryResult { docids, queries } = traverse_query_tree(reader, postings_lists_store, &operation).unwrap();
+    println!("found {} documents", docids.len());
+    println!("number of postings {:?}", queries.len());
+
+    let before = Instant::now();
+    for (query, matches) in queries {
+        let op = sdset::duo::IntersectionByKey::new(&matches, &docids, |d| d.document_id, Clone::clone);
+        let buf: SetBuf<DocIndex> = op.into_set_buf();
+        if !buf.is_empty() {
+            println!("{:?} gives {} matches", query, buf.len());
+        }
+    }
+
+    println!("matches cleaned in {:.02?}", before.elapsed());
 
     // We delegate the filter work to the distinct query builder,
     // specifying a distinct rule that has no effect.
