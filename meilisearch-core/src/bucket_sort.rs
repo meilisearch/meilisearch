@@ -635,12 +635,12 @@ fn fetch_matches<'txn, 'tag>(
                 let is_exact = *is_exact && distance == 0 && input.len() == query.len();
 
                 let before_postings_lists_fetching = Instant::now();
-                if let Some(postings_list) = postings_lists_store.postings_list(reader, input)? {
-                    postings_lists_original_length += postings_list.len();
+                if let Some(Postings { docids, matches }) = postings_lists_store.postings_list(reader, input)? {
+                    postings_lists_original_length += matches.len();
 
                     let input = Rc::from(input);
-                    let postings_list = Rc::new(postings_list);
-                    let postings_list_view = PostingsListView::original(input, postings_list);
+                    let matches = Rc::new(matches);
+                    let postings_list_view = PostingsListView::original(input, matches);
 
                     let mut offset = 0;
                     for group in postings_list_view.linear_group_by_key(|di| di.document_id) {

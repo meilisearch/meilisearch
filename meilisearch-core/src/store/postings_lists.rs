@@ -1,13 +1,19 @@
-use crate::DocIndex;
-use crate::database::MainT;
-use heed::types::{ByteSlice, CowSlice};
-use heed::Result as ZResult;
-use sdset::{Set, SetBuf};
 use std::borrow::Cow;
+use std::convert::TryInto;
+use std::{mem, ptr};
+
+use heed::Result as ZResult;
+use heed::types::{ByteSlice, CowSlice};
+use sdset::{Set, SetBuf};
+use slice_group_by::GroupBy;
+
+use crate::database::MainT;
+use crate::{DocIndex, DocumentId};
+use crate::store::{Postings, PostingsCodec};
 
 #[derive(Copy, Clone)]
 pub struct PostingsLists {
-    pub(crate) postings_lists: heed::Database<ByteSlice, CowSlice<DocIndex>>,
+    pub(crate) postings_lists: heed::Database<ByteSlice, PostingsCodec>,
 }
 
 impl PostingsLists {
@@ -15,9 +21,14 @@ impl PostingsLists {
         self,
         writer: &mut heed::RwTxn<MainT>,
         word: &[u8],
-        words_indexes: &Set<DocIndex>,
+        matches: &Set<DocIndex>,
     ) -> ZResult<()> {
-        self.postings_lists.put(writer, word, words_indexes)
+        let docids = matches.linear_group_by_key(|m| m.document_id).map(|g| g[0].document_id).collect();
+        let docids = Cow::Owned(SetBuf::new_unchecked(docids));
+        let matches = Cow::Borrowed(matches);
+        let postings = Postings { docids, matches };
+
+        self.postings_lists.put(writer, word, &postings)
     }
 
     pub fn del_postings_list(self, writer: &mut heed::RwTxn<MainT>, word: &[u8]) -> ZResult<bool> {
@@ -32,11 +43,7 @@ impl PostingsLists {
         self,
         reader: &'txn heed::RoTxn<MainT>,
         word: &[u8],
-    ) -> ZResult<Option<Cow<'txn, Set<DocIndex>>>> {
-        match self.postings_lists.get(reader, word)? {
-            Some(Cow::Borrowed(slice)) => Ok(Some(Cow::Borrowed(Set::new_unchecked(slice)))),
-            Some(Cow::Owned(vec)) => Ok(Some(Cow::Owned(SetBuf::new_unchecked(vec)))),
-            None => Ok(None),
-        }
+    ) -> ZResult<Option<Postings<'txn>>> {
+        self.postings_lists.get(reader, word)
     }
 }
