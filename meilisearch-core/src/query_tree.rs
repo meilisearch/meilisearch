@@ -336,9 +336,14 @@ pub fn traverse_query_tree<'o, 'txn>(
                 if *prefix && word.len() == 1 {
                     let prefix = [word.as_bytes()[0], 0, 0, 0];
                     let matches = ppls.prefix_postings_list(reader, prefix)?.unwrap_or_default();
+
+                    let before = Instant::now();
                     let mut docids: Vec<_> = matches.into_iter().map(|m| m.document_id).collect();
                     docids.dedup();
-                    SetBuf::new(docids).unwrap()
+                    let docids = SetBuf::new(docids).unwrap();
+                    println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
+
+                    docids
                 } else {
                     let dfa = if *prefix { build_prefix_dfa(word) } else { build_dfa(word) };
 
@@ -356,7 +361,11 @@ pub fn traverse_query_tree<'o, 'txn>(
                         }
                     }
 
-                    SetBuf::from_dirty(docids)
+                    let before = Instant::now();
+                    let docids = SetBuf::from_dirty(docids);
+                    println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
+
+                    docids
                 }
             },
             QueryKind::Exact(word) => {
@@ -377,7 +386,11 @@ pub fn traverse_query_tree<'o, 'txn>(
                     }
                 }
 
-                SetBuf::from_dirty(docids)
+                let before = Instant::now();
+                let docids = SetBuf::from_dirty(docids);
+                println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
+
+                docids
             },
             QueryKind::Phrase(words) => {
                 // TODO support prefix and non-prefix exact DFA
@@ -396,12 +409,15 @@ pub fn traverse_query_tree<'o, 'txn>(
                         .flat_map(|(a, b)| once(*a).chain(Some(*b)))
                         .collect();
 
+                    let before = Instant::now();
                     let mut docids: Vec<_> = matches.iter().map(|m| m.document_id).collect();
                     docids.dedup();
+                    let docids = SetBuf::new(docids).unwrap();
 
+                    println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
                     println!("{:2$}matches {:?}", "", matches, depth * 2);
 
-                    SetBuf::new(docids).unwrap()
+                    docids
                 } else {
                     println!("{:2$}{:?} skipped", "", words, depth * 2);
                     SetBuf::default()
