@@ -29,6 +29,7 @@ use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
 use crate::query_tree::{create_query_tree, traverse_query_tree, QueryResult};
+use crate::query_tree::Context as QTContext;
 
 pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
@@ -47,22 +48,23 @@ pub fn bucket_sort<'c, FI>(
 where
     FI: Fn(DocumentId) -> bool,
 {
-    let operation = create_query_tree(reader, postings_lists_store, synonyms_store, query).unwrap();
-    println!("{:?}", operation);
-
-    let words = match unsafe { main_store.static_words_fst(reader)? } {
+    let words_set = match unsafe { main_store.static_words_fst(reader)? } {
         Some(words) => words,
         None => return Ok(Vec::new()),
     };
 
-    let QueryResult { docids, queries } =
-        traverse_query_tree(
-            reader,
-            &words,
-            postings_lists_store,
-            prefix_postings_lists_cache_store,
-            &operation,
-        ).unwrap();
+    let context = QTContext {
+        words_set,
+        synonyms: synonyms_store,
+        postings_lists: postings_lists_store,
+        prefix_postings_lists: prefix_postings_lists_cache_store,
+    };
+
+    let operation = create_query_tree(reader, &context, query).unwrap();
+    println!("{:?}", operation);
+
+
+    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation).unwrap();
     println!("found {} documents", docids.len());
     println!("number of postings {:?}", queries.len());
 

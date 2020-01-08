@@ -93,26 +93,22 @@ pub struct PostingsList {
     matches: SetBuf<DocIndex>,
 }
 
-#[derive(Debug, Default)]
 pub struct Context {
-    pub synonyms: HashMap<Vec<String>, Vec<Vec<String>>>,
-    pub postings: HashMap<String, PostingsList>,
+    pub words_set: fst::Set,
+    pub synonyms: store::Synonyms,
+    pub postings_lists: store::PostingsLists,
+    pub prefix_postings_lists: store::PrefixPostingsListsCache,
 }
 
-fn split_best_frequency<'a>(
-    reader: &heed::RoTxn<MainT>,
-    postings_lists: store::PostingsLists,
-    word: &'a str,
-) -> MResult<Option<(&'a str, &'a str)>>
-{
+fn split_best_frequency<'a>(reader: &heed::RoTxn<MainT>, ctx: &Context, word: &'a str) -> MResult<Option<(&'a str, &'a str)>> {
     let chars = word.char_indices().skip(1);
     let mut best = None;
 
     for (i, _) in chars {
         let (left, right) = word.split_at(i);
 
-        let left_freq = postings_lists.postings_list(reader, left.as_bytes())?.map(|pl| pl.len()).unwrap_or(0);
-        let right_freq = postings_lists.postings_list(reader, right.as_bytes())?.map(|pl| pl.len()).unwrap_or(0);
+        let left_freq = ctx.postings_lists.postings_list(reader, left.as_bytes())?.map(|pl| pl.len()).unwrap_or(0);
+        let right_freq = ctx.postings_lists.postings_list(reader, right.as_bytes())?.map(|pl| pl.len()).unwrap_or(0);
 
         let min_freq = cmp::min(left_freq, right_freq);
         if min_freq != 0 && best.map_or(true, |(old, _, _)| min_freq > old) {
@@ -123,12 +119,7 @@ fn split_best_frequency<'a>(
     Ok(best.map(|(_, l, r)| (l, r)))
 }
 
-fn fetch_synonyms(
-    reader: &heed::RoTxn<MainT>,
-    synonyms: store::Synonyms,
-    words: &[&str],
-) -> MResult<Vec<Vec<String>>>
-{
+fn fetch_synonyms(reader: &heed::RoTxn<MainT>, ctx: &Context, words: &[&str]) -> MResult<Vec<Vec<String>>> {
     let words = words.join(" "); // TODO ugly
     // synonyms.synonyms(reader, words.as_bytes()).cloned().unwrap_or_default()
     Ok(vec![])
@@ -154,13 +145,7 @@ where I: IntoIterator<Item=Operation>,
 
 const MAX_NGRAM: usize = 3;
 
-pub fn create_query_tree(
-    reader: &heed::RoTxn<MainT>,
-    postings_lists: store::PostingsLists,
-    synonyms: store::Synonyms,
-    query: &str,
-) -> MResult<Operation>
-{
+pub fn create_query_tree(reader: &heed::RoTxn<MainT>, ctx: &Context, query: &str) -> MResult<Operation> {
     let query = query.to_lowercase();
 
     let words = query.linear_group_by_key(char::is_whitespace).map(ToOwned::to_owned);
@@ -182,11 +167,11 @@ pub fn create_query_tree(
                 let mut alts = Vec::new();
                 match words {
                     [(id, word)] => {
-                        let phrase = split_best_frequency(reader, postings_lists, word)?
+                        let phrase = split_best_frequency(reader, ctx, word)?
                             .map(|ws| Query::phrase2(*id, is_last, ws))
                             .map(Operation::Query);
 
-                        let synonyms = fetch_synonyms(reader, synonyms, &[word])?.into_iter().map(|alts| {
+                        let synonyms = fetch_synonyms(reader, ctx, &[word])?.into_iter().map(|alts| {
                             let iter = alts.into_iter().map(|w| Query::exact(*id, false, &w)).map(Operation::Query);
                             create_operation(iter, Operation::And)
                         });
@@ -200,7 +185,7 @@ pub fn create_query_tree(
                         let id = words[0].0;
                         let words: Vec<_> = words.iter().map(|(_, s)| s.as_str()).collect();
 
-                        for synonym in fetch_synonyms(reader, synonyms, &words)? {
+                        for synonym in fetch_synonyms(reader, ctx, &words)? {
                             let synonym = synonym.into_iter().map(|s| Operation::Query(Query::exact(id, false, &s)));
                             let synonym = create_operation(synonym, Operation::And);
                             alts.push(synonym);
@@ -232,17 +217,13 @@ pub type Cache<'o, 'c> = HashMap<&'o Operation, SetBuf<DocumentId>>;
 
 pub fn traverse_query_tree<'o, 'txn>(
     reader: &'txn heed::RoTxn<MainT>,
-    words_set: &fst::Set,
-    postings_lists: store::PostingsLists,
-    prefix_postings_lists: store::PrefixPostingsListsCache,
+    ctx: &Context,
     tree: &'o Operation,
 ) -> MResult<QueryResult<'o, 'txn>>
 {
     fn execute_and<'o, 'txn>(
         reader: &'txn heed::RoTxn<MainT>,
-        words_set: &fst::Set,
-        pls: store::PostingsLists,
-        ppls: store::PrefixPostingsListsCache,
+        ctx: &Context,
         cache: &mut Cache<'o, 'txn>,
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
@@ -257,9 +238,9 @@ pub fn traverse_query_tree<'o, 'txn>(
         for op in operations {
             if cache.get(op).is_none() {
                 let docids = match op {
-                    Operation::And(ops) => execute_and(reader, words_set, pls, ppls, cache, postings, depth + 1, &ops)?,
-                    Operation::Or(ops) => execute_or(reader, words_set, pls, ppls, cache, postings, depth + 1, &ops)?,
-                    Operation::Query(query) => execute_query(reader, words_set, pls, ppls, postings, depth + 1, &query)?,
+                    Operation::And(ops) => execute_and(reader, ctx, cache, postings, depth + 1, &ops)?,
+                    Operation::Or(ops) => execute_or(reader, ctx, cache, postings, depth + 1, &ops)?,
+                    Operation::Query(query) => execute_query(reader, ctx, postings, depth + 1, &query)?,
                 };
                 cache.insert(op, docids);
             }
@@ -281,9 +262,7 @@ pub fn traverse_query_tree<'o, 'txn>(
 
     fn execute_or<'o, 'txn>(
         reader: &'txn heed::RoTxn<MainT>,
-        words_set: &fst::Set,
-        pls: store::PostingsLists,
-        ppls: store::PrefixPostingsListsCache,
+        ctx: &Context,
         cache: &mut Cache<'o, 'txn>,
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
@@ -300,9 +279,9 @@ pub fn traverse_query_tree<'o, 'txn>(
                 Some(docids) => docids,
                 None => {
                     let docids = match op {
-                        Operation::And(ops) => execute_and(reader, words_set, pls, ppls, cache, postings, depth + 1, &ops)?,
-                        Operation::Or(ops) => execute_or(reader, words_set, pls, ppls, cache, postings, depth + 1, &ops)?,
-                        Operation::Query(query) => execute_query(reader, words_set, pls, ppls, postings, depth + 1, &query)?,
+                        Operation::And(ops) => execute_and(reader, ctx, cache, postings, depth + 1, &ops)?,
+                        Operation::Or(ops) => execute_or(reader, ctx, cache, postings, depth + 1, &ops)?,
+                        Operation::Query(query) => execute_query(reader, ctx, postings, depth + 1, &query)?,
                     };
                     cache.entry(op).or_insert(docids)
                 }
@@ -320,9 +299,7 @@ pub fn traverse_query_tree<'o, 'txn>(
 
     fn execute_query<'o, 'txn>(
         reader: &'txn heed::RoTxn<MainT>,
-        words_set: &fst::Set,
-        pls: store::PostingsLists,
-        ppls: store::PrefixPostingsListsCache,
+        ctx: &Context,
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
         query: &'o Query,
@@ -335,7 +312,7 @@ pub fn traverse_query_tree<'o, 'txn>(
             QueryKind::Tolerant(word) => {
                 if *prefix && word.len() == 1 {
                     let prefix = [word.as_bytes()[0], 0, 0, 0];
-                    let matches = ppls.prefix_postings_list(reader, prefix)?.unwrap_or_default();
+                    let matches = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
 
                     let before = Instant::now();
                     let mut docids: Vec<_> = matches.into_iter().map(|m| m.document_id).collect();
@@ -349,14 +326,14 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                     let byte = word.as_bytes()[0];
                     let mut stream = if byte == u8::max_value() {
-                        words_set.search(&dfa).ge(&[byte]).into_stream()
+                        ctx.words_set.search(&dfa).ge(&[byte]).into_stream()
                     } else {
-                        words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
+                        ctx.words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
                     };
 
                     let mut docids = Vec::new();
                     while let Some(input) = stream.next() {
-                        if let Some(matches) = pls.postings_list(reader, input)? {
+                        if let Some(matches) = ctx.postings_lists.postings_list(reader, input)? {
                             docids.extend(matches.iter().map(|d| d.document_id))
                         }
                     }
@@ -374,14 +351,14 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                 let byte = word.as_bytes()[0];
                 let mut stream = if byte == u8::max_value() {
-                    words_set.search(&dfa).ge(&[byte]).into_stream()
+                    ctx.words_set.search(&dfa).ge(&[byte]).into_stream()
                 } else {
-                    words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
+                    ctx.words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
                 };
 
                 let mut docids = Vec::new();
                 while let Some(input) = stream.next() {
-                    if let Some(matches) = pls.postings_list(reader, input)? {
+                    if let Some(matches) = ctx.postings_lists.postings_list(reader, input)? {
                         docids.extend(matches.iter().map(|d| d.document_id))
                     }
                 }
@@ -395,8 +372,8 @@ pub fn traverse_query_tree<'o, 'txn>(
             QueryKind::Phrase(words) => {
                 // TODO support prefix and non-prefix exact DFA
                 if let [first, second] = words.as_slice() {
-                    let first = pls.postings_list(reader, first.as_bytes())?.unwrap_or_default();
-                    let second = pls.postings_list(reader, second.as_bytes())?.unwrap_or_default();
+                    let first = ctx.postings_lists.postings_list(reader, first.as_bytes())?.unwrap_or_default();
+                    let second = ctx.postings_lists.postings_list(reader, second.as_bytes())?.unwrap_or_default();
 
                     let iter = merge_join_by(first.as_slice(), second.as_slice(), |a, b| {
                         let x = (a.document_id, a.attribute, (a.word_index as u32) + 1);
@@ -435,9 +412,9 @@ pub fn traverse_query_tree<'o, 'txn>(
     let mut postings = Postings::new();
 
     let docids = match tree {
-        Operation::And(ops) => execute_and(reader, words_set, postings_lists, prefix_postings_lists, &mut cache, &mut postings, 0, &ops)?,
-        Operation::Or(ops) => execute_or(reader, words_set, postings_lists, prefix_postings_lists, &mut cache, &mut postings, 0, &ops)?,
-        Operation::Query(query) => execute_query(reader, words_set, postings_lists, prefix_postings_lists, &mut postings, 0, &query)?,
+        Operation::And(ops) => execute_and(reader, ctx, &mut cache, &mut postings, 0, &ops)?,
+        Operation::Or(ops) => execute_or(reader, ctx, &mut cache, &mut postings, 0, &ops)?,
+        Operation::Query(query) => execute_query(reader, ctx, &mut postings, 0, &query)?,
     };
 
     Ok(QueryResult { docids, queries: postings })
