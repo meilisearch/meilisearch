@@ -1,15 +1,17 @@
 use std::borrow::Cow;
 
 use heed::Result as ZResult;
-use heed::types::{OwnedType, CowSlice};
+use heed::types::OwnedType;
 use sdset::{Set, SetBuf};
+use slice_group_by::GroupBy;
 
-use crate::DocIndex;
 use crate::database::MainT;
+use crate::DocIndex;
+use crate::store::{PostingsCodec, Postings};
 
 #[derive(Copy, Clone)]
 pub struct PrefixPostingsListsCache {
-    pub(crate) prefix_postings_lists_cache: heed::Database<OwnedType<[u8; 4]>, CowSlice<DocIndex>>,
+    pub(crate) prefix_postings_lists_cache: heed::Database<OwnedType<[u8; 4]>, PostingsCodec>,
 }
 
 impl PrefixPostingsListsCache {
@@ -17,10 +19,15 @@ impl PrefixPostingsListsCache {
         self,
         writer: &mut heed::RwTxn<MainT>,
         prefix: [u8; 4],
-        postings_list: &Set<DocIndex>,
+        matches: &Set<DocIndex>,
     ) -> ZResult<()>
     {
-        self.prefix_postings_lists_cache.put(writer, &prefix, postings_list)
+        let docids = matches.linear_group_by_key(|m| m.document_id).map(|g| g[0].document_id).collect();
+        let docids = Cow::Owned(SetBuf::new_unchecked(docids));
+        let matches = Cow::Borrowed(matches);
+        let postings = Postings { docids, matches };
+
+        self.prefix_postings_lists_cache.put(writer, &prefix, &postings)
     }
 
     pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
@@ -31,12 +38,8 @@ impl PrefixPostingsListsCache {
         self,
         reader: &'txn heed::RoTxn<MainT>,
         prefix: [u8; 4],
-    ) -> ZResult<Option<Cow<'txn, Set<DocIndex>>>>
+    ) -> ZResult<Option<Postings<'txn>>>
     {
-        match self.prefix_postings_lists_cache.get(reader, &prefix)? {
-            Some(Cow::Owned(vec)) => Ok(Some(Cow::Owned(SetBuf::new_unchecked(vec)))),
-            Some(Cow::Borrowed(slice)) => Ok(Some(Cow::Borrowed(Set::new_unchecked(slice)))),
-            None => Ok(None),
-        }
+        self.prefix_postings_lists_cache.get(reader, &prefix)
     }
 }

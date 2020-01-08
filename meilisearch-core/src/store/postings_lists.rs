@@ -1,14 +1,12 @@
 use std::borrow::Cow;
-use std::convert::TryInto;
-use std::{mem, ptr};
 
 use heed::Result as ZResult;
-use heed::types::{ByteSlice, CowSlice};
+use heed::types::ByteSlice;
 use sdset::{Set, SetBuf};
 use slice_group_by::GroupBy;
 
 use crate::database::MainT;
-use crate::{DocIndex, DocumentId};
+use crate::DocIndex;
 use crate::store::{Postings, PostingsCodec};
 
 #[derive(Copy, Clone)]

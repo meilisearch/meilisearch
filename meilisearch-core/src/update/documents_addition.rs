@@ -1,8 +1,7 @@
 use std::collections::HashMap;
-use std::borrow::Cow;
 
 use fst::{set::OpBuilder, SetBuilder, IntoStreamer, Streamer};
-use sdset::{duo::Union, SetOperation, Set, SetBuf};
+use sdset::{duo::Union, SetOperation, Set};
 use serde::{Deserialize, Serialize};
 use log::debug;
 
@@ -201,7 +200,7 @@ pub fn apply_documents_addition<'a, 'b>(
     // compute prefixes and store those in the PrefixPostingsListsCache.
     let mut stream = words_fst.into_stream();
     while let Some(input) = stream.next() {
-        if let Some(postings_list) = postings_lists_store.postings_list(writer, input)?.map(Cow::into_owned) {
+        if let Some(postings_list) = postings_lists_store.postings_list(writer, input)?.map(|p| p.matches.into_owned()) {
             let prefix = &input[..1];
 
             let mut arr = [0; 4];
@@ -453,7 +452,7 @@ pub fn write_documents_addition_index(
         delta_words_builder.insert(&word).unwrap();
 
         let set = match postings_lists_store.postings_list(writer, &word)? {
-            Some(set) => Union::new(&set, &delta_set).into_set_buf(),
+            Some(postings) => Union::new(&postings.matches, &delta_set).into_set_buf(),
             None => delta_set,
         };
 

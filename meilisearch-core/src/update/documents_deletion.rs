@@ -142,8 +142,8 @@ pub fn apply_documents_deletion(
     for (word, document_ids) in words_document_ids {
         let document_ids = SetBuf::from_dirty(document_ids);
 
-        if let Some(doc_indexes) = postings_lists_store.postings_list(writer, &word)? {
-            let op = DifferenceByKey::new(&doc_indexes, &document_ids, |d| d.document_id, |id| *id);
+        if let Some(postings) = postings_lists_store.postings_list(writer, &word)? {
+            let op = DifferenceByKey::new(&postings.matches, &document_ids, |d| d.document_id, |id| *id);
             let doc_indexes = op.into_set_buf();
 
             if !doc_indexes.is_empty() {

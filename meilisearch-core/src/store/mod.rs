@@ -59,13 +59,13 @@ impl DocumentAttrKey {
     }
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct Postings<'a> {
     pub docids: Cow<'a, Set<DocumentId>>,
     pub matches: Cow<'a, Set<DocIndex>>,
 }
 
-struct PostingsCodec;
+pub struct PostingsCodec;
 
 impl<'a> BytesEncode<'a> for PostingsCodec {
     type EItem = Postings<'a>;
@@ -125,7 +125,6 @@ impl<'a> BytesDecode<'a> for PostingsCodec {
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
         let u64_size = mem::size_of::<u64>();
         let docid_size = mem::size_of::<DocumentId>();
-        let docindex_size = mem::size_of::<DocIndex>();
 
         let (len_bytes, bytes) = bytes.split_at(u64_size);
         let docids_len = len_bytes.try_into().ok().map(u64::from_be_bytes)? as usize;

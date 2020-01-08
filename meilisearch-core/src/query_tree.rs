@@ -107,8 +107,14 @@ fn split_best_frequency<'a>(reader: &heed::RoTxn<MainT>, ctx: &Context, word: &'
     for (i, _) in chars {
         let (left, right) = word.split_at(i);
 
-        let left_freq = ctx.postings_lists.postings_list(reader, left.as_bytes())?.map(|pl| pl.len()).unwrap_or(0);
-        let right_freq = ctx.postings_lists.postings_list(reader, right.as_bytes())?.map(|pl| pl.len()).unwrap_or(0);
+        let left_freq = ctx.postings_lists
+            .postings_list(reader, left.as_bytes())?
+            .map(|p| p.docids.len())
+            .unwrap_or(0);
+        let right_freq = ctx.postings_lists
+            .postings_list(reader, right.as_bytes())?
+            .map(|p| p.docids.len())
+            .unwrap_or(0);
 
         let min_freq = cmp::min(left_freq, right_freq);
         if min_freq != 0 && best.map_or(true, |(old, _, _)| min_freq > old) {
@@ -208,12 +214,12 @@ pub fn create_query_tree(reader: &heed::RoTxn<MainT>, ctx: &Context, query: &str
 }
 
 pub struct QueryResult<'o, 'txn> {
-    pub docids: SetBuf<DocumentId>,
+    pub docids: Cow<'txn, Set<DocumentId>>,
     pub queries: HashMap<&'o Query, Cow<'txn, Set<DocIndex>>>,
 }
 
 pub type Postings<'o, 'txn> = HashMap<&'o Query, Cow<'txn, Set<DocIndex>>>;
-pub type Cache<'o, 'c> = HashMap<&'o Operation, SetBuf<DocumentId>>;
+pub type Cache<'o, 'txn> = HashMap<&'o Operation, Cow<'txn, Set<DocumentId>>>;
 
 pub fn traverse_query_tree<'o, 'txn>(
     reader: &'txn heed::RoTxn<MainT>,
@@ -228,7 +234,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
         operations: &'o [Operation],
-    ) -> MResult<SetBuf<DocumentId>>
+    ) -> MResult<Cow<'txn, Set<DocumentId>>>
     {
         println!("{:1$}AND", "", depth * 2);
 
@@ -257,7 +263,7 @@ pub fn traverse_query_tree<'o, 'txn>(
 
         println!("{:3$}--- AND fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
 
-        Ok(docids)
+        Ok(Cow::Owned(docids))
     }
 
     fn execute_or<'o, 'txn>(
@@ -267,7 +273,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
         operations: &'o [Operation],
-    ) -> MResult<SetBuf<DocumentId>>
+    ) -> MResult<Cow<'txn, Set<DocumentId>>>
     {
         println!("{:1$}OR", "", depth * 2);
 
@@ -294,7 +300,7 @@ pub fn traverse_query_tree<'o, 'txn>(
 
         println!("{:3$}--- OR fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
 
-        Ok(docids)
+        Ok(Cow::Owned(docids))
     }
 
     fn execute_query<'o, 'txn>(
@@ -303,7 +309,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
         query: &'o Query,
-    ) -> MResult<SetBuf<DocumentId>>
+    ) -> MResult<Cow<'txn, Set<DocumentId>>>
     {
         let before = Instant::now();
 
@@ -313,14 +319,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                 if *prefix && word.len() == 1 {
                     let prefix = [word.as_bytes()[0], 0, 0, 0];
                     let matches = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
-
-                    let before = Instant::now();
-                    let mut docids: Vec<_> = matches.into_iter().map(|m| m.document_id).collect();
-                    docids.dedup();
-                    let docids = SetBuf::new(docids).unwrap();
-                    println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
-
-                    docids
+                    matches.docids
                 } else {
                     let dfa = if *prefix { build_prefix_dfa(word) } else { build_dfa(word) };
 
@@ -333,8 +332,8 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                     let mut docids = Vec::new();
                     while let Some(input) = stream.next() {
-                        if let Some(matches) = ctx.postings_lists.postings_list(reader, input)? {
-                            docids.extend(matches.iter().map(|d| d.document_id))
+                        if let Some(postings) = ctx.postings_lists.postings_list(reader, input)? {
+                            docids.extend_from_slice(&postings.docids);
                         }
                     }
 
@@ -342,7 +341,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let docids = SetBuf::from_dirty(docids);
                     println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
-                    docids
+                    Cow::Owned(docids)
                 }
             },
             QueryKind::Exact(word) => {
@@ -358,16 +357,12 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                 let mut docids = Vec::new();
                 while let Some(input) = stream.next() {
-                    if let Some(matches) = ctx.postings_lists.postings_list(reader, input)? {
-                        docids.extend(matches.iter().map(|d| d.document_id))
+                    if let Some(postings) = ctx.postings_lists.postings_list(reader, input)? {
+                        docids.extend_from_slice(&postings.docids);
                     }
                 }
 
-                let before = Instant::now();
-                let docids = SetBuf::from_dirty(docids);
-                println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
-
-                docids
+                Cow::Owned(SetBuf::from_dirty(docids))
             },
             QueryKind::Phrase(words) => {
                 // TODO support prefix and non-prefix exact DFA
@@ -375,7 +370,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let first = ctx.postings_lists.postings_list(reader, first.as_bytes())?.unwrap_or_default();
                     let second = ctx.postings_lists.postings_list(reader, second.as_bytes())?.unwrap_or_default();
 
-                    let iter = merge_join_by(first.as_slice(), second.as_slice(), |a, b| {
+                    let iter = merge_join_by(first.matches.as_slice(), second.matches.as_slice(), |a, b| {
                         let x = (a.document_id, a.attribute, (a.word_index as u32) + 1);
                         let y = (b.document_id, b.attribute, b.word_index as u32);
                         x.cmp(&y)
@@ -394,10 +389,10 @@ pub fn traverse_query_tree<'o, 'txn>(
                     println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
                     println!("{:2$}matches {:?}", "", matches, depth * 2);
 
-                    docids
+                    Cow::Owned(docids)
                 } else {
                     println!("{:2$}{:?} skipped", "", words, depth * 2);
-                    SetBuf::default()
+                    Cow::default()
                 }
             },
         };

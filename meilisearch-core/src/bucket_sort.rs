@@ -30,6 +30,7 @@ use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
 use crate::query_tree::{create_query_tree, traverse_query_tree, QueryResult};
 use crate::query_tree::Context as QTContext;
+use crate::store::Postings;
 
 pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
@@ -569,12 +570,12 @@ fn fetch_matches<'txn, 'tag>(
             number_of_words += 1;
 
             let before_postings_lists_fetching = Instant::now();
-            if let Some(postings_list) = pplc_store.prefix_postings_list(reader, prefix)? {
+            if let Some(postings) = pplc_store.prefix_postings_list(reader, prefix)? {
                 debug!("Found cached postings list for {:?}", query);
-                postings_lists_original_length += postings_list.len();
+                postings_lists_original_length += postings.matches.len();
 
                 let input = Rc::from(&prefix[..]);
-                let postings_list = Rc::new(postings_list);
+                let postings_list = Rc::new(postings.matches);
                 let postings_list_view = PostingsListView::original(input, postings_list);
 
                 let mut offset = 0;
@@ -751,11 +752,11 @@ fn split_best_frequency<'a>(
 
         let left_freq = postings_lists_store
             .postings_list(reader, left.as_ref())?
-            .map_or(0, |i| i.len());
+            .map_or(0, |p| p.docids.len());
 
         let right_freq = postings_lists_store
             .postings_list(reader, right.as_ref())?
-            .map_or(0, |i| i.len());
+            .map_or(0, |p| p.docids.len());
 
         let min_freq = cmp::min(left_freq, right_freq);
         if min_freq != 0 && best.map_or(true, |(old, _, _)| min_freq > old) {
