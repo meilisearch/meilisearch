@@ -55,7 +55,14 @@ where
         None => return Ok(Vec::new()),
     };
 
-    let QueryResult { docids, queries } = traverse_query_tree(reader, &words, postings_lists_store, &operation).unwrap();
+    let QueryResult { docids, queries } =
+        traverse_query_tree(
+            reader,
+            &words,
+            postings_lists_store,
+            prefix_postings_lists_cache_store,
+            &operation,
+        ).unwrap();
     println!("found {} documents", docids.len());
     println!("number of postings {:?}", queries.len());
 

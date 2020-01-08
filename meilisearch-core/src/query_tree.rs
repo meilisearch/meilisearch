@@ -234,6 +234,7 @@ pub fn traverse_query_tree<'o, 'txn>(
     reader: &'txn heed::RoTxn<MainT>,
     words_set: &fst::Set,
     postings_lists: store::PostingsLists,
+    prefix_postings_lists: store::PrefixPostingsListsCache,
     tree: &'o Operation,
 ) -> MResult<QueryResult<'o, 'txn>>
 {
@@ -241,6 +242,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         reader: &'txn heed::RoTxn<MainT>,
         words_set: &fst::Set,
         pls: store::PostingsLists,
+        ppls: store::PrefixPostingsListsCache,
         cache: &mut Cache<'o, 'txn>,
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
@@ -255,9 +257,9 @@ pub fn traverse_query_tree<'o, 'txn>(
         for op in operations {
             if cache.get(op).is_none() {
                 let docids = match op {
-                    Operation::And(ops) => execute_and(reader, words_set, pls, cache, postings, depth + 1, &ops)?,
-                    Operation::Or(ops) => execute_or(reader, words_set, pls, cache, postings, depth + 1, &ops)?,
-                    Operation::Query(query) => execute_query(reader, words_set, pls, postings, depth + 1, &query)?,
+                    Operation::And(ops) => execute_and(reader, words_set, pls, ppls, cache, postings, depth + 1, &ops)?,
+                    Operation::Or(ops) => execute_or(reader, words_set, pls, ppls, cache, postings, depth + 1, &ops)?,
+                    Operation::Query(query) => execute_query(reader, words_set, pls, ppls, postings, depth + 1, &query)?,
                 };
                 cache.insert(op, docids);
             }
@@ -281,6 +283,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         reader: &'txn heed::RoTxn<MainT>,
         words_set: &fst::Set,
         pls: store::PostingsLists,
+        ppls: store::PrefixPostingsListsCache,
         cache: &mut Cache<'o, 'txn>,
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
@@ -297,9 +300,9 @@ pub fn traverse_query_tree<'o, 'txn>(
                 Some(docids) => docids,
                 None => {
                     let docids = match op {
-                        Operation::And(ops) => execute_and(reader, words_set, pls, cache, postings, depth + 1, &ops)?,
-                        Operation::Or(ops) => execute_or(reader, words_set, pls, cache, postings, depth + 1, &ops)?,
-                        Operation::Query(query) => execute_query(reader, words_set, pls, postings, depth + 1, &query)?,
+                        Operation::And(ops) => execute_and(reader, words_set, pls, ppls, cache, postings, depth + 1, &ops)?,
+                        Operation::Or(ops) => execute_or(reader, words_set, pls, ppls, cache, postings, depth + 1, &ops)?,
+                        Operation::Query(query) => execute_query(reader, words_set, pls, ppls, postings, depth + 1, &query)?,
                     };
                     cache.entry(op).or_insert(docids)
                 }
@@ -319,6 +322,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         reader: &'txn heed::RoTxn<MainT>,
         words_set: &fst::Set,
         pls: store::PostingsLists,
+        ppls: store::PrefixPostingsListsCache,
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
         query: &'o Query,
@@ -329,23 +333,31 @@ pub fn traverse_query_tree<'o, 'txn>(
         let Query { id, prefix, kind } = query;
         let docids = match kind {
             QueryKind::Tolerant(word) => {
-                let dfa = if *prefix { build_prefix_dfa(word) } else { build_dfa(word) };
-
-                let byte = word.as_bytes()[0];
-                let mut stream = if byte == u8::max_value() {
-                    words_set.search(&dfa).ge(&[byte]).into_stream()
+                if *prefix && word.len() == 1 {
+                    let prefix = [word.as_bytes()[0], 0, 0, 0];
+                    let matches = ppls.prefix_postings_list(reader, prefix)?.unwrap_or_default();
+                    let mut docids: Vec<_> = matches.into_iter().map(|m| m.document_id).collect();
+                    docids.dedup();
+                    SetBuf::new(docids).unwrap()
                 } else {
-                    words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
-                };
+                    let dfa = if *prefix { build_prefix_dfa(word) } else { build_dfa(word) };
 
-                let mut docids = Vec::new();
-                while let Some(input) = stream.next() {
-                    if let Some(matches) = pls.postings_list(reader, input)? {
-                        docids.extend(matches.iter().map(|d| d.document_id))
+                    let byte = word.as_bytes()[0];
+                    let mut stream = if byte == u8::max_value() {
+                        words_set.search(&dfa).ge(&[byte]).into_stream()
+                    } else {
+                        words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
+                    };
+
+                    let mut docids = Vec::new();
+                    while let Some(input) = stream.next() {
+                        if let Some(matches) = pls.postings_list(reader, input)? {
+                            docids.extend(matches.iter().map(|d| d.document_id))
+                        }
                     }
-                }
 
-                SetBuf::from_dirty(docids)
+                    SetBuf::from_dirty(docids)
+                }
             },
             QueryKind::Exact(word) => {
                 // TODO support prefix and non-prefix exact DFA
@@ -407,9 +419,9 @@ pub fn traverse_query_tree<'o, 'txn>(
     let mut postings = Postings::new();
 
     let docids = match tree {
-        Operation::And(ops) => execute_and(reader, words_set, postings_lists, &mut cache, &mut postings, 0, &ops)?,
-        Operation::Or(ops) => execute_or(reader, words_set, postings_lists, &mut cache, &mut postings, 0, &ops)?,
-        Operation::Query(query) => execute_query(reader, words_set, postings_lists, &mut postings, 0, &query)?,
+        Operation::And(ops) => execute_and(reader, words_set, postings_lists, prefix_postings_lists, &mut cache, &mut postings, 0, &ops)?,
+        Operation::Or(ops) => execute_or(reader, words_set, postings_lists, prefix_postings_lists, &mut cache, &mut postings, 0, &ops)?,
+        Operation::Query(query) => execute_query(reader, words_set, postings_lists, prefix_postings_lists, &mut postings, 0, &query)?,
     };
 
     Ok(QueryResult { docids, queries: postings })
