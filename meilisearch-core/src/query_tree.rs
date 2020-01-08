@@ -326,20 +326,19 @@ pub fn traverse_query_tree<'o, 'txn>(
     {
         let before = Instant::now();
 
-        // let byte = query.as_bytes()[0];
-        // let mut stream = if byte == u8::max_value() {
-        //     words.search(&dfa).ge(&[byte]).into_stream()
-        // } else {
-        //     words.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
-        // };
-
         let Query { id, prefix, kind } = query;
         let docids = match kind {
             QueryKind::Tolerant(word) => {
                 let dfa = if *prefix { build_prefix_dfa(word) } else { build_dfa(word) };
 
+                let byte = word.as_bytes()[0];
+                let mut stream = if byte == u8::max_value() {
+                    words_set.search(&dfa).ge(&[byte]).into_stream()
+                } else {
+                    words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
+                };
+
                 let mut docids = Vec::new();
-                let mut stream = words_set.search(&dfa).into_stream();
                 while let Some(input) = stream.next() {
                     if let Some(matches) = pls.postings_list(reader, input)? {
                         docids.extend(matches.iter().map(|d| d.document_id))
@@ -352,8 +351,14 @@ pub fn traverse_query_tree<'o, 'txn>(
                 // TODO support prefix and non-prefix exact DFA
                 let dfa = build_exact_dfa(word);
 
+                let byte = word.as_bytes()[0];
+                let mut stream = if byte == u8::max_value() {
+                    words_set.search(&dfa).ge(&[byte]).into_stream()
+                } else {
+                    words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
+                };
+
                 let mut docids = Vec::new();
-                let mut stream = words_set.search(&dfa).into_stream();
                 while let Some(input) = stream.next() {
                     if let Some(matches) = pls.postings_list(reader, input)? {
                         docids.extend(matches.iter().map(|d| d.document_id))
