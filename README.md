@@ -33,6 +33,13 @@ For more [details about those features, go to our documentation](https://docs.me
 docker run -it -p 7700:7700 --rm getmeili/meilisearch
 ```
 
+#### Installation using Homebrew
+
+```bash
+brew update && brew install meilisearch
+meilisearch
+```
+
 #### Installation using APT
 
 ```bash
