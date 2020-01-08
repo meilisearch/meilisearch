@@ -6,9 +6,11 @@ use std::{cmp, fmt, iter::once};
 use sdset::{Set, SetBuf, SetOperation};
 use slice_group_by::StrGroupBy;
 use itertools::{EitherOrBoth, merge_join_by};
+use fst::{IntoStreamer, Streamer};
 
 use crate::database::MainT;
 use crate::{store, DocumentId, DocIndex, MResult};
+use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Operation {
@@ -39,25 +41,49 @@ impl fmt::Debug for Operation {
 
 pub type QueryId = usize;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Query {
-    Tolerant(QueryId, String),
-    Exact(QueryId, String),
-    Prefix(QueryId, String),
-    Phrase(QueryId, Vec<String>),
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Query {
+    pub id: QueryId,
+    pub prefix: bool,
+    pub kind: QueryKind,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum QueryKind {
+    Tolerant(String),
+    Exact(String),
+    Phrase(Vec<String>),
 }
 
 impl Query {
-    fn tolerant(id: QueryId, s: &str) -> Query {
-        Query::Tolerant(id, s.to_string())
+    fn tolerant(id: QueryId, prefix: bool, s: &str) -> Query {
+        Query { id, prefix, kind: QueryKind::Tolerant(s.to_string()) }
     }
 
-    fn prefix(id: QueryId, s: &str) -> Query {
-        Query::Prefix(id, s.to_string())
+    fn exact(id: QueryId, prefix: bool, s: &str) -> Query {
+        Query { id, prefix, kind: QueryKind::Exact(s.to_string()) }
     }
 
-    fn phrase2(id: QueryId, (left, right): (&str, &str)) -> Query {
-        Query::Phrase(id, vec![left.to_owned(), right.to_owned()])
+    fn phrase2(id: QueryId, prefix: bool, (left, right): (&str, &str)) -> Query {
+        Query { id, prefix, kind: QueryKind::Phrase(vec![left.to_owned(), right.to_owned()]) }
+    }
+}
+
+impl fmt::Debug for Query {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Query { id, prefix, kind } = self;
+        let prefix = if *prefix { String::from("Prefix") } else { String::default() };
+        match kind {
+            QueryKind::Exact(word) => {
+                f.debug_struct(&(prefix + "Exact")).field("id", &id).field("word", &word).finish()
+            },
+            QueryKind::Tolerant(word) => {
+                f.debug_struct(&(prefix + "Tolerant")).field("id", &id).field("word", &word).finish()
+            },
+            QueryKind::Phrase(words) => {
+                f.debug_struct(&(prefix + "Phrase")).field("id", &id).field("words", &words).finish()
+            },
+        }
     }
 }
 
@@ -157,18 +183,15 @@ pub fn create_query_tree(
                 match words {
                     [(id, word)] => {
                         let phrase = split_best_frequency(reader, postings_lists, word)?
-                            .map(|ws| Query::phrase2(*id, ws)).map(Operation::Query);
+                            .map(|ws| Query::phrase2(*id, is_last, ws))
+                            .map(Operation::Query);
 
                         let synonyms = fetch_synonyms(reader, synonyms, &[word])?.into_iter().map(|alts| {
-                            let iter = alts.into_iter().map(|w| Query::Exact(*id, w)).map(Operation::Query);
+                            let iter = alts.into_iter().map(|w| Query::exact(*id, false, &w)).map(Operation::Query);
                             create_operation(iter, Operation::And)
                         });
 
-                        let query = if is_last {
-                            Query::prefix(*id, word)
-                        } else {
-                            Query::tolerant(*id, word)
-                        };
+                        let query = Query::tolerant(*id, is_last, word);
 
                         alts.push(Operation::Query(query));
                         alts.extend(synonyms.chain(phrase));
@@ -178,17 +201,12 @@ pub fn create_query_tree(
                         let words: Vec<_> = words.iter().map(|(_, s)| s.as_str()).collect();
 
                         for synonym in fetch_synonyms(reader, synonyms, &words)? {
-                            let synonym = synonym.into_iter().map(|s| Operation::Query(Query::Exact(id, s)));
+                            let synonym = synonym.into_iter().map(|s| Operation::Query(Query::exact(id, false, &s)));
                             let synonym = create_operation(synonym, Operation::And);
                             alts.push(synonym);
                         }
 
-                        let query = if is_last {
-                            Query::Prefix(id, words.concat())
-                        } else {
-                            Query::Exact(id, words.concat())
-                        };
-
+                        let query = Query::exact(id, is_last, &words.concat());
                         alts.push(Operation::Query(query));
                     }
                 }
@@ -214,12 +232,14 @@ pub type Cache<'o, 'c> = HashMap<&'o Operation, SetBuf<DocumentId>>;
 
 pub fn traverse_query_tree<'o, 'txn>(
     reader: &'txn heed::RoTxn<MainT>,
+    words_set: &fst::Set,
     postings_lists: store::PostingsLists,
     tree: &'o Operation,
 ) -> MResult<QueryResult<'o, 'txn>>
 {
     fn execute_and<'o, 'txn>(
         reader: &'txn heed::RoTxn<MainT>,
+        words_set: &fst::Set,
         pls: store::PostingsLists,
         cache: &mut Cache<'o, 'txn>,
         postings: &mut Postings<'o, 'txn>,
@@ -235,9 +255,9 @@ pub fn traverse_query_tree<'o, 'txn>(
         for op in operations {
             if cache.get(op).is_none() {
                 let docids = match op {
-                    Operation::And(ops) => execute_and(reader, pls, cache, postings, depth + 1, &ops)?,
-                    Operation::Or(ops) => execute_or(reader, pls, cache, postings, depth + 1, &ops)?,
-                    Operation::Query(query) => execute_query(reader, pls, postings, depth + 1, &query)?,
+                    Operation::And(ops) => execute_and(reader, words_set, pls, cache, postings, depth + 1, &ops)?,
+                    Operation::Or(ops) => execute_or(reader, words_set, pls, cache, postings, depth + 1, &ops)?,
+                    Operation::Query(query) => execute_query(reader, words_set, pls, postings, depth + 1, &query)?,
                 };
                 cache.insert(op, docids);
             }
@@ -259,6 +279,7 @@ pub fn traverse_query_tree<'o, 'txn>(
 
     fn execute_or<'o, 'txn>(
         reader: &'txn heed::RoTxn<MainT>,
+        words_set: &fst::Set,
         pls: store::PostingsLists,
         cache: &mut Cache<'o, 'txn>,
         postings: &mut Postings<'o, 'txn>,
@@ -276,9 +297,9 @@ pub fn traverse_query_tree<'o, 'txn>(
                 Some(docids) => docids,
                 None => {
                     let docids = match op {
-                        Operation::And(ops) => execute_and(reader, pls, cache, postings, depth + 1, &ops)?,
-                        Operation::Or(ops) => execute_or(reader, pls, cache, postings, depth + 1, &ops)?,
-                        Operation::Query(query) => execute_query(reader, pls, postings, depth + 1, &query)?,
+                        Operation::And(ops) => execute_and(reader, words_set, pls, cache, postings, depth + 1, &ops)?,
+                        Operation::Or(ops) => execute_or(reader, words_set, pls, cache, postings, depth + 1, &ops)?,
+                        Operation::Query(query) => execute_query(reader, words_set, pls, postings, depth + 1, &query)?,
                     };
                     cache.entry(op).or_insert(docids)
                 }
@@ -296,6 +317,7 @@ pub fn traverse_query_tree<'o, 'txn>(
 
     fn execute_query<'o, 'txn>(
         reader: &'txn heed::RoTxn<MainT>,
+        words_set: &fst::Set,
         pls: store::PostingsLists,
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
@@ -303,17 +325,45 @@ pub fn traverse_query_tree<'o, 'txn>(
     ) -> MResult<SetBuf<DocumentId>>
     {
         let before = Instant::now();
-        let (docids, matches) = match query {
-            Query::Tolerant(_, word) | Query::Exact(_, word) | Query::Prefix(_, word) => {
-                if let Some(docindexes) = pls.postings_list(reader, word.as_bytes())? {
-                    let mut docids: Vec<_> = docindexes.iter().map(|d| d.document_id).collect();
-                    docids.dedup();
-                    (SetBuf::new(docids).unwrap(), docindexes)
-                } else {
-                    (SetBuf::default(), Cow::default())
+
+        // let byte = query.as_bytes()[0];
+        // let mut stream = if byte == u8::max_value() {
+        //     words.search(&dfa).ge(&[byte]).into_stream()
+        // } else {
+        //     words.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
+        // };
+
+        let Query { id, prefix, kind } = query;
+        let docids = match kind {
+            QueryKind::Tolerant(word) => {
+                let dfa = if *prefix { build_prefix_dfa(word) } else { build_dfa(word) };
+
+                let mut docids = Vec::new();
+                let mut stream = words_set.search(&dfa).into_stream();
+                while let Some(input) = stream.next() {
+                    if let Some(matches) = pls.postings_list(reader, input)? {
+                        docids.extend(matches.iter().map(|d| d.document_id))
+                    }
                 }
+
+                SetBuf::from_dirty(docids)
             },
-            Query::Phrase(_, words) => {
+            QueryKind::Exact(word) => {
+                // TODO support prefix and non-prefix exact DFA
+                let dfa = build_exact_dfa(word);
+
+                let mut docids = Vec::new();
+                let mut stream = words_set.search(&dfa).into_stream();
+                while let Some(input) = stream.next() {
+                    if let Some(matches) = pls.postings_list(reader, input)? {
+                        docids.extend(matches.iter().map(|d| d.document_id))
+                    }
+                }
+
+                SetBuf::from_dirty(docids)
+            },
+            QueryKind::Phrase(words) => {
+                // TODO support prefix and non-prefix exact DFA
                 if let [first, second] = words.as_slice() {
                     let first = pls.postings_list(reader, first.as_bytes())?.unwrap_or_default();
                     let second = pls.postings_list(reader, second.as_bytes())?.unwrap_or_default();
@@ -334,17 +384,17 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                     println!("{:2$}matches {:?}", "", matches, depth * 2);
 
-                    (SetBuf::new(docids).unwrap(), Cow::Owned(SetBuf::new(matches).unwrap()))
+                    SetBuf::new(docids).unwrap()
                 } else {
                     println!("{:2$}{:?} skipped", "", words, depth * 2);
-                    (SetBuf::default(), Cow::default())
+                    SetBuf::default()
                 }
             },
         };
 
         println!("{:4$}{:?} fetched {:?} documents in {:.02?}", "", query, docids.len(), before.elapsed(), depth * 2);
 
-        postings.insert(query, matches);
+        // postings.insert(query, matches);
         Ok(docids)
     }
 
@@ -352,9 +402,9 @@ pub fn traverse_query_tree<'o, 'txn>(
     let mut postings = Postings::new();
 
     let docids = match tree {
-        Operation::And(ops) => execute_and(reader, postings_lists, &mut cache, &mut postings, 0, &ops)?,
-        Operation::Or(ops) => execute_or(reader, postings_lists, &mut cache, &mut postings, 0, &ops)?,
-        Operation::Query(query) => execute_query(reader, postings_lists, &mut postings, 0, &query)?,
+        Operation::And(ops) => execute_and(reader, words_set, postings_lists, &mut cache, &mut postings, 0, &ops)?,
+        Operation::Or(ops) => execute_or(reader, words_set, postings_lists, &mut cache, &mut postings, 0, &ops)?,
+        Operation::Query(query) => execute_query(reader, words_set, postings_lists, &mut postings, 0, &query)?,
     };
 
     Ok(QueryResult { docids, queries: postings })

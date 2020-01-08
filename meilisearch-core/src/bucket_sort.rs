@@ -50,7 +50,12 @@ where
     let operation = create_query_tree(reader, postings_lists_store, synonyms_store, query).unwrap();
     println!("{:?}", operation);
 
-    let QueryResult { docids, queries } = traverse_query_tree(reader, postings_lists_store, &operation).unwrap();
+    let words = match unsafe { main_store.static_words_fst(reader)? } {
+        Some(words) => words,
+        None => return Ok(Vec::new()),
+    };
+
+    let QueryResult { docids, queries } = traverse_query_tree(reader, &words, postings_lists_store, &operation).unwrap();
     println!("found {} documents", docids.len());
     println!("number of postings {:?}", queries.len());
 
