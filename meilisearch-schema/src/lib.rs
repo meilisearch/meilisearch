@@ -22,7 +22,7 @@ pub const RANKED: SchemaProps = SchemaProps {
     ranked: true,
 };
 
-#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaProps {
     #[serde(default)]
     pub displayed: bool,
@@ -97,6 +97,7 @@ pub struct SchemaBuilder {
 }
 
 impl SchemaBuilder {
+
     pub fn with_identifier<S: Into<String>>(name: S) -> SchemaBuilder {
         SchemaBuilder {
             identifier: name.into(),
@@ -189,6 +190,10 @@ impl Schema {
     pub fn attribute_name(&self, attr: SchemaAttr) -> &str {
         let (name, _) = &self.inner.props[attr.0 as usize];
         name
+    }
+
+    pub fn into_iter<'a>(&'a self) -> impl Iterator<Item = (String, SchemaProps)> + 'a {
+        self.inner.props.clone().into_iter()
     }
 
     pub fn iter<'a>(&'a self) -> impl Iterator<Item = (&str, SchemaAttr, SchemaProps)> + 'a {
@@ -339,6 +344,62 @@ pub fn diff(old: &Schema, new: &Schema) -> Vec<Diff> {
     }
 
     differences
+}
+
+
+// The diff_transposition return the transpotion matrix to apply during the documents rewrite process.
+// e.g.
+// old_schema: ["id", "title", "description", "tags", "date"]
+// new_schema: ["title", "tags", "id", "new", "position","description"]
+// diff_transposition: [Some(2), Some(0), Some(5), Some(1), None]
+//
+// - attribute 0 (id) become attribute 2
+// - attribute 1 (title) become attribute 0
+// - attribute 2 (description) become attribute 5
+// - attribute 3 (tags) become attribute 1
+// - attribute 4 (date) is deleted
+pub fn diff_transposition(old: &Schema, new: &Schema) -> Vec<Option<u16>> {
+    let old = old.to_builder();
+    let new = new.to_builder();
+
+    let old_attributes: Vec<&str> = old.attributes.iter().map(|(key, _)| key.as_str()).collect();
+    let new_attributes: Vec<&str> = new.attributes.iter().map(|(key, _)| key.as_str()).collect();
+
+    let mut transpotition = Vec::new();
+
+    for (_pos, attr) in old_attributes.iter().enumerate() {
+        if let Some(npos) = new_attributes[..].iter().position(|x| x == attr) {
+            transpotition.push(Some(npos as u16));
+        } else {
+            transpotition.push(None);
+        }
+    }
+
+    transpotition
+}
+
+pub fn generate_schema(identifier: String, indexed: Vec<String>, displayed: Vec<String>, ranked: Vec<String>) -> Schema {
+    let mut map = IndexMap::new();
+
+    for item in indexed.iter() {
+        map.entry(item).or_insert(SchemaProps::default()).indexed = true;
+    }
+    for item in ranked.iter() {
+        map.entry(item).or_insert(SchemaProps::default()).ranked = true;
+    }
+    for item in displayed.iter() {
+        map.entry(item).or_insert(SchemaProps::default()).displayed = true;
+    }
+    let id = identifier.clone();
+    map.entry(&id).or_insert(SchemaProps::default());
+
+    let mut builder = SchemaBuilder::with_identifier(identifier);
+
+    for (key, value) in map {
+        builder.new_attribute(key, value);
+    }
+
+    builder.build()
 }
 
 #[cfg(test)]

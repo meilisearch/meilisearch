@@ -4,18 +4,20 @@ use chrono::{DateTime, Utc};
 use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
 use heed::Result as ZResult;
 use meilisearch_schema::Schema;
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 const CREATED_AT_KEY: &str = "created-at";
+const RANKING_RULES_KEY: &str = "ranking-rules-key";
+const RANKING_DISTINCT_KEY: &str = "ranking-distinct-key";
+const STOP_WORDS_KEY: &str = "stop-words-key";
+const SYNONYMS_KEY: &str = "synonyms-key";
 const CUSTOMS_KEY: &str = "customs-key";
 const FIELDS_FREQUENCY_KEY: &str = "fields-frequency";
 const NAME_KEY: &str = "name";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY: &str = "ranked-map";
 const SCHEMA_KEY: &str = "schema";
-const STOP_WORDS_KEY: &str = "stop-words";
-const SYNONYMS_KEY: &str = "synonyms";
 const UPDATED_AT_KEY: &str = "updated-at";
 const WORDS_KEY: &str = "words";
 
@@ -182,6 +184,54 @@ impl Main {
             Some(freqs) => Ok(Some(freqs)),
             None => Ok(None),
         }
+    }
+
+    pub fn ranking_rules<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<Vec<String>>> {
+        self.main.get::<_, Str, SerdeBincode<Vec<String>>>(reader, RANKING_RULES_KEY)
+    }
+
+    pub fn put_ranking_rules(self, writer: &mut heed::RwTxn<MainT>, value: Vec<String>) -> ZResult<()> {
+        self.main.put::<_, Str, SerdeBincode<Vec<String>>>(writer, RANKING_RULES_KEY, &value)
+    }
+
+    pub fn delete_ranking_rules(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
+        self.main.delete::<_, Str>(writer, RANKING_RULES_KEY)
+    }
+
+    pub fn ranking_distinct<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<String>> {
+        self.main.get::<_, Str, SerdeBincode<String>>(reader, RANKING_DISTINCT_KEY)
+    }
+
+    pub fn put_ranking_distinct(self, writer: &mut heed::RwTxn<MainT>, value: String) -> ZResult<()> {
+        self.main.put::<_, Str, SerdeBincode<String>>(writer, RANKING_DISTINCT_KEY, &value)
+    }
+
+    pub fn delete_ranking_distinct(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
+        self.main.delete::<_, Str>(writer, RANKING_DISTINCT_KEY)
+    }
+
+    pub fn stop_words<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<BTreeSet<String>>> {
+        self.main.get::<_, Str, SerdeBincode<BTreeSet<String>>>(reader, STOP_WORDS_KEY)
+    }
+
+    pub fn put_stop_words(self, writer: &mut heed::RwTxn<MainT>, value: BTreeSet<String>) -> ZResult<()> {
+        self.main.put::<_, Str, SerdeBincode<BTreeSet<String>>>(writer, STOP_WORDS_KEY, &value)
+    }
+
+    pub fn delete_stop_words(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
+        self.main.delete::<_, Str>(writer, STOP_WORDS_KEY)
+    }
+
+    pub fn synonyms<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<BTreeMap<String, Vec<String>>>> {
+        self.main.get::<_, Str, SerdeBincode<BTreeMap<String, Vec<String>>>>(reader, SYNONYMS_KEY)
+    }
+
+    pub fn put_synonyms(self, writer: &mut heed::RwTxn<MainT>, value: BTreeMap<String, Vec<String>>) -> ZResult<()> {
+        self.main.put::<_, Str, SerdeBincode<BTreeMap<String, Vec<String>>>>(writer, SYNONYMS_KEY, &value)
+    }
+
+    pub fn delete_synonyms(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
+        self.main.delete::<_, Str>(writer, SYNONYMS_KEY)
     }
 
     pub fn put_customs(self, writer: &mut heed::RwTxn<MainT>, customs: &[u8]) -> ZResult<()> {

@@ -43,7 +43,6 @@ rustyline = { version = "5.0.0", default-features = false }
 structopt = "0.3.2"
 tempfile = "3.1.0"
 termcolor = "1.0.4"
-toml = "0.5.3"
 
 [[bench]]
 name = "search_benchmark"

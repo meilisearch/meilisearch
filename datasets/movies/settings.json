@@ -1,0 +1,12 @@
+{
+    "attribute_identifier": "id",
+    "attributes_searchable": ["title", "overview"],
+    "attributes_displayed": [
+        "id",
+        "title",
+        "overview",
+        "release_date",
+        "poster"
+    ],
+    "attributes_ranked": ["release_date"]
+}

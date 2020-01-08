@@ -353,10 +353,12 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     use crate::criterion::{self, CriteriaBuilder};
     use crate::update::{ProcessedUpdateResult, UpdateStatus};
+    use crate::settings::Settings;
     use crate::{Document, DocumentId};
     use serde::de::IgnoredAny;
     use std::sync::mpsc;
@@ -376,23 +378,20 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let schema = {
+        let settings = {
             let data = r#"
-                identifier = "id"
-
-                [attributes."name"]
-                displayed = true
-                indexed = true
-
-                [attributes."description"]
-                displayed = true
-                indexed = true
+                {
+                    "attribute_identifier": "id",
+                    "attributes_searchable": ["name", "description"],
+                    "attributes_displayed": ["name", "description"]
+                }
             "#;
-            toml::from_str(data).unwrap()
+            let settings: Settings = serde_json::from_str(data).unwrap();
+            settings.into()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
-        let _update_id = index.schema_update(&mut update_writer, schema).unwrap();
+        let _update_id = index.settings_update(&mut update_writer, settings).unwrap();
         update_writer.commit().unwrap();
 
         let mut additions = index.documents_addition();
@@ -439,23 +438,20 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let schema = {
+        let settings = {
             let data = r#"
-                identifier = "id"
-
-                [attributes."name"]
-                displayed = true
-                indexed = true
-
-                [attributes."description"]
-                displayed = true
-                indexed = true
+                {
+                    "attribute_identifier": "id",
+                    "attributes_searchable": ["name", "description"],
+                    "attributes_displayed": ["name", "description"]
+                }
             "#;
-            toml::from_str(data).unwrap()
+            let settings: Settings = serde_json::from_str(data).unwrap();
+            settings.into()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
-        let _update_id = index.schema_update(&mut update_writer, schema).unwrap();
+        let _update_id = index.settings_update(&mut update_writer, settings).unwrap();
         update_writer.commit().unwrap();
 
         let mut additions = index.documents_addition();
@@ -501,19 +497,20 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let schema = {
+        let settings = {
             let data = r#"
-                identifier = "id"
-
-                [attributes."name"]
-                displayed = true
-                indexed = true
+                {
+                    "attribute_identifier": "id",
+                    "attributes_searchable": ["name"],
+                    "attributes_displayed": ["name"]
+                }
             "#;
-            toml::from_str(data).unwrap()
+            let settings: Settings = serde_json::from_str(data).unwrap();
+            settings.into()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
-        let _update_id = index.schema_update(&mut update_writer, schema).unwrap();
+        let _update_id = index.settings_update(&mut update_writer, settings).unwrap();
         update_writer.commit().unwrap();
 
         let mut additions = index.documents_addition();
@@ -552,23 +549,20 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let schema = {
+        let settings = {
             let data = r#"
-                identifier = "id"
-
-                [attributes."name"]
-                displayed = true
-                indexed = true
-
-                [attributes."description"]
-                displayed = true
-                indexed = true
+                {
+                    "attribute_identifier": "id",
+                    "attributes_searchable": ["name", "description"],
+                    "attributes_displayed": ["name", "description"]
+                }
             "#;
-            toml::from_str(data).unwrap()
+            let settings: Settings = serde_json::from_str(data).unwrap();
+            settings.into()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
-        let _update_id = index.schema_update(&mut update_writer, schema).unwrap();
+        let _update_id = index.settings_update(&mut update_writer, settings).unwrap();
         update_writer.commit().unwrap();
 
         let mut additions = index.documents_addition();
@@ -592,31 +586,21 @@ mod tests {
         let _update_id = additions.finalize(&mut update_writer).unwrap();
         update_writer.commit().unwrap();
 
-        let schema = {
+
+        let settings = {
             let data = r#"
-                identifier = "id"
-
-                [attributes."name"]
-                displayed = true
-                indexed = true
-
-                [attributes."description"]
-                displayed = true
-                indexed = true
-
-                [attributes."age"]
-                displayed = true
-                indexed = true
-
-                [attributes."sex"]
-                displayed = true
-                indexed = true
+                {
+                    "attribute_identifier": "id",
+                    "attributes_searchable": ["name", "description", "age", "sex"],
+                    "attributes_displayed": ["name", "description", "age", "sex"]
+                }
             "#;
-            toml::from_str(data).unwrap()
+            let settings: Settings = serde_json::from_str(data).unwrap();
+            settings.into()
         };
 
         let mut writer = db.update_write_txn().unwrap();
-        let update_id = index.schema_update(&mut writer, schema).unwrap();
+        let update_id = index.settings_update(&mut writer, settings).unwrap();
         writer.commit().unwrap();
 
         // block until the transaction is processed
@@ -670,44 +654,28 @@ mod tests {
         reader.abort();
 
         // try to introduce attributes in the middle of the schema
-        let schema = {
+        let settings = {
             let data = r#"
-                identifier = "id"
-
-                [attributes."name"]
-                displayed = true
-                indexed = true
-
-                [attributes."description"]
-                displayed = true
-                indexed = true
-
-                [attributes."city"]
-                displayed = true
-                indexed = true
-
-                [attributes."age"]
-                displayed = true
-                indexed = true
-
-                [attributes."sex"]
-                displayed = true
-                indexed = true
+                {
+                    "attribute_identifier": "id",
+                    "attributes_searchable": ["name", "description", "city", "age", "sex"],
+                    "attributes_displayed": ["name", "description", "city", "age", "sex"]
+                }
             "#;
-            toml::from_str(data).unwrap()
+            let settings: Settings = serde_json::from_str(data).unwrap();
+            settings.into()
         };
 
         let mut writer = db.update_write_txn().unwrap();
-        let update_id = index.schema_update(&mut writer, schema).unwrap();
+        let update_id = index.settings_update(&mut writer, settings).unwrap();
         writer.commit().unwrap();
 
         // block until the transaction is processed
         let _ = receiver.iter().find(|id| *id == update_id);
-
         // check if it has been accepted
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
-        assert_matches!(result, Some(UpdateStatus::Failed { content }) if content.error.is_some());
+        assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
     }
 
     #[test]
@@ -725,23 +693,20 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let schema = {
+        let settings = {
             let data = r#"
-                identifier = "id"
-
-                [attributes."name"]
-                displayed = true
-                indexed = true
-
-                [attributes."description"]
-                displayed = true
-                indexed = true
+                {
+                    "attribute_identifier": "id",
+                    "attributes_searchable": ["name", "description"],
+                    "attributes_displayed": ["name", "description"]
+                }
             "#;
-            toml::from_str(data).unwrap()
+            let settings: Settings = serde_json::from_str(data).unwrap();
+            settings.into()
         };
 
         let mut writer = db.update_write_txn().unwrap();
-        let _update_id = index.schema_update(&mut writer, schema).unwrap();
+        let _update_id = index.settings_update(&mut writer, settings).unwrap();
         writer.commit().unwrap();
 
         let mut additions = index.documents_addition();
@@ -805,26 +770,20 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let schema = {
+        let settings = {
             let data = r#"
-                identifier = "id"
-
-                [attributes."id"]
-                displayed = true
-
-                [attributes."name"]
-                displayed = true
-                indexed = true
-
-                [attributes."description"]
-                displayed = true
-                indexed = true
+                {
+                    "attribute_identifier": "id",
+                    "attributes_searchable": ["name", "description"],
+                    "attributes_displayed": ["name", "description", "id"]
+                }
             "#;
-            toml::from_str(data).unwrap()
+            let settings: Settings = serde_json::from_str(data).unwrap();
+            settings.into()
         };
 
         let mut writer = db.update_write_txn().unwrap();
-        let _update_id = index.schema_update(&mut writer, schema).unwrap();
+        let _update_id = index.settings_update(&mut writer, settings).unwrap();
         writer.commit().unwrap();
 
         let mut additions = index.documents_addition();
@@ -947,24 +906,20 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let schema = {
+        let settings = {
             let data = r#"
-                identifier = "id"
-
-                [attributes."name"]
-                displayed = true
-                indexed = true
-
-                [attributes."description"]
-                displayed = true
-                indexed = true
+                {
+                    "attribute_identifier": "id",
+                    "attributes_searchable": ["name", "description"],
+                    "attributes_displayed": ["name", "description"]
+                }
             "#;
-            toml::from_str(data).unwrap()
+            let settings: Settings = serde_json::from_str(data).unwrap();
+            settings.into()
         };
 
-        // add a schema to the index
         let mut writer = db.update_write_txn().unwrap();
-        let _update_id = index.schema_update(&mut writer, schema).unwrap();
+        let _update_id = index.settings_update(&mut writer, settings).unwrap();
         writer.commit().unwrap();
 
         // add documents to the index
@@ -1015,23 +970,21 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let schema = {
+        let settings = {
             let data = r#"
-                identifier = "id"
-
-                [attributes."name"]
-                displayed = true
-                indexed = true
-
-                [attributes."release_date"]
-                displayed = true
-                ranked = true
+                {
+                    "attribute_identifier": "id",
+                    "attributes_searchable": ["name", "release_date"],
+                    "attributes_displayed": ["name", "release_date"],
+                    "attributes_ranked": ["release_date"]
+                }
             "#;
-            toml::from_str(data).unwrap()
+            let settings: Settings = serde_json::from_str(data).unwrap();
+            settings.into()
         };
 
         let mut writer = db.update_write_txn().unwrap();
-        let _update_id = index.schema_update(&mut writer, schema).unwrap();
+        let _update_id = index.settings_update(&mut writer, settings).unwrap();
         writer.commit().unwrap();
 
         let mut additions = index.documents_addition();

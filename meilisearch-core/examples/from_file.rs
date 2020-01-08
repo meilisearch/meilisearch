@@ -32,9 +32,9 @@ struct IndexCommand {
     #[structopt(parse(from_os_str))]
     csv_data_path: PathBuf,
 
-    /// The path to the schema.
+    /// The path to the settings.
     #[structopt(long, parse(from_os_str))]
-    schema: PathBuf,
+    settings: PathBuf,
 
     #[structopt(long)]
     update_group_size: Option<usize>,
@@ -119,25 +119,14 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
     let db = &database;
 
-    let schema = {
-        let string = fs::read_to_string(&command.schema)?;
-        toml::from_str(&string).unwrap()
+    let settings = {
+        let string = fs::read_to_string(&command.settings)?;
+        serde_json::from_str(&string).unwrap()
     };
 
-    let reader = db.main_read_txn().unwrap();
     let mut update_writer = db.update_write_txn().unwrap();
-    match index.main.schema(&reader)? {
-        Some(current_schema) => {
-            if current_schema != schema {
-                return Err(meilisearch_core::Error::SchemaDiffer.into());
-            }
-            update_writer.abort();
-        }
-        None => {
-            index.schema_update(&mut update_writer, schema)?;
-            update_writer.commit().unwrap();
-        }
-    }
+    index.settings_update(&mut update_writer, settings)?;
+    update_writer.commit().unwrap();
 
     let mut rdr = if command.csv_data_path.as_os_str() == "-" {
         csv::Reader::from_reader(Box::new(io::stdin()) as Box<dyn Read>)

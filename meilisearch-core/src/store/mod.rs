@@ -35,8 +35,8 @@ use serde::de::{self, Deserialize};
 use zerocopy::{AsBytes, FromBytes};
 
 use crate::criterion::Criteria;
-use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::database::{MainT, UpdateT};
+use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::serde::Deserializer;
 use crate::{query_builder::QueryBuilder, update, DocIndex, DocumentId, Error, MResult};
 
@@ -240,14 +240,15 @@ impl Index {
         }
     }
 
-    pub fn schema_update(&self, writer: &mut heed::RwTxn<UpdateT>, schema: Schema) -> MResult<u64> {
-        let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
-        update::push_schema_update(writer, self, schema)
-    }
 
     pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> ZResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         update::push_customs_update(writer, self.updates, self.updates_results, customs)
+    }
+
+    pub fn settings_update(&self, writer: &mut heed::RwTxn<UpdateT>, update: SettingsUpdate) -> ZResult<u64> {
+        let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
+        update::push_settings_update(writer, self.updates, self.updates_results, update)
     }
 
     pub fn documents_addition<D>(&self) -> update::DocumentsAddition<D> {
@@ -277,22 +278,6 @@ impl Index {
     pub fn clear_all(&self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         update::push_clear_all(writer, self.updates, self.updates_results)
-    }
-
-    pub fn synonyms_update(&self) -> update::SynonymsUpdate {
-        update::SynonymsUpdate::new(
-            self.updates,
-            self.updates_results,
-            self.updates_notifier.clone(),
-        )
-    }
-
-    pub fn stop_words_update(&self) -> update::StopWordsUpdate {
-        update::StopWordsUpdate::new(
-            self.updates,
-            self.updates_results,
-            self.updates_notifier.clone(),
-        )
     }
 
     pub fn current_update_id(&self, reader: &heed::RoTxn<UpdateT>) -> MResult<Option<u64>> {

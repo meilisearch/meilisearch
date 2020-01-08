@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-
 use http::StatusCode;
 use serde::{Deserialize, Serialize, Deserializer};
 use tide::response::IntoResponse;
 use tide::{Context, Response};
+// use indexmap::IndexMap;
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::ContextExt;
@@ -14,7 +13,7 @@ use crate::Data;
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Setting {
-    pub ranking_order: Option<RankingOrder>,
+    // pub ranking_order: Option<RankingOrder>,
     pub distinct_field: Option<DistinctField>,
     pub ranking_rules: Option<RankingRules>,
 }
@@ -26,9 +25,9 @@ pub enum RankingOrdering {
     Dsc,
 }
 
-pub type RankingOrder = Vec<String>;
+// pub type RankingOrder = Vec<String>;
 pub type DistinctField = String;
-pub type RankingRules = HashMap<String, RankingOrdering>;
+pub type RankingRules = Vec<String>;
 
 pub async fn get(ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
@@ -48,8 +47,8 @@ pub async fn get(ctx: Context<Data>) -> SResult<Response> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SettingBody {
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub ranking_order: Option<Option<RankingOrder>>,
+    // #[serde(default, deserialize_with = "deserialize_some")]
+    // pub ranking_order: Option<Option<RankingOrder>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub distinct_field: Option<Option<DistinctField>>,
     #[serde(default, deserialize_with = "deserialize_some")]
@@ -80,9 +79,9 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
         None => Setting::default(),
     };
 
-    if let Some(ranking_order) = settings.ranking_order {
-        current_settings.ranking_order = ranking_order;
-    }
+    // if let Some(ranking_order) = settings.ranking_order {
+    //     current_settings.ranking_order = ranking_order;
+    // }
 
     if let Some(distinct_field) = settings.distinct_field {
         current_settings.distinct_field = distinct_field;

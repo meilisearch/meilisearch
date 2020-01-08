@@ -81,6 +81,11 @@ pub async fn delete(ctx: Context<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
+    let settings = SettingsUpdate {
+        synonyms: UpdateState::Clear,
+        .. SettingsUpdate::default()
+    };
+
     let synonyms_update = index.synonyms_update();
 
     let update_id = synonyms_update
