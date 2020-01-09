@@ -70,11 +70,12 @@ where
     println!("number of postings {:?}", queries.len());
 
     let before = Instant::now();
-    for (query, matches) in queries {
+    for ((query, input), matches) in queries {
         let op = sdset::duo::IntersectionByKey::new(&matches, &docids, |d| d.document_id, Clone::clone);
         let buf: SetBuf<DocIndex> = op.into_set_buf();
         if !buf.is_empty() {
-            println!("{:?} gives {} matches", query, buf.len());
+            let input = std::str::from_utf8(&input);
+            println!("({:?}, {:?}) gives {} matches", query, input, buf.len());
         }
     }
 

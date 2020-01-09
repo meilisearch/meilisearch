@@ -213,13 +213,13 @@ pub fn create_query_tree(reader: &heed::RoTxn<MainT>, ctx: &Context, query: &str
     Ok(create_operation(ngrams, Operation::Or))
 }
 
+pub type Postings<'o, 'txn> = HashMap<(&'o Query, Vec<u8>), Cow<'txn, Set<DocIndex>>>;
+pub type Cache<'o, 'txn> = HashMap<&'o Operation, Cow<'txn, Set<DocumentId>>>;
+
 pub struct QueryResult<'o, 'txn> {
     pub docids: Cow<'txn, Set<DocumentId>>,
-    pub queries: HashMap<&'o Query, Cow<'txn, Set<DocIndex>>>,
+    pub queries: Postings<'o, 'txn>,
 }
-
-pub type Postings<'o, 'txn> = HashMap<&'o Query, Cow<'txn, Set<DocIndex>>>;
-pub type Cache<'o, 'txn> = HashMap<&'o Operation, Cow<'txn, Set<DocumentId>>>;
 
 pub fn traverse_query_tree<'o, 'txn>(
     reader: &'txn heed::RoTxn<MainT>,
@@ -318,8 +318,9 @@ pub fn traverse_query_tree<'o, 'txn>(
             QueryKind::Tolerant(word) => {
                 if *prefix && word.len() == 1 {
                     let prefix = [word.as_bytes()[0], 0, 0, 0];
-                    let matches = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
-                    matches.docids
+                    let result = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
+                    postings.insert((query, word.clone().into_bytes()), result.matches);
+                    result.docids
                 } else {
                     let dfa = if *prefix { build_prefix_dfa(word) } else { build_dfa(word) };
 
@@ -333,8 +334,9 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let before = Instant::now();
                     let mut docids = Vec::new();
                     while let Some(input) = stream.next() {
-                        if let Some(postings) = ctx.postings_lists.postings_list(reader, input)? {
-                            docids.extend_from_slice(&postings.docids);
+                        if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
+                            docids.extend_from_slice(&result.docids);
+                            postings.insert((query, input.to_owned()), result.matches);
                         }
                     }
                     println!("{:3$}docids extend ({:?}) took {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
@@ -359,8 +361,9 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                 let mut docids = Vec::new();
                 while let Some(input) = stream.next() {
-                    if let Some(postings) = ctx.postings_lists.postings_list(reader, input)? {
-                        docids.extend_from_slice(&postings.docids);
+                    if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
+                        docids.extend_from_slice(&result.docids);
+                        postings.insert((query, input.to_owned()), result.matches);
                     }
                 }
 
@@ -388,6 +391,10 @@ pub fn traverse_query_tree<'o, 'txn>(
                     docids.dedup();
                     let docids = SetBuf::new(docids).unwrap();
                     println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
+
+                    let matches = Cow::Owned(SetBuf::new(matches).unwrap());
+                    postings.insert((query, vec![]), matches);
+
                     Cow::Owned(docids)
                 } else {
                     println!("{:2$}{:?} skipped", "", words, depth * 2);
@@ -397,8 +404,6 @@ pub fn traverse_query_tree<'o, 'txn>(
         };
 
         println!("{:4$}{:?} fetched {:?} documents in {:.02?}", "", query, docids.len(), before.elapsed(), depth * 2);
-
-        // postings.insert(query, matches);
         Ok(docids)
     }
 
