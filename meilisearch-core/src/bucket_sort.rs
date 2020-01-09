@@ -15,7 +15,7 @@ use levenshtein_automata::DFA;
 use log::debug;
 use meilisearch_tokenizer::{is_cjk, split_query_string};
 use meilisearch_types::DocIndex;
-use sdset::{Set, SetBuf, SetOperation};
+use sdset::{Set, SetBuf};
 use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::automaton::NGRAMS;
@@ -64,18 +64,15 @@ where
     let operation = create_query_tree(reader, &context, query).unwrap();
     println!("{:?}", operation);
 
-
     let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation).unwrap();
     println!("found {} documents", docids.len());
     println!("number of postings {:?}", queries.len());
 
     let before = Instant::now();
     for ((query, input), matches) in queries {
-        let op = sdset::duo::IntersectionByKey::new(&matches, &docids, |d| d.document_id, Clone::clone);
-        let buf: SetBuf<DocIndex> = op.into_set_buf();
-        if !buf.is_empty() {
-            let input = std::str::from_utf8(&input);
-            println!("({:?}, {:?}) gives {} matches", query, input, buf.len());
+        // TODO optimize the filter by skipping docids that have already been seen
+        for matches in matches.linear_group_by_key(|m| m.document_id).filter(|ms| docids.contains(&ms[0].document_id)) {
+            // ...
         }
     }
 
