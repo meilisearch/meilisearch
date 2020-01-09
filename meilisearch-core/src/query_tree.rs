@@ -330,12 +330,14 @@ pub fn traverse_query_tree<'o, 'txn>(
                         ctx.words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
                     };
 
+                    let before = Instant::now();
                     let mut docids = Vec::new();
                     while let Some(input) = stream.next() {
                         if let Some(postings) = ctx.postings_lists.postings_list(reader, input)? {
                             docids.extend_from_slice(&postings.docids);
                         }
                     }
+                    println!("{:3$}docids extend ({:?}) took {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
 
                     let before = Instant::now();
                     let docids = SetBuf::from_dirty(docids);
@@ -385,10 +387,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let mut docids: Vec<_> = matches.iter().map(|m| m.document_id).collect();
                     docids.dedup();
                     let docids = SetBuf::new(docids).unwrap();
-
                     println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
-                    println!("{:2$}matches {:?}", "", matches, depth * 2);
-
                     Cow::Owned(docids)
                 } else {
                     println!("{:2$}{:?} skipped", "", words, depth * 2);
