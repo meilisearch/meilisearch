@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
-use meilisearch_schema::{Schema, SchemaAttr};
+use meilisearch_schema::{Schema, FieldId};
 use crate::{RankedMap, RawDocument};
 use super::{Criterion, Context};
 
@@ -41,7 +41,7 @@ use super::{Criterion, Context};
 /// ```
 pub struct SortByAttr<'a> {
     ranked_map: &'a RankedMap,
-    attr: SchemaAttr,
+    field_id: FieldId,
     reversed: bool,
 }
 
@@ -68,18 +68,18 @@ impl<'a> SortByAttr<'a> {
         attr_name: &str,
         reversed: bool,
     ) -> Result<SortByAttr<'a>, SortByAttrError> {
-        let attr = match schema.attribute(attr_name) {
-            Some(attr) => attr,
+        let field_id = match schema.get_id(attr_name) {
+            Some(field_id) => *field_id,
             None => return Err(SortByAttrError::AttributeNotFound),
         };
 
-        if !schema.props(attr).is_ranked() {
+        if !schema.id_is_ranked(field_id) {
             return Err(SortByAttrError::AttributeNotRegisteredForRanking);
         }
 
         Ok(SortByAttr {
             ranked_map,
-            attr,
+            field_id,
             reversed,
         })
     }
@@ -91,8 +91,8 @@ impl Criterion for SortByAttr<'_> {
     }
 
     fn evaluate(&self, _ctx: &Context, lhs: &RawDocument, rhs: &RawDocument) -> Ordering {
-        let lhs = self.ranked_map.get(lhs.id, self.attr);
-        let rhs = self.ranked_map.get(rhs.id, self.attr);
+        let lhs = self.ranked_map.get(lhs.id, self.field_id);
+        let rhs = self.ranked_map.get(rhs.id, self.field_id);
 
         match (lhs, rhs) {
             (Some(lhs), Some(rhs)) => {

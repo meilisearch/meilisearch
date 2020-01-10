@@ -1,3 +1,4 @@
+use crate::fields_map::FieldsMap;
 use crate::database::MainT;
 use crate::RankedMap;
 use chrono::{DateTime, Utc};
@@ -17,6 +18,7 @@ const FIELDS_FREQUENCY_KEY: &str = "fields-frequency";
 const NAME_KEY: &str = "name";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY: &str = "ranked-map";
+const FIELDS_MAP_KEY: &str = "fields-map";
 const SCHEMA_KEY: &str = "schema";
 const UPDATED_AT_KEY: &str = "updated-at";
 const WORDS_KEY: &str = "words";
@@ -110,6 +112,16 @@ impl Main {
     pub fn ranked_map(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<RankedMap>> {
         self.main
             .get::<_, Str, SerdeBincode<RankedMap>>(reader, RANKED_MAP_KEY)
+    }
+
+    pub fn put_fields_map(self, writer: &mut heed::RwTxn<MainT>, fields_map: &FieldsMap) -> ZResult<()> {
+        self.main
+            .put::<_, Str, SerdeBincode<FieldsMap>>(writer, FIELDS_MAP_KEY, &fields_map)
+    }
+
+    pub fn fields_map(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<FieldsMap>> {
+        self.main
+            .get::<_, Str, SerdeBincode<FieldsMap>>(reader, FIELDS_MAP_KEY)
     }
 
     pub fn put_synonyms_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {

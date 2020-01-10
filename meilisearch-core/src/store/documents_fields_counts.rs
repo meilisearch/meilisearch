@@ -3,7 +3,7 @@ use crate::database::MainT;
 use crate::DocumentId;
 use heed::types::OwnedType;
 use heed::Result as ZResult;
-use meilisearch_schema::SchemaAttr;
+use meilisearch_schema::FieldId;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFieldsCounts {
@@ -15,7 +15,7 @@ impl DocumentsFieldsCounts {
         self,
         writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
-        attribute: SchemaAttr,
+        attribute: FieldId,
         value: u16,
     ) -> ZResult<()> {
         let key = DocumentAttrKey::new(document_id, attribute);
@@ -27,8 +27,8 @@ impl DocumentsFieldsCounts {
         writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<usize> {
-        let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
-        let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
+        let start = DocumentAttrKey::new(document_id, FieldId::min());
+        let end = DocumentAttrKey::new(document_id, FieldId::max());
         self.documents_fields_counts
             .delete_range(writer, &(start..=end))
     }
@@ -41,7 +41,7 @@ impl DocumentsFieldsCounts {
         self,
         reader: &heed::RoTxn<MainT>,
         document_id: DocumentId,
-        attribute: SchemaAttr,
+        attribute: FieldId,
     ) -> ZResult<Option<u16>> {
         let key = DocumentAttrKey::new(document_id, attribute);
         match self.documents_fields_counts.get(reader, &key)? {
@@ -55,8 +55,8 @@ impl DocumentsFieldsCounts {
         reader: &'txn heed::RoTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<DocumentFieldsCountsIter<'txn>> {
-        let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
-        let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
+        let start = DocumentAttrKey::new(document_id, FieldId::min());
+        let end = DocumentAttrKey::new(document_id, FieldId::max());
         let iter = self.documents_fields_counts.range(reader, &(start..=end))?;
         Ok(DocumentFieldsCountsIter { iter })
     }
@@ -83,12 +83,12 @@ pub struct DocumentFieldsCountsIter<'txn> {
 }
 
 impl Iterator for DocumentFieldsCountsIter<'_> {
-    type Item = ZResult<(SchemaAttr, u16)>;
+    type Item = ZResult<(FieldId, u16)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(Ok((key, count))) => {
-                let attr = SchemaAttr(key.attr.get());
+                let attr = FieldId(key.attr.get());
                 Some(Ok((attr, count)))
             }
             Some(Err(e)) => Some(Err(e)),
@@ -127,13 +127,13 @@ pub struct AllDocumentsFieldsCountsIter<'txn> {
 }
 
 impl Iterator for AllDocumentsFieldsCountsIter<'_> {
-    type Item = ZResult<(DocumentId, SchemaAttr, u16)>;
+    type Item = ZResult<(DocumentId, FieldId, u16)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(Ok((key, count))) => {
                 let docid = DocumentId(key.docid.get());
-                let attr = SchemaAttr(key.attr.get());
+                let attr = FieldId(key.attr.get());
                 Some(Ok((docid, attr, count)))
             }
             Some(Err(e)) => Some(Err(e)),

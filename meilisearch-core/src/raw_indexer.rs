@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 
 use crate::{DocIndex, DocumentId};
 use deunicode::deunicode_with_tofu;
-use meilisearch_schema::SchemaAttr;
+use meilisearch_schema::IndexedPos;
 use meilisearch_tokenizer::{is_cjk, SeqTokenizer, Token, Tokenizer};
 use sdset::SetBuf;
 
@@ -37,14 +37,14 @@ impl RawIndexer {
         }
     }
 
-    pub fn index_text(&mut self, id: DocumentId, attr: SchemaAttr, text: &str) -> usize {
+    pub fn index_text(&mut self, id: DocumentId, indexed_pos: IndexedPos, text: &str) -> usize {
         let mut number_of_words = 0;
 
         for token in Tokenizer::new(text) {
             let must_continue = index_token(
                 token,
                 id,
-                attr,
+                indexed_pos,
                 self.word_limit,
                 &self.stop_words,
                 &mut self.words_doc_indexes,
@@ -61,7 +61,7 @@ impl RawIndexer {
         number_of_words
     }
 
-    pub fn index_text_seq<'a, I>(&mut self, id: DocumentId, attr: SchemaAttr, iter: I)
+    pub fn index_text_seq<'a, I>(&mut self, id: DocumentId, indexed_pos: IndexedPos, iter: I)
     where
         I: IntoIterator<Item = &'a str>,
     {
@@ -70,7 +70,7 @@ impl RawIndexer {
             let must_continue = index_token(
                 token,
                 id,
-                attr,
+                indexed_pos,
                 self.word_limit,
                 &self.stop_words,
                 &mut self.words_doc_indexes,
@@ -110,7 +110,7 @@ impl RawIndexer {
 fn index_token(
     token: Token,
     id: DocumentId,
-    attr: SchemaAttr,
+    indexed_pos: IndexedPos,
     word_limit: usize,
     stop_words: &fst::Set,
     words_doc_indexes: &mut BTreeMap<Word, Vec<DocIndex>>,
@@ -127,7 +127,7 @@ fn index_token(
     };
 
     if !stop_words.contains(&token.word) {
-        match token_to_docindex(id, attr, token) {
+        match token_to_docindex(id, indexed_pos, token) {
             Some(docindex) => {
                 let word = Vec::from(token.word);
 
@@ -160,14 +160,14 @@ fn index_token(
     true
 }
 
-fn token_to_docindex(id: DocumentId, attr: SchemaAttr, token: Token) -> Option<DocIndex> {
+fn token_to_docindex(id: DocumentId, indexed_pos: IndexedPos, token: Token) -> Option<DocIndex> {
     let word_index = u16::try_from(token.word_index).ok()?;
     let char_index = u16::try_from(token.char_index).ok()?;
     let char_length = u16::try_from(token.word.chars().count()).ok()?;
 
     let docindex = DocIndex {
         document_id: id,
-        attribute: attr.0,
+        attribute: indexed_pos.0,
         word_index,
         char_index,
         char_length,
@@ -178,7 +178,9 @@ fn token_to_docindex(id: DocumentId, attr: SchemaAttr, token: Token) -> Option<D
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+    use meilisearch_schema::SchemaAttr;
 
     #[test]
     fn strange_apostrophe() {

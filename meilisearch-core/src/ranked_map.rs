@@ -1,14 +1,14 @@
 use std::io::{Read, Write};
 
 use hashbrown::HashMap;
-use meilisearch_schema::SchemaAttr;
+use meilisearch_schema::FieldId;
 use serde::{Deserialize, Serialize};
 
 use crate::{DocumentId, Number};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct RankedMap(HashMap<(DocumentId, SchemaAttr), Number>);
+pub struct RankedMap(HashMap<(DocumentId, FieldId), Number>);
 
 impl RankedMap {
     pub fn len(&self) -> usize {
@@ -19,15 +19,15 @@ impl RankedMap {
         self.0.is_empty()
     }
 
-    pub fn insert(&mut self, document: DocumentId, attribute: SchemaAttr, number: Number) {
+    pub fn insert(&mut self, document: DocumentId, attribute: FieldId, number: Number) {
         self.0.insert((document, attribute), number);
     }
 
-    pub fn remove(&mut self, document: DocumentId, attribute: SchemaAttr) {
+    pub fn remove(&mut self, document: DocumentId, attribute: FieldId) {
         self.0.remove(&(document, attribute));
     }
 
-    pub fn get(&self, document: DocumentId, attribute: SchemaAttr) -> Option<Number> {
+    pub fn get(&self, document: DocumentId, attribute: FieldId) -> Option<Number> {
         self.0.get(&(document, attribute)).cloned()
     }
 

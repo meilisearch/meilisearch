@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error::Error, fmt};
 
-use meilisearch_schema::{Schema, SchemaAttr};
+use meilisearch_schema::{Schema, FieldId};
 use serde::{de, forward_to_deserialize_any};
 use serde_json::de::IoRead as SerdeJsonIoRead;
 use serde_json::Deserializer as SerdeJsonDeserializer;
@@ -54,7 +54,7 @@ pub struct Deserializer<'a> {
     pub reader: &'a heed::RoTxn<MainT>,
     pub documents_fields: DocumentsFields,
     pub schema: &'a Schema,
-    pub attributes: Option<&'a HashSet<SchemaAttr>>,
+    pub attributes: Option<&'a HashSet<FieldId>>,
 }
 
 impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
@@ -92,15 +92,17 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
                     }
                 };
 
-                let is_displayed = self.schema.props(attr).is_displayed();
+                let is_displayed = self.schema.id_is_displayed(attr);
                 if is_displayed && self.attributes.map_or(true, |f| f.contains(&attr)) {
-                    let attribute_name = self.schema.attribute_name(attr);
+                    if let Some(attribute_name) = self.schema.get_name(attr) {
+                        let cursor = Cursor::new(value.to_owned());
+                        let ioread = SerdeJsonIoRead::new(cursor);
+                        let value = Value(SerdeJsonDeserializer::new(ioread));
 
-                    let cursor = Cursor::new(value.to_owned());
-                    let ioread = SerdeJsonIoRead::new(cursor);
-                    let value = Value(SerdeJsonDeserializer::new(ioread));
-
-                    Some((attribute_name, value))
+                        Some((*attribute_name, value))
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }

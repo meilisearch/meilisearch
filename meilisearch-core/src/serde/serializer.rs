@@ -1,4 +1,4 @@
-use meilisearch_schema::{Schema, SchemaAttr, SchemaProps};
+use meilisearch_schema::{Schema, FieldsMap};
 use serde::ser;
 
 use crate::database::MainT;
@@ -15,6 +15,7 @@ pub struct Serializer<'a, 'b> {
     pub document_fields_counts: DocumentsFieldsCounts,
     pub indexer: &'a mut RawIndexer,
     pub ranked_map: &'a mut RankedMap,
+    pub fields_map: &'a mut FieldsMap,
     pub document_id: DocumentId,
 }
 
@@ -158,6 +159,7 @@ impl<'a, 'b> ser::Serializer for Serializer<'a, 'b> {
             document_fields_counts: self.document_fields_counts,
             indexer: self.indexer,
             ranked_map: self.ranked_map,
+            fields_map: self.fields_map,
             current_key_name: None,
         })
     }
@@ -175,6 +177,7 @@ impl<'a, 'b> ser::Serializer for Serializer<'a, 'b> {
             document_fields_counts: self.document_fields_counts,
             indexer: self.indexer,
             ranked_map: self.ranked_map,
+            fields_map: self.fields_map,
         })
     }
 
@@ -199,6 +202,7 @@ pub struct MapSerializer<'a, 'b> {
     document_fields_counts: DocumentsFieldsCounts,
     indexer: &'a mut RawIndexer,
     ranked_map: &'a mut RankedMap,
+    fields_map: &'a mut FieldsMap,
     current_key_name: Option<String>,
 }
 
@@ -243,6 +247,7 @@ impl<'a, 'b> ser::SerializeMap for MapSerializer<'a, 'b> {
                 self.document_fields_counts,
                 self.indexer,
                 self.ranked_map,
+                self.fields_map,
                 value,
             ),
             None => Ok(()),
@@ -262,6 +267,7 @@ pub struct StructSerializer<'a, 'b> {
     document_fields_counts: DocumentsFieldsCounts,
     indexer: &'a mut RawIndexer,
     ranked_map: &'a mut RankedMap,
+    fields_map: &'a mut FieldsMap,
 }
 
 impl<'a, 'b> ser::SerializeStruct for StructSerializer<'a, 'b> {
@@ -276,20 +282,26 @@ impl<'a, 'b> ser::SerializeStruct for StructSerializer<'a, 'b> {
     where
         T: ser::Serialize,
     {
-        match self.schema.attribute(key) {
-            Some(attribute) => serialize_value(
-                self.txn,
-                attribute,
-                self.schema.props(attribute),
-                self.document_id,
-                self.document_store,
-                self.document_fields_counts,
-                self.indexer,
-                self.ranked_map,
-                value,
-            ),
-            None => Ok(()),
-        }
+        // let id = fields_map.insert(key)?;
+
+        // let attribute = match self.schema.attribute(id) {
+        //     Some(attribute) => attribute,
+        //     None => {
+
+        //     },
+        // }
+
+        serialize_value(
+            self.txn,
+            attribute,
+            self.schema.props(attribute),
+            self.document_id,
+            self.document_store,
+            self.document_fields_counts,
+            self.indexer,
+            self.ranked_map,
+            value,
+        )
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -297,10 +309,10 @@ impl<'a, 'b> ser::SerializeStruct for StructSerializer<'a, 'b> {
     }
 }
 
-pub fn serialize_value<T: ?Sized>(
+pub fn serialize_value<'a, T: ?Sized>(
     txn: &mut heed::RwTxn<MainT>,
-    attribute: SchemaAttr,
-    props: SchemaProps,
+    attribute: &'static str,
+    schema: &'a Schema,
     document_id: DocumentId,
     document_store: DocumentsFields,
     documents_fields_counts: DocumentsFieldsCounts,
@@ -312,11 +324,12 @@ where
     T: ser::Serialize,
 {
     let serialized = serde_json::to_vec(value)?;
-    document_store.put_document_field(txn, document_id, attribute, &serialized)?;
+    let field_id = schema.get_or_create(attribute)?;
+    document_store.put_document_field(txn, document_id, field_id, &serialized)?;
 
-    if props.is_indexed() {
+    if let Some(indexed_pos) = schema.id_is_indexed(field_id) {
         let indexer = Indexer {
-            attribute,
+            field_id,
             indexer,
             document_id,
         };
@@ -324,15 +337,15 @@ where
             documents_fields_counts.put_document_field_count(
                 txn,
                 document_id,
-                attribute,
+                field_id,
                 number_of_words as u16,
             )?;
         }
     }
 
-    if props.is_ranked() {
+    if let Some(field_id) = schema.id_is_ranked(field_id) {
         let number = value.serialize(ConvertToNumber)?;
-        ranked_map.insert(document_id, attribute, number);
+        ranked_map.insert(document_id, field_id, number);
     }
 
     Ok(())

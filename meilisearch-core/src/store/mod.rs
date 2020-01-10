@@ -206,11 +206,10 @@ impl Index {
         let schema = self.main.schema(reader)?;
         let schema = schema.ok_or(Error::SchemaMissing)?;
 
+        // let attributes = attributes.map(|a| a.iter().filter_map(|name| schema.get_id(*name)).collect());
+
         let attributes = match attributes {
-            Some(attributes) => attributes
-                .iter()
-                .map(|name| schema.attribute(name))
-                .collect(),
+            Some(attributes) => Some(attributes.iter().filter_map(|name| schema.get_id(*name)).collect()),
             None => None,
         };
 

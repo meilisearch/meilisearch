@@ -1,6 +1,9 @@
+use std::collections::BTreeSet;
+
 use http::StatusCode;
 use tide::response::IntoResponse;
 use tide::{Context, Response};
+use meilisearch_core::settings::{SettingsUpdate, UpdateState};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::ContextExt;
@@ -33,18 +36,17 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
-    let data: Vec<String> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
+    let data: BTreeSet<String> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
     let db = &ctx.state().db;
     let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
-    let mut stop_words_update = index.stop_words_update();
-    for stop_word in data {
-        stop_words_update.add_stop_word(stop_word);
-    }
+    let settings = SettingsUpdate {
+        stop_words: UpdateState::Update(data),
+        .. SettingsUpdate::default()
+    };
 
-    let update_id = stop_words_update
-        .finalize(&mut writer)
+    let update_id = index.settings_update(&mut writer, settings)
         .map_err(ResponseError::internal)?;
 
     writer.commit().map_err(ResponseError::internal)?;
@@ -62,10 +64,12 @@ pub async fn delete(ctx: Context<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
-    let stop_words_deletion = index.stop_words_update();
+    let settings = SettingsUpdate {
+        stop_words: UpdateState::Clear,
+        .. SettingsUpdate::default()
+    };
 
-    let update_id = stop_words_deletion
-        .finalize(&mut writer)
+    let update_id = index.settings_update(&mut writer, settings)
         .map_err(ResponseError::internal)?;
 
     writer.commit().map_err(ResponseError::internal)?;

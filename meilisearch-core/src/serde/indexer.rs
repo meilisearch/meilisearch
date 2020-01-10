@@ -1,4 +1,4 @@
-use meilisearch_schema::SchemaAttr;
+use meilisearch_schema::{IndexedPos};
 use serde::ser;
 use serde::Serialize;
 
@@ -7,7 +7,7 @@ use crate::raw_indexer::RawIndexer;
 use crate::DocumentId;
 
 pub struct Indexer<'a> {
-    pub attribute: SchemaAttr,
+    pub pos: IndexedPos,
     pub indexer: &'a mut RawIndexer,
     pub document_id: DocumentId,
 }
@@ -85,7 +85,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
     fn serialize_str(self, text: &str) -> Result<Self::Ok, Self::Error> {
         let number_of_words = self
             .indexer
-            .index_text(self.document_id, self.attribute, text);
+            .index_text(self.document_id, self.pos, text);
         Ok(Some(number_of_words))
     }
 
@@ -104,7 +104,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
         let text = value.serialize(ConvertToString)?;
         let number_of_words = self
             .indexer
-            .index_text(self.document_id, self.attribute, &text);
+            .index_text(self.document_id, self.pos, &text);
         Ok(Some(number_of_words))
     }
 
@@ -153,7 +153,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
         let indexer = SeqIndexer {
-            attribute: self.attribute,
+            pos: self.pos,
             document_id: self.document_id,
             indexer: self.indexer,
             texts: Vec::new(),
@@ -164,7 +164,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
         let indexer = TupleIndexer {
-            attribute: self.attribute,
+            pos: self.pos,
             document_id: self.document_id,
             indexer: self.indexer,
             texts: Vec::new(),
@@ -197,7 +197,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         let indexer = MapIndexer {
-            attribute: self.attribute,
+            pos: self.pos,
             document_id: self.document_id,
             indexer: self.indexer,
             texts: Vec::new(),
@@ -212,7 +212,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         let indexer = StructIndexer {
-            attribute: self.attribute,
+            pos: self.pos,
             document_id: self.document_id,
             indexer: self.indexer,
             texts: Vec::new(),
@@ -235,7 +235,7 @@ impl<'a> ser::Serializer for Indexer<'a> {
 }
 
 pub struct SeqIndexer<'a> {
-    attribute: SchemaAttr,
+    pos: IndexedPos,
     document_id: DocumentId,
     indexer: &'a mut RawIndexer,
     texts: Vec<String>,
@@ -257,13 +257,13 @@ impl<'a> ser::SerializeSeq for SeqIndexer<'a> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let texts = self.texts.iter().map(String::as_str);
         self.indexer
-            .index_text_seq(self.document_id, self.attribute, texts);
+            .index_text_seq(self.document_id, self.pos, texts);
         Ok(None)
     }
 }
 
 pub struct MapIndexer<'a> {
-    attribute: SchemaAttr,
+    pos: IndexedPos,
     document_id: DocumentId,
     indexer: &'a mut RawIndexer,
     texts: Vec<String>,
@@ -294,13 +294,13 @@ impl<'a> ser::SerializeMap for MapIndexer<'a> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let texts = self.texts.iter().map(String::as_str);
         self.indexer
-            .index_text_seq(self.document_id, self.attribute, texts);
+            .index_text_seq(self.document_id, self.pos, texts);
         Ok(None)
     }
 }
 
 pub struct StructIndexer<'a> {
-    attribute: SchemaAttr,
+    pos: IndexedPos,
     document_id: DocumentId,
     indexer: &'a mut RawIndexer,
     texts: Vec<String>,
@@ -328,13 +328,13 @@ impl<'a> ser::SerializeStruct for StructIndexer<'a> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let texts = self.texts.iter().map(String::as_str);
         self.indexer
-            .index_text_seq(self.document_id, self.attribute, texts);
+            .index_text_seq(self.document_id, self.pos, texts);
         Ok(None)
     }
 }
 
 pub struct TupleIndexer<'a> {
-    attribute: SchemaAttr,
+    pos: IndexedPos,
     document_id: DocumentId,
     indexer: &'a mut RawIndexer,
     texts: Vec<String>,
@@ -356,7 +356,7 @@ impl<'a> ser::SerializeTuple for TupleIndexer<'a> {
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let texts = self.texts.iter().map(String::as_str);
         self.indexer
-            .index_text_seq(self.document_id, self.attribute, texts);
+            .index_text_seq(self.document_id, self.pos, texts);
         Ok(None)
     }
 }

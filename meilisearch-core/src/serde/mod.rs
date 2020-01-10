@@ -26,6 +26,7 @@ use std::{error::Error, fmt};
 
 use serde::ser;
 use serde_json::Error as SerdeJsonError;
+use meilisearch_schema::Error as SchemaError;
 
 use crate::ParseNumberError;
 
@@ -36,6 +37,7 @@ pub enum SerializerError {
     Zlmdb(heed::Error),
     SerdeJson(SerdeJsonError),
     ParseNumber(ParseNumberError),
+    Schema(SchemaError),
     UnserializableType { type_name: &'static str },
     UnindexableType { type_name: &'static str },
     UnrankableType { type_name: &'static str },
@@ -62,6 +64,7 @@ impl fmt::Display for SerializerError {
             SerializerError::ParseNumber(e) => {
                 write!(f, "error while trying to parse a number: {}", e)
             }
+            SerializerError::Schema(e) => write!(f, "impossible to update schema: {}", e),
             SerializerError::UnserializableType { type_name } => {
                 write!(f, "{} is not a serializable type", type_name)
             }
@@ -100,4 +103,10 @@ impl From<ParseNumberError> for SerializerError {
     fn from(error: ParseNumberError) -> SerializerError {
         SerializerError::ParseNumber(error)
     }
+}
+
+impl From<SchemaError> for SerializerError {
+    fn from(error: SchemaError) -> SerializerError {
+        SerializerError::Schema(error)
+   }
 }

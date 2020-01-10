@@ -12,6 +12,7 @@ pub enum Error {
     SchemaMissing,
     WordIndexMissing,
     MissingDocumentId,
+    MaxFieldsLimitExceeded,
     Zlmdb(heed::Error),
     Fst(fst::Error),
     SerdeJson(SerdeJsonError),

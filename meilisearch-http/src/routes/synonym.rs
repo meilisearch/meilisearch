@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use http::StatusCode;
 use tide::response::IntoResponse;
 use tide::{Context, Response};
 use indexmap::IndexMap;
+use meilisearch_core::settings::{SettingsUpdate, UpdateState};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::ContextExt;
@@ -47,21 +48,19 @@ pub async fn get(ctx: Context<Data>) -> SResult<Response> {
 pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
 
-    let data: HashMap<String, Vec<String>> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
+    let data: BTreeMap<String, Vec<String>> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
     let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
-    let mut synonyms_update = index.synonyms_update();
+    let settings = SettingsUpdate {
+        synonyms: UpdateState::Update(data),
+        .. SettingsUpdate::default()
+    };
 
-    for (input, synonyms) in data {
-        synonyms_update.add_synonym(input, synonyms.into_iter());
-    }
-
-    let update_id = synonyms_update
-        .finalize(&mut writer)
+    let update_id = index.settings_update(&mut writer, settings)
         .map_err(ResponseError::internal)?;
 
     writer.commit().map_err(ResponseError::internal)?;
@@ -86,10 +85,7 @@ pub async fn delete(ctx: Context<Data>) -> SResult<Response> {
         .. SettingsUpdate::default()
     };
 
-    let synonyms_update = index.synonyms_update();
-
-    let update_id = synonyms_update
-        .finalize(&mut writer)
+    let update_id = index.settings_update(&mut writer, settings)
         .map_err(ResponseError::internal)?;
 
     writer.commit().map_err(ResponseError::internal)?;
