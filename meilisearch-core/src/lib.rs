@@ -11,6 +11,7 @@ mod levenshtein;
 mod number;
 mod query_builder;
 mod query_tree;
+mod query_words_mapper;
 mod ranked_map;
 mod raw_document;
 mod reordered_attrs;
@@ -28,6 +29,7 @@ pub use self::raw_document::RawDocument;
 pub use self::store::Index;
 pub use self::update::{EnqueuedUpdateResult, ProcessedUpdateResult, UpdateStatus, UpdateType};
 pub use meilisearch_types::{DocIndex, DocumentId, Highlight};
+pub use query_words_mapper::QueryWordsMapper;
 
 use compact_arena::SmallArena;
 use crate::bucket_sort::{QueryWordAutomaton, PostingsListView};

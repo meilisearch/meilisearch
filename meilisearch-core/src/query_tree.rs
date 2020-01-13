@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::ops::Range;
 use std::time::Instant;
 use std::{cmp, fmt, iter::once};
 
@@ -11,8 +13,9 @@ use fst::{IntoStreamer, Streamer};
 use crate::database::MainT;
 use crate::{store, DocumentId, DocIndex, MResult};
 use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
+use crate::QueryWordsMapper;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Operation {
     And(Vec<Operation>),
     Or(Vec<Operation>),
@@ -39,34 +42,47 @@ impl fmt::Debug for Operation {
     }
 }
 
+impl Operation {
+    fn tolerant(id: QueryId, prefix: bool, s: &str) -> Operation {
+        Operation::Query(Query { id, prefix, kind: QueryKind::Tolerant(s.to_string()) })
+    }
+
+    fn exact(id: QueryId, prefix: bool, s: &str) -> Operation {
+        Operation::Query(Query { id, prefix, kind: QueryKind::Exact(s.to_string()) })
+    }
+
+    fn phrase2(id: QueryId, prefix: bool, (left, right): (&str, &str)) -> Operation {
+        Operation::Query(Query { id, prefix, kind: QueryKind::Phrase(vec![left.to_owned(), right.to_owned()]) })
+    }
+}
+
 pub type QueryId = usize;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq)]
 pub struct Query {
     pub id: QueryId,
     pub prefix: bool,
     pub kind: QueryKind,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
+impl PartialEq for Query {
+    fn eq(&self, other: &Self) -> bool {
+        self.prefix == other.prefix && self.kind == other.kind
+    }
+}
+
+impl Hash for Query {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.prefix.hash(state);
+        self.kind.hash(state);
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum QueryKind {
     Tolerant(String),
     Exact(String),
     Phrase(Vec<String>),
-}
-
-impl Query {
-    fn tolerant(id: QueryId, prefix: bool, s: &str) -> Query {
-        Query { id, prefix, kind: QueryKind::Tolerant(s.to_string()) }
-    }
-
-    fn exact(id: QueryId, prefix: bool, s: &str) -> Query {
-        Query { id, prefix, kind: QueryKind::Exact(s.to_string()) }
-    }
-
-    fn phrase2(id: QueryId, prefix: bool, (left, right): (&str, &str)) -> Query {
-        Query { id, prefix, kind: QueryKind::Phrase(vec![left.to_owned(), right.to_owned()]) }
-    }
 }
 
 impl fmt::Debug for Query {
@@ -151,54 +167,88 @@ where I: IntoIterator<Item=Operation>,
 
 const MAX_NGRAM: usize = 3;
 
-pub fn create_query_tree(reader: &heed::RoTxn<MainT>, ctx: &Context, query: &str) -> MResult<Operation> {
+pub fn create_query_tree(
+    reader: &heed::RoTxn<MainT>,
+    ctx: &Context,
+    query: &str,
+) -> MResult<(Operation, HashMap<QueryId, Range<usize>>)>
+{
     let query = query.to_lowercase();
-
     let words = query.linear_group_by_key(char::is_whitespace).map(ToOwned::to_owned);
-    let words = words.filter(|s| !s.contains(char::is_whitespace)).enumerate();
-    let words: Vec<_> = words.collect();
+    let words: Vec<_> = words.filter(|s| !s.contains(char::is_whitespace)).enumerate().collect();
 
+    let mut mapper = QueryWordsMapper::new(words.iter().map(|(_, w)| w));
     let mut ngrams = Vec::new();
     for ngram in 1..=MAX_NGRAM {
+
         let ngiter = words.windows(ngram).enumerate().map(|(i, group)| {
-            let before = words[..i].windows(1);
-            let after = words[i + ngram..].windows(1);
-            before.chain(Some(group)).chain(after)
+            let before = words[0..i].windows(1).enumerate().map(|(i, g)| (i..i+1, g));
+            let after = words[i + ngram..].windows(1)
+                .enumerate()
+                .map(move |(j, g)| (i + j + ngram..i + j + ngram + 1, g));
+            before.chain(Some((i..i + ngram, group))).chain(after)
         });
 
         for group in ngiter {
-            let mut ops = Vec::new();
 
-            for (is_last, words) in is_last(group) {
+            let mut ops = Vec::new();
+            for (is_last, (range, words)) in is_last(group) {
+
                 let mut alts = Vec::new();
                 match words {
                     [(id, word)] => {
+                        let mut idgen = ((id + 1) * 100)..;
+
                         let phrase = split_best_frequency(reader, ctx, word)?
-                            .map(|ws| Query::phrase2(*id, is_last, ws))
-                            .map(Operation::Query);
+                            .map(|ws| {
+                                let id = idgen.next().unwrap();
+                                idgen.next().unwrap();
+                                mapper.declare(range.clone(), id, &[ws.0, ws.1]);
+                                Operation::phrase2(id, is_last, ws)
+                            });
 
-                        let synonyms = fetch_synonyms(reader, ctx, &[word])?.into_iter().map(|alts| {
-                            let iter = alts.into_iter().map(|w| Query::exact(*id, false, &w)).map(Operation::Query);
-                            create_operation(iter, Operation::And)
-                        });
+                        let synonyms = fetch_synonyms(reader, ctx, &[word])?
+                            .into_iter()
+                            .map(|alts| {
+                                let id = idgen.next().unwrap();
+                                mapper.declare(range.clone(), id, &alts);
 
-                        let query = Query::tolerant(*id, is_last, word);
+                                let mut idgen = once(id).chain(&mut idgen);
+                                let iter = alts.into_iter().map(|w| {
+                                    let id = idgen.next().unwrap();
+                                    Operation::exact(id, false, &w)
+                                });
 
-                        alts.push(Operation::Query(query));
+                                create_operation(iter, Operation::And)
+                            });
+
+                        let query = Operation::tolerant(*id, is_last, word);
+
+                        alts.push(query);
                         alts.extend(synonyms.chain(phrase));
                     },
                     words => {
                         let id = words[0].0;
+                        let mut idgen = ((id + 1) * 100_usize.pow(ngram as u32))..;
+
                         let words: Vec<_> = words.iter().map(|(_, s)| s.as_str()).collect();
 
                         for synonym in fetch_synonyms(reader, ctx, &words)? {
-                            let synonym = synonym.into_iter().map(|s| Operation::Query(Query::exact(id, false, &s)));
-                            let synonym = create_operation(synonym, Operation::And);
-                            alts.push(synonym);
+                            let id = idgen.next().unwrap();
+                            mapper.declare(range.clone(), id, &synonym);
+
+                            let mut idgen = once(id).chain(&mut idgen);
+                            let synonym = synonym.into_iter().map(|s| {
+                                let id = idgen.next().unwrap();
+                                Operation::exact(id, false, &s)
+                            });
+                            alts.push(create_operation(synonym, Operation::And));
                         }
 
-                        let query = Query::exact(id, is_last, &words.concat());
-                        alts.push(Operation::Query(query));
+                        let id = idgen.next().unwrap();
+                        let concat = words.concat();
+                        alts.push(Operation::exact(id, is_last, &concat));
+                        mapper.declare(range.clone(), id, &[concat]);
                     }
                 }
 
@@ -210,7 +260,10 @@ pub fn create_query_tree(reader: &heed::RoTxn<MainT>, ctx: &Context, query: &str
         }
     }
 
-    Ok(create_operation(ngrams, Operation::Or))
+    let mapping = mapper.mapping();
+    let operation = create_operation(ngrams, Operation::Or);
+
+    Ok((operation, mapping))
 }
 
 pub type Postings<'o, 'txn> = HashMap<(&'o Query, Vec<u8>), Cow<'txn, Set<DocIndex>>>;

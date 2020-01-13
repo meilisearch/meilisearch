@@ -61,8 +61,9 @@ where
         prefix_postings_lists: prefix_postings_lists_cache_store,
     };
 
-    let operation = create_query_tree(reader, &context, query).unwrap();
+    let (operation, mapping) = create_query_tree(reader, &context, query).unwrap();
     println!("{:?}", operation);
+    println!("{:?}", mapping);
 
     let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation).unwrap();
     println!("found {} documents", docids.len());
