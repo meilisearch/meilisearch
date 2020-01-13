@@ -167,6 +167,15 @@ impl Schema {
         self.indexed_map.get(&id)
     }
 
+    pub fn indexed_pos_to_field_id<I: Into<IndexedPos>>(&self, pos: I) -> Option<FieldId> {
+        let indexed_pos = pos.into().0 as usize;
+        if indexed_pos < self.indexed.len() {
+            Some(self.indexed[indexed_pos as usize])
+        } else {
+            None
+        }
+    }
+
     pub fn update_ranked<S: Into<String>>(&mut self, data: impl IntoIterator<Item = S>) -> SResult<()> {
         self.ranked = HashSet::new();
         for name in data {
