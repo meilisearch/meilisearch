@@ -1,13 +1,16 @@
 use std::cmp::{self, Ordering};
+use std::collections::HashMap;
+use std::ops::Range;
 
 use compact_arena::SmallArena;
 use sdset::SetBuf;
 use slice_group_by::GroupBy;
 
-use crate::{store, RawDocument, MResult};
 use crate::automaton::QueryEnhancer;
 use crate::bucket_sort::{SimpleMatch, PostingsListView, QueryWordAutomaton};
 use crate::database::MainT;
+use crate::query_tree::QueryId;
+use crate::{store, RawDocument, MResult};
 
 mod typo;
 mod words;
@@ -30,26 +33,26 @@ pub use self::sort_by_attr::SortByAttr;
 pub trait Criterion {
     fn name(&self) -> &str;
 
-    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
+    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'r>(
         &self,
-        _ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
+        _ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q>,
         _documents: &mut [RawDocument<'r, 'tag>],
     ) -> MResult<()>
     {
         Ok(())
     }
 
-    fn evaluate<'p, 'tag, 'txn, 'q, 'a, 'r>(
+    fn evaluate<'p, 'tag, 'txn, 'q, 'r>(
         &self,
-        ctx: &Context<'p, 'tag, 'txn, 'q, 'a>,
+        ctx: &Context<'p, 'tag, 'txn, 'q>,
         lhs: &RawDocument<'r, 'tag>,
         rhs: &RawDocument<'r, 'tag>,
     ) -> Ordering;
 
     #[inline]
-    fn eq<'p, 'tag, 'txn, 'q, 'a, 'r>(
+    fn eq<'p, 'tag, 'txn, 'q, 'r>(
         &self,
-        ctx: &Context<'p, 'tag, 'txn, 'q, 'a>,
+        ctx: &Context<'p, 'tag, 'txn, 'q>,
         lhs: &RawDocument<'r, 'tag>,
         rhs: &RawDocument<'r, 'tag>,
     ) -> bool
@@ -58,18 +61,16 @@ pub trait Criterion {
     }
 }
 
-pub struct ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a> {
+pub struct ContextMut<'h, 'p, 'tag, 'txn, 'q> {
     pub reader: &'h heed::RoTxn<MainT>,
     pub postings_lists: &'p mut SmallArena<'tag, PostingsListView<'txn>>,
-    pub query_enhancer: &'q mut QueryEnhancer,
-    pub automatons: &'a mut [QueryWordAutomaton],
+    pub query_mapping: &'q HashMap<QueryId, Range<usize>>,
     pub documents_fields_counts_store: store::DocumentsFieldsCounts,
 }
 
-pub struct Context<'p, 'tag, 'txn, 'q, 'a> {
+pub struct Context<'p, 'tag, 'txn, 'q> {
     pub postings_lists: &'p SmallArena<'tag, PostingsListView<'txn>>,
-    pub query_enhancer: &'q QueryEnhancer,
-    pub automatons: &'a [QueryWordAutomaton],
+    pub query_mapping: &'q HashMap<QueryId, Range<usize>>,
 }
 
 #[derive(Default)]
@@ -138,7 +139,7 @@ impl<'a> AsRef<[Box<dyn Criterion + 'a>]> for Criteria<'a> {
 
 fn prepare_query_distances<'a, 'tag, 'txn>(
     documents: &mut [RawDocument<'a, 'tag>],
-    query_enhancer: &QueryEnhancer,
+    query_mapping: &HashMap<QueryId, Range<usize>>,
     postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
 ) {
     for document in documents {
@@ -148,7 +149,7 @@ fn prepare_query_distances<'a, 'tag, 'txn>(
         for m in document.bare_matches.iter() {
             if postings_lists[m.postings_list].is_empty() { continue }
 
-            let range = query_enhancer.replacement(m.query_index as u32);
+            let range = query_mapping[&(m.query_index as usize)].clone();
             let new_len = cmp::max(range.end as usize, processed.len());
             processed.resize(new_len, None);
 
@@ -169,7 +170,7 @@ fn prepare_query_distances<'a, 'tag, 'txn>(
 fn prepare_bare_matches<'a, 'tag, 'txn>(
     documents: &mut [RawDocument<'a, 'tag>],
     postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
-    query_enhancer: &QueryEnhancer,
+    query_mapping: &HashMap<QueryId, Range<usize>>,
 ) {
     for document in documents {
         if !document.processed_matches.is_empty() { continue }
@@ -190,14 +191,14 @@ fn prepare_bare_matches<'a, 'tag, 'txn>(
             }
         }
 
-        let processed = multiword_rewrite_matches(&mut processed, query_enhancer);
+        let processed = multiword_rewrite_matches(&mut processed, query_mapping);
         document.processed_matches = processed.into_vec();
     }
 }
 
 fn multiword_rewrite_matches(
     matches: &mut [SimpleMatch],
-    query_enhancer: &QueryEnhancer,
+    query_mapping: &HashMap<QueryId, Range<usize>>,
 ) -> SetBuf<SimpleMatch>
 {
     matches.sort_unstable_by_key(|m| (m.attribute, m.word_index));
@@ -218,7 +219,7 @@ fn multiword_rewrite_matches(
             // find the biggest padding
             let mut biggest = 0;
             for match_ in same_word_index {
-                let mut replacement = query_enhancer.replacement(match_.query_index as u32);
+                let mut replacement = query_mapping[&(match_.query_index as usize)].clone();
                 let replacement_len = replacement.len();
                 let nexts = iter.remainder().linear_group_by_key(|m| m.word_index);
 
@@ -240,7 +241,7 @@ fn multiword_rewrite_matches(
                         let padmatch = SimpleMatch { query_index, word_index, ..*match_ };
 
                         for nmatch_ in next_group {
-                            let mut rep = query_enhancer.replacement(nmatch_.query_index as u32);
+                            let mut rep = query_mapping[&(nmatch_.query_index as usize)].clone();
                             let query_index = rep.next().unwrap() as u16;
                             if query_index == padmatch.query_index {
                                 if !found {

@@ -97,17 +97,19 @@ impl Document {
     #[cfg(not(test))]
     pub fn from_raw<'a, 'tag, 'txn>(
         raw_document: RawDocument<'a, 'tag>,
-        automatons: &[QueryWordAutomaton],
+        // automatons: &[QueryWordAutomaton],
         arena: &SmallArena<'tag, PostingsListView<'txn>>,
         searchable_attrs: Option<&ReorderedAttrs>,
     ) -> Document
     {
-        let highlights = highlights_from_raw_document(
-            &raw_document,
-            automatons,
-            arena,
-            searchable_attrs,
-        );
+        // let highlights = highlights_from_raw_document(
+        //     &raw_document,
+        //     automatons,
+        //     arena,
+        //     searchable_attrs,
+        // );
+
+        let highlights = Vec::new();
 
         Document { id: raw_document.id, highlights }
     }
@@ -115,19 +117,21 @@ impl Document {
     #[cfg(test)]
     pub fn from_raw<'a, 'tag, 'txn>(
         raw_document: RawDocument<'a, 'tag>,
-        automatons: &[QueryWordAutomaton],
+        // automatons: &[QueryWordAutomaton],
         arena: &SmallArena<'tag, PostingsListView<'txn>>,
         searchable_attrs: Option<&ReorderedAttrs>,
     ) -> Document
     {
         use crate::bucket_sort::SimpleMatch;
 
-        let highlights = highlights_from_raw_document(
-            &raw_document,
-            automatons,
-            arena,
-            searchable_attrs,
-        );
+        // let highlights = highlights_from_raw_document(
+        //     &raw_document,
+        //     automatons,
+        //     arena,
+        //     searchable_attrs,
+        // );
+
+        let highlights = Vec::new();
 
         let mut matches = Vec::new();
         for sm in raw_document.processed_matches {
