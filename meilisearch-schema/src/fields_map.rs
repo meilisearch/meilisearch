@@ -3,9 +3,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{SResult, SchemaAttr};
+use crate::{SResult, FieldId};
 
-pub type FieldId = SchemaAttr;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FieldsMap {
@@ -43,13 +42,13 @@ impl FieldsMap {
         self.name_map.remove(&name);
     }
 
-    pub fn get_id<S: Into<String>>(&self, name: S) -> Option<&FieldId> {
+    pub fn get_id<S: Into<String>>(&self, name: S) -> Option<FieldId> {
         let name = name.into();
-        self.name_map.get(&name)
+        self.name_map.get(&name).map(|s| *s)
     }
 
-    pub fn get_name<I: Into<SchemaAttr>>(&self, id: I) -> Option<&String> {
-        self.id_map.get(&id.into())
+    pub fn get_name<I: Into<FieldId>>(&self, id: I) -> Option<String> {
+        self.id_map.get(&id.into()).map(|s| s.to_string())
     }
 
     pub fn read_from_bin<R: Read>(reader: R) -> bincode::Result<FieldsMap> {
@@ -74,14 +73,14 @@ mod tests {
         assert_eq!(fields_map.insert("id").unwrap(), 0.into());
         assert_eq!(fields_map.insert("title").unwrap(), 1.into());
         assert_eq!(fields_map.insert("descritpion").unwrap(), 2.into());
-        assert_eq!(fields_map.get_id("id"), Some(&0.into()));
-        assert_eq!(fields_map.get_id("title"), Some(&1.into()));
-        assert_eq!(fields_map.get_id("descritpion"), Some(&2.into()));
+        assert_eq!(fields_map.get_id("id"), Some(0.into()));
+        assert_eq!(fields_map.get_id("title"), Some(1.into()));
+        assert_eq!(fields_map.get_id("descritpion"), Some(2.into()));
         assert_eq!(fields_map.get_id("date"), None);
         assert_eq!(fields_map.len(), 3);
-        assert_eq!(fields_map.get_name(0), Some(&"id".to_owned()));
-        assert_eq!(fields_map.get_name(1), Some(&"title".to_owned()));
-        assert_eq!(fields_map.get_name(2), Some(&"descritpion".to_owned()));
+        assert_eq!(fields_map.get_name(0), Some("id".to_owned()));
+        assert_eq!(fields_map.get_name(1), Some("title".to_owned()));
+        assert_eq!(fields_map.get_name(2), Some("descritpion".to_owned()));
         assert_eq!(fields_map.get_name(4), None);
         fields_map.remove("title");
         assert_eq!(fields_map.get_id("title"), None);

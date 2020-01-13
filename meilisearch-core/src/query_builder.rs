@@ -136,7 +136,7 @@ mod tests {
     use std::iter::FromIterator;
 
     use fst::{IntoStreamer, Set};
-    use meilisearch_schema::SchemaAttr;
+    use meilisearch_schema::IndexedPos;
     use sdset::SetBuf;
     use tempfile::TempDir;
 
@@ -295,14 +295,14 @@ mod tests {
             for ((docid, attr, _), count) in fields_counts {
                 let prev = index
                     .documents_fields_counts
-                    .document_field_count(&mut writer, docid, SchemaAttr(attr))
+                    .document_field_count(&mut writer, docid, IndexedPos(attr))
                     .unwrap();
 
                 let prev = prev.unwrap_or(0);
 
                 index
                     .documents_fields_counts
-                    .put_document_field_count(&mut writer, docid, SchemaAttr(attr), prev + count)
+                    .put_document_field_count(&mut writer, docid, IndexedPos(attr), prev + count)
                     .unwrap();
             }
 

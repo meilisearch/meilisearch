@@ -69,7 +69,7 @@ impl<'a> SortByAttr<'a> {
         reversed: bool,
     ) -> Result<SortByAttr<'a>, SortByAttrError> {
         let field_id = match schema.get_id(attr_name) {
-            Some(field_id) => *field_id,
+            Some(field_id) => field_id,
             None => return Err(SortByAttrError::AttributeNotFound),
         };
 

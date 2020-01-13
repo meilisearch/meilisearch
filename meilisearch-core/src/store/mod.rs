@@ -43,18 +43,50 @@ use crate::{query_builder::QueryBuilder, update, DocIndex, DocumentId, Error, MR
 type BEU64 = zerocopy::U64<byteorder::BigEndian>;
 type BEU16 = zerocopy::U16<byteorder::BigEndian>;
 
+// #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
+// #[repr(C)]
+// pub struct DocumentAttrKey {
+//     docid: BEU64,
+//     indexed_pos: BEU16,
+// }
+
+// impl DocumentAttrKey {
+//     fn new(docid: DocumentId, indexed_pos: IndexedPos) -> DocumentAttrKey {
+//         DocumentAttrKey {
+//             docid: BEU64::new(docid.0),
+//             indexed_pos: BEU16::new(indexed_pos.0),
+//         }
+//     }
+// }
+
 #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]
-pub struct DocumentAttrKey {
+pub struct DocumentFieldIndexedKey {
     docid: BEU64,
-    attr: BEU16,
+    indexed_pos: BEU16,
 }
 
-impl DocumentAttrKey {
-    fn new(docid: DocumentId, attr: SchemaAttr) -> DocumentAttrKey {
-        DocumentAttrKey {
+impl DocumentFieldIndexedKey {
+    fn new(docid: DocumentId, indexed_pos: IndexedPos) -> DocumentFieldIndexedKey {
+        DocumentFieldIndexedKey {
             docid: BEU64::new(docid.0),
-            attr: BEU16::new(attr.0),
+            indexed_pos: BEU16::new(indexed_pos.0),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
+#[repr(C)]
+pub struct DocumentFieldStoredKey {
+    docid: BEU64,
+    field_id: BEU16,
+}
+
+impl DocumentFieldStoredKey {
+    fn new(docid: DocumentId, field_id: FieldId) -> DocumentFieldStoredKey {
+        DocumentFieldStoredKey {
+            docid: BEU64::new(docid.0),
+            field_id: BEU16::new(field_id.0),
         }
     }
 }
@@ -228,7 +260,7 @@ impl Index {
         &self,
         reader: &heed::RoTxn<MainT>,
         document_id: DocumentId,
-        attribute: SchemaAttr,
+        attribute: FieldId,
     ) -> MResult<Option<T>> {
         let bytes = self
             .documents_fields

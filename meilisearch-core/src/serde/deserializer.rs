@@ -99,7 +99,7 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
                         let ioread = SerdeJsonIoRead::new(cursor);
                         let value = Value(SerdeJsonDeserializer::new(ioread));
 
-                        Some((*attribute_name, value))
+                        Some((attribute_name, value))
                     } else {
                         None
                     }

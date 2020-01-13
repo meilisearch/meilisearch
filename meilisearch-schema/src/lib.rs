@@ -3,46 +3,86 @@ mod fields_map;
 mod schema;
 
 pub use error::{Error, SResult};
-pub use fields_map::{FieldsMap, FieldId};
-pub use schema::{Schema, IndexedPos};
+pub use fields_map::FieldsMap;
+pub use schema::Schema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub struct SchemaAttr(pub u16);
+pub struct IndexedPos(pub u16);
 
-impl SchemaAttr {
-    pub const fn new(value: u16) -> SchemaAttr {
-        SchemaAttr(value)
+impl IndexedPos {
+    pub const fn new(value: u16) -> IndexedPos {
+        IndexedPos(value)
     }
 
-    pub const fn min() -> SchemaAttr {
-        SchemaAttr(u16::min_value())
+    pub const fn min() -> IndexedPos {
+        IndexedPos(u16::min_value())
     }
 
-    pub const fn max() -> SchemaAttr {
-        SchemaAttr(u16::max_value())
+    pub const fn max() -> IndexedPos {
+        IndexedPos(u16::max_value())
     }
 
-    pub fn next(self) -> SResult<SchemaAttr> {
-        self.0.checked_add(1).map(SchemaAttr).ok_or(Error::MaxFieldsLimitExceeded)
+    pub fn next(self) -> SResult<IndexedPos> {
+        self.0.checked_add(1).map(IndexedPos).ok_or(Error::MaxFieldsLimitExceeded)
     }
 
-    pub fn prev(self) -> SResult<SchemaAttr> {
-        self.0.checked_sub(1).map(SchemaAttr).ok_or(Error::MaxFieldsLimitExceeded)
-    }
-}
-
-impl From<u16> for SchemaAttr {
-    fn from(value: u16) -> SchemaAttr {
-        SchemaAttr(value)
+    pub fn prev(self) -> SResult<IndexedPos> {
+        self.0.checked_sub(1).map(IndexedPos).ok_or(Error::MaxFieldsLimitExceeded)
     }
 }
 
-impl Into<u16> for SchemaAttr {
+impl From<u16> for IndexedPos {
+    fn from(value: u16) -> IndexedPos {
+        IndexedPos(value)
+    }
+}
+
+impl Into<u16> for IndexedPos {
     fn into(self) -> u16 {
         self.0
     }
 }
+
+
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash)]
+pub struct FieldId(pub u16);
+
+impl FieldId {
+    pub const fn new(value: u16) -> FieldId {
+        FieldId(value)
+    }
+
+    pub const fn min() -> FieldId {
+        FieldId(u16::min_value())
+    }
+
+    pub const fn max() -> FieldId {
+        FieldId(u16::max_value())
+    }
+
+    pub fn next(self) -> SResult<FieldId> {
+        self.0.checked_add(1).map(FieldId).ok_or(Error::MaxFieldsLimitExceeded)
+    }
+
+    pub fn prev(self) -> SResult<FieldId> {
+        self.0.checked_sub(1).map(FieldId).ok_or(Error::MaxFieldsLimitExceeded)
+    }
+}
+
+impl From<u16> for FieldId {
+    fn from(value: u16) -> FieldId {
+        FieldId(value)
+    }
+}
+
+impl Into<u16> for FieldId {
+    fn into(self) -> u16 {
+        self.0
+    }
+}
+
+
 
 
 

@@ -8,11 +8,12 @@ pub type MResult<T> = Result<T, Error>;
 pub enum Error {
     Io(io::Error),
     IndexAlreadyExists,
-    SchemaDiffer,
+    MissingSchemaIdentifier,
     SchemaMissing,
     WordIndexMissing,
     MissingDocumentId,
     MaxFieldsLimitExceeded,
+    Schema(meilisearch_schema::Error),
     Zlmdb(heed::Error),
     Fst(fst::Error),
     SerdeJson(SerdeJsonError),
@@ -25,6 +26,12 @@ pub enum Error {
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Error {
         Error::Io(error)
+    }
+}
+
+impl From<meilisearch_schema::Error> for Error {
+    fn from(error: meilisearch_schema::Error) -> Error {
+        Error::Schema(error)
     }
 }
 
@@ -76,10 +83,12 @@ impl fmt::Display for Error {
         match self {
             Io(e) => write!(f, "{}", e),
             IndexAlreadyExists => write!(f, "index already exists"),
-            SchemaDiffer => write!(f, "schemas differ"),
+            MissingSchemaIdentifier => write!(f, "schema cannot be build without identifier"),
             SchemaMissing => write!(f, "this index does not have a schema"),
             WordIndexMissing => write!(f, "this index does not have a word index"),
             MissingDocumentId => write!(f, "document id is missing"),
+            MaxFieldsLimitExceeded => write!(f, "maximum field in a document is exceeded"),
+            Schema(e) => write!(f, "schemas error; {}", e),
             Zlmdb(e) => write!(f, "heed error; {}", e),
             Fst(e) => write!(f, "fst error; {}", e),
             SerdeJson(e) => write!(f, "serde json error; {}", e),

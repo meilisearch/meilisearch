@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{FieldsMap, FieldId, SResult, SchemaAttr};
+use serde::{Serialize, Deserialize};
 
-pub type IndexedPos = SchemaAttr;
+use crate::{FieldsMap, FieldId, SResult, Error, IndexedPos};
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Schema {
     fields_map: FieldsMap,
 
@@ -30,11 +30,21 @@ impl Schema {
         self.fields_map.get_name(self.identifier).unwrap().to_string()
     }
 
-    pub fn get_id<S: Into<String>>(&self, name: S) -> Option<&FieldId> {
+    pub fn set_identifier(&mut self, id: String) -> SResult<()> {
+        match self.get_id(id.clone()) {
+            Some(id) => {
+                self.identifier = id;
+                Ok(())
+            },
+            None => Err(Error::FieldNameNotFound(id))
+        }
+    }
+
+    pub fn get_id<S: Into<String>>(&self, name: S) -> Option<FieldId> {
         self.fields_map.get_id(name)
     }
 
-    pub fn get_name<I: Into<SchemaAttr>>(&self, id: I) -> Option<&String> {
+    pub fn get_name<I: Into<FieldId>>(&self, id: I) -> Option<String> {
         self.fields_map.get_name(id)
     }
 
@@ -52,13 +62,37 @@ impl Schema {
     pub fn get_or_create<S: Into<String> + std::clone::Clone>(&mut self, name: S) -> SResult<FieldId> {
         match self.fields_map.get_id(name.clone()) {
             Some(id) => {
-                Ok(*id)
+                Ok(id)
             }
             None => {
                 self.set_indexed(name.clone())?;
                 self.set_displayed(name)
             }
         }
+    }
+
+    pub fn get_ranked(&self) -> HashSet<FieldId> {
+        self.ranked.clone()
+    }
+
+    pub fn get_ranked_name(&self) -> HashSet<String> {
+        self.ranked.iter().filter_map(|a| self.get_name(*a)).collect()
+    }
+
+    pub fn get_displayed(&self) -> HashSet<FieldId> {
+        self.displayed.clone()
+    }
+
+    pub fn get_displayed_name(&self) -> HashSet<String> {
+        self.displayed.iter().filter_map(|a| self.get_name(*a)).collect()
+    }
+
+    pub fn get_indexed(&self) -> Vec<FieldId> {
+        self.indexed.clone()
+    }
+
+    pub fn get_indexed_name(&self) -> Vec<String> {
+        self.indexed.iter().filter_map(|a| self.get_name(*a)).collect()
     }
 
     pub fn set_ranked<S: Into<String>>(&mut self, name: S) -> SResult<FieldId> {
@@ -81,23 +115,42 @@ impl Schema {
         Ok((id, pos.into()))
     }
 
-    pub fn is_ranked<S: Into<String>>(&self, name: S) -> Option<&FieldId> {
+    pub fn remove_ranked<S: Into<String>>(&mut self, name: S) {
+        if let Some(id) = self.fields_map.get_id(name.into()) {
+            self.ranked.remove(&id);
+        }
+    }
+
+    pub fn remove_displayed<S: Into<String>>(&mut self, name: S) {
+        if let Some(id) = self.fields_map.get_id(name.into()) {
+            self.displayed.remove(&id);
+        }
+    }
+
+    pub fn remove_indexed<S: Into<String>>(&mut self, name: S) {
+        if let Some(id) = self.fields_map.get_id(name.into()) {
+            self.indexed_map.remove(&id);
+            self.indexed.retain(|x| *x != id);
+        }
+    }
+
+    pub fn is_ranked<S: Into<String>>(&self, name: S) -> Option<FieldId> {
         match self.fields_map.get_id(name.into()) {
-            Some(id) => self.ranked.get(id),
+            Some(id) => self.ranked.get(&id).map(|s| *s),
             None => None,
         }
     }
 
-    pub fn is_displayed<S: Into<String>>(&self, name: S) -> Option<&FieldId> {
+    pub fn is_displayed<S: Into<String>>(&self, name: S) -> Option<FieldId> {
         match self.fields_map.get_id(name.into()) {
-            Some(id) => self.displayed.get(id),
+            Some(id) => self.displayed.get(&id).map(|s| *s),
             None => None,
         }
     }
 
-    pub fn is_indexed<S: Into<String>>(&self, name: S) -> Option<&IndexedPos> {
+    pub fn is_indexed<S: Into<String>>(&self, name: S) -> Option<IndexedPos> {
         match self.fields_map.get_id(name.into()) {
-            Some(id) => self.indexed_map.get(id),
+            Some(id) => self.indexed_map.get(&id).map(|s| *s),
             None => None,
         }
     }

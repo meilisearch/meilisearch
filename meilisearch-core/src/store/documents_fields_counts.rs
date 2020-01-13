@@ -1,13 +1,13 @@
-use super::DocumentAttrKey;
+use super::DocumentFieldIndexedKey;
 use crate::database::MainT;
 use crate::DocumentId;
 use heed::types::OwnedType;
 use heed::Result as ZResult;
-use meilisearch_schema::FieldId;
+use meilisearch_schema::IndexedPos;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFieldsCounts {
-    pub(crate) documents_fields_counts: heed::Database<OwnedType<DocumentAttrKey>, OwnedType<u16>>,
+    pub(crate) documents_fields_counts: heed::Database<OwnedType<DocumentFieldIndexedKey>, OwnedType<u16>>,
 }
 
 impl DocumentsFieldsCounts {
@@ -15,10 +15,10 @@ impl DocumentsFieldsCounts {
         self,
         writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
-        attribute: FieldId,
+        attribute: IndexedPos,
         value: u16,
     ) -> ZResult<()> {
-        let key = DocumentAttrKey::new(document_id, attribute);
+        let key = DocumentFieldIndexedKey::new(document_id, attribute);
         self.documents_fields_counts.put(writer, &key, &value)
     }
 
@@ -27,10 +27,9 @@ impl DocumentsFieldsCounts {
         writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<usize> {
-        let start = DocumentAttrKey::new(document_id, FieldId::min());
-        let end = DocumentAttrKey::new(document_id, FieldId::max());
-        self.documents_fields_counts
-            .delete_range(writer, &(start..=end))
+        let start = DocumentFieldIndexedKey::new(document_id, IndexedPos::min());
+        let end = DocumentFieldIndexedKey::new(document_id, IndexedPos::max());
+        self.documents_fields_counts.delete_range(writer, &(start..=end))
     }
 
     pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
@@ -41,9 +40,9 @@ impl DocumentsFieldsCounts {
         self,
         reader: &heed::RoTxn<MainT>,
         document_id: DocumentId,
-        attribute: FieldId,
+        attribute: IndexedPos,
     ) -> ZResult<Option<u16>> {
-        let key = DocumentAttrKey::new(document_id, attribute);
+        let key = DocumentFieldIndexedKey::new(document_id, attribute);
         match self.documents_fields_counts.get(reader, &key)? {
             Some(count) => Ok(Some(count)),
             None => Ok(None),
@@ -55,8 +54,8 @@ impl DocumentsFieldsCounts {
         reader: &'txn heed::RoTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<DocumentFieldsCountsIter<'txn>> {
-        let start = DocumentAttrKey::new(document_id, FieldId::min());
-        let end = DocumentAttrKey::new(document_id, FieldId::max());
+        let start = DocumentFieldIndexedKey::new(document_id, IndexedPos::min());
+        let end = DocumentFieldIndexedKey::new(document_id, IndexedPos::max());
         let iter = self.documents_fields_counts.range(reader, &(start..=end))?;
         Ok(DocumentFieldsCountsIter { iter })
     }
@@ -79,17 +78,17 @@ impl DocumentsFieldsCounts {
 }
 
 pub struct DocumentFieldsCountsIter<'txn> {
-    iter: heed::RoRange<'txn, OwnedType<DocumentAttrKey>, OwnedType<u16>>,
+    iter: heed::RoRange<'txn, OwnedType<DocumentFieldIndexedKey>, OwnedType<u16>>,
 }
 
 impl Iterator for DocumentFieldsCountsIter<'_> {
-    type Item = ZResult<(FieldId, u16)>;
+    type Item = ZResult<(IndexedPos, u16)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(Ok((key, count))) => {
-                let attr = FieldId(key.attr.get());
-                Some(Ok((attr, count)))
+                let indexed_pos = IndexedPos(key.indexed_pos.get());
+                Some(Ok((indexed_pos, count)))
             }
             Some(Err(e)) => Some(Err(e)),
             None => None,
@@ -99,7 +98,7 @@ impl Iterator for DocumentFieldsCountsIter<'_> {
 
 pub struct DocumentsIdsIter<'txn> {
     last_seen_id: Option<DocumentId>,
-    iter: heed::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u16>>,
+    iter: heed::RoIter<'txn, OwnedType<DocumentFieldIndexedKey>, OwnedType<u16>>,
 }
 
 impl Iterator for DocumentsIdsIter<'_> {
@@ -123,18 +122,18 @@ impl Iterator for DocumentsIdsIter<'_> {
 }
 
 pub struct AllDocumentsFieldsCountsIter<'txn> {
-    iter: heed::RoIter<'txn, OwnedType<DocumentAttrKey>, OwnedType<u16>>,
+    iter: heed::RoIter<'txn, OwnedType<DocumentFieldIndexedKey>, OwnedType<u16>>,
 }
 
 impl Iterator for AllDocumentsFieldsCountsIter<'_> {
-    type Item = ZResult<(DocumentId, FieldId, u16)>;
+    type Item = ZResult<(DocumentId, IndexedPos, u16)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(Ok((key, count))) => {
                 let docid = DocumentId(key.docid.get());
-                let attr = FieldId(key.attr.get());
-                Some(Ok((docid, attr, count)))
+                let indexed_pos = IndexedPos(key.indexed_pos.get());
+                Some(Ok((docid, indexed_pos, count)))
             }
             Some(Err(e)) => Some(Err(e)),
             None => None,

@@ -180,16 +180,16 @@ fn token_to_docindex(id: DocumentId, indexed_pos: IndexedPos, token: Token) -> O
 mod tests {
 
     use super::*;
-    use meilisearch_schema::SchemaAttr;
+    use meilisearch_schema::IndexedPos;
 
     #[test]
     fn strange_apostrophe() {
         let mut indexer = RawIndexer::new(fst::Set::default());
 
         let docid = DocumentId(0);
-        let attr = SchemaAttr(0);
+        let indexed_pos = IndexedPos(0);
         let text = "Zut, l’aspirateur, j’ai oublié de l’éteindre !";
-        indexer.index_text(docid, attr, text);
+        indexer.index_text(docid, indexed_pos, text);
 
         let Indexed {
             words_doc_indexes, ..
@@ -209,9 +209,9 @@ mod tests {
         let mut indexer = RawIndexer::new(fst::Set::default());
 
         let docid = DocumentId(0);
-        let attr = SchemaAttr(0);
+        let indexed_pos = IndexedPos(0);
         let text = vec!["Zut, l’aspirateur, j’ai oublié de l’éteindre !"];
-        indexer.index_text_seq(docid, attr, text);
+        indexer.index_text_seq(docid, indexed_pos, text);
 
         let Indexed {
             words_doc_indexes, ..
@@ -234,9 +234,9 @@ mod tests {
         let mut indexer = RawIndexer::new(stop_words);
 
         let docid = DocumentId(0);
-        let attr = SchemaAttr(0);
+        let indexed_pos = IndexedPos(0);
         let text = "Zut, l’aspirateur, j’ai oublié de l’éteindre !";
-        indexer.index_text(docid, attr, text);
+        indexer.index_text(docid, indexed_pos, text);
 
         let Indexed {
             words_doc_indexes, ..
@@ -258,9 +258,9 @@ mod tests {
         let mut indexer = RawIndexer::new(fst::Set::default());
 
         let docid = DocumentId(0);
-        let attr = SchemaAttr(0);
+        let indexed_pos = IndexedPos(0);
         let text = "🇯🇵";
-        indexer.index_text(docid, attr, text);
+        indexer.index_text(docid, indexed_pos, text);
 
         let Indexed {
             words_doc_indexes, ..

@@ -13,7 +13,8 @@ use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use meilisearch_core::{Database, Highlight, ProcessedUpdateResult};
-use meilisearch_schema::SchemaAttr;
+use meilisearch_core::settings::Settings;
+use meilisearch_schema::FieldId;
 
 // #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -121,7 +122,8 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
     let settings = {
         let string = fs::read_to_string(&command.settings)?;
-        serde_json::from_str(&string).unwrap()
+        let settings: Settings = serde_json::from_str(&string).unwrap();
+        settings.into()
     };
 
     let mut update_writer = db.update_write_txn().unwrap();
@@ -357,7 +359,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     };
 
                     let attr = schema
-                        .attribute(&filter)
+                        .get_id(filter)
                         .expect("Could not find filtered attribute");
 
                     builder.with_filter(move |document_id| {
@@ -388,11 +390,11 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                             for (name, text) in document.0 {
                                 print!("{}: ", name);
 
-                                let attr = schema.attribute(&name).unwrap();
+                                let attr = schema.get_id(&name).unwrap();
                                 let highlights = doc
                                     .highlights
                                     .iter()
-                                    .filter(|m| SchemaAttr::new(m.attribute) == attr)
+                                    .filter(|m| FieldId::new(m.attribute) == attr)
                                     .cloned();
                                 let (text, highlights) =
                                     crop_text(&text, highlights, command.char_context);
@@ -407,8 +409,8 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
 
                     let mut matching_attributes = HashSet::new();
                     for highlight in doc.highlights {
-                        let attr = SchemaAttr::new(highlight.attribute);
-                        let name = schema.attribute_name(attr);
+                        let attr = FieldId::new(highlight.attribute);
+                        let name = schema.get_name(attr);
                         matching_attributes.insert(name);
                     }
 

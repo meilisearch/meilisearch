@@ -1,16 +1,15 @@
-use std::collections::{HashMap, BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use heed::Result as ZResult;
 use fst::{set::OpBuilder, SetBuilder};
 use sdset::SetBuf;
-
-use meilisearch_schema::{Schema, SchemaAttr, diff_transposition, generate_schema};
+use meilisearch_schema::Schema;
 
 use crate::database::{MainT, UpdateT};
 use crate::settings::{UpdateState, SettingsUpdate};
 use crate::update::documents_addition::reindex_all_documents;
 use crate::update::{next_update_id, Update};
-use crate::{store, MResult};
+use crate::{store, MResult, Error};
 
 pub fn push_settings_update(
     writer: &mut heed::RwTxn<UpdateT>,
@@ -35,7 +34,17 @@ pub fn apply_settings_update(
 
     let mut must_reindex = false;
 
-    let old_schema = index.main.schema(writer)?;
+    let mut schema = match index.main.schema(writer)? {
+        Some(schema) => schema,
+        None => {
+            match settings.attribute_identifier.clone() {
+                UpdateState::Update(id) => Schema::with_identifier(id),
+                _ => return Err(Error::MissingSchemaIdentifier)
+            }
+        }
+    };
+
+    println!("settings: {:?}", settings);
 
     match settings.ranking_rules {
         UpdateState::Update(v) => {
@@ -55,157 +64,69 @@ pub fn apply_settings_update(
         },
         _ => (),
     }
-    let identifier = match settings.attribute_identifier.clone() {
-        UpdateState::Update(v) => v,
-        _ => {
-            old_schema.clone().unwrap().identifier_name().to_owned()
-        },
+
+    if let UpdateState::Update(id) = settings.attribute_identifier {
+         schema.set_identifier(id)?;
     };
-    let attributes_searchable: Vec<String> = match settings.attributes_searchable.clone() {
-        UpdateState::Update(v) => v,
-        UpdateState::Clear => Vec::new(),
-        UpdateState::Nothing => {
-            match old_schema.clone() {
-                Some(schema) => {
-                    schema.into_iter()
-                        .filter(|(_, props)| props.is_indexed())
-                        .map(|(name, _)| name)
-                        .collect()
-                },
-                None => Vec::new(),
-            }
+
+    match settings.attributes_searchable.clone() {
+        UpdateState::Update(v) => schema.update_indexed(v)?,
+        UpdateState::Clear => {
+            let clear: Vec<String> = Vec::new();
+            schema.update_indexed(clear)?;
         },
+        UpdateState::Nothing => (),
         UpdateState::Add(attrs) => {
-            let mut old_attrs = match old_schema.clone() {
-                Some(schema) => {
-                    schema.into_iter()
-                        .filter(|(_, props)| props.is_indexed())
-                        .map(|(name, _)| name)
-                        .collect()
-                },
-                None => Vec::new(),
-            };
             for attr in attrs {
-                if !old_attrs.contains(&attr) {
-                    old_attrs.push(attr);
-                }
+                schema.set_indexed(attr)?;
             }
-            old_attrs
         },
         UpdateState::Delete(attrs) => {
-            let mut old_attrs = match old_schema.clone() {
-                Some(schema) => {
-                    schema.into_iter()
-                        .filter(|(_, props)| props.is_indexed())
-                        .map(|(name, _)| name)
-                        .collect()
-                },
-                None => Vec::new(),
-            };
             for attr in attrs {
-                old_attrs.retain(|x| *x == attr)
+                schema.remove_indexed(attr);
             }
-            old_attrs
         }
     };
-    let attributes_displayed: Vec<String> = match settings.attributes_displayed.clone() {
-        UpdateState::Update(v) => v,
-        UpdateState::Clear => Vec::new(),
-        UpdateState::Nothing => {
-            match old_schema.clone() {
-                Some(schema) => {
-                    schema.into_iter()
-                        .filter(|(_, props)| props.is_displayed())
-                        .map(|(name, _)| name)
-                        .collect()
-                },
-                None => Vec::new(),
-            }
+    match settings.attributes_displayed.clone() {
+        UpdateState::Update(v) => schema.update_displayed(v)?,
+        UpdateState::Clear => {
+            let clear: Vec<String> = Vec::new();
+            schema.update_displayed(clear)?;
         },
+        UpdateState::Nothing => (),
         UpdateState::Add(attrs) => {
-            let mut old_attrs = match old_schema.clone() {
-                Some(schema) => {
-                    schema.into_iter()
-                        .filter(|(_, props)| props.is_displayed())
-                        .map(|(name, _)| name)
-                        .collect()
-                },
-                None => Vec::new(),
-            };
             for attr in attrs {
-                if !old_attrs.contains(&attr) {
-                    old_attrs.push(attr);
-                }
+                schema.set_displayed(attr)?;
             }
-            old_attrs
         },
         UpdateState::Delete(attrs) => {
-            let mut old_attrs = match old_schema.clone() {
-                Some(schema) => {
-                    schema.into_iter()
-                        .filter(|(_, props)| props.is_displayed())
-                        .map(|(name, _)| name)
-                        .collect()
-                },
-                None => Vec::new(),
-            };
             for attr in attrs {
-                old_attrs.retain(|x| *x == attr)
+                schema.remove_displayed(attr);
             }
-            old_attrs
         }
     };
-    let attributes_ranked: Vec<String> = match settings.attributes_ranked.clone() {
-        UpdateState::Update(v) => v,
-        UpdateState::Clear => Vec::new(),
-        UpdateState::Nothing => {
-            match old_schema.clone() {
-                Some(schema) => {
-                    schema.into_iter()
-                        .filter(|(_, props)| props.is_ranked())
-                        .map(|(name, _)| name)
-                        .collect()
-                },
-                None => Vec::new(),
-            }
+    match settings.attributes_ranked.clone() {
+        UpdateState::Update(v) => schema.update_ranked(v)?,
+        UpdateState::Clear => {
+            let clear: Vec<String> = Vec::new();
+            schema.update_ranked(clear)?;
         },
+        UpdateState::Nothing => (),
         UpdateState::Add(attrs) => {
-            let mut old_attrs = match old_schema.clone() {
-                Some(schema) => {
-                    schema.into_iter()
-                        .filter(|(_, props)| props.is_ranked())
-                        .map(|(name, _)| name)
-                        .collect()
-                },
-                None => Vec::new(),
-            };
             for attr in attrs {
-                if !old_attrs.contains(&attr) {
-                    old_attrs.push(attr);
-                }
+                schema.set_ranked(attr)?;
             }
-            old_attrs
         },
         UpdateState::Delete(attrs) => {
-            let mut old_attrs = match old_schema.clone() {
-                Some(schema) => {
-                    schema.into_iter()
-                        .filter(|(_, props)| props.is_ranked())
-                        .map(|(name, _)| name)
-                        .collect()
-                },
-                None => Vec::new(),
-            };
             for attr in attrs {
-                old_attrs.retain(|x| *x == attr)
+                schema.remove_ranked(attr);
             }
-            old_attrs
         }
     };
 
-    let new_schema = generate_schema(identifier, attributes_searchable, attributes_displayed, attributes_ranked);
+    index.main.put_schema(writer, &schema)?;
 
-    index.main.put_schema(writer, &new_schema)?;
+    println!("schema: {:?}", schema);
 
     match settings.stop_words {
         UpdateState::Update(stop_words) => {
@@ -233,16 +154,6 @@ pub fn apply_settings_update(
     let postings_lists_store = index.postings_lists;
     let docs_words_store = index.docs_words;
 
-    if settings.attribute_identifier.is_changed() ||
-        settings.attributes_ranked.is_changed() ||
-        settings.attributes_searchable.is_changed() ||
-        settings.attributes_displayed.is_changed()
-    {
-        if let Some(old_schema) = old_schema {
-            rewrite_all_documents(writer, index, &old_schema, &new_schema)?;
-            must_reindex = true;
-        }
-    }
     if must_reindex {
         reindex_all_documents(
             writer,
@@ -435,49 +346,6 @@ pub fn apply_synonyms_update(
 
     main_store.put_synonyms_fst(writer, &synonyms_set)?;
     main_store.put_synonyms(writer, synonyms)?;
-
-    Ok(())
-}
-
-pub fn rewrite_all_documents(
-    writer: &mut heed::RwTxn<MainT>,
-    index: &store::Index,
-    old_schema: &Schema,
-    new_schema: &Schema,
-) -> MResult<()> {
-
-    let mut documents_ids_to_reindex = Vec::new();
-
-    // Retrieve all documents present on the database
-    for result in index.documents_fields_counts.documents_ids(writer)? {
-        let document_id = result?;
-        documents_ids_to_reindex.push(document_id);
-    }
-
-    let transpotition = diff_transposition(old_schema, new_schema);
-
-    // Rewrite all documents one by one
-    for id in documents_ids_to_reindex {
-        let mut document: HashMap<SchemaAttr, Vec<u8>> = HashMap::new();
-
-        // Retrieve the old document
-        for item in index.documents_fields.document_fields(writer, id)? {
-            if let Ok(item) = item {
-                if let Some(pos) = transpotition[(item.0).0 as usize] {
-                    // Save the current document with the new SchemaAttr
-                    document.insert(SchemaAttr::new(pos), item.1.to_vec());
-                }
-            }
-        }
-        // Remove the current document
-        index.documents_fields.del_all_document_fields(writer, id)?;
-
-        // Rewrite the new document
-        // TODO: use cursor to not do memory jump at each call
-        for (key, value) in document {
-            index.documents_fields.put_document_field(writer, id, key, &value)?;
-        }
-    }
 
     Ok(())
 }
