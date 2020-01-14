@@ -108,7 +108,7 @@ where
                 let posting_list_index = arena.add(range);
                 let bare_match = BareMatch {
                     document_id,
-                    query_index: u16::try_from(query.id).unwrap(),
+                    query_index: query.id,
                     distance: distance,
                     is_exact: true, // TODO where can I find this info?
                     postings_list: posting_list_index,
@@ -232,7 +232,7 @@ where
 
 pub struct BareMatch<'tag> {
     pub document_id: DocumentId,
-    pub query_index: u16,
+    pub query_index: usize,
     pub distance: u8,
     pub is_exact: bool,
     pub postings_list: Idx32<'tag>,
@@ -251,7 +251,7 @@ impl fmt::Debug for BareMatch<'_> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SimpleMatch {
-    pub query_index: u16,
+    pub query_index: usize,
     pub distance: u8,
     pub attribute: u16,
     pub word_index: u16,
@@ -413,7 +413,7 @@ fn fetch_matches<'txn, 'tag>(
                     let posting_list_index = arena.add(range);
                     let bare_match = BareMatch {
                         document_id,
-                        query_index: query_index as u16,
+                        query_index,
                         distance: 0,
                         is_exact: *is_exact,
                         postings_list: posting_list_index,
@@ -478,7 +478,7 @@ fn fetch_matches<'txn, 'tag>(
                         let posting_list_index = arena.add(range);
                         let bare_match = BareMatch {
                             document_id,
-                            query_index: query_index as u16,
+                            query_index,
                             distance,
                             is_exact,
                             postings_list: posting_list_index,

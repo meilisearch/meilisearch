@@ -225,7 +225,6 @@ fn multiword_rewrite_matches(
 
                 if let Some(query_index) = replacement.next() {
                     let word_index = match_.word_index + padding as u16;
-                    let query_index = query_index as u16;
                     let match_ = SimpleMatch { query_index, word_index, ..*match_ };
                     padded_matches.push(match_);
                 }
@@ -237,12 +236,11 @@ fn multiword_rewrite_matches(
                 'padding: for (x, next_group) in nexts.enumerate() {
                     for (i, query_index) in replacement.clone().enumerate().skip(x) {
                         let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
-                        let query_index = query_index as u16;
                         let padmatch = SimpleMatch { query_index, word_index, ..*match_ };
 
                         for nmatch_ in next_group {
                             let mut rep = query_mapping[&(nmatch_.query_index as usize)].clone();
-                            let query_index = rep.next().unwrap() as u16;
+                            let query_index = rep.next().unwrap();
                             if query_index == padmatch.query_index {
                                 if !found {
                                     // if we find a corresponding padding for the
@@ -250,7 +248,6 @@ fn multiword_rewrite_matches(
                                     for (i, query_index) in replacement.clone().enumerate().take(i)
                                     {
                                         let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
-                                        let query_index = query_index as u16;
                                         let match_ = SimpleMatch { query_index, word_index, ..*match_ };
                                         padded_matches.push(match_);
                                         biggest = biggest.max(i + 1);
@@ -274,7 +271,6 @@ fn multiword_rewrite_matches(
                     // we must insert the entire padding
                     for (i, query_index) in replacement.enumerate() {
                         let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
-                        let query_index = query_index as u16;
                         let match_ = SimpleMatch { query_index, word_index, ..*match_ };
                         padded_matches.push(match_);
                     }
