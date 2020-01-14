@@ -2,19 +2,16 @@ use chrono::{DateTime, Utc};
 use http::StatusCode;
 use log::error;
 use meilisearch_core::ProcessedUpdateResult;
-use meilisearch_schema::{Schema, SchemaBuilder};
+// use meilisearch_schema::Schema;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tide::querystring::ContextExt as QSContextExt;
 use tide::response::IntoResponse;
 use tide::{Context, Response};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::ContextExt;
-use crate::models::schema::SchemaBody;
 use crate::models::token::ACL::*;
-use crate::routes::document::IndexUpdateResponse;
 use crate::Data;
 
 fn generate_uid() -> String {
@@ -124,7 +121,7 @@ pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
 struct IndexCreateRequest {
     name: String,
     uid: Option<String>,
-    schema: Option<SchemaBody>,
+    // schema: Option<SchemaBody>,
 }
 
 #[derive(Debug, Serialize)]
@@ -132,9 +129,9 @@ struct IndexCreateRequest {
 struct IndexCreateResponse {
     name: String,
     uid: String,
-    schema: Option<SchemaBody>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    update_id: Option<u64>,
+    // schema: Option<SchemaBody>,
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // update_id: Option<u64>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -165,30 +162,29 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
     };
 
     let mut writer = db.main_write_txn().map_err(ResponseError::internal)?;
-    let mut update_writer = db.update_write_txn().map_err(ResponseError::internal)?;
 
     created_index
         .main
         .put_name(&mut writer, &body.name)
         .map_err(ResponseError::internal)?;
 
-    let schema: Option<Schema> = body.schema.clone().map(Into::into);
-    let mut response_update_id = None;
-    if let Some(schema) = schema {
-        let update_id = created_index
-            .schema_update(&mut update_writer, schema)
-            .map_err(ResponseError::internal)?;
-        response_update_id = Some(update_id)
-    }
+    // let schema: Option<Schema> = body.schema.clone().map(Into::into);
+    // let mut response_update_id = None;
+    // if let Some(schema) = schema {
+    //     let update_id = created_index
+    //         .schema_update(&mut update_writer, schema)
+    //         .map_err(ResponseError::internal)?;
+    //     response_update_id = Some(update_id)
+    // }
 
-    writer.commit().map_err(ResponseError::internal)?;
-    update_writer.commit().map_err(ResponseError::internal)?;
+    // writer.commit().map_err(ResponseError::internal)?;
+    // update_writer.commit().map_err(ResponseError::internal)?;
 
     let response_body = IndexCreateResponse {
         name: body.name,
         uid,
-        schema: body.schema,
-        update_id: response_update_id,
+        // schema: body.schema,
+        // update_id: update_id,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     };
@@ -260,78 +256,6 @@ pub async fn update_index(mut ctx: Context<Data>) -> SResult<Response> {
 
     Ok(tide::response::json(response_body)
         .with_status(StatusCode::OK)
-        .into_response())
-}
-
-#[derive(Default, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SchemaParams {
-    raw: bool,
-}
-
-pub async fn get_index_schema(ctx: Context<Data>) -> SResult<Response> {
-    ctx.is_allowed(IndexesRead)?;
-
-    let index = ctx.index()?;
-
-    // Tide doesn't support "no query param"
-    let params: SchemaParams = ctx.url_query().unwrap_or_default();
-
-    let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-
-    let schema = index
-        .main
-        .schema(&reader)
-        .map_err(ResponseError::open_index)?;
-
-    match schema {
-        Some(schema) => {
-            if params.raw {
-                Ok(tide::response::json(schema))
-            } else {
-                Ok(tide::response::json(SchemaBody::from(schema)))
-            }
-        }
-        None => Err(ResponseError::not_found("missing index schema")),
-    }
-}
-
-pub async fn update_schema(mut ctx: Context<Data>) -> SResult<Response> {
-    ctx.is_allowed(IndexesWrite)?;
-
-    let index_uid = ctx.url_param("index")?;
-
-    let params: SchemaParams = ctx.url_query().unwrap_or_default();
-
-    let schema = if params.raw {
-        ctx.body_json::<SchemaBuilder>()
-            .await
-            .map_err(ResponseError::bad_request)?
-            .build()
-    } else {
-        ctx.body_json::<SchemaBody>()
-            .await
-            .map_err(ResponseError::bad_request)?
-            .into()
-    };
-
-    let db = &ctx.state().db;
-    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
-
-    let index = db
-        .open_index(&index_uid)
-        .ok_or(ResponseError::index_not_found(index_uid))?;
-
-    let update_id = index
-        .schema_update(&mut writer, schema.clone())
-        .map_err(ResponseError::internal)?;
-
-    writer.commit().map_err(ResponseError::internal)?;
-
-    let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::response::json(response_body)
-        .with_status(StatusCode::ACCEPTED)
         .into_response())
 }
 

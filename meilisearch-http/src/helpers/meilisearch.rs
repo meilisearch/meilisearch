@@ -1,11 +1,11 @@
-use crate::routes::setting::{RankingOrdering, Setting};
 use indexmap::IndexMap;
-use log::{error, warn};
+use log::error;
 use meilisearch_core::criterion::*;
 use meilisearch_core::Highlight;
 use meilisearch_core::{Index, RankedMap};
 use meilisearch_core::MainT;
-use meilisearch_schema::{Schema, SchemaAttr};
+use meilisearch_core::settings::RankingRule;
+use meilisearch_schema::{Schema, FieldId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cmp::Ordering;
@@ -172,7 +172,7 @@ impl<'a> SearchBuilder<'a> {
                     let ref_index = &self.index;
                     let value = value.trim().to_lowercase();
 
-                    let attr = match schema.attribute(attr) {
+                    let attr = match schema.get_id(attr) {
                         Some(attr) => attr,
                         None => return Err(Error::UnknownFilteredAttribute),
                     };
@@ -274,75 +274,24 @@ impl<'a> SearchBuilder<'a> {
         ranked_map: &'a RankedMap,
         schema: &Schema,
     ) -> Result<Option<Criteria<'a>>, Error> {
-        let current_settings = match self.index.main.customs(reader).unwrap() {
-            Some(bytes) => bincode::deserialize(bytes).unwrap(),
-            None => Setting::default(),
-        };
-
-        let ranking_rules = &current_settings.ranking_rules;
-        let ranking_order = &current_settings.ranking_order;
+        let ranking_rules = self.index.main.ranking_rules(reader).unwrap();
 
         if let Some(ranking_rules) = ranking_rules {
             let mut builder = CriteriaBuilder::with_capacity(7 + ranking_rules.len());
-            if let Some(ranking_rules_order) = ranking_order {
-                for rule in ranking_rules_order {
-                    match rule.as_str() {
-                        "_typo" => builder.push(Typo),
-                        "_words" => builder.push(Words),
-                        "_proximity" => builder.push(Proximity),
-                        "_attribute" => builder.push(Attribute),
-                        "_words_position" => builder.push(WordsPosition),
-                        "_exact" => builder.push(Exact),
-                        _ => {
-                            let order = match ranking_rules.get(rule.as_str()) {
-                                Some(o) => o,
-                                None => continue,
-                            };
-
-                            let custom_ranking = match order {
-                                RankingOrdering::Asc => {
-                                    SortByAttr::lower_is_better(&ranked_map, &schema, &rule)
-                                        .unwrap()
-                                }
-                                RankingOrdering::Dsc => {
-                                    SortByAttr::higher_is_better(&ranked_map, &schema, &rule)
-                                        .unwrap()
-                                }
-                            };
-
-                            builder.push(custom_ranking);
-                        }
-                    }
-                }
-                builder.push(DocumentId);
-                return Ok(Some(builder.build()));
-            } else {
-                builder.push(Typo);
-                builder.push(Words);
-                builder.push(Proximity);
-                builder.push(Attribute);
-                builder.push(WordsPosition);
-                builder.push(Exact);
-                for (rule, order) in ranking_rules.iter() {
-                    let custom_ranking = match order {
-                        RankingOrdering::Asc => {
-                            SortByAttr::lower_is_better(&ranked_map, &schema, &rule)
-                        }
-                        RankingOrdering::Dsc => {
-                            SortByAttr::higher_is_better(&ranked_map, &schema, &rule)
-                        }
-                    };
-                    if let Ok(custom_ranking) = custom_ranking {
-                        builder.push(custom_ranking);
-                    } else {
-                        // TODO push this warning to a log tree
-                        warn!("Custom ranking cannot be added; Attribute {} not registered for ranking", rule)
-                    }
-
-                }
-                builder.push(DocumentId);
-                return Ok(Some(builder.build()));
+            for rule in ranking_rules {
+                match rule {
+                    RankingRule::Typo => builder.push(Typo),
+                    RankingRule::Words => builder.push(Words),
+                    RankingRule::Proximity => builder.push(Proximity),
+                    RankingRule::Attribute => builder.push(Attribute),
+                    RankingRule::WordsPosition => builder.push(WordsPosition),
+                    RankingRule::Exact => builder.push(Exact),
+                    RankingRule::Asc(field) => builder.push(SortByAttr::lower_is_better(&ranked_map, &schema, &field).unwrap()),
+                    RankingRule::Dsc(field) => builder.push(SortByAttr::higher_is_better(&ranked_map, &schema, &field).unwrap()),
+                };
             }
+            builder.push(DocumentId);
+            return Ok(Some(builder.build()));
         }
 
         Ok(None)
@@ -421,14 +370,14 @@ fn crop_document(
     matches.sort_unstable_by_key(|m| (m.char_index, m.char_length));
 
     for (field, length) in fields {
-        let attribute = match schema.attribute(field) {
+        let attribute = match schema.get_id(field) {
             Some(attribute) => attribute,
             None => continue,
         };
 
         let selected_matches = matches
             .iter()
-            .filter(|m| SchemaAttr::new(m.attribute) == attribute)
+            .filter(|m| FieldId::new(m.attribute) == attribute)
             .cloned();
 
         if let Some(Value::String(ref mut original_text)) = document.get_mut(field) {
@@ -437,7 +386,7 @@ fn crop_document(
 
             *original_text = cropped_text;
 
-            matches.retain(|m| SchemaAttr::new(m.attribute) != attribute);
+            matches.retain(|m| FieldId::new(m.attribute) != attribute);
             matches.extend_from_slice(&cropped_matches);
         }
     }
@@ -450,26 +399,25 @@ fn calculate_matches(
 ) -> MatchesInfos {
     let mut matches_result: HashMap<String, Vec<MatchPosition>> = HashMap::new();
     for m in matches.iter() {
-        let attribute = schema
-            .attribute_name(SchemaAttr::new(m.attribute))
-            .to_string();
-        if let Some(attributes_to_retrieve) = attributes_to_retrieve.clone() {
-            if !attributes_to_retrieve.contains(attribute.as_str()) {
-                continue;
+        if let Some(attribute) = schema.get_name(FieldId::new(m.attribute)) {
+            if let Some(attributes_to_retrieve) = attributes_to_retrieve.clone() {
+                if !attributes_to_retrieve.contains(attribute.as_str()) {
+                    continue;
+                }
+            };
+            if let Some(pos) = matches_result.get_mut(&attribute) {
+                pos.push(MatchPosition {
+                    start: m.char_index as usize,
+                    length: m.char_length as usize,
+                });
+            } else {
+                let mut positions = Vec::new();
+                positions.push(MatchPosition {
+                    start: m.char_index as usize,
+                    length: m.char_length as usize,
+                });
+                matches_result.insert(attribute, positions);
             }
-        };
-        if let Some(pos) = matches_result.get_mut(&attribute) {
-            pos.push(MatchPosition {
-                start: m.char_index as usize,
-                length: m.char_length as usize,
-            });
-        } else {
-            let mut positions = Vec::new();
-            positions.push(MatchPosition {
-                start: m.char_index as usize,
-                length: m.char_length as usize,
-            });
-            matches_result.insert(attribute, positions);
         }
     }
     for (_, val) in matches_result.iter_mut() {

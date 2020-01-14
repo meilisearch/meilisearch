@@ -1,3 +1,4 @@
+
 use std::collections::{BTreeSet, HashSet};
 
 use http::StatusCode;
@@ -7,6 +8,7 @@ use serde_json::Value;
 use tide::querystring::ContextExt as QSContextExt;
 use tide::response::IntoResponse;
 use tide::{Context, Response};
+use meilisearch_core::settings::Settings;
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::ContextExt;
@@ -117,27 +119,13 @@ pub async fn get_all_documents(ctx: Context<Data>) -> SResult<Response> {
     Ok(tide::response::json(response_body))
 }
 
-fn infered_schema(document: &IndexMap<String, Value>, identifier: Option<String>) -> Option<meilisearch_schema::Schema> {
-    use meilisearch_schema::{SchemaBuilder, DISPLAYED, INDEXED};
-
-    let mut identifier = identifier;
+fn find_identifier(document: &IndexMap<String, Value>) -> Option<String> {
     for key in document.keys() {
-        if identifier.is_none() && key.to_lowercase().contains("id") {
-            identifier = Some(key.to_string());
-            break;
+        if key.to_lowercase().contains("id") {
+            return Some(key.to_string())
         }
     }
-
-    match identifier {
-        Some(identifier) => {
-            let mut builder = SchemaBuilder::with_identifier(identifier);
-            for key in document.keys() {
-                builder.new_attribute(key, DISPLAYED | INDEXED);
-            }
-            Some(builder.build())
-        }
-        None => None,
-    }
+    return None
 }
 
 #[derive(Default, Deserialize)]
@@ -165,14 +153,22 @@ async fn update_multiple_documents(mut ctx: Context<Data>, is_partial: bool) -> 
         .schema(&reader)
         .map_err(ResponseError::internal)?;
     if current_schema.is_none() {
-        match data.first().and_then(|docs| infered_schema(docs, query.identifier)) {
-            Some(schema) => {
-                index
-                    .schema_update(&mut update_writer, schema)
-                    .map_err(ResponseError::internal)?;
+        let id = match query.identifier {
+            Some(id) => id,
+            None => {
+                match data.first().and_then(|docs| find_identifier(docs)) {
+                    Some(id) => id,
+                    None => return Err(ResponseError::bad_request("Could not infer a schema")),
+                }
             }
-            None => return Err(ResponseError::bad_request("Could not infer a schema")),
-        }
+        };
+        let settings = Settings {
+            attribute_identifier: Some(id),
+            ..Settings::default()
+        };
+        index
+            .settings_update(&mut update_writer, settings.into())
+            .map_err(ResponseError::internal)?;
     }
 
     let mut document_addition = if is_partial {

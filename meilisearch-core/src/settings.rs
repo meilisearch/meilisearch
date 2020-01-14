@@ -1,6 +1,14 @@
+use std::sync::Mutex;
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
+use once_cell::sync::Lazy;
+
+static RANKING_RULE_REGEX: Lazy<Mutex<regex::Regex>> = Lazy::new(|| {
+    let regex = regex::Regex::new(r"(asc|dsc)\(([a-zA-Z0-9-_]*)\)").unwrap();
+    Mutex::new(regex)
+});
+
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -17,8 +25,36 @@ pub struct Settings {
 impl Into<SettingsUpdate> for Settings {
     fn into(self) -> SettingsUpdate {
         let settings = self.clone();
+
+        let ranking_rules = match settings.ranking_rules {
+            Some(rules) => {
+                let mut final_rules = Vec::new();
+                for rule in rules {
+                    let parsed_rule = match rule.as_str() {
+                        "_typo" => RankingRule::Typo,
+                        "_words" => RankingRule::Words,
+                        "_proximity" => RankingRule::Proximity,
+                        "_attribute" => RankingRule::Attribute,
+                        "_words_position" => RankingRule::WordsPosition,
+                        "_exact" => RankingRule::Exact,
+                        _ => {
+                            let captures = RANKING_RULE_REGEX.lock().unwrap().captures(&rule).unwrap();
+                            match captures[0].as_ref() {
+                                "asc" => RankingRule::Asc(captures[1].to_string()),
+                                "dsc" => RankingRule::Dsc(captures[1].to_string()),
+                                _ => continue
+                            }
+                        }
+                    };
+                    final_rules.push(parsed_rule);
+                }
+                Some(final_rules)
+            }
+            None => None
+        };
+
         SettingsUpdate {
-            ranking_rules: settings.ranking_rules.into(),
+            ranking_rules: ranking_rules.into(),
             ranking_distinct: settings.ranking_distinct.into(),
             attribute_identifier: settings.attribute_identifier.into(),
             attributes_searchable: settings.attributes_searchable.into(),
@@ -58,8 +94,20 @@ impl<T> UpdateState<T> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RankingRule {
+    Typo,
+    Words,
+    Proximity,
+    Attribute,
+    WordsPosition,
+    Exact,
+    Asc(String),
+    Dsc(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettingsUpdate {
-    pub ranking_rules: UpdateState<Vec<String>>,
+    pub ranking_rules: UpdateState<Vec<RankingRule>>,
     pub ranking_distinct: UpdateState<String>,
     pub attribute_identifier: UpdateState<String>,
     pub attributes_searchable: UpdateState<Vec<String>>,

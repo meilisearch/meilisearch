@@ -43,22 +43,6 @@ use crate::{query_builder::QueryBuilder, update, DocIndex, DocumentId, Error, MR
 type BEU64 = zerocopy::U64<byteorder::BigEndian>;
 type BEU16 = zerocopy::U16<byteorder::BigEndian>;
 
-// #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
-// #[repr(C)]
-// pub struct DocumentAttrKey {
-//     docid: BEU64,
-//     indexed_pos: BEU16,
-// }
-
-// impl DocumentAttrKey {
-//     fn new(docid: DocumentId, indexed_pos: IndexedPos) -> DocumentAttrKey {
-//         DocumentAttrKey {
-//             docid: BEU64::new(docid.0),
-//             indexed_pos: BEU16::new(indexed_pos.0),
-//         }
-//     }
-// }
-
 #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]
 pub struct DocumentFieldIndexedKey {
@@ -270,7 +254,6 @@ impl Index {
             None => Ok(None),
         }
     }
-
 
     pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> ZResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);

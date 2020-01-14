@@ -8,6 +8,7 @@ use meilisearch_schema::Schema;
 
 use crate::database::MainT;
 use crate::RankedMap;
+use crate::settings::RankingRule;
 
 const CREATED_AT_KEY: &str = "created-at";
 const RANKING_RULES_KEY: &str = "ranking-rules-key";
@@ -188,12 +189,12 @@ impl Main {
         }
     }
 
-    pub fn ranking_rules<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<Vec<String>>> {
-        self.main.get::<_, Str, SerdeBincode<Vec<String>>>(reader, RANKING_RULES_KEY)
+    pub fn ranking_rules<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<Vec<RankingRule>>> {
+        self.main.get::<_, Str, SerdeBincode<Vec<RankingRule>>>(reader, RANKING_RULES_KEY)
     }
 
-    pub fn put_ranking_rules(self, writer: &mut heed::RwTxn<MainT>, value: Vec<String>) -> ZResult<()> {
-        self.main.put::<_, Str, SerdeBincode<Vec<String>>>(writer, RANKING_RULES_KEY, &value)
+    pub fn put_ranking_rules(self, writer: &mut heed::RwTxn<MainT>, value: Vec<RankingRule>) -> ZResult<()> {
+        self.main.put::<_, Str, SerdeBincode<Vec<RankingRule>>>(writer, RANKING_RULES_KEY, &value)
     }
 
     pub fn delete_ranking_rules(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {

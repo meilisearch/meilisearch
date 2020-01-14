@@ -64,8 +64,9 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
         let crop_length = query.crop_length.unwrap_or(200);
         if attributes_to_crop == "*" {
             let attributes_to_crop = schema
+                .get_displayed_name()
                 .iter()
-                .map(|(attr, ..)| (attr.to_string(), crop_length))
+                .map(|attr| (attr.to_string(), crop_length))
                 .collect();
             search_builder.attributes_to_crop(attributes_to_crop);
         } else {
@@ -79,7 +80,7 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
 
     if let Some(attributes_to_highlight) = query.attributes_to_highlight {
         let attributes_to_highlight = if attributes_to_highlight == "*" {
-            schema.iter().map(|(attr, ..)| attr.to_string()).collect()
+            schema.get_displayed_name()
         } else {
             attributes_to_highlight
                 .split(',')
