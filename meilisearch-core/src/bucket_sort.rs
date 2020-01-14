@@ -15,7 +15,7 @@ use levenshtein_automata::DFA;
 use log::debug;
 use meilisearch_tokenizer::{is_cjk, split_query_string};
 use meilisearch_types::DocIndex;
-use sdset::{Set, SetBuf};
+use sdset::{Set, SetBuf, exponential_search};
 use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::automaton::NGRAMS;
@@ -103,7 +103,7 @@ where
         let mut offset = 0;
         for id in docids.as_slice() {
             let di = DocIndex { document_id: *id, ..DocIndex::default() };
-            let pos = postings_list_view[offset..].binary_search(&di).unwrap_or_else(|x| x);
+            let pos = exponential_search(&postings_list_view[offset..], &di).unwrap_or_else(|x| x);
 
             let group = postings_list_view[offset + pos..]
                 .linear_group_by_key(|m| m.document_id)
