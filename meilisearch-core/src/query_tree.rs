@@ -370,8 +370,14 @@ pub fn traverse_query_tree<'o, 'txn>(
         let Query { id, prefix, kind } = query;
         let docids = match kind {
             QueryKind::Tolerant(word) => {
-                if *prefix && word.len() == 1 {
-                    let prefix = [word.as_bytes()[0], 0, 0, 0];
+                if *prefix && word.len() <= 2 {
+                    let prefix = {
+                        let mut array = [0; 4];
+                        let bytes = word.as_bytes();
+                        array[..bytes.len()].copy_from_slice(bytes);
+                        array
+                    };
+
                     let result = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
                     let distance = 0;
                     postings.insert((query, word.clone().into_bytes(), distance), result.matches);
