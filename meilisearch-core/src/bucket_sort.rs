@@ -96,18 +96,28 @@ where
 
     let mut bare_matches = Vec::new();
     mk_arena!(arena);
+
     for ((query, input, distance), matches) in queries {
 
         let postings_list_view = PostingsListView::original(Rc::from(input), Rc::new(matches));
-        // TODO optimize the filter by skipping docids that have already been seen
         let mut offset = 0;
-        for matches in postings_list_view.linear_group_by_key(|m| m.document_id) {
-            let document_id = matches[0].document_id;
-            if docids.contains(&document_id) {
-                let range = postings_list_view.range(offset, matches.len());
+        for id in docids.as_slice() {
+            let di = DocIndex { document_id: *id, ..DocIndex::default() };
+            let pos = postings_list_view[offset..].binary_search(&di).unwrap_or_else(|x| x);
+
+            let group = postings_list_view[offset + pos..]
+                .linear_group_by_key(|m| m.document_id)
+                .next()
+                .filter(|matches| matches[0].document_id == *id);
+
+            offset += pos;
+
+            if let Some(matches) = group {
+                let range = postings_list_view.range(pos, matches.len());
                 let posting_list_index = arena.add(range);
+
                 let bare_match = BareMatch {
-                    document_id,
+                    document_id: *id,
                     query_index: query.id,
                     distance: distance,
                     is_exact: true, // TODO where can I find this info?
@@ -116,8 +126,6 @@ where
 
                 bare_matches.push(bare_match);
             }
-
-            offset += matches.len();
         }
     }
 

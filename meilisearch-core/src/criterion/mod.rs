@@ -245,8 +245,7 @@ fn multiword_rewrite_matches(
                                 if !found {
                                     // if we find a corresponding padding for the
                                     // first time we must push preceding paddings
-                                    for (i, query_index) in replacement.clone().enumerate().take(i)
-                                    {
+                                    for (i, query_index) in replacement.clone().enumerate().take(i) {
                                         let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
                                         let match_ = SimpleMatch { query_index, word_index, ..*match_ };
                                         padded_matches.push(match_);

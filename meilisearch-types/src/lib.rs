@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// It is used to inform the database the document you want to deserialize.
 /// Helpful for custom ranking.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "zerocopy", derive(AsBytes, FromBytes))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
@@ -19,7 +19,7 @@ pub struct DocumentId(pub u64);
 ///
 /// This is stored in the map, generated at index time,
 /// extracted and interpreted at search time.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "zerocopy", derive(AsBytes, FromBytes))]
 #[repr(C)]
 pub struct DocIndex {
