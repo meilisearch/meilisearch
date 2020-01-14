@@ -266,7 +266,8 @@ pub fn create_query_tree(
     Ok((operation, mapping))
 }
 
-pub type Postings<'o, 'txn> = HashMap<(&'o Query, Vec<u8>), Cow<'txn, Set<DocIndex>>>;
+pub type Distance = u8;
+pub type Postings<'o, 'txn> = HashMap<(&'o Query, Vec<u8>, Distance), Cow<'txn, Set<DocIndex>>>;
 pub type Cache<'o, 'txn> = HashMap<&'o Operation, Cow<'txn, Set<DocumentId>>>;
 
 pub struct QueryResult<'o, 'txn> {
@@ -372,7 +373,8 @@ pub fn traverse_query_tree<'o, 'txn>(
                 if *prefix && word.len() == 1 {
                     let prefix = [word.as_bytes()[0], 0, 0, 0];
                     let result = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
-                    postings.insert((query, word.clone().into_bytes()), result.matches);
+                    let distance = 0;
+                    postings.insert((query, word.clone().into_bytes(), distance), result.matches);
                     result.docids
                 } else {
                     let dfa = if *prefix { build_prefix_dfa(word) } else { build_dfa(word) };
@@ -387,9 +389,10 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let before = Instant::now();
                     let mut docids = Vec::new();
                     while let Some(input) = stream.next() {
+                        let distance = dfa.eval(input).to_u8();
                         if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
                             docids.extend_from_slice(&result.docids);
-                            postings.insert((query, input.to_owned()), result.matches);
+                            postings.insert((query, input.to_owned(), distance), result.matches);
                         }
                     }
                     println!("{:3$}docids extend ({:?}) took {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
@@ -414,9 +417,10 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                 let mut docids = Vec::new();
                 while let Some(input) = stream.next() {
+                    let distance = dfa.eval(input).to_u8();
                     if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
                         docids.extend_from_slice(&result.docids);
-                        postings.insert((query, input.to_owned()), result.matches);
+                        postings.insert((query, input.to_owned(), distance), result.matches);
                     }
                 }
 
@@ -446,7 +450,8 @@ pub fn traverse_query_tree<'o, 'txn>(
                     println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                     let matches = Cow::Owned(SetBuf::new(matches).unwrap());
-                    postings.insert((query, vec![]), matches);
+                    let distance = 0;
+                    postings.insert((query, vec![], distance), matches);
 
                     Cow::Owned(docids)
                 } else {

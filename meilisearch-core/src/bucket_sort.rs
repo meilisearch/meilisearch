@@ -96,7 +96,7 @@ where
 
     let mut bare_matches = Vec::new();
     mk_arena!(arena);
-    for ((query, input), matches) in queries {
+    for ((query, input, distance), matches) in queries {
 
         let postings_list_view = PostingsListView::original(Rc::from(input), Rc::new(matches));
         // TODO optimize the filter by skipping docids that have already been seen
@@ -109,7 +109,7 @@ where
                 let bare_match = BareMatch {
                     document_id,
                     query_index: u16::try_from(query.id).unwrap(),
-                    distance: 0,
+                    distance: distance,
                     is_exact: true, // TODO where can I find this info?
                     postings_list: posting_list_index,
                 };
