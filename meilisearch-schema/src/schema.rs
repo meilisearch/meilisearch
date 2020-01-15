@@ -109,6 +109,9 @@ impl Schema {
 
     pub fn set_indexed<S: Into<String>>(&mut self, name: S) -> SResult<(FieldId, IndexedPos)> {
         let id = self.fields_map.insert(name.into())?;
+        if let Some(indexed_pos) = self.indexed_map.get(&id) {
+            return Ok((id, *indexed_pos))
+        };
         let pos = self.indexed.len() as u16;
         self.indexed.push(id);
         self.indexed_map.insert(id, pos.into());

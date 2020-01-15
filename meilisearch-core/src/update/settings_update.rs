@@ -44,8 +44,6 @@ pub fn apply_settings_update(
         }
     };
 
-    println!("settings: {:?}", settings);
-
     match settings.ranking_rules {
         UpdateState::Update(v) => {
             index.main.put_ranking_rules(writer, v)?;
@@ -125,8 +123,6 @@ pub fn apply_settings_update(
     };
 
     index.main.put_schema(writer, &schema)?;
-
-    println!("schema: {:?}", schema);
 
     match settings.stop_words {
         UpdateState::Update(stop_words) => {
