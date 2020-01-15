@@ -3,7 +3,7 @@ use std::fmt::Display;
 use http::status::StatusCode;
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
-use tide::response::IntoResponse;
+use tide::IntoResponse;
 use tide::Response;
 
 pub type SResult<T> = Result<T, ResponseError>;
@@ -120,7 +120,5 @@ struct ErrorMessage {
 
 fn error(message: String, status: StatusCode) -> Response {
     let message = ErrorMessage { message };
-    tide::response::json(message)
-        .with_status(status)
-        .into_response()
+    tide::Response::new(status.as_u16()).body_json(&message).unwrap()
 }

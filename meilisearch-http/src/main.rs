@@ -1,12 +1,12 @@
 use std::env::VarError::NotPresent;
 use std::{env, thread};
 
-use http::header::HeaderValue;
+use async_std::task;
 use log::info;
 use main_error::MainError;
 use structopt::StructOpt;
-use tide::middleware::{CorsMiddleware, CorsOrigin};
-use tide_log::RequestLogger;
+// use tide::middleware::{CorsMiddleware, CorsOrigin};
+// use tide_log::RequestLogger;
 
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
@@ -34,21 +34,23 @@ pub fn main() -> Result<(), MainError> {
         index_update_callback(name, &data_cloned, status);
     }));
 
-    let mut app = tide::App::with_state(data);
+    let mut app = tide::with_state(data);
 
-    app.middleware(
-        CorsMiddleware::new()
-            .allow_origin(CorsOrigin::from("*"))
-            .allow_methods(HeaderValue::from_static("GET, POST, OPTIONS")),
-    );
-    app.middleware(RequestLogger::new());
-    app.middleware(tide_compression::Compression::new());
-    app.middleware(tide_compression::Decompression::new());
+    // app.middleware(
+    //     CorsMiddleware::new()
+    //         .allow_origin(CorsOrigin::from("*"))
+    //         .allow_methods(HeaderValue::from_static("GET, POST, OPTIONS")),
+    // );
+    // app.middleware(RequestLogger::new());
+    // app.middleware(tide_compression::Compression::new());
+    // app.middleware(tide_compression::Decompression::new());
 
     routes::load_routes(&mut app);
 
     info!("Server HTTP enabled");
-    app.run(opt.http_addr)?;
 
+    task::block_on(async {
+        app.listen(opt.http_addr).await.unwrap();
+    });
     Ok(())
 }

@@ -1,14 +1,12 @@
 use chrono::serde::ts_seconds;
 use chrono::{DateTime, Utc};
 use heed::types::{SerdeBincode, Str};
-use http::StatusCode;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use tide::response::IntoResponse;
-use tide::{Context, Response};
+use tide::{Request, Response};
 
 use crate::error::{ResponseError, SResult};
-use crate::helpers::tide::ContextExt;
+use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
 use crate::models::token::*;
 use crate::Data;
@@ -22,7 +20,7 @@ fn generate_api_key() -> String {
         .collect()
 }
 
-pub async fn list(ctx: Context<Data>) -> SResult<Response> {
+pub async fn list(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
 
     let db = &ctx.state().db;
@@ -41,10 +39,10 @@ pub async fn list(ctx: Context<Data>) -> SResult<Response> {
         response.push(token);
     }
 
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
-pub async fn get(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
     let request_key = ctx.url_param("key")?;
 
@@ -62,7 +60,7 @@ pub async fn get(ctx: Context<Data>) -> SResult<Response> {
             token_key
         )))?;
 
-    Ok(tide::response::json(token_config))
+    Ok(tide::Response::new(200).body_json(&token_config).unwrap())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -75,7 +73,7 @@ pub struct CreatedRequest {
     expires_at: DateTime<Utc>,
 }
 
-pub async fn create(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn create(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
 
     let data: CreatedRequest = ctx.body_json().await.map_err(ResponseError::bad_request)?;
@@ -103,9 +101,7 @@ pub async fn create(mut ctx: Context<Data>) -> SResult<Response> {
 
     writer.commit().map_err(ResponseError::internal)?;
 
-    Ok(tide::response::json(token_definition)
-        .with_status(StatusCode::CREATED)
-        .into_response())
+    Ok(tide::Response::new(201).body_json(&token_definition).unwrap())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -118,7 +114,7 @@ pub struct UpdatedRequest {
     revoked: Option<bool>,
 }
 
-pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
     let request_key = ctx.url_param("key")?;
 
@@ -168,12 +164,10 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
 
     writer.commit().map_err(ResponseError::internal)?;
 
-    Ok(tide::response::json(token_config)
-        .with_status(StatusCode::OK)
-        .into_response())
+    Ok(tide::Response::new(200).body_json(&token_config).unwrap())
 }
 
-pub async fn delete(ctx: Context<Data>) -> SResult<StatusCode> {
+pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
     let request_key = ctx.url_param("key")?;
 
@@ -190,5 +184,5 @@ pub async fn delete(ctx: Context<Data>) -> SResult<StatusCode> {
 
     writer.commit().map_err(ResponseError::internal)?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(tide::Response::new(204))
 }

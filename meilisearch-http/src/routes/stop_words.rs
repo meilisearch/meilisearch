@@ -1,17 +1,15 @@
 use std::collections::BTreeSet;
 
-use http::StatusCode;
-use tide::response::IntoResponse;
-use tide::{Context, Response};
+use tide::{Request, Response};
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
 
 use crate::error::{ResponseError, SResult};
-use crate::helpers::tide::ContextExt;
+use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
 use crate::routes::document::IndexUpdateResponse;
 use crate::Data;
 
-pub async fn get(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
@@ -29,10 +27,10 @@ pub async fn get(ctx: Context<Data>) -> SResult<Response> {
         .into_strs()
         .map_err(ResponseError::internal)?;
 
-    Ok(tide::response::json(stop_words))
+    Ok(tide::Response::new(200).body_json(&stop_words).unwrap())
 }
 
-pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
@@ -52,12 +50,10 @@ pub async fn update(mut ctx: Context<Data>) -> SResult<Response> {
     writer.commit().map_err(ResponseError::internal)?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::response::json(response_body)
-        .with_status(StatusCode::ACCEPTED)
-        .into_response())
+    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
 }
 
-pub async fn delete(ctx: Context<Data>) -> SResult<Response> {
+pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
@@ -75,7 +71,5 @@ pub async fn delete(ctx: Context<Data>) -> SResult<Response> {
     writer.commit().map_err(ResponseError::internal)?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::response::json(response_body)
-        .with_status(StatusCode::ACCEPTED)
-        .into_response())
+    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
 }

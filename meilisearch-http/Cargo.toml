@@ -37,27 +37,14 @@ sysinfo = "0.9.5"
 ureq = { version = "0.11.2", features = ["tls"], default-features = false }
 walkdir = "2.2.9"
 whoami = "0.6"
+tide = "0.5.1"
+async-std = { version = "1.0.1", features = ["unstable", "attributes"] }
 
-[dependencies.async-compression]
-default-features = false
-features = ["stream", "gzip", "zlib", "brotli", "zstd"]
-version = "=0.1.0-alpha.7"
+[dev-dependencies]
+http-service-mock = "0.4.0"
+http-service = "0.4.0"
 
-[dependencies.tide]
-git = "https://github.com/rustasync/tide"
-rev = "e77709370bb24cf776fe6da902467c35131535b1"
-
-[dependencies.tide-log]
-git = "https://github.com/rustasync/tide"
-rev = "e77709370bb24cf776fe6da902467c35131535b1"
-
-[dependencies.tide-slog]
-git = "https://github.com/rustasync/tide"
-rev = "e77709370bb24cf776fe6da902467c35131535b1"
-
-[dependencies.tide-compression]
-git = "https://github.com/rustasync/tide"
-rev = "e77709370bb24cf776fe6da902467c35131535b1"
+tempdir = "0.3.7"
 
 [build-dependencies]
 vergen = "3.0.4"

@@ -1,15 +1,15 @@
 use crate::error::{ResponseError, SResult};
-use crate::helpers::tide::ContextExt;
+use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
 use crate::Data;
 
 use heed::types::{Str, Unit};
 use serde::Deserialize;
-use tide::Context;
+use tide::{Response, Request};
 
 const UNHEALTHY_KEY: &str = "_is_unhealthy";
 
-pub async fn get_health(ctx: Context<Data>) -> SResult<()> {
+pub async fn get_health(ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let reader = db.main_read_txn().map_err(ResponseError::internal)?;
 
@@ -19,10 +19,10 @@ pub async fn get_health(ctx: Context<Data>) -> SResult<()> {
         return Err(ResponseError::Maintenance);
     }
 
-    Ok(())
+    Ok(tide::Response::new(200))
 }
 
-pub async fn set_healthy(ctx: Context<Data>) -> SResult<()> {
+pub async fn set_healthy(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
 
     let db = &ctx.state().db;
@@ -38,10 +38,10 @@ pub async fn set_healthy(ctx: Context<Data>) -> SResult<()> {
         return Err(ResponseError::internal(e));
     }
 
-    Ok(())
+    Ok(tide::Response::new(200))
 }
 
-pub async fn set_unhealthy(ctx: Context<Data>) -> SResult<()> {
+pub async fn set_unhealthy(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
 
     let db = &ctx.state().db;
@@ -57,7 +57,7 @@ pub async fn set_unhealthy(ctx: Context<Data>) -> SResult<()> {
         return Err(ResponseError::internal(e));
     }
 
-    Ok(())
+    Ok(tide::Response::new(200))
 }
 
 #[derive(Deserialize, Clone)]
@@ -65,7 +65,7 @@ struct HealtBody {
     health: bool,
 }
 
-pub async fn change_healthyness(mut ctx: Context<Data>) -> SResult<()> {
+pub async fn change_healthyness(mut ctx: Request<Data>) -> SResult<Response> {
     let body: HealtBody = ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
     if body.health {

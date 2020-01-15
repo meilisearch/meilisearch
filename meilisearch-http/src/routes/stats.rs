@@ -5,11 +5,11 @@ use log::error;
 use pretty_bytes::converter::convert;
 use serde::Serialize;
 use sysinfo::{NetworkExt, Pid, ProcessExt, ProcessorExt, System, SystemExt};
-use tide::{Context, Response};
+use tide::{Request, Response};
 use walkdir::WalkDir;
 
 use crate::error::{ResponseError, SResult};
-use crate::helpers::tide::ContextExt;
+use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
 use crate::Data;
 
@@ -21,7 +21,7 @@ struct IndexStatsResponse {
     fields_frequency: HashMap<String, usize>,
 }
 
-pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
+pub async fn index_stat(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
     let index_uid = ctx.url_param("index")?;
     let index = ctx.index()?;
@@ -52,7 +52,7 @@ pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
         is_indexing,
         fields_frequency,
     };
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
 #[derive(Serialize)]
@@ -63,7 +63,7 @@ struct StatsResult {
     indexes: HashMap<String, IndexStatsResponse>,
 }
 
-pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_stats(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
 
     let mut index_list = HashMap::new();
@@ -127,7 +127,7 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
         indexes: index_list,
     };
 
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
 #[derive(Serialize)]
@@ -138,7 +138,7 @@ struct VersionResponse {
     pkg_version: String,
 }
 
-pub async fn get_version(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_version(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
     let response = VersionResponse {
         commit_sha: env!("VERGEN_SHA").to_string(),
@@ -146,7 +146,7 @@ pub async fn get_version(ctx: Context<Data>) -> SResult<Response> {
         pkg_version: env!("CARGO_PKG_VERSION").to_string(),
     };
 
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
 #[derive(Serialize)]
@@ -236,9 +236,10 @@ pub(crate) fn report(pid: Pid) -> SysInfo {
     info
 }
 
-pub async fn get_sys_info(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_sys_info(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
-    Ok(tide::response::json(report(ctx.state().server_pid)))
+    let response = report(ctx.state().server_pid);
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
 #[derive(Serialize)]
@@ -332,7 +333,8 @@ pub(crate) fn report_pretty(pid: Pid) -> SysInfoPretty {
     info
 }
 
-pub async fn get_sys_info_pretty(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_sys_info_pretty(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
-    Ok(tide::response::json(report_pretty(ctx.state().server_pid)))
+    let response = report_pretty(ctx.state().server_pid);
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }

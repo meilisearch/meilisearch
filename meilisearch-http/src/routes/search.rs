@@ -5,12 +5,11 @@ use std::time::Duration;
 use meilisearch_core::Index;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use tide::querystring::ContextExt as QSContextExt;
-use tide::{Context, Response};
+use tide::{Request, Response};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit};
-use crate::helpers::tide::ContextExt;
+use crate::helpers::tide::RequestExt;
 use crate::Data;
 
 #[derive(Deserialize)]
@@ -28,7 +27,7 @@ struct SearchQuery {
     matches: Option<bool>,
 }
 
-pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
+pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
     // ctx.is_allowed(DocumentsRead)?;
 
     let index = ctx.index()?;
@@ -41,8 +40,7 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
         .map_err(ResponseError::internal)?
         .ok_or(ResponseError::open_index("No Schema found"))?;
 
-    let query: SearchQuery = ctx
-        .url_query()
+    let query: SearchQuery = ctx.query()
         .map_err(|_| ResponseError::bad_request("invalid query parameter"))?;
 
     let mut search_builder = index.new_search(query.q.clone());
@@ -111,7 +109,7 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
         Err(others) => return Err(ResponseError::bad_request(others)),
     };
 
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
 #[derive(Clone, Deserialize)]
@@ -140,7 +138,7 @@ struct SearchMultiBodyResponse {
     query: String,
 }
 
-pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn search_multi_index(mut ctx: Request<Data>) -> SResult<Response> {
     // ctx.is_allowed(DocumentsRead)?;
     let body = ctx
         .body_json::<SearchMultiBody>()
@@ -232,5 +230,5 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
         query: body.query,
     };
 
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }

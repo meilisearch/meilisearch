@@ -4,9 +4,9 @@ use crate::Data;
 use chrono::Utc;
 use heed::types::{SerdeBincode, Str};
 use meilisearch_core::Index;
-use tide::Context;
+use tide::Request;
 
-pub trait ContextExt {
+pub trait RequestExt {
     fn is_allowed(&self, acl: ACL) -> SResult<()>;
     fn header(&self, name: &str) -> Result<String, ResponseError>;
     fn url_param(&self, name: &str) -> Result<String, ResponseError>;
@@ -14,14 +14,16 @@ pub trait ContextExt {
     fn identifier(&self) -> Result<String, ResponseError>;
 }
 
-impl ContextExt for Context<Data> {
+impl RequestExt for Request<Data> {
     fn is_allowed(&self, acl: ACL) -> SResult<()> {
         let api_key = match &self.state().api_key {
             Some(api_key) => api_key,
             None => return Ok(()),
         };
 
-        let user_api_key = self.header("X-Meili-API-Key")?;
+        let user_api_key = self.header("X-Meili-API-Key")
+            .ok_or(ResponseError::missing_header("X-Meili-API-Key"))?;
+
         if user_api_key == *api_key {
             return Ok(());
         }

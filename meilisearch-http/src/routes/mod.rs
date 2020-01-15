@@ -1,3 +1,6 @@
+use tide::Response;
+use tide::IntoResponse;
+use std::future::Future;
 use crate::data::Data;
 
 pub mod document;
@@ -10,113 +13,108 @@ pub mod stats;
 pub mod stop_words;
 pub mod synonym;
 
-pub fn load_routes(app: &mut tide::App<Data>) {
+async fn into_response<T: IntoResponse, U: IntoResponse>(x: impl Future<Output = Result<T, U>>) -> Response {
+    match x.await {
+        Ok(resp) => resp.into_response(),
+        Err(resp) => resp.into_response(),
+    }
+}
+
+pub fn load_routes(app: &mut tide::Server<Data>) {
     app.at("").nest(|router| {
         // expose the web interface static files
-        router.at("/").get(|_| async {
-            let content = include_str!("../../public/interface.html").to_owned();
-            tide::http::Response::builder()
-                .header(tide::http::header::CONTENT_TYPE, "text/html; charset=utf-8")
-                .status(tide::http::StatusCode::OK)
-                .body(content).unwrap()
+        router.at("/").get(|_| async move  {
+            let response = include_str!("../../public/interface.html");
+            response
         });
         router.at("/bulma.min.css").get(|_| async {
-            let content = include_str!("../../public/bulma.min.css");
-            tide::http::Response::builder()
-                .header(tide::http::header::CONTENT_TYPE, "text/css; charset=utf-8")
-                .status(tide::http::StatusCode::OK)
-                .body(content).unwrap()
+            let response = include_str!("../../public/bulma.min.css");
+            response
         });
 
         router.at("/indexes").nest(|router| {
             router
                 .at("/")
-                .get(index::list_indexes)
-                .post(index::create_index);
+                .get(|ctx| into_response(index::list_indexes(ctx)))
+                .post(|ctx| into_response(index::create_index(ctx)));
 
-            router.at("/search").post(search::search_multi_index);
+            router.at("/search").post(|ctx| into_response(search::search_multi_index(ctx)));
 
             router.at("/:index").nest(|router| {
-                router.at("/search").get(search::search_with_url_query);
+                router.at("/search").get(|ctx| into_response(search::search_with_url_query(ctx)));
 
                 router.at("/updates").nest(|router| {
-                    router.at("/").get(index::get_all_updates_status);
+                    router.at("/").get(|ctx| into_response(index::get_all_updates_status(ctx)));
 
-                    router.at("/:update_id").get(index::get_update_status);
+                    router.at("/:update_id").get(|ctx| into_response(index::get_update_status(ctx)));
                 });
 
                 router
                     .at("/")
-                    .get(index::get_index)
-                    .put(index::update_index)
-                    .delete(index::delete_index);
-
-                // router
-                //     .at("/schema")
-                //     .get(index::get_index_schema)
-                //     .put(index::update_schema);
+                    .get(|ctx| into_response(index::get_index(ctx)))
+                    .put(|ctx| into_response(index::update_index(ctx)))
+                    .delete(|ctx| into_response(index::delete_index(ctx)));
 
                 router.at("/documents").nest(|router| {
                     router
                         .at("/")
-                        .get(document::get_all_documents)
-                        .post(document::add_or_replace_multiple_documents)
-                        .put(document::add_or_update_multiple_documents)
-                        .delete(document::clear_all_documents);
+                        .get(|ctx| into_response(document::get_all_documents(ctx)))
+                        .post(|ctx| into_response(document::add_or_replace_multiple_documents(ctx)))
+                        .put(|ctx| into_response(document::add_or_update_multiple_documents(ctx)))
+                        .delete(|ctx| into_response(document::clear_all_documents(ctx)));
 
                     router.at("/:identifier").nest(|router| {
                         router
                             .at("/")
-                            .get(document::get_document)
-                            .delete(document::delete_document);
+                            .get(|ctx| into_response(document::get_document(ctx)))
+                            .delete(|ctx| into_response(document::delete_document(ctx)));
                     });
 
                     router
                         .at("/delete-batch")
-                        .post(document::delete_multiple_documents);
+                        .post(|ctx| into_response(document::delete_multiple_documents(ctx)));
                 });
 
                 router.at("/settings").nest(|router| {
                     router.at("/synonyms")
-                        .get(synonym::get)
-                        .post(synonym::update)
-                        .delete(synonym::delete);
+                        .get(|ctx| into_response(synonym::get(ctx)))
+                        .post(|ctx| into_response(synonym::update(ctx)))
+                        .delete(|ctx| into_response(synonym::delete(ctx)));
 
                     router.at("/stop-words")
-                        .get(stop_words::get)
-                        .post(stop_words::update)
-                        .delete(stop_words::delete);
+                        .get(|ctx| into_response(stop_words::get(ctx)))
+                        .post(|ctx| into_response(stop_words::update(ctx)))
+                        .delete(|ctx| into_response(stop_words::delete(ctx)));
                 })
-                .get(setting::get)
-                .post(setting::update);
+                .get(|ctx| into_response(setting::get(ctx)))
+                .post(|ctx| into_response(setting::update(ctx)));
 
-
-                router.at("/stats").get(stats::index_stat);
+                router.at("/stats").get(|ctx| into_response(stats::index_stat(ctx)));
             });
         });
 
         router.at("/keys").nest(|router| {
-            router.at("/").get(key::list).post(key::create);
+            router.at("/").get(|ctx| into_response(key::list(ctx))).post(|ctx| into_response(key::create(ctx)));
 
             router
                 .at("/:key")
-                .get(key::get)
-                .put(key::update)
-                .delete(key::delete);
+                .get(|ctx| into_response(key::get(ctx)))
+                .put(|ctx| into_response(key::update(ctx)))
+                .delete(|ctx| into_response(key::delete(ctx)));
         });
     });
 
     app.at("").nest(|router| {
         router
             .at("/health")
-            .get(health::get_health)
-            .put(health::change_healthyness);
+            .get(|ctx| into_response(health::get_health(ctx)))
+            .put(|ctx| into_response(health::change_healthyness(ctx)));
 
-        router.at("/stats").get(stats::get_stats);
-        router.at("/version").get(stats::get_version);
-        router.at("/sys-info").get(stats::get_sys_info);
+        router.at("/stats").get(|ctx| into_response(stats::get_stats(ctx)));
+        router.at("/version").get(|ctx| into_response(stats::get_version(ctx)));
+        router.at("/sys-info").get(|ctx| into_response(stats::get_sys_info(ctx)));
         router
             .at("/sys-info/pretty")
-            .get(stats::get_sys_info_pretty);
+            .get(|ctx| into_response(stats::get_sys_info_pretty(ctx)));
     });
 }
