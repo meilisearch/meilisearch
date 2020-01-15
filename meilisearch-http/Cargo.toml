@@ -40,10 +40,10 @@ whoami = "0.6"
 tide = "0.5.1"
 async-std = { version = "1.0.1", features = ["unstable", "attributes"] }
 
+
 [dev-dependencies]
 http-service-mock = "0.4.0"
 http-service = "0.4.0"
-
 tempdir = "0.3.7"
 
 [build-dependencies]
