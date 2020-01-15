@@ -158,6 +158,8 @@ pub fn apply_documents_addition<'a, 'b>(
         document.serialize(serializer)?;
     }
 
+
+
     write_documents_addition_index(
         writer,
         index,
@@ -243,6 +245,8 @@ pub fn apply_documents_partial_addition<'a, 'b>(
 
         document.serialize(serializer)?;
     }
+
+
 
     write_documents_addition_index(
         writer,
