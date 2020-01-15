@@ -184,7 +184,6 @@ pub fn apply_documents_addition<'a, 'b>(
         indexer,
     )?;
 
-
     // retrieve the words fst to compute all those prefixes
     let words_fst = match main_store.words_fst(writer)? {
         Some(fst) => fst,
@@ -205,9 +204,8 @@ pub fn apply_documents_addition<'a, 'b>(
             if let Some(postings_list) = postings_lists_store.postings_list(writer, input)?.map(|p| p.matches.into_owned()) {
                 let prefix = &input[..prefix_len];
 
-                let mut array = [0; 4];
-                array[..prefix_len].copy_from_slice(prefix);
-                let arr_prefix = array;
+                let mut arr_prefix = [0; 4];
+                arr_prefix[..prefix_len].copy_from_slice(prefix);
 
                 match previous_prefix {
                     Some((ref mut prev_prefix, ref mut prev_postings_list)) if *prev_prefix != arr_prefix => {

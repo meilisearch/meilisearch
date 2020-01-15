@@ -1702,7 +1702,7 @@ dependencies = [
 [[package]]
 name = "sdset"
 version = "0.3.6"
-source = "git+https://github.com/Kerollmops/sdset?branch=intersection-by-key#03c5008a4b23e11ba89c5579b023473b555d3864"
+source = "git+https://github.com/Kerollmops/sdset?branch=intersection-by-key#f8f5f9eeec3795d25f07f5b8a97d2df902ece7ec"
 
 [[package]]
 name = "semver"
