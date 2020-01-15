@@ -116,9 +116,8 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct IndexCreateRequest {
-    name: String,
+    name: Option<String>,
     uid: Option<String>,
-    // schema: Option<SchemaBody>,
 }
 
 #[derive(Debug, Serialize)]
@@ -137,6 +136,10 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         .body_json::<IndexCreateRequest>()
         .await
         .map_err(ResponseError::bad_request)?;
+
+    if let (None, None) = (body.name.clone(), body.uid.clone()) {
+        return Err(ResponseError::bad_request("Index creation must have an uid"));
+    }
 
     let db = &ctx.state().db;
 
@@ -157,14 +160,11 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
 
     let mut writer = db.main_write_txn().map_err(ResponseError::internal)?;
 
-    created_index
-        .main
-        .put_name(&mut writer, &body.name)
-        .map_err(ResponseError::internal)?;
+    let name = body.name.unwrap_or(uid.clone());
 
-    // let schema: Option<Schema> = body.schema.clone().map(Into::into);
-    // let mut response_update_id = None;
-    // if let Some(schema) = schema {
+    created_index.main
+        .put_name(&mut writer, &name)
+        .map_err(ResponseError::internal)?;
 
     writer.commit().map_err(ResponseError::internal)?;
 
