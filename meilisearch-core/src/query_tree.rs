@@ -332,25 +332,27 @@ pub fn traverse_query_tree<'o, 'txn>(
         println!("{:1$}OR", "", depth * 2);
 
         let before = Instant::now();
-        let mut ids = Vec::new();
+        let mut results = Vec::new();
 
         for op in operations {
-            let docids = match cache.get(op) {
-                Some(docids) => docids,
-                None => {
-                    let docids = match op {
-                        Operation::And(ops) => execute_and(reader, ctx, cache, postings, depth + 1, &ops)?,
-                        Operation::Or(ops) => execute_or(reader, ctx, cache, postings, depth + 1, &ops)?,
-                        Operation::Query(query) => execute_query(reader, ctx, postings, depth + 1, &query)?,
-                    };
-                    cache.entry(op).or_insert(docids)
-                }
-            };
-
-            ids.extend_from_slice(docids.as_ref());
+            if cache.get(op).is_none() {
+                let docids = match op {
+                    Operation::And(ops) => execute_and(reader, ctx, cache, postings, depth + 1, &ops)?,
+                    Operation::Or(ops) => execute_or(reader, ctx, cache, postings, depth + 1, &ops)?,
+                    Operation::Query(query) => execute_query(reader, ctx, postings, depth + 1, &query)?,
+                };
+                cache.insert(op, docids);
+            }
         }
 
-        let docids = SetBuf::from_dirty(ids);
+        for op in operations {
+            if let Some(docids) = cache.get(op) {
+                results.push(docids.as_ref());
+            }
+        }
+
+        let op = sdset::multi::Union::new(results);
+        let docids = op.into_set_buf();
 
         println!("{:3$}--- OR fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
 
