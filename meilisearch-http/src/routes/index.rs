@@ -166,13 +166,22 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         .put_name(&mut writer, &name)
         .map_err(ResponseError::internal)?;
 
+    let created_at = created_index.main
+        .created_at(&writer)
+        .map_err(ResponseError::internal)?
+        .unwrap_or(Utc::now());
+    let updated_at = created_index.main
+        .updated_at(&writer)
+        .map_err(ResponseError::internal)?
+        .unwrap_or(Utc::now());
+
     writer.commit().map_err(ResponseError::internal)?;
 
     let response_body = IndexCreateResponse {
         name: name,
         uid,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        created_at,
+        updated_at,
     };
 
     Ok(tide::Response::new(201).body_json(&response_body).unwrap())
