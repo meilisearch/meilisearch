@@ -5,10 +5,11 @@ use std::ops::Range;
 use std::time::Instant;
 use std::{cmp, fmt, iter::once};
 
+use fst::{IntoStreamer, Streamer};
+use itertools::{EitherOrBoth, merge_join_by};
+use meilisearch_tokenizer::split_query_string;
 use sdset::{Set, SetBuf, SetOperation};
 use slice_group_by::StrGroupBy;
-use itertools::{EitherOrBoth, merge_join_by};
-use fst::{IntoStreamer, Streamer};
 
 use crate::database::MainT;
 use crate::{store, DocumentId, DocIndex, MResult};
@@ -183,8 +184,7 @@ pub fn create_query_tree(
     query: &str,
 ) -> MResult<(Operation, HashMap<QueryId, Range<usize>>)>
 {
-    let query = query.to_lowercase();
-    let words = query.linear_group_by_key(char::is_whitespace).map(ToOwned::to_owned);
+    let words = split_query_string(query).map(str::to_lowercase);
     let words: Vec<_> = words.filter(|s| !s.contains(char::is_whitespace)).enumerate().collect();
 
     let mut mapper = QueryWordsMapper::new(words.iter().map(|(_, w)| w));
@@ -270,14 +270,22 @@ pub fn create_query_tree(
         }
     }
 
-    let mapping = mapper.mapping();
     let operation = create_operation(ngrams, Operation::Or);
+    let mapping = mapper.mapping();
 
     Ok((operation, mapping))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PostingsKey<'o> {
+    pub query: &'o Query,
+    pub input: Vec<u8>,
+    pub distance: u8,
+    pub is_exact: bool,
+}
+
 pub type Distance = u8;
-pub type Postings<'o, 'txn> = HashMap<(&'o Query, Vec<u8>, Distance), Cow<'txn, Set<DocIndex>>>;
+pub type Postings<'o, 'txn> = HashMap<PostingsKey<'o>, Cow<'txn, Set<DocIndex>>>;
 pub type Cache<'o, 'txn> = HashMap<&'o Operation, Cow<'txn, Set<DocumentId>>>;
 
 pub struct QueryResult<'o, 'txn> {
@@ -392,18 +400,18 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                     let mut docids = Vec::new();
 
-                    // We retrieve the cached postings list for all
+                    // We retrieve the cached postings lists for all
                     // the words that starts with this short prefix.
                     let result = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
-                    let distance = 0;
-                    postings.insert((query, word.clone().into_bytes(), distance), result.matches);
+                    let key = PostingsKey { query, input: word.clone().into_bytes(), distance: 0, is_exact: false };
+                    postings.insert(key, result.matches);
                     docids.extend_from_slice(&result.docids);
 
                     // We retrieve the exact postings list for the prefix,
                     // because we must consider these matches as exact.
                     if let Some(result) = ctx.postings_lists.postings_list(reader, word.as_bytes())? {
-                        let distance = 0;
-                        postings.insert((query, word.clone().into_bytes(), distance), result.matches);
+                        let key = PostingsKey { query, input: word.clone().into_bytes(), distance: 0, is_exact: true };
+                        postings.insert(key, result.matches);
                         docids.extend_from_slice(&result.docids);
                     }
 
@@ -426,10 +434,12 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let before = Instant::now();
                     let mut docids = Vec::new();
                     while let Some(input) = stream.next() {
-                        let distance = dfa.eval(input).to_u8();
                         if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
+                            let distance = dfa.eval(input).to_u8();
+                            let is_exact = *prefix == false && distance == 0 && input.len() == word.len();
                             docids.extend_from_slice(&result.docids);
-                            postings.insert((query, input.to_owned(), distance), result.matches);
+                            let key = PostingsKey { query, input: input.to_owned(), distance, is_exact };
+                            postings.insert(key, result.matches);
                         }
                     }
                     println!("{:3$}docids extend ({:?}) took {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
@@ -454,10 +464,11 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                 let mut docids = Vec::new();
                 while let Some(input) = stream.next() {
-                    let distance = dfa.eval(input).to_u8();
                     if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
+                        let distance = dfa.eval(input).to_u8();
                         docids.extend_from_slice(&result.docids);
-                        postings.insert((query, input.to_owned(), distance), result.matches);
+                        let key = PostingsKey { query, input: input.to_owned(), distance, is_exact: true };
+                        postings.insert(key, result.matches);
                     }
                 }
 
@@ -491,8 +502,8 @@ pub fn traverse_query_tree<'o, 'txn>(
                     println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                     let matches = Cow::Owned(SetBuf::new(matches).unwrap());
-                    let distance = 0;
-                    postings.insert((query, vec![], distance), matches);
+                    let key = PostingsKey { query, input: vec![], distance: 0, is_exact: true };
+                    postings.insert(key, matches);
 
                     Cow::Owned(docids)
                 } else {

@@ -28,7 +28,7 @@ use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
-use crate::query_tree::{create_query_tree, traverse_query_tree, QueryResult};
+use crate::query_tree::{create_query_tree, traverse_query_tree, QueryResult, PostingsKey};
 use crate::query_tree::Context as QTContext;
 use crate::store::Postings;
 
@@ -98,7 +98,7 @@ where
     let mut bare_matches = Vec::new();
     mk_arena!(arena);
 
-    for ((query, input, distance), matches) in queries {
+    for (PostingsKey{ query, input, distance, is_exact }, matches) in queries {
 
         let postings_list_view = PostingsListView::original(Rc::from(input), Rc::new(matches));
         let pllen = postings_list_view.len() as f32;
@@ -115,7 +115,7 @@ where
                         document_id,
                         query_index: query.id,
                         distance,
-                        is_exact: true, // TODO where can I find this info?
+                        is_exact,
                         postings_list: posting_list_index,
                     };
 
@@ -166,7 +166,6 @@ where
     debug!("sort by documents ids took {:.02?}", before_raw_documents_presort.elapsed());
 
     let before_raw_documents_building = Instant::now();
-    let mut prefiltered_documents = 0;
     let mut raw_documents = Vec::new();
     for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
         let raw_document = RawDocument::new(bare_matches, &mut arena, searchable_attrs.as_ref());
