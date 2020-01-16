@@ -257,16 +257,7 @@ pub fn update_task<'a, 'b>(
             let start = Instant::now();
 
             let update_type = UpdateType::ClearAll;
-            let result = apply_clear_all(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-                index.prefix_documents_cache,
-                index.prefix_postings_lists_cache,
-            );
+            let result = apply_clear_all(writer, index);
 
             (update_type, result, start.elapsed())
         }
@@ -274,17 +265,7 @@ pub fn update_task<'a, 'b>(
             let start = Instant::now();
 
             let update_type = UpdateType::Schema;
-            let result = apply_schema_update(
-                writer,
-                &schema,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-                index.prefix_documents_cache,
-                index.prefix_postings_lists_cache,
-            );
+            let result = apply_schema_update(writer, &schema, index);
 
             (update_type, result, start.elapsed())
         }
@@ -303,17 +284,7 @@ pub fn update_task<'a, 'b>(
                 number: documents.len(),
             };
 
-            let result = apply_documents_addition(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-                index.prefix_documents_cache,
-                index.prefix_postings_lists_cache,
-                documents,
-            );
+            let result = apply_documents_addition(writer, index, documents);
 
             (update_type, result, start.elapsed())
         }
@@ -324,17 +295,7 @@ pub fn update_task<'a, 'b>(
                 number: documents.len(),
             };
 
-            let result = apply_documents_partial_addition(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-                index.prefix_documents_cache,
-                index.prefix_postings_lists_cache,
-                documents,
-            );
+            let result = apply_documents_partial_addition(writer, index, documents);
 
             (update_type, result, start.elapsed())
         }
@@ -345,16 +306,7 @@ pub fn update_task<'a, 'b>(
                 number: documents.len(),
             };
 
-            let result = apply_documents_deletion(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-                index.prefix_postings_lists_cache,
-                documents,
-            );
+            let result = apply_documents_deletion(writer, index, documents);
 
             (update_type, result, start.elapsed())
         }
@@ -388,17 +340,7 @@ pub fn update_task<'a, 'b>(
                 number: stop_words.len(),
             };
 
-            let result = apply_stop_words_deletion(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-                index.prefix_documents_cache,
-                index.prefix_postings_lists_cache,
-                stop_words,
-            );
+            let result = apply_stop_words_deletion(writer, index, stop_words);
 
             (update_type, result, start.elapsed())
         }
@@ -421,21 +363,15 @@ pub fn update_task<'a, 'b>(
     Ok(status)
 }
 
-fn compute_short_prefixes(
-    writer: &mut heed::RwTxn<MainT>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
-) -> MResult<()>
-{
+fn compute_short_prefixes(writer: &mut heed::RwTxn<MainT>, index: &store::Index) -> MResult<()> {
     // retrieve the words fst to compute all those prefixes
-    let words_fst = match main_store.words_fst(writer)? {
+    let words_fst = match index.main.words_fst(writer)? {
         Some(fst) => fst,
         None => return Ok(()),
     };
 
     // clear the prefixes
-    let pplc_store = prefix_postings_lists_cache_store;
+    let pplc_store = index.prefix_postings_lists_cache;
     pplc_store.clear(writer)?;
 
     for prefix_len in 1..=2 {
@@ -450,7 +386,7 @@ fn compute_short_prefixes(
             // to consider it as an exact match and not as a prefix (=).
             if input.len() <= prefix_len { continue }
 
-            if let Some(postings_list) = postings_lists_store.postings_list(writer, input)?.map(|p| p.matches.into_owned()) {
+            if let Some(postings_list) = index.postings_lists.postings_list(writer, input)?.map(|p| p.matches.into_owned()) {
                 let prefix = &input[..prefix_len];
 
                 let mut arr_prefix = [0; 4];

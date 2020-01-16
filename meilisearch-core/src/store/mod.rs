@@ -242,7 +242,7 @@ impl Index {
 
     pub fn schema_update(&self, writer: &mut heed::RwTxn<UpdateT>, schema: Schema) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
-        update::push_schema_update(writer, self.updates, self.updates_results, schema)
+        update::push_schema_update(writer, self, schema)
     }
 
     pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> ZResult<u64> {

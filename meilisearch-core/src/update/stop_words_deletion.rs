@@ -63,13 +63,7 @@ pub fn push_stop_words_deletion(
 
 pub fn apply_stop_words_deletion(
     writer: &mut heed::RwTxn<MainT>,
-    main_store: store::Main,
-    documents_fields_store: store::DocumentsFields,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    postings_lists_store: store::PostingsLists,
-    docs_words_store: store::DocsWords,
-    prefix_documents_cache_store: store::PrefixDocumentsCache,
-    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
+    index: &store::Index,
     deletion: BTreeSet<String>,
 ) -> MResult<()> {
     let mut stop_words_builder = SetBuilder::memory();
@@ -85,7 +79,7 @@ pub fn apply_stop_words_deletion(
         .unwrap();
 
     // now we delete all of these stop words from the main store
-    let stop_words_fst = main_store.stop_words_fst(writer)?.unwrap_or_default();
+    let stop_words_fst = index.main.stop_words_fst(writer)?.unwrap_or_default();
 
     let op = OpBuilder::new()
         .add(&stop_words_fst)
@@ -99,22 +93,13 @@ pub fn apply_stop_words_deletion(
         .and_then(fst::Set::from_bytes)
         .unwrap();
 
-    main_store.put_stop_words_fst(writer, &stop_words_fst)?;
+    index.main.put_stop_words_fst(writer, &stop_words_fst)?;
 
     // now that we have setup the stop words
     // lets reindex everything...
-    if let Ok(number) = main_store.number_of_documents(writer) {
+    if let Ok(number) = index.main.number_of_documents(writer) {
         if number > 0 {
-            reindex_all_documents(
-                writer,
-                main_store,
-                documents_fields_store,
-                documents_fields_counts_store,
-                postings_lists_store,
-                docs_words_store,
-                prefix_documents_cache_store,
-                prefix_postings_lists_cache_store,
-            )?;
+            reindex_all_documents(writer, index)?;
         }
     }
 
