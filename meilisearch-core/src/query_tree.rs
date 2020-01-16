@@ -397,24 +397,22 @@ pub fn traverse_query_tree<'o, 'txn>(
                         array
                     };
 
-                    let mut results: Vec<&Set<_>> = Vec::new();
-
                     // We retrieve the cached postings lists for all
                     // the words that starts with this short prefix.
                     let result = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
                     let key = PostingsKey { query, input: word.clone().into_bytes(), distance: 0, is_exact: false };
                     postings.insert(key, result.matches);
-                    results.push(&result.docids);
+                    let prefix_docids = &result.docids;
 
                     // We retrieve the exact postings list for the prefix,
                     // because we must consider these matches as exact.
                     let result = ctx.postings_lists.postings_list(reader, word.as_bytes())?.unwrap_or_default();
                     let key = PostingsKey { query, input: word.clone().into_bytes(), distance: 0, is_exact: true };
                     postings.insert(key, result.matches);
-                    results.push(&result.docids);
+                    let exact_docids = &result.docids;
 
                     let before = Instant::now();
-                    let docids = sdset::multi::Union::new(results).into_set_buf();
+                    let docids = sdset::duo::Union::new(prefix_docids, exact_docids).into_set_buf();
                     println!("{:2$}prefix docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                     Cow::Owned(docids)
@@ -434,7 +432,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                     while let Some(input) = stream.next() {
                         if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
                             let distance = dfa.eval(input).to_u8();
-                            let is_exact = *prefix == false && distance == 0 && input.len() == word.len();
+                            let is_exact = distance == 0 && input.len() == word.len();
                             docids.extend_from_slice(&result.docids);
                             let key = PostingsKey { query, input: input.to_owned(), distance, is_exact };
                             postings.insert(key, result.matches);
