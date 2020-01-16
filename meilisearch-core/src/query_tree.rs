@@ -285,7 +285,6 @@ pub struct PostingsKey<'o> {
     pub is_exact: bool,
 }
 
-pub type Distance = u8;
 pub type Postings<'o, 'txn> = HashMap<PostingsKey<'o>, Cow<'txn, Set<DocIndex>>>;
 pub type Cache<'o, 'txn> = HashMap<&'o Operation, Cow<'txn, Set<DocumentId>>>;
 

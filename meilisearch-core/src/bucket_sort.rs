@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::mem;
@@ -28,7 +29,8 @@ use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
-use crate::query_tree::{create_query_tree, traverse_query_tree, QueryResult, PostingsKey};
+use crate::query_tree::{create_query_tree, traverse_query_tree};
+use crate::query_tree::{Operation, QueryResult, QueryKind, QueryId, PostingsKey};
 use crate::query_tree::Context as QTContext;
 use crate::store::Postings;
 
@@ -88,6 +90,17 @@ where
     println!("{:?}", operation);
     println!("{:?}", mapping);
 
+    fn recurs_operation<'o>(map: &mut HashMap<QueryId, &'o QueryKind>, operation: &'o Operation) {
+        match operation {
+            Operation::And(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
+            Operation::Or(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
+            Operation::Query(query) => { map.insert(query.id, &query.kind); },
+        }
+    }
+
+    let mut queries_kinds = HashMap::new();
+    recurs_operation(&mut queries_kinds, &operation);
+
     let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation).unwrap();
     println!("found {} documents", docids.len());
     println!("number of postings {:?}", queries.len());
@@ -99,7 +112,6 @@ where
     mk_arena!(arena);
 
     for (PostingsKey{ query, input, distance, is_exact }, matches) in queries {
-
         let postings_list_view = PostingsListView::original(Rc::from(input), Rc::new(matches));
         let pllen = postings_list_view.len() as f32;
 
@@ -126,7 +138,6 @@ where
             }
 
         } else {
-
             let mut offset = 0;
             for id in docids.as_slice() {
                 let di = DocIndex { document_id: *id, ..DocIndex::default() };
@@ -234,7 +245,7 @@ where
     debug!("proximity evaluation called {} times", proximity_count.load(Ordering::Relaxed));
 
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
-    let iter = iter.map(|rd| Document::from_raw(rd, &arena, searchable_attrs.as_ref()));
+    let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref()));
     let documents = iter.collect();
 
     debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
