@@ -49,10 +49,7 @@ impl Schema {
     }
 
     pub fn contains<S: Into<String>>(&self, name: S) -> bool {
-        match self.fields_map.get_id(name.into()) {
-            Some(_) => true,
-            None => false,
-        }
+        self.fields_map.get_id(name.into()).is_some()
     }
 
     pub fn get_or_create_empty<S: Into<String>>(&mut self, name: S) -> SResult<FieldId> {

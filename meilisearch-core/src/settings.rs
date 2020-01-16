@@ -1,5 +1,6 @@
 use std::sync::Mutex;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use once_cell::sync::Lazy;
@@ -16,8 +17,8 @@ pub struct Settings {
     pub ranking_distinct: Option<String>,
     pub attribute_identifier: Option<String>,
     pub attributes_searchable: Option<Vec<String>>,
-    pub attributes_displayed: Option<Vec<String>>,
-    pub attributes_ranked: Option<Vec<String>>,
+    pub attributes_displayed: Option<HashSet<String>>,
+    pub attributes_ranked: Option<HashSet<String>>,
     pub stop_words: Option<BTreeSet<String>>,
     pub synonyms: Option<BTreeMap<String, Vec<String>>>,
 }
@@ -93,6 +94,15 @@ impl<T> UpdateState<T> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct RankingRuleConversionError;
+
+impl std::fmt::Display for RankingRuleConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "impossible to convert into RankingRule")
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RankingRule {
     Typo,
@@ -105,14 +115,53 @@ pub enum RankingRule {
     Dsc(String),
 }
 
+impl ToString for RankingRule {
+    fn to_string(&self) -> String {
+        match self {
+            RankingRule::Typo => "_typo".to_string(),
+            RankingRule::Words => "_words".to_string(),
+            RankingRule::Proximity => "_proximity".to_string(),
+            RankingRule::Attribute => "_attribute".to_string(),
+            RankingRule::WordsPosition => "_word_position".to_string(),
+            RankingRule::Exact => "_exact".to_string(),
+            RankingRule::Asc(field) => format!("asc({})", field),
+            RankingRule::Dsc(field) => format!("dsc({})", field),
+        }
+    }
+}
+
+impl FromStr for RankingRule {
+    type Err = RankingRuleConversionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let rule = match s {
+            "_typo" => RankingRule::Typo,
+            "_words" => RankingRule::Words,
+            "_proximity" => RankingRule::Proximity,
+            "_attribute" => RankingRule::Attribute,
+            "_words_position" => RankingRule::WordsPosition,
+            "_exact" => RankingRule::Exact,
+            _ => {
+                let captures = RANKING_RULE_REGEX.lock().unwrap().captures(s).unwrap();
+                match captures[0].as_ref() {
+                    "asc" => RankingRule::Asc(captures[1].to_string()),
+                    "dsc" => RankingRule::Dsc(captures[1].to_string()),
+                    _ => return Err(RankingRuleConversionError)
+                }
+            }
+        };
+        Ok(rule)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettingsUpdate {
     pub ranking_rules: UpdateState<Vec<RankingRule>>,
     pub ranking_distinct: UpdateState<String>,
     pub attribute_identifier: UpdateState<String>,
     pub attributes_searchable: UpdateState<Vec<String>>,
-    pub attributes_displayed: UpdateState<Vec<String>>,
-    pub attributes_ranked: UpdateState<Vec<String>>,
+    pub attributes_displayed: UpdateState<HashSet<String>>,
+    pub attributes_ranked: UpdateState<HashSet<String>>,
     pub stop_words: UpdateState<BTreeSet<String>>,
     pub synonyms: UpdateState<BTreeMap<String, Vec<String>>>,
 }

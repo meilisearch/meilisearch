@@ -76,6 +76,50 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
                 });
 
                 router.at("/settings").nest(|router| {
+
+                    router
+                        .get(|ctx| into_response(setting::get_all(ctx)))
+                        .post(|ctx| into_response(setting::update_all(ctx)))
+                        .delete(|ctx| into_response(setting::delete_all(ctx)));
+
+                    router.at("/ranking").nest(|router| {
+
+                        router
+                            .get(|ctx| into_response(setting::get_ranking(ctx)))
+                            .post(|ctx| into_response(setting::update_ranking(ctx)))
+                            .delete(|ctx| into_response(setting::delete_ranking(ctx)));
+
+                        router.at("/rules")
+                            .get(|ctx| into_response(setting::get_rules(ctx)))
+                            .post(|ctx| into_response(setting::update_rules(ctx)))
+                            .delete(|ctx| into_response(setting::delete_rules(ctx)));
+
+                        router.at("/distinct")
+                            .get(|ctx| into_response(setting::get_distinct(ctx)))
+                            .post(|ctx| into_response(setting::update_distinct(ctx)))
+                            .delete(|ctx| into_response(setting::delete_distinct(ctx)));
+                    });
+
+                    router.at("/attributes").nest(|router| {
+                        router
+                            .get(|ctx| into_response(setting::get_attributes(ctx)))
+                            .post(|ctx| into_response(setting::update_attributes(ctx)))
+                            .delete(|ctx| into_response(setting::delete_attributes(ctx)));
+
+                        router.at("/identifier")
+                            .get(|ctx| into_response(setting::get_identifier(ctx)));
+
+                        router.at("/searchable")
+                            .get(|ctx| into_response(setting::get_searchable(ctx)))
+                            .post(|ctx| into_response(setting::update_searchable(ctx)))
+                            .delete(|ctx| into_response(setting::delete_searchable(ctx)));
+
+                        router.at("/displayed")
+                            .get(|ctx| into_response(setting::get_displayed(ctx)))
+                            .post(|ctx| into_response(setting::update_displayed(ctx)))
+                            .delete(|ctx| into_response(setting::delete_displayed(ctx)));
+                    });
+
                     router.at("/synonyms")
                         .get(|ctx| into_response(synonym::get(ctx)))
                         .post(|ctx| into_response(synonym::update(ctx)))
@@ -85,9 +129,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
                         .get(|ctx| into_response(stop_words::get(ctx)))
                         .post(|ctx| into_response(stop_words::update(ctx)))
                         .delete(|ctx| into_response(stop_words::delete(ctx)));
-                })
-                .get(|ctx| into_response(setting::get(ctx)))
-                .post(|ctx| into_response(setting::update(ctx)));
+                });
 
                 router.at("/stats").get(|ctx| into_response(stats::index_stat(ctx)));
             });

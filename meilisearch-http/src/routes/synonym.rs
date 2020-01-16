@@ -17,14 +17,10 @@ pub async fn get(ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
 
-    let synonyms_fst = index
-        .main
-        .synonyms_fst(&reader)?;
-
-    let synonyms_fst = synonyms_fst.unwrap_or_default();
+    let synonyms_fst = index.main.synonyms_fst(&reader)?.unwrap_or_default();
     let synonyms_list = synonyms_fst.stream().into_strs()?;
 
-    let mut response = IndexMap::new();
+    let mut synonyms = IndexMap::new();
 
     let index_synonyms = &index.synonyms;
 
@@ -33,11 +29,11 @@ pub async fn get(ctx: Request<Data>) -> SResult<Response> {
 
         if let Some(list) = alternative_list {
             let list = list.stream().into_strs()?;
-            response.insert(synonym, list);
+            synonyms.insert(synonym, list);
         }
     }
 
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
+    Ok(tide::Response::new(200).body_json(&synonyms).unwrap())
 }
 
 pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
