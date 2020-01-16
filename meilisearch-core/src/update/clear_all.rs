@@ -9,6 +9,8 @@ pub fn apply_clear_all(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
+    prefix_documents_cache: store::PrefixDocumentsCache,
+    prefix_postings_lists_cache: store::PrefixPostingsListsCache,
 ) -> MResult<()> {
     main_store.put_words_fst(writer, &fst::Set::default())?;
     main_store.put_ranked_map(writer, &RankedMap::default())?;
@@ -17,6 +19,8 @@ pub fn apply_clear_all(
     documents_fields_counts_store.clear(writer)?;
     postings_lists_store.clear(writer)?;
     docs_words_store.clear(writer)?;
+    prefix_documents_cache.clear(writer)?;
+    prefix_postings_lists_cache.clear(writer)?;
 
     Ok(())
 }

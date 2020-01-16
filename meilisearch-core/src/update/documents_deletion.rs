@@ -8,7 +8,7 @@ use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::serde::extract_document_id;
 use crate::store;
-use crate::update::{next_update_id, Update};
+use crate::update::{next_update_id, compute_short_prefixes, Update};
 use crate::{DocumentId, Error, MResult, RankedMap};
 
 pub struct DocumentsDeletion {
@@ -90,6 +90,7 @@ pub fn apply_documents_deletion(
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
+    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
     deletion: Vec<DocumentId>,
 ) -> MResult<()> {
     let idset = SetBuf::from_dirty(deletion);
@@ -188,6 +189,13 @@ pub fn apply_documents_deletion(
     main_store.put_words_fst(writer, &words)?;
     main_store.put_ranked_map(writer, &ranked_map)?;
     main_store.put_number_of_documents(writer, |old| old - deleted_documents_len)?;
+
+    compute_short_prefixes(
+        writer,
+        main_store,
+        postings_lists_store,
+        prefix_postings_lists_cache_store,
+    )?;
 
     Ok(())
 }

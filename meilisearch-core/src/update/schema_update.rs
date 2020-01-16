@@ -14,6 +14,7 @@ pub fn apply_schema_update(
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
     prefix_documents_cache_store: store::PrefixDocumentsCache,
+    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
 ) -> MResult<()> {
     use UnsupportedOperation::{
         CanOnlyIntroduceNewSchemaAttributesAtEnd, CannotRemoveSchemaAttribute,
@@ -57,6 +58,7 @@ pub fn apply_schema_update(
             postings_lists_store,
             docs_words_store,
             prefix_documents_cache_store,
+            prefix_postings_lists_cache_store,
         )?
     }
 
