@@ -32,7 +32,7 @@ pub use meilisearch_types::{DocIndex, DocumentId, Highlight};
 pub use query_words_mapper::QueryWordsMapper;
 
 use compact_arena::SmallArena;
-use crate::bucket_sort::{QueryWordAutomaton, PostingsListView};
+use crate::bucket_sort::PostingsListView;
 use crate::levenshtein::prefix_damerau_levenshtein;
 use crate::reordered_attrs::ReorderedAttrs;
 
@@ -47,7 +47,6 @@ pub struct Document {
 
 fn highlights_from_raw_document<'a, 'tag, 'txn>(
     raw_document: &RawDocument<'a, 'tag>,
-    automatons: &[QueryWordAutomaton],
     arena: &SmallArena<'tag, PostingsListView<'txn>>,
     searchable_attrs: Option<&ReorderedAttrs>,
 ) -> Vec<Highlight>
@@ -57,14 +56,14 @@ fn highlights_from_raw_document<'a, 'tag, 'txn>(
     for bm in raw_document.bare_matches.iter() {
         let postings_list = &arena[bm.postings_list];
         let input = postings_list.input();
-        let query = &automatons[bm.query_index as usize].query;
+        // let query = &automatons[bm.query_index as usize].query;
 
         for di in postings_list.iter() {
-            let covered_area = if query.len() > input.len() {
-                input.len()
-            } else {
-                prefix_damerau_levenshtein(query.as_bytes(), input).1
-            };
+            // let covered_area = if query.len() > input.len() {
+            //     input.len()
+            // } else {
+            //     prefix_damerau_levenshtein(query.as_bytes(), input).1
+            // };
 
             let attribute = searchable_attrs
                 .and_then(|sa| sa.reverse(di.attribute))
@@ -73,7 +72,7 @@ fn highlights_from_raw_document<'a, 'tag, 'txn>(
             let highlight = Highlight {
                 attribute: attribute,
                 char_index: di.char_index,
-                char_length: covered_area as u16,
+                char_length: di.char_length,
             };
 
             highlights.push(highlight);
@@ -97,19 +96,15 @@ impl Document {
     #[cfg(not(test))]
     pub fn from_raw<'a, 'tag, 'txn>(
         raw_document: RawDocument<'a, 'tag>,
-        // automatons: &[QueryWordAutomaton],
         arena: &SmallArena<'tag, PostingsListView<'txn>>,
         searchable_attrs: Option<&ReorderedAttrs>,
     ) -> Document
     {
-        // let highlights = highlights_from_raw_document(
-        //     &raw_document,
-        //     automatons,
-        //     arena,
-        //     searchable_attrs,
-        // );
-
-        let highlights = Vec::new();
+        let highlights = highlights_from_raw_document(
+            &raw_document,
+            arena,
+            searchable_attrs,
+        );
 
         Document { id: raw_document.id, highlights }
     }
@@ -117,21 +112,17 @@ impl Document {
     #[cfg(test)]
     pub fn from_raw<'a, 'tag, 'txn>(
         raw_document: RawDocument<'a, 'tag>,
-        // automatons: &[QueryWordAutomaton],
         arena: &SmallArena<'tag, PostingsListView<'txn>>,
         searchable_attrs: Option<&ReorderedAttrs>,
     ) -> Document
     {
         use crate::bucket_sort::SimpleMatch;
 
-        // let highlights = highlights_from_raw_document(
-        //     &raw_document,
-        //     automatons,
-        //     arena,
-        //     searchable_attrs,
-        // );
-
-        let highlights = Vec::new();
+        let highlights = highlights_from_raw_document(
+            &raw_document,
+            arena,
+            searchable_attrs,
+        );
 
         let mut matches = Vec::new();
         for sm in raw_document.processed_matches {

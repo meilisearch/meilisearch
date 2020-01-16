@@ -7,7 +7,7 @@ use sdset::SetBuf;
 use slice_group_by::GroupBy;
 
 use crate::automaton::QueryEnhancer;
-use crate::bucket_sort::{SimpleMatch, PostingsListView, QueryWordAutomaton};
+use crate::bucket_sort::{SimpleMatch, PostingsListView};
 use crate::database::MainT;
 use crate::query_tree::QueryId;
 use crate::{store, RawDocument, MResult};

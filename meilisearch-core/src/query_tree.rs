@@ -53,7 +53,8 @@ impl Operation {
     }
 
     fn phrase2(id: QueryId, prefix: bool, (left, right): (&str, &str)) -> Operation {
-        Operation::Query(Query { id, prefix, kind: QueryKind::Phrase(vec![left.to_owned(), right.to_owned()]) })
+        let kind = QueryKind::Phrase(vec![left.to_owned(), right.to_owned()]);
+        Operation::Query(Query { id, prefix, kind })
     }
 }
 
