@@ -29,7 +29,7 @@ pub async fn get(ctx: Request<Data>) -> SResult<Response> {
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
 
     let settings = match index.main.customs(&reader).unwrap() {
         Some(bytes) => bincode::deserialize(bytes).unwrap(),
@@ -64,8 +64,8 @@ pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
+    let mut writer = db.update_write_txn()?;
 
     let mut current_settings = match index.main.customs(&reader).unwrap() {
         Some(bytes) => bincode::deserialize(bytes).unwrap(),
@@ -82,11 +82,9 @@ pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
 
     let bytes = bincode::serialize(&current_settings).unwrap();
 
-    let update_id = index
-        .customs_update(&mut writer, bytes)
-        .map_err(ResponseError::internal)?;
+    let update_id = index.customs_update(&mut writer, bytes)?;
 
-    writer.commit().map_err(ResponseError::internal)?;
+    writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())

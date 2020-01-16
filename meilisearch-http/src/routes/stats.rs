@@ -8,7 +8,7 @@ use sysinfo::{NetworkExt, Pid, ProcessExt, ProcessorExt, System, SystemExt};
 use tide::{Request, Response};
 use walkdir::WalkDir;
 
-use crate::error::{ResponseError, SResult};
+use crate::error::{SResult, IntoInternalError};
 use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
 use crate::Data;
@@ -25,27 +25,12 @@ pub async fn index_stat(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
     let index_uid = ctx.url_param("index")?;
     let index = ctx.index()?;
-
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-    let update_reader = db.update_read_txn().map_err(ResponseError::internal)?;
-
-    let number_of_documents = index
-        .main
-        .number_of_documents(&reader)
-        .map_err(ResponseError::internal)?;
-
-    let fields_frequency = index
-        .main
-        .fields_frequency(&reader)
-        .map_err(ResponseError::internal)?
-        .unwrap_or_default();
-
-    let is_indexing = ctx
-        .state()
-        .is_indexing(&update_reader, &index_uid)
-        .map_err(ResponseError::internal)?
-        .ok_or(ResponseError::internal("'is_indexing' date not found"))?;
+    let reader = db.main_read_txn()?;
+    let update_reader = db.update_read_txn()?;
+    let number_of_documents = index.main.number_of_documents(&reader)?;
+    let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
+    let is_indexing = ctx.state().is_indexing(&update_reader, &index_uid)?.into_internal_error()?;
 
     let response = IndexStatsResponse {
         number_of_documents,
@@ -69,8 +54,8 @@ pub async fn get_stats(ctx: Request<Data>) -> SResult<Response> {
     let mut index_list = HashMap::new();
 
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-    let update_reader = db.update_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
+    let update_reader = db.update_read_txn()?;
 
     let indexes_set = ctx.state().db.indexes_uids();
     for index_uid in indexes_set {
@@ -78,22 +63,14 @@ pub async fn get_stats(ctx: Request<Data>) -> SResult<Response> {
 
         match index {
             Some(index) => {
-                let number_of_documents = index
-                    .main
-                    .number_of_documents(&reader)
-                    .map_err(ResponseError::internal)?;
+                let number_of_documents = index.main.number_of_documents(&reader)?;
 
-                let fields_frequency = index
-                    .main
-                    .fields_frequency(&reader)
-                    .map_err(ResponseError::internal)?
-                    .unwrap_or_default();
+                let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
 
                 let is_indexing = ctx
                     .state()
-                    .is_indexing(&update_reader, &index_uid)
-                    .map_err(ResponseError::internal)?
-                    .ok_or(ResponseError::internal("'is_indexing' date not found"))?;
+                    .is_indexing(&update_reader, &index_uid)?
+                    .into_internal_error()?;
 
                 let response = IndexStatsResponse {
                     number_of_documents,
@@ -116,10 +93,7 @@ pub async fn get_stats(ctx: Request<Data>) -> SResult<Response> {
         .filter(|metadata| metadata.is_file())
         .fold(0, |acc, m| acc + m.len());
 
-    let last_update = ctx
-        .state()
-        .last_update(&reader)
-        .map_err(ResponseError::internal)?;
+    let last_update = ctx.state().last_update(&reader)?;
 
     let response = StatsResult {
         database_size,

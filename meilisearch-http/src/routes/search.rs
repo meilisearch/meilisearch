@@ -32,12 +32,9 @@ pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
 
     let index = ctx.index()?;
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
 
-    let schema = index
-        .main
-        .schema(&reader)
-        .map_err(ResponseError::internal)?
+    let schema = index.main.schema(&reader)?
         .ok_or(ResponseError::open_index("No Schema found"))?;
 
     let query: SearchQuery = ctx.query()
@@ -201,10 +198,8 @@ pub async fn search_multi_index(mut ctx: Request<Data>) -> SResult<Response> {
                 }
             }
 
-            let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-            let response = search_builder
-                .search(&reader)
-                .map_err(ResponseError::internal)?;
+            let reader = db.main_read_txn()?;
+            let response = search_builder.search(&reader)?;
             Ok((index_uid, response))
         })
         .collect();

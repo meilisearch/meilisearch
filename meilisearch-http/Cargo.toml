@@ -14,10 +14,12 @@ name = "meilisearch"
 path = "src/main.rs"
 
 [dependencies]
+async-std = { version = "1.0.1", features = ["unstable", "attributes"] }
 bincode = "1.2.0"
 chrono = { version = "0.4.9", features = ["serde"] }
 crossbeam-channel = "0.4.0"
 env_logger = "0.7.1"
+fst = { version = "0.3.5", default-features = false }
 heed = "0.6.1"
 http = "0.1.19"
 indexmap = { version = "1.3.0", features = ["serde-1"] }
@@ -34,11 +36,10 @@ serde_qs = "0.5.1"
 siphasher = "0.3.1"
 structopt = "0.3.3"
 sysinfo = "0.9.5"
+tide = "0.5.1"
 ureq = { version = "0.11.2", features = ["tls"], default-features = false }
 walkdir = "2.2.9"
 whoami = "0.6"
-tide = "0.5.1"
-async-std = { version = "1.0.1", features = ["unstable", "attributes"] }
 
 
 [dev-dependencies]

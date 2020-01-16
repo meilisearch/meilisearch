@@ -30,14 +30,13 @@ impl RequestExt for Request<Data> {
         let request_index: Option<String> = None; //self.param::<String>("index").ok();
 
         let db = &self.state().db;
-        let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+        let reader = db.main_read_txn()?;
 
         let token_key = format!("{}{}", TOKEN_PREFIX_KEY, user_api_key);
 
         let token_config = db
             .common_store()
-            .get::<_, Str, SerdeBincode<Token>>(&reader, &token_key)
-            .map_err(ResponseError::internal)?
+            .get::<_, Str, SerdeBincode<Token>>(&reader, &token_key)?
             .ok_or(ResponseError::invalid_token(format!(
                 "Api key does not exist: {}",
                 user_api_key

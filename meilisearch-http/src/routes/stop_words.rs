@@ -12,20 +12,10 @@ use crate::Data;
 pub async fn get(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
-
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-
-    let stop_words_fst = index
-        .main
-        .stop_words_fst(&reader)
-        .map_err(ResponseError::internal)?;
-
-    let stop_words = stop_words_fst
-        .unwrap_or_default()
-        .stream()
-        .into_strs()
-        .map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
+    let stop_words_fst = index.main.stop_words_fst(&reader)?;
+    let stop_words = stop_words_fst.unwrap_or_default().stream().into_strs()?;
 
     Ok(tide::Response::new(200).body_json(&stop_words).unwrap())
 }
@@ -37,17 +27,16 @@ pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
     let data: BTreeSet<String> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
     let db = &ctx.state().db;
-    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.update_write_txn()?;
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Update(data),
         .. SettingsUpdate::default()
     };
 
-    let update_id = index.settings_update(&mut writer, settings)
-        .map_err(ResponseError::internal)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
 
-    writer.commit().map_err(ResponseError::internal)?;
+    writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())
@@ -58,17 +47,16 @@ pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
-    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.update_write_txn()?;
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Clear,
         .. SettingsUpdate::default()
     };
 
-    let update_id = index.settings_update(&mut writer, settings)
-        .map_err(ResponseError::internal)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
 
-    writer.commit().map_err(ResponseError::internal)?;
+    writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())

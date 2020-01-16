@@ -21,11 +21,10 @@ pub async fn get_document(ctx: Request<Data>) -> SResult<Response> {
     let document_id = meilisearch_core::serde::compute_document_id(identifier.clone());
 
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
 
     let response = index
-        .document::<IndexMap<String, Value>>(&reader, None, document_id)
-        .map_err(ResponseError::internal)?
+        .document::<IndexMap<String, Value>>(&reader, None, document_id)?
         .ok_or(ResponseError::document_not_found(&identifier))?;
 
     if response.is_empty() {
@@ -47,17 +46,13 @@ pub async fn delete_document(ctx: Request<Data>) -> SResult<Response> {
     let index = ctx.index()?;
     let identifier = ctx.identifier()?;
     let document_id = meilisearch_core::serde::compute_document_id(identifier.clone());
-
     let db = &ctx.state().db;
-    let mut update_writer = db.update_write_txn().map_err(ResponseError::internal)?;
-
+    let mut update_writer = db.update_write_txn()?;
     let mut documents_deletion = index.documents_deletion();
     documents_deletion.delete_document_by_id(document_id);
-    let update_id = documents_deletion
-        .finalize(&mut update_writer)
-        .map_err(ResponseError::internal)?;
+    let update_id = documents_deletion.finalize(&mut update_writer)?;
 
-    update_writer.commit().map_err(ResponseError::internal)?;
+    update_writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())
@@ -81,13 +76,11 @@ pub async fn get_all_documents(ctx: Request<Data>) -> SResult<Response> {
     let limit = query.limit.unwrap_or(20);
 
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
 
-    let documents_ids: Result<BTreeSet<_>, _> =
-        match index.documents_fields_counts.documents_ids(&reader) {
-            Ok(documents_ids) => documents_ids.skip(offset).take(limit).collect(),
-            Err(e) => return Err(ResponseError::internal(e)),
-        };
+    let documents_ids: Result<BTreeSet<_>, _> = index.documents_fields_counts
+        .documents_ids(&reader)?
+        .skip(offset).take(limit).collect();
 
     let documents_ids = match documents_ids {
         Ok(documents_ids) => documents_ids,
@@ -139,13 +132,9 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
     let query: UpdateDocumentsQuery = ctx.query().unwrap_or_default();
 
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-    let mut update_writer = db.update_write_txn().map_err(ResponseError::internal)?;
-
-    let current_schema = index
-        .main
-        .schema(&reader)
-        .map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
+    let mut update_writer = db.update_write_txn()?;
+    let current_schema = index.main.schema(&reader)?;
     if current_schema.is_none() {
         let id = match query.identifier {
             Some(id) => id,
@@ -160,9 +149,7 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
             attribute_identifier: Some(id),
             ..Settings::default()
         };
-        index
-            .settings_update(&mut update_writer, settings.into())
-            .map_err(ResponseError::internal)?;
+        index.settings_update(&mut update_writer, settings.into())?;
     }
 
     let mut document_addition = if is_partial {
@@ -175,11 +162,8 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
         document_addition.update_document(document);
     }
 
-    let update_id = document_addition
-        .finalize(&mut update_writer)
-        .map_err(ResponseError::internal)?;
-
-    update_writer.commit().map_err(ResponseError::internal)?;
+    let update_id = document_addition.finalize(&mut update_writer)?;
+    update_writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())
@@ -200,7 +184,7 @@ pub async fn delete_multiple_documents(mut ctx: Request<Data>) -> SResult<Respon
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
-    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.update_write_txn()?;
 
     let mut documents_deletion = index.documents_deletion();
 
@@ -211,11 +195,9 @@ pub async fn delete_multiple_documents(mut ctx: Request<Data>) -> SResult<Respon
         }
     }
 
-    let update_id = documents_deletion
-        .finalize(&mut writer)
-        .map_err(ResponseError::internal)?;
+    let update_id = documents_deletion.finalize(&mut writer)?;
 
-    writer.commit().map_err(ResponseError::internal)?;
+    writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())
@@ -227,12 +209,10 @@ pub async fn clear_all_documents(ctx: Request<Data>) -> SResult<Response> {
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
-    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.update_write_txn()?;
 
-    let update_id = index
-        .clear_all(&mut writer)
-        .map_err(ResponseError::internal)?;
-    writer.commit().map_err(ResponseError::internal)?;
+    let update_id = index.clear_all(&mut writer)?;
+    writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())

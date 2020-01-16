@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use tide::IntoResponse;
 use tide::Response;
 
+use crate::helpers::meilisearch::Error as SearchError;
+
 pub type SResult<T> = Result<T, ResponseError>;
 
 pub enum ResponseError {
@@ -121,4 +123,43 @@ struct ErrorMessage {
 fn error(message: String, status: StatusCode) -> Response {
     let message = ErrorMessage { message };
     tide::Response::new(status.as_u16()).body_json(&message).unwrap()
+}
+
+impl From<meilisearch_core::Error> for ResponseError {
+    fn from(err: meilisearch_core::Error) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
+impl From<heed::Error> for ResponseError {
+    fn from(err: heed::Error) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
+impl From<fst::Error> for ResponseError {
+    fn from(err: fst::Error) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
+impl From<SearchError> for ResponseError {
+    fn from(err: SearchError) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
+
+pub trait IntoInternalError<T> {
+    fn into_internal_error(self) -> SResult<T>;
+}
+
+/// Must be used only
+impl <T> IntoInternalError<T> for Option<T> {
+    fn into_internal_error(self) -> SResult<T> {
+        match self {
+            Some(value) => Ok(value),
+            None => Err(ResponseError::internal("Heed "))
+        }
+    }
 }
