@@ -142,9 +142,19 @@ fn split_best_frequency<'a>(reader: &heed::RoTxn<MainT>, ctx: &Context, word: &'
 }
 
 fn fetch_synonyms(reader: &heed::RoTxn<MainT>, ctx: &Context, words: &[&str]) -> MResult<Vec<Vec<String>>> {
-    let words = words.join(" "); // TODO ugly
-    // synonyms.synonyms(reader, words.as_bytes()).cloned().unwrap_or_default()
-    Ok(vec![])
+    let words = words.join(" ");
+    let set = ctx.synonyms.synonyms(reader, words.as_bytes())?.unwrap_or_default();
+
+    let mut strings = Vec::new();
+    let mut stream = set.stream();
+    while let Some(input) = stream.next() {
+        if let Ok(input) = std::str::from_utf8(input) {
+            let alts = input.split_ascii_whitespace().map(ToOwned::to_owned).collect();
+            strings.push(alts);
+        }
+    }
+
+    Ok(strings)
 }
 
 fn is_last<I: IntoIterator>(iter: I) -> impl Iterator<Item=(bool, I::Item)> {
