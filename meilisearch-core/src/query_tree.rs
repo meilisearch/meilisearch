@@ -9,7 +9,6 @@ use fst::{IntoStreamer, Streamer};
 use itertools::{EitherOrBoth, merge_join_by};
 use meilisearch_tokenizer::split_query_string;
 use sdset::{Set, SetBuf, SetOperation};
-use slice_group_by::StrGroupBy;
 
 use crate::database::MainT;
 use crate::{store, DocumentId, DocIndex, MResult};
@@ -387,7 +386,7 @@ pub fn traverse_query_tree<'o, 'txn>(
     {
         let before = Instant::now();
 
-        let Query { id, prefix, kind } = query;
+        let Query { prefix, kind, .. } = query;
         let docids: Cow<Set<_>> = match kind {
             QueryKind::Tolerant(word) => {
                 if *prefix && word.len() <= 2 {

@@ -1,28 +1,18 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::collections::HashSet;
-use std::convert::TryFrom;
 use std::mem;
 use std::ops::Deref;
 use std::ops::Range;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
-use std::{cmp, fmt};
+use std::time::Instant;
+use std::fmt;
 
 use compact_arena::{SmallArena, Idx32, mk_arena};
-use fst::{IntoStreamer, Streamer};
-use levenshtein_automata::DFA;
 use log::debug;
-use meilisearch_tokenizer::{is_cjk, split_query_string};
 use meilisearch_types::DocIndex;
 use sdset::{Set, SetBuf, exponential_search};
 use slice_group_by::{GroupBy, GroupByMut};
-
-use crate::automaton::NGRAMS;
-use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
-use crate::automaton::normalize_str;
-use crate::automaton::{QueryEnhancer, QueryEnhancerBuilder};
 
 use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
@@ -32,7 +22,6 @@ use crate::{store, Document, DocumentId, MResult};
 use crate::query_tree::{create_query_tree, traverse_query_tree};
 use crate::query_tree::{Operation, QueryResult, QueryKind, QueryId, PostingsKey};
 use crate::query_tree::Context as QTContext;
-use crate::store::Postings;
 
 pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
@@ -87,8 +76,8 @@ where
     };
 
     let (operation, mapping) = create_query_tree(reader, &context, query).unwrap();
-    println!("{:?}", operation);
-    println!("{:?}", mapping);
+    debug!("operation:\n{:?}", operation);
+    debug!("mapping:\n{:?}", mapping);
 
     fn recurs_operation<'o>(map: &mut HashMap<QueryId, &'o QueryKind>, operation: &'o Operation) {
         match operation {
@@ -106,12 +95,278 @@ where
     println!("number of postings {:?}", queries.len());
 
     let before = Instant::now();
+    mk_arena!(arena);
+    let mut bare_matches = cleanup_bare_matches(&mut arena, &docids, queries);
+    println!("matches cleaned in {:.02?}", before.elapsed());
 
+    let before_bucket_sort = Instant::now();
+
+    let before_raw_documents_building = Instant::now();
+    let mut raw_documents = Vec::new();
+    for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
+        let raw_document = RawDocument::new(bare_matches, &mut arena, searchable_attrs.as_ref());
+        raw_documents.push(raw_document);
+    }
+    debug!("creating {} candidates documents took {:.02?}",
+        raw_documents.len(),
+        before_raw_documents_building.elapsed(),
+    );
+
+    let before_criterion_loop = Instant::now();
+    let proximity_count = AtomicUsize::new(0);
+
+    let mut groups = vec![raw_documents.as_mut_slice()];
+
+    'criteria: for criterion in criteria.as_ref() {
+        let tmp_groups = mem::replace(&mut groups, Vec::new());
+        let mut documents_seen = 0;
+
+        for mut group in tmp_groups {
+            let before_criterion_preparation = Instant::now();
+
+            let ctx = ContextMut {
+                reader,
+                postings_lists: &mut arena,
+                query_mapping: &mapping,
+                documents_fields_counts_store,
+            };
+
+            criterion.prepare(ctx, &mut group)?;
+            debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
+
+            let ctx = Context {
+                postings_lists: &arena,
+                query_mapping: &mapping,
+            };
+
+            let before_criterion_sort = Instant::now();
+            group.sort_unstable_by(|a, b| criterion.evaluate(&ctx, a, b));
+            debug!("{:?} evaluation took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
+
+            for group in group.binary_group_by_mut(|a, b| criterion.eq(&ctx, a, b)) {
+                debug!("{:?} produced a group of size {}", criterion.name(), group.len());
+
+                documents_seen += group.len();
+                groups.push(group);
+
+                // we have sort enough documents if the last document sorted is after
+                // the end of the requested range, we can continue to the next criterion
+                if documents_seen >= range.end {
+                    continue 'criteria;
+                }
+            }
+        }
+    }
+
+    debug!("criterion loop took {:.02?}", before_criterion_loop.elapsed());
+    debug!("proximity evaluation called {} times", proximity_count.load(Ordering::Relaxed));
+
+    let iter = raw_documents.into_iter().skip(range.start).take(range.len());
+    let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref()));
+    let documents = iter.collect();
+
+    debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
+
+    Ok(documents)
+}
+
+pub fn bucket_sort_with_distinct<'c, FI, FD>(
+    reader: &heed::RoTxn<MainT>,
+    query: &str,
+    range: Range<usize>,
+    filter: Option<FI>,
+    distinct: FD,
+    distinct_size: usize,
+    criteria: Criteria<'c>,
+    searchable_attrs: Option<ReorderedAttrs>,
+    main_store: store::Main,
+    postings_lists_store: store::PostingsLists,
+    documents_fields_counts_store: store::DocumentsFieldsCounts,
+    synonyms_store: store::Synonyms,
+    _prefix_documents_cache_store: store::PrefixDocumentsCache,
+    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
+) -> MResult<Vec<Document>>
+where
+    FI: Fn(DocumentId) -> bool,
+    FD: Fn(DocumentId) -> Option<u64>,
+{
+    let words_set = match unsafe { main_store.static_words_fst(reader)? } {
+        Some(words) => words,
+        None => return Ok(Vec::new()),
+    };
+
+    let context = QTContext {
+        words_set,
+        synonyms: synonyms_store,
+        postings_lists: postings_lists_store,
+        prefix_postings_lists: prefix_postings_lists_cache_store,
+    };
+
+    let (operation, mapping) = create_query_tree(reader, &context, query).unwrap();
+    debug!("operation:\n{:?}", operation);
+    debug!("mapping:\n{:?}", mapping);
+
+    fn recurs_operation<'o>(map: &mut HashMap<QueryId, &'o QueryKind>, operation: &'o Operation) {
+        match operation {
+            Operation::And(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
+            Operation::Or(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
+            Operation::Query(query) => { map.insert(query.id, &query.kind); },
+        }
+    }
+
+    let mut queries_kinds = HashMap::new();
+    recurs_operation(&mut queries_kinds, &operation);
+
+    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation).unwrap();
+    println!("found {} documents", docids.len());
+    println!("number of postings {:?}", queries.len());
+
+    let before = Instant::now();
+    mk_arena!(arena);
+    let mut bare_matches = cleanup_bare_matches(&mut arena, &docids, queries);
+    println!("matches cleaned in {:.02?}", before.elapsed());
+
+    let before_raw_documents_building = Instant::now();
+    let mut raw_documents = Vec::new();
+    for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
+        let raw_document = RawDocument::new(bare_matches, &mut arena, searchable_attrs.as_ref());
+        raw_documents.push(raw_document);
+    }
+    debug!("creating {} candidates documents took {:.02?}",
+        raw_documents.len(),
+        before_raw_documents_building.elapsed(),
+    );
+
+    let mut groups = vec![raw_documents.as_mut_slice()];
+    let mut key_cache = HashMap::new();
+
+    let mut filter_map = HashMap::new();
+    // these two variables informs on the current distinct map and
+    // on the raw offset of the start of the group where the
+    // range.start bound is located according to the distinct function
+    let mut distinct_map = DistinctMap::new(distinct_size);
+    let mut distinct_raw_offset = 0;
+
+    'criteria: for criterion in criteria.as_ref() {
+        let tmp_groups = mem::replace(&mut groups, Vec::new());
+        let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
+        let mut documents_seen = 0;
+
+        for mut group in tmp_groups {
+            // if this group does not overlap with the requested range,
+            // push it without sorting and splitting it
+            if documents_seen + group.len() < distinct_raw_offset {
+                documents_seen += group.len();
+                groups.push(group);
+                continue;
+            }
+
+            let ctx = ContextMut {
+                reader,
+                postings_lists: &mut arena,
+                query_mapping: &mapping,
+                documents_fields_counts_store,
+            };
+
+            let before_criterion_preparation = Instant::now();
+            criterion.prepare(ctx, &mut group)?;
+            debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
+
+            let ctx = Context {
+                postings_lists: &arena,
+                query_mapping: &mapping,
+            };
+
+            let before_criterion_sort = Instant::now();
+            group.sort_unstable_by(|a, b| criterion.evaluate(&ctx, a, b));
+            debug!("{:?} evaluation took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
+
+            for group in group.binary_group_by_mut(|a, b| criterion.eq(&ctx, a, b)) {
+                // we must compute the real distinguished len of this sub-group
+                for document in group.iter() {
+                    let filter_accepted = match &filter {
+                        Some(filter) => {
+                            let entry = filter_map.entry(document.id);
+                            *entry.or_insert_with(|| (filter)(document.id))
+                        }
+                        None => true,
+                    };
+
+                    if filter_accepted {
+                        let entry = key_cache.entry(document.id);
+                        let key = entry.or_insert_with(|| (distinct)(document.id).map(Rc::new));
+
+                        match key.clone() {
+                            Some(key) => buf_distinct.register(key),
+                            None => buf_distinct.register_without_key(),
+                        };
+                    }
+
+                    // the requested range end is reached: stop computing distinct
+                    if buf_distinct.len() >= range.end {
+                        break;
+                    }
+                }
+
+                documents_seen += group.len();
+                groups.push(group);
+
+                // if this sub-group does not overlap with the requested range
+                // we must update the distinct map and its start index
+                if buf_distinct.len() < range.start {
+                    buf_distinct.transfert_to_internal();
+                    distinct_raw_offset = documents_seen;
+                }
+
+                // we have sort enough documents if the last document sorted is after
+                // the end of the requested range, we can continue to the next criterion
+                if buf_distinct.len() >= range.end {
+                    continue 'criteria;
+                }
+            }
+        }
+    }
+
+    // once we classified the documents related to the current
+    // automatons we save that as the next valid result
+    let mut seen = BufferedDistinctMap::new(&mut distinct_map);
+
+    let mut documents = Vec::with_capacity(range.len());
+    for raw_document in raw_documents.into_iter().skip(distinct_raw_offset) {
+        let filter_accepted = match &filter {
+            Some(_) => filter_map.remove(&raw_document.id).unwrap(),
+            None => true,
+        };
+
+        if filter_accepted {
+            let key = key_cache.remove(&raw_document.id).unwrap();
+            let distinct_accepted = match key {
+                Some(key) => seen.register(key),
+                None => seen.register_without_key(),
+            };
+
+            if distinct_accepted && seen.len() > range.start {
+                documents.push(Document::from_raw(raw_document, &queries_kinds, &arena, searchable_attrs.as_ref()));
+                if documents.len() == range.len() {
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(documents)
+}
+
+fn cleanup_bare_matches<'tag, 'txn>(
+    arena: &mut SmallArena<'tag, PostingsListView<'txn>>,
+    docids: &Set<DocumentId>,
+    queries: HashMap<PostingsKey, Cow<'txn, Set<DocIndex>>>,
+) -> Vec<BareMatch<'tag>>
+{
     let docidslen = docids.len() as f32;
     let mut bare_matches = Vec::new();
-    mk_arena!(arena);
 
-    for (PostingsKey{ query, input, distance, is_exact }, matches) in queries {
+    for (PostingsKey { query, input, distance, is_exact }, matches) in queries {
         let postings_list_view = PostingsListView::original(Rc::from(input), Rc::new(matches));
         let pllen = postings_list_view.len() as f32;
 
@@ -168,112 +423,11 @@ where
         }
     }
 
-    println!("matches cleaned in {:.02?}", before.elapsed());
-
-    let before_bucket_sort = Instant::now();
-
     let before_raw_documents_presort = Instant::now();
     bare_matches.sort_unstable_by_key(|sm| sm.document_id);
     debug!("sort by documents ids took {:.02?}", before_raw_documents_presort.elapsed());
 
-    let before_raw_documents_building = Instant::now();
-    let mut raw_documents = Vec::new();
-    for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
-        let raw_document = RawDocument::new(bare_matches, &mut arena, searchable_attrs.as_ref());
-        raw_documents.push(raw_document);
-    }
-    debug!("creating {} candidates documents took {:.02?}",
-        raw_documents.len(),
-        before_raw_documents_building.elapsed(),
-    );
-
-    let before_criterion_loop = Instant::now();
-    let proximity_count = AtomicUsize::new(0);
-
-    let mut groups = vec![raw_documents.as_mut_slice()];
-
-    'criteria: for criterion in criteria.as_ref() {
-        let tmp_groups = mem::replace(&mut groups, Vec::new());
-        let mut documents_seen = 0;
-
-        for mut group in tmp_groups {
-            let before_criterion_preparation = Instant::now();
-
-            let ctx = ContextMut {
-                reader,
-                postings_lists: &mut arena,
-                query_mapping: &mapping,
-                documents_fields_counts_store,
-            };
-
-            criterion.prepare(ctx, &mut group)?;
-            debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
-
-            let ctx = Context {
-                postings_lists: &arena,
-                query_mapping: &mapping,
-            };
-
-            let must_count = criterion.name() == "proximity";
-
-            let before_criterion_sort = Instant::now();
-            group.sort_unstable_by(|a, b| {
-                if must_count {
-                    proximity_count.fetch_add(1, Ordering::SeqCst);
-                }
-
-                criterion.evaluate(&ctx, a, b)
-            });
-            debug!("{:?} evaluation took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
-
-            for group in group.binary_group_by_mut(|a, b| criterion.eq(&ctx, a, b)) {
-                debug!("{:?} produced a group of size {}", criterion.name(), group.len());
-
-                documents_seen += group.len();
-                groups.push(group);
-
-                // we have sort enough documents if the last document sorted is after
-                // the end of the requested range, we can continue to the next criterion
-                if documents_seen >= range.end {
-                    continue 'criteria;
-                }
-            }
-        }
-    }
-
-    debug!("criterion loop took {:.02?}", before_criterion_loop.elapsed());
-    debug!("proximity evaluation called {} times", proximity_count.load(Ordering::Relaxed));
-
-    let iter = raw_documents.into_iter().skip(range.start).take(range.len());
-    let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref()));
-    let documents = iter.collect();
-
-    debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
-
-    Ok(documents)
-}
-
-pub fn bucket_sort_with_distinct<'c, FI, FD>(
-    reader: &heed::RoTxn<MainT>,
-    query: &str,
-    range: Range<usize>,
-    filter: Option<FI>,
-    distinct: FD,
-    distinct_size: usize,
-    criteria: Criteria<'c>,
-    searchable_attrs: Option<ReorderedAttrs>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    synonyms_store: store::Synonyms,
-    prefix_documents_cache_store: store::PrefixDocumentsCache,
-    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
-) -> MResult<Vec<Document>>
-where
-    FI: Fn(DocumentId) -> bool,
-    FD: Fn(DocumentId) -> Option<u64>,
-{
-    unimplemented!()
+    bare_matches
 }
 
 pub struct BareMatch<'tag> {

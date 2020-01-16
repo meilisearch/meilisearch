@@ -429,7 +429,7 @@ pub fn write_documents_addition_index(
     main_store: store::Main,
     postings_lists_store: store::PostingsLists,
     docs_words_store: store::DocsWords,
-    prefix_documents_cache_store: store::PrefixDocumentsCache,
+    _prefix_documents_cache_store: store::PrefixDocumentsCache,
     ranked_map: &RankedMap,
     number_of_inserted_documents: usize,
     indexer: RawIndexer,
