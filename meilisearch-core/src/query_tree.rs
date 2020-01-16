@@ -397,25 +397,24 @@ pub fn traverse_query_tree<'o, 'txn>(
                         array
                     };
 
-                    let mut docids = Vec::new();
+                    let mut results: Vec<&Set<_>> = Vec::new();
 
                     // We retrieve the cached postings lists for all
                     // the words that starts with this short prefix.
                     let result = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
                     let key = PostingsKey { query, input: word.clone().into_bytes(), distance: 0, is_exact: false };
                     postings.insert(key, result.matches);
-                    docids.extend_from_slice(&result.docids);
+                    results.push(&result.docids);
 
                     // We retrieve the exact postings list for the prefix,
                     // because we must consider these matches as exact.
-                    if let Some(result) = ctx.postings_lists.postings_list(reader, word.as_bytes())? {
-                        let key = PostingsKey { query, input: word.clone().into_bytes(), distance: 0, is_exact: true };
-                        postings.insert(key, result.matches);
-                        docids.extend_from_slice(&result.docids);
-                    }
+                    let result = ctx.postings_lists.postings_list(reader, word.as_bytes())?.unwrap_or_default();
+                    let key = PostingsKey { query, input: word.clone().into_bytes(), distance: 0, is_exact: true };
+                    postings.insert(key, result.matches);
+                    results.push(&result.docids);
 
                     let before = Instant::now();
-                    let docids = SetBuf::from_dirty(docids);
+                    let docids = sdset::multi::Union::new(results).into_set_buf();
                     println!("{:2$}prefix docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                     Cow::Owned(docids)
