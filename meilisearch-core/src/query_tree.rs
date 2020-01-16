@@ -380,7 +380,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         let before = Instant::now();
 
         let Query { id, prefix, kind } = query;
-        let docids = match kind {
+        let docids: Cow<Set<_>> = match kind {
             QueryKind::Tolerant(word) => {
                 if *prefix && word.len() <= 2 {
                     let prefix = {
@@ -390,10 +390,29 @@ pub fn traverse_query_tree<'o, 'txn>(
                         array
                     };
 
+                    let mut docids = Vec::new();
+
+                    // We retrieve the cached postings list for all
+                    // the words that starts with this short prefix.
                     let result = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
                     let distance = 0;
                     postings.insert((query, word.clone().into_bytes(), distance), result.matches);
-                    result.docids
+                    docids.extend_from_slice(&result.docids);
+
+                    // We retrieve the exact postings list for the prefix,
+                    // because we must consider these matches as exact.
+                    if let Some(result) = ctx.postings_lists.postings_list(reader, word.as_bytes())? {
+                        let distance = 0;
+                        postings.insert((query, word.clone().into_bytes(), distance), result.matches);
+                        docids.extend_from_slice(&result.docids);
+                    }
+
+                    let before = Instant::now();
+                    let docids = SetBuf::from_dirty(docids);
+                    println!("{:2$}prefix docids construction took {:.02?}", "", before.elapsed(), depth * 2);
+
+                    Cow::Owned(docids)
+
                 } else {
                     let dfa = if *prefix { build_prefix_dfa(word) } else { build_dfa(word) };
 
@@ -442,7 +461,11 @@ pub fn traverse_query_tree<'o, 'txn>(
                     }
                 }
 
-                Cow::Owned(SetBuf::from_dirty(docids))
+                let before = Instant::now();
+                let docids = SetBuf::from_dirty(docids);
+                println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
+
+                Cow::Owned(docids)
             },
             QueryKind::Phrase(words) => {
                 // TODO support prefix and non-prefix exact DFA
