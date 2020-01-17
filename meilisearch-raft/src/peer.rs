@@ -8,7 +8,7 @@ use raft::storage::MemStorage;
 use raft::{self, Config, RawNode};
 use slog::{o, Drain};
 
-use crate::util;
+// use crate::util;
 
 pub enum PeerMessage {
     Propose(Vec<u8>),
@@ -48,7 +48,7 @@ impl Peer {
             match receiver.recv_timeout(timeout) {
                 Ok(PeerMessage::Propose(p)) => match self.node.propose(vec![], p) {
                     Ok(_) => (),
-                    Err(_err) => self.apply_message(Entry::new()),
+                    Err(_err) => self.apply_message(Entry::default()),
                 },
                 Ok(PeerMessage::ConfChange(cc)) => {
                     match self.node.propose_conf_change(vec![], cc.clone()) {

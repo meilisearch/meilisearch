@@ -1,12 +1,61 @@
 syntax = "proto3";
 package indexpb;
 
-import "indexrpcpb.proto";
 import "eraftpb.proto";
 
 service Index {
-    rpc Raft (eraftpb.Message) returns (indexrpcpb.RaftDone) {
-    }
-    rpc RaftConfChange (indexrpcpb.ConfChangeReq) returns (indexrpcpb.RaftDone) {
-    }
+    rpc Raft (Message) returns (RaftDone) {}
+    rpc RaftConfChange (ConfChangeReq) returns (RaftDone) {}
+}
+
+//
+// Specific Messages
+//
+
+enum RespErr {
+    OK = 0;
+    ErrWrongLeader = 1;
+}
+
+enum ReqType {
+    Join = 0;
+    Leave = 1;
+    Put = 2;
+}
+
+message ApplyReq {
+    uint64 client_id = 1;
+    ReqType req_type = 2;
+    JoinReq join_req = 3;
+    LeaveReq leave_req = 4;
+    PutReq put_req = 5;
+}
+
+message ConfChangeReq {
+    ConfChange cc = 1;
+    string ip = 2;
+    uint32 port = 3;
+}
+
+message RaftDone {
+    RespErr err = 1;
+}
+
+message JoinReq {
+    uint64 client_id = 1;
+    uint64 peer_id = 2;
+    string peer_addr = 3;
+}
+
+message LeaveReq {
+    uint64 client_id = 1;
+    uint64 peer_id = 2;
+    string peer_addr = 3;
+}
+
+message PutReq {
+    uint64 client_id = 1;
+    uint64 seq = 2;
+    string doc_id = 3;
+    string fields = 4;
 }

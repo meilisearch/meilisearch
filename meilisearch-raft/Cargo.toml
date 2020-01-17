@@ -18,6 +18,7 @@ serde_json = "1.0.42"
 slog = "2.5.2"
 slog-stdlog = "4.0.0"
 prost = "0.5.0"
+tonic = "0.1.0-beta.1"
 
 [dependencies.raft]
 git = "https://github.com/tikv/raft-rs"
@@ -30,4 +31,5 @@ rustyline = "5.0.5"
 structopt = "0.3.5"
 
 [build-dependencies]
-prost-build = "0.5.0"
+# prost-build = "0.5.0"
+tonic-build = "0.1.0-beta.1"

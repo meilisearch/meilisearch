@@ -1,5 +1,6 @@
 syntax = "proto3";
-package eraftpb;
+package indexpb;
+
 
 enum EntryType {
     EntryNormal = 0;
@@ -24,7 +25,7 @@ message Entry {
     bytes data = 4;
     bytes context = 6;
 
-    // Deprecated! It is kept for backward compatibility.
+    // the trait `prost::message::Message` is not implemented for! It is kept for backward compatibility.
     // TODO: remove it in the next major release.
     bool sync_log = 5;
 }
