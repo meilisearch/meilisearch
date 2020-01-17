@@ -75,7 +75,7 @@ where
         prefix_postings_lists: prefix_postings_lists_cache_store,
     };
 
-    let (operation, mapping) = create_query_tree(reader, &context, query).unwrap();
+    let (operation, mapping) = create_query_tree(reader, &context, query)?;
     debug!("operation:\n{:?}", operation);
     debug!("mapping:\n{:?}", mapping);
 
@@ -90,7 +90,7 @@ where
     let mut queries_kinds = HashMap::new();
     recurs_operation(&mut queries_kinds, &operation);
 
-    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation).unwrap();
+    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation)?;
     println!("found {} documents", docids.len());
     println!("number of postings {:?}", queries.len());
 
@@ -202,7 +202,7 @@ where
         prefix_postings_lists: prefix_postings_lists_cache_store,
     };
 
-    let (operation, mapping) = create_query_tree(reader, &context, query).unwrap();
+    let (operation, mapping) = create_query_tree(reader, &context, query)?;
     debug!("operation:\n{:?}", operation);
     debug!("mapping:\n{:?}", mapping);
 
@@ -217,7 +217,7 @@ where
     let mut queries_kinds = HashMap::new();
     recurs_operation(&mut queries_kinds, &operation);
 
-    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation).unwrap();
+    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation)?;
     println!("found {} documents", docids.len());
     println!("number of postings {:?}", queries.len());
 
