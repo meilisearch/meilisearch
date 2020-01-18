@@ -40,9 +40,9 @@ impl Into<SettingsUpdate> for Settings {
                         "_exact" => RankingRule::Exact,
                         _ => {
                             let captures = RANKING_RULE_REGEX.lock().unwrap().captures(&rule).unwrap();
-                            match captures[0].as_ref() {
-                                "asc" => RankingRule::Asc(captures[1].to_string()),
-                                "dsc" => RankingRule::Dsc(captures[1].to_string()),
+                            match captures[1].as_ref() {
+                                "asc" => RankingRule::Asc(captures[2].to_string()),
+                                "dsc" => RankingRule::Dsc(captures[2].to_string()),
                                 _ => continue
                             }
                         }
