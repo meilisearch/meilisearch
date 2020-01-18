@@ -78,6 +78,8 @@ fn write_all_and_retreive() {
 
     block_on(sleep(Duration::from_secs(1)));
 
+    // 3 - Get all settings and compare to the previous one
+
     let req = http::Request::get("/indexes/movies/settings").body(Body::empty()).unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 200);
@@ -86,8 +88,36 @@ fn write_all_and_retreive() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    println!("json1: {:?}", json);
-    println!("json2: {:?}", res_value);
+    assert_json_eq!(json, res_value, ordered: false);
+
+    // 4 - Delete all settings
+
+    let req = http::Request::delete("/indexes/movies/settings").body(Body::empty()).unwrap();
+    let res = server.simulate(req).unwrap();
+    assert_eq!(res.status(), 202);
+
+    block_on(sleep(Duration::from_secs(1)));
+
+    // 5 - Get all settings and check if they are empty
+
+    let req = http::Request::get("/indexes/movies/settings").body(Body::empty()).unwrap();
+    let res = server.simulate(req).unwrap();
+    assert_eq!(res.status(), 200);
+
+    let mut buf = Vec::new();
+    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
+    let res_value: Value = serde_json::from_slice(&buf).unwrap();
+
+    let json = json!({
+        "ranking_rules": null,
+        "ranking_distinct": null,
+        "attribute_identifier": null,
+        "attributes_searchable": null,
+        "attributes_displayed": null,
+        "attributes_ranked": null,
+        "stop_words": null,
+        "synonyms": null,
+    });
 
     assert_json_eq!(json, res_value, ordered: false);
 }

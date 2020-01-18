@@ -63,10 +63,6 @@ pub fn apply_settings_update(
         _ => (),
     }
 
-    if let UpdateState::Update(id) = settings.attribute_identifier {
-         schema.set_identifier(id)?;
-    };
-
     match settings.attributes_searchable.clone() {
         UpdateState::Update(v) => schema.update_indexed(v)?,
         UpdateState::Clear => {
@@ -122,7 +118,18 @@ pub fn apply_settings_update(
         }
     };
 
-    index.main.put_schema(writer, &schema)?;
+    match settings.attribute_identifier.clone() {
+        UpdateState::Update(v) => {
+            schema.set_identifier(v)?;
+            index.main.put_schema(writer, &schema)?;
+        },
+        UpdateState::Clear => {
+            index.main.delete_schema(writer)?;
+        },
+        _ => {
+            index.main.put_schema(writer, &schema)?;
+        },
+    };
 
     match settings.stop_words {
         UpdateState::Update(stop_words) => {

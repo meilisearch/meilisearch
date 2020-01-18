@@ -96,23 +96,23 @@ impl Main {
     }
 
     pub fn put_schema(self, writer: &mut heed::RwTxn<MainT>, schema: &Schema) -> ZResult<()> {
-        self.main
-            .put::<_, Str, SerdeBincode<Schema>>(writer, SCHEMA_KEY, schema)
+        self.main.put::<_, Str, SerdeBincode<Schema>>(writer, SCHEMA_KEY, schema)
     }
 
     pub fn schema(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<Schema>> {
-        self.main
-            .get::<_, Str, SerdeBincode<Schema>>(reader, SCHEMA_KEY)
+        self.main.get::<_, Str, SerdeBincode<Schema>>(reader, SCHEMA_KEY)
+    }
+
+    pub fn delete_schema(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
+        self.main.delete::<_, Str>(writer, SCHEMA_KEY)
     }
 
     pub fn put_ranked_map(self, writer: &mut heed::RwTxn<MainT>, ranked_map: &RankedMap) -> ZResult<()> {
-        self.main
-            .put::<_, Str, SerdeBincode<RankedMap>>(writer, RANKED_MAP_KEY, &ranked_map)
+        self.main.put::<_, Str, SerdeBincode<RankedMap>>(writer, RANKED_MAP_KEY, &ranked_map)
     }
 
     pub fn ranked_map(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<RankedMap>> {
-        self.main
-            .get::<_, Str, SerdeBincode<RankedMap>>(reader, RANKED_MAP_KEY)
+        self.main.get::<_, Str, SerdeBincode<RankedMap>>(reader, RANKED_MAP_KEY)
     }
 
     pub fn put_synonyms_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
