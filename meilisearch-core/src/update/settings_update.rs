@@ -197,8 +197,6 @@ pub fn apply_stop_words_update(
         )?;
     }
 
-    main_store.put_stop_words(writer, stop_words)?;
-
     Ok(must_reindex)
 }
 
@@ -341,7 +339,6 @@ pub fn apply_synonyms_update(
         .unwrap();
 
     main_store.put_synonyms_fst(writer, &synonyms_set)?;
-    main_store.put_synonyms(writer, synonyms)?;
 
     Ok(())
 }

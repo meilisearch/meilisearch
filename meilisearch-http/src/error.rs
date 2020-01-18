@@ -137,8 +137,8 @@ impl From<heed::Error> for ResponseError {
     }
 }
 
-impl From<fst::Error> for ResponseError {
-    fn from(err: fst::Error) -> ResponseError {
+impl From<meilisearch_core::FstError> for ResponseError {
+    fn from(err: meilisearch_core::FstError) -> ResponseError {
         ResponseError::internal(err)
     }
 }
@@ -149,7 +149,6 @@ impl From<SearchError> for ResponseError {
     }
 }
 
-
 pub trait IntoInternalError<T> {
     fn into_internal_error(self) -> SResult<T>;
 }
@@ -159,7 +158,7 @@ impl <T> IntoInternalError<T> for Option<T> {
     fn into_internal_error(self) -> SResult<T> {
         match self {
             Some(value) => Ok(value),
-            None => Err(ResponseError::internal("Heed "))
+            None => Err(ResponseError::internal("Heed cannot find requested value"))
         }
     }
 }
