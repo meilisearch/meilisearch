@@ -35,6 +35,15 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "assert-json-diff"
+version = "1.0.1"
+source = "git+https://github.com/qdequele/assert-json-diff#0340008d8fc183a490e3ccf81f86a2355a7474e7"
+dependencies = [
+ "serde 1.0.102 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 1.0.41 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "assert_matches"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1011,12 +1020,12 @@ dependencies = [
 name = "meilisearch-http"
 version = "0.8.4"
 dependencies = [
+ "assert-json-diff 1.0.1 (git+https://github.com/qdequele/assert-json-diff)",
  "async-std 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bincode 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-channel 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "fst 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "heed 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "http 0.1.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "http-service 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2353,6 +2362,7 @@ dependencies = [
 "checksum ansi_term 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ee49baf6cb617b853aa8d93bf420db2383fab46d314482ca2803b40d5fde979b"
 "checksum anyhow 1.0.25 (registry+https://github.com/rust-lang/crates.io-index)" = "9267dff192e68f3399525901e709a48c1d3982c9c072fa32f2127a0cb0babf14"
 "checksum arc-swap 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "f1a1eca3195b729bbd64e292ef2f5fff6b1c28504fed762ce2b1013dde4d8e92"
+"checksum assert-json-diff 1.0.1 (git+https://github.com/qdequele/assert-json-diff)" = "<none>"
 "checksum assert_matches 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7deb0a829ca7bcfaf5da70b073a8d128619259a7be8216a355e23f00763059e5"
 "checksum async-attributes 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "efd3d156917d94862e779f356c5acae312b08fd3121e792c857d7928c8088423"
 "checksum async-std 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "0bf6039b315300e057d198b9d3ab92ee029e31c759b7f1afae538145e6f18a3e"

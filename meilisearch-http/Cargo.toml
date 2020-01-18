@@ -45,7 +45,10 @@ whoami = "0.6"
 http-service-mock = "0.4.0"
 http-service = "0.4.0"
 tempdir = "0.3.7"
-assert-json-diff = "1.0.1"
+
+[dev-dependencies.assert-json-diff]
+git = "https://github.com/qdequele/assert-json-diff"
+branch = "master"
 
 [build-dependencies]
 vergen = "3.0.4"
