@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::collections::{HashMap, BTreeMap, BTreeSet};
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
@@ -134,8 +134,7 @@ impl Main {
 
     pub fn put_stop_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
         let bytes = fst.as_fst().as_bytes();
-        self.main
-            .put::<_, Str, ByteSlice>(writer, STOP_WORDS_KEY, bytes)
+        self.main.put::<_, Str, ByteSlice>(writer, STOP_WORDS_KEY, bytes)
     }
 
     pub fn stop_words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
@@ -211,30 +210,6 @@ impl Main {
 
     pub fn delete_ranking_distinct(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
         self.main.delete::<_, Str>(writer, RANKING_DISTINCT_KEY)
-    }
-
-    pub fn stop_words<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<BTreeSet<String>>> {
-        self.main.get::<_, Str, SerdeBincode<BTreeSet<String>>>(reader, STOP_WORDS_KEY)
-    }
-
-    pub fn put_stop_words(self, writer: &mut heed::RwTxn<MainT>, value: BTreeSet<String>) -> ZResult<()> {
-        self.main.put::<_, Str, SerdeBincode<BTreeSet<String>>>(writer, STOP_WORDS_KEY, &value)
-    }
-
-    pub fn delete_stop_words(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
-        self.main.delete::<_, Str>(writer, STOP_WORDS_KEY)
-    }
-
-    pub fn synonyms<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<BTreeMap<String, Vec<String>>>> {
-        self.main.get::<_, Str, SerdeBincode<BTreeMap<String, Vec<String>>>>(reader, SYNONYMS_KEY)
-    }
-
-    pub fn put_synonyms(self, writer: &mut heed::RwTxn<MainT>, value: BTreeMap<String, Vec<String>>) -> ZResult<()> {
-        self.main.put::<_, Str, SerdeBincode<BTreeMap<String, Vec<String>>>>(writer, SYNONYMS_KEY, &value)
-    }
-
-    pub fn delete_synonyms(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
-        self.main.delete::<_, Str>(writer, SYNONYMS_KEY)
     }
 
     pub fn put_customs(self, writer: &mut heed::RwTxn<MainT>, customs: &[u8]) -> ZResult<()> {

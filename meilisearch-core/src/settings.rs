@@ -122,7 +122,7 @@ impl ToString for RankingRule {
             RankingRule::Words => "_words".to_string(),
             RankingRule::Proximity => "_proximity".to_string(),
             RankingRule::Attribute => "_attribute".to_string(),
-            RankingRule::WordsPosition => "_word_position".to_string(),
+            RankingRule::WordsPosition => "_words_position".to_string(),
             RankingRule::Exact => "_exact".to_string(),
             RankingRule::Asc(field) => format!("asc({})", field),
             RankingRule::Dsc(field) => format!("dsc({})", field),
