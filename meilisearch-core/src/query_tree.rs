@@ -442,8 +442,17 @@ pub fn traverse_query_tree<'o, 'txn>(
                     println!("{:3$}docids retrieval ({:?}) took {:.02?}", "", results.len(), before.elapsed(), depth * 2);
 
                     let before = Instant::now();
-                    let sets = results.iter().map(AsRef::as_ref).collect();
-                    let docids = sdset::multi::Union::new(sets).into_set_buf();
+                    let docids = if results.len() > 10 {
+                        let cap = results.iter().map(|dis| dis.len()).sum();
+                        let mut docids = Vec::with_capacity(cap);
+                        for dis in results {
+                            docids.extend_from_slice(&dis);
+                        }
+                        SetBuf::from_dirty(docids)
+                    } else {
+                        let sets = results.iter().map(AsRef::as_ref).collect();
+                        sdset::multi::Union::new(sets).into_set_buf()
+                    };
                     println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                     Cow::Owned(docids)
@@ -473,8 +482,17 @@ pub fn traverse_query_tree<'o, 'txn>(
                 println!("{:3$}docids retrieval ({:?}) took {:.02?}", "", results.len(), before.elapsed(), depth * 2);
 
                 let before = Instant::now();
-                let sets = results.iter().map(AsRef::as_ref).collect();
-                let docids = sdset::multi::Union::new(sets).into_set_buf();
+                let docids = if results.len() > 10 {
+                    let cap = results.iter().map(|dis| dis.len()).sum();
+                    let mut docids = Vec::with_capacity(cap);
+                    for dis in results {
+                        docids.extend_from_slice(&dis);
+                    }
+                    SetBuf::from_dirty(docids)
+                } else {
+                    let sets = results.iter().map(AsRef::as_ref).collect();
+                    sdset::multi::Union::new(sets).into_set_buf()
+                };
                 println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                 Cow::Owned(docids)
