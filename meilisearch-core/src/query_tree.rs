@@ -428,20 +428,21 @@ pub fn traverse_query_tree<'o, 'txn>(
                     };
 
                     let before = Instant::now();
-                    let mut docids = Vec::new();
+                    let mut results = Vec::new();
                     while let Some(input) = stream.next() {
                         if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
                             let distance = dfa.eval(input).to_u8();
                             let is_exact = distance == 0 && input.len() == word.len();
-                            docids.extend_from_slice(&result.docids);
+                            results.push(result.docids);
                             let key = PostingsKey { query, input: input.to_owned(), distance, is_exact };
                             postings.insert(key, result.matches);
                         }
                     }
-                    println!("{:3$}docids extend ({:?}) took {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
+                    println!("{:3$}docids retrieval ({:?}) took {:.02?}", "", results.len(), before.elapsed(), depth * 2);
 
                     let before = Instant::now();
-                    let docids = SetBuf::from_dirty(docids);
+                    let sets = results.iter().map(AsRef::as_ref).collect();
+                    let docids = sdset::multi::Union::new(sets).into_set_buf();
                     println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                     Cow::Owned(docids)
@@ -458,18 +459,21 @@ pub fn traverse_query_tree<'o, 'txn>(
                     ctx.words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
                 };
 
-                let mut docids = Vec::new();
+                let before = Instant::now();
+                let mut results = Vec::new();
                 while let Some(input) = stream.next() {
                     if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
                         let distance = dfa.eval(input).to_u8();
-                        docids.extend_from_slice(&result.docids);
+                        results.push(result.docids);
                         let key = PostingsKey { query, input: input.to_owned(), distance, is_exact: true };
                         postings.insert(key, result.matches);
                     }
                 }
+                println!("{:3$}docids retrieval ({:?}) took {:.02?}", "", results.len(), before.elapsed(), depth * 2);
 
                 let before = Instant::now();
-                let docids = SetBuf::from_dirty(docids);
+                let sets = results.iter().map(AsRef::as_ref).collect();
+                let docids = sdset::multi::Union::new(sets).into_set_buf();
                 println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                 Cow::Owned(docids)
