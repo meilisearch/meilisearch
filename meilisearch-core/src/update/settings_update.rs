@@ -6,7 +6,7 @@ use sdset::SetBuf;
 use meilisearch_schema::Schema;
 
 use crate::database::{MainT, UpdateT};
-use crate::settings::{UpdateState, SettingsUpdate};
+use crate::settings::{UpdateState, SettingsUpdate, RankingRule};
 use crate::update::documents_addition::reindex_all_documents;
 use crate::update::{next_update_id, Update};
 use crate::{store, MResult, Error};
@@ -30,8 +30,6 @@ pub fn apply_settings_update(
     index: &store::Index,
     settings: SettingsUpdate,
 ) -> MResult<()> {
-
-
     let mut must_reindex = false;
 
     let mut schema = match index.main.schema(writer)? {
@@ -46,9 +44,13 @@ pub fn apply_settings_update(
 
     match settings.ranking_rules {
         UpdateState::Update(v) => {
+            let ranked_field: Vec<String> = v.iter().filter_map(RankingRule::get_field).collect();
+            schema.update_ranked(ranked_field)?;
             index.main.put_ranking_rules(writer, v)?;
         },
         UpdateState::Clear => {
+            let clear: Vec<String> = Vec::new();
+            schema.update_ranked(clear)?;
             index.main.delete_ranking_rules(writer)?;
         },
         _ => (),
@@ -99,25 +101,6 @@ pub fn apply_settings_update(
             }
         }
     };
-    match settings.attributes_ranked.clone() {
-        UpdateState::Update(v) => schema.update_ranked(v)?,
-        UpdateState::Clear => {
-            let clear: Vec<String> = Vec::new();
-            schema.update_ranked(clear)?;
-        },
-        UpdateState::Nothing => (),
-        UpdateState::Add(attrs) => {
-            for attr in attrs {
-                schema.set_ranked(attr)?;
-            }
-        },
-        UpdateState::Delete(attrs) => {
-            for attr in attrs {
-                schema.remove_ranked(attr);
-            }
-        }
-    };
-
     match settings.attribute_identifier.clone() {
         UpdateState::Update(v) => {
             schema.set_identifier(v)?;

@@ -18,7 +18,6 @@ pub struct Settings {
     pub attribute_identifier: Option<String>,
     pub attributes_searchable: Option<Vec<String>>,
     pub attributes_displayed: Option<HashSet<String>>,
-    pub attributes_ranked: Option<HashSet<String>>,
     pub stop_words: Option<BTreeSet<String>>,
     pub synonyms: Option<BTreeMap<String, Vec<String>>>,
 }
@@ -60,7 +59,6 @@ impl Into<SettingsUpdate> for Settings {
             attribute_identifier: settings.attribute_identifier.into(),
             attributes_searchable: settings.attributes_searchable.into(),
             attributes_displayed: settings.attributes_displayed.into(),
-            attributes_ranked: settings.attributes_ranked.into(),
             stop_words: settings.stop_words.into(),
             synonyms: settings.synonyms.into(),
         }
@@ -130,6 +128,15 @@ impl ToString for RankingRule {
     }
 }
 
+impl RankingRule {
+    pub fn get_field(&self) -> Option<String> {
+        match self {
+            RankingRule::Asc(field) | RankingRule::Dsc(field) => Some((*field).clone()),
+            _ => None,
+        }
+    }
+}
+
 impl FromStr for RankingRule {
     type Err = RankingRuleConversionError;
 
@@ -161,7 +168,6 @@ pub struct SettingsUpdate {
     pub attribute_identifier: UpdateState<String>,
     pub attributes_searchable: UpdateState<Vec<String>>,
     pub attributes_displayed: UpdateState<HashSet<String>>,
-    pub attributes_ranked: UpdateState<HashSet<String>>,
     pub stop_words: UpdateState<BTreeSet<String>>,
     pub synonyms: UpdateState<BTreeMap<String, Vec<String>>>,
 }
@@ -174,7 +180,6 @@ impl Default for SettingsUpdate {
             attribute_identifier: UpdateState::Nothing,
             attributes_searchable: UpdateState::Nothing,
             attributes_displayed: UpdateState::Nothing,
-            attributes_ranked: UpdateState::Nothing,
             stop_words: UpdateState::Nothing,
             synonyms: UpdateState::Nothing,
         }

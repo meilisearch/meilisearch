@@ -973,10 +973,18 @@ mod tests {
         let settings = {
             let data = r#"
                 {
+                    "ranking_rules": [
+                        "_typo",
+                        "_words",
+                        "_proximity",
+                        "_attribute",
+                        "_words_position",
+                        "_exact",
+                        "dsc(release_date)"
+                    ],
                     "attribute_identifier": "id",
                     "attributes_searchable": ["name", "release_date"],
-                    "attributes_displayed": ["name", "release_date"],
-                    "attributes_ranked": ["release_date"]
+                    "attributes_displayed": ["name", "release_date"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();

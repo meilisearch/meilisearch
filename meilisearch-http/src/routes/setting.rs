@@ -60,7 +60,6 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let attribute_identifier = schema.clone().map(|s| s.identifier());
     let attributes_searchable = schema.clone().map(|s| s.get_indexed_name());
     let attributes_displayed = schema.clone().map(|s| s.get_displayed_name());
-    let attributes_ranked = schema.map(|s| s.get_ranked_name());
 
     let settings = Settings {
         ranking_rules,
@@ -68,7 +67,6 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
         attribute_identifier,
         attributes_searchable,
         attributes_displayed,
-        attributes_ranked,
         stop_words,
         synonyms,
     };
@@ -102,7 +100,6 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
         attribute_identifier: UpdateState::Clear,
         attributes_searchable: UpdateState::Clear,
         attributes_displayed: UpdateState::Clear,
-        attributes_ranked: UpdateState::Clear,
         stop_words: UpdateState::Clear,
         synonyms: UpdateState::Clear,
     };
@@ -310,7 +307,6 @@ pub struct AttributesSettings {
     pub attribute_identifier: Option<String>,
     pub attributes_searchable: Option<Vec<String>>,
     pub attributes_displayed: Option<HashSet<String>>,
-    pub attributes_ranked: Option<HashSet<String>>,
 }
 
 pub async fn get_attributes(ctx: Request<Data>) -> SResult<Response> {
@@ -324,13 +320,11 @@ pub async fn get_attributes(ctx: Request<Data>) -> SResult<Response> {
     let attribute_identifier = schema.clone().map(|s| s.identifier());
     let attributes_searchable = schema.clone().map(|s| s.get_indexed_name());
     let attributes_displayed = schema.clone().map(|s| s.get_displayed_name());
-    let attributes_ranked = schema.map(|s| s.get_ranked_name());
 
     let settings = AttributesSettings {
         attribute_identifier,
         attributes_searchable,
         attributes_displayed,
-        attributes_ranked,
     };
 
     Ok(tide::Response::new(200).body_json(&settings).unwrap())
@@ -347,7 +341,6 @@ pub async fn update_attributes(mut ctx: Request<Data>) -> SResult<Response> {
         attribute_identifier: settings.attribute_identifier,
         attributes_searchable: settings.attributes_searchable,
         attributes_displayed: settings.attributes_displayed,
-        attributes_ranked: settings.attributes_ranked,
         .. Settings::default()
     };
 
