@@ -35,7 +35,7 @@ zerocopy = "0.2.8"
 [dependencies.sdset]
 # version = "0.3.6"
 git = "https://github.com/Kerollmops/sdset"
-branch = "intersection-by-key"
+branch = "typed-algorithms"
 
 [dev-dependencies]
 assert_matches = "1.3"
