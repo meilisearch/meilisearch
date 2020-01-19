@@ -413,7 +413,8 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                     let before = Instant::now();
                     let docids = sdset::duo::Union::new(prefix_docids, exact_docids).into_set_buf();
-                    println!("{:2$}prefix docids construction took {:.02?}", "", before.elapsed(), depth * 2);
+                    println!("{:4$}prefix docids ({} and {}) construction took {:.02?}",
+                        "", prefix_docids.len(), exact_docids.len(), before.elapsed(), depth * 2);
 
                     Cow::Owned(docids)
 
