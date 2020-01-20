@@ -37,7 +37,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "assert-json-diff"
 version = "1.0.1"
-source = "git+https://github.com/qdequele/assert-json-diff#0340008d8fc183a490e3ccf81f86a2355a7474e7"
+source = "git+https://github.com/qdequele/assert-json-diff#29bdf99315e510abb2824ccb9353b3a7a330cbc4"
 dependencies = [
  "serde 1.0.102 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.41 (registry+https://github.com/rust-lang/crates.io-index)",

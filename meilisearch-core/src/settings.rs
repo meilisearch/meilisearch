@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use once_cell::sync::Lazy;
 
 static RANKING_RULE_REGEX: Lazy<Mutex<regex::Regex>> = Lazy::new(|| {
@@ -27,30 +27,48 @@ impl Into<SettingsUpdate> for Settings {
         let settings = self.clone();
 
         let ranking_rules = match settings.ranking_rules {
-            Some(rules) => {
-                let mut final_rules = Vec::new();
-                for rule in rules {
-                    let parsed_rule = match rule.as_str() {
-                        "_typo" => RankingRule::Typo,
-                        "_words" => RankingRule::Words,
-                        "_proximity" => RankingRule::Proximity,
-                        "_attribute" => RankingRule::Attribute,
-                        "_words_position" => RankingRule::WordsPosition,
-                        "_exact" => RankingRule::Exact,
-                        _ => {
-                            let captures = RANKING_RULE_REGEX.lock().unwrap().captures(&rule).unwrap();
-                            match captures[1].as_ref() {
-                                "asc" => RankingRule::Asc(captures[2].to_string()),
-                                "dsc" => RankingRule::Dsc(captures[2].to_string()),
-                                _ => continue
-                            }
-                        }
-                    };
-                    final_rules.push(parsed_rule);
-                }
-                Some(final_rules)
-            }
+            Some(rules) => Some(RankingRule::from_vec(rules)),
             None => None
+        };
+
+        SettingsUpdate {
+            ranking_rules: ranking_rules.into(),
+            ranking_distinct: settings.ranking_distinct.into(),
+            attribute_identifier: settings.attribute_identifier.into(),
+            attributes_searchable: settings.attributes_searchable.into(),
+            attributes_displayed: settings.attributes_displayed.into(),
+            stop_words: settings.stop_words.into(),
+            synonyms: settings.synonyms.into(),
+        }
+    }
+}
+
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub struct SettingsComplete {
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub ranking_rules: Option<Option<Vec<String>>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub ranking_distinct: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub attribute_identifier: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub attributes_searchable: Option<Option<Vec<String>>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub attributes_displayed: Option<Option<HashSet<String>>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub stop_words: Option<Option<BTreeSet<String>>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
+}
+
+impl Into<SettingsUpdate> for SettingsComplete {
+    fn into(self) -> SettingsUpdate {
+        let settings = self.clone();
+
+        let ranking_rules = match settings.ranking_rules {
+            Some(Some(rules)) => Some(Some(RankingRule::from_vec(rules))),
+            Some(None) => Some(None),
+            None => None,
         };
 
         SettingsUpdate {
@@ -78,6 +96,16 @@ impl <T> From<Option<T>> for UpdateState<T> {
     fn from(opt: Option<T>) -> UpdateState<T> {
         match opt {
             Some(t) => UpdateState::Update(t),
+            None => UpdateState::Nothing,
+        }
+    }
+}
+
+impl <T> From<Option<Option<T>>> for UpdateState<T> {
+    fn from(opt: Option<Option<T>>) -> UpdateState<T> {
+        match opt {
+            Some(Some(t)) => UpdateState::Update(t),
+            Some(None) => UpdateState::Clear,
             None => UpdateState::Nothing,
         }
     }
@@ -128,15 +156,6 @@ impl ToString for RankingRule {
     }
 }
 
-impl RankingRule {
-    pub fn get_field(&self) -> Option<String> {
-        match self {
-            RankingRule::Asc(field) | RankingRule::Dsc(field) => Some((*field).clone()),
-            _ => None,
-        }
-    }
-}
-
 impl FromStr for RankingRule {
     type Err = RankingRuleConversionError;
 
@@ -158,6 +177,22 @@ impl FromStr for RankingRule {
             }
         };
         Ok(rule)
+    }
+}
+
+impl RankingRule {
+    pub fn get_field(&self) -> Option<String> {
+        match self {
+            RankingRule::Asc(field) | RankingRule::Dsc(field) => Some((*field).clone()),
+            _ => None,
+        }
+    }
+
+    pub fn from_vec(rules: Vec<String>) -> Vec<RankingRule> {
+        rules.iter()
+            .map(|s| RankingRule::from_str(s.as_str()))
+            .filter_map(Result::ok)
+            .collect()
     }
 }
 
@@ -184,4 +219,12 @@ impl Default for SettingsUpdate {
             synonyms: UpdateState::Nothing,
         }
     }
+}
+
+// Any value that is present is considered Some value, including null.
+fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+    where T: Deserialize<'de>,
+          D: Deserializer<'de>
+{
+    Deserialize::deserialize(deserializer).map(Some)
 }
