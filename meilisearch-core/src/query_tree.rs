@@ -9,6 +9,7 @@ use fst::{IntoStreamer, Streamer};
 use itertools::{EitherOrBoth, merge_join_by};
 use meilisearch_tokenizer::split_query_string;
 use sdset::{Set, SetBuf, SetOperation};
+use log::debug;
 
 use crate::database::MainT;
 use crate::{store, DocumentId, DocIndex, MResult};
@@ -307,7 +308,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         operations: &'o [Operation],
     ) -> MResult<Cow<'txn, Set<DocumentId>>>
     {
-        println!("{:1$}AND", "", depth * 2);
+        debug!("{:1$}AND", "", depth * 2);
 
         let before = Instant::now();
         let mut results = Vec::new();
@@ -332,7 +333,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         let op = sdset::multi::Intersection::new(results);
         let docids = op.into_set_buf();
 
-        println!("{:3$}--- AND fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
+        debug!("{:3$}--- AND fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
 
         Ok(Cow::Owned(docids))
     }
@@ -346,7 +347,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         operations: &'o [Operation],
     ) -> MResult<Cow<'txn, Set<DocumentId>>>
     {
-        println!("{:1$}OR", "", depth * 2);
+        debug!("{:1$}OR", "", depth * 2);
 
         let before = Instant::now();
         let mut results = Vec::new();
@@ -371,7 +372,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         let op = sdset::multi::Union::new(results);
         let docids = op.into_set_buf();
 
-        println!("{:3$}--- OR fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
+        debug!("{:3$}--- OR fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
 
         Ok(Cow::Owned(docids))
     }
@@ -413,7 +414,7 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                     let before = Instant::now();
                     let docids = sdset::duo::Union::new(prefix_docids, exact_docids).into_set_buf();
-                    println!("{:4$}prefix docids ({} and {}) construction took {:.02?}",
+                    debug!("{:4$}prefix docids ({} and {}) construction took {:.02?}",
                         "", prefix_docids.len(), exact_docids.len(), before.elapsed(), depth * 2);
 
                     Cow::Owned(docids)
@@ -439,7 +440,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                             postings.insert(key, result.matches);
                         }
                     }
-                    println!("{:3$}docids retrieval ({:?}) took {:.02?}", "", results.len(), before.elapsed(), depth * 2);
+                    debug!("{:3$}docids retrieval ({:?}) took {:.02?}", "", results.len(), before.elapsed(), depth * 2);
 
                     let before = Instant::now();
                     let docids = if results.len() > 10 {
@@ -453,7 +454,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                         let sets = results.iter().map(AsRef::as_ref).collect();
                         sdset::multi::Union::new(sets).into_set_buf()
                     };
-                    println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
+                    debug!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                     Cow::Owned(docids)
                 }
@@ -479,7 +480,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                         postings.insert(key, result.matches);
                     }
                 }
-                println!("{:3$}docids retrieval ({:?}) took {:.02?}", "", results.len(), before.elapsed(), depth * 2);
+                debug!("{:3$}docids retrieval ({:?}) took {:.02?}", "", results.len(), before.elapsed(), depth * 2);
 
                 let before = Instant::now();
                 let docids = if results.len() > 10 {
@@ -493,7 +494,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let sets = results.iter().map(AsRef::as_ref).collect();
                     sdset::multi::Union::new(sets).into_set_buf()
                 };
-                println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
+                debug!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                 Cow::Owned(docids)
             },
@@ -518,7 +519,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let mut docids: Vec<_> = matches.iter().map(|m| m.document_id).collect();
                     docids.dedup();
                     let docids = SetBuf::new(docids).unwrap();
-                    println!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
+                    debug!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                     let matches = Cow::Owned(SetBuf::new(matches).unwrap());
                     let key = PostingsKey { query, input: vec![], distance: 0, is_exact: true };
@@ -526,13 +527,13 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                     Cow::Owned(docids)
                 } else {
-                    println!("{:2$}{:?} skipped", "", words, depth * 2);
+                    debug!("{:2$}{:?} skipped", "", words, depth * 2);
                     Cow::default()
                 }
             },
         };
 
-        println!("{:4$}{:?} fetched {:?} documents in {:.02?}", "", query, docids.len(), before.elapsed(), depth * 2);
+        debug!("{:4$}{:?} fetched {:?} documents in {:.02?}", "", query, docids.len(), before.elapsed(), depth * 2);
         Ok(docids)
     }
 

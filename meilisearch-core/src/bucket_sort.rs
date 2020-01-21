@@ -91,13 +91,13 @@ where
     recurs_operation(&mut queries_kinds, &operation);
 
     let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation)?;
-    println!("found {} documents", docids.len());
-    println!("number of postings {:?}", queries.len());
+    debug!("found {} documents", docids.len());
+    debug!("number of postings {:?}", queries.len());
 
     let before = Instant::now();
     mk_arena!(arena);
     let mut bare_matches = cleanup_bare_matches(&mut arena, &docids, queries);
-    println!("matches cleaned in {:.02?}", before.elapsed());
+    debug!("matches cleaned in {:.02?}", before.elapsed());
 
     let before_bucket_sort = Instant::now();
 
@@ -218,13 +218,13 @@ where
     recurs_operation(&mut queries_kinds, &operation);
 
     let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation)?;
-    println!("found {} documents", docids.len());
-    println!("number of postings {:?}", queries.len());
+    debug!("found {} documents", docids.len());
+    debug!("number of postings {:?}", queries.len());
 
     let before = Instant::now();
     mk_arena!(arena);
     let mut bare_matches = cleanup_bare_matches(&mut arena, &docids, queries);
-    println!("matches cleaned in {:.02?}", before.elapsed());
+    debug!("matches cleaned in {:.02?}", before.elapsed());
 
     let before_raw_documents_building = Instant::now();
     let mut raw_documents = Vec::new();
