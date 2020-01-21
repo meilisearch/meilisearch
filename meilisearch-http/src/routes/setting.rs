@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use serde::{Deserialize, Serialize};
 use tide::{Request, Response};
-use meilisearch_core::settings::{SettingsUpdate, UpdateState, Settings, SettingsComplete};
+use meilisearch_core::settings::{SettingsUpdate, UpdateState, Settings};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::RequestExt;
@@ -77,11 +77,11 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
 pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: SettingsComplete = ctx.body_json().await.map_err(ResponseError::bad_request)?;
+    let settings: Settings = ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -113,6 +113,7 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GetRankingSettings {
     pub ranking_rules: Option<Vec<String>>,
     pub ranking_distinct: Option<String>,
@@ -141,9 +142,10 @@ pub async fn get_ranking(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SetRankingSettings {
-    pub ranking_rules: Option<Option<Vec<String>>>,
-    pub ranking_distinct: Option<Option<String>>,
+    pub ranking_rules: Option<Vec<String>>,
+    pub ranking_distinct: Option<String>,
 }
 
 pub async fn update_ranking(mut ctx: Request<Data>) -> SResult<Response> {
@@ -152,14 +154,14 @@ pub async fn update_ranking(mut ctx: Request<Data>) -> SResult<Response> {
     let settings: SetRankingSettings = ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
-    let settings = SettingsComplete {
+    let settings = Settings {
         ranking_rules: settings.ranking_rules,
         ranking_distinct: settings.ranking_distinct,
-        .. SettingsComplete::default()
+        .. Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -187,6 +189,7 @@ pub async fn delete_ranking(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GetRankingRulesSettings {
     pub ranking_rules: Option<Vec<String>>,
 }
@@ -212,8 +215,9 @@ pub async fn get_rules(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SetRankingRulesSettings {
-    pub ranking_rules: Option<Option<Vec<String>>>,
+    pub ranking_rules: Option<Vec<String>>,
 }
 
 pub async fn update_rules(mut ctx: Request<Data>) -> SResult<Response> {
@@ -223,13 +227,13 @@ pub async fn update_rules(mut ctx: Request<Data>) -> SResult<Response> {
         .map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
-    let settings = SettingsComplete {
+    let settings = Settings {
         ranking_rules: settings.ranking_rules,
-        .. SettingsComplete::default()
+        .. Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -256,6 +260,7 @@ pub async fn delete_rules(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GetRankingDistinctSettings {
     pub ranking_distinct: Option<String>,
 }
@@ -275,8 +280,9 @@ pub async fn get_distinct(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SetRankingDistinctSettings {
-    pub ranking_distinct: Option<Option<String>>,
+    pub ranking_distinct: Option<String>,
 }
 
 pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
@@ -286,13 +292,13 @@ pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
         .map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
-    let settings = SettingsComplete {
+    let settings = Settings {
         ranking_distinct: settings.ranking_distinct,
-        .. SettingsComplete::default()
+        .. Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -319,6 +325,7 @@ pub async fn delete_distinct(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GetAttributesSettings {
     pub attribute_identifier: Option<String>,
     pub attributes_searchable: Option<Vec<String>>,
@@ -347,10 +354,11 @@ pub async fn get_attributes(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SetAttributesSettings {
-    pub attribute_identifier: Option<Option<String>>,
-    pub attributes_searchable: Option<Option<Vec<String>>>,
-    pub attributes_displayed: Option<Option<HashSet<String>>>,
+    pub attribute_identifier: Option<String>,
+    pub attributes_searchable: Option<Vec<String>>,
+    pub attributes_displayed: Option<HashSet<String>>,
 }
 
 pub async fn update_attributes(mut ctx: Request<Data>) -> SResult<Response> {
@@ -360,15 +368,15 @@ pub async fn update_attributes(mut ctx: Request<Data>) -> SResult<Response> {
         .map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
-    let settings = SettingsComplete {
+    let settings = Settings {
         attribute_identifier: settings.attribute_identifier,
         attributes_searchable: settings.attributes_searchable,
         attributes_displayed: settings.attributes_displayed,
-        .. SettingsComplete::default()
+        .. Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -395,6 +403,7 @@ pub async fn delete_attributes(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AttributesIdentifierSettings {
     pub attribute_identifier: Option<String>,
 }
@@ -417,6 +426,7 @@ pub async fn get_identifier(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GetAttributesSearchableSettings {
     pub attributes_searchable: Option<Vec<String>>,
 }
@@ -439,8 +449,9 @@ pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SetAttributesSearchableSettings {
-    pub attributes_searchable: Option<Option<Vec<String>>>,
+    pub attributes_searchable: Option<Vec<String>>,
 }
 
 pub async fn update_searchable(mut ctx: Request<Data>) -> SResult<Response> {
@@ -450,13 +461,13 @@ pub async fn update_searchable(mut ctx: Request<Data>) -> SResult<Response> {
         .map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
-    let settings = SettingsComplete {
+    let settings = Settings {
         attributes_searchable: settings.attributes_searchable,
-        .. SettingsComplete::default()
+        .. Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -482,6 +493,7 @@ pub async fn delete_searchable(ctx: Request<Data>) -> SResult<Response> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AttributesDisplayedSettings {
     pub attributes_displayed: Option<HashSet<String>>,
 }
@@ -516,7 +528,7 @@ pub async fn update_displayed(mut ctx: Request<Data>) -> SResult<Response> {
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };

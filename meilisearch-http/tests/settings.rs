@@ -27,7 +27,7 @@ fn write_all_and_delete() {
     // 2 - Send the settings
 
     let json = json!({
-        "ranking_rules": [
+        "rankingRules": [
             "_typo",
             "_words",
             "_proximity",
@@ -37,9 +37,9 @@ fn write_all_and_delete() {
             "dsc(release_date)",
             "dsc(rank)",
         ],
-        "ranking_distinct": "movie_id",
-        "attribute_identifier": "uid",
-        "attributes_searchable": [
+        "rankingDistinct": "movie_id",
+        "attributeIdentifier": "uid",
+        "attributesSearchable": [
             "uid",
             "movie_id",
             "title",
@@ -48,14 +48,14 @@ fn write_all_and_delete() {
             "release_date",
             "rank",
         ],
-        "attributes_displayed": [
+        "attributesDisplayed": [
             "title",
             "description",
             "poster",
             "release_date",
             "rank",
         ],
-        "stop_words": [
+        "stopWords": [
             "the",
             "a",
             "an",
@@ -105,12 +105,12 @@ fn write_all_and_delete() {
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
 
     let json = json!({
-        "ranking_rules": null,
-        "ranking_distinct": null,
-        "attribute_identifier": null,
-        "attributes_searchable": null,
-        "attributes_displayed": null,
-        "stop_words": null,
+        "rankingRules": null,
+        "rankingDistinct": null,
+        "attributeIdentifier": null,
+        "attributesSearchable": null,
+        "attributesDisplayed": null,
+        "stopWords": null,
         "synonyms": null,
     });
 
@@ -135,7 +135,7 @@ fn write_all_and_update() {
     // 2 - Send the settings
 
     let json = json!({
-        "ranking_rules": [
+        "rankingRules": [
             "_typo",
             "_words",
             "_proximity",
@@ -145,9 +145,9 @@ fn write_all_and_update() {
             "dsc(release_date)",
             "dsc(rank)",
         ],
-        "ranking_distinct": "movie_id",
-        "attribute_identifier": "uid",
-        "attributes_searchable": [
+        "rankingDistinct": "movie_id",
+        "attributeIdentifier": "uid",
+        "attributesSearchable": [
             "uid",
             "movie_id",
             "title",
@@ -156,14 +156,14 @@ fn write_all_and_update() {
             "release_date",
             "rank",
         ],
-        "attributes_displayed": [
+        "attributesDisplayed": [
             "title",
             "description",
             "poster",
             "release_date",
             "rank",
         ],
-        "stop_words": [
+        "stopWords": [
             "the",
             "a",
             "an",
@@ -197,7 +197,7 @@ fn write_all_and_update() {
     // 4 - Update all settings
 
     let json_update = json!({
-        "ranking_rules": [
+        "rankingRules": [
             "_typo",
             "_words",
             "_proximity",
@@ -206,21 +206,20 @@ fn write_all_and_update() {
             "_exact",
             "dsc(release_date)",
         ],
-        "ranking_distinct": null,
-        "attribute_identifier": "uid",
-        "attributes_searchable": [
+        "attributeIdentifier": "uid",
+        "attributesSearchable": [
             "title",
             "description",
             "uid",
         ],
-        "attributes_displayed": [
+        "attributesDisplayed": [
             "title",
             "description",
             "release_date",
             "rank",
             "poster",
         ],
-        "stop_words": [
+        "stopWords": [
         ],
         "synonyms": {
             "wolverine": ["xmen", "logan"],
@@ -247,7 +246,7 @@ fn write_all_and_update() {
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
 
     let res_expected = json!({
-        "ranking_rules": [
+        "rankingRules": [
             "_typo",
             "_words",
             "_proximity",
@@ -256,27 +255,26 @@ fn write_all_and_update() {
             "_exact",
             "dsc(release_date)",
         ],
-        "ranking_distinct": "movie_id",
-        "attribute_identifier": "uid",
-        "attributes_searchable": [
+        "rankingDistinct": null,
+        "attributeIdentifier": "uid",
+        "attributesSearchable": [
             "title",
             "description",
             "uid",
         ],
-        "attributes_displayed": [
+        "attributesDisplayed": [
             "title",
             "description",
             "release_date",
             "rank",
             "poster",
         ],
-        "stop_words": [
-        ],
+        "stopWords": null,
         "synonyms": {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
         }
     });
 
-    assert_json_eq!(json_update, res_value, ordered: false);
+    assert_json_eq!(res_expected, res_value, ordered: false);
 }

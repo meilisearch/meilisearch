@@ -8,10 +8,10 @@ use tide::Request;
 
 pub trait RequestExt {
     fn is_allowed(&self, acl: ACL) -> SResult<()>;
-    fn header(&self, name: &str) -> Result<String, ResponseError>;
-    fn url_param(&self, name: &str) -> Result<String, ResponseError>;
-    fn index(&self) -> Result<Index, ResponseError>;
-    fn identifier(&self) -> Result<String, ResponseError>;
+    fn header(&self, name: &str) -> SResult<String>;
+    fn url_param(&self, name: &str) -> SResult<String>;
+    fn index(&self) -> SResult<Index>;
+    fn identifier(&self) -> SResult<String>;
 }
 
 impl RequestExt for Request<Data> {
@@ -73,7 +73,7 @@ impl RequestExt for Request<Data> {
         Ok(())
     }
 
-    fn header(&self, name: &str) -> Result<String, ResponseError> {
+    fn header(&self, name: &str) -> SResult<String> {
         let header = self
             .headers()
             .get(name)
@@ -84,14 +84,13 @@ impl RequestExt for Request<Data> {
         Ok(header)
     }
 
-    fn url_param(&self, name: &str) -> Result<String, ResponseError> {
-        let param = self
-            .param::<String>(name)
-            .map_err(|e| ResponseError::bad_parameter(name, e))?;
+    fn url_param(&self, name: &str) -> SResult<String> {
+        let param = self.param::<String>(name)
+            .map_err(|_| ResponseError::bad_parameter("identifier", ""))?;
         Ok(param)
     }
 
-    fn index(&self) -> Result<Index, ResponseError> {
+    fn index(&self) -> SResult<Index> {
         let index_uid = self.url_param("index")?;
         let index = self
             .state()
@@ -101,10 +100,9 @@ impl RequestExt for Request<Data> {
         Ok(index)
     }
 
-    fn identifier(&self) -> Result<String, ResponseError> {
-        let name = self
-            .param::<String>("identifier")
-            .map_err(|e| ResponseError::bad_parameter("identifier", e))?;
+    fn identifier(&self) -> SResult<String> {
+        let name = self.param::<String>("identifier")
+            .map_err(|_| ResponseError::bad_parameter("identifier", ""))?;
 
         Ok(name)
     }

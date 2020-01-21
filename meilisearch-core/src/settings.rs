@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use once_cell::sync::Lazy;
 
 static RANKING_RULE_REGEX: Lazy<Mutex<regex::Regex>> = Lazy::new(|| {
@@ -12,6 +12,7 @@ static RANKING_RULE_REGEX: Lazy<Mutex<regex::Regex>> = Lazy::new(|| {
 
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Settings {
     pub ranking_rules: Option<Vec<String>>,
     pub ranking_distinct: Option<String>,
@@ -22,8 +23,8 @@ pub struct Settings {
     pub synonyms: Option<BTreeMap<String, Vec<String>>>,
 }
 
-impl Into<SettingsUpdate> for Settings {
-    fn into(self) -> SettingsUpdate {
+impl Settings {
+    pub fn into_cleared(self) -> SettingsUpdate {
         let settings = self.clone();
 
         let ranking_rules = match settings.ranking_rules {
@@ -32,42 +33,23 @@ impl Into<SettingsUpdate> for Settings {
         };
 
         SettingsUpdate {
-            ranking_rules: ranking_rules.into(),
-            ranking_distinct: settings.ranking_distinct.into(),
-            attribute_identifier: settings.attribute_identifier.into(),
-            attributes_searchable: settings.attributes_searchable.into(),
-            attributes_displayed: settings.attributes_displayed.into(),
-            stop_words: settings.stop_words.into(),
-            synonyms: settings.synonyms.into(),
+            ranking_rules: UpdateState::convert_with_default(ranking_rules, UpdateState::Clear),
+            ranking_distinct: UpdateState::convert_with_default(settings.ranking_distinct, UpdateState::Clear),
+            attribute_identifier: UpdateState::convert_with_default(settings.attribute_identifier, UpdateState::Clear),
+            attributes_searchable: UpdateState::convert_with_default(settings.attributes_searchable, UpdateState::Clear),
+            attributes_displayed: UpdateState::convert_with_default(settings.attributes_displayed, UpdateState::Clear),
+            stop_words: UpdateState::convert_with_default(settings.stop_words, UpdateState::Clear),
+            synonyms: UpdateState::convert_with_default(settings.synonyms, UpdateState::Clear),
         }
     }
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-pub struct SettingsComplete {
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub ranking_rules: Option<Option<Vec<String>>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub ranking_distinct: Option<Option<String>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub attribute_identifier: Option<Option<String>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub attributes_searchable: Option<Option<Vec<String>>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub attributes_displayed: Option<Option<HashSet<String>>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub stop_words: Option<Option<BTreeSet<String>>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
-}
-
-impl Into<SettingsUpdate> for SettingsComplete {
+impl Into<SettingsUpdate> for Settings {
     fn into(self) -> SettingsUpdate {
         let settings = self.clone();
 
         let ranking_rules = match settings.ranking_rules {
-            Some(Some(rules)) => Some(Some(RankingRule::from_vec(rules))),
-            Some(None) => Some(None),
+            Some(rules) => Some(RankingRule::from_vec(rules)),
             None => None,
         };
 
@@ -101,21 +83,18 @@ impl <T> From<Option<T>> for UpdateState<T> {
     }
 }
 
-impl <T> From<Option<Option<T>>> for UpdateState<T> {
-    fn from(opt: Option<Option<T>>) -> UpdateState<T> {
-        match opt {
-            Some(Some(t)) => UpdateState::Update(t),
-            Some(None) => UpdateState::Clear,
-            None => UpdateState::Nothing,
-        }
-    }
-}
-
 impl<T> UpdateState<T> {
     pub fn is_changed(&self) -> bool {
         match self {
             UpdateState::Nothing => false,
             _ => true,
+        }
+    }
+
+    fn convert_with_default(opt: Option<T>, default: UpdateState<T>) -> UpdateState<T> {
+        match opt {
+            Some(t) => UpdateState::Update(t),
+            None => default,
         }
     }
 }
@@ -169,9 +148,9 @@ impl FromStr for RankingRule {
             "_exact" => RankingRule::Exact,
             _ => {
                 let captures = RANKING_RULE_REGEX.lock().unwrap().captures(s).unwrap();
-                match captures[0].as_ref() {
-                    "asc" => RankingRule::Asc(captures[1].to_string()),
-                    "dsc" => RankingRule::Dsc(captures[1].to_string()),
+                match captures[1].as_ref() {
+                    "asc" => RankingRule::Asc(captures[2].to_string()),
+                    "dsc" => RankingRule::Dsc(captures[2].to_string()),
                     _ => return Err(RankingRuleConversionError)
                 }
             }
@@ -219,12 +198,4 @@ impl Default for SettingsUpdate {
             synonyms: UpdateState::Nothing,
         }
     }
-}
-
-// Any value that is present is considered Some value, including null.
-fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-    where T: Deserialize<'de>,
-          D: Deserializer<'de>
-{
-    Deserialize::deserialize(deserializer).map(Some)
 }
