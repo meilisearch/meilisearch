@@ -102,7 +102,9 @@ impl UpdateData {
             UpdateData::DocumentsDeletion(deletion) => UpdateType::DocumentsDeletion {
                 number: deletion.len(),
             },
-            UpdateData::Settings(update) => UpdateType::Settings(update.clone()),
+            UpdateData::Settings(update) => UpdateType::Settings {
+                settings: update.clone(),
+            },
         }
     }
 }
@@ -115,7 +117,7 @@ pub enum UpdateType {
     DocumentsAddition { number: usize },
     DocumentsPartial { number: usize },
     DocumentsDeletion { number: usize },
-    Settings(SettingsUpdate),
+    Settings { settings: SettingsUpdate },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -264,7 +266,9 @@ pub fn update_task<'a, 'b>(
         UpdateData::Settings(settings) => {
             let start = Instant::now();
 
-            let update_type = UpdateType::Settings(settings.clone());
+            let update_type = UpdateType::Settings {
+                settings: settings.clone(),
+            };
 
             let result = apply_settings_update(
                 writer,

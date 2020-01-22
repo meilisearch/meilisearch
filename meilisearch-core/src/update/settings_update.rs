@@ -116,7 +116,6 @@ pub fn apply_settings_update(
             must_reindex = true;
         },
         _ => {
-            println!("schema: {:?}", schema);
             index.main.put_schema(writer, &schema)?;
         },
     };
