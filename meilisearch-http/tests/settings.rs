@@ -10,6 +10,14 @@ use assert_json_diff::assert_json_eq;
 
 mod common;
 
+// Process:
+// - Write a full settings update
+// - Delete all settings
+// Check:
+// - Settings are deleted, all fields are null
+// - POST success repond Status Code 202
+// - Get success repond Status Code 200
+// - Delete success repond Status Code 202
 #[test]
 fn write_all_and_delete() {
     let mut server = common::setup_server().unwrap();
@@ -92,7 +100,7 @@ fn write_all_and_delete() {
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 202);
 
-    block_on(sleep(Duration::from_secs(1)));
+    block_on(sleep(Duration::from_secs(2)));
 
     // 5 - Get all settings and check if they are empty
 
@@ -117,7 +125,14 @@ fn write_all_and_delete() {
     assert_json_eq!(json, res_value, ordered: false);
 }
 
-
+// Process:
+// - Write a full setting update
+// - Rewrite an other settings confirmation
+// Check:
+// - Settings are overwrited
+// - Forgotten attributes are deleted
+// - Null attributes are deleted
+// - Empty attribute are deleted
 #[test]
 fn write_all_and_update() {
     let mut server = common::setup_server().unwrap();
