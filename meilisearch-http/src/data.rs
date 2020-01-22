@@ -84,7 +84,9 @@ impl DataInner {
         let mut fields_frequency = HashMap::<_, usize>::new();
         for result in all_documents_fields {
             let (_, attr, _) = result?;
-            *fields_frequency.entry(schema.indexed_pos_to_field_id(attr).unwrap()).or_default() += 1;
+            if let Some(field_id) = schema.indexed_pos_to_field_id(attr) {
+                *fields_frequency.entry(field_id).or_default() += 1;
+            }
         }
 
         // convert attributes to their names

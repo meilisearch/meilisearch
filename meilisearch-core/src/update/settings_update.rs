@@ -47,11 +47,13 @@ pub fn apply_settings_update(
             let ranked_field: Vec<String> = v.iter().filter_map(RankingRule::get_field).collect();
             schema.update_ranked(ranked_field)?;
             index.main.put_ranking_rules(writer, v)?;
+            must_reindex = true;
         },
         UpdateState::Clear => {
             let clear: Vec<String> = Vec::new();
             schema.update_ranked(clear)?;
             index.main.delete_ranking_rules(writer)?;
+            must_reindex = true;
         },
         _ => (),
     }
@@ -66,21 +68,27 @@ pub fn apply_settings_update(
     }
 
     match settings.attributes_searchable.clone() {
-        UpdateState::Update(v) => schema.update_indexed(v)?,
+        UpdateState::Update(v) => {
+            schema.update_indexed(v)?;
+            must_reindex = true;
+        },
         UpdateState::Clear => {
             let clear: Vec<String> = Vec::new();
             schema.update_indexed(clear)?;
+            must_reindex = true;
         },
         UpdateState::Nothing => (),
         UpdateState::Add(attrs) => {
             for attr in attrs {
                 schema.set_indexed(attr)?;
             }
+            must_reindex = true;
         },
         UpdateState::Delete(attrs) => {
             for attr in attrs {
                 schema.remove_indexed(attr);
             }
+            must_reindex = true;
         }
     };
     match settings.attributes_displayed.clone() {
@@ -105,11 +113,10 @@ pub fn apply_settings_update(
         UpdateState::Update(v) => {
             schema.set_identifier(v)?;
             index.main.put_schema(writer, &schema)?;
-        },
-        UpdateState::Clear => {
-            index.main.delete_schema(writer)?;
+            must_reindex = true;
         },
         _ => {
+            println!("schema: {:?}", schema);
             index.main.put_schema(writer, &schema)?;
         },
     };
@@ -149,6 +156,9 @@ pub fn apply_settings_update(
             postings_lists_store,
             docs_words_store,
         )?;
+    }
+    if let UpdateState::Clear = settings.attribute_identifier {
+        index.main.delete_schema(writer)?;
     }
     Ok(())
 }
