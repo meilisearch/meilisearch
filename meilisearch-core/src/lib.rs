@@ -65,7 +65,7 @@ fn highlights_from_raw_document<'a, 'tag, 'txn>(
 
         for di in postings_list.iter() {
             let covered_area = match kind {
-                Some(QueryKind::Exact(query)) | Some(QueryKind::Tolerant(query)) => {
+                Some(QueryKind::NonTolerant(query)) | Some(QueryKind::Tolerant(query)) => {
                     let len = if query.len() > input.len() {
                         input.len()
                     } else {

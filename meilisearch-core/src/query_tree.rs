@@ -45,16 +45,16 @@ impl fmt::Debug for Operation {
 
 impl Operation {
     fn tolerant(id: QueryId, prefix: bool, s: &str) -> Operation {
-        Operation::Query(Query { id, prefix, kind: QueryKind::Tolerant(s.to_string()) })
+        Operation::Query(Query { id, prefix, exact: true, kind: QueryKind::Tolerant(s.to_string()) })
     }
 
-    fn exact(id: QueryId, prefix: bool, s: &str) -> Operation {
-        Operation::Query(Query { id, prefix, kind: QueryKind::Exact(s.to_string()) })
+    fn non_tolerant(id: QueryId, prefix: bool, s: &str) -> Operation {
+        Operation::Query(Query { id, prefix, exact: true, kind: QueryKind::NonTolerant(s.to_string()) })
     }
 
     fn phrase2(id: QueryId, prefix: bool, (left, right): (&str, &str)) -> Operation {
         let kind = QueryKind::Phrase(vec![left.to_owned(), right.to_owned()]);
-        Operation::Query(Query { id, prefix, kind })
+        Operation::Query(Query { id, prefix, exact: true, kind })
     }
 }
 
@@ -64,6 +64,7 @@ pub type QueryId = usize;
 pub struct Query {
     pub id: QueryId,
     pub prefix: bool,
+    pub exact: bool,
     pub kind: QueryKind,
 }
 
@@ -83,17 +84,17 @@ impl Hash for Query {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum QueryKind {
     Tolerant(String),
-    Exact(String),
+    NonTolerant(String),
     Phrase(Vec<String>),
 }
 
 impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Query { id, prefix, kind } = self;
+        let Query { id, prefix, kind, .. } = self;
         let prefix = if *prefix { String::from("Prefix") } else { String::default() };
         match kind {
-            QueryKind::Exact(word) => {
-                f.debug_struct(&(prefix + "Exact")).field("id", &id).field("word", &word).finish()
+            QueryKind::NonTolerant(word) => {
+                f.debug_struct(&(prefix + "NonTolerant")).field("id", &id).field("word", &word).finish()
             },
             QueryKind::Tolerant(word) => {
                 f.debug_struct(&(prefix + "Tolerant")).field("id", &id).field("word", &word).finish()
@@ -205,25 +206,30 @@ pub fn create_query_tree(
                         let mut idgen = ((id + 1) * 100)..;
                         let range = (*id)..id+1;
 
-                        let phrase = split_best_frequency(reader, ctx, word)?.map(|ws| {
-                            let id = idgen.next().unwrap();
-                            idgen.next().unwrap();
-                            mapper.declare(range.clone(), id, &[ws.0, ws.1]);
-                            Operation::phrase2(id, is_last, ws)
-                        });
-
-                        let synonyms = fetch_synonyms(reader, ctx, &[word])?.into_iter().map(|alts| {
-                            let id = idgen.next().unwrap();
-                            mapper.declare(range.clone(), id, &alts);
-
-                            let mut idgen = once(id).chain(&mut idgen);
-                            let iter = alts.into_iter().map(|w| {
+                        let phrase = split_best_frequency(reader, ctx, word)?
+                            .map(|ws| {
                                 let id = idgen.next().unwrap();
-                                Operation::exact(id, false, &w)
+                                idgen.next().unwrap();
+                                mapper.declare(range.clone(), id, &[ws.0, ws.1]);
+                                Operation::phrase2(id, is_last, ws)
                             });
 
-                            create_operation(iter, Operation::And)
-                        });
+                        let synonyms = fetch_synonyms(reader, ctx, &[word])?
+                            .into_iter()
+                            .map(|alts| {
+                                let exact = alts.len() == 1;
+                                let id = idgen.next().unwrap();
+                                mapper.declare(range.clone(), id, &alts);
+
+                                let mut idgen = once(id).chain(&mut idgen);
+                                let iter = alts.into_iter().map(|w| {
+                                    let id = idgen.next().unwrap();
+                                    let kind = QueryKind::NonTolerant(w);
+                                    Operation::Query(Query { id, prefix: false, exact, kind })
+                                });
+
+                                create_operation(iter, Operation::And)
+                            });
 
                         let original = Operation::tolerant(*id, is_last, word);
 
@@ -238,13 +244,15 @@ pub fn create_query_tree(
                         let words: Vec<_> = words.iter().map(|(_, s)| s.as_str()).collect();
 
                         for synonym in fetch_synonyms(reader, ctx, &words)? {
+                            let exact = synonym.len() == 1;
                             let id = idgen.next().unwrap();
                             mapper.declare(range.clone(), id, &synonym);
 
                             let mut idgen = once(id).chain(&mut idgen);
                             let synonym = synonym.into_iter().map(|s| {
                                 let id = idgen.next().unwrap();
-                                Operation::exact(id, false, &s)
+                                let kind = QueryKind::NonTolerant(s);
+                                Operation::Query(Query { id, prefix: false, exact, kind })
                             });
                             group_alts.push(create_operation(synonym, Operation::And));
                         }
@@ -252,7 +260,7 @@ pub fn create_query_tree(
                         let id = idgen.next().unwrap();
                         let concat = words.concat();
                         mapper.declare(range.clone(), id, &[&concat]);
-                        group_alts.push(Operation::exact(id, is_last, &concat));
+                        group_alts.push(Operation::non_tolerant(id, is_last, &concat));
                     }
                 }
 
@@ -387,7 +395,7 @@ pub fn traverse_query_tree<'o, 'txn>(
     {
         let before = Instant::now();
 
-        let Query { prefix, kind, .. } = query;
+        let Query { prefix, kind, exact, .. } = query;
         let docids: Cow<Set<_>> = match kind {
             QueryKind::Tolerant(word) => {
                 if *prefix && word.len() <= 2 {
@@ -434,7 +442,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                     while let Some(input) = stream.next() {
                         if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
                             let distance = dfa.eval(input).to_u8();
-                            let is_exact = distance == 0 && input.len() == word.len();
+                            let is_exact = *exact && distance == 0 && input.len() == word.len();
                             results.push(result.docids);
                             let key = PostingsKey { query, input: input.to_owned(), distance, is_exact };
                             postings.insert(key, result.matches);
@@ -459,7 +467,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                     Cow::Owned(docids)
                 }
             },
-            QueryKind::Exact(word) => {
+            QueryKind::NonTolerant(word) => {
                 // TODO support prefix and non-prefix exact DFA
                 let dfa = build_exact_dfa(word);
 
@@ -476,7 +484,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                     if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
                         let distance = dfa.eval(input).to_u8();
                         results.push(result.docids);
-                        let key = PostingsKey { query, input: input.to_owned(), distance, is_exact: true };
+                        let key = PostingsKey { query, input: input.to_owned(), distance, is_exact: *exact };
                         postings.insert(key, result.matches);
                     }
                 }
