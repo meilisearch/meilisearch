@@ -13,7 +13,7 @@ use log::debug;
 
 use crate::database::MainT;
 use crate::{store, DocumentId, DocIndex, MResult};
-use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
+use crate::automaton::{normalize_str, build_dfa, build_prefix_dfa, build_exact_dfa};
 use crate::QueryWordsMapper;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -144,7 +144,7 @@ fn split_best_frequency<'a>(reader: &heed::RoTxn<MainT>, ctx: &Context, word: &'
 }
 
 fn fetch_synonyms(reader: &heed::RoTxn<MainT>, ctx: &Context, words: &[&str]) -> MResult<Vec<Vec<String>>> {
-    let words = words.join(" ");
+    let words = normalize_str(&words.join(" "));
     let set = ctx.synonyms.synonyms(reader, words.as_bytes())?.unwrap_or_default();
 
     let mut strings = Vec::new();
@@ -157,13 +157,6 @@ fn fetch_synonyms(reader: &heed::RoTxn<MainT>, ctx: &Context, words: &[&str]) ->
     }
 
     Ok(strings)
-}
-
-fn is_last<I: IntoIterator>(iter: I) -> impl Iterator<Item=(bool, I::Item)> {
-    let mut iter = iter.into_iter().peekable();
-    core::iter::from_fn(move || {
-        iter.next().map(|item| (iter.peek().is_none(), item))
-    })
 }
 
 fn create_operation<I, F>(iter: I, f: F) -> Operation
@@ -186,61 +179,61 @@ pub fn create_query_tree(
 ) -> MResult<(Operation, HashMap<QueryId, Range<usize>>)>
 {
     let words = split_query_string(query).map(str::to_lowercase);
-    let words: Vec<_> = words.filter(|s| !s.contains(char::is_whitespace)).enumerate().collect();
+    let words: Vec<_> = words.into_iter().enumerate().collect();
 
     let mut mapper = QueryWordsMapper::new(words.iter().map(|(_, w)| w));
-    let mut ngrams = Vec::new();
-    for ngram in 1..=MAX_NGRAM {
 
-        let ngiter = words.windows(ngram).enumerate().map(|(i, group)| {
-            let before = words[0..i].windows(1).enumerate().map(|(i, g)| (i..i+1, g));
-            let after = words[i + ngram..].windows(1)
-                .enumerate()
-                .map(move |(j, g)| (i + j + ngram..i + j + ngram + 1, g));
-            before.chain(Some((i..i + ngram, group))).chain(after)
-        });
+    fn create_inner(
+        reader: &heed::RoTxn<MainT>,
+        ctx: &Context,
+        mapper: &mut QueryWordsMapper,
+        words: &[(usize, String)],
+    ) -> MResult<Vec<Operation>>
+    {
+        let mut alts = Vec::new();
 
-        for group in ngiter {
+        for ngram in 1..=MAX_NGRAM {
+            if let Some(group) = words.get(..ngram) {
+                let mut group_ops = Vec::new();
 
-            let mut ops = Vec::new();
-            for (is_last, (range, words)) in is_last(group) {
+                let tail = &words[ngram..];
+                let is_last = tail.is_empty();
 
-                let mut alts = Vec::new();
-                match words {
+                let mut group_alts = Vec::new();
+                match group {
                     [(id, word)] => {
                         let mut idgen = ((id + 1) * 100)..;
+                        let range = (*id)..id+1;
 
-                        let phrase = split_best_frequency(reader, ctx, word)?
-                            .map(|ws| {
+                        let phrase = split_best_frequency(reader, ctx, word)?.map(|ws| {
+                            let id = idgen.next().unwrap();
+                            idgen.next().unwrap();
+                            mapper.declare(range.clone(), id, &[ws.0, ws.1]);
+                            Operation::phrase2(id, is_last, ws)
+                        });
+
+                        let synonyms = fetch_synonyms(reader, ctx, &[word])?.into_iter().map(|alts| {
+                            let id = idgen.next().unwrap();
+                            mapper.declare(range.clone(), id, &alts);
+
+                            let mut idgen = once(id).chain(&mut idgen);
+                            let iter = alts.into_iter().map(|w| {
                                 let id = idgen.next().unwrap();
-                                idgen.next().unwrap();
-                                mapper.declare(range.clone(), id, &[ws.0, ws.1]);
-                                Operation::phrase2(id, is_last, ws)
+                                Operation::exact(id, false, &w)
                             });
 
-                        let synonyms = fetch_synonyms(reader, ctx, &[word])?
-                            .into_iter()
-                            .map(|alts| {
-                                let id = idgen.next().unwrap();
-                                mapper.declare(range.clone(), id, &alts);
+                            create_operation(iter, Operation::And)
+                        });
 
-                                let mut idgen = once(id).chain(&mut idgen);
-                                let iter = alts.into_iter().map(|w| {
-                                    let id = idgen.next().unwrap();
-                                    Operation::exact(id, false, &w)
-                                });
+                        let original = Operation::tolerant(*id, is_last, word);
 
-                                create_operation(iter, Operation::And)
-                            });
-
-                        let query = Operation::tolerant(*id, is_last, word);
-
-                        alts.push(query);
-                        alts.extend(synonyms.chain(phrase));
+                        group_alts.push(original);
+                        group_alts.extend(synonyms.chain(phrase));
                     },
                     words => {
                         let id = words[0].0;
                         let mut idgen = ((id + 1) * 100_usize.pow(ngram as u32))..;
+                        let range = id..id+ngram;
 
                         let words: Vec<_> = words.iter().map(|(_, s)| s.as_str()).collect();
 
@@ -253,25 +246,32 @@ pub fn create_query_tree(
                                 let id = idgen.next().unwrap();
                                 Operation::exact(id, false, &s)
                             });
-                            alts.push(create_operation(synonym, Operation::And));
+                            group_alts.push(create_operation(synonym, Operation::And));
                         }
 
                         let id = idgen.next().unwrap();
                         let concat = words.concat();
-                        alts.push(Operation::exact(id, is_last, &concat));
-                        mapper.declare(range.clone(), id, &[concat]);
+                        mapper.declare(range.clone(), id, &[&concat]);
+                        group_alts.push(Operation::exact(id, is_last, &concat));
                     }
                 }
 
-                ops.push(create_operation(alts, Operation::Or));
-            }
+                group_ops.push(create_operation(group_alts, Operation::Or));
 
-            ngrams.push(create_operation(ops, Operation::And));
-            if ngram == 1 { break }
+                if !tail.is_empty() {
+                    let tail_ops = create_inner(reader, ctx, mapper, tail)?;
+                    group_ops.push(create_operation(tail_ops, Operation::Or));
+                }
+
+                alts.push(create_operation(group_ops, Operation::And));
+            }
         }
+
+        Ok(alts)
     }
 
-    let operation = create_operation(ngrams, Operation::Or);
+    let alternatives = create_inner(reader, ctx, &mut mapper, &words)?;
+    let operation = Operation::Or(alternatives);
     let mapping = mapper.mapping();
 
     Ok((operation, mapping))
