@@ -63,10 +63,7 @@ impl DocumentsFieldsCounts {
 
     pub fn documents_ids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<DocumentsIdsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
-        Ok(DocumentsIdsIter {
-            last_seen_id: None,
-            iter,
-        })
+        Ok(DocumentsIdsIter { last_seen_id: None, iter })
     }
 
     pub fn all_documents_fields_counts<'txn>(

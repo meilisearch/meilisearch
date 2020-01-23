@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use fst::{set::OpBuilder, SetBuilder};
-use sdset::{duo::Union, SetOperation};
+use sdset::duo::{Union, Intersection};
+use sdset::{SetBuf, SetOperation};
 use serde::{Deserialize, Serialize};
 
 use crate::database::{MainT, UpdateT};
@@ -128,7 +129,16 @@ pub fn apply_documents_addition<'a, 'b>(
 
     // 2. remove the documents posting lists
     let number_of_inserted_documents = documents_additions.len();
+
     let documents_ids = documents_additions.iter().map(|(id, _)| *id).collect();
+    let documents_ids = SetBuf::from_dirty(documents_ids);
+
+    let existings_documents_ids: Result<Vec<_>, _> = index.documents_fields_counts.documents_ids(writer)?.collect();
+    let existings_documents_ids = SetBuf::from_dirty(existings_documents_ids?);
+
+    let documents_ids = Intersection::new(&documents_ids, &existings_documents_ids).into_set_buf();
+    let documents_ids = documents_ids.into_vec();
+
     apply_documents_deletion(writer, index, documents_ids)?;
 
     let mut ranked_map = match index.main.ranked_map(writer)? {
@@ -214,7 +224,16 @@ pub fn apply_documents_partial_addition<'a, 'b>(
 
     // 2. remove the documents posting lists
     let number_of_inserted_documents = documents_additions.len();
+
     let documents_ids = documents_additions.iter().map(|(id, _)| *id).collect();
+    let documents_ids = SetBuf::from_dirty(documents_ids);
+
+    let existings_documents_ids: Result<Vec<_>, _> = index.documents_fields_counts.documents_ids(writer)?.collect();
+    let existings_documents_ids = SetBuf::from_dirty(existings_documents_ids?);
+
+    let documents_ids = Intersection::new(&documents_ids, &existings_documents_ids).into_set_buf();
+    let documents_ids = documents_ids.into_vec();
+
     apply_documents_deletion(writer, index, documents_ids)?;
 
     let mut ranked_map = match index.main.ranked_map(writer)? {
