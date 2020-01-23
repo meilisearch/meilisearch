@@ -9,7 +9,7 @@ use indexmap::IndexMap;
 use log::error;
 use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
-use meilisearch_core::{MainT, Highlight, Index, RankedMap};
+use meilisearch_core::{Highlight, Index, MainT, RankedMap};
 use meilisearch_schema::{FieldId, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

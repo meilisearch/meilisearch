@@ -121,3 +121,28 @@ pub fn enrich_server_with_movies_documents(
 
     Ok(())
 }
+
+pub fn search(server: &mut TestBackend<Service<Data>>, query: &str, expect: Value) {
+    let req = http::Request::get(format!("/indexes/movies/search?{}", query))
+        .body(Body::empty())
+        .unwrap();
+    let res = server.simulate(req).unwrap();
+
+    let mut buf = Vec::new();
+    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
+    let response: Value = serde_json::from_slice(&buf).unwrap();
+
+    assert_json_eq!(expect, response, ordered: false)
+}
+
+pub fn update_config(server: &mut TestBackend<Service<Data>>, config: Value) {
+    let body = config.to_string().into_bytes();
+
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
+    let res = server.simulate(req).unwrap();
+    assert_eq!(res.status(), 201);
+
+    block_on(sleep(Duration::from_secs(5)));
+}
