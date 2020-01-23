@@ -21,7 +21,8 @@ impl RequestExt for Request<Data> {
             None => return Ok(()),
         };
 
-        let user_api_key = self.header("X-Meili-API-Key")
+        let user_api_key = self
+            .header("X-Meili-API-Key")
             .ok_or(ResponseError::missing_header("X-Meili-API-Key"))?;
 
         if user_api_key == *api_key {
@@ -85,7 +86,8 @@ impl RequestExt for Request<Data> {
     }
 
     fn url_param(&self, name: &str) -> SResult<String> {
-        let param = self.param::<String>(name)
+        let param = self
+            .param::<String>(name)
             .map_err(|_| ResponseError::bad_parameter("identifier", ""))?;
         Ok(param)
     }
@@ -101,7 +103,8 @@ impl RequestExt for Request<Data> {
     }
 
     fn identifier(&self) -> SResult<String> {
-        let name = self.param::<String>("identifier")
+        let name = self
+            .param::<String>("identifier")
             .map_err(|_| ResponseError::bad_parameter("identifier", ""))?;
 
         Ok(name)

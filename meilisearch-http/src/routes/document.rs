@@ -1,11 +1,10 @@
-
 use std::collections::{BTreeSet, HashSet};
 
 use indexmap::IndexMap;
+use meilisearch_core::settings::Settings;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tide::{Request, Response};
-use meilisearch_core::settings::Settings;
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::RequestExt;
@@ -78,9 +77,12 @@ pub async fn get_all_documents(ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
 
-    let documents_ids: Result<BTreeSet<_>, _> = index.documents_fields_counts
+    let documents_ids: Result<BTreeSet<_>, _> = index
+        .documents_fields_counts
         .documents_ids(&reader)?
-        .skip(offset).take(limit).collect();
+        .skip(offset)
+        .take(limit)
+        .collect();
 
     let documents_ids = match documents_ids {
         Ok(documents_ids) => documents_ids,
@@ -110,10 +112,10 @@ pub async fn get_all_documents(ctx: Request<Data>) -> SResult<Response> {
 fn find_identifier(document: &IndexMap<String, Value>) -> Option<String> {
     for key in document.keys() {
         if key.to_lowercase().contains("id") {
-            return Some(key.to_string())
+            return Some(key.to_string());
         }
     }
-    return None
+    return None;
 }
 
 #[derive(Default, Deserialize)]
@@ -138,12 +140,10 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
     if current_schema.is_none() {
         let id = match query.identifier {
             Some(id) => id,
-            None => {
-                match data.first().and_then(|docs| find_identifier(docs)) {
-                    Some(id) => id,
-                    None => return Err(ResponseError::bad_request("Could not infer a schema")),
-                }
-            }
+            None => match data.first().and_then(|docs| find_identifier(docs)) {
+                Some(id) => id,
+                None => return Err(ResponseError::bad_request("Could not infer a schema")),
+            },
         };
         let settings = Settings {
             attribute_identifier: Some(id),

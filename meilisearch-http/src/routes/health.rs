@@ -5,7 +5,7 @@ use crate::Data;
 
 use heed::types::{Str, Unit};
 use serde::Deserialize;
-use tide::{Response, Request};
+use tide::{Request, Response};
 
 const UNHEALTHY_KEY: &str = "_is_unhealthy";
 

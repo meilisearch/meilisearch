@@ -8,7 +8,7 @@ use sysinfo::{NetworkExt, Pid, ProcessExt, ProcessorExt, System, SystemExt};
 use tide::{Request, Response};
 use walkdir::WalkDir;
 
-use crate::error::{SResult, IntoInternalError};
+use crate::error::{IntoInternalError, SResult};
 use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
 use crate::Data;
@@ -30,7 +30,10 @@ pub async fn index_stat(ctx: Request<Data>) -> SResult<Response> {
     let update_reader = db.update_read_txn()?;
     let number_of_documents = index.main.number_of_documents(&reader)?;
     let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
-    let is_indexing = ctx.state().is_indexing(&update_reader, &index_uid)?.into_internal_error()?;
+    let is_indexing = ctx
+        .state()
+        .is_indexing(&update_reader, &index_uid)?
+        .into_internal_error()?;
 
     let response = IndexStatsResponse {
         number_of_documents,

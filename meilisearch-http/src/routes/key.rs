@@ -30,8 +30,8 @@ pub async fn list(ctx: Request<Data>) -> SResult<Response> {
 
     let mut response: Vec<Token> = Vec::new();
 
-    let iter = common_store
-        .prefix_iter::<_, Str, SerdeBincode<Token>>(&reader, TOKEN_PREFIX_KEY)?;
+    let iter =
+        common_store.prefix_iter::<_, Str, SerdeBincode<Token>>(&reader, TOKEN_PREFIX_KEY)?;
 
     for result in iter {
         let (_, token) = result?;
@@ -93,10 +93,16 @@ pub async fn create(mut ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let mut writer = db.main_write_txn()?;
 
-    db.common_store().put::<_, Str, SerdeBincode<Token>>(&mut writer, &token_key, &token_definition)?;
+    db.common_store().put::<_, Str, SerdeBincode<Token>>(
+        &mut writer,
+        &token_key,
+        &token_definition,
+    )?;
 
     writer.commit()?;
-    Ok(tide::Response::new(201).body_json(&token_definition).unwrap())
+    Ok(tide::Response::new(201)
+        .body_json(&token_definition)
+        .unwrap())
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use heed::types::{SerdeBincode, Str};
 use log::error;
-use meilisearch_core::{Database, MainT, UpdateT, Error as MError, MResult};
+use meilisearch_core::{Database, Error as MError, MResult, MainT, UpdateT};
 use sysinfo::Pid;
 
 use crate::option::Opt;

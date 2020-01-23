@@ -1,19 +1,18 @@
-use indexmap::IndexMap;
-use log::error;
-use meilisearch_core::criterion::*;
-use meilisearch_core::Highlight;
-use meilisearch_core::{Index, RankedMap};
-use meilisearch_core::MainT;
-use meilisearch_core::settings::RankingRule;
-use meilisearch_schema::{Schema, FieldId};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::convert::From;
 use std::error;
 use std::fmt;
 use std::time::{Duration, Instant};
+
+use indexmap::IndexMap;
+use log::error;
+use meilisearch_core::criterion::*;
+use meilisearch_core::settings::RankingRule;
+use meilisearch_core::{MainT, Highlight, Index, RankedMap};
+use meilisearch_schema::{FieldId, Schema};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug)]
 pub enum Error {
@@ -286,8 +285,10 @@ impl<'a> SearchBuilder<'a> {
                     RankingRule::Attribute => builder.push(Attribute),
                     RankingRule::WordsPosition => builder.push(WordsPosition),
                     RankingRule::Exact => builder.push(Exact),
-                    RankingRule::Asc(field) => builder.push(SortByAttr::lower_is_better(&ranked_map, &schema, &field).unwrap()),
-                    RankingRule::Dsc(field) => builder.push(SortByAttr::higher_is_better(&ranked_map, &schema, &field).unwrap()),
+                    RankingRule::Asc(field) => builder
+                        .push(SortByAttr::lower_is_better(&ranked_map, &schema, &field).unwrap()),
+                    RankingRule::Dsc(field) => builder
+                        .push(SortByAttr::higher_is_better(&ranked_map, &schema, &field).unwrap()),
                 };
             }
             builder.push(DocumentId);

@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use tide::{Request, Response};
 use indexmap::IndexMap;
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
+use tide::{Request, Response};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::RequestExt;
@@ -39,7 +39,8 @@ pub async fn get(ctx: Request<Data>) -> SResult<Response> {
 pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
 
-    let data: BTreeMap<String, Vec<String>> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
+    let data: BTreeMap<String, Vec<String>> =
+        ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
     let index = ctx.index()?;
 
@@ -48,7 +49,7 @@ pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
 
     let settings = SettingsUpdate {
         synonyms: UpdateState::Update(data),
-        .. SettingsUpdate::default()
+        ..SettingsUpdate::default()
     };
 
     let update_id = index.settings_update(&mut writer, settings)?;
@@ -58,7 +59,6 @@ pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())
 }
-
 
 pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
@@ -70,7 +70,7 @@ pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
 
     let settings = SettingsUpdate {
         synonyms: UpdateState::Clear,
-        .. SettingsUpdate::default()
+        ..SettingsUpdate::default()
     };
 
     let update_id = index.settings_update(&mut writer, settings)?;

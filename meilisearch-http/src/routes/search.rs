@@ -34,10 +34,13 @@ pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
 
-    let schema = index.main.schema(&reader)?
+    let schema = index
+        .main
+        .schema(&reader)?
         .ok_or(ResponseError::open_index("No Schema found"))?;
 
-    let query: SearchQuery = ctx.query()
+    let query: SearchQuery = ctx
+        .query()
         .map_err(|_| ResponseError::bad_request("invalid query parameter"))?;
 
     let mut search_builder = index.new_search(query.q.clone());

@@ -122,7 +122,9 @@ struct ErrorMessage {
 
 fn error(message: String, status: StatusCode) -> Response {
     let message = ErrorMessage { message };
-    tide::Response::new(status.as_u16()).body_json(&message).unwrap()
+    tide::Response::new(status.as_u16())
+        .body_json(&message)
+        .unwrap()
 }
 
 impl From<meilisearch_core::Error> for ResponseError {
@@ -154,11 +156,11 @@ pub trait IntoInternalError<T> {
 }
 
 /// Must be used only
-impl <T> IntoInternalError<T> for Option<T> {
+impl<T> IntoInternalError<T> for Option<T> {
     fn into_internal_error(self) -> SResult<T> {
         match self {
             Some(value) => Ok(value),
-            None => Err(ResponseError::internal("Heed cannot find requested value"))
+            None => Err(ResponseError::internal("Heed cannot find requested value")),
         }
     }
 }

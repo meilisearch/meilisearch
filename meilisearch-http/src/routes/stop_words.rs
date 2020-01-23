@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
-use tide::{Request, Response};
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
+use tide::{Request, Response};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::RequestExt;
@@ -31,7 +31,7 @@ pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Update(data),
-        .. SettingsUpdate::default()
+        ..SettingsUpdate::default()
     };
 
     let update_id = index.settings_update(&mut writer, settings)?;
@@ -51,7 +51,7 @@ pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Clear,
-        .. SettingsUpdate::default()
+        ..SettingsUpdate::default()
     };
 
     let update_id = index.settings_update(&mut writer, settings)?;

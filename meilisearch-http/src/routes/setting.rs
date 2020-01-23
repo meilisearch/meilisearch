@@ -1,14 +1,13 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use tide::{Request, Response};
-use meilisearch_core::settings::{SettingsUpdate, UpdateState, Settings};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
 use crate::routes::document::IndexUpdateResponse;
 use crate::Data;
-
 
 pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
@@ -48,9 +47,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     };
 
     let ranking_rules = match index.main.ranking_rules(&reader)? {
-        Some(rules) => {
-            Some(rules.iter().map(|r| r.to_string()).collect())
-        },
+        Some(rules) => Some(rules.iter().map(|r| r.to_string()).collect()),
         None => None,
     };
     let ranking_distinct = index.main.ranking_distinct(&reader)?;
@@ -126,9 +123,7 @@ pub async fn get_ranking(ctx: Request<Data>) -> SResult<Response> {
     let reader = db.main_read_txn()?;
 
     let ranking_rules = match index.main.ranking_rules(&reader)? {
-        Some(rules) => {
-            Some(rules.iter().map(|r| r.to_string()).collect())
-        },
+        Some(rules) => Some(rules.iter().map(|r| r.to_string()).collect()),
         None => None,
     };
 
@@ -157,7 +152,7 @@ pub async fn update_ranking(mut ctx: Request<Data>) -> SResult<Response> {
     let settings = Settings {
         ranking_rules: settings.ranking_rules,
         ranking_distinct: settings.ranking_distinct,
-        .. Settings::default()
+        ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
@@ -177,7 +172,7 @@ pub async fn delete_ranking(ctx: Request<Data>) -> SResult<Response> {
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
         ranking_distinct: UpdateState::Clear,
-        .. SettingsUpdate::default()
+        ..SettingsUpdate::default()
     };
 
     let update_id = index.settings_update(&mut writer, settings)?;
@@ -201,15 +196,11 @@ pub async fn get_rules(ctx: Request<Data>) -> SResult<Response> {
     let reader = db.main_read_txn()?;
 
     let ranking_rules = match index.main.ranking_rules(&reader)? {
-        Some(rules) => {
-            Some(rules.iter().map(|r| r.to_string()).collect())
-        },
+        Some(rules) => Some(rules.iter().map(|r| r.to_string()).collect()),
         None => None,
     };
 
-    let settings = GetRankingRulesSettings {
-        ranking_rules,
-    };
+    let settings = GetRankingRulesSettings { ranking_rules };
 
     Ok(tide::Response::new(200).body_json(&settings).unwrap())
 }
@@ -223,13 +214,13 @@ pub struct SetRankingRulesSettings {
 pub async fn update_rules(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: SetRankingRulesSettings = ctx.body_json().await
-        .map_err(ResponseError::bad_request)?;
+    let settings: SetRankingRulesSettings =
+        ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
         ranking_rules: settings.ranking_rules,
-        .. Settings::default()
+        ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
@@ -248,7 +239,7 @@ pub async fn delete_rules(ctx: Request<Data>) -> SResult<Response> {
 
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
-        .. SettingsUpdate::default()
+        ..SettingsUpdate::default()
     };
 
     let update_id = index.settings_update(&mut writer, settings)?;
@@ -272,9 +263,7 @@ pub async fn get_distinct(ctx: Request<Data>) -> SResult<Response> {
     let reader = db.main_read_txn()?;
 
     let ranking_distinct = index.main.ranking_distinct(&reader)?;
-    let settings = GetRankingDistinctSettings {
-        ranking_distinct,
-    };
+    let settings = GetRankingDistinctSettings { ranking_distinct };
 
     Ok(tide::Response::new(200).body_json(&settings).unwrap())
 }
@@ -288,13 +277,13 @@ pub struct SetRankingDistinctSettings {
 pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: SetRankingDistinctSettings = ctx.body_json().await
-        .map_err(ResponseError::bad_request)?;
+    let settings: SetRankingDistinctSettings =
+        ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
         ranking_distinct: settings.ranking_distinct,
-        .. Settings::default()
+        ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
@@ -313,7 +302,7 @@ pub async fn delete_distinct(ctx: Request<Data>) -> SResult<Response> {
 
     let settings = SettingsUpdate {
         ranking_distinct: UpdateState::Clear,
-        .. SettingsUpdate::default()
+        ..SettingsUpdate::default()
     };
 
     let update_id = index.settings_update(&mut writer, settings)?;
@@ -364,15 +353,15 @@ pub struct SetAttributesSettings {
 pub async fn update_attributes(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: SetAttributesSettings = ctx.body_json().await
-        .map_err(ResponseError::bad_request)?;
+    let settings: SetAttributesSettings =
+        ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
         attribute_identifier: settings.attribute_identifier,
         attributes_searchable: settings.attributes_searchable,
         attributes_displayed: settings.attributes_displayed,
-        .. Settings::default()
+        ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
@@ -391,7 +380,7 @@ pub async fn delete_attributes(ctx: Request<Data>) -> SResult<Response> {
     let settings = SettingsUpdate {
         attributes_searchable: UpdateState::Clear,
         attributes_displayed: UpdateState::Clear,
-        .. SettingsUpdate::default()
+        ..SettingsUpdate::default()
     };
 
     let mut writer = db.update_write_txn()?;
@@ -457,13 +446,13 @@ pub struct SetAttributesSearchableSettings {
 pub async fn update_searchable(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: SetAttributesSearchableSettings = ctx.body_json().await
-        .map_err(ResponseError::bad_request)?;
+    let settings: SetAttributesSearchableSettings =
+        ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
         attributes_searchable: settings.attributes_searchable,
-        .. Settings::default()
+        ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
@@ -481,7 +470,7 @@ pub async fn delete_searchable(ctx: Request<Data>) -> SResult<Response> {
 
     let settings = SettingsUpdate {
         attributes_searchable: UpdateState::Clear,
-        .. SettingsUpdate::default()
+        ..SettingsUpdate::default()
     };
 
     let mut writer = db.update_write_txn()?;
@@ -518,13 +507,13 @@ pub async fn get_displayed(ctx: Request<Data>) -> SResult<Response> {
 pub async fn update_displayed(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: AttributesDisplayedSettings = ctx.body_json().await
-        .map_err(ResponseError::bad_request)?;
+    let settings: AttributesDisplayedSettings =
+        ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
         attributes_displayed: settings.attributes_displayed,
-        .. Settings::default()
+        ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
@@ -542,7 +531,7 @@ pub async fn delete_displayed(ctx: Request<Data>) -> SResult<Response> {
 
     let settings = SettingsUpdate {
         attributes_displayed: UpdateState::Clear,
-        .. SettingsUpdate::default()
+        ..SettingsUpdate::default()
     };
 
     let mut writer = db.update_write_txn()?;

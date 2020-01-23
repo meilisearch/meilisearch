@@ -18,9 +18,13 @@ fn test_healthyness() {
 
     let body = json!({
         "health": false,
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::put("/health").body(Body::from(body)).unwrap();
+    let req = http::Request::put("/health")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 200);
 
@@ -34,9 +38,13 @@ fn test_healthyness() {
 
     let body = json!({
         "health": true,
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::put("/health").body(Body::from(body)).unwrap();
+    let req = http::Request::put("/health")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 200);
 

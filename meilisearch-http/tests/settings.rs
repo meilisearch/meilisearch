@@ -1,12 +1,12 @@
-use std::time::Duration;
 use std::convert::Into;
+use std::time::Duration;
 
-use async_std::task::{block_on, sleep};
+use assert_json_diff::assert_json_eq;
 use async_std::io::prelude::*;
+use async_std::task::{block_on, sleep};
 use http_service::Body;
 use serde_json::json;
 use serde_json::Value;
-use assert_json_diff::assert_json_eq;
 
 mod common;
 
@@ -26,9 +26,13 @@ fn write_all_and_delete() {
 
     let body = json!({
         "uid": "movies",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 201);
 
@@ -76,7 +80,9 @@ fn write_all_and_delete() {
 
     let body = json.to_string().into_bytes();
 
-    let req = http::Request::post("/indexes/movies/settings").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes/movies/settings")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 202);
 
@@ -84,7 +90,9 @@ fn write_all_and_delete() {
 
     // 3 - Get all settings and compare to the previous one
 
-    let req = http::Request::get("/indexes/movies/settings").body(Body::empty()).unwrap();
+    let req = http::Request::get("/indexes/movies/settings")
+        .body(Body::empty())
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 200);
 
@@ -96,7 +104,9 @@ fn write_all_and_delete() {
 
     // 4 - Delete all settings
 
-    let req = http::Request::delete("/indexes/movies/settings").body(Body::empty()).unwrap();
+    let req = http::Request::delete("/indexes/movies/settings")
+        .body(Body::empty())
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 202);
 
@@ -104,7 +114,9 @@ fn write_all_and_delete() {
 
     // 5 - Get all settings and check if they are empty
 
-    let req = http::Request::get("/indexes/movies/settings").body(Body::empty()).unwrap();
+    let req = http::Request::get("/indexes/movies/settings")
+        .body(Body::empty())
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 200);
 
@@ -141,9 +153,13 @@ fn write_all_and_update() {
 
     let body = json!({
         "uid": "movies",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 201);
 
@@ -191,7 +207,9 @@ fn write_all_and_update() {
 
     let body = json.to_string().into_bytes();
 
-    let req = http::Request::post("/indexes/movies/settings").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes/movies/settings")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 202);
 
@@ -199,7 +217,9 @@ fn write_all_and_update() {
 
     // 3 - Get all settings and compare to the previous one
 
-    let req = http::Request::get("/indexes/movies/settings").body(Body::empty()).unwrap();
+    let req = http::Request::get("/indexes/movies/settings")
+        .body(Body::empty())
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 200);
 
@@ -244,7 +264,9 @@ fn write_all_and_update() {
 
     let body_update = json_update.to_string().into_bytes();
 
-    let req = http::Request::post("/indexes/movies/settings").body(Body::from(body_update)).unwrap();
+    let req = http::Request::post("/indexes/movies/settings")
+        .body(Body::from(body_update))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 202);
 
@@ -252,7 +274,9 @@ fn write_all_and_update() {
 
     // 5 - Get all settings and check if the content is the same of (4)
 
-    let req = http::Request::get("/indexes/movies/settings").body(Body::empty()).unwrap();
+    let req = http::Request::get("/indexes/movies/settings")
+        .body(Body::empty())
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 200);
 

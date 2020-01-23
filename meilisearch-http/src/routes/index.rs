@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tide::{Request, Response};
 
-use crate::error::{ResponseError, SResult, IntoInternalError};
+use crate::error::{IntoInternalError, ResponseError, SResult};
 use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
 use crate::Data;
@@ -114,7 +114,9 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         .map_err(ResponseError::bad_request)?;
 
     if let (None, None) = (body.name.clone(), body.uid.clone()) {
-        return Err(ResponseError::bad_request("Index creation must have an uid"));
+        return Err(ResponseError::bad_request(
+            "Index creation must have an uid",
+        ));
     }
 
     let db = &ctx.state().db;
@@ -137,8 +139,14 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
     let mut writer = db.main_write_txn()?;
     let name = body.name.unwrap_or(uid.clone());
     created_index.main.put_name(&mut writer, &name)?;
-    let created_at = created_index.main.created_at(&writer)?.into_internal_error()?;
-    let updated_at = created_index.main.updated_at(&writer)?.into_internal_error()?;
+    let created_at = created_index
+        .main
+        .created_at(&writer)?
+        .into_internal_error()?;
+    let updated_at = created_index
+        .main
+        .updated_at(&writer)?
+        .into_internal_error()?;
 
     writer.commit()?;
 
@@ -216,7 +224,9 @@ pub async fn get_update_status(ctx: Request<Data>) -> SResult<Response> {
 
     let response = match status {
         Some(status) => tide::Response::new(200).body_json(&status).unwrap(),
-        None => tide::Response::new(404).body_json(&json!({ "message": "unknown update id" })).unwrap(),
+        None => tide::Response::new(404)
+            .body_json(&json!({ "message": "unknown update id" }))
+            .unwrap(),
     };
 
     Ok(response)

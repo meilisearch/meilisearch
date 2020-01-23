@@ -1,9 +1,9 @@
-use async_std::task::block_on;
 use async_std::io::prelude::*;
+use async_std::task::block_on;
 use http_service::Body;
 use serde_json::json;
-use std::convert::Into;
 use serde_json::Value;
+use std::convert::Into;
 
 mod common;
 
@@ -17,9 +17,13 @@ fn create_index_with_name() {
 
     let body = json!({
         "name": "movies",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 201);
 
@@ -73,9 +77,13 @@ fn create_index_with_uid() {
 
     let body = json!({
         "uid": "movies",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 201);
 
@@ -130,9 +138,13 @@ fn create_index_with_name_and_uid() {
     let body = json!({
         "name": "Films",
         "uid": "fr_movies",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 201);
 
@@ -185,9 +197,13 @@ fn rename_index() {
 
     let body = json!({
         "name": "movies",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 201);
 
@@ -212,9 +228,13 @@ fn rename_index() {
 
     let body = json!({
         "name": "TV Shows",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::put(format!("/indexes/{}", r1_uid)).body(Body::from(body)).unwrap();
+    let req = http::Request::put(format!("/indexes/{}", r1_uid))
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 200);
 
@@ -268,9 +288,13 @@ fn delete_index_and_recreate_it() {
 
     let body = json!({
         "name": "movies",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 201);
 
@@ -317,7 +341,9 @@ fn delete_index_and_recreate_it() {
     // Update "movies" to "TV Shows"
     // DELETE: /indexes/:uid
 
-    let req = http::Request::delete(format!("/indexes/{}", r1_uid)).body(Body::empty()).unwrap();
+    let req = http::Request::delete(format!("/indexes/{}", r1_uid))
+        .body(Body::empty())
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 204);
 
@@ -345,9 +371,13 @@ fn delete_index_and_recreate_it() {
 
     let body = json!({
         "name": "movies",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 201);
 
@@ -401,9 +431,13 @@ fn check_multiples_indexes() {
 
     let body = json!({
         "name": "movies",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 201);
 
@@ -452,9 +486,13 @@ fn check_multiples_indexes() {
 
     let body = json!({
         "name": "films",
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 201);
 
@@ -524,7 +562,6 @@ fn check_multiples_indexes() {
     }
 }
 
-
 #[test]
 fn create_index_failed() {
     let mut server = common::setup_server().unwrap();
@@ -549,7 +586,9 @@ fn create_index_failed() {
 
     let body = json!({}).to_string().into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 400);
 
@@ -567,9 +606,13 @@ fn create_index_failed() {
     let body = json!({
         "name": "movies",
         "active": true
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 400);
 
@@ -587,9 +630,13 @@ fn create_index_failed() {
     let body = json!({
         "name": "movies",
         "uid": 0
-    }).to_string().into_bytes();
+    })
+    .to_string()
+    .into_bytes();
 
-    let req = http::Request::post("/indexes").body(Body::from(body)).unwrap();
+    let req = http::Request::post("/indexes")
+        .body(Body::from(body))
+        .unwrap();
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 400);
 
