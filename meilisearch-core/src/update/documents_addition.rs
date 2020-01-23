@@ -139,7 +139,9 @@ pub fn apply_documents_addition<'a, 'b>(
     let documents_ids = Intersection::new(&documents_ids, &existings_documents_ids).into_set_buf();
     let documents_ids = documents_ids.into_vec();
 
-    apply_documents_deletion(writer, index, documents_ids)?;
+    if !documents_ids.is_empty() {
+        apply_documents_deletion(writer, index, documents_ids)?;
+    }
 
     let mut ranked_map = match index.main.ranked_map(writer)? {
         Some(ranked_map) => ranked_map,
@@ -175,8 +177,6 @@ pub fn apply_documents_addition<'a, 'b>(
         number_of_inserted_documents,
         indexer,
     )?;
-
-    compute_short_prefixes(writer, index)?;
 
     Ok(())
 }
@@ -234,7 +234,9 @@ pub fn apply_documents_partial_addition<'a, 'b>(
     let documents_ids = Intersection::new(&documents_ids, &existings_documents_ids).into_set_buf();
     let documents_ids = documents_ids.into_vec();
 
-    apply_documents_deletion(writer, index, documents_ids)?;
+    if !documents_ids.is_empty() {
+        apply_documents_deletion(writer, index, documents_ids)?;
+    }
 
     let mut ranked_map = match index.main.ranked_map(writer)? {
         Some(ranked_map) => ranked_map,
@@ -270,8 +272,6 @@ pub fn apply_documents_partial_addition<'a, 'b>(
         number_of_inserted_documents,
         indexer,
     )?;
-
-    compute_short_prefixes(writer, index)?;
 
     Ok(())
 }
@@ -339,8 +339,6 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
             indexer,
         )?;
     }
-
-    compute_short_prefixes(writer, index)?;
 
     Ok(())
 }
