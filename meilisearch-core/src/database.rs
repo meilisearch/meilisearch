@@ -319,8 +319,26 @@ impl Database {
         self.update_env.typed_write_txn::<UpdateT>()
     }
 
-    pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> ZResult<File> {
-        self.env.copy_to_path(path, CompactionOption::Enabled)
+    pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> ZResult<(File, File)> {
+        let path = path.as_ref();
+
+        let env_path = path.join("main");
+        let env_update_path = path.join("update");
+
+        fs::create_dir(&env_path)?;
+        fs::create_dir(&env_update_path)?;
+
+        let env_path = env_path.join("data.mdb");
+        let env_file = self.env.copy_to_path(&env_path, CompactionOption::Enabled)?;
+
+        let env_update_path = env_update_path.join("data.mdb");
+        match self.update_env.copy_to_path(env_update_path, CompactionOption::Enabled) {
+            Ok(update_env_file) => Ok((env_file, update_env_file)),
+            Err(e) => {
+                fs::remove_file(env_path)?;
+                Err(e)
+            },
+        }
     }
 
     pub fn indexes_uids(&self) -> Vec<String> {
