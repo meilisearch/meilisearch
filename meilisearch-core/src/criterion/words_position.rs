@@ -9,13 +9,13 @@ pub struct WordsPosition;
 impl Criterion for WordsPosition {
     fn name(&self) -> &str { "words position" }
 
-    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
+    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'r>(
         &self,
-        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
+        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q>,
         documents: &mut [RawDocument<'r, 'tag>],
     ) -> MResult<()>
     {
-        prepare_bare_matches(documents, ctx.postings_lists, ctx.query_enhancer);
+        prepare_bare_matches(documents, ctx.postings_lists, ctx.query_mapping);
         Ok(())
     }
 

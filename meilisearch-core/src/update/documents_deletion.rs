@@ -8,7 +8,7 @@ use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::serde::extract_document_id;
 use crate::store;
-use crate::update::{next_update_id, Update};
+use crate::update::{next_update_id, compute_short_prefixes, Update};
 use crate::{DocumentId, Error, MResult, RankedMap};
 
 pub struct DocumentsDeletion {
@@ -85,21 +85,17 @@ pub fn push_documents_deletion(
 
 pub fn apply_documents_deletion(
     writer: &mut heed::RwTxn<MainT>,
-    main_store: store::Main,
-    documents_fields_store: store::DocumentsFields,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    postings_lists_store: store::PostingsLists,
-    docs_words_store: store::DocsWords,
+    index: &store::Index,
     deletion: Vec<DocumentId>,
 ) -> MResult<()> {
     let idset = SetBuf::from_dirty(deletion);
 
-    let schema = match main_store.schema(writer)? {
+    let schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
 
-    let mut ranked_map = match main_store.ranked_map(writer)? {
+    let mut ranked_map = match index.main.ranked_map(writer)? {
         Some(ranked_map) => ranked_map,
         None => RankedMap::default(),
     };
@@ -125,7 +121,7 @@ pub fn apply_documents_deletion(
             ranked_map.remove(id, *ranked_attr);
         }
 
-        if let Some(words) = docs_words_store.doc_words(writer, id)? {
+        if let Some(words) = index.docs_words.doc_words(writer, id)? {
             let mut stream = words.stream();
             while let Some(word) = stream.next() {
                 let word = word.to_vec();
@@ -142,21 +138,21 @@ pub fn apply_documents_deletion(
     for (word, document_ids) in words_document_ids {
         let document_ids = SetBuf::from_dirty(document_ids);
 
-        if let Some(doc_indexes) = postings_lists_store.postings_list(writer, &word)? {
-            let op = DifferenceByKey::new(&doc_indexes, &document_ids, |d| d.document_id, |id| *id);
+        if let Some(postings) = index.postings_lists.postings_list(writer, &word)? {
+            let op = DifferenceByKey::new(&postings.matches, &document_ids, |d| d.document_id, |id| *id);
             let doc_indexes = op.into_set_buf();
 
             if !doc_indexes.is_empty() {
-                postings_lists_store.put_postings_list(writer, &word, &doc_indexes)?;
+                index.postings_lists.put_postings_list(writer, &word, &doc_indexes)?;
             } else {
-                postings_lists_store.del_postings_list(writer, &word)?;
+                index.postings_lists.del_postings_list(writer, &word)?;
                 removed_words.insert(word);
             }
         }
 
         for id in document_ids {
-            documents_fields_counts_store.del_all_document_fields_counts(writer, id)?;
-            if documents_fields_store.del_all_document_fields(writer, id)? != 0 {
+            index.documents_fields_counts.del_all_document_fields_counts(writer, id)?;
+            if index.documents_fields.del_all_document_fields(writer, id)? != 0 {
                 deleted_documents.insert(id);
             }
         }
@@ -164,11 +160,11 @@ pub fn apply_documents_deletion(
 
     let deleted_documents_len = deleted_documents.len() as u64;
     for id in deleted_documents {
-        docs_words_store.del_doc_words(writer, id)?;
+        index.docs_words.del_doc_words(writer, id)?;
     }
 
     let removed_words = fst::Set::from_iter(removed_words).unwrap();
-    let words = match main_store.words_fst(writer)? {
+    let words = match index.main.words_fst(writer)? {
         Some(words_set) => {
             let op = fst::set::OpBuilder::new()
                 .add(words_set.stream())
@@ -185,9 +181,11 @@ pub fn apply_documents_deletion(
         None => fst::Set::default(),
     };
 
-    main_store.put_words_fst(writer, &words)?;
-    main_store.put_ranked_map(writer, &ranked_map)?;
-    main_store.put_number_of_documents(writer, |old| old - deleted_documents_len)?;
+    index.main.put_words_fst(writer, &words)?;
+    index.main.put_ranked_map(writer, &ranked_map)?;
+    index.main.put_number_of_documents(writer, |old| old - deleted_documents_len)?;
+
+    compute_short_prefixes(writer, index)?;
 
     Ok(())
 }

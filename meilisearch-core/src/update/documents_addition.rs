@@ -9,7 +9,7 @@ use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::raw_indexer::RawIndexer;
 use crate::serde::{extract_document_id, serialize_value, Deserializer, Serializer};
 use crate::store;
-use crate::update::{apply_documents_deletion, next_update_id, Update};
+use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
 use crate::{Error, MResult, RankedMap};
 
 pub struct DocumentsAddition<D> {
@@ -104,16 +104,12 @@ pub fn push_documents_addition<D: serde::Serialize>(
 
 pub fn apply_documents_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
-    main_store: store::Main,
-    documents_fields_store: store::DocumentsFields,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    postings_lists_store: store::PostingsLists,
-    docs_words_store: store::DocsWords,
+    index: &store::Index,
     addition: Vec<HashMap<String, serde_json::Value>>,
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
 
-    let schema = match main_store.schema(writer)? {
+    let schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
@@ -133,22 +129,14 @@ pub fn apply_documents_addition<'a, 'b>(
     // 2. remove the documents posting lists
     let number_of_inserted_documents = documents_additions.len();
     let documents_ids = documents_additions.iter().map(|(id, _)| *id).collect();
-    apply_documents_deletion(
-        writer,
-        main_store,
-        documents_fields_store,
-        documents_fields_counts_store,
-        postings_lists_store,
-        docs_words_store,
-        documents_ids,
-    )?;
+    apply_documents_deletion(writer, index, documents_ids)?;
 
-    let mut ranked_map = match main_store.ranked_map(writer)? {
+    let mut ranked_map = match index.main.ranked_map(writer)? {
         Some(ranked_map) => ranked_map,
         None => RankedMap::default(),
     };
 
-    let stop_words = match main_store.stop_words_fst(writer)? {
+    let stop_words = match index.main.stop_words_fst(writer)? {
         Some(stop_words) => stop_words,
         None => fst::Set::default(),
     };
@@ -160,8 +148,8 @@ pub fn apply_documents_addition<'a, 'b>(
         let serializer = Serializer {
             txn: writer,
             schema: &schema,
-            document_store: documents_fields_store,
-            document_fields_counts: documents_fields_counts_store,
+            document_store: index.documents_fields,
+            document_fields_counts: index.documents_fields_counts,
             indexer: &mut indexer,
             ranked_map: &mut ranked_map,
             document_id,
@@ -172,27 +160,25 @@ pub fn apply_documents_addition<'a, 'b>(
 
     write_documents_addition_index(
         writer,
-        main_store,
-        postings_lists_store,
-        docs_words_store,
+        index,
         &ranked_map,
         number_of_inserted_documents,
         indexer,
-    )
+    )?;
+
+    compute_short_prefixes(writer, index)?;
+
+    Ok(())
 }
 
 pub fn apply_documents_partial_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
-    main_store: store::Main,
-    documents_fields_store: store::DocumentsFields,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    postings_lists_store: store::PostingsLists,
-    docs_words_store: store::DocsWords,
+    index: &store::Index,
     addition: Vec<HashMap<String, serde_json::Value>>,
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
 
-    let schema = match main_store.schema(writer)? {
+    let schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
@@ -209,7 +195,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
         let mut deserializer = Deserializer {
             document_id,
             reader: writer,
-            documents_fields: documents_fields_store,
+            documents_fields: index.documents_fields,
             schema: &schema,
             attributes: None,
         };
@@ -229,22 +215,14 @@ pub fn apply_documents_partial_addition<'a, 'b>(
     // 2. remove the documents posting lists
     let number_of_inserted_documents = documents_additions.len();
     let documents_ids = documents_additions.iter().map(|(id, _)| *id).collect();
-    apply_documents_deletion(
-        writer,
-        main_store,
-        documents_fields_store,
-        documents_fields_counts_store,
-        postings_lists_store,
-        docs_words_store,
-        documents_ids,
-    )?;
+    apply_documents_deletion(writer, index, documents_ids)?;
 
-    let mut ranked_map = match main_store.ranked_map(writer)? {
+    let mut ranked_map = match index.main.ranked_map(writer)? {
         Some(ranked_map) => ranked_map,
         None => RankedMap::default(),
     };
 
-    let stop_words = match main_store.stop_words_fst(writer)? {
+    let stop_words = match index.main.stop_words_fst(writer)? {
         Some(stop_words) => stop_words,
         None => fst::Set::default(),
     };
@@ -256,8 +234,8 @@ pub fn apply_documents_partial_addition<'a, 'b>(
         let serializer = Serializer {
             txn: writer,
             schema: &schema,
-            document_store: documents_fields_store,
-            document_fields_counts: documents_fields_counts_store,
+            document_store: index.documents_fields,
+            document_fields_counts: index.documents_fields_counts,
             indexer: &mut indexer,
             ranked_map: &mut ranked_map,
             document_id,
@@ -268,24 +246,19 @@ pub fn apply_documents_partial_addition<'a, 'b>(
 
     write_documents_addition_index(
         writer,
-        main_store,
-        postings_lists_store,
-        docs_words_store,
+        index,
         &ranked_map,
         number_of_inserted_documents,
         indexer,
-    )
+    )?;
+
+    compute_short_prefixes(writer, index)?;
+
+    Ok(())
 }
 
-pub fn reindex_all_documents(
-    writer: &mut heed::RwTxn<MainT>,
-    main_store: store::Main,
-    documents_fields_store: store::DocumentsFields,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    postings_lists_store: store::PostingsLists,
-    docs_words_store: store::DocsWords,
-) -> MResult<()> {
-    let schema = match main_store.schema(writer)? {
+pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Index) -> MResult<()> {
+    let schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
@@ -294,21 +267,21 @@ pub fn reindex_all_documents(
 
     // 1. retrieve all documents ids
     let mut documents_ids_to_reindex = Vec::new();
-    for result in documents_fields_counts_store.documents_ids(writer)? {
+    for result in index.documents_fields_counts.documents_ids(writer)? {
         let document_id = result?;
         documents_ids_to_reindex.push(document_id);
     }
 
     // 2. remove the documents posting lists
-    main_store.put_words_fst(writer, &fst::Set::default())?;
-    main_store.put_ranked_map(writer, &ranked_map)?;
-    main_store.put_number_of_documents(writer, |_| 0)?;
-    postings_lists_store.clear(writer)?;
-    docs_words_store.clear(writer)?;
+    index.main.put_words_fst(writer, &fst::Set::default())?;
+    index.main.put_ranked_map(writer, &ranked_map)?;
+    index.main.put_number_of_documents(writer, |_| 0)?;
+    index.postings_lists.clear(writer)?;
+    index.docs_words.clear(writer)?;
 
     // 3. re-index chunks of documents (otherwise we make the borrow checker unhappy)
     for documents_ids in documents_ids_to_reindex.chunks(100) {
-        let stop_words = match main_store.stop_words_fst(writer)? {
+        let stop_words = match index.main.stop_words_fst(writer)? {
             Some(stop_words) => stop_words,
             None => fst::Set::default(),
         };
@@ -318,7 +291,7 @@ pub fn reindex_all_documents(
         let mut ram_store = HashMap::new();
 
         for document_id in documents_ids {
-            for result in documents_fields_store.document_fields(writer, *document_id)? {
+            for result in index.documents_fields.document_fields(writer, *document_id)? {
                 let (attr, bytes) = result?;
                 let value: serde_json::Value = serde_json::from_slice(bytes)?;
                 ram_store.insert((document_id, attr), value);
@@ -330,8 +303,8 @@ pub fn reindex_all_documents(
                     attr,
                     schema.props(attr),
                     *docid,
-                    documents_fields_store,
-                    documents_fields_counts_store,
+                    index.documents_fields,
+                    index.documents_fields_counts,
                     &mut indexer,
                     &mut ranked_map,
                     &value,
@@ -342,23 +315,21 @@ pub fn reindex_all_documents(
         // 4. write the new index in the main store
         write_documents_addition_index(
             writer,
-            main_store,
-            postings_lists_store,
-            docs_words_store,
+            index,
             &ranked_map,
             number_of_inserted_documents,
             indexer,
         )?;
     }
 
+    compute_short_prefixes(writer, index)?;
+
     Ok(())
 }
 
 pub fn write_documents_addition_index(
     writer: &mut heed::RwTxn<MainT>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    docs_words_store: store::DocsWords,
+    index: &store::Index,
     ranked_map: &RankedMap,
     number_of_inserted_documents: usize,
     indexer: RawIndexer,
@@ -369,16 +340,16 @@ pub fn write_documents_addition_index(
     for (word, delta_set) in indexed.words_doc_indexes {
         delta_words_builder.insert(&word).unwrap();
 
-        let set = match postings_lists_store.postings_list(writer, &word)? {
-            Some(set) => Union::new(&set, &delta_set).into_set_buf(),
+        let set = match index.postings_lists.postings_list(writer, &word)? {
+            Some(postings) => Union::new(&postings.matches, &delta_set).into_set_buf(),
             None => delta_set,
         };
 
-        postings_lists_store.put_postings_list(writer, &word, &set)?;
+        index.postings_lists.put_postings_list(writer, &word, &set)?;
     }
 
     for (id, words) in indexed.docs_words {
-        docs_words_store.put_doc_words(writer, id, &words)?;
+        index.docs_words.put_doc_words(writer, id, &words)?;
     }
 
     let delta_words = delta_words_builder
@@ -386,7 +357,7 @@ pub fn write_documents_addition_index(
         .and_then(fst::Set::from_bytes)
         .unwrap();
 
-    let words = match main_store.words_fst(writer)? {
+    let words = match index.main.words_fst(writer)? {
         Some(words) => {
             let op = OpBuilder::new()
                 .add(words.stream())
@@ -403,9 +374,11 @@ pub fn write_documents_addition_index(
         None => delta_words,
     };
 
-    main_store.put_words_fst(writer, &words)?;
-    main_store.put_ranked_map(writer, ranked_map)?;
-    main_store.put_number_of_documents(writer, |old| old + number_of_inserted_documents as u64)?;
+    index.main.put_words_fst(writer, &words)?;
+    index.main.put_ranked_map(writer, ranked_map)?;
+    index.main.put_number_of_documents(writer, |old| old + number_of_inserted_documents as u64)?;
+
+    compute_short_prefixes(writer, index)?;
 
     Ok(())
 }

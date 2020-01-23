@@ -4,19 +4,17 @@ use crate::{store, MResult, RankedMap};
 
 pub fn apply_clear_all(
     writer: &mut heed::RwTxn<MainT>,
-    main_store: store::Main,
-    documents_fields_store: store::DocumentsFields,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    postings_lists_store: store::PostingsLists,
-    docs_words_store: store::DocsWords,
+    index: &store::Index,
 ) -> MResult<()> {
-    main_store.put_words_fst(writer, &fst::Set::default())?;
-    main_store.put_ranked_map(writer, &RankedMap::default())?;
-    main_store.put_number_of_documents(writer, |_| 0)?;
-    documents_fields_store.clear(writer)?;
-    documents_fields_counts_store.clear(writer)?;
-    postings_lists_store.clear(writer)?;
-    docs_words_store.clear(writer)?;
+    index.main.put_words_fst(writer, &fst::Set::default())?;
+    index.main.put_ranked_map(writer, &RankedMap::default())?;
+    index.main.put_number_of_documents(writer, |_| 0)?;
+    index.documents_fields.clear(writer)?;
+    index.documents_fields_counts.clear(writer)?;
+    index.postings_lists.clear(writer)?;
+    index.docs_words.clear(writer)?;
+    index.prefix_documents_cache.clear(writer)?;
+    index.prefix_postings_lists_cache.clear(writer)?;
 
     Ok(())
 }

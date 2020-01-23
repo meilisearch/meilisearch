@@ -26,6 +26,8 @@ use chrono::{DateTime, Utc};
 use heed::Result as ZResult;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use fst::{IntoStreamer, Streamer};
+use sdset::Set;
 
 use crate::{store, DocumentId, MResult};
 use crate::database::{MainT, UpdateT};
@@ -255,14 +257,7 @@ pub fn update_task<'a, 'b>(
             let start = Instant::now();
 
             let update_type = UpdateType::ClearAll;
-            let result = apply_clear_all(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-            );
+            let result = apply_clear_all(writer, index);
 
             (update_type, result, start.elapsed())
         }
@@ -270,15 +265,7 @@ pub fn update_task<'a, 'b>(
             let start = Instant::now();
 
             let update_type = UpdateType::Schema;
-            let result = apply_schema_update(
-                writer,
-                &schema,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-            );
+            let result = apply_schema_update(writer, &schema, index);
 
             (update_type, result, start.elapsed())
         }
@@ -297,15 +284,7 @@ pub fn update_task<'a, 'b>(
                 number: documents.len(),
             };
 
-            let result = apply_documents_addition(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-                documents,
-            );
+            let result = apply_documents_addition(writer, index, documents);
 
             (update_type, result, start.elapsed())
         }
@@ -316,15 +295,7 @@ pub fn update_task<'a, 'b>(
                 number: documents.len(),
             };
 
-            let result = apply_documents_partial_addition(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-                documents,
-            );
+            let result = apply_documents_partial_addition(writer, index, documents);
 
             (update_type, result, start.elapsed())
         }
@@ -335,15 +306,7 @@ pub fn update_task<'a, 'b>(
                 number: documents.len(),
             };
 
-            let result = apply_documents_deletion(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-                documents,
-            );
+            let result = apply_documents_deletion(writer, index, documents);
 
             (update_type, result, start.elapsed())
         }
@@ -377,15 +340,7 @@ pub fn update_task<'a, 'b>(
                 number: stop_words.len(),
             };
 
-            let result = apply_stop_words_deletion(
-                writer,
-                index.main,
-                index.documents_fields,
-                index.documents_fields_counts,
-                index.postings_lists,
-                index.docs_words,
-                stop_words,
-            );
+            let result = apply_stop_words_deletion(writer, index, stop_words);
 
             (update_type, result, start.elapsed())
         }
@@ -406,4 +361,68 @@ pub fn update_task<'a, 'b>(
     };
 
     Ok(status)
+}
+
+fn compute_short_prefixes(writer: &mut heed::RwTxn<MainT>, index: &store::Index) -> MResult<()> {
+    // retrieve the words fst to compute all those prefixes
+    let words_fst = match index.main.words_fst(writer)? {
+        Some(fst) => fst,
+        None => return Ok(()),
+    };
+
+    // clear the prefixes
+    let pplc_store = index.prefix_postings_lists_cache;
+    pplc_store.clear(writer)?;
+
+    for prefix_len in 1..=2 {
+        // compute prefixes and store those in the PrefixPostingsListsCache store.
+        let mut previous_prefix: Option<([u8; 4], Vec<_>)> = None;
+        let mut stream = words_fst.into_stream();
+        while let Some(input) = stream.next() {
+
+            // We skip the prefixes that are shorter than the current length
+            // we want to cache (<). We must ignore the input when it is exactly the
+            // same word as the prefix because if we match exactly on it we need
+            // to consider it as an exact match and not as a prefix (=).
+            if input.len() <= prefix_len { continue }
+
+            if let Some(postings_list) = index.postings_lists.postings_list(writer, input)?.map(|p| p.matches.into_owned()) {
+                let prefix = &input[..prefix_len];
+
+                let mut arr_prefix = [0; 4];
+                arr_prefix[..prefix_len].copy_from_slice(prefix);
+
+                match previous_prefix {
+                    Some((ref mut prev_prefix, ref mut prev_pl)) if *prev_prefix != arr_prefix => {
+                        prev_pl.sort_unstable();
+                        prev_pl.dedup();
+
+                        if let Ok(prefix) = std::str::from_utf8(&prev_prefix[..prefix_len]) {
+                            debug!("writing the prefix of {:?} of length {}", prefix, prev_pl.len());
+                        }
+
+                        let pls = Set::new_unchecked(&prev_pl);
+                        pplc_store.put_prefix_postings_list(writer, *prev_prefix, &pls)?;
+
+                        *prev_prefix = arr_prefix;
+                        prev_pl.clear();
+                        prev_pl.extend_from_slice(&postings_list);
+                    },
+                    Some((_, ref mut prev_pl)) => prev_pl.extend_from_slice(&postings_list),
+                    None => previous_prefix = Some((arr_prefix, postings_list.to_vec())),
+                }
+            }
+        }
+
+        // write the last prefix postings lists
+        if let Some((prev_prefix, mut prev_pl)) = previous_prefix.take() {
+            prev_pl.sort_unstable();
+            prev_pl.dedup();
+
+            let pls = Set::new_unchecked(&prev_pl);
+            pplc_store.put_prefix_postings_list(writer, prev_prefix, &pls)?;
+        }
+    }
+
+    Ok(())
 }

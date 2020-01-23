@@ -8,11 +8,7 @@ use crate::{error::UnsupportedOperation, store, MResult};
 pub fn apply_schema_update(
     writer: &mut heed::RwTxn<MainT>,
     new_schema: &Schema,
-    main_store: store::Main,
-    documents_fields_store: store::DocumentsFields,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    postings_lists_store: store::PostingsLists,
-    docs_words_store: store::DocsWords,
+    index: &store::Index,
 ) -> MResult<()> {
     use UnsupportedOperation::{
         CanOnlyIntroduceNewSchemaAttributesAtEnd, CannotRemoveSchemaAttribute,
@@ -21,7 +17,7 @@ pub fn apply_schema_update(
 
     let mut need_full_reindexing = false;
 
-    if let Some(old_schema) = main_store.schema(writer)? {
+    if let Some(old_schema) = index.main.schema(writer)? {
         for diff in meilisearch_schema::diff(&old_schema, new_schema) {
             match diff {
                 Diff::IdentChange { .. } => return Err(CannotUpdateSchemaIdentifier.into()),
@@ -45,17 +41,10 @@ pub fn apply_schema_update(
         }
     }
 
-    main_store.put_schema(writer, new_schema)?;
+    index.main.put_schema(writer, new_schema)?;
 
     if need_full_reindexing {
-        reindex_all_documents(
-            writer,
-            main_store,
-            documents_fields_store,
-            documents_fields_counts_store,
-            postings_lists_store,
-            docs_words_store,
-        )?
+        reindex_all_documents(writer, index)?
     }
 
     Ok(())
@@ -63,14 +52,13 @@ pub fn apply_schema_update(
 
 pub fn push_schema_update(
     writer: &mut heed::RwTxn<UpdateT>,
-    updates_store: store::Updates,
-    updates_results_store: store::UpdatesResults,
+    index: &store::Index,
     schema: Schema,
 ) -> MResult<u64> {
-    let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
+    let last_update_id = next_update_id(writer, index.updates, index.updates_results)?;
 
     let update = Update::schema(schema);
-    updates_store.put_update(writer, last_update_id, &update)?;
+    index.updates.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
 }

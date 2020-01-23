@@ -10,6 +10,8 @@ mod error;
 mod levenshtein;
 mod number;
 mod query_builder;
+mod query_tree;
+mod query_words_mapper;
 mod ranked_map;
 mod raw_document;
 mod reordered_attrs;
@@ -27,10 +29,15 @@ pub use self::raw_document::RawDocument;
 pub use self::store::Index;
 pub use self::update::{EnqueuedUpdateResult, ProcessedUpdateResult, UpdateStatus, UpdateType};
 pub use meilisearch_types::{DocIndex, DocumentId, Highlight};
+pub use query_words_mapper::QueryWordsMapper;
 
+use std::convert::TryFrom;
+use std::collections::HashMap;
 use compact_arena::SmallArena;
-use crate::bucket_sort::{QueryWordAutomaton, PostingsListView};
+
+use crate::bucket_sort::PostingsListView;
 use crate::levenshtein::prefix_damerau_levenshtein;
+use crate::query_tree::{QueryId, QueryKind};
 use crate::reordered_attrs::ReorderedAttrs;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -44,7 +51,7 @@ pub struct Document {
 
 fn highlights_from_raw_document<'a, 'tag, 'txn>(
     raw_document: &RawDocument<'a, 'tag>,
-    automatons: &[QueryWordAutomaton],
+    queries_kinds: &HashMap<QueryId, &QueryKind>,
     arena: &SmallArena<'tag, PostingsListView<'txn>>,
     searchable_attrs: Option<&ReorderedAttrs>,
 ) -> Vec<Highlight>
@@ -54,13 +61,19 @@ fn highlights_from_raw_document<'a, 'tag, 'txn>(
     for bm in raw_document.bare_matches.iter() {
         let postings_list = &arena[bm.postings_list];
         let input = postings_list.input();
-        let query = &automatons[bm.query_index as usize].query;
+        let kind = &queries_kinds.get(&bm.query_index);
 
         for di in postings_list.iter() {
-            let covered_area = if query.len() > input.len() {
-                input.len()
-            } else {
-                prefix_damerau_levenshtein(query.as_bytes(), input).1
+            let covered_area = match kind {
+                Some(QueryKind::NonTolerant(query)) | Some(QueryKind::Tolerant(query)) => {
+                    let len = if query.len() > input.len() {
+                        input.len()
+                    } else {
+                        prefix_damerau_levenshtein(query.as_bytes(), input).1
+                    };
+                    u16::try_from(len).unwrap_or(u16::max_value())
+                },
+                _ => di.char_length,
             };
 
             let attribute = searchable_attrs
@@ -70,7 +83,7 @@ fn highlights_from_raw_document<'a, 'tag, 'txn>(
             let highlight = Highlight {
                 attribute: attribute,
                 char_index: di.char_index,
-                char_length: covered_area as u16,
+                char_length: covered_area,
             };
 
             highlights.push(highlight);
@@ -82,16 +95,26 @@ fn highlights_from_raw_document<'a, 'tag, 'txn>(
 
 impl Document {
     #[cfg(not(test))]
+    pub fn from_highlights(id: DocumentId, highlights: &[Highlight]) -> Document {
+        Document { id, highlights: highlights.to_owned() }
+    }
+
+    #[cfg(test)]
+    pub fn from_highlights(id: DocumentId, highlights: &[Highlight]) -> Document {
+        Document { id, highlights: highlights.to_owned(), matches: Vec::new() }
+    }
+
+    #[cfg(not(test))]
     pub fn from_raw<'a, 'tag, 'txn>(
         raw_document: RawDocument<'a, 'tag>,
-        automatons: &[QueryWordAutomaton],
+        queries_kinds: &HashMap<QueryId, &QueryKind>,
         arena: &SmallArena<'tag, PostingsListView<'txn>>,
         searchable_attrs: Option<&ReorderedAttrs>,
     ) -> Document
     {
         let highlights = highlights_from_raw_document(
             &raw_document,
-            automatons,
+            queries_kinds,
             arena,
             searchable_attrs,
         );
@@ -102,7 +125,7 @@ impl Document {
     #[cfg(test)]
     pub fn from_raw<'a, 'tag, 'txn>(
         raw_document: RawDocument<'a, 'tag>,
-        automatons: &[QueryWordAutomaton],
+        queries_kinds: &HashMap<QueryId, &QueryKind>,
         arena: &SmallArena<'tag, PostingsListView<'txn>>,
         searchable_attrs: Option<&ReorderedAttrs>,
     ) -> Document
@@ -111,7 +134,7 @@ impl Document {
 
         let highlights = highlights_from_raw_document(
             &raw_document,
-            automatons,
+            queries_kinds,
             arena,
             searchable_attrs,
         );

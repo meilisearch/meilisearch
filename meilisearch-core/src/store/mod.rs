@@ -1,4 +1,6 @@
 mod docs_words;
+mod prefix_documents_cache;
+mod prefix_postings_lists_cache;
 mod documents_fields;
 mod documents_fields_counts;
 mod main;
@@ -8,6 +10,8 @@ mod updates;
 mod updates_results;
 
 pub use self::docs_words::DocsWords;
+pub use self::prefix_documents_cache::PrefixDocumentsCache;
+pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
 pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
 pub use self::documents_fields_counts::{
     DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter,
@@ -18,10 +22,15 @@ pub use self::synonyms::Synonyms;
 pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;
 
+use std::borrow::Cow;
 use std::collections::HashSet;
+use std::convert::TryInto;
+use std::{mem, ptr};
 
 use heed::Result as ZResult;
+use heed::{BytesEncode, BytesDecode};
 use meilisearch_schema::{Schema, SchemaAttr};
+use sdset::{Set, SetBuf};
 use serde::de::{self, Deserialize};
 use zerocopy::{AsBytes, FromBytes};
 
@@ -29,7 +38,7 @@ use crate::criterion::Criteria;
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::database::{MainT, UpdateT};
 use crate::serde::Deserializer;
-use crate::{query_builder::QueryBuilder, update, DocumentId, Error, MResult};
+use crate::{query_builder::QueryBuilder, update, DocIndex, DocumentId, Error, MResult};
 
 type BEU64 = zerocopy::U64<byteorder::BigEndian>;
 type BEU16 = zerocopy::U16<byteorder::BigEndian>;
@@ -47,6 +56,87 @@ impl DocumentAttrKey {
             docid: BEU64::new(docid.0),
             attr: BEU16::new(attr.0),
         }
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct Postings<'a> {
+    pub docids: Cow<'a, Set<DocumentId>>,
+    pub matches: Cow<'a, Set<DocIndex>>,
+}
+
+pub struct PostingsCodec;
+
+impl<'a> BytesEncode<'a> for PostingsCodec {
+    type EItem = Postings<'a>;
+
+    fn bytes_encode(item: &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
+        let u64_size = mem::size_of::<u64>();
+        let docids_size = item.docids.len() * mem::size_of::<DocumentId>();
+        let matches_size = item.matches.len() * mem::size_of::<DocIndex>();
+
+        let mut buffer = Vec::with_capacity(u64_size + docids_size + matches_size);
+
+        let docids_len = item.docids.len();
+        buffer.extend_from_slice(&docids_len.to_be_bytes());
+        buffer.extend_from_slice(item.docids.as_bytes());
+        buffer.extend_from_slice(item.matches.as_bytes());
+
+        Some(Cow::Owned(buffer))
+    }
+}
+
+fn aligned_to(bytes: &[u8], align: usize) -> bool {
+    (bytes as *const _ as *const () as usize) % align == 0
+}
+
+fn from_bytes_to_set<'a, T: 'a>(bytes: &'a [u8]) -> Option<Cow<'a, Set<T>>>
+where T: Clone + FromBytes
+{
+    match zerocopy::LayoutVerified::<_, [T]>::new_slice(bytes) {
+        Some(layout) => Some(Cow::Borrowed(Set::new_unchecked(layout.into_slice()))),
+        None => {
+            let len = bytes.len();
+            let elem_size = mem::size_of::<T>();
+
+            // ensure that it is the alignment that is wrong
+            // and the length is valid
+            if len % elem_size == 0 && !aligned_to(bytes, mem::align_of::<T>()) {
+                let elems = len / elem_size;
+                let mut vec = Vec::<T>::with_capacity(elems);
+
+                unsafe {
+                    let dst = vec.as_mut_ptr() as *mut u8;
+                    ptr::copy_nonoverlapping(bytes.as_ptr(), dst, len);
+                    vec.set_len(elems);
+                }
+
+                return Some(Cow::Owned(SetBuf::new_unchecked(vec)));
+            }
+
+            None
+        }
+    }
+}
+
+impl<'a> BytesDecode<'a> for PostingsCodec {
+    type DItem = Postings<'a>;
+
+    fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
+        let u64_size = mem::size_of::<u64>();
+        let docid_size = mem::size_of::<DocumentId>();
+
+        let (len_bytes, bytes) = bytes.split_at(u64_size);
+        let docids_len = len_bytes.try_into().ok().map(u64::from_be_bytes)? as usize;
+        let docids_size = docids_len * docid_size;
+
+        let docids_bytes = &bytes[..docids_size];
+        let matches_bytes = &bytes[docids_size..];
+
+        let docids = from_bytes_to_set(docids_bytes)?;
+        let matches = from_bytes_to_set(matches_bytes)?;
+
+        Some(Postings { docids, matches })
     }
 }
 
@@ -74,6 +164,14 @@ fn docs_words_name(name: &str) -> String {
     format!("store-{}-docs-words", name)
 }
 
+fn prefix_documents_cache_name(name: &str) -> String {
+    format!("store-{}-prefix-documents-cache", name)
+}
+
+fn prefix_postings_lists_cache_name(name: &str) -> String {
+    format!("store-{}-prefix-postings-lists-cache", name)
+}
+
 fn updates_name(name: &str) -> String {
     format!("store-{}-updates", name)
 }
@@ -90,6 +188,8 @@ pub struct Index {
     pub documents_fields_counts: DocumentsFieldsCounts,
     pub synonyms: Synonyms,
     pub docs_words: DocsWords,
+    pub prefix_documents_cache: PrefixDocumentsCache,
+    pub prefix_postings_lists_cache: PrefixPostingsListsCache,
 
     pub updates: Updates,
     pub updates_results: UpdatesResults,
@@ -142,7 +242,7 @@ impl Index {
 
     pub fn schema_update(&self, writer: &mut heed::RwTxn<UpdateT>, schema: Schema) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
-        update::push_schema_update(writer, self.updates, self.updates_results, schema)
+        update::push_schema_update(writer, self, schema)
     }
 
     pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> ZResult<u64> {
@@ -252,6 +352,8 @@ impl Index {
             self.postings_lists,
             self.documents_fields_counts,
             self.synonyms,
+            self.prefix_documents_cache,
+            self.prefix_postings_lists_cache,
         )
     }
 
@@ -264,6 +366,8 @@ impl Index {
             self.postings_lists,
             self.documents_fields_counts,
             self.synonyms,
+            self.prefix_documents_cache,
+            self.prefix_postings_lists_cache,
             criteria,
         )
     }
@@ -282,6 +386,8 @@ pub fn create(
     let documents_fields_counts_name = documents_fields_counts_name(name);
     let synonyms_name = synonyms_name(name);
     let docs_words_name = docs_words_name(name);
+    let prefix_documents_cache_name = prefix_documents_cache_name(name);
+    let prefix_postings_lists_cache_name = prefix_postings_lists_cache_name(name);
     let updates_name = updates_name(name);
     let updates_results_name = updates_results_name(name);
 
@@ -292,6 +398,8 @@ pub fn create(
     let documents_fields_counts = env.create_database(Some(&documents_fields_counts_name))?;
     let synonyms = env.create_database(Some(&synonyms_name))?;
     let docs_words = env.create_database(Some(&docs_words_name))?;
+    let prefix_documents_cache = env.create_database(Some(&prefix_documents_cache_name))?;
+    let prefix_postings_lists_cache = env.create_database(Some(&prefix_postings_lists_cache_name))?;
     let updates = update_env.create_database(Some(&updates_name))?;
     let updates_results = update_env.create_database(Some(&updates_results_name))?;
 
@@ -299,11 +407,11 @@ pub fn create(
         main: Main { main },
         postings_lists: PostingsLists { postings_lists },
         documents_fields: DocumentsFields { documents_fields },
-        documents_fields_counts: DocumentsFieldsCounts {
-            documents_fields_counts,
-        },
+        documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
+        prefix_postings_lists_cache: PrefixPostingsListsCache { prefix_postings_lists_cache },
+        prefix_documents_cache: PrefixDocumentsCache { prefix_documents_cache },
         updates: Updates { updates },
         updates_results: UpdatesResults { updates_results },
         updates_notifier,
@@ -323,6 +431,8 @@ pub fn open(
     let documents_fields_counts_name = documents_fields_counts_name(name);
     let synonyms_name = synonyms_name(name);
     let docs_words_name = docs_words_name(name);
+    let prefix_documents_cache_name = prefix_documents_cache_name(name);
+    let prefix_postings_lists_cache_name = prefix_postings_lists_cache_name(name);
     let updates_name = updates_name(name);
     let updates_results_name = updates_results_name(name);
 
@@ -351,6 +461,14 @@ pub fn open(
         Some(docs_words) => docs_words,
         None => return Ok(None),
     };
+    let prefix_documents_cache = match env.open_database(Some(&prefix_documents_cache_name))? {
+        Some(prefix_documents_cache) => prefix_documents_cache,
+        None => return Ok(None),
+    };
+    let prefix_postings_lists_cache = match env.open_database(Some(&prefix_postings_lists_cache_name))? {
+        Some(prefix_postings_lists_cache) => prefix_postings_lists_cache,
+        None => return Ok(None),
+    };
     let updates = match update_env.open_database(Some(&updates_name))? {
         Some(updates) => updates,
         None => return Ok(None),
@@ -364,11 +482,11 @@ pub fn open(
         main: Main { main },
         postings_lists: PostingsLists { postings_lists },
         documents_fields: DocumentsFields { documents_fields },
-        documents_fields_counts: DocumentsFieldsCounts {
-            documents_fields_counts,
-        },
+        documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
+        prefix_documents_cache: PrefixDocumentsCache { prefix_documents_cache },
+        prefix_postings_lists_cache: PrefixPostingsListsCache { prefix_postings_lists_cache },
         updates: Updates { updates },
         updates_results: UpdatesResults { updates_results },
         updates_notifier,
@@ -387,6 +505,8 @@ pub fn clear(
     index.documents_fields_counts.clear(writer)?;
     index.synonyms.clear(writer)?;
     index.docs_words.clear(writer)?;
+    index.prefix_documents_cache.clear(writer)?;
+    index.prefix_postings_lists_cache.clear(writer)?;
     index.updates.clear(update_writer)?;
     index.updates_results.clear(update_writer)?;
     Ok(())
