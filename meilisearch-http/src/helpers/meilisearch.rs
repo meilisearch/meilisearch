@@ -239,10 +239,8 @@ impl<'a> SearchBuilder<'a> {
             // Transform to readable matches
             let matches = calculate_matches(matches, self.attributes_to_retrieve.clone(), &schema);
 
-            if !self.matches {
-                if let Some(attributes_to_highlight) = &self.attributes_to_highlight {
-                    formatted = calculate_highlights(&formatted, &matches, attributes_to_highlight);
-                }
+            if let Some(attributes_to_highlight) = &self.attributes_to_highlight {
+                formatted = calculate_highlights(&formatted, &matches, attributes_to_highlight);
             }
 
             let matches_info = if self.matches { Some(matches) } else { None };
