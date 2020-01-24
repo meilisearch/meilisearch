@@ -298,7 +298,7 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
     index.postings_lists.clear(writer)?;
 
     // 3. re-index chunks of documents (otherwise we make the borrow checker unhappy)
-    for documents_ids in documents_ids_to_reindex.chunks(100) {
+    for documents_ids in documents_ids_to_reindex.chunks(10_000) {
         let stop_words = match index.main.stop_words_fst(writer)? {
             Some(stop_words) => stop_words,
             None => fst::Set::default(),
