@@ -404,6 +404,9 @@ fn calculate_matches(
                     continue;
                 }
             };
+            if !schema.get_displayed_name().contains(attribute.as_str()) {
+                continue;
+            }
             if let Some(pos) = matches_result.get_mut(&attribute) {
                 pos.push(MatchPosition {
                     start: m.char_index as usize,
