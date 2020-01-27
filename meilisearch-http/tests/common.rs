@@ -3,9 +3,9 @@ use serde_json::Value;
 use std::error::Error;
 use std::time::Duration;
 
-use async_std::task::{block_on, sleep};
-use async_std::io::prelude::*;
 use assert_json_diff::assert_json_eq;
+use async_std::io::prelude::*;
+use async_std::task::{block_on, sleep};
 use http_service::Body;
 use http_service_mock::{make_server, TestBackend};
 use meilisearch_http::data::Data;
@@ -89,7 +89,8 @@ pub fn enrich_server_with_movies_settings(
             "popularity",
         ],
         "stopWords": null,
-        "synonyms": null
+        "synonyms": null,
+        "indexNewFields": false,
     });
 
     let body = json.to_string().into_bytes();

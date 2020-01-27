@@ -101,7 +101,7 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
         attributes_displayed: UpdateState::Clear,
         stop_words: UpdateState::Clear,
         synonyms: UpdateState::Clear,
-        index_new_fields:  UpdateState::Clear,
+        index_new_fields: UpdateState::Clear,
     };
 
     let update_id = index.settings_update(&mut writer, settings)?;

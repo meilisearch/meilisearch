@@ -75,7 +75,8 @@ fn write_all_and_delete() {
         "synonyms": {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine"],
-        }
+        },
+        "indexNewFields": false,
     });
 
     let body = json.to_string().into_bytes();
@@ -132,7 +133,7 @@ fn write_all_and_delete() {
         "attributesDisplayed": null,
         "stopWords": null,
         "synonyms": null,
-        "indexNewFields": true,
+        "indexNewFields": null,
     });
 
     assert_json_eq!(json, res_value, ordered: false);
@@ -203,7 +204,8 @@ fn write_all_and_update() {
         "synonyms": {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine"],
-        }
+        },
+        "indexNewFields": false,
     });
 
     let body = json.to_string().into_bytes();
@@ -260,7 +262,8 @@ fn write_all_and_update() {
         "synonyms": {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
-        }
+        },
+        "indexNewFields": false,
     });
 
     let body_update = json_update.to_string().into_bytes();
@@ -314,7 +317,7 @@ fn write_all_and_update() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
         },
-        "indexNewFields": true
+        "indexNewFields": false
     });
 
     assert_json_eq!(res_expected, res_value, ordered: false);
