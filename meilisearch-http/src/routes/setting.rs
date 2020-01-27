@@ -544,3 +544,46 @@ pub async fn delete_displayed(ctx: Request<Data>) -> SResult<Response> {
     let response_body = IndexUpdateResponse { update_id };
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())
 }
+
+#[derive(Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct IndexNewFieldsSettings {
+    pub index_new_fields: Option<bool>,
+}
+
+pub async fn get_index_new_fields(ctx: Request<Data>) -> SResult<Response> {
+    ctx.is_allowed(SettingsRead)?;
+    let index = ctx.index()?;
+    let db = &ctx.state().db;
+    let reader = db.main_read_txn()?;
+
+    let schema = index.main.schema(&reader)?;
+
+    let index_new_fields = schema.map(|s| s.must_index_new_fields());
+
+    let settings = IndexNewFieldsSettings {
+        index_new_fields,
+    };
+
+    Ok(tide::Response::new(200).body_json(&settings).unwrap())
+}
+
+pub async fn update_index_new_fields(mut ctx: Request<Data>) -> SResult<Response> {
+    ctx.is_allowed(SettingsWrite)?;
+    let index = ctx.index()?;
+    let settings: IndexNewFieldsSettings =
+        ctx.body_json().await.map_err(ResponseError::bad_request)?;
+    let db = &ctx.state().db;
+
+    let settings = Settings {
+        index_new_fields: settings.index_new_fields,
+        ..Settings::default()
+    };
+
+    let mut writer = db.update_write_txn()?;
+    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
+    writer.commit()?;
+
+    let response_body = IndexUpdateResponse { update_id };
+    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+}
