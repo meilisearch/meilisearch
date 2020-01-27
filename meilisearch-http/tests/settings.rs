@@ -132,6 +132,7 @@ fn write_all_and_delete() {
         "attributesDisplayed": null,
         "stopWords": null,
         "synonyms": null,
+        "indexNewFields": true,
     });
 
     assert_json_eq!(json, res_value, ordered: false);
@@ -312,7 +313,8 @@ fn write_all_and_update() {
         "synonyms": {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
-        }
+        },
+        "indexNewFields": true
     });
 
     assert_json_eq!(res_expected, res_value, ordered: false);

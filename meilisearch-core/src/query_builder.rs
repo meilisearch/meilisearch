@@ -269,7 +269,7 @@ mod tests {
             let mut postings_lists = HashMap::new();
             let mut fields_counts = HashMap::<_, u16>::new();
 
-            let mut schema = Schema::default();
+            let mut schema = Schema::with_identifier("id");
 
             for (word, indexes) in iter {
                 let mut final_indexes = Vec::new();

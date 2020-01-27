@@ -1,8 +1,11 @@
 #![allow(dead_code)]
+use serde_json::Value;
 use std::error::Error;
 use std::time::Duration;
 
 use async_std::task::{block_on, sleep};
+use async_std::io::prelude::*;
+use assert_json_diff::assert_json_eq;
 use http_service::Body;
 use http_service_mock::{make_server, TestBackend};
 use meilisearch_http::data::Data;
@@ -41,9 +44,7 @@ pub fn enrich_server_with_movies_index(
     let req = http::Request::post("/indexes")
         .body(Body::from(body))
         .unwrap();
-    let res = server.simulate(req).unwrap();
-
-    println!("enrich_server_with_movies_index: {:?}", res.status());
+    let _res = server.simulate(req).unwrap();
 
     Ok(())
 }
@@ -96,9 +97,7 @@ pub fn enrich_server_with_movies_settings(
     let req = http::Request::post("/indexes/movies/settings")
         .body(Body::from(body))
         .unwrap();
-    let res = server.simulate(req).unwrap();
-
-    println!("enrich_server_with_movies_settings: {:?}", res.status());
+    let _res = server.simulate(req).unwrap();
 
     block_on(sleep(Duration::from_secs(5)));
 
@@ -113,9 +112,7 @@ pub fn enrich_server_with_movies_documents(
     let req = http::Request::post("/indexes/movies/documents")
         .body(Body::from(body))
         .unwrap();
-    let res = server.simulate(req).unwrap();
-
-    println!("enrich_server_with_movies_documents: {:?}", res.status());
+    let _res = server.simulate(req).unwrap();
 
     block_on(sleep(Duration::from_secs(5)));
 
@@ -132,17 +129,17 @@ pub fn search(server: &mut TestBackend<Service<Data>>, query: &str, expect: Valu
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let response: Value = serde_json::from_slice(&buf).unwrap();
 
-    assert_json_eq!(expect, response, ordered: false)
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false)
 }
 
 pub fn update_config(server: &mut TestBackend<Service<Data>>, config: Value) {
     let body = config.to_string().into_bytes();
 
-    let req = http::Request::post("/indexes")
+    let req = http::Request::post("/indexes/movies/settings")
         .body(Body::from(body))
         .unwrap();
     let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
+    assert_eq!(res.status(), 202);
 
     block_on(sleep(Duration::from_secs(5)));
 }

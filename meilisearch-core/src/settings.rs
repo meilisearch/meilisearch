@@ -21,6 +21,7 @@ pub struct Settings {
     pub attributes_displayed: Option<HashSet<String>>,
     pub stop_words: Option<BTreeSet<String>>,
     pub synonyms: Option<BTreeMap<String, Vec<String>>>,
+    pub index_new_fields: Option<bool>,
 }
 
 impl Settings {
@@ -40,6 +41,7 @@ impl Settings {
             attributes_displayed: UpdateState::convert_with_default(settings.attributes_displayed, UpdateState::Clear),
             stop_words: UpdateState::convert_with_default(settings.stop_words, UpdateState::Clear),
             synonyms: UpdateState::convert_with_default(settings.synonyms, UpdateState::Clear),
+            index_new_fields: UpdateState::convert_with_default(settings.index_new_fields, UpdateState::Clear),
         }
     }
 }
@@ -61,6 +63,7 @@ impl Into<SettingsUpdate> for Settings {
             attributes_displayed: settings.attributes_displayed.into(),
             stop_words: settings.stop_words.into(),
             synonyms: settings.synonyms.into(),
+            index_new_fields: settings.index_new_fields.into(),
         }
     }
 }
@@ -184,6 +187,7 @@ pub struct SettingsUpdate {
     pub attributes_displayed: UpdateState<HashSet<String>>,
     pub stop_words: UpdateState<BTreeSet<String>>,
     pub synonyms: UpdateState<BTreeMap<String, Vec<String>>>,
+    pub index_new_fields: UpdateState<bool>,
 }
 
 impl Default for SettingsUpdate {
@@ -196,6 +200,7 @@ impl Default for SettingsUpdate {
             attributes_displayed: UpdateState::Nothing,
             stop_words: UpdateState::Nothing,
             synonyms: UpdateState::Nothing,
+            index_new_fields: UpdateState::Nothing,
         }
     }
 }

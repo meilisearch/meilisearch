@@ -1,15 +1,6 @@
 use std::convert::Into;
-use std::time::Duration;
 
-use assert_json_diff::assert_json_eq;
-use async_std::io::prelude::*;
-use async_std::task::{block_on, sleep};
-use http_service::Body;
-use http_service_mock::TestBackend;
-use meilisearch_http::data::Data;
 use serde_json::json;
-use serde_json::Value;
-use tide::server::Service;
 
 mod common;
 
@@ -628,14 +619,10 @@ fn basic_search() {
 }
 
 #[test]
-fn search_with_settings_change() {
+fn search_with_settings_basic() {
     let mut server = common::setup_server().unwrap();
-
     common::enrich_server_with_movies_index(&mut server).unwrap();
-    common::enrich_server_with_movies_settings(&mut server).unwrap();
     common::enrich_server_with_movies_documents(&mut server).unwrap();
-
-    // Basic
 
     let config = json!({
       "rankingRules": [
@@ -735,9 +722,12 @@ fn search_with_settings_change() {
     ]);
 
     common::search(&mut server, query, response);
+}
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Set with stop words
+#[test]
+fn search_with_settings_stop_words() {
+    let mut server = common::setup_server().unwrap();
+    common::enrich_server_with_movies_index(&mut server).unwrap();
 
     let config = json!({
       "rankingRules": [
@@ -780,6 +770,7 @@ fn search_with_settings_change() {
     });
 
     common::update_config(&mut server, config);
+    common::enrich_server_with_movies_documents(&mut server).unwrap();
 
     let query = "q=the%20avangers&limit=3";
     let response = json!([
@@ -837,9 +828,12 @@ fn search_with_settings_change() {
     ]);
 
     common::search(&mut server, query, response);
+}
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Set with synonyms
+#[test]
+fn search_with_settings_synonyms() {
+    let mut server = common::setup_server().unwrap();
+    common::enrich_server_with_movies_index(&mut server).unwrap();
 
     let config = json!({
       "rankingRules": [
@@ -887,6 +881,7 @@ fn search_with_settings_change() {
     });
 
     common::update_config(&mut server, config);
+    common::enrich_server_with_movies_documents(&mut server).unwrap();
 
     let query = "q=avangers&limit=3";
     let response = json!([
@@ -944,9 +939,12 @@ fn search_with_settings_change() {
     ]);
 
     common::search(&mut server, query, response);
+}
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Set asc(vote_average) in ranking rules
+#[test]
+fn search_with_settings_ranking_rules() {
+    let mut server = common::setup_server().unwrap();
+    common::enrich_server_with_movies_index(&mut server).unwrap();
 
     let config = json!({
       "rankingRules": [
@@ -989,6 +987,7 @@ fn search_with_settings_change() {
     });
 
     common::update_config(&mut server, config);
+    common::enrich_server_with_movies_documents(&mut server).unwrap();
 
     let query = "q=avangers&limit=3";
     let response = json!([
@@ -1046,9 +1045,12 @@ fn search_with_settings_change() {
     ]);
 
     common::search(&mut server, query, response);
+}
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Remove Title from attributesSearchable
+#[test]
+fn search_with_settings_attributes_searchable() {
+    let mut server = common::setup_server().unwrap();
+    common::enrich_server_with_movies_index(&mut server).unwrap();
 
     let config = json!({
       "rankingRules": [
@@ -1090,6 +1092,7 @@ fn search_with_settings_change() {
     });
 
     common::update_config(&mut server, config);
+    common::enrich_server_with_movies_documents(&mut server).unwrap();
 
     let query = "q=avangers&limit=3";
     let response = json!([
@@ -1147,9 +1150,12 @@ fn search_with_settings_change() {
     ]);
 
     common::search(&mut server, query, response);
+}
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Remove Attributes displayed
+#[test]
+fn search_with_settings_attributes_displayed() {
+    let mut server = common::setup_server().unwrap();
+    common::enrich_server_with_movies_index(&mut server).unwrap();
 
     let config = json!({
       "rankingRules": [
@@ -1186,6 +1192,7 @@ fn search_with_settings_change() {
     });
 
     common::update_config(&mut server, config);
+    common::enrich_server_with_movies_documents(&mut server).unwrap();
 
     let query = "q=avangers&limit=3";
     let response = json!([
@@ -1213,9 +1220,12 @@ fn search_with_settings_change() {
     ]);
 
     common::search(&mut server, query, response);
+}
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Reoder attributesSearchable
+#[test]
+fn search_with_settings_attributes_searchable_2() {
+    let mut server = common::setup_server().unwrap();
+    common::enrich_server_with_movies_index(&mut server).unwrap();
 
     let config = json!({
       "rankingRules": [
@@ -1252,6 +1262,7 @@ fn search_with_settings_change() {
     });
 
     common::update_config(&mut server, config);
+    common::enrich_server_with_movies_documents(&mut server).unwrap();
 
     let query = "q=avangers&limit=3";
     let response = json!([

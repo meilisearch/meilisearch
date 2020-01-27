@@ -57,12 +57,23 @@ pub fn apply_settings_update(
         },
         _ => (),
     }
+
     match settings.ranking_distinct {
         UpdateState::Update(v) => {
             index.main.put_ranking_distinct(writer, v)?;
         },
         UpdateState::Clear => {
             index.main.delete_ranking_distinct(writer)?;
+        },
+        _ => (),
+    }
+
+    match settings.index_new_fields {
+        UpdateState::Update(v) => {
+            schema.set_must_index_new_fields(v);
+        },
+        UpdateState::Clear => {
+            schema.set_must_index_new_fields(true);
         },
         _ => (),
     }
@@ -109,6 +120,7 @@ pub fn apply_settings_update(
             }
         }
     };
+
     match settings.attribute_identifier.clone() {
         UpdateState::Update(v) => {
             schema.set_identifier(v)?;

@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::{FieldsMap, FieldId, SResult, Error, IndexedPos};
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Schema {
     fields_map: FieldsMap,
 
@@ -14,16 +14,25 @@ pub struct Schema {
 
     indexed: Vec<FieldId>,
     indexed_map: HashMap<FieldId, IndexedPos>,
+
+    must_index_new_fields: bool,
 }
 
 impl Schema {
 
     pub fn with_identifier<S: Into<String>>(name: S) -> Schema {
-        let mut schema = Schema::default();
-        let field_id = schema.fields_map.insert(name.into()).unwrap();
-        schema.identifier = field_id;
+        let mut fields_map = FieldsMap::default();
+        let field_id = fields_map.insert(name.into()).unwrap();
 
-        schema
+        Schema {
+            fields_map,
+            identifier: field_id,
+            ranked: HashSet::new(),
+            displayed: HashSet::new(),
+            indexed: Vec::new(),
+            indexed_map: HashMap::new(),
+            must_index_new_fields: true,
+        }
     }
 
     pub fn identifier(&self) -> String {
@@ -62,8 +71,12 @@ impl Schema {
                 Ok(id)
             }
             None => {
-                self.set_indexed(name.clone())?;
-                self.set_displayed(name)
+                if self.must_index_new_fields {
+                    self.set_indexed(name.clone())?;
+                    self.set_displayed(name)
+                } else {
+                    self.fields_map.insert(name.clone())
+                }
             }
         }
     }
@@ -199,5 +212,13 @@ impl Schema {
             self.set_indexed(name)?;
         }
         Ok(())
+    }
+
+    pub fn must_index_new_fields(&self) -> bool {
+        self.must_index_new_fields
+    }
+
+    pub fn set_must_index_new_fields(&mut self, value: bool) {
+        self.must_index_new_fields = value;
     }
 }

@@ -57,6 +57,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let attribute_identifier = schema.clone().map(|s| s.identifier());
     let attributes_searchable = schema.clone().map(|s| s.get_indexed_name());
     let attributes_displayed = schema.clone().map(|s| s.get_displayed_name());
+    let index_new_fields = schema.map(|s| s.must_index_new_fields());
 
     let settings = Settings {
         ranking_rules,
@@ -66,6 +67,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
         attributes_displayed,
         stop_words,
         synonyms,
+        index_new_fields,
     };
 
     Ok(tide::Response::new(200).body_json(&settings).unwrap())
@@ -99,6 +101,7 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
         attributes_displayed: UpdateState::Clear,
         stop_words: UpdateState::Clear,
         synonyms: UpdateState::Clear,
+        index_new_fields:  UpdateState::Clear,
     };
 
     let update_id = index.settings_update(&mut writer, settings)?;
