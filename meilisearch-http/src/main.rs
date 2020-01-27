@@ -6,7 +6,7 @@ use log::info;
 use main_error::MainError;
 use structopt::StructOpt;
 // use tide::middleware::{CorsMiddleware, CorsOrigin};
-// use tide_log::RequestLogger;
+use tide::middleware::RequestLogger;
 
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
@@ -41,7 +41,7 @@ pub fn main() -> Result<(), MainError> {
     //         .allow_origin(CorsOrigin::from("*"))
     //         .allow_methods(HeaderValue::from_static("GET, POST, OPTIONS")),
     // );
-    // app.middleware(RequestLogger::new());
+    app.middleware(RequestLogger::new());
     // app.middleware(tide_compression::Compression::new());
     // app.middleware(tide_compression::Decompression::new());
 
