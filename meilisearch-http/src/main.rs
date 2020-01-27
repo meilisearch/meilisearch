@@ -5,7 +5,6 @@ use async_std::task;
 use log::info;
 use main_error::MainError;
 use structopt::StructOpt;
-// use tide::middleware::{CorsMiddleware, CorsOrigin};
 use tide::middleware::RequestLogger;
 
 use meilisearch_http::data::Data;
@@ -13,7 +12,10 @@ use meilisearch_http::option::Opt;
 use meilisearch_http::routes;
 use meilisearch_http::routes::index::index_update_callback;
 
+use cors::Cors;
+
 mod analytics;
+mod cors;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -36,11 +38,7 @@ pub fn main() -> Result<(), MainError> {
 
     let mut app = tide::with_state(data);
 
-    // app.middleware(
-    //     CorsMiddleware::new()
-    //         .allow_origin(CorsOrigin::from("*"))
-    //         .allow_methods(HeaderValue::from_static("GET, POST, OPTIONS")),
-    // );
+    app.middleware(Cors::new());
     app.middleware(RequestLogger::new());
     // app.middleware(tide_compression::Compression::new());
     // app.middleware(tide_compression::Decompression::new());

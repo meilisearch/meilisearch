@@ -39,11 +39,11 @@ tide = "0.5.1"
 ureq = { version = "0.11.2", features = ["tls"], default-features = false }
 walkdir = "2.2.9"
 whoami = "0.6"
-
+http-service = "0.4.0"
+futures = "0.3.1"
 
 [dev-dependencies]
 http-service-mock = "0.4.0"
-http-service = "0.4.0"
 tempdir = "0.3.7"
 
 [dev-dependencies.assert-json-diff]
