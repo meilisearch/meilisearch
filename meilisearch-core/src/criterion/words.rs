@@ -7,13 +7,13 @@ pub struct Words;
 impl Criterion for Words {
     fn name(&self) -> &str { "words" }
 
-    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
+    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'r>(
         &self,
-        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
+        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q>,
         documents: &mut [RawDocument<'r, 'tag>],
     ) -> MResult<()>
     {
-        prepare_query_distances(documents, ctx.query_enhancer, ctx.postings_lists);
+        prepare_query_distances(documents, ctx.query_mapping, ctx.postings_lists);
         Ok(())
     }
 

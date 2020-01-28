@@ -1,31 +1,27 @@
-use std::ops::Deref;
-use std::{cmp, fmt};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::mem;
+use std::ops::Deref;
 use std::ops::Range;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
+use std::fmt;
 
 use compact_arena::{SmallArena, Idx32, mk_arena};
-use fst::{IntoStreamer, Streamer};
-use hashbrown::HashMap;
-use levenshtein_automata::DFA;
 use log::debug;
-use meilisearch_tokenizer::{is_cjk, split_query_string};
 use meilisearch_types::DocIndex;
-use sdset::{Set, SetBuf};
+use sdset::{Set, SetBuf, exponential_search};
 use slice_group_by::{GroupBy, GroupByMut};
-
-use crate::automaton::NGRAMS;
-use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
-use crate::automaton::normalize_str;
-use crate::automaton::{QueryEnhancer, QueryEnhancerBuilder};
 
 use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
+use crate::query_tree::{create_query_tree, traverse_query_tree};
+use crate::query_tree::{Operation, QueryResult, QueryKind, QueryId, PostingsKey};
+use crate::query_tree::Context as QTContext;
 
 pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
@@ -38,6 +34,8 @@ pub fn bucket_sort<'c, FI>(
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
+    prefix_documents_cache_store: store::PrefixDocumentsCache,
+    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
 ) -> MResult<Vec<Document>>
 where
     FI: Fn(DocumentId) -> bool,
@@ -60,41 +58,62 @@ where
             postings_lists_store,
             documents_fields_counts_store,
             synonyms_store,
+            prefix_documents_cache_store,
+            prefix_postings_lists_cache_store,
         );
     }
 
-    let (mut automatons, mut query_enhancer) =
-        construct_automatons(reader, query, main_store, postings_lists_store, synonyms_store)?;
+    let words_set = match unsafe { main_store.static_words_fst(reader)? } {
+        Some(words) => words,
+        None => return Ok(Vec::new()),
+    };
 
-    debug!("{:?}", query_enhancer);
+    let context = QTContext {
+        words_set,
+        synonyms: synonyms_store,
+        postings_lists: postings_lists_store,
+        prefix_postings_lists: prefix_postings_lists_cache_store,
+    };
 
-    let before_postings_lists_fetching = Instant::now();
-    mk_arena!(arena);
-    let mut bare_matches =
-        fetch_matches(reader, &automatons, &mut arena, main_store, postings_lists_store)?;
-    debug!("bare matches ({}) retrieved in {:.02?}",
-        bare_matches.len(),
-        before_postings_lists_fetching.elapsed(),
-    );
+    let (operation, mapping) = create_query_tree(reader, &context, query)?;
+    debug!("operation:\n{:?}", operation);
+    debug!("mapping:\n{:?}", mapping);
 
-    let before_raw_documents_presort = Instant::now();
-    bare_matches.sort_unstable_by_key(|sm| sm.document_id);
-    debug!("sort by documents ids took {:.02?}", before_raw_documents_presort.elapsed());
-
-    let before_raw_documents_building = Instant::now();
-    let mut prefiltered_documents = 0;
-    let mut raw_documents = Vec::new();
-    for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
-        prefiltered_documents += 1;
-        if let Some(raw_document) = RawDocument::new(bare_matches, &automatons, &mut arena, searchable_attrs.as_ref()) {
-            raw_documents.push(raw_document);
+    fn recurs_operation<'o>(map: &mut HashMap<QueryId, &'o QueryKind>, operation: &'o Operation) {
+        match operation {
+            Operation::And(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
+            Operation::Or(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
+            Operation::Query(query) => { map.insert(query.id, &query.kind); },
         }
     }
-    debug!("creating {} (original {}) candidates documents took {:.02?}",
+
+    let mut queries_kinds = HashMap::new();
+    recurs_operation(&mut queries_kinds, &operation);
+
+    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation)?;
+    debug!("found {} documents", docids.len());
+    debug!("number of postings {:?}", queries.len());
+
+    let before = Instant::now();
+    mk_arena!(arena);
+    let mut bare_matches = cleanup_bare_matches(&mut arena, &docids, queries);
+    debug!("matches cleaned in {:.02?}", before.elapsed());
+
+    let before_bucket_sort = Instant::now();
+
+    let before_raw_documents_building = Instant::now();
+    let mut raw_documents = Vec::new();
+    for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
+        let raw_document = RawDocument::new(bare_matches, &mut arena, searchable_attrs.as_ref());
+        raw_documents.push(raw_document);
+    }
+    debug!("creating {} candidates documents took {:.02?}",
         raw_documents.len(),
-        prefiltered_documents,
         before_raw_documents_building.elapsed(),
     );
+
+    let before_criterion_loop = Instant::now();
+    let proximity_count = AtomicUsize::new(0);
 
     let mut groups = vec![raw_documents.as_mut_slice()];
 
@@ -108,8 +127,7 @@ where
             let ctx = ContextMut {
                 reader,
                 postings_lists: &mut arena,
-                query_enhancer: &mut query_enhancer,
-                automatons: &mut automatons,
+                query_mapping: &mapping,
                 documents_fields_counts_store,
             };
 
@@ -118,8 +136,7 @@ where
 
             let ctx = Context {
                 postings_lists: &arena,
-                query_enhancer: &query_enhancer,
-                automatons: &automatons,
+                query_mapping: &mapping,
             };
 
             let before_criterion_sort = Instant::now();
@@ -141,10 +158,16 @@ where
         }
     }
 
-    let iter = raw_documents.into_iter().skip(range.start).take(range.len());
-    let iter = iter.map(|rd| Document::from_raw(rd, &automatons, &arena, searchable_attrs.as_ref()));
+    debug!("criterion loop took {:.02?}", before_criterion_loop.elapsed());
+    debug!("proximity evaluation called {} times", proximity_count.load(Ordering::Relaxed));
 
-    Ok(iter.collect())
+    let iter = raw_documents.into_iter().skip(range.start).take(range.len());
+    let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref()));
+    let documents = iter.collect();
+
+    debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
+
+    Ok(documents)
 }
 
 pub fn bucket_sort_with_distinct<'c, FI, FD>(
@@ -160,38 +183,57 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     postings_lists_store: store::PostingsLists,
     documents_fields_counts_store: store::DocumentsFieldsCounts,
     synonyms_store: store::Synonyms,
+    _prefix_documents_cache_store: store::PrefixDocumentsCache,
+    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
 ) -> MResult<Vec<Document>>
 where
     FI: Fn(DocumentId) -> bool,
     FD: Fn(DocumentId) -> Option<u64>,
 {
-    let (mut automatons, mut query_enhancer) =
-        construct_automatons(reader, query, main_store, postings_lists_store, synonyms_store)?;
+    let words_set = match unsafe { main_store.static_words_fst(reader)? } {
+        Some(words) => words,
+        None => return Ok(Vec::new()),
+    };
 
-    let before_postings_lists_fetching = Instant::now();
-    mk_arena!(arena);
-    let mut bare_matches = fetch_matches(reader, &automatons, &mut arena, main_store, postings_lists_store)?;
-    debug!("bare matches ({}) retrieved in {:.02?}",
-        bare_matches.len(),
-        before_postings_lists_fetching.elapsed(),
-    );
+    let context = QTContext {
+        words_set,
+        synonyms: synonyms_store,
+        postings_lists: postings_lists_store,
+        prefix_postings_lists: prefix_postings_lists_cache_store,
+    };
 
-    let before_raw_documents_presort = Instant::now();
-    bare_matches.sort_unstable_by_key(|sm| sm.document_id);
-    debug!("sort by documents ids took {:.02?}", before_raw_documents_presort.elapsed());
+    let (operation, mapping) = create_query_tree(reader, &context, query)?;
+    debug!("operation:\n{:?}", operation);
+    debug!("mapping:\n{:?}", mapping);
 
-    let before_raw_documents_building = Instant::now();
-    let mut prefiltered_documents = 0;
-    let mut raw_documents = Vec::new();
-    for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
-        prefiltered_documents += 1;
-        if let Some(raw_document) = RawDocument::new(bare_matches, &automatons, &mut arena, searchable_attrs.as_ref()) {
-            raw_documents.push(raw_document);
+    fn recurs_operation<'o>(map: &mut HashMap<QueryId, &'o QueryKind>, operation: &'o Operation) {
+        match operation {
+            Operation::And(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
+            Operation::Or(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
+            Operation::Query(query) => { map.insert(query.id, &query.kind); },
         }
     }
-    debug!("creating {} (original {}) candidates documents took {:.02?}",
+
+    let mut queries_kinds = HashMap::new();
+    recurs_operation(&mut queries_kinds, &operation);
+
+    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation)?;
+    debug!("found {} documents", docids.len());
+    debug!("number of postings {:?}", queries.len());
+
+    let before = Instant::now();
+    mk_arena!(arena);
+    let mut bare_matches = cleanup_bare_matches(&mut arena, &docids, queries);
+    debug!("matches cleaned in {:.02?}", before.elapsed());
+
+    let before_raw_documents_building = Instant::now();
+    let mut raw_documents = Vec::new();
+    for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
+        let raw_document = RawDocument::new(bare_matches, &mut arena, searchable_attrs.as_ref());
+        raw_documents.push(raw_document);
+    }
+    debug!("creating {} candidates documents took {:.02?}",
         raw_documents.len(),
-        prefiltered_documents,
         before_raw_documents_building.elapsed(),
     );
 
@@ -222,8 +264,7 @@ where
             let ctx = ContextMut {
                 reader,
                 postings_lists: &mut arena,
-                query_enhancer: &mut query_enhancer,
-                automatons: &mut automatons,
+                query_mapping: &mapping,
                 documents_fields_counts_store,
             };
 
@@ -233,8 +274,7 @@ where
 
             let ctx = Context {
                 postings_lists: &arena,
-                query_enhancer: &query_enhancer,
-                automatons: &automatons,
+                query_mapping: &mapping,
             };
 
             let before_criterion_sort = Instant::now();
@@ -306,7 +346,7 @@ where
             };
 
             if distinct_accepted && seen.len() > range.start {
-                documents.push(Document::from_raw(raw_document, &automatons, &arena, searchable_attrs.as_ref()));
+                documents.push(Document::from_raw(raw_document, &queries_kinds, &arena, searchable_attrs.as_ref()));
                 if documents.len() == range.len() {
                     break;
                 }
@@ -317,9 +357,82 @@ where
     Ok(documents)
 }
 
+fn cleanup_bare_matches<'tag, 'txn>(
+    arena: &mut SmallArena<'tag, PostingsListView<'txn>>,
+    docids: &Set<DocumentId>,
+    queries: HashMap<PostingsKey, Cow<'txn, Set<DocIndex>>>,
+) -> Vec<BareMatch<'tag>>
+{
+    let docidslen = docids.len() as f32;
+    let mut bare_matches = Vec::new();
+
+    for (PostingsKey { query, input, distance, is_exact }, matches) in queries {
+        let postings_list_view = PostingsListView::original(Rc::from(input), Rc::new(matches));
+        let pllen = postings_list_view.len() as f32;
+
+        if docidslen / pllen >= 0.8 {
+            let mut offset = 0;
+            for matches in postings_list_view.linear_group_by_key(|m| m.document_id) {
+                let document_id = matches[0].document_id;
+                if docids.contains(&document_id) {
+                    let range = postings_list_view.range(offset, matches.len());
+                    let posting_list_index = arena.add(range);
+
+                    let bare_match = BareMatch {
+                        document_id,
+                        query_index: query.id,
+                        distance,
+                        is_exact,
+                        postings_list: posting_list_index,
+                    };
+
+                    bare_matches.push(bare_match);
+                }
+
+                offset += matches.len();
+            }
+
+        } else {
+            let mut offset = 0;
+            for id in docids.as_slice() {
+                let di = DocIndex { document_id: *id, ..DocIndex::default() };
+                let pos = exponential_search(&postings_list_view[offset..], &di).unwrap_or_else(|x| x);
+
+                offset += pos;
+
+                let group = postings_list_view[offset..]
+                    .linear_group_by_key(|m| m.document_id)
+                    .next()
+                    .filter(|matches| matches[0].document_id == *id);
+
+                if let Some(matches) = group {
+                    let range = postings_list_view.range(offset, matches.len());
+                    let posting_list_index = arena.add(range);
+
+                    let bare_match = BareMatch {
+                        document_id: *id,
+                        query_index: query.id,
+                        distance,
+                        is_exact,
+                        postings_list: posting_list_index,
+                    };
+
+                    bare_matches.push(bare_match);
+                }
+            }
+        }
+    }
+
+    let before_raw_documents_presort = Instant::now();
+    bare_matches.sort_unstable_by_key(|sm| sm.document_id);
+    debug!("sort by documents ids took {:.02?}", before_raw_documents_presort.elapsed());
+
+    bare_matches
+}
+
 pub struct BareMatch<'tag> {
     pub document_id: DocumentId,
-    pub query_index: u16,
+    pub query_index: usize,
     pub distance: u8,
     pub is_exact: bool,
     pub postings_list: Idx32<'tag>,
@@ -338,7 +451,7 @@ impl fmt::Debug for BareMatch<'_> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SimpleMatch {
-    pub query_index: u16,
+    pub query_index: usize,
     pub distance: u8,
     pub attribute: u16,
     pub word_index: u16,
@@ -435,286 +548,4 @@ impl Deref for PostingsListView<'_> {
             PostingsListView::Rewritten { ref postings_list, .. } => postings_list,
         }
     }
-}
-
-fn fetch_matches<'txn, 'tag>(
-    reader: &'txn heed::RoTxn<MainT>,
-    automatons: &[QueryWordAutomaton],
-    arena: &mut SmallArena<'tag, PostingsListView<'txn>>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-) -> MResult<Vec<BareMatch<'tag>>>
-{
-    let before_words_fst = Instant::now();
-    let words = match main_store.words_fst(reader)? {
-        Some(words) => words,
-        None => return Ok(Vec::new()),
-    };
-    debug!("words fst took {:.02?}", before_words_fst.elapsed());
-    debug!("words fst len {} and size {}", words.len(), words.as_fst().as_bytes().len());
-
-    let mut total_postings_lists = Vec::new();
-
-    let mut dfa_time = Duration::default();
-    let mut stream_next_time = Duration::default();
-    let mut postings_lists_fetching_time = Duration::default();
-    let automatons_loop = Instant::now();
-
-    for (query_index, automaton) in automatons.iter().enumerate() {
-        let before_dfa = Instant::now();
-        let dfa = automaton.dfa();
-        let QueryWordAutomaton { query, is_exact, .. } = automaton;
-        dfa_time += before_dfa.elapsed();
-
-        let mut number_of_words = 0;
-        let mut stream = words.search(&dfa).into_stream();
-
-        // while let Some(input) = stream.next() {
-        loop {
-            let before_stream_next = Instant::now();
-            let value = stream.next();
-            stream_next_time += before_stream_next.elapsed();
-
-            let input = match value {
-                Some(input) => input,
-                None => break,
-            };
-
-            number_of_words += 1;
-
-            let distance = dfa.eval(input).to_u8();
-            let is_exact = *is_exact && distance == 0 && input.len() == query.len();
-
-            let before_postings_lists_fetching = Instant::now();
-            if let Some(postings_list) = postings_lists_store.postings_list(reader, input)? {
-                let input = Rc::from(input);
-                let postings_list = Rc::new(postings_list);
-                let postings_list_view = PostingsListView::original(input, postings_list);
-
-                let mut offset = 0;
-                for group in postings_list_view.linear_group_by_key(|di| di.document_id) {
-                    let posting_list_index = arena.add(postings_list_view.range(offset, group.len()));
-                    let document_id = group[0].document_id;
-                    let bare_match = BareMatch {
-                        document_id,
-                        query_index: query_index as u16,
-                        distance,
-                        is_exact,
-                        postings_list: posting_list_index,
-                    };
-
-                    total_postings_lists.push(bare_match);
-                    offset += group.len();
-                }
-            }
-            postings_lists_fetching_time += before_postings_lists_fetching.elapsed();
-        }
-
-        debug!("{:?} gives {} words", query, number_of_words);
-    }
-
-    debug!("automatons loop took {:.02?}", automatons_loop.elapsed());
-    debug!("stream next took {:.02?}", stream_next_time);
-    debug!("postings lists fetching took {:.02?}", postings_lists_fetching_time);
-    debug!("dfa creation took {:.02?}", dfa_time);
-
-    Ok(total_postings_lists)
-}
-
-#[derive(Debug)]
-pub struct QueryWordAutomaton {
-    pub query: String,
-    /// Is it a word that must be considered exact
-    /// or is it some derived word (i.e. a synonym)
-    pub is_exact: bool,
-    pub is_prefix: bool,
-    /// If it's a phrase query and what is
-    /// its index an the length of the phrase
-    pub phrase_query: Option<(u16, u16)>,
-}
-
-impl QueryWordAutomaton {
-    pub fn exact(query: &str) -> QueryWordAutomaton {
-        QueryWordAutomaton {
-            query: query.to_string(),
-            is_exact: true,
-            is_prefix: false,
-            phrase_query: None,
-        }
-    }
-
-    pub fn exact_prefix(query: &str) -> QueryWordAutomaton {
-        QueryWordAutomaton {
-            query: query.to_string(),
-            is_exact: true,
-            is_prefix: true,
-            phrase_query: None,
-        }
-    }
-
-    pub fn non_exact(query: &str) -> QueryWordAutomaton {
-        QueryWordAutomaton {
-            query: query.to_string(),
-            is_exact: false,
-            is_prefix: false,
-            phrase_query: None,
-        }
-    }
-
-    pub fn dfa(&self) -> DFA {
-        if self.phrase_query.is_some() {
-            build_exact_dfa(&self.query)
-        } else if self.is_prefix {
-            build_prefix_dfa(&self.query)
-        } else {
-            build_dfa(&self.query)
-        }
-    }
-}
-
-fn split_best_frequency<'a>(
-    reader: &heed::RoTxn<MainT>,
-    word: &'a str,
-    postings_lists_store: store::PostingsLists,
-) -> MResult<Option<(&'a str, &'a str)>> {
-    let chars = word.char_indices().skip(1);
-    let mut best = None;
-
-    for (i, _) in chars {
-        let (left, right) = word.split_at(i);
-
-        let left_freq = postings_lists_store
-            .postings_list(reader, left.as_ref())?
-            .map_or(0, |i| i.len());
-
-        let right_freq = postings_lists_store
-            .postings_list(reader, right.as_ref())?
-            .map_or(0, |i| i.len());
-
-        let min_freq = cmp::min(left_freq, right_freq);
-        if min_freq != 0 && best.map_or(true, |(old, _, _)| min_freq > old) {
-            best = Some((min_freq, left, right));
-        }
-    }
-
-    Ok(best.map(|(_, l, r)| (l, r)))
-}
-
-fn construct_automatons(
-    reader: &heed::RoTxn<MainT>,
-    query: &str,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    synonym_store: store::Synonyms,
-) -> MResult<(Vec<QueryWordAutomaton>, QueryEnhancer)> {
-    let has_end_whitespace = query.chars().last().map_or(false, char::is_whitespace);
-    let query_words: Vec<_> = split_query_string(query).map(str::to_lowercase).collect();
-    let synonyms = match main_store.synonyms_fst(reader)? {
-        Some(synonym) => synonym,
-        None => fst::Set::default(),
-    };
-
-    let mut automaton_index = 0;
-    let mut automatons = Vec::new();
-    let mut enhancer_builder = QueryEnhancerBuilder::new(&query_words);
-
-    // We must not declare the original words to the query enhancer
-    // *but* we need to push them in the automatons list first
-    let mut original_words = query_words.iter().peekable();
-    while let Some(word) = original_words.next() {
-        let has_following_word = original_words.peek().is_some();
-        let not_prefix_dfa = has_following_word || has_end_whitespace || word.chars().all(is_cjk);
-
-        let automaton = if not_prefix_dfa {
-            QueryWordAutomaton::exact(word)
-        } else {
-            QueryWordAutomaton::exact_prefix(word)
-        };
-        automaton_index += 1;
-        automatons.push(automaton);
-    }
-
-    for n in 1..=NGRAMS {
-        let mut ngrams = query_words.windows(n).enumerate().peekable();
-        while let Some((query_index, ngram_slice)) = ngrams.next() {
-            let query_range = query_index..query_index + n;
-            let ngram_nb_words = ngram_slice.len();
-            let ngram = ngram_slice.join(" ");
-
-            let has_following_word = ngrams.peek().is_some();
-            let not_prefix_dfa =
-                has_following_word || has_end_whitespace || ngram.chars().all(is_cjk);
-
-            // automaton of synonyms of the ngrams
-            let normalized = normalize_str(&ngram);
-            let lev = if not_prefix_dfa {
-                build_dfa(&normalized)
-            } else {
-                build_prefix_dfa(&normalized)
-            };
-
-            let mut stream = synonyms.search(&lev).into_stream();
-            while let Some(base) = stream.next() {
-                // only trigger alternatives when the last word has been typed
-                // i.e. "new " do not but "new yo" triggers alternatives to "new york"
-                let base = std::str::from_utf8(base).unwrap();
-                let base_nb_words = split_query_string(base).count();
-                if ngram_nb_words != base_nb_words {
-                    continue;
-                }
-
-                if let Some(synonyms) = synonym_store.synonyms(reader, base.as_bytes())? {
-                    let mut stream = synonyms.into_stream();
-                    while let Some(synonyms) = stream.next() {
-                        let synonyms = std::str::from_utf8(synonyms).unwrap();
-                        let synonyms_words: Vec<_> = split_query_string(synonyms).collect();
-                        let nb_synonym_words = synonyms_words.len();
-
-                        let real_query_index = automaton_index;
-                        enhancer_builder.declare(query_range.clone(), real_query_index, &synonyms_words);
-
-                        for synonym in synonyms_words {
-                            let automaton = if nb_synonym_words == 1 {
-                                QueryWordAutomaton::exact(synonym)
-                            } else {
-                                QueryWordAutomaton::non_exact(synonym)
-                            };
-                            automaton_index += 1;
-                            automatons.push(automaton);
-                        }
-                    }
-                }
-            }
-
-            if n == 1 {
-                // automatons for splitted words
-                if let Some((left, right)) = split_best_frequency(reader, &normalized, postings_lists_store)? {
-                    let mut left_automaton = QueryWordAutomaton::exact(left);
-                    left_automaton.phrase_query = Some((0, 2));
-                    enhancer_builder.declare(query_range.clone(), automaton_index, &[left]);
-                    automaton_index += 1;
-                    automatons.push(left_automaton);
-
-                    let mut right_automaton = QueryWordAutomaton::exact(right);
-                    right_automaton.phrase_query = Some((1, 2));
-                    enhancer_builder.declare(query_range.clone(), automaton_index, &[right]);
-                    automaton_index += 1;
-                    automatons.push(right_automaton);
-                }
-            } else {
-                // automaton of concatenation of query words
-                let concat = ngram_slice.concat();
-                let normalized = normalize_str(&concat);
-
-                let real_query_index = automaton_index;
-                enhancer_builder.declare(query_range.clone(), real_query_index, &[&normalized]);
-
-                let automaton = QueryWordAutomaton::exact(&normalized);
-                automaton_index += 1;
-                automatons.push(automaton);
-            }
-        }
-    }
-
-    Ok((automatons, enhancer_builder.build()))
 }

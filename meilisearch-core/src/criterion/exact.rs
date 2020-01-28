@@ -11,9 +11,9 @@ pub struct Exact;
 impl Criterion for Exact {
     fn name(&self) -> &str { "exact" }
 
-    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'a, 'r>(
+    fn prepare<'h, 'p, 'tag, 'txn, 'q, 'r>(
         &self,
-        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q, 'a>,
+        ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q>,
         documents: &mut [RawDocument<'r, 'tag>],
     ) -> MResult<()>
     {
