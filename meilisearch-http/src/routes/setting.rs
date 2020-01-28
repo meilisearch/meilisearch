@@ -86,11 +86,11 @@ pub struct UpdateSettings {
     pub index_new_fields: Option<bool>,
 }
 
-
 pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings_update: UpdateSettings = ctx.body_json().await.map_err(ResponseError::bad_request)?;
+    let settings_update: UpdateSettings =
+        ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {

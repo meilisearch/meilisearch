@@ -151,7 +151,9 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         .into_internal_error()?;
 
     if let Some(id) = body.attribute_identifier {
-        created_index.main.put_schema(&mut writer, &Schema::with_identifier(id))?;
+        created_index
+            .main
+            .put_schema(&mut writer, &Schema::with_identifier(id))?;
     }
 
     writer.commit()?;
