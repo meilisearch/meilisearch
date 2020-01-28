@@ -60,27 +60,52 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let index_new_fields = schema.map(|s| s.must_index_new_fields());
 
     let settings = Settings {
-        ranking_rules,
-        ranking_distinct,
-        attribute_identifier,
-        attributes_searchable,
-        attributes_displayed,
-        stop_words,
-        synonyms,
-        index_new_fields,
+        ranking_rules: Some(ranking_rules),
+        ranking_distinct: Some(ranking_distinct),
+        attribute_identifier: Some(attribute_identifier),
+        attributes_searchable: Some(attributes_searchable),
+        attributes_displayed: Some(attributes_displayed),
+        stop_words: Some(stop_words),
+        synonyms: Some(synonyms),
+        index_new_fields: Some(index_new_fields),
     };
 
     Ok(tide::Response::new(200).body_json(&settings).unwrap())
 }
 
+#[derive(Default, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdateSettings {
+    pub ranking_rules: Option<Vec<String>>,
+    pub ranking_distinct: Option<String>,
+    pub attribute_identifier: Option<String>,
+    pub attributes_searchable: Option<Vec<String>>,
+    pub attributes_displayed: Option<HashSet<String>>,
+    pub stop_words: Option<BTreeSet<String>>,
+    pub synonyms: Option<BTreeMap<String, Vec<String>>>,
+    pub index_new_fields: Option<bool>,
+}
+
+
 pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: Settings = ctx.body_json().await.map_err(ResponseError::bad_request)?;
+    let settings_update: UpdateSettings = ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
+    let settings = Settings {
+        ranking_rules: Some(settings_update.ranking_rules),
+        ranking_distinct: Some(settings_update.ranking_distinct),
+        attribute_identifier: Some(settings_update.attribute_identifier),
+        attributes_searchable: Some(settings_update.attributes_searchable),
+        attributes_displayed: Some(settings_update.attributes_displayed),
+        stop_words: Some(settings_update.stop_words),
+        synonyms: Some(settings_update.synonyms),
+        index_new_fields: Some(settings_update.index_new_fields),
+    };
+
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
+    let update_id = index.settings_update(&mut writer, settings.into())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -153,13 +178,13 @@ pub async fn update_ranking(mut ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
 
     let settings = Settings {
-        ranking_rules: settings.ranking_rules,
-        ranking_distinct: settings.ranking_distinct,
+        ranking_rules: Some(settings.ranking_rules),
+        ranking_distinct: Some(settings.ranking_distinct),
         ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
+    let update_id = index.settings_update(&mut writer, settings.into())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -208,12 +233,12 @@ pub async fn update_rules(mut ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
 
     let settings = Settings {
-        ranking_rules,
+        ranking_rules: Some(ranking_rules),
         ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
+    let update_id = index.settings_update(&mut writer, settings.into())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -272,12 +297,12 @@ pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
 
     let settings = Settings {
-        ranking_distinct,
+        ranking_distinct: Some(ranking_distinct),
         ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
+    let update_id = index.settings_update(&mut writer, settings.into())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -348,14 +373,14 @@ pub async fn update_attributes(mut ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
 
     let settings = Settings {
-        attribute_identifier: settings.attribute_identifier,
-        attributes_searchable: settings.attributes_searchable,
-        attributes_displayed: settings.attributes_displayed,
+        attribute_identifier: Some(settings.attribute_identifier),
+        attributes_searchable: Some(settings.attributes_searchable),
+        attributes_displayed: Some(settings.attributes_displayed),
         ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
+    let update_id = index.settings_update(&mut writer, settings.into())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -425,12 +450,12 @@ pub async fn update_searchable(mut ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
 
     let settings = Settings {
-        attributes_searchable,
+        attributes_searchable: Some(attributes_searchable),
         ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
+    let update_id = index.settings_update(&mut writer, settings.into())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -478,12 +503,12 @@ pub async fn update_displayed(mut ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
 
     let settings = Settings {
-        attributes_displayed,
+        attributes_displayed: Some(attributes_displayed),
         ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
+    let update_id = index.settings_update(&mut writer, settings.into())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -531,12 +556,12 @@ pub async fn update_index_new_fields(mut ctx: Request<Data>) -> SResult<Response
     let db = &ctx.state().db;
 
     let settings = Settings {
-        index_new_fields,
+        index_new_fields: Some(index_new_fields),
         ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_cleared())?;
+    let update_id = index.settings_update(&mut writer, settings.into())?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };

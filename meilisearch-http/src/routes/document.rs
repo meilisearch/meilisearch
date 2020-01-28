@@ -146,7 +146,7 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
             },
         };
         let settings = Settings {
-            attribute_identifier: Some(id),
+            attribute_identifier: Some(Some(id)),
             ..Settings::default()
         };
         index.settings_update(&mut update_writer, settings.into())?;

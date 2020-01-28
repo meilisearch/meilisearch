@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use log::error;
 use meilisearch_core::ProcessedUpdateResult;
+use meilisearch_schema::Schema;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -94,6 +95,7 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
 struct IndexCreateRequest {
     name: Option<String>,
     uid: Option<String>,
+    attribute_identifier: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -147,6 +149,10 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         .main
         .updated_at(&writer)?
         .into_internal_error()?;
+
+    if let Some(id) = body.attribute_identifier {
+        created_index.main.put_schema(&mut writer, &Schema::with_identifier(id))?;
+    }
 
     writer.commit()?;
 
