@@ -186,43 +186,29 @@ pub async fn delete_ranking(ctx: Request<Data>) -> SResult<Response> {
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GetRankingRulesSettings {
-    pub ranking_rules: Option<Vec<String>>,
-}
-
 pub async fn get_rules(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
 
-    let ranking_rules = match index.main.ranking_rules(&reader)? {
+    let ranking_rules: Option<Vec<String>> = match index.main.ranking_rules(&reader)? {
         Some(rules) => Some(rules.iter().map(|r| r.to_string()).collect()),
         None => None,
     };
 
-    let settings = GetRankingRulesSettings { ranking_rules };
-
-    Ok(tide::Response::new(200).body_json(&settings).unwrap())
-}
-
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SetRankingRulesSettings {
-    pub ranking_rules: Option<Vec<String>>,
+    Ok(tide::Response::new(200).body_json(&ranking_rules).unwrap())
 }
 
 pub async fn update_rules(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: SetRankingRulesSettings =
+    let ranking_rules: Option<Vec<String>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
-        ranking_rules: settings.ranking_rules,
+        ranking_rules,
         ..Settings::default()
     };
 
@@ -266,9 +252,10 @@ pub async fn get_distinct(ctx: Request<Data>) -> SResult<Response> {
     let reader = db.main_read_txn()?;
 
     let ranking_distinct = index.main.ranking_distinct(&reader)?;
-    let settings = GetRankingDistinctSettings { ranking_distinct };
 
-    Ok(tide::Response::new(200).body_json(&settings).unwrap())
+    Ok(tide::Response::new(200)
+        .body_json(&ranking_distinct)
+        .unwrap())
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -280,12 +267,12 @@ pub struct SetRankingDistinctSettings {
 pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: SetRankingDistinctSettings =
+    let ranking_distinct: Option<String> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
-        ranking_distinct: settings.ranking_distinct,
+        ranking_distinct,
         ..Settings::default()
     };
 
@@ -394,12 +381,6 @@ pub async fn delete_attributes(ctx: Request<Data>) -> SResult<Response> {
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AttributesIdentifierSettings {
-    pub attribute_identifier: Option<String>,
-}
-
 pub async fn get_identifier(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
@@ -410,17 +391,9 @@ pub async fn get_identifier(ctx: Request<Data>) -> SResult<Response> {
 
     let attribute_identifier = schema.map(|s| s.identifier());
 
-    let settings = AttributesIdentifierSettings {
-        attribute_identifier,
-    };
-
-    Ok(tide::Response::new(200).body_json(&settings).unwrap())
-}
-
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GetAttributesSearchableSettings {
-    pub attributes_searchable: Option<Vec<String>>,
+    Ok(tide::Response::new(200)
+        .body_json(&attribute_identifier)
+        .unwrap())
 }
 
 pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
@@ -433,11 +406,9 @@ pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
 
     let attributes_searchable = schema.map(|s| s.get_indexed_name());
 
-    let settings = GetAttributesSearchableSettings {
-        attributes_searchable,
-    };
-
-    Ok(tide::Response::new(200).body_json(&settings).unwrap())
+    Ok(tide::Response::new(200)
+        .body_json(&attributes_searchable)
+        .unwrap())
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -449,12 +420,12 @@ pub struct SetAttributesSearchableSettings {
 pub async fn update_searchable(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: SetAttributesSearchableSettings =
+    let attributes_searchable: Option<Vec<String>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
-        attributes_searchable: settings.attributes_searchable,
+        attributes_searchable,
         ..Settings::default()
     };
 
@@ -484,12 +455,6 @@ pub async fn delete_searchable(ctx: Request<Data>) -> SResult<Response> {
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AttributesDisplayedSettings {
-    pub attributes_displayed: Option<HashSet<String>>,
-}
-
 pub async fn get_displayed(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
@@ -500,22 +465,20 @@ pub async fn get_displayed(ctx: Request<Data>) -> SResult<Response> {
 
     let attributes_displayed = schema.map(|s| s.get_displayed_name());
 
-    let settings = AttributesDisplayedSettings {
-        attributes_displayed,
-    };
-
-    Ok(tide::Response::new(200).body_json(&settings).unwrap())
+    Ok(tide::Response::new(200)
+        .body_json(&attributes_displayed)
+        .unwrap())
 }
 
 pub async fn update_displayed(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: AttributesDisplayedSettings =
+    let attributes_displayed: Option<HashSet<String>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
-        attributes_displayed: settings.attributes_displayed,
+        attributes_displayed,
         ..Settings::default()
     };
 
@@ -545,12 +508,6 @@ pub async fn delete_displayed(ctx: Request<Data>) -> SResult<Response> {
     Ok(tide::Response::new(202).body_json(&response_body).unwrap())
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct IndexNewFieldsSettings {
-    pub index_new_fields: Option<bool>,
-}
-
 pub async fn get_index_new_fields(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
@@ -561,22 +518,20 @@ pub async fn get_index_new_fields(ctx: Request<Data>) -> SResult<Response> {
 
     let index_new_fields = schema.map(|s| s.must_index_new_fields());
 
-    let settings = IndexNewFieldsSettings {
-        index_new_fields,
-    };
-
-    Ok(tide::Response::new(200).body_json(&settings).unwrap())
+    Ok(tide::Response::new(200)
+        .body_json(&index_new_fields)
+        .unwrap())
 }
 
 pub async fn update_index_new_fields(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: IndexNewFieldsSettings =
+    let index_new_fields: Option<bool> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
-        index_new_fields: settings.index_new_fields,
+        index_new_fields,
         ..Settings::default()
     };
 
