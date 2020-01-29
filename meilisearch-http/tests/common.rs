@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use serde_json::Value;
 use std::error::Error;
 use std::time::Duration;
@@ -64,8 +63,8 @@ pub fn enrich_server_with_movies_settings(
             "dsc(vote_average)",
         ],
         "rankingDistinct": null,
-        "attributeIdentifier": "id",
-        "attributesSearchable": [
+        "identifier": "id",
+        "searchableAttributes": [
             "title",
             "tagline",
             "overview",
@@ -75,7 +74,7 @@ pub fn enrich_server_with_movies_settings(
             "production_companies",
             "genres",
         ],
-        "attributesDisplayed": [
+        "displayedAttributes": [
             "title",
             "director",
             "producer",

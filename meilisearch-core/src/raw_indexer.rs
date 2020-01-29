@@ -178,7 +178,6 @@ fn token_to_docindex(id: DocumentId, indexed_pos: IndexedPos, token: Token) -> O
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use meilisearch_schema::IndexedPos;
 

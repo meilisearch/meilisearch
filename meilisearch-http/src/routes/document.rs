@@ -30,7 +30,7 @@ pub async fn get_document(ctx: Request<Data>) -> SResult<Response> {
         return Err(ResponseError::document_not_found(identifier));
     }
 
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
+    Ok(tide::Response::new(200).body_json(&response)?)
 }
 
 #[derive(Default, Serialize)]
@@ -54,7 +54,7 @@ pub async fn delete_document(ctx: Request<Data>) -> SResult<Response> {
     update_writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 #[derive(Default, Deserialize)]
@@ -106,7 +106,7 @@ pub async fn get_all_documents(ctx: Request<Data>) -> SResult<Response> {
         }
     }
 
-    Ok(tide::Response::new(200).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(200).body_json(&response_body)?)
 }
 
 fn find_identifier(document: &IndexMap<String, Value>) -> Option<String> {
@@ -146,10 +146,10 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
             },
         };
         let settings = Settings {
-            attribute_identifier: Some(Some(id)),
+            identifier: Some(Some(id)),
             ..Settings::default()
         };
-        index.settings_update(&mut update_writer, settings.into())?;
+        index.settings_update(&mut update_writer, settings.into_update()?)?;
     }
 
     let mut document_addition = if is_partial {
@@ -166,7 +166,7 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
     update_writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn add_or_replace_multiple_documents(ctx: Request<Data>) -> SResult<Response> {
@@ -200,7 +200,7 @@ pub async fn delete_multiple_documents(mut ctx: Request<Data>) -> SResult<Respon
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn clear_all_documents(ctx: Request<Data>) -> SResult<Response> {
@@ -215,5 +215,5 @@ pub async fn clear_all_documents(ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }

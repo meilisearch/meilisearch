@@ -1,15 +1,13 @@
-use std::sync::Mutex;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use once_cell::sync::Lazy;
 
-static RANKING_RULE_REGEX: Lazy<Mutex<regex::Regex>> = Lazy::new(|| {
+static RANKING_RULE_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
     let regex = regex::Regex::new(r"(asc|dsc)\(([a-zA-Z0-9-_]*)\)").unwrap();
-    Mutex::new(regex)
+    regex
 });
-
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -19,11 +17,11 @@ pub struct Settings {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub ranking_distinct: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub attribute_identifier: Option<Option<String>>,
+    pub identifier: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub attributes_searchable: Option<Option<Vec<String>>>,
+    pub searchable_attributes: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub attributes_displayed: Option<Option<HashSet<String>>>,
+    pub displayed_attributes: Option<Option<HashSet<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub stop_words: Option<Option<BTreeSet<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
@@ -40,34 +38,32 @@ fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
     Deserialize::deserialize(deserializer).map(Some)
 }
 
-impl Into<SettingsUpdate> for Settings {
-    fn into(self) -> SettingsUpdate {
+impl Settings {
+    pub fn into_update(&self) -> Result<SettingsUpdate, RankingRuleConversionError> {
         let settings = self.clone();
 
         let ranking_rules = match settings.ranking_rules {
-            Some(Some(rules)) => UpdateState::Update(RankingRule::from_vec(rules)),
+            Some(Some(rules)) => UpdateState::Update(RankingRule::from_vec(rules.iter().map(|m| m.as_ref()).collect())?),
             Some(None) => UpdateState::Clear,
             None => UpdateState::Nothing,
         };
 
-        SettingsUpdate {
+        Ok(SettingsUpdate {
             ranking_rules: ranking_rules,
             ranking_distinct: settings.ranking_distinct.into(),
-            attribute_identifier: settings.attribute_identifier.into(),
-            attributes_searchable: settings.attributes_searchable.into(),
-            attributes_displayed: settings.attributes_displayed.into(),
+            identifier: settings.identifier.into(),
+            searchable_attributes: settings.searchable_attributes.into(),
+            displayed_attributes: settings.displayed_attributes.into(),
             stop_words: settings.stop_words.into(),
             synonyms: settings.synonyms.into(),
             index_new_fields: settings.index_new_fields.into(),
-        }
+        })
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateState<T> {
     Update(T),
-    Add(T),
-    Delete(T),
     Clear,
     Nothing,
 }
@@ -78,15 +74,6 @@ impl <T> From<Option<Option<T>>> for UpdateState<T> {
             Some(Some(t)) => UpdateState::Update(t),
             Some(None) => UpdateState::Clear,
             None => UpdateState::Nothing,
-        }
-    }
-}
-
-impl<T> UpdateState<T> {
-    pub fn is_changed(&self) -> bool {
-        match self {
-            UpdateState::Nothing => false,
-            _ => true,
         }
     }
 }
@@ -139,10 +126,10 @@ impl FromStr for RankingRule {
             "_words_position" => RankingRule::WordsPosition,
             "_exact" => RankingRule::Exact,
             _ => {
-                let captures = RANKING_RULE_REGEX.lock().unwrap().captures(s).unwrap();
-                match captures[1].as_ref() {
-                    "asc" => RankingRule::Asc(captures[2].to_string()),
-                    "dsc" => RankingRule::Dsc(captures[2].to_string()),
+                let captures = RANKING_RULE_REGEX.captures(s).ok_or(RankingRuleConversionError)?;
+                match (captures.get(1).map(|m| m.as_str()), captures.get(2)) {
+                    (Some("asc"), Some(field)) => RankingRule::Asc(field.as_str().to_string()),
+                    (Some("dsc"), Some(field)) => RankingRule::Dsc(field.as_str().to_string()),
                     _ => return Err(RankingRuleConversionError)
                 }
             }
@@ -152,17 +139,16 @@ impl FromStr for RankingRule {
 }
 
 impl RankingRule {
-    pub fn get_field(&self) -> Option<String> {
+    pub fn get_field(&self) -> Option<&str> {
         match self {
-            RankingRule::Asc(field) | RankingRule::Dsc(field) => Some((*field).clone()),
+            RankingRule::Asc(field) | RankingRule::Dsc(field) => Some(field),
             _ => None,
         }
     }
 
-    pub fn from_vec(rules: Vec<String>) -> Vec<RankingRule> {
+    pub fn from_vec(rules: Vec<&str>) -> Result<Vec<RankingRule>, RankingRuleConversionError> {
         rules.iter()
-            .map(|s| RankingRule::from_str(s.as_str()))
-            .filter_map(Result::ok)
+            .map(|s| RankingRule::from_str(s))
             .collect()
     }
 }
@@ -171,9 +157,9 @@ impl RankingRule {
 pub struct SettingsUpdate {
     pub ranking_rules: UpdateState<Vec<RankingRule>>,
     pub ranking_distinct: UpdateState<String>,
-    pub attribute_identifier: UpdateState<String>,
-    pub attributes_searchable: UpdateState<Vec<String>>,
-    pub attributes_displayed: UpdateState<HashSet<String>>,
+    pub identifier: UpdateState<String>,
+    pub searchable_attributes: UpdateState<Vec<String>>,
+    pub displayed_attributes: UpdateState<HashSet<String>>,
     pub stop_words: UpdateState<BTreeSet<String>>,
     pub synonyms: UpdateState<BTreeMap<String, Vec<String>>>,
     pub index_new_fields: UpdateState<bool>,
@@ -184,9 +170,9 @@ impl Default for SettingsUpdate {
         Self {
             ranking_rules: UpdateState::Nothing,
             ranking_distinct: UpdateState::Nothing,
-            attribute_identifier: UpdateState::Nothing,
-            attributes_searchable: UpdateState::Nothing,
-            attributes_displayed: UpdateState::Nothing,
+            identifier: UpdateState::Nothing,
+            searchable_attributes: UpdateState::Nothing,
+            displayed_attributes: UpdateState::Nothing,
             stop_words: UpdateState::Nothing,
             synonyms: UpdateState::Nothing,
             index_new_fields: UpdateState::Nothing,

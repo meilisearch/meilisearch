@@ -2,7 +2,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::DocumentId;
 use serde::{ser, Serialize};
-use serde_json::Value;
+use serde_json::{Value, Number};
 use siphasher::sip::SipHasher;
 
 use super::{ConvertToString, SerializerError};
@@ -18,18 +18,27 @@ where
     document.serialize(serializer)
 }
 
+fn validate_number(value: &Number) -> Option<String> {
+    if value.is_f64() {
+        return None
+    }
+    return Some(value.to_string())
+}
+
+fn validate_string(value: &String) -> Option<String> {
+    if value.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
+        Some(value.to_string())
+    } else {
+        None
+    }
+}
+
 pub fn value_to_string(value: &Value) -> Option<String> {
     match value {
         Value::Null => None,
         Value::Bool(_) => None,
-        Value::Number(value) => Some(value.to_string()),
-        Value::String(value) => {
-            if value.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
-                Some(value.to_string())
-            } else {
-                None
-            }
-        },
+        Value::Number(value) => validate_number(value),
+        Value::String(value) => validate_string(value),
         Value::Array(_) => None,
         Value::Object(_) => None,
     }

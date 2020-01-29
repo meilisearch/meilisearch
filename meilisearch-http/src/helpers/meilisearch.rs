@@ -63,6 +63,12 @@ impl From<meilisearch_core::Error> for Error {
     }
 }
 
+impl From<heed::Error> for Error {
+    fn from(error: heed::Error) -> Self {
+        Error::Internal(error.to_string())
+    }
+}
+
 pub trait IndexSearchExt {
     fn new_search(&self, query: String) -> SearchBuilder;
 }
@@ -171,7 +177,7 @@ impl<'a> SearchBuilder<'a> {
                     let ref_index = &self.index;
                     let value = value.trim().to_lowercase();
 
-                    let attr = match schema.get_id(attr) {
+                    let attr = match schema.id(attr) {
                         Some(attr) => attr,
                         None => return Err(Error::UnknownFilteredAttribute),
                     };
@@ -271,7 +277,7 @@ impl<'a> SearchBuilder<'a> {
         ranked_map: &'a RankedMap,
         schema: &Schema,
     ) -> Result<Option<Criteria<'a>>, Error> {
-        let ranking_rules = self.index.main.ranking_rules(reader).unwrap();
+        let ranking_rules = self.index.main.ranking_rules(reader)?;
 
         if let Some(ranking_rules) = ranking_rules {
             let mut builder = CriteriaBuilder::with_capacity(7 + ranking_rules.len());
@@ -283,10 +289,18 @@ impl<'a> SearchBuilder<'a> {
                     RankingRule::Attribute => builder.push(Attribute),
                     RankingRule::WordsPosition => builder.push(WordsPosition),
                     RankingRule::Exact => builder.push(Exact),
-                    RankingRule::Asc(field) => builder
-                        .push(SortByAttr::lower_is_better(&ranked_map, &schema, &field).unwrap()),
-                    RankingRule::Dsc(field) => builder
-                        .push(SortByAttr::higher_is_better(&ranked_map, &schema, &field).unwrap()),
+                    RankingRule::Asc(field) => {
+                        match SortByAttr::lower_is_better(&ranked_map, &schema, &field) {
+                            Ok(rule) => builder.push(rule),
+                            Err(err) => error!("Error during criteria builder; {:?}", err),
+                        }
+                    }
+                    RankingRule::Dsc(field) => {
+                        match SortByAttr::higher_is_better(&ranked_map, &schema, &field) {
+                            Ok(rule) => builder.push(rule),
+                            Err(err) => error!("Error during criteria builder; {:?}", err),
+                        }
+                    }
                 };
             }
             builder.push(DocumentId);
@@ -334,8 +348,6 @@ pub struct SearchResult {
     pub limit: usize,
     pub processing_time_ms: usize,
     pub query: String,
-    // pub parsed_query: String,
-    // pub params: Option<String>,
 }
 
 fn crop_text(
@@ -369,7 +381,7 @@ fn crop_document(
     matches.sort_unstable_by_key(|m| (m.char_index, m.char_length));
 
     for (field, length) in fields {
-        let attribute = match schema.get_id(field) {
+        let attribute = match schema.id(field) {
             Some(attribute) => attribute,
             None => continue,
         };
@@ -398,16 +410,16 @@ fn calculate_matches(
 ) -> MatchesInfos {
     let mut matches_result: HashMap<String, Vec<MatchPosition>> = HashMap::new();
     for m in matches.iter() {
-        if let Some(attribute) = schema.get_name(FieldId::new(m.attribute)) {
+        if let Some(attribute) = schema.name(FieldId::new(m.attribute)) {
             if let Some(attributes_to_retrieve) = attributes_to_retrieve.clone() {
-                if !attributes_to_retrieve.contains(attribute.as_str()) {
+                if !attributes_to_retrieve.contains(attribute) {
                     continue;
                 }
             };
-            if !schema.get_displayed_name().contains(attribute.as_str()) {
+            if !schema.displayed_name().contains(attribute) {
                 continue;
             }
-            if let Some(pos) = matches_result.get_mut(&attribute) {
+            if let Some(pos) = matches_result.get_mut(attribute) {
                 pos.push(MatchPosition {
                     start: m.char_index as usize,
                     length: m.char_length as usize,
@@ -418,7 +430,7 @@ fn calculate_matches(
                     start: m.char_index as usize,
                     length: m.char_length as usize,
                 });
-                matches_result.insert(attribute, positions);
+                matches_result.insert(attribute.to_string(), positions);
             }
         }
     }

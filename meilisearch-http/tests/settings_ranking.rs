@@ -1,4 +1,3 @@
-use std::convert::Into;
 use std::time::Duration;
 
 use assert_json_diff::assert_json_eq;
@@ -26,7 +25,7 @@ fn write_all_and_delete() {
 
     let body = json!({
         "uid": "movies",
-        "attributeIdentifier": "uid",
+        "identifier": "uid",
     })
     .to_string()
     .into_bytes();
@@ -123,7 +122,7 @@ fn write_all_and_update() {
 
     let body = json!({
         "uid": "movies",
-        "attributeIdentifier": "uid",
+        "identifier": "uid",
     })
     .to_string()
     .into_bytes();

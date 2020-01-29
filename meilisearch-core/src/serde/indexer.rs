@@ -1,4 +1,4 @@
-use meilisearch_schema::{IndexedPos};
+use meilisearch_schema::IndexedPos;
 use serde::ser;
 use serde::Serialize;
 

@@ -4,7 +4,6 @@ mod documents_addition;
 mod documents_deletion;
 mod settings_update;
 
-
 pub use self::clear_all::{apply_clear_all, push_clear_all};
 pub use self::customs_update::{apply_customs_update, push_customs_update};
 pub use self::documents_addition::{

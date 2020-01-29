@@ -57,7 +57,7 @@ impl fmt::Display for SerializerError {
                 f.write_str("serialized document does not have an id according to the schema")
             }
             SerializerError::InvalidDocumentIdType => {
-                f.write_str("document identifier can only be of type number or string (A-Z, a-z, 0-9, -_)")
+                f.write_str("documents identifiers can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).")
             }
             SerializerError::Zlmdb(e) => write!(f, "heed related error: {}", e),
             SerializerError::SerdeJson(e) => write!(f, "serde json error: {}", e),

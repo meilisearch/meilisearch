@@ -11,11 +11,11 @@ use crate::RankedMap;
 use crate::settings::RankingRule;
 
 const CREATED_AT_KEY: &str = "created-at";
-const RANKING_RULES_KEY: &str = "ranking-rules-key";
-const RANKING_DISTINCT_KEY: &str = "ranking-distinct-key";
-const STOP_WORDS_KEY: &str = "stop-words-key";
-const SYNONYMS_KEY: &str = "synonyms-key";
-const CUSTOMS_KEY: &str = "customs-key";
+const RANKING_RULES_KEY: &str = "ranking-rules";
+const RANKING_DISTINCT_KEY: &str = "ranking-distinct";
+const STOP_WORDS_KEY: &str = "stop-words";
+const SYNONYMS_KEY: &str = "synonyms";
+const CUSTOMS_KEY: &str = "customs";
 const FIELDS_FREQUENCY_KEY: &str = "fields-frequency";
 const NAME_KEY: &str = "name";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
@@ -188,7 +188,7 @@ impl Main {
         }
     }
 
-    pub fn ranking_rules<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<Vec<RankingRule>>> {
+    pub fn ranking_rules(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<Vec<RankingRule>>> {
         self.main.get::<_, Str, SerdeBincode<Vec<RankingRule>>>(reader, RANKING_RULES_KEY)
     }
 
@@ -200,7 +200,7 @@ impl Main {
         self.main.delete::<_, Str>(writer, RANKING_RULES_KEY)
     }
 
-    pub fn ranking_distinct<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<String>> {
+    pub fn ranking_distinct(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<String>> {
         self.main.get::<_, Str, SerdeBincode<String>>(reader, RANKING_DISTINCT_KEY)
     }
 

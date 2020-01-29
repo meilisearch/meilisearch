@@ -8,7 +8,7 @@ pub type MResult<T> = Result<T, Error>;
 pub enum Error {
     Io(io::Error),
     IndexAlreadyExists,
-    MissingSchemaIdentifier,
+    MissingIdentifier,
     SchemaMissing,
     WordIndexMissing,
     MissingDocumentId,
@@ -83,7 +83,7 @@ impl fmt::Display for Error {
         match self {
             Io(e) => write!(f, "{}", e),
             IndexAlreadyExists => write!(f, "index already exists"),
-            MissingSchemaIdentifier => write!(f, "schema cannot be build without identifier"),
+            MissingIdentifier => write!(f, "schema cannot be build without identifier"),
             SchemaMissing => write!(f, "this index does not have a schema"),
             WordIndexMissing => write!(f, "this index does not have a word index"),
             MissingDocumentId => write!(f, "document id is missing"),

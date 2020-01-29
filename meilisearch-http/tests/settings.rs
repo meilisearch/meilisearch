@@ -50,8 +50,8 @@ fn write_all_and_delete() {
             "dsc(rank)",
         ],
         "rankingDistinct": "movie_id",
-        "attributeIdentifier": "uid",
-        "attributesSearchable": [
+        "identifier": "uid",
+        "searchableAttributes": [
             "uid",
             "movie_id",
             "title",
@@ -60,7 +60,7 @@ fn write_all_and_delete() {
             "release_date",
             "rank",
         ],
-        "attributesDisplayed": [
+        "displayedAttributes": [
             "title",
             "description",
             "poster",
@@ -128,9 +128,9 @@ fn write_all_and_delete() {
     let json = json!({
         "rankingRules": null,
         "rankingDistinct": null,
-        "attributeIdentifier": null,
-        "attributesSearchable": null,
-        "attributesDisplayed": null,
+        "identifier": null,
+        "searchableAttributes": null,
+        "displayedAttributes": null,
         "stopWords": null,
         "synonyms": null,
         "indexNewFields": null,
@@ -179,8 +179,8 @@ fn write_all_and_update() {
             "dsc(rank)",
         ],
         "rankingDistinct": "movie_id",
-        "attributeIdentifier": "uid",
-        "attributesSearchable": [
+        "identifier": "uid",
+        "searchableAttributes": [
             "uid",
             "movie_id",
             "title",
@@ -189,7 +189,7 @@ fn write_all_and_update() {
             "release_date",
             "rank",
         ],
-        "attributesDisplayed": [
+        "displayedAttributes": [
             "title",
             "description",
             "poster",
@@ -244,13 +244,13 @@ fn write_all_and_update() {
             "_exact",
             "dsc(release_date)",
         ],
-        "attributeIdentifier": "uid",
-        "attributesSearchable": [
+        "identifier": "uid",
+        "searchableAttributes": [
             "title",
             "description",
             "uid",
         ],
-        "attributesDisplayed": [
+        "displayedAttributes": [
             "title",
             "description",
             "release_date",
@@ -299,13 +299,13 @@ fn write_all_and_update() {
             "dsc(release_date)",
         ],
         "rankingDistinct": null,
-        "attributeIdentifier": "uid",
-        "attributesSearchable": [
+        "identifier": "uid",
+        "searchableAttributes": [
             "title",
             "description",
             "uid",
         ],
-        "attributesDisplayed": [
+        "displayedAttributes": [
             "title",
             "description",
             "release_date",

@@ -19,16 +19,16 @@ impl RankedMap {
         self.0.is_empty()
     }
 
-    pub fn insert(&mut self, document: DocumentId, attribute: FieldId, number: Number) {
-        self.0.insert((document, attribute), number);
+    pub fn insert(&mut self, document: DocumentId, field: FieldId, number: Number) {
+        self.0.insert((document, field), number);
     }
 
-    pub fn remove(&mut self, document: DocumentId, attribute: FieldId) {
-        self.0.remove(&(document, attribute));
+    pub fn remove(&mut self, document: DocumentId, field: FieldId) {
+        self.0.remove(&(document, field));
     }
 
-    pub fn get(&self, document: DocumentId, attribute: FieldId) -> Option<Number> {
-        self.0.get(&(document, attribute)).cloned()
+    pub fn get(&self, document: DocumentId, field: FieldId) -> Option<Number> {
+        self.0.get(&(document, field)).cloned()
     }
 
     pub fn read_from_bin<R: Read>(reader: R) -> bincode::Result<RankedMap> {

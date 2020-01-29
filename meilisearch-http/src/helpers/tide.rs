@@ -88,7 +88,7 @@ impl RequestExt for Request<Data> {
     fn url_param(&self, name: &str) -> SResult<String> {
         let param = self
             .param::<String>(name)
-            .map_err(|_| ResponseError::bad_parameter("identifier", ""))?;
+            .map_err(|_| ResponseError::bad_parameter("identifier", name))?;
         Ok(param)
     }
 
@@ -105,7 +105,7 @@ impl RequestExt for Request<Data> {
     fn identifier(&self) -> SResult<String> {
         let name = self
             .param::<String>("identifier")
-            .map_err(|_| ResponseError::bad_parameter("identifier", ""))?;
+            .map_err(|_| ResponseError::bad_parameter("identifier", "identifier"))?;
 
         Ok(name)
     }

@@ -223,7 +223,7 @@ impl Index {
         let schema = schema.ok_or(Error::SchemaMissing)?;
 
         let attributes = match attributes {
-            Some(attributes) => Some(attributes.iter().filter_map(|name| schema.get_id(*name)).collect()),
+            Some(attributes) => Some(attributes.iter().filter_map(|name| schema.id(*name)).collect()),
             None => None,
         };
 
@@ -232,7 +232,7 @@ impl Index {
             reader,
             documents_fields: self.documents_fields,
             schema: &schema,
-            attributes: attributes.as_ref(),
+            fields: attributes.as_ref(),
         };
 
         Ok(Option::<T>::deserialize(&mut deserializer)?)

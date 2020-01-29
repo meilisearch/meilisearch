@@ -305,7 +305,7 @@ pub fn serialize_value<'a, T: ?Sized>(
 where
     T: ser::Serialize,
 {
-    let field_id = schema.get_or_create(attribute.clone())?;
+    let field_id = schema.get_or_create(&attribute)?;
 
     serialize_value_with_id(
         txn,
@@ -337,7 +337,7 @@ where
     let serialized = serde_json::to_vec(value)?;
     document_store.put_document_field(txn, document_id, field_id, &serialized)?;
 
-    if let Some(indexed_pos) = schema.id_is_indexed(field_id) {
+    if let Some(indexed_pos) = schema.is_indexed(field_id) {
         let indexer = Indexer {
             pos: *indexed_pos,
             indexer,
@@ -353,7 +353,7 @@ where
         }
     }
 
-    if schema.id_is_ranked(field_id) {
+    if schema.is_ranked(field_id) {
         let number = value.serialize(ConvertToNumber)?;
         ranked_map.insert(document_id, field_id, number);
     }

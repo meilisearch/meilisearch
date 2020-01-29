@@ -68,12 +68,12 @@ impl<'a> SortByAttr<'a> {
         attr_name: &str,
         reversed: bool,
     ) -> Result<SortByAttr<'a>, SortByAttrError> {
-        let field_id = match schema.get_id(attr_name) {
+        let field_id = match schema.id(attr_name) {
             Some(field_id) => field_id,
             None => return Err(SortByAttrError::AttributeNotFound),
         };
 
-        if !schema.id_is_ranked(field_id) {
+        if !schema.is_ranked(field_id) {
             return Err(SortByAttrError::AttributeNotRegisteredForRanking);
         }
 

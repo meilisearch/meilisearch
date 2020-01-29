@@ -55,7 +55,7 @@ pub async fn list_indexes(ctx: Request<Data>) -> SResult<Response> {
         }
     }
 
-    Ok(tide::Response::new(200).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(200).body_json(&response_body)?)
 }
 
 #[derive(Debug, Serialize)]
@@ -87,7 +87,7 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
         updated_at,
     };
 
-    Ok(tide::Response::new(200).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(200).body_json(&response_body)?)
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,7 +95,7 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
 struct IndexCreateRequest {
     name: Option<String>,
     uid: Option<String>,
-    attribute_identifier: Option<String>,
+    identifier: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -150,10 +150,10 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         .updated_at(&writer)?
         .into_internal_error()?;
 
-    if let Some(id) = body.attribute_identifier {
+    if let Some(id) = body.identifier {
         created_index
             .main
-            .put_schema(&mut writer, &Schema::with_identifier(id))?;
+            .put_schema(&mut writer, &Schema::with_identifier(&id))?;
     }
 
     writer.commit()?;
@@ -165,7 +165,7 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         updated_at,
     };
 
-    Ok(tide::Response::new(201).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(201).body_json(&response_body)?)
 }
 
 #[derive(Debug, Deserialize)]
@@ -214,7 +214,7 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
         updated_at,
     };
 
-    Ok(tide::Response::new(200).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(200).body_json(&response_body)?)
 }
 
 pub async fn get_update_status(ctx: Request<Data>) -> SResult<Response> {

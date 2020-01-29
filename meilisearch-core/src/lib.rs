@@ -86,7 +86,7 @@ fn highlights_from_raw_document<'a, 'tag, 'txn>(
                 Some(field_id) => field_id.0,
                 None => {
                     error!("Cannot convert indexed_pos {} to field_id", attribute);
-                    trace!("Schema is compronized; {:?}", schema);
+                    trace!("Schema is compromized; {:?}", schema);
                     continue
                 }
             };
@@ -164,7 +164,7 @@ impl Document {
                 Some(field_id) => field_id.0,
                 None => {
                     error!("Cannot convert indexed_pos {} to field_id", attribute);
-                    trace!("Schema is compronized; {:?}", schema);
+                    trace!("Schema is compromized; {:?}", schema);
                     continue
                 }
             };

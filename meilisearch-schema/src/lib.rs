@@ -22,14 +22,6 @@ impl IndexedPos {
     pub const fn max() -> IndexedPos {
         IndexedPos(u16::max_value())
     }
-
-    pub fn next(self) -> SResult<IndexedPos> {
-        self.0.checked_add(1).map(IndexedPos).ok_or(Error::MaxFieldsLimitExceeded)
-    }
-
-    pub fn prev(self) -> SResult<IndexedPos> {
-        self.0.checked_sub(1).map(IndexedPos).ok_or(Error::MaxFieldsLimitExceeded)
-    }
 }
 
 impl From<u16> for IndexedPos {
@@ -43,7 +35,6 @@ impl Into<u16> for IndexedPos {
         self.0
     }
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct FieldId(pub u16);
@@ -63,10 +54,6 @@ impl FieldId {
 
     pub fn next(self) -> SResult<FieldId> {
         self.0.checked_add(1).map(FieldId).ok_or(Error::MaxFieldsLimitExceeded)
-    }
-
-    pub fn prev(self) -> SResult<FieldId> {
-        self.0.checked_sub(1).map(FieldId).ok_or(Error::MaxFieldsLimitExceeded)
     }
 }
 

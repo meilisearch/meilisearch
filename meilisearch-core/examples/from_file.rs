@@ -123,7 +123,7 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     let settings = {
         let string = fs::read_to_string(&command.settings)?;
         let settings: Settings = serde_json::from_str(&string).unwrap();
-        settings.into()
+        settings.into_update().unwrap()
     };
 
     let mut update_writer = db.update_write_txn().unwrap();
@@ -359,7 +359,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     };
 
                     let attr = schema
-                        .get_id(filter)
+                        .id(filter)
                         .expect("Could not find filtered attribute");
 
                     builder.with_filter(move |document_id| {
@@ -390,7 +390,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                             for (name, text) in document.0 {
                                 print!("{}: ", name);
 
-                                let attr = schema.get_id(&name).unwrap();
+                                let attr = schema.id(&name).unwrap();
                                 let highlights = doc
                                     .highlights
                                     .iter()
@@ -410,7 +410,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     let mut matching_attributes = HashSet::new();
                     for highlight in doc.highlights {
                         let attr = FieldId::new(highlight.attribute);
-                        let name = schema.get_name(attr);
+                        let name = schema.name(attr);
                         matching_attributes.insert(name);
                     }
 

@@ -16,10 +16,10 @@ impl DocumentsFields {
         self,
         writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
-        attribute: FieldId,
+        field: FieldId,
         value: &[u8],
     ) -> ZResult<()> {
-        let key = DocumentFieldStoredKey::new(document_id, attribute);
+        let key = DocumentFieldStoredKey::new(document_id, field);
         self.documents_fields.put(writer, &key, value)
     }
 
@@ -41,9 +41,9 @@ impl DocumentsFields {
         self,
         reader: &'txn heed::RoTxn<MainT>,
         document_id: DocumentId,
-        attribute: FieldId,
+        field: FieldId,
     ) -> ZResult<Option<&'txn [u8]>> {
-        let key = DocumentFieldStoredKey::new(document_id, attribute);
+        let key = DocumentFieldStoredKey::new(document_id, field);
         self.documents_fields.get(reader, &key)
     }
 

@@ -353,7 +353,6 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     use crate::criterion::{self, CriteriaBuilder};
@@ -381,13 +380,13 @@ mod tests {
         let settings = {
             let data = r#"
                 {
-                    "attributeIdentifier": "id",
-                    "attributesSearchable": ["name", "description"],
-                    "attributesDisplayed": ["name", "description"]
+                    "identifier": "id",
+                    "searchableAttributes": ["name", "description"],
+                    "displayedAttributes": ["name", "description"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into()
+            settings.into_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -441,13 +440,13 @@ mod tests {
         let settings = {
             let data = r#"
                 {
-                    "attributeIdentifier": "id",
-                    "attributesSearchable": ["name", "description"],
-                    "attributesDisplayed": ["name", "description"]
+                    "identifier": "id",
+                    "searchableAttributes": ["name", "description"],
+                    "displayedAttributes": ["name", "description"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into()
+            settings.into_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -500,13 +499,13 @@ mod tests {
         let settings = {
             let data = r#"
                 {
-                    "attributeIdentifier": "id",
-                    "attributesSearchable": ["name"],
-                    "attributesDisplayed": ["name"]
+                    "identifier": "id",
+                    "searchableAttributes": ["name"],
+                    "displayedAttributes": ["name"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into()
+            settings.into_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -552,13 +551,13 @@ mod tests {
         let settings = {
             let data = r#"
                 {
-                    "attributeIdentifier": "id",
-                    "attributesSearchable": ["name", "description"],
-                    "attributesDisplayed": ["name", "description"]
+                    "identifier": "id",
+                    "searchableAttributes": ["name", "description"],
+                    "displayedAttributes": ["name", "description"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into()
+            settings.into_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -586,17 +585,16 @@ mod tests {
         let _update_id = additions.finalize(&mut update_writer).unwrap();
         update_writer.commit().unwrap();
 
-
         let settings = {
             let data = r#"
                 {
-                    "attributeIdentifier": "id",
-                    "attributesSearchable": ["name", "description", "age", "sex"],
-                    "attributesDisplayed": ["name", "description", "age", "sex"]
+                    "identifier": "id",
+                    "searchableAttributes": ["name", "description", "age", "sex"],
+                    "displayedAttributes": ["name", "description", "age", "sex"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into()
+            settings.into_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -657,13 +655,13 @@ mod tests {
         let settings = {
             let data = r#"
                 {
-                    "attributeIdentifier": "id",
-                    "attributesSearchable": ["name", "description", "city", "age", "sex"],
-                    "attributesDisplayed": ["name", "description", "city", "age", "sex"]
+                    "identifier": "id",
+                    "searchableAttributes": ["name", "description", "city", "age", "sex"],
+                    "displayedAttributes": ["name", "description", "city", "age", "sex"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into()
+            settings.into_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -696,13 +694,13 @@ mod tests {
         let settings = {
             let data = r#"
                 {
-                    "attributeIdentifier": "id",
-                    "attributesSearchable": ["name", "description"],
-                    "attributesDisplayed": ["name", "description"]
+                    "identifier": "id",
+                    "searchableAttributes": ["name", "description"],
+                    "displayedAttributes": ["name", "description"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into()
+            settings.into_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -773,13 +771,13 @@ mod tests {
         let settings = {
             let data = r#"
                 {
-                    "attributeIdentifier": "id",
-                    "attributesSearchable": ["name", "description"],
-                    "attributesDisplayed": ["name", "description", "id"]
+                    "identifier": "id",
+                    "searchableAttributes": ["name", "description"],
+                    "displayedAttributes": ["name", "description", "id"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into()
+            settings.into_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -909,13 +907,13 @@ mod tests {
         let settings = {
             let data = r#"
                 {
-                    "attributeIdentifier": "id",
-                    "attributesSearchable": ["name", "description"],
-                    "attributesDisplayed": ["name", "description"]
+                    "identifier": "id",
+                    "searchableAttributes": ["name", "description"],
+                    "displayedAttributes": ["name", "description"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into()
+            settings.into_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -982,13 +980,13 @@ mod tests {
                         "_exact",
                         "dsc(release_date)"
                     ],
-                    "attributeIdentifier": "id",
-                    "attributesSearchable": ["name", "release_date"],
-                    "attributesDisplayed": ["name", "release_date"]
+                    "identifier": "id",
+                    "searchableAttributes": ["name", "release_date"],
+                    "displayedAttributes": ["name", "release_date"]
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into()
+            settings.into_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();

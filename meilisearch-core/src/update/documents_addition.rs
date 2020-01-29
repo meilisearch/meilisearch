@@ -158,8 +158,6 @@ pub fn apply_documents_addition<'a, 'b>(
         document.serialize(serializer)?;
     }
 
-
-
     write_documents_addition_index(
         writer,
         index,
@@ -199,7 +197,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
             reader: writer,
             documents_fields: index.documents_fields,
             schema: &schema,
-            attributes: None,
+            fields: None,
         };
 
         // retrieve the old document and
@@ -245,8 +243,6 @@ pub fn apply_documents_partial_addition<'a, 'b>(
 
         document.serialize(serializer)?;
     }
-
-
 
     write_documents_addition_index(
         writer,

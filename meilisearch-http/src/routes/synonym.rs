@@ -57,7 +57,7 @@ pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
@@ -78,5 +78,5 @@ pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }

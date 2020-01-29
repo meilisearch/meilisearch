@@ -35,27 +35,27 @@ pub fn apply_settings_update(
     let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => {
-            match settings.attribute_identifier.clone() {
-                UpdateState::Update(id) => Schema::with_identifier(id),
-                _ => return Err(Error::MissingSchemaIdentifier)
+            match settings.identifier.clone() {
+                UpdateState::Update(id) => Schema::with_identifier(&id),
+                _ => return Err(Error::MissingIdentifier)
             }
         }
     };
 
     match settings.ranking_rules {
         UpdateState::Update(v) => {
-            let ranked_field: Vec<String> = v.iter().filter_map(RankingRule::get_field).collect();
+            let ranked_field: Vec<&str> = v.iter().filter_map(RankingRule::get_field).collect();
             schema.update_ranked(ranked_field)?;
             index.main.put_ranking_rules(writer, v)?;
             must_reindex = true;
         },
         UpdateState::Clear => {
-            let clear: Vec<String> = Vec::new();
+            let clear: Vec<&str> = Vec::new();
             schema.update_ranked(clear)?;
             index.main.delete_ranking_rules(writer)?;
             must_reindex = true;
         },
-        _ => (),
+        UpdateState::Nothing => (),
     }
 
     match settings.ranking_distinct {
@@ -65,65 +65,43 @@ pub fn apply_settings_update(
         UpdateState::Clear => {
             index.main.delete_ranking_distinct(writer)?;
         },
-        _ => (),
+        UpdateState::Nothing => (),
     }
 
     match settings.index_new_fields {
         UpdateState::Update(v) => {
-            schema.set_must_index_new_fields(v);
+            schema.set_index_new_fields(v);
         },
         UpdateState::Clear => {
-            schema.set_must_index_new_fields(true);
+            schema.set_index_new_fields(true);
         },
-        _ => (),
+        UpdateState::Nothing => (),
     }
 
-    match settings.attributes_searchable.clone() {
+    match settings.searchable_attributes.clone() {
         UpdateState::Update(v) => {
             schema.update_indexed(v)?;
             must_reindex = true;
         },
         UpdateState::Clear => {
-            let clear: Vec<String> = Vec::new();
+            let clear: Vec<&str> = Vec::new();
             schema.update_indexed(clear)?;
             must_reindex = true;
         },
         UpdateState::Nothing => (),
-        UpdateState::Add(attrs) => {
-            for attr in attrs {
-                schema.set_indexed(attr)?;
-            }
-            must_reindex = true;
-        },
-        UpdateState::Delete(attrs) => {
-            for attr in attrs {
-                schema.remove_indexed(attr);
-            }
-            must_reindex = true;
-        }
     };
-    match settings.attributes_displayed.clone() {
+    match settings.displayed_attributes.clone() {
         UpdateState::Update(v) => schema.update_displayed(v)?,
         UpdateState::Clear => {
-            let clear: Vec<String> = Vec::new();
+            let clear: Vec<&str> = Vec::new();
             schema.update_displayed(clear)?;
         },
         UpdateState::Nothing => (),
-        UpdateState::Add(attrs) => {
-            for attr in attrs {
-                schema.set_displayed(attr)?;
-            }
-        },
-        UpdateState::Delete(attrs) => {
-            for attr in attrs {
-                schema.remove_displayed(attr);
-            }
-        }
     };
 
-    match settings.attribute_identifier.clone() {
+    match settings.identifier.clone() {
         UpdateState::Update(v) => {
-            schema.set_identifier(v)?;
+            schema.set_identifier(v.as_ref())?;
             index.main.put_schema(writer, &schema)?;
             must_reindex = true;
         },
@@ -168,7 +146,7 @@ pub fn apply_settings_update(
             docs_words_store,
         )?;
     }
-    if let UpdateState::Clear = settings.attribute_identifier {
+    if let UpdateState::Clear = settings.identifier {
         index.main.delete_schema(writer)?;
     }
     Ok(())
@@ -189,8 +167,8 @@ pub fn apply_stop_words_update(
         .stream()
         .into_strs().unwrap().into_iter().collect();
 
-    let deletion: BTreeSet<String> = old_stop_words.clone().difference(&stop_words).cloned().collect();
-    let addition: BTreeSet<String> = stop_words.clone().difference(&old_stop_words).cloned().collect();
+    let deletion: BTreeSet<String> = old_stop_words.difference(&stop_words).cloned().collect();
+    let addition: BTreeSet<String> = stop_words.difference(&old_stop_words).cloned().collect();
 
     if !addition.is_empty() {
         apply_stop_words_addition(
@@ -201,11 +179,12 @@ pub fn apply_stop_words_update(
     }
 
     if !deletion.is_empty() {
-        must_reindex = apply_stop_words_deletion(
+        apply_stop_words_deletion(
             writer,
             index,
             deletion
         )?;
+        must_reindex = true;
     }
 
     Ok(must_reindex)
@@ -275,7 +254,7 @@ fn apply_stop_words_deletion(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     deletion: BTreeSet<String>,
-) -> MResult<bool> {
+) -> MResult<()> {
 
     let main_store = index.main;
 
@@ -306,17 +285,7 @@ fn apply_stop_words_deletion(
         .and_then(fst::Set::from_bytes)
         .unwrap();
 
-    main_store.put_stop_words_fst(writer, &stop_words_fst)?;
-
-    // now that we have setup the stop words
-    // lets reindex everything...
-    if let Ok(number) = main_store.number_of_documents(writer) {
-        if number > 0 {
-            return Ok(true)
-        }
-    }
-
-    Ok(false)
+    Ok(main_store.put_stop_words_fst(writer, &stop_words_fst)?)
 }
 
 pub fn apply_synonyms_update(

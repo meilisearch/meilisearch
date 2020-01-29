@@ -127,6 +127,12 @@ fn error(message: String, status: StatusCode) -> Response {
         .unwrap()
 }
 
+impl From<serde_json::Error> for ResponseError {
+    fn from(err: serde_json::Error) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
 impl From<meilisearch_core::Error> for ResponseError {
     fn from(err: meilisearch_core::Error) -> ResponseError {
         ResponseError::internal(err)
@@ -151,11 +157,16 @@ impl From<SearchError> for ResponseError {
     }
 }
 
+impl From<meilisearch_core::settings::RankingRuleConversionError> for ResponseError {
+    fn from(err: meilisearch_core::settings::RankingRuleConversionError) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
 pub trait IntoInternalError<T> {
     fn into_internal_error(self) -> SResult<T>;
 }
 
-/// Must be used only
 impl<T> IntoInternalError<T> for Option<T> {
     fn into_internal_error(self) -> SResult<T> {
         match self {

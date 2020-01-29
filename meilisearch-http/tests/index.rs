@@ -3,7 +3,6 @@ use async_std::task::block_on;
 use http_service::Body;
 use serde_json::json;
 use serde_json::Value;
-use std::convert::Into;
 
 mod common;
 

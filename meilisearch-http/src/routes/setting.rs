@@ -18,7 +18,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let stop_words_fst = index.main.stop_words_fst(&reader)?;
     let stop_words = stop_words_fst.unwrap_or_default().stream().into_strs()?;
     let stop_words: BTreeSet<String> = stop_words.into_iter().collect();
-    let stop_words = if stop_words.len() > 0 {
+    let stop_words = if stop_words.is_empty() {
         Some(stop_words)
     } else {
         None
@@ -40,7 +40,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
         }
     }
 
-    let synonyms = if synonyms.len() > 0 {
+    let synonyms = if synonyms.is_empty() {
         Some(synonyms)
     } else {
         None
@@ -54,17 +54,21 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
 
     let schema = index.main.schema(&reader)?;
 
-    let attribute_identifier = schema.clone().map(|s| s.identifier());
-    let attributes_searchable = schema.clone().map(|s| s.get_indexed_name());
-    let attributes_displayed = schema.clone().map(|s| s.get_displayed_name());
-    let index_new_fields = schema.map(|s| s.must_index_new_fields());
+    let identifier = schema.clone().map(|s| s.identifier().to_owned());
+    let searchable_attributes = schema
+        .clone()
+        .map(|s| s.indexed_name().iter().map(|s| s.to_string()).collect());
+    let displayed_attributes = schema
+        .clone()
+        .map(|s| s.displayed_name().iter().map(|s| s.to_string()).collect());
+    let index_new_fields = schema.map(|s| s.index_new_fields());
 
     let settings = Settings {
         ranking_rules: Some(ranking_rules),
         ranking_distinct: Some(ranking_distinct),
-        attribute_identifier: Some(attribute_identifier),
-        attributes_searchable: Some(attributes_searchable),
-        attributes_displayed: Some(attributes_displayed),
+        identifier: Some(identifier),
+        searchable_attributes: Some(searchable_attributes),
+        displayed_attributes: Some(displayed_attributes),
         stop_words: Some(stop_words),
         synonyms: Some(synonyms),
         index_new_fields: Some(index_new_fields),
@@ -78,9 +82,9 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
 pub struct UpdateSettings {
     pub ranking_rules: Option<Vec<String>>,
     pub ranking_distinct: Option<String>,
-    pub attribute_identifier: Option<String>,
-    pub attributes_searchable: Option<Vec<String>>,
-    pub attributes_displayed: Option<HashSet<String>>,
+    pub identifier: Option<String>,
+    pub searchable_attributes: Option<Vec<String>>,
+    pub displayed_attributes: Option<HashSet<String>>,
     pub stop_words: Option<BTreeSet<String>>,
     pub synonyms: Option<BTreeMap<String, Vec<String>>>,
     pub index_new_fields: Option<bool>,
@@ -96,20 +100,20 @@ pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
     let settings = Settings {
         ranking_rules: Some(settings_update.ranking_rules),
         ranking_distinct: Some(settings_update.ranking_distinct),
-        attribute_identifier: Some(settings_update.attribute_identifier),
-        attributes_searchable: Some(settings_update.attributes_searchable),
-        attributes_displayed: Some(settings_update.attributes_displayed),
+        identifier: Some(settings_update.identifier),
+        searchable_attributes: Some(settings_update.searchable_attributes),
+        displayed_attributes: Some(settings_update.displayed_attributes),
         stop_words: Some(settings_update.stop_words),
         synonyms: Some(settings_update.synonyms),
         index_new_fields: Some(settings_update.index_new_fields),
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
@@ -121,9 +125,9 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
         ranking_distinct: UpdateState::Clear,
-        attribute_identifier: UpdateState::Clear,
-        attributes_searchable: UpdateState::Clear,
-        attributes_displayed: UpdateState::Clear,
+        identifier: UpdateState::Clear,
+        searchable_attributes: UpdateState::Clear,
+        displayed_attributes: UpdateState::Clear,
         stop_words: UpdateState::Clear,
         synonyms: UpdateState::Clear,
         index_new_fields: UpdateState::Clear,
@@ -134,12 +138,12 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GetRankingSettings {
+pub struct RankingSettings {
     pub ranking_rules: Option<Vec<String>>,
     pub ranking_distinct: Option<String>,
 }
@@ -156,7 +160,7 @@ pub async fn get_ranking(ctx: Request<Data>) -> SResult<Response> {
     };
 
     let ranking_distinct = index.main.ranking_distinct(&reader)?;
-    let settings = GetRankingSettings {
+    let settings = RankingSettings {
         ranking_rules,
         ranking_distinct,
     };
@@ -164,17 +168,10 @@ pub async fn get_ranking(ctx: Request<Data>) -> SResult<Response> {
     Ok(tide::Response::new(200).body_json(&settings).unwrap())
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SetRankingSettings {
-    pub ranking_rules: Option<Vec<String>>,
-    pub ranking_distinct: Option<String>,
-}
-
 pub async fn update_ranking(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: SetRankingSettings = ctx.body_json().await.map_err(ResponseError::bad_request)?;
+    let settings: RankingSettings = ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
@@ -184,11 +181,11 @@ pub async fn update_ranking(mut ctx: Request<Data>) -> SResult<Response> {
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn delete_ranking(ctx: Request<Data>) -> SResult<Response> {
@@ -208,7 +205,7 @@ pub async fn delete_ranking(ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn get_rules(ctx: Request<Data>) -> SResult<Response> {
@@ -238,11 +235,11 @@ pub async fn update_rules(mut ctx: Request<Data>) -> SResult<Response> {
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn delete_rules(ctx: Request<Data>) -> SResult<Response> {
@@ -261,13 +258,7 @@ pub async fn delete_rules(ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
-}
-
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GetRankingDistinctSettings {
-    pub ranking_distinct: Option<String>,
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn get_distinct(ctx: Request<Data>) -> SResult<Response> {
@@ -283,12 +274,6 @@ pub async fn get_distinct(ctx: Request<Data>) -> SResult<Response> {
         .unwrap())
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SetRankingDistinctSettings {
-    pub ranking_distinct: Option<String>,
-}
-
 pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
@@ -302,11 +287,11 @@ pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn delete_distinct(ctx: Request<Data>) -> SResult<Response> {
@@ -325,15 +310,15 @@ pub async fn delete_distinct(ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct GetAttributesSettings {
-    pub attribute_identifier: Option<String>,
-    pub attributes_searchable: Option<Vec<String>>,
-    pub attributes_displayed: Option<HashSet<String>>,
+pub struct AttributesSettings {
+    pub identifier: Option<String>,
+    pub searchable_attributes: Option<Vec<String>>,
+    pub displayed_attributes: Option<HashSet<String>>,
 }
 
 pub async fn get_attributes(ctx: Request<Data>) -> SResult<Response> {
@@ -344,47 +329,42 @@ pub async fn get_attributes(ctx: Request<Data>) -> SResult<Response> {
 
     let schema = index.main.schema(&reader)?;
 
-    let attribute_identifier = schema.clone().map(|s| s.identifier());
-    let attributes_searchable = schema.clone().map(|s| s.get_indexed_name());
-    let attributes_displayed = schema.clone().map(|s| s.get_displayed_name());
+    let identifier = schema.clone().map(|s| s.identifier().to_string());
+    let searchable_attributes = schema
+        .clone()
+        .map(|s| s.indexed_name().iter().map(|s| s.to_string()).collect());
+    let displayed_attributes = schema
+        .clone()
+        .map(|s| s.displayed_name().iter().map(|s| s.to_string()).collect());
 
-    let settings = GetAttributesSettings {
-        attribute_identifier,
-        attributes_searchable,
-        attributes_displayed,
+    let settings = AttributesSettings {
+        identifier,
+        searchable_attributes,
+        displayed_attributes,
     };
 
     Ok(tide::Response::new(200).body_json(&settings).unwrap())
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SetAttributesSettings {
-    pub attribute_identifier: Option<String>,
-    pub attributes_searchable: Option<Vec<String>>,
-    pub attributes_displayed: Option<HashSet<String>>,
-}
-
 pub async fn update_attributes(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let settings: SetAttributesSettings =
-        ctx.body_json().await.map_err(ResponseError::bad_request)?;
+    let settings: AttributesSettings = ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
-        attribute_identifier: Some(settings.attribute_identifier),
-        attributes_searchable: Some(settings.attributes_searchable),
-        attributes_displayed: Some(settings.attributes_displayed),
+        identifier: Some(settings.identifier),
+        searchable_attributes: Some(settings.searchable_attributes),
+        displayed_attributes: Some(settings.displayed_attributes),
         ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn delete_attributes(ctx: Request<Data>) -> SResult<Response> {
@@ -393,8 +373,8 @@ pub async fn delete_attributes(ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
 
     let settings = SettingsUpdate {
-        attributes_searchable: UpdateState::Clear,
-        attributes_displayed: UpdateState::Clear,
+        searchable_attributes: UpdateState::Clear,
+        displayed_attributes: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
@@ -403,7 +383,7 @@ pub async fn delete_attributes(ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn get_identifier(ctx: Request<Data>) -> SResult<Response> {
@@ -414,11 +394,9 @@ pub async fn get_identifier(ctx: Request<Data>) -> SResult<Response> {
 
     let schema = index.main.schema(&reader)?;
 
-    let attribute_identifier = schema.map(|s| s.identifier());
+    let identifier = schema.map(|s| s.identifier().to_string());
 
-    Ok(tide::Response::new(200)
-        .body_json(&attribute_identifier)
-        .unwrap())
+    Ok(tide::Response::new(200).body_json(&identifier).unwrap())
 }
 
 pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
@@ -429,37 +407,32 @@ pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
 
     let schema = index.main.schema(&reader)?;
 
-    let attributes_searchable = schema.map(|s| s.get_indexed_name());
+    let searchable_attributes: Option<HashSet<String>> =
+        schema.map(|s| s.indexed_name().iter().map(|i| i.to_string()).collect());
 
     Ok(tide::Response::new(200)
-        .body_json(&attributes_searchable)
+        .body_json(&searchable_attributes)
         .unwrap())
-}
-
-#[derive(Default, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SetAttributesSearchableSettings {
-    pub attributes_searchable: Option<Vec<String>>,
 }
 
 pub async fn update_searchable(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let attributes_searchable: Option<Vec<String>> =
+    let searchable_attributes: Option<Vec<String>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
-        attributes_searchable: Some(attributes_searchable),
+        searchable_attributes: Some(searchable_attributes),
         ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn delete_searchable(ctx: Request<Data>) -> SResult<Response> {
@@ -468,7 +441,7 @@ pub async fn delete_searchable(ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
 
     let settings = SettingsUpdate {
-        attributes_searchable: UpdateState::Clear,
+        searchable_attributes: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
@@ -477,10 +450,10 @@ pub async fn delete_searchable(ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
-pub async fn get_displayed(ctx: Request<Data>) -> SResult<Response> {
+pub async fn displayed(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
@@ -488,31 +461,32 @@ pub async fn get_displayed(ctx: Request<Data>) -> SResult<Response> {
 
     let schema = index.main.schema(&reader)?;
 
-    let attributes_displayed = schema.map(|s| s.get_displayed_name());
+    let displayed_attributes: Option<HashSet<String>> =
+        schema.map(|s| s.displayed_name().iter().map(|i| i.to_string()).collect());
 
     Ok(tide::Response::new(200)
-        .body_json(&attributes_displayed)
+        .body_json(&displayed_attributes)
         .unwrap())
 }
 
 pub async fn update_displayed(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsWrite)?;
     let index = ctx.index()?;
-    let attributes_displayed: Option<HashSet<String>> =
+    let displayed_attributes: Option<HashSet<String>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
-        attributes_displayed: Some(attributes_displayed),
+        displayed_attributes: Some(displayed_attributes),
         ..Settings::default()
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn delete_displayed(ctx: Request<Data>) -> SResult<Response> {
@@ -521,7 +495,7 @@ pub async fn delete_displayed(ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
 
     let settings = SettingsUpdate {
-        attributes_displayed: UpdateState::Clear,
+        displayed_attributes: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
@@ -530,7 +504,7 @@ pub async fn delete_displayed(ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
 pub async fn get_index_new_fields(ctx: Request<Data>) -> SResult<Response> {
@@ -541,7 +515,7 @@ pub async fn get_index_new_fields(ctx: Request<Data>) -> SResult<Response> {
 
     let schema = index.main.schema(&reader)?;
 
-    let index_new_fields = schema.map(|s| s.must_index_new_fields());
+    let index_new_fields = schema.map(|s| s.index_new_fields());
 
     Ok(tide::Response::new(200)
         .body_json(&index_new_fields)
@@ -561,9 +535,9 @@ pub async fn update_index_new_fields(mut ctx: Request<Data>) -> SResult<Response
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into())?;
+    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body).unwrap())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }

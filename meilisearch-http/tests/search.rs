@@ -636,8 +636,8 @@ fn search_with_settings_basic() {
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
-      "attributeIdentifier": "id",
-      "attributesSearchable": [
+      "identifier": "id",
+      "searchableAttributes": [
         "title",
         "tagline",
         "overview",
@@ -647,7 +647,7 @@ fn search_with_settings_basic() {
         "production_companies",
         "genres"
       ],
-      "attributesDisplayed": [
+      "displayedAttributes": [
         "title",
         "director",
         "producer",
@@ -742,8 +742,8 @@ fn search_with_settings_stop_words() {
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
-      "attributeIdentifier": "id",
-      "attributesSearchable": [
+      "identifier": "id",
+      "searchableAttributes": [
         "title",
         "tagline",
         "overview",
@@ -753,7 +753,7 @@ fn search_with_settings_stop_words() {
         "production_companies",
         "genres"
       ],
-      "attributesDisplayed": [
+      "displayedAttributes": [
         "title",
         "director",
         "producer",
@@ -849,8 +849,8 @@ fn search_with_settings_synonyms() {
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
-      "attributeIdentifier": "id",
-      "attributesSearchable": [
+      "identifier": "id",
+      "searchableAttributes": [
         "title",
         "tagline",
         "overview",
@@ -860,7 +860,7 @@ fn search_with_settings_synonyms() {
         "production_companies",
         "genres"
       ],
-      "attributesDisplayed": [
+      "displayedAttributes": [
         "title",
         "director",
         "producer",
@@ -961,8 +961,8 @@ fn search_with_settings_ranking_rules() {
         "dsc(popularity)"
       ],
       "rankingDistinct": null,
-      "attributeIdentifier": "id",
-      "attributesSearchable": [
+      "identifier": "id",
+      "searchableAttributes": [
         "title",
         "tagline",
         "overview",
@@ -972,7 +972,7 @@ fn search_with_settings_ranking_rules() {
         "production_companies",
         "genres"
       ],
-      "attributesDisplayed": [
+      "displayedAttributes": [
         "title",
         "director",
         "producer",
@@ -1052,7 +1052,7 @@ fn search_with_settings_ranking_rules() {
 }
 
 #[test]
-fn search_with_settings_attributes_searchable() {
+fn search_with_settings_searchable_attributes() {
     let mut server = common::setup_server().unwrap();
     common::enrich_server_with_movies_index(&mut server).unwrap();
 
@@ -1068,8 +1068,8 @@ fn search_with_settings_attributes_searchable() {
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
-      "attributeIdentifier": "id",
-      "attributesSearchable": [
+      "identifier": "id",
+      "searchableAttributes": [
         "tagline",
         "overview",
         "cast",
@@ -1078,7 +1078,7 @@ fn search_with_settings_attributes_searchable() {
         "production_companies",
         "genres"
       ],
-      "attributesDisplayed": [
+      "displayedAttributes": [
         "title",
         "director",
         "producer",
@@ -1158,7 +1158,7 @@ fn search_with_settings_attributes_searchable() {
 }
 
 #[test]
-fn search_with_settings_attributes_displayed() {
+fn search_with_settings_displayed_attributes() {
     let mut server = common::setup_server().unwrap();
     common::enrich_server_with_movies_index(&mut server).unwrap();
 
@@ -1174,8 +1174,8 @@ fn search_with_settings_attributes_displayed() {
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
-      "attributeIdentifier": "id",
-      "attributesSearchable": [
+      "identifier": "id",
+      "searchableAttributes": [
         "title",
         "tagline",
         "overview",
@@ -1185,7 +1185,7 @@ fn search_with_settings_attributes_displayed() {
         "production_companies",
         "genres"
       ],
-      "attributesDisplayed": [
+      "displayedAttributes": [
         "title",
         "tagline",
         "id",
@@ -1229,7 +1229,7 @@ fn search_with_settings_attributes_displayed() {
 }
 
 #[test]
-fn search_with_settings_attributes_searchable_2() {
+fn search_with_settings_searchable_attributes_2() {
     let mut server = common::setup_server().unwrap();
     common::enrich_server_with_movies_index(&mut server).unwrap();
 
@@ -1245,8 +1245,8 @@ fn search_with_settings_attributes_searchable_2() {
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
-      "attributeIdentifier": "id",
-      "attributesSearchable": [
+      "identifier": "id",
+      "searchableAttributes": [
         "tagline",
         "overview",
         "title",
@@ -1256,7 +1256,7 @@ fn search_with_settings_attributes_searchable_2() {
         "production_companies",
         "genres"
       ],
-      "attributesDisplayed": [
+      "displayedAttributes": [
         "title",
         "tagline",
         "id",

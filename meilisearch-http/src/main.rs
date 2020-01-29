@@ -5,17 +5,14 @@ use async_std::task;
 use log::info;
 use main_error::MainError;
 use structopt::StructOpt;
-use tide::middleware::RequestLogger;
+use tide::middleware::{Cors, RequestLogger};
 
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
 use meilisearch_http::routes;
 use meilisearch_http::routes::index::index_update_callback;
 
-use cors::Cors;
-
 mod analytics;
-mod cors;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -40,15 +37,11 @@ pub fn main() -> Result<(), MainError> {
 
     app.middleware(Cors::new());
     app.middleware(RequestLogger::new());
-    // app.middleware(tide_compression::Compression::new());
-    // app.middleware(tide_compression::Decompression::new());
 
     routes::load_routes(&mut app);
 
     info!("Server HTTP enabled");
 
-    task::block_on(async {
-        app.listen(opt.http_addr).await.unwrap();
-    });
+    task::block_on(app.listen(opt.http_addr))?;
     Ok(())
 }
