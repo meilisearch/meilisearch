@@ -76,35 +76,26 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .get(|ctx| into_response(setting::get_all(ctx)))
         .post(|ctx| into_response(setting::update_all(ctx)))
         .delete(|ctx| into_response(setting::delete_all(ctx)));
-    app.at("/indexes/:index/settings/ranking")
-        .get(|ctx| into_response(setting::get_ranking(ctx)))
-        .post(|ctx| into_response(setting::update_ranking(ctx)))
-        .delete(|ctx| into_response(setting::delete_ranking(ctx)));
 
-    app.at("/indexes/:index/settings/ranking/rules")
+    app.at("/indexes/:index/settings/ranking-rules")
         .get(|ctx| into_response(setting::get_rules(ctx)))
         .post(|ctx| into_response(setting::update_rules(ctx)))
         .delete(|ctx| into_response(setting::delete_rules(ctx)));
 
-    app.at("/indexes/:index/settings/ranking/distinct")
+    app.at("/indexes/:index/settings/ranking-distinct")
         .get(|ctx| into_response(setting::get_distinct(ctx)))
         .post(|ctx| into_response(setting::update_distinct(ctx)))
         .delete(|ctx| into_response(setting::delete_distinct(ctx)));
 
-    app.at("/indexes/:index/settings/attributes")
-        .get(|ctx| into_response(setting::get_attributes(ctx)))
-        .post(|ctx| into_response(setting::update_attributes(ctx)))
-        .delete(|ctx| into_response(setting::delete_attributes(ctx)));
-
-    app.at("/indexes/:index/settings/attributes/identifier")
+    app.at("/indexes/:index/settings/identifier")
         .get(|ctx| into_response(setting::get_identifier(ctx)));
 
-    app.at("/indexes/:index/settings/attributes/searchable")
+    app.at("/indexes/:index/settings/searchable-attributes")
         .get(|ctx| into_response(setting::get_searchable(ctx)))
         .post(|ctx| into_response(setting::update_searchable(ctx)))
         .delete(|ctx| into_response(setting::delete_searchable(ctx)));
 
-    app.at("/indexes/:index/settings/attributes/displayed")
+    app.at("/indexes/:index/settings/displayed-attribute")
         .get(|ctx| into_response(setting::displayed(ctx)))
         .post(|ctx| into_response(setting::update_displayed(ctx)))
         .delete(|ctx| into_response(setting::delete_displayed(ctx)));
