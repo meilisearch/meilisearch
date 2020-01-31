@@ -44,7 +44,7 @@ pub async fn delete_document(ctx: Request<Data>) -> SResult<Response> {
 
     let index = ctx.index()?;
     let identifier = ctx.identifier()?;
-    let document_id = meilisearch_core::serde::compute_document_id(identifier.clone());
+    let document_id = meilisearch_core::serde::compute_document_id(identifier);
     let db = &ctx.state().db;
     let mut update_writer = db.update_write_txn()?;
     let mut documents_deletion = index.documents_deletion();
@@ -69,7 +69,7 @@ pub async fn get_all_documents(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(DocumentsRead)?;
 
     let index = ctx.index()?;
-    let query: BrowseQuery = ctx.query().unwrap_or(BrowseQuery::default());
+    let query: BrowseQuery = ctx.query().unwrap_or_default();
 
     let offset = query.offset.unwrap_or(0);
     let limit = query.limit.unwrap_or(20);
@@ -115,7 +115,7 @@ fn find_identifier(document: &IndexMap<String, Value>) -> Option<String> {
             return Some(key.to_string());
         }
     }
-    return None;
+    None
 }
 
 #[derive(Default, Deserialize)]

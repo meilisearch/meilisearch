@@ -1,5 +1,5 @@
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use tide::{Request, Response};
 
@@ -57,10 +57,10 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let identifier = schema.clone().map(|s| s.identifier().to_owned());
     let searchable_attributes = schema
         .clone()
-        .map(|s| s.indexed_name().iter().map(|s| s.to_string()).collect());
+        .map(|s| s.indexed_name().iter().map(|s| (*s).to_string()).collect());
     let displayed_attributes = schema
         .clone()
-        .map(|s| s.displayed_name().iter().map(|s| s.to_string()).collect());
+        .map(|s| s.displayed_name().iter().map(|s| (*s).to_string()).collect());
     let index_new_fields = schema.map(|s| s.index_new_fields());
 
     let settings = Settings {
@@ -268,7 +268,7 @@ pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
     let schema = index.main.schema(&reader)?;
 
     let searchable_attributes: Option<HashSet<String>> =
-        schema.map(|s| s.indexed_name().iter().map(|i| i.to_string()).collect());
+        schema.map(|s| s.indexed_name().iter().map(|i| (*i).to_string()).collect());
 
     Ok(tide::Response::new(200)
         .body_json(&searchable_attributes)
@@ -322,7 +322,7 @@ pub async fn displayed(ctx: Request<Data>) -> SResult<Response> {
     let schema = index.main.schema(&reader)?;
 
     let displayed_attributes: Option<HashSet<String>> =
-        schema.map(|s| s.displayed_name().iter().map(|i| i.to_string()).collect());
+        schema.map(|s| s.displayed_name().iter().map(|i| (*i).to_string()).collect());
 
     Ok(tide::Response::new(200)
         .body_json(&displayed_attributes)

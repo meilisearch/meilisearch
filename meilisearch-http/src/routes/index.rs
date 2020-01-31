@@ -159,7 +159,7 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
     writer.commit()?;
 
     let response_body = IndexCreateResponse {
-        name: name,
+        name,
         uid,
         created_at,
         updated_at,

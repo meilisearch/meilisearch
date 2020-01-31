@@ -108,7 +108,7 @@ impl Data {
         let api_key = opt.api_key.clone();
         let server_pid = sysinfo::get_current_pid().unwrap();
 
-        let db = Arc::new(Database::open_or_create(opt.db_path.clone()).unwrap());
+        let db = Arc::new(Database::open_or_create(opt.db_path).unwrap());
 
         let inner_data = DataInner {
             db: db.clone(),

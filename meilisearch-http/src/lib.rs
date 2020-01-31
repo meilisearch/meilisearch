@@ -1,3 +1,5 @@
+#![allow(clippy::or_fun_call)]
+
 pub mod data;
 pub mod error;
 pub mod helpers;
