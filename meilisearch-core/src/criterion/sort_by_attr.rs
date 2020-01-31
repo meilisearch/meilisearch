@@ -32,7 +32,7 @@ use super::{Criterion, Context};
 ///        .add(Proximity)
 ///        .add(Attribute)
 ///        .add(WordsPosition)
-///        .add(Exact)
+///        .add(Exactness)
 ///        .add(custom_ranking)
 ///        .add(DocumentId);
 ///

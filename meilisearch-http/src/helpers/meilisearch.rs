@@ -289,7 +289,7 @@ impl<'a> SearchBuilder<'a> {
                     RankingRule::Proximity => builder.push(Proximity),
                     RankingRule::Attribute => builder.push(Attribute),
                     RankingRule::WordsPosition => builder.push(WordsPosition),
-                    RankingRule::Exact => builder.push(Exact),
+                    RankingRule::Exactness => builder.push(Exactness),
                     RankingRule::Asc(field) => {
                         match SortByAttr::lower_is_better(&ranked_map, &schema, &field) {
                             Ok(rule) => builder.push(rule),
