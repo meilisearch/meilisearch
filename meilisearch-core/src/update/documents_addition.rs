@@ -109,7 +109,7 @@ pub fn apply_documents_addition<'a, 'b>(
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
 
-    let schema = match index.main.schema(writer)? {
+    let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
@@ -147,7 +147,7 @@ pub fn apply_documents_addition<'a, 'b>(
     for (document_id, document) in documents_additions {
         let serializer = Serializer {
             txn: writer,
-            schema: &schema,
+            schema: &mut schema,
             document_store: index.documents_fields,
             document_fields_counts: index.documents_fields_counts,
             indexer: &mut indexer,
@@ -166,7 +166,7 @@ pub fn apply_documents_addition<'a, 'b>(
         indexer,
     )?;
 
-    compute_short_prefixes(writer, index)?;
+    index.main.put_schema(writer, &schema)?;
 
     Ok(())
 }
@@ -178,7 +178,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
 
-
+    let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
@@ -233,7 +233,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
     for (document_id, document) in documents_additions {
         let serializer = Serializer {
             txn: writer,
-            schema: &schema,
+            schema: &mut schema,
             document_store: index.documents_fields,
             document_fields_counts: index.documents_fields_counts,
             indexer: &mut indexer,
@@ -252,7 +252,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
         indexer,
     )?;
 
-    compute_short_prefixes(writer, index)?;
+    index.main.put_schema(writer, &schema)?;
 
     Ok(())
 }
@@ -292,7 +292,7 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
 
         for document_id in documents_ids {
             for result in index.documents_fields.document_fields(writer, *document_id)? {
-                let (attr, bytes) = result?;
+                let (field_id, bytes) = result?;
                 let value: serde_json::Value = serde_json::from_slice(bytes)?;
                 ram_store.insert((document_id, field_id), value);
             }
@@ -322,7 +322,7 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
         )?;
     }
 
-    compute_short_prefixes(writer, index)?;
+    index.main.put_schema(writer, &schema)?;
 
     Ok(())
 }

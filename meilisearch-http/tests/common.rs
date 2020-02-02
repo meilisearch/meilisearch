@@ -36,6 +36,7 @@ pub fn enrich_server_with_movies_index(
 ) -> Result<(), Box<dyn Error>> {
     let body = json!({
         "uid": "movies",
+        "identifier": "id",
     })
     .to_string()
     .into_bytes();
@@ -114,7 +115,7 @@ pub fn enrich_server_with_movies_documents(
         .unwrap();
     let _res = server.simulate(req).unwrap();
 
-    block_on(sleep(Duration::from_secs(5)));
+    block_on(sleep(Duration::from_secs(10)));
 
     Ok(())
 }

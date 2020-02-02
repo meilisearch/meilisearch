@@ -306,7 +306,6 @@ where
     T: ser::Serialize,
 {
     let field_id = schema.get_or_create(&attribute)?;
-
     serialize_value_with_id(
         txn,
         field_id,

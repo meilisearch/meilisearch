@@ -2,6 +2,10 @@ use crate::serde::{DeserializerError, SerializerError};
 use serde_json::Error as SerdeJsonError;
 use std::{error, fmt, io};
 
+pub use heed::Error as HeedError;
+pub use fst::Error as FstError;
+pub use bincode::Error as BincodeError;
+
 pub type MResult<T> = Result<T, Error>;
 
 #[derive(Debug)]
@@ -35,14 +39,14 @@ impl From<meilisearch_schema::Error> for Error {
     }
 }
 
-impl From<heed::Error> for Error {
-    fn from(error: heed::Error) -> Error {
+impl From<HeedError> for Error {
+    fn from(error: HeedError) -> Error {
         Error::Zlmdb(error)
     }
 }
 
-impl From<fst::Error> for Error {
-    fn from(error: fst::Error) -> Error {
+impl From<FstError> for Error {
+    fn from(error: FstError) -> Error {
         Error::Fst(error)
     }
 }
@@ -53,8 +57,8 @@ impl From<SerdeJsonError> for Error {
     }
 }
 
-impl From<bincode::Error> for Error {
-    fn from(error: bincode::Error) -> Error {
+impl From<BincodeError> for Error {
+    fn from(error: BincodeError) -> Error {
         Error::Bincode(error)
     }
 }

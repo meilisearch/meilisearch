@@ -29,7 +29,7 @@ use std::{mem, ptr};
 
 use heed::Result as ZResult;
 use heed::{BytesEncode, BytesDecode};
-use meilisearch_schema::{Schema, SchemaAttr};
+use meilisearch_schema::{IndexedPos, FieldId};
 use sdset::{Set, SetBuf};
 use serde::de::{self, Deserialize};
 use zerocopy::{AsBytes, FromBytes};
@@ -38,6 +38,7 @@ use crate::criterion::Criteria;
 use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::serde::Deserializer;
+use crate::settings::SettingsUpdate;
 use crate::{query_builder::QueryBuilder, update, DocIndex, DocumentId, Error, MResult};
 
 type BEU64 = zerocopy::U64<byteorder::BigEndian>;

@@ -73,7 +73,7 @@ fn write_all_and_delete() {
     let mut buf = Vec::new();
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
-    println!("1: {:?} vs {:?}", json, res_value);
+
     assert_json_eq!(json, res_value, ordered: false);
 
     // 4 - Delete all settings
@@ -102,7 +102,7 @@ fn write_all_and_delete() {
         "rankingRules": null,
         "rankingDistinct": null,
     });
-    println!("2: {:?} vs {:?}", json, res_value);
+
     assert_json_eq!(json, res_value, ordered: false);
 }
 

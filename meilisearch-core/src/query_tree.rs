@@ -180,7 +180,7 @@ pub fn create_query_tree(
 ) -> MResult<(Operation, HashMap<QueryId, Range<usize>>)>
 {
     let words = split_query_string(query).map(str::to_lowercase);
-    let words: Vec<_> = words.into_iter().enumerate().collect();
+    let words: Vec<_> = words.enumerate().collect();
 
     let mut mapper = QueryWordsMapper::new(words.iter().map(|(_, w)| w));
 

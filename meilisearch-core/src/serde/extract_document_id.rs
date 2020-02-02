@@ -22,10 +22,10 @@ fn validate_number(value: &Number) -> Option<String> {
     if value.is_f64() {
         return None
     }
-    return Some(value.to_string())
+    Some(value.to_string())
 }
 
-fn validate_string(value: &String) -> Option<String> {
+fn validate_string(value: &str) -> Option<String> {
     if value.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
         Some(value.to_string())
     } else {

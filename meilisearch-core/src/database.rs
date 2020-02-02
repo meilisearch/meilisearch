@@ -743,12 +743,12 @@ mod tests {
         assert!(document.is_none());
 
         let document: Option<IgnoredAny> = index
-            .document(&reader, None, DocumentId(7900334843754999545))
+            .document(&reader, None, DocumentId(7_900_334_843_754_999_545))
             .unwrap();
         assert!(document.is_some());
 
         let document: Option<IgnoredAny> = index
-            .document(&reader, None, DocumentId(8367468610878465872))
+            .document(&reader, None, DocumentId(8_367_468_610_878_465_872))
             .unwrap();
         assert!(document.is_some());
     }
@@ -820,12 +820,12 @@ mod tests {
         assert!(document.is_none());
 
         let document: Option<IgnoredAny> = index
-            .document(&reader, None, DocumentId(7900334843754999545))
+            .document(&reader, None, DocumentId(7_900_334_843_754_999_545))
             .unwrap();
         assert!(document.is_some());
 
         let document: Option<IgnoredAny> = index
-            .document(&reader, None, DocumentId(8367468610878465872))
+            .document(&reader, None, DocumentId(8_367_468_610_878_465_872))
             .unwrap();
         assert!(document.is_some());
 
@@ -862,7 +862,7 @@ mod tests {
 
         let reader = db.main_read_txn().unwrap();
         let document: Option<serde_json::Value> = index
-            .document(&reader, None, DocumentId(7900334843754999545))
+            .document(&reader, None, DocumentId(7_900_334_843_754_999_545))
             .unwrap();
 
         let new_doc1 = serde_json::json!({
@@ -873,7 +873,7 @@ mod tests {
         assert_eq!(document, Some(new_doc1));
 
         let document: Option<serde_json::Value> = index
-            .document(&reader, None, DocumentId(8367468610878465872))
+            .document(&reader, None, DocumentId(8_367_468_610_878_465_872))
             .unwrap();
 
         let new_doc2 = serde_json::json!({
@@ -1039,14 +1039,14 @@ mod tests {
         assert_matches!(
             iter.next(),
             Some(Document {
-                id: DocumentId(7900334843754999545),
+                id: DocumentId(7_900_334_843_754_999_545),
                 ..
             })
         );
         assert_matches!(
             iter.next(),
             Some(Document {
-                id: DocumentId(8367468610878465872),
+                id: DocumentId(8_367_468_610_878_465_872),
                 ..
             })
         );

@@ -49,7 +49,7 @@ impl Settings {
         };
 
         Ok(SettingsUpdate {
-            ranking_rules: ranking_rules,
+            ranking_rules,
             ranking_distinct: settings.ranking_distinct.into(),
             identifier: settings.identifier.into(),
             searchable_attributes: settings.searchable_attributes.into(),

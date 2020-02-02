@@ -312,7 +312,7 @@ mod tests {
             for ((docid, attr, _), count) in fields_counts {
                 let prev = index
                     .documents_fields_counts
-                    .document_field_count(&mut writer, docid, IndexedPos(attr))
+                    .document_field_count(&writer, docid, IndexedPos(attr))
                     .unwrap();
 
                 let prev = prev.unwrap_or(0);

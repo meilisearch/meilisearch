@@ -5,6 +5,7 @@ use log::{error, warn};
 use serde::{Deserialize, Serialize};
 use tide::IntoResponse;
 use tide::Response;
+use meilisearch_core::{HeedError, FstError};
 
 use crate::helpers::meilisearch::Error as SearchError;
 
@@ -139,14 +140,14 @@ impl From<meilisearch_core::Error> for ResponseError {
     }
 }
 
-impl From<heed::Error> for ResponseError {
-    fn from(err: heed::Error) -> ResponseError {
+impl From<HeedError> for ResponseError {
+    fn from(err: HeedError) -> ResponseError {
         ResponseError::internal(err)
     }
 }
 
-impl From<meilisearch_core::FstError> for ResponseError {
-    fn from(err: meilisearch_core::FstError) -> ResponseError {
+impl From<FstError> for ResponseError {
+    fn from(err: FstError) -> ResponseError {
         ResponseError::internal(err)
     }
 }

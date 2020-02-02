@@ -1022,7 +1022,6 @@ version = "0.8.4"
 dependencies = [
  "assert-json-diff 1.0.1 (git+https://github.com/qdequele/assert-json-diff)",
  "async-std 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "bincode 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-channel 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",

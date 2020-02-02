@@ -14,6 +14,7 @@ use meilisearch_types::DocIndex;
 use sdset::{Set, SetBuf, exponential_search};
 use slice_group_by::{GroupBy, GroupByMut};
 
+use crate::error::Error;
 use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
@@ -163,11 +164,11 @@ where
 
     let schema = main_store.schema(reader)?.ok_or(Error::SchemaMissing)?;
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
-    let iter = iter.map(|rd| Document::from_raw(rd, &automatons, &arena, searchable_attrs.as_ref(), &schema));
+    let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref(), &schema));
     let documents = iter.collect();
 
     debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
-    
+
 
     Ok(documents)
 }
@@ -349,7 +350,7 @@ where
             };
 
             if distinct_accepted && seen.len() > range.start {
-                documents.push(Document::from_raw(raw_document, &queries_kinds, &arena, searchable_attrs.as_ref()));
+                documents.push(Document::from_raw(raw_document, &queries_kinds, &arena, searchable_attrs.as_ref(), &schema));
                 if documents.len() == range.len() {
                     break;
                 }

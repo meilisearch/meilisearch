@@ -130,22 +130,10 @@ pub fn apply_settings_update(
         _ => (),
     }
 
-    let main_store = index.main;
-    let documents_fields_store = index.documents_fields;
-    let documents_fields_counts_store = index.documents_fields_counts;
-    let postings_lists_store = index.postings_lists;
-    let docs_words_store = index.docs_words;
-
     if must_reindex {
-        reindex_all_documents(
-            writer,
-            main_store,
-            documents_fields_store,
-            documents_fields_counts_store,
-            postings_lists_store,
-            docs_words_store,
-        )?;
+        reindex_all_documents(writer, index)?;
     }
+
     if let UpdateState::Clear = settings.identifier {
         index.main.delete_schema(writer)?;
     }
@@ -158,10 +146,7 @@ pub fn apply_stop_words_update(
     stop_words: BTreeSet<String>,
 ) -> MResult<bool> {
 
-    let main_store = index.main;
-    let mut must_reindex = false;
-
-    let old_stop_words: BTreeSet<String> = main_store
+    let old_stop_words: BTreeSet<String> = index.main
         .stop_words_fst(writer)?
         .unwrap_or_default()
         .stream()
@@ -184,10 +169,9 @@ pub fn apply_stop_words_update(
             index,
             deletion
         )?;
-        must_reindex = true;
+        return Ok(true)
     }
-
-    Ok(must_reindex)
+    Ok(false)
 }
 
 fn apply_stop_words_addition(
@@ -256,8 +240,6 @@ fn apply_stop_words_deletion(
     deletion: BTreeSet<String>,
 ) -> MResult<()> {
 
-    let main_store = index.main;
-
     let mut stop_words_builder = SetBuilder::memory();
 
     for word in deletion {
@@ -271,7 +253,7 @@ fn apply_stop_words_deletion(
         .unwrap();
 
     // now we delete all of these stop words from the main store
-    let stop_words_fst = main_store.stop_words_fst(writer)?.unwrap_or_default();
+    let stop_words_fst = index.main.stop_words_fst(writer)?.unwrap_or_default();
 
     let op = OpBuilder::new()
         .add(&stop_words_fst)
@@ -285,7 +267,7 @@ fn apply_stop_words_deletion(
         .and_then(fst::Set::from_bytes)
         .unwrap();
 
-    Ok(main_store.put_stop_words_fst(writer, &stop_words_fst)?)
+    Ok(index.main.put_stop_words_fst(writer, &stop_words_fst)?)
 }
 
 pub fn apply_synonyms_update(

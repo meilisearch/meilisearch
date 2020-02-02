@@ -50,9 +50,9 @@ fn write_all_and_delete() {
             "dsc(rank)",
         ],
         "rankingDistinct": "movie_id",
-        "identifier": "uid",
+        "identifier": "id",
         "searchableAttributes": [
-            "uid",
+            "id",
             "movie_id",
             "title",
             "description",

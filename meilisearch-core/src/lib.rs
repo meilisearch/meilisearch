@@ -23,18 +23,20 @@ pub mod serde;
 pub mod store;
 
 pub use self::database::{BoxUpdateFn, Database, MainT, UpdateT};
-pub use self::error::{Error, MResult};
+pub use self::error::{Error, HeedError, FstError, MResult};
 pub use self::number::{Number, ParseNumberError};
 pub use self::ranked_map::RankedMap;
 pub use self::raw_document::RawDocument;
 pub use self::store::Index;
 pub use self::update::{EnqueuedUpdateResult, ProcessedUpdateResult, UpdateStatus, UpdateType};
 pub use meilisearch_types::{DocIndex, DocumentId, Highlight};
+pub use meilisearch_schema::Schema;
 pub use query_words_mapper::QueryWordsMapper;
 
 use std::convert::TryFrom;
 use std::collections::HashMap;
 use compact_arena::SmallArena;
+use log::{error, trace};
 
 use crate::bucket_sort::PostingsListView;
 use crate::levenshtein::prefix_damerau_levenshtein;
@@ -92,7 +94,7 @@ fn highlights_from_raw_document<'a, 'tag, 'txn>(
             };
 
             let highlight = Highlight {
-                attribute: attribute,
+                attribute,
                 char_index: di.char_index,
                 char_length: covered_area,
             };

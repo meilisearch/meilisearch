@@ -21,7 +21,7 @@ pub struct Schema {
 impl Schema {
     pub fn with_identifier(name: &str) -> Schema {
         let mut fields_map = FieldsMap::default();
-        let field_id = fields_map.insert(name.into()).unwrap();
+        let field_id = fields_map.insert(name).unwrap();
 
         Schema {
             fields_map,
@@ -57,7 +57,7 @@ impl Schema {
     }
 
     pub fn contains(&self, name: &str) -> bool {
-        self.fields_map.id(name.into()).is_some()
+        self.fields_map.id(name).is_some()
     }
 
     pub fn get_or_create_empty(&mut self, name: &str) -> SResult<FieldId> {
@@ -65,16 +65,16 @@ impl Schema {
     }
 
     pub fn get_or_create(&mut self, name: &str) -> SResult<FieldId> {
-        match self.fields_map.id(name.clone()) {
+        match self.fields_map.id(name) {
             Some(id) => {
                 Ok(id)
             }
             None => {
                 if self.index_new_fields {
-                    self.set_indexed(name.clone())?;
+                    self.set_indexed(name)?;
                     self.set_displayed(name)
                 } else {
-                    self.fields_map.insert(name.clone())
+                    self.fields_map.insert(name)
                 }
             }
         }
@@ -105,19 +105,19 @@ impl Schema {
     }
 
     pub fn set_ranked(&mut self, name: &str) -> SResult<FieldId> {
-        let id = self.fields_map.insert(name.into())?;
+        let id = self.fields_map.insert(name)?;
         self.ranked.insert(id);
         Ok(id)
     }
 
     pub fn set_displayed(&mut self, name: &str) -> SResult<FieldId> {
-        let id = self.fields_map.insert(name.into())?;
+        let id = self.fields_map.insert(name)?;
         self.displayed.insert(id);
         Ok(id)
     }
 
     pub fn set_indexed(&mut self, name: &str) -> SResult<(FieldId, IndexedPos)> {
-        let id = self.fields_map.insert(name.into())?;
+        let id = self.fields_map.insert(name)?;
         if let Some(indexed_pos) = self.indexed_map.get(&id) {
             return Ok((id, *indexed_pos))
         };
@@ -128,19 +128,19 @@ impl Schema {
     }
 
     pub fn remove_ranked(&mut self, name: &str) {
-        if let Some(id) = self.fields_map.id(name.into()) {
+        if let Some(id) = self.fields_map.id(name) {
             self.ranked.remove(&id);
         }
     }
 
     pub fn remove_displayed(&mut self, name: &str) {
-        if let Some(id) = self.fields_map.id(name.into()) {
+        if let Some(id) = self.fields_map.id(name) {
             self.displayed.remove(&id);
         }
     }
 
     pub fn remove_indexed(&mut self, name: &str) {
-        if let Some(id) = self.fields_map.id(name.into()) {
+        if let Some(id) = self.fields_map.id(name) {
             self.indexed_map.remove(&id);
             self.indexed.retain(|x| *x != id);
         }

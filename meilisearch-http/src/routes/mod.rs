@@ -38,7 +38,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         }
     });
 
-    app.at("/indexes/")
+    app.at("/indexes")
         .get(|ctx| into_response(index::list_indexes(ctx)))
         .post(|ctx| into_response(index::create_index(ctx)));
 
@@ -95,7 +95,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .post(|ctx| into_response(setting::update_searchable(ctx)))
         .delete(|ctx| into_response(setting::delete_searchable(ctx)));
 
-    app.at("/indexes/:index/settings/displayed-attribute")
+    app.at("/indexes/:index/settings/displayed-attributes")
         .get(|ctx| into_response(setting::displayed(ctx)))
         .post(|ctx| into_response(setting::update_displayed(ctx)))
         .delete(|ctx| into_response(setting::delete_displayed(ctx)));

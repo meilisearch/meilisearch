@@ -24,7 +24,7 @@ impl FieldsMap {
         if let Some(id) = self.name_map.get(name) {
             return Ok(*id)
         }
-        let id = self.next_id.into();
+        let id = self.next_id;
         self.next_id = self.next_id.next()?;
         self.name_map.insert(name.to_string(), id);
         self.id_map.insert(id, name.to_string());
@@ -39,7 +39,7 @@ impl FieldsMap {
     }
 
     pub fn id(&self, name: &str) -> Option<FieldId> {
-        self.name_map.get(name).map(|s| *s)
+        self.name_map.get(name).copied()
     }
 
     pub fn name<I: Into<FieldId>>(&self, id: I) -> Option<&str> {
