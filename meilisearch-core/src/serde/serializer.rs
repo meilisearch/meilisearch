@@ -353,7 +353,7 @@ where
     }
 
     if schema.is_ranked(field_id) {
-        let number = value.serialize(ConvertToNumber)?;
+        let number = value.serialize(ConvertToNumber).unwrap_or_default();
         ranked_map.insert(document_id, field_id, number);
     }
 
