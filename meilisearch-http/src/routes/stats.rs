@@ -10,7 +10,7 @@ use walkdir::WalkDir;
 
 use crate::error::{IntoInternalError, SResult};
 use crate::helpers::tide::RequestExt;
-use crate::models::token::ACL::*;
+use crate::helpers::tide::ACL::*;
 use crate::Data;
 
 #[derive(Serialize)]

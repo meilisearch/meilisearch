@@ -7,6 +7,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use tide::{Request, Response};
 
+use crate::helpers::tide::ACL::*;
 use crate::error::{ResponseError, SResult};
 use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit};
 use crate::helpers::tide::RequestExt;
@@ -28,7 +29,7 @@ struct SearchQuery {
 }
 
 pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
-    // ctx.is_allowed(DocumentsRead)?;
+    ctx.is_allowed(Public)?;
 
     let index = ctx.index()?;
     let db = &ctx.state().db;
@@ -143,7 +144,7 @@ struct SearchMultiBodyResponse {
 }
 
 pub async fn search_multi_index(mut ctx: Request<Data>) -> SResult<Response> {
-    // ctx.is_allowed(DocumentsRead)?;
+    ctx.is_allowed(Public)?;
     let body = ctx
         .body_json::<SearchMultiBody>()
         .await

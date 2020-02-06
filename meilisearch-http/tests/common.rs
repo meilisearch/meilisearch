@@ -22,7 +22,7 @@ pub fn setup_server() -> Result<TestBackend<Service<Data>>, Box<dyn Error>> {
     let opt = Opt {
         db_path: tmp_dir.path().to_str().unwrap().to_string(),
         http_addr: "127.0.0.1:7700".to_owned(),
-        api_key: None,
+        master_key: None,
         no_analytics: true,
     };
 

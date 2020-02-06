@@ -8,11 +8,11 @@ use tide::{Request, Response};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::RequestExt;
-use crate::models::token::ACL::*;
+use crate::helpers::tide::ACL::*;
 use crate::Data;
 
 pub async fn get_document(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(DocumentsRead)?;
+    ctx.is_allowed(Public)?;
 
     let index = ctx.index()?;
 
@@ -40,7 +40,7 @@ pub struct IndexUpdateResponse {
 }
 
 pub async fn delete_document(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(DocumentsWrite)?;
+    ctx.is_allowed(Private)?;
 
     let index = ctx.index()?;
     let identifier = ctx.identifier()?;
@@ -66,7 +66,7 @@ struct BrowseQuery {
 }
 
 pub async fn get_all_documents(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(DocumentsRead)?;
+    ctx.is_allowed(Private)?;
 
     let index = ctx.index()?;
     let query: BrowseQuery = ctx.query().unwrap_or_default();
@@ -125,7 +125,7 @@ struct UpdateDocumentsQuery {
 }
 
 async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> SResult<Response> {
-    ctx.is_allowed(DocumentsWrite)?;
+    ctx.is_allowed(Private)?;
 
     let index = ctx.index()?;
 
@@ -178,7 +178,7 @@ pub async fn add_or_update_multiple_documents(ctx: Request<Data>) -> SResult<Res
 }
 
 pub async fn delete_multiple_documents(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(DocumentsWrite)?;
+    ctx.is_allowed(Private)?;
 
     let data: Vec<Value> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let index = ctx.index()?;
@@ -204,7 +204,7 @@ pub async fn delete_multiple_documents(mut ctx: Request<Data>) -> SResult<Respon
 }
 
 pub async fn clear_all_documents(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(DocumentsWrite)?;
+    ctx.is_allowed(Private)?;
 
     let index = ctx.index()?;
 

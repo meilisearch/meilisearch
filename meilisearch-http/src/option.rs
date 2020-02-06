@@ -11,8 +11,8 @@ pub struct Opt {
     pub http_addr: String,
 
     /// The master key allowing you to do everything on the server.
-    #[structopt(long, env = "MEILI_API_KEY")]
-    pub api_key: Option<String>,
+    #[structopt(long, env = "MEILI_MASTER_KEY")]
+    pub master_key: Option<String>,
 
     /// Do not send analytics to Meili.
     #[structopt(long, env = "MEILI_NO_ANALYTICS")]

@@ -118,13 +118,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .get(|ctx| into_response(stats::index_stats(ctx)));
 
     app.at("/keys/")
-        .get(|ctx| into_response(key::list(ctx)))
-        .post(|ctx| into_response(key::create(ctx)));
-
-    app.at("/keys/:key")
-        .get(|ctx| into_response(key::get(ctx)))
-        .put(|ctx| into_response(key::update(ctx)))
-        .delete(|ctx| into_response(key::delete(ctx)));
+        .get(|ctx| into_response(key::list(ctx)));
 
     app.at("/health")
         .get(|ctx| into_response(health::get_health(ctx)))

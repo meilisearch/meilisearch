@@ -1,6 +1,6 @@
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::RequestExt;
-use crate::models::token::ACL::*;
+use crate::helpers::tide::ACL::*;
 use crate::Data;
 
 use heed::types::{Str, Unit};
