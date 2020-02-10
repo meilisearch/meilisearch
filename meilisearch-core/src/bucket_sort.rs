@@ -69,8 +69,11 @@ where
         None => return Ok(Vec::new()),
     };
 
+    let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
+
     let context = QTContext {
         words_set,
+        stop_words,
         synonyms: synonyms_store,
         postings_lists: postings_lists_store,
         prefix_postings_lists: prefix_postings_lists_cache_store,
@@ -198,8 +201,11 @@ where
         None => return Ok(Vec::new()),
     };
 
+    let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
+
     let context = QTContext {
         words_set,
+        stop_words,
         synonyms: synonyms_store,
         postings_lists: postings_lists_store,
         prefix_postings_lists: prefix_postings_lists_cache_store,

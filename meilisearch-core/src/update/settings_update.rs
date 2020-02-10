@@ -171,6 +171,9 @@ pub fn apply_stop_words_update(
         )?;
         return Ok(true)
     }
+
+    let stop_words_fst = fst::Set::from_iter(stop_words)?;
+    index.main.put_words_fst(writer, &stop_words_fst)?;
     Ok(false)
 }
 
