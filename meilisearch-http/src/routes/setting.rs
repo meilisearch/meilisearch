@@ -18,7 +18,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let stop_words_fst = index.main.stop_words_fst(&reader)?;
     let stop_words = stop_words_fst.unwrap_or_default().stream().into_strs()?;
     let stop_words: BTreeSet<String> = stop_words.into_iter().collect();
-    let stop_words = if stop_words.is_empty() {
+    let stop_words = if !stop_words.is_empty() {
         Some(stop_words)
     } else {
         None
@@ -40,7 +40,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
         }
     }
 
-    let synonyms = if synonyms.is_empty() {
+    let synonyms = if !synonyms.is_empty() {
         Some(synonyms)
     } else {
         None

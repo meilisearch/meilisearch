@@ -38,23 +38,20 @@ fn write_all_and_delete() {
 
     // 2 - Send the settings
 
-    let json = json!({
-        "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exact",
-            "dsc(release_date)",
-            "dsc(rank)",
-        ],
-        "rankingDistinct": "movie_id",
-    });
+    let json = json!([
+        "_typo",
+        "_words",
+        "_proximity",
+        "_attribute",
+        "_words_position",
+        "_exact",
+        "dsc(release_date)",
+        "dsc(rank)",
+    ]);
 
     let body = json.to_string().into_bytes();
 
-    let req = http::Request::post("/indexes/movies/settings/ranking")
+    let req = http::Request::post("/indexes/movies/settings/ranking-rules")
         .body(Body::from(body))
         .unwrap();
     let res = server.simulate(req).unwrap();
@@ -64,7 +61,7 @@ fn write_all_and_delete() {
 
     // 3 - Get all settings and compare to the previous one
 
-    let req = http::Request::get("/indexes/movies/settings/ranking")
+    let req = http::Request::get("/indexes/movies/settings/ranking-rules")
         .body(Body::empty())
         .unwrap();
     let res = server.simulate(req).unwrap();
@@ -78,7 +75,7 @@ fn write_all_and_delete() {
 
     // 4 - Delete all settings
 
-    let req = http::Request::delete("/indexes/movies/settings/ranking")
+    let req = http::Request::delete("/indexes/movies/settings/ranking-rules")
         .body(Body::empty())
         .unwrap();
     let res = server.simulate(req).unwrap();
@@ -88,7 +85,7 @@ fn write_all_and_delete() {
 
     // 5 - Get all settings and check if they are empty
 
-    let req = http::Request::get("/indexes/movies/settings/ranking")
+    let req = http::Request::get("/indexes/movies/settings/ranking-rules")
         .body(Body::empty())
         .unwrap();
     let res = server.simulate(req).unwrap();
@@ -98,10 +95,7 @@ fn write_all_and_delete() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    let json = json!({
-        "rankingRules": null,
-        "rankingDistinct": null,
-    });
+    let json = json!(null);
 
     assert_json_eq!(json, res_value, ordered: false);
 }
@@ -135,23 +129,20 @@ fn write_all_and_update() {
 
     // 2 - Send the settings
 
-    let json = json!({
-        "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exact",
-            "dsc(release_date)",
-            "dsc(rank)",
-        ],
-        "rankingDistinct": "movie_id",
-    });
+    let json = json!([
+        "_typo",
+        "_words",
+        "_proximity",
+        "_attribute",
+        "_words_position",
+        "_exact",
+        "dsc(release_date)",
+        "dsc(rank)",
+    ]);
 
     let body = json.to_string().into_bytes();
 
-    let req = http::Request::post("/indexes/movies/settings/ranking")
+    let req = http::Request::post("/indexes/movies/settings/ranking-rules")
         .body(Body::from(body))
         .unwrap();
     let res = server.simulate(req).unwrap();
@@ -161,7 +152,7 @@ fn write_all_and_update() {
 
     // 3 - Get all settings and compare to the previous one
 
-    let req = http::Request::get("/indexes/movies/settings/ranking")
+    let req = http::Request::get("/indexes/movies/settings/ranking-rules")
         .body(Body::empty())
         .unwrap();
     let res = server.simulate(req).unwrap();
@@ -175,22 +166,19 @@ fn write_all_and_update() {
 
     // 4 - Update all settings
 
-    let json_update = json!({
-        "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exact",
-            "dsc(release_date)",
-        ],
-        "rankingDistinct": null,
-    });
+    let json_update = json!([
+        "_typo",
+        "_words",
+        "_proximity",
+        "_attribute",
+        "_words_position",
+        "_exact",
+        "dsc(release_date)",
+    ]);
 
     let body_update = json_update.to_string().into_bytes();
 
-    let req = http::Request::post("/indexes/movies/settings/ranking")
+    let req = http::Request::post("/indexes/movies/settings/ranking-rules")
         .body(Body::from(body_update))
         .unwrap();
     let res = server.simulate(req).unwrap();
@@ -200,7 +188,7 @@ fn write_all_and_update() {
 
     // 5 - Get all settings and check if the content is the same of (4)
 
-    let req = http::Request::get("/indexes/movies/settings/ranking")
+    let req = http::Request::get("/indexes/movies/settings/ranking-rules")
         .body(Body::empty())
         .unwrap();
     let res = server.simulate(req).unwrap();
@@ -210,18 +198,15 @@ fn write_all_and_update() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    let res_expected = json!({
-        "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exact",
-            "dsc(release_date)",
-        ],
-        "rankingDistinct": null,
-    });
+    let res_expected = json!([
+        "_typo",
+        "_words",
+        "_proximity",
+        "_attribute",
+        "_words_position",
+        "_exact",
+        "dsc(release_date)",
+    ]);
 
     assert_json_eq!(res_expected, res_value, ordered: false);
 }
