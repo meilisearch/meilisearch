@@ -1,8 +1,6 @@
-use std::collections::{HashMap, HashSet};
-
-use serde::{Serialize, Deserialize};
-
 use crate::{FieldsMap, FieldId, SResult, Error, IndexedPos};
+use serde::{Serialize, Deserialize};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Schema {
@@ -60,11 +58,11 @@ impl Schema {
         self.fields_map.id(name).is_some()
     }
 
-    pub fn get_or_create_empty(&mut self, name: &str) -> SResult<FieldId> {
+    pub fn insert(&mut self, name: &str) -> SResult<FieldId> {
         self.fields_map.insert(name)
     }
 
-    pub fn get_or_create(&mut self, name: &str) -> SResult<FieldId> {
+    pub fn insert_and_index(&mut self, name: &str) -> SResult<FieldId> {
         match self.fields_map.id(name) {
             Some(id) => {
                 Ok(id)
@@ -80,24 +78,24 @@ impl Schema {
         }
     }
 
-    pub fn ranked(&self) -> HashSet<FieldId> {
-        self.ranked.clone()
+    pub fn ranked(&self) -> &HashSet<FieldId> {
+        &self.ranked
     }
 
     pub fn ranked_name(&self) -> HashSet<&str> {
         self.ranked.iter().filter_map(|a| self.name(*a)).collect()
     }
 
-    pub fn displayed(&self) -> HashSet<FieldId> {
-        self.displayed.clone()
+    pub fn displayed(&self) -> &HashSet<FieldId> {
+        &self.displayed
     }
 
     pub fn displayed_name(&self) -> HashSet<&str> {
         self.displayed.iter().filter_map(|a| self.name(*a)).collect()
     }
 
-    pub fn indexed(&self) -> Vec<FieldId> {
-        self.indexed.clone()
+    pub fn indexed(&self) -> &Vec<FieldId> {
+        &self.indexed
     }
 
     pub fn indexed_name(&self) -> Vec<&str> {
@@ -168,7 +166,7 @@ impl Schema {
     }
 
     pub fn update_ranked<S: AsRef<str>>(&mut self, data: impl IntoIterator<Item = S>) -> SResult<()> {
-        self.ranked = HashSet::new();
+        self.ranked.clear();
         for name in data {
             self.set_ranked(name.as_ref())?;
         }
@@ -176,7 +174,7 @@ impl Schema {
     }
 
     pub fn update_displayed<S: AsRef<str>>(&mut self, data: impl IntoIterator<Item = S>) -> SResult<()> {
-        self.displayed = HashSet::new();
+        self.displayed.clear();
         for name in data {
             self.set_displayed(name.as_ref())?;
         }
@@ -184,8 +182,8 @@ impl Schema {
     }
 
     pub fn update_indexed<S: AsRef<str>>(&mut self, data: Vec<S>) -> SResult<()> {
-        self.indexed = Vec::new();
-        self.indexed_map = HashMap::new();
+        self.indexed.clear();
+        self.indexed_map.clear();
         for name in data {
             self.set_indexed(name.as_ref())?;
         }

@@ -115,7 +115,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .delete(|ctx| into_response(stop_words::delete(ctx)));
 
     app.at("/indexes/:index/stats")
-        .get(|ctx| into_response(stats::index_stat(ctx)));
+        .get(|ctx| into_response(stats::index_stats(ctx)));
 
     app.at("/keys/")
         .get(|ctx| into_response(key::list(ctx)))

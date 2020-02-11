@@ -1,7 +1,7 @@
 {
     "identifier": "id",
-    "searchable_attributes": ["title", "overview"],
-    "displayed_attributes": [
+    "searchableAttributes": ["title", "overview"],
+    "displayedAttributes": [
         "id",
         "title",
         "overview",

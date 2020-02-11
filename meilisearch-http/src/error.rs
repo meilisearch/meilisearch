@@ -2,10 +2,10 @@ use std::fmt::Display;
 
 use http::status::StatusCode;
 use log::{error, warn};
+use meilisearch_core::{FstError, HeedError};
 use serde::{Deserialize, Serialize};
 use tide::IntoResponse;
 use tide::Response;
-use meilisearch_core::{HeedError, FstError};
 
 use crate::helpers::meilisearch::Error as SearchError;
 

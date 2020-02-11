@@ -106,7 +106,7 @@ pub fn apply_documents_deletion(
     let mut words_document_ids = HashMap::new();
     for id in idset {
         // remove all the ranked attributes from the ranked_map
-        for ranked_attr in &ranked_fields {
+        for ranked_attr in ranked_fields {
             ranked_map.remove(id, *ranked_attr);
         }
 

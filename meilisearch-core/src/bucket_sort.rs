@@ -172,7 +172,6 @@ where
 
     debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
 
-
     Ok(documents)
 }
 

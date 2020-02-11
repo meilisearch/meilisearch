@@ -206,7 +206,8 @@ impl<'a> SearchBuilder<'a> {
         query_builder.with_fetch_timeout(self.timeout);
 
         let start = Instant::now();
-        let docs = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let docs =
+            query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
         let time_ms = start.elapsed().as_millis() as usize;
 
         let mut hits = Vec::with_capacity(self.limit);

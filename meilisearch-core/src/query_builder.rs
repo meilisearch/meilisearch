@@ -275,7 +275,7 @@ mod tests {
                 let mut final_indexes = Vec::new();
                 for index in indexes {
                     let name = index.attribute.to_string();
-                    schema.get_or_create_empty(&name).unwrap();
+                    schema.insert(&name).unwrap();
                     let indexed_pos = schema.set_indexed(&name).unwrap().1;
                     let index = DocIndex {
                         attribute: indexed_pos.0,

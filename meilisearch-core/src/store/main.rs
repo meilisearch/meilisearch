@@ -192,8 +192,8 @@ impl Main {
         self.main.get::<_, Str, SerdeBincode<Vec<RankingRule>>>(reader, RANKING_RULES_KEY)
     }
 
-    pub fn put_ranking_rules(self, writer: &mut heed::RwTxn<MainT>, value: Vec<RankingRule>) -> ZResult<()> {
-        self.main.put::<_, Str, SerdeBincode<Vec<RankingRule>>>(writer, RANKING_RULES_KEY, &value)
+    pub fn put_ranking_rules(self, writer: &mut heed::RwTxn<MainT>, value: &[RankingRule]) -> ZResult<()> {
+        self.main.put::<_, Str, SerdeBincode<Vec<RankingRule>>>(writer, RANKING_RULES_KEY, &value.to_vec())
     }
 
     pub fn delete_ranking_rules(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
@@ -201,11 +201,14 @@ impl Main {
     }
 
     pub fn ranking_distinct(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<String>> {
-        self.main.get::<_, Str, SerdeBincode<String>>(reader, RANKING_DISTINCT_KEY)
+        if let Some(value) = self.main.get::<_, Str, Str>(reader, RANKING_DISTINCT_KEY)? {
+            return Ok(Some(value.to_owned()))
+        }
+        return Ok(None)
     }
 
-    pub fn put_ranking_distinct(self, writer: &mut heed::RwTxn<MainT>, value: String) -> ZResult<()> {
-        self.main.put::<_, Str, SerdeBincode<String>>(writer, RANKING_DISTINCT_KEY, &value)
+    pub fn put_ranking_distinct(self, writer: &mut heed::RwTxn<MainT>, value: &str) -> ZResult<()> {
+        self.main.put::<_, Str, Str>(writer, RANKING_DISTINCT_KEY, value)
     }
 
     pub fn delete_ranking_distinct(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {

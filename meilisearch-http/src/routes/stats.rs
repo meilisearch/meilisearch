@@ -21,7 +21,7 @@ struct IndexStatsResponse {
     fields_frequency: HashMap<String, usize>,
 }
 
-pub async fn index_stat(ctx: Request<Data>) -> SResult<Response> {
+pub async fn index_stats(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
     let index_uid = ctx.url_param("index")?;
     let index = ctx.index()?;

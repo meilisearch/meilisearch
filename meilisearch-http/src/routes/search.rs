@@ -64,7 +64,7 @@ pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
             let attributes_to_crop = schema
                 .displayed_name()
                 .iter()
-                .map(|attr| ((*attr).to_string(), crop_length))
+                .map(|attr| (attr.to_string(), crop_length))
                 .collect();
             search_builder.attributes_to_crop(attributes_to_crop);
         } else {
@@ -81,7 +81,7 @@ pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
             schema
                 .displayed_name()
                 .iter()
-                .map(|s| (*s).to_string())
+                .map(|s| s.to_string())
                 .collect()
         } else {
             attributes_to_highlight

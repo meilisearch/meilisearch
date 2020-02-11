@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
+use std::iter::IntoIterator;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use once_cell::sync::Lazy;
@@ -16,8 +17,6 @@ pub struct Settings {
     pub ranking_rules: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub ranking_distinct: Option<Option<String>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub identifier: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub searchable_attributes: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
@@ -43,7 +42,7 @@ impl Settings {
         let settings = self.clone();
 
         let ranking_rules = match settings.ranking_rules {
-            Some(Some(rules)) => UpdateState::Update(RankingRule::from_vec(rules.iter().map(|m| m.as_ref()).collect())?),
+            Some(Some(rules)) => UpdateState::Update(RankingRule::from_iter(rules.iter())?),
             Some(None) => UpdateState::Clear,
             None => UpdateState::Nothing,
         };
@@ -51,7 +50,7 @@ impl Settings {
         Ok(SettingsUpdate {
             ranking_rules,
             ranking_distinct: settings.ranking_distinct.into(),
-            identifier: settings.identifier.into(),
+            identifier: UpdateState::Nothing,
             searchable_attributes: settings.searchable_attributes.into(),
             displayed_attributes: settings.displayed_attributes.into(),
             stop_words: settings.stop_words.into(),
@@ -139,16 +138,16 @@ impl FromStr for RankingRule {
 }
 
 impl RankingRule {
-    pub fn get_field(&self) -> Option<&str> {
+    pub fn field(&self) -> Option<&str> {
         match self {
             RankingRule::Asc(field) | RankingRule::Dsc(field) => Some(field),
             _ => None,
         }
     }
 
-    pub fn from_vec(rules: Vec<&str>) -> Result<Vec<RankingRule>, RankingRuleConversionError> {
-        rules.iter()
-            .map(|s| RankingRule::from_str(s))
+    pub fn from_iter(rules: impl IntoIterator<Item = impl AsRef<str>>) -> Result<Vec<RankingRule>, RankingRuleConversionError> {
+        rules.into_iter()
+            .map(|s| RankingRule::from_str(s.as_ref()))
             .collect()
     }
 }

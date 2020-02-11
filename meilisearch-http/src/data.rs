@@ -92,7 +92,13 @@ impl DataInner {
         // convert attributes to their names
         let frequency: HashMap<_, _> = fields_frequency
             .into_iter()
-            .map(|(a, c)| (schema.name(a).unwrap().to_string(), c))
+            .filter_map(|(a, c)| {
+                if let Some(name) = schema.name(a) {
+                    return Some((name.to_string(), c));
+                } else {
+                    return None;
+                }
+            })
             .collect();
 
         index

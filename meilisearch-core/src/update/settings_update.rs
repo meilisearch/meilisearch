@@ -44,9 +44,9 @@ pub fn apply_settings_update(
 
     match settings.ranking_rules {
         UpdateState::Update(v) => {
-            let ranked_field: Vec<&str> = v.iter().filter_map(RankingRule::get_field).collect();
+            let ranked_field: Vec<&str> = v.iter().filter_map(RankingRule::field).collect();
             schema.update_ranked(ranked_field)?;
-            index.main.put_ranking_rules(writer, v)?;
+            index.main.put_ranking_rules(writer, &v)?;
             must_reindex = true;
         },
         UpdateState::Clear => {
@@ -60,7 +60,7 @@ pub fn apply_settings_update(
 
     match settings.ranking_distinct {
         UpdateState::Update(v) => {
-            index.main.put_ranking_distinct(writer, v)?;
+            index.main.put_ranking_distinct(writer, &v)?;
         },
         UpdateState::Clear => {
             index.main.delete_ranking_distinct(writer)?;
@@ -99,16 +99,12 @@ pub fn apply_settings_update(
         UpdateState::Nothing => (),
     };
 
-    match settings.identifier.clone() {
-        UpdateState::Update(v) => {
-            schema.set_identifier(v.as_ref())?;
-            index.main.put_schema(writer, &schema)?;
-            must_reindex = true;
-        },
-        _ => {
-            index.main.put_schema(writer, &schema)?;
-        },
-    };
+    if let UpdateState::Update(v) = settings.identifier.clone() {
+        schema.set_identifier(v.as_ref())?;
+        must_reindex = true;
+    }
+
+    index.main.put_schema(writer, &schema)?;
 
     match settings.stop_words {
         UpdateState::Update(stop_words) => {
@@ -121,13 +117,13 @@ pub fn apply_settings_update(
                 must_reindex = true;
             }
         },
-        _ => (),
+        UpdateState::Nothing => (),
     }
 
     match settings.synonyms {
         UpdateState::Update(synonyms) => apply_synonyms_update(writer, index, synonyms)?,
         UpdateState::Clear => apply_synonyms_update(writer, index, BTreeMap::new())?,
-        _ => (),
+        UpdateState::Nothing => (),
     }
 
     if must_reindex {

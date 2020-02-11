@@ -235,7 +235,7 @@ impl<'a, 'b> ser::SerializeMap for MapSerializer<'a, 'b> {
         let key = key.serialize(ConvertToString)?;
         serialize_value(
             self.txn,
-            key,
+            key.as_str(),
             self.schema,
             self.document_id,
             self.document_store,
@@ -275,7 +275,7 @@ impl<'a, 'b> ser::SerializeStruct for StructSerializer<'a, 'b> {
     {
         serialize_value(
             self.txn,
-            key.to_string(),
+            key,
             self.schema,
             self.document_id,
             self.document_store,
@@ -293,7 +293,7 @@ impl<'a, 'b> ser::SerializeStruct for StructSerializer<'a, 'b> {
 
 pub fn serialize_value<'a, T: ?Sized>(
     txn: &mut heed::RwTxn<MainT>,
-    attribute: String,
+    attribute: &str,
     schema: &'a mut Schema,
     document_id: DocumentId,
     document_store: DocumentsFields,
@@ -305,7 +305,7 @@ pub fn serialize_value<'a, T: ?Sized>(
 where
     T: ser::Serialize,
 {
-    let field_id = schema.get_or_create(&attribute)?;
+    let field_id = schema.insert_and_index(&attribute)?;
     serialize_value_with_id(
         txn,
         field_id,
