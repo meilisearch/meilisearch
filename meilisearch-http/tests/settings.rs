@@ -26,6 +26,7 @@ fn write_all_and_delete() {
 
     let body = json!({
         "uid": "movies",
+        "identifier": "id",
     })
     .to_string()
     .into_bytes();
@@ -50,7 +51,6 @@ fn write_all_and_delete() {
             "dsc(rank)",
         ],
         "rankingDistinct": "movie_id",
-        "identifier": "id",
         "searchableAttributes": [
             "id",
             "movie_id",
@@ -128,12 +128,11 @@ fn write_all_and_delete() {
     let json = json!({
         "rankingRules": null,
         "rankingDistinct": null,
-        "identifier": null,
         "searchableAttributes": null,
         "displayedAttributes": null,
         "stopWords": null,
         "synonyms": null,
-        "indexNewFields": null,
+        "indexNewFields": true,
     });
 
     assert_json_eq!(json, res_value, ordered: false);
@@ -155,6 +154,7 @@ fn write_all_and_update() {
 
     let body = json!({
         "uid": "movies",
+        "identifier": "id",
     })
     .to_string()
     .into_bytes();
@@ -179,7 +179,6 @@ fn write_all_and_update() {
             "dsc(rank)",
         ],
         "rankingDistinct": "movie_id",
-        "identifier": "uid",
         "searchableAttributes": [
             "uid",
             "movie_id",
@@ -244,7 +243,6 @@ fn write_all_and_update() {
             "_exact",
             "dsc(release_date)",
         ],
-        "identifier": "uid",
         "searchableAttributes": [
             "title",
             "description",
@@ -299,7 +297,6 @@ fn write_all_and_update() {
             "dsc(release_date)",
         ],
         "rankingDistinct": null,
-        "identifier": "uid",
         "searchableAttributes": [
             "title",
             "description",

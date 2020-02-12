@@ -54,21 +54,36 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
 
     let schema = index.main.schema(&reader)?;
 
-    let identifier = schema.clone().map(|s| s.identifier().to_owned());
-    let searchable_attributes = schema
-        .clone()
-        .map(|s| s.indexed_name().iter().map(|s| (*s).to_string()).collect());
-    let displayed_attributes = schema
-        .clone()
-        .map(|s| s.displayed_name().iter().map(|s| (*s).to_string()).collect());
+    let searchable_attributes = schema.clone().map(|s| {
+        let attrs = s.indexed_name()
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect::<Vec<String>>();
+        if attrs.is_empty() {
+            None
+        } else {
+            Some(attrs)
+        }
+    });
+
+    let displayed_attributes = schema.clone().map(|s| {
+        let attrs = s.displayed_name()
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect::<HashSet<String>>();
+        if attrs.is_empty() {
+            None
+        } else {
+            Some(attrs)
+        }
+    });
     let index_new_fields = schema.map(|s| s.index_new_fields());
 
     let settings = Settings {
         ranking_rules: Some(ranking_rules),
         ranking_distinct: Some(ranking_distinct),
-        identifier: Some(identifier),
-        searchable_attributes: Some(searchable_attributes),
-        displayed_attributes: Some(displayed_attributes),
+        searchable_attributes: searchable_attributes,
+        displayed_attributes: displayed_attributes,
         stop_words: Some(stop_words),
         synonyms: Some(synonyms),
         index_new_fields: Some(index_new_fields),
@@ -100,7 +115,6 @@ pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
     let settings = Settings {
         ranking_rules: Some(settings_update.ranking_rules),
         ranking_distinct: Some(settings_update.ranking_distinct),
-        identifier: Some(settings_update.identifier),
         searchable_attributes: Some(settings_update.searchable_attributes),
         displayed_attributes: Some(settings_update.displayed_attributes),
         stop_words: Some(settings_update.stop_words),
@@ -321,8 +335,12 @@ pub async fn displayed(ctx: Request<Data>) -> SResult<Response> {
 
     let schema = index.main.schema(&reader)?;
 
-    let displayed_attributes: Option<HashSet<String>> =
-        schema.map(|s| s.displayed_name().iter().map(|i| (*i).to_string()).collect());
+    let displayed_attributes: Option<HashSet<String>> = schema.map(|s| {
+        s.displayed_name()
+            .iter()
+            .map(|i| (*i).to_string())
+            .collect()
+    });
 
     Ok(tide::Response::new(200)
         .body_json(&displayed_attributes)

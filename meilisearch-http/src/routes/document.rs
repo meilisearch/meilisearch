@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use indexmap::IndexMap;
-use meilisearch_core::settings::Settings;
+use meilisearch_core::settings::{SettingsUpdate, UpdateState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tide::{Request, Response};
@@ -145,11 +145,11 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
                 None => return Err(ResponseError::bad_request("Could not infer a schema")),
             },
         };
-        let settings = Settings {
-            identifier: Some(Some(id)),
-            ..Settings::default()
+        let settings_update = SettingsUpdate{
+            identifier: UpdateState::Update(id),
+            ..SettingsUpdate::default()
         };
-        index.settings_update(&mut update_writer, settings.into_update()?)?;
+        index.settings_update(&mut update_writer, settings_update)?;
     }
 
     let mut document_addition = if is_partial {

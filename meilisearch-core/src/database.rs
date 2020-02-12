@@ -357,7 +357,7 @@ mod tests {
 
     use crate::criterion::{self, CriteriaBuilder};
     use crate::update::{ProcessedUpdateResult, UpdateStatus};
-    use crate::settings::Settings;
+    use crate::settings::{Settings, SettingsUpdate, UpdateState};
     use crate::{Document, DocumentId};
     use serde::de::IgnoredAny;
     use std::sync::mpsc;
@@ -377,10 +377,21 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
+        let settings_update = SettingsUpdate{
+            identifier: UpdateState::Update("id".to_string()),
+            ..SettingsUpdate::default()
+        };
+
+        let mut writer = db.update_write_txn().unwrap();
+        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
         let settings = {
             let data = r#"
                 {
-                    "identifier": "id",
                     "searchableAttributes": ["name", "description"],
                     "displayedAttributes": ["name", "description"]
                 }
@@ -437,10 +448,21 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
+        let settings_update = SettingsUpdate{
+            identifier: UpdateState::Update("id".to_string()),
+            ..SettingsUpdate::default()
+        };
+
+        let mut writer = db.update_write_txn().unwrap();
+        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
         let settings = {
             let data = r#"
                 {
-                    "identifier": "id",
                     "searchableAttributes": ["name", "description"],
                     "displayedAttributes": ["name", "description"]
                 }
@@ -496,10 +518,21 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
+        let settings_update = SettingsUpdate{
+            identifier: UpdateState::Update("id".to_string()),
+            ..SettingsUpdate::default()
+        };
+
+        let mut writer = db.update_write_txn().unwrap();
+        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
         let settings = {
             let data = r#"
                 {
-                    "identifier": "id",
                     "searchableAttributes": ["name"],
                     "displayedAttributes": ["name"]
                 }
@@ -548,10 +581,21 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
+        let settings_update = SettingsUpdate{
+            identifier: UpdateState::Update("id".to_string()),
+            ..SettingsUpdate::default()
+        };
+
+        let mut writer = db.update_write_txn().unwrap();
+        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
         let settings = {
             let data = r#"
                 {
-                    "identifier": "id",
                     "searchableAttributes": ["name", "description"],
                     "displayedAttributes": ["name", "description"]
                 }
@@ -588,7 +632,6 @@ mod tests {
         let settings = {
             let data = r#"
                 {
-                    "identifier": "id",
                     "searchableAttributes": ["name", "description", "age", "sex"],
                     "displayedAttributes": ["name", "description", "age", "sex"]
                 }
@@ -655,7 +698,6 @@ mod tests {
         let settings = {
             let data = r#"
                 {
-                    "identifier": "id",
                     "searchableAttributes": ["name", "description", "city", "age", "sex"],
                     "displayedAttributes": ["name", "description", "city", "age", "sex"]
                 }
@@ -691,10 +733,21 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
+        let settings_update = SettingsUpdate{
+            identifier: UpdateState::Update("id".to_string()),
+            ..SettingsUpdate::default()
+        };
+
+        let mut writer = db.update_write_txn().unwrap();
+        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
         let settings = {
             let data = r#"
                 {
-                    "identifier": "id",
                     "searchableAttributes": ["name", "description"],
                     "displayedAttributes": ["name", "description"]
                 }
@@ -768,10 +821,21 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
+        let settings_update = SettingsUpdate{
+            identifier: UpdateState::Update("id".to_string()),
+            ..SettingsUpdate::default()
+        };
+
+        let mut writer = db.update_write_txn().unwrap();
+        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
         let settings = {
             let data = r#"
                 {
-                    "identifier": "id",
                     "searchableAttributes": ["name", "description"],
                     "displayedAttributes": ["name", "description", "id"]
                 }
@@ -904,10 +968,21 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
+        let settings_update = SettingsUpdate{
+            identifier: UpdateState::Update("id".to_string()),
+            ..SettingsUpdate::default()
+        };
+
+        let mut writer = db.update_write_txn().unwrap();
+        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
         let settings = {
             let data = r#"
                 {
-                    "identifier": "id",
                     "searchableAttributes": ["name", "description"],
                     "displayedAttributes": ["name", "description"]
                 }
@@ -968,6 +1043,18 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
+        let settings_update = SettingsUpdate{
+            identifier: UpdateState::Update("id".to_string()),
+            ..SettingsUpdate::default()
+        };
+
+        let mut writer = db.update_write_txn().unwrap();
+        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        writer.commit().unwrap();
+
+        // block until the transaction is processed
+        let _ = receiver.iter().find(|id| *id == update_id);
+
         let settings = {
             let data = r#"
                 {
@@ -980,7 +1067,6 @@ mod tests {
                         "_exact",
                         "dsc(release_date)"
                     ],
-                    "identifier": "id",
                     "searchableAttributes": ["name", "release_date"],
                     "displayedAttributes": ["name", "release_date"]
                 }

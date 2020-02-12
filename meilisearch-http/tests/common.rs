@@ -64,7 +64,6 @@ pub fn enrich_server_with_movies_settings(
             "dsc(vote_average)",
         ],
         "rankingDistinct": null,
-        "identifier": "id",
         "searchableAttributes": [
             "title",
             "tagline",

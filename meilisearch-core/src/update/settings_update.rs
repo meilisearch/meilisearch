@@ -89,7 +89,7 @@ pub fn apply_settings_update(
             must_reindex = true;
         },
         UpdateState::Nothing => (),
-    };
+    }
     match settings.displayed_attributes.clone() {
         UpdateState::Update(v) => schema.update_displayed(v)?,
         UpdateState::Clear => {
@@ -97,11 +97,6 @@ pub fn apply_settings_update(
             schema.update_displayed(clear)?;
         },
         UpdateState::Nothing => (),
-    };
-
-    if let UpdateState::Update(v) = settings.identifier.clone() {
-        schema.set_identifier(v.as_ref())?;
-        must_reindex = true;
     }
 
     index.main.put_schema(writer, &schema)?;
@@ -130,9 +125,6 @@ pub fn apply_settings_update(
         reindex_all_documents(writer, index)?;
     }
 
-    if let UpdateState::Clear = settings.identifier {
-        index.main.delete_schema(writer)?;
-    }
     Ok(())
 }
 

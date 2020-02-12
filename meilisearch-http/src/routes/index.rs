@@ -40,11 +40,17 @@ pub async fn list_indexes(ctx: Request<Data>) -> SResult<Response> {
                 let created_at = index.main.created_at(&reader)?.into_internal_error()?;
                 let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
 
+                let identifier = match index.main.schema(&reader) {
+                    Ok(Some(schema)) => Some(schema.identifier().to_owned()),
+                    _ => None
+                };
+
                 let index_response = IndexResponse {
                     name,
                     uid: index_uid,
                     created_at,
                     updated_at,
+                    identifier,
                 };
                 response_body.push(index_response);
             }
@@ -65,6 +71,7 @@ struct IndexResponse {
     uid: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    identifier: Option<String>,
 }
 
 pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
@@ -80,11 +87,17 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
     let created_at = index.main.created_at(&reader)?.into_internal_error()?;
     let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
 
+    let identifier = match index.main.schema(&reader) {
+        Ok(Some(schema)) => Some(schema.identifier().to_owned()),
+        _ => None
+    };
+
     let response_body = IndexResponse {
         name,
         uid,
         created_at,
         updated_at,
+        identifier
     };
 
     Ok(tide::Response::new(200).body_json(&response_body)?)
@@ -105,6 +118,7 @@ struct IndexCreateResponse {
     uid: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    identifier: Option<String>,
 }
 
 pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
@@ -150,7 +164,7 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         .updated_at(&writer)?
         .into_internal_error()?;
 
-    if let Some(id) = body.identifier {
+    if let Some(id) = body.identifier.clone() {
         created_index
             .main
             .put_schema(&mut writer, &Schema::with_identifier(&id))?;
@@ -163,6 +177,7 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         uid,
         created_at,
         updated_at,
+        identifier: body.identifier,
     };
 
     Ok(tide::Response::new(201).body_json(&response_body)?)
@@ -171,7 +186,8 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateIndexRequest {
-    name: String,
+    name: Option<String>,
+    identifier: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -181,6 +197,7 @@ struct UpdateIndexResponse {
     uid: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    identifier: Option<String>,
 }
 
 pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
@@ -197,21 +214,36 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let mut writer = db.main_write_txn()?;
 
-    index.main.put_name(&mut writer, &body.name)?;
+    if let Some(name) = body.name {
+        index.main.put_name(&mut writer, &name)?;
+    }
+
+    if let Some(identifier) = body.identifier {
+        if let Ok(Some(_)) = index.main.schema(&writer) {
+            return Err(ResponseError::bad_request("The index identifier cannot be updated"));
+        }
+        index.main.put_schema(&mut writer, &Schema::with_identifier(&identifier))?;
+    }
 
     index.main.put_updated_at(&mut writer)?;
-
     writer.commit()?;
-    let reader = db.main_read_txn()?;
 
+    let reader = db.main_read_txn()?;
+    let name = index.main.name(&reader)?.into_internal_error()?;
     let created_at = index.main.created_at(&reader)?.into_internal_error()?;
     let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
 
+    let identifier = match index.main.schema(&reader) {
+        Ok(Some(schema)) => Some(schema.identifier().to_owned()),
+        _ => None
+    };
+
     let response_body = UpdateIndexResponse {
-        name: body.name,
+        name,
         uid: index_uid,
         created_at,
         updated_at,
+        identifier
     };
 
     Ok(tide::Response::new(200).body_json(&response_body)?)

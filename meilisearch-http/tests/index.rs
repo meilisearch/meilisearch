@@ -30,7 +30,7 @@ fn create_index_with_name() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res1_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    assert_eq!(res1_value.as_object().unwrap().len(), 4);
+    assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
     let r1_uid = res1_value["uid"].as_str().unwrap();
     let r1_created_at = res1_value["createdAt"].as_str().unwrap();
@@ -54,7 +54,7 @@ fn create_index_with_name() {
     let res2_value: Value = serde_json::from_slice(&buf).unwrap();
 
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
-    assert_eq!(res2_value[0].as_object().unwrap().len(), 4);
+    assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
     let r2_name = res2_value[0]["name"].as_str().unwrap();
     let r2_uid = res2_value[0]["uid"].as_str().unwrap();
     let r2_created_at = res2_value[0]["createdAt"].as_str().unwrap();
@@ -90,7 +90,7 @@ fn create_index_with_uid() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res1_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    assert_eq!(res1_value.as_object().unwrap().len(), 4);
+    assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
     let r1_uid = res1_value["uid"].as_str().unwrap();
     let r1_created_at = res1_value["createdAt"].as_str().unwrap();
@@ -114,7 +114,7 @@ fn create_index_with_uid() {
     let res2_value: Value = serde_json::from_slice(&buf).unwrap();
 
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
-    assert_eq!(res2_value[0].as_object().unwrap().len(), 4);
+    assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
     let r2_name = res2_value[0]["name"].as_str().unwrap();
     let r2_uid = res2_value[0]["uid"].as_str().unwrap();
     let r2_created_at = res2_value[0]["createdAt"].as_str().unwrap();
@@ -151,7 +151,7 @@ fn create_index_with_name_and_uid() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res1_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    assert_eq!(res1_value.as_object().unwrap().len(), 4);
+    assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
     let r1_uid = res1_value["uid"].as_str().unwrap();
     let r1_created_at = res1_value["createdAt"].as_str().unwrap();
@@ -175,7 +175,7 @@ fn create_index_with_name_and_uid() {
     let res2_value: Value = serde_json::from_slice(&buf).unwrap();
 
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
-    assert_eq!(res2_value[0].as_object().unwrap().len(), 4);
+    assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
     let r2_name = res2_value[0]["name"].as_str().unwrap();
     let r2_uid = res2_value[0]["uid"].as_str().unwrap();
     let r2_created_at = res2_value[0]["createdAt"].as_str().unwrap();
@@ -210,7 +210,7 @@ fn rename_index() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res1_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    assert_eq!(res1_value.as_object().unwrap().len(), 4);
+    assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
     let r1_uid = res1_value["uid"].as_str().unwrap();
     let r1_created_at = res1_value["createdAt"].as_str().unwrap();
@@ -241,7 +241,7 @@ fn rename_index() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res2_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    assert_eq!(res2_value.as_object().unwrap().len(), 4);
+    assert_eq!(res2_value.as_object().unwrap().len(), 5);
     let r2_name = res2_value["name"].as_str().unwrap();
     let r2_uid = res2_value["uid"].as_str().unwrap();
     let r2_created_at = res2_value["createdAt"].as_str().unwrap();
@@ -265,7 +265,7 @@ fn rename_index() {
     let res3_value: Value = serde_json::from_slice(&buf).unwrap();
 
     assert_eq!(res3_value.as_array().unwrap().len(), 1);
-    assert_eq!(res3_value[0].as_object().unwrap().len(), 4);
+    assert_eq!(res3_value[0].as_object().unwrap().len(), 5);
     let r3_name = res3_value[0]["name"].as_str().unwrap();
     let r3_uid = res3_value[0]["uid"].as_str().unwrap();
     let r3_created_at = res3_value[0]["createdAt"].as_str().unwrap();
@@ -301,7 +301,7 @@ fn delete_index_and_recreate_it() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res1_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    assert_eq!(res1_value.as_object().unwrap().len(), 4);
+    assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
     let r1_uid = res1_value["uid"].as_str().unwrap();
     let r1_created_at = res1_value["createdAt"].as_str().unwrap();
@@ -325,7 +325,7 @@ fn delete_index_and_recreate_it() {
     let res2_value: Value = serde_json::from_slice(&buf).unwrap();
 
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
-    assert_eq!(res2_value[0].as_object().unwrap().len(), 4);
+    assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
     let r2_name = res2_value[0]["name"].as_str().unwrap();
     let r2_uid = res2_value[0]["uid"].as_str().unwrap();
     let r2_created_at = res2_value[0]["createdAt"].as_str().unwrap();
@@ -384,7 +384,7 @@ fn delete_index_and_recreate_it() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res1_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    assert_eq!(res1_value.as_object().unwrap().len(), 4);
+    assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
     let r1_uid = res1_value["uid"].as_str().unwrap();
     let r1_created_at = res1_value["createdAt"].as_str().unwrap();
@@ -408,7 +408,7 @@ fn delete_index_and_recreate_it() {
     let res2_value: Value = serde_json::from_slice(&buf).unwrap();
 
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
-    assert_eq!(res2_value[0].as_object().unwrap().len(), 4);
+    assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
     let r2_name = res2_value[0]["name"].as_str().unwrap();
     let r2_uid = res2_value[0]["uid"].as_str().unwrap();
     let r2_created_at = res2_value[0]["createdAt"].as_str().unwrap();
@@ -444,7 +444,7 @@ fn check_multiples_indexes() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res1_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    assert_eq!(res1_value.as_object().unwrap().len(), 4);
+    assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
     let r1_uid = res1_value["uid"].as_str().unwrap();
     let r1_created_at = res1_value["createdAt"].as_str().unwrap();
@@ -468,7 +468,7 @@ fn check_multiples_indexes() {
     let res2_value: Value = serde_json::from_slice(&buf).unwrap();
 
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
-    assert_eq!(res2_value[0].as_object().unwrap().len(), 4);
+    assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
     let r2_0_name = res2_value[0]["name"].as_str().unwrap();
     let r2_0_uid = res2_value[0]["uid"].as_str().unwrap();
     let r2_0_created_at = res2_value[0]["createdAt"].as_str().unwrap();
@@ -499,7 +499,7 @@ fn check_multiples_indexes() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res3_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    assert_eq!(res3_value.as_object().unwrap().len(), 4);
+    assert_eq!(res3_value.as_object().unwrap().len(), 5);
     let r3_name = res3_value["name"].as_str().unwrap();
     let r3_uid = res3_value["uid"].as_str().unwrap();
     let r3_created_at = res3_value["createdAt"].as_str().unwrap();
@@ -524,13 +524,13 @@ fn check_multiples_indexes() {
 
     assert_eq!(res4_value.as_array().unwrap().len(), 2);
 
-    assert_eq!(res4_value[0].as_object().unwrap().len(), 4);
+    assert_eq!(res4_value[0].as_object().unwrap().len(), 5);
     let r4_0_name = res4_value[0]["name"].as_str().unwrap();
     let r4_0_uid = res4_value[0]["uid"].as_str().unwrap();
     let r4_0_created_at = res4_value[0]["createdAt"].as_str().unwrap();
     let r4_0_updated_at = res4_value[0]["updatedAt"].as_str().unwrap();
 
-    assert_eq!(res4_value[1].as_object().unwrap().len(), 4);
+    assert_eq!(res4_value[1].as_object().unwrap().len(), 5);
     let r4_1_name = res4_value[1]["name"].as_str().unwrap();
     let r4_1_uid = res4_value[1]["uid"].as_str().unwrap();
     let r4_1_created_at = res4_value[1]["createdAt"].as_str().unwrap();
