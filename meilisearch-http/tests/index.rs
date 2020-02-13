@@ -38,8 +38,8 @@ fn create_index_with_name() {
 
     assert_eq!(r1_name, "movies");
     assert_eq!(r1_uid.len(), 8);
-    assert_eq!(r1_created_at.len(), 27);
-    assert_eq!(r1_updated_at.len(), 27);
+    assert!(r1_created_at.len() > 1);
+    assert!(r1_updated_at.len() > 1);
 
     // 2 - Check the list of indexes
     // Must have 1 index with the exact same content that the request 1
@@ -98,8 +98,8 @@ fn create_index_with_uid() {
 
     assert_eq!(r1_name, "movies");
     assert_eq!(r1_uid, "movies");
-    assert_eq!(r1_created_at.len(), 27);
-    assert_eq!(r1_updated_at.len(), 27);
+    assert!(r1_created_at.len() > 1);
+    assert!(r1_updated_at.len() > 1);
 
     // 2 - Check the list of indexes
     // Must have 1 index with the exact same content that the request 1
@@ -159,8 +159,8 @@ fn create_index_with_name_and_uid() {
 
     assert_eq!(r1_name, "Films");
     assert_eq!(r1_uid, "fr_movies");
-    assert_eq!(r1_created_at.len(), 27);
-    assert_eq!(r1_updated_at.len(), 27);
+    assert!(r1_created_at.len() > 1);
+    assert!(r1_updated_at.len() > 1);
 
     // 2 - Check the list of indexes
     // Must have 1 index with the exact same content that the request 1
@@ -218,8 +218,8 @@ fn rename_index() {
 
     assert_eq!(r1_name, "movies");
     assert_eq!(r1_uid.len(), 8);
-    assert_eq!(r1_created_at.len(), 27);
-    assert_eq!(r1_updated_at.len(), 27);
+    assert!(r1_created_at.len() > 1);
+    assert!(r1_updated_at.len() > 1);
 
     // 2 - Update an index name
     // Update "movies" to "TV Shows"
@@ -250,7 +250,7 @@ fn rename_index() {
     assert_eq!(r2_name, "TV Shows");
     assert_eq!(r2_uid, r1_uid);
     assert_eq!(r2_created_at, r1_created_at);
-    assert_eq!(r2_updated_at.len(), 27);
+    assert!(r2_updated_at.len() > 1);
 
     // 3 - Check the list of indexes
     // Must have 1 index with the exact same content that the request 2
@@ -309,8 +309,8 @@ fn delete_index_and_recreate_it() {
 
     assert_eq!(r1_name, "movies");
     assert_eq!(r1_uid.len(), 8);
-    assert_eq!(r1_created_at.len(), 27);
-    assert_eq!(r1_updated_at.len(), 27);
+    assert!(r1_created_at.len() > 1);
+    assert!(r1_updated_at.len() > 1);
 
     // 2 - Check the list of indexes
     // Must have 1 index with the exact same content that the request 1
@@ -392,8 +392,8 @@ fn delete_index_and_recreate_it() {
 
     assert_eq!(r1_name, "movies");
     assert_eq!(r1_uid.len(), 8);
-    assert_eq!(r1_created_at.len(), 27);
-    assert_eq!(r1_updated_at.len(), 27);
+    assert!(r1_created_at.len() > 1);
+    assert!(r1_updated_at.len() > 1);
 
     // 6 - Check the list of indexes
     // Must have 1 index with the exact same content that the request 1
@@ -452,8 +452,8 @@ fn check_multiples_indexes() {
 
     assert_eq!(r1_name, "movies");
     assert_eq!(r1_uid.len(), 8);
-    assert_eq!(r1_created_at.len(), 27);
-    assert_eq!(r1_updated_at.len(), 27);
+    assert!(r1_created_at.len() > 1);
+    assert!(r1_updated_at.len() > 1);
 
     // 2 - Check the list of indexes
     // Must have 1 index with the exact same content that the request 1
@@ -507,8 +507,8 @@ fn check_multiples_indexes() {
 
     assert_eq!(r3_name, "films");
     assert_eq!(r3_uid.len(), 8);
-    assert_eq!(r3_created_at.len(), 27);
-    assert_eq!(r3_updated_at.len(), 27);
+    assert!(r3_created_at.len() > 1);
+    assert!(r3_updated_at.len() > 1);
 
     // 4 - Check the list of indexes
     // Must have 2 index with the exact same content that the request 1 and 3

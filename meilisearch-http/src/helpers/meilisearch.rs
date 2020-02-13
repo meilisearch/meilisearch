@@ -302,7 +302,7 @@ impl<'a> SearchBuilder<'a> {
                             Err(err) => error!("Error during criteria builder; {:?}", err),
                         }
                     }
-                };
+                }
             }
             builder.push(DocumentId);
             return Ok(Some(builder.build()));
@@ -416,7 +416,7 @@ fn calculate_matches(
                 if !attributes_to_retrieve.contains(attribute) {
                     continue;
                 }
-            };
+            }
             if !schema.displayed_name().contains(attribute) {
                 continue;
             }

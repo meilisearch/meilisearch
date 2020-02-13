@@ -93,11 +93,7 @@ impl DataInner {
         let frequency: HashMap<_, _> = fields_frequency
             .into_iter()
             .filter_map(|(a, c)| {
-                if let Some(name) = schema.name(a) {
-                    return Some((name.to_string(), c));
-                } else {
-                    return None;
-                }
+                schema.name(a).map(|name| (name.to_string(), c))
             })
             .collect();
 

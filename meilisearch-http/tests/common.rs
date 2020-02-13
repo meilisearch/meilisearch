@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use serde_json::Value;
 use std::error::Error;
 use std::time::Duration;
@@ -97,9 +99,15 @@ pub fn enrich_server_with_movies_settings(
     let req = http::Request::post("/indexes/movies/settings")
         .body(Body::from(body))
         .unwrap();
-    let _res = server.simulate(req).unwrap();
+    let res = server.simulate(req).unwrap();
 
-    block_on(sleep(Duration::from_secs(5)));
+    let mut buf = Vec::new();
+    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
+    let response: Value = serde_json::from_slice(&buf).unwrap();
+
+    assert!(response["updateId"].as_u64().is_some());
+
+    wait_update_id(server, response["updateId"].as_u64().unwrap());
 
     Ok(())
 }
@@ -112,9 +120,15 @@ pub fn enrich_server_with_movies_documents(
     let req = http::Request::post("/indexes/movies/documents")
         .body(Body::from(body))
         .unwrap();
-    let _res = server.simulate(req).unwrap();
+    let res = server.simulate(req).unwrap();
 
-    block_on(sleep(Duration::from_secs(10)));
+    let mut buf = Vec::new();
+    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
+    let response: Value = serde_json::from_slice(&buf).unwrap();
+
+    assert!(response["updateId"].as_u64().is_some());
+
+    wait_update_id(server, response["updateId"].as_u64().unwrap());
 
     Ok(())
 }
@@ -141,5 +155,31 @@ pub fn update_config(server: &mut TestBackend<Service<Data>>, config: Value) {
     let res = server.simulate(req).unwrap();
     assert_eq!(res.status(), 202);
 
-    block_on(sleep(Duration::from_secs(5)));
+    let mut buf = Vec::new();
+    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
+    let response: Value = serde_json::from_slice(&buf).unwrap();
+
+    assert!(response["updateId"].as_u64().is_some());
+
+    wait_update_id(server, response["updateId"].as_u64().unwrap());
+}
+
+pub fn wait_update_id(server: &mut TestBackend<Service<Data>>, update_id: u64) {
+    loop {
+        let req = http::Request::get(format!("/indexes/movies/updates/{}", update_id))
+            .body(Body::empty())
+            .unwrap();
+
+        let res = server.simulate(req).unwrap();
+        assert_eq!(res.status(), 200);
+
+        let mut buf = Vec::new();
+        block_on(res.into_body().read_to_end(&mut buf)).unwrap();
+        let response: Value = serde_json::from_slice(&buf).unwrap();
+
+        if response["status"] == "processed" {
+            return
+        }
+        block_on(sleep(Duration::from_secs(1)));
+    }
 }

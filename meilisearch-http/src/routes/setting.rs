@@ -82,8 +82,8 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let settings = Settings {
         ranking_rules: Some(ranking_rules),
         ranking_distinct: Some(ranking_distinct),
-        searchable_attributes: searchable_attributes,
-        displayed_attributes: displayed_attributes,
+        searchable_attributes,
+        displayed_attributes,
         stop_words: Some(stop_words),
         synonyms: Some(synonyms),
         index_new_fields: Some(index_new_fields),

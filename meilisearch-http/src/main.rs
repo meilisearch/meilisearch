@@ -25,7 +25,7 @@ pub fn main() -> Result<(), MainError> {
     let data = Data::new(opt.clone());
 
     if env::var("MEILI_NO_ANALYTICS") == Err(NotPresent) {
-        thread::spawn(|| analytics::analytics_sender());
+        thread::spawn(analytics::analytics_sender);
     }
 
     let data_cloned = data.clone();
