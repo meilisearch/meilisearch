@@ -19,7 +19,7 @@ pub struct PrefixKey {
 impl PrefixKey {
     pub fn new(prefix: [u8; 4], index: u64, docid: u64) -> PrefixKey {
         PrefixKey {
-            prefix: prefix,
+            prefix,
             index: BEU64::new(index),
             docid: BEU64::new(docid),
         }

@@ -136,7 +136,7 @@ mod tests {
     use std::iter::FromIterator;
 
     use fst::{IntoStreamer, Set};
-    use meilisearch_schema::SchemaAttr;
+    use meilisearch_schema::IndexedPos;
     use sdset::SetBuf;
     use tempfile::TempDir;
 
@@ -145,6 +145,7 @@ mod tests {
     use crate::bucket_sort::SimpleMatch;
     use crate::database::Database;
     use crate::store::Index;
+    use meilisearch_schema::Schema;
 
     fn set_from_stream<'f, I, S>(stream: I) -> Set
     where
@@ -268,17 +269,33 @@ mod tests {
             let mut postings_lists = HashMap::new();
             let mut fields_counts = HashMap::<_, u16>::new();
 
+            let mut schema = Schema::with_identifier("id");
+
             for (word, indexes) in iter {
+                let mut final_indexes = Vec::new();
+                for index in indexes {
+                    let name = index.attribute.to_string();
+                    schema.insert(&name).unwrap();
+                    let indexed_pos = schema.set_indexed(&name).unwrap().1;
+                    let index = DocIndex {
+                        attribute: indexed_pos.0,
+                        ..*index
+                    };
+                    final_indexes.push(index);
+                }
+
                 let word = word.to_lowercase().into_bytes();
                 words_fst.insert(word.clone());
                 postings_lists
                     .entry(word)
                     .or_insert_with(Vec::new)
-                    .extend_from_slice(indexes);
-                for idx in indexes {
+                    .extend_from_slice(&final_indexes);
+                for idx in final_indexes {
                     fields_counts.insert((idx.document_id, idx.attribute, idx.word_index), 1);
                 }
             }
+
+            index.main.put_schema(&mut writer, &schema).unwrap();
 
             let words_fst = Set::from_iter(words_fst).unwrap();
 
@@ -295,14 +312,14 @@ mod tests {
             for ((docid, attr, _), count) in fields_counts {
                 let prev = index
                     .documents_fields_counts
-                    .document_field_count(&mut writer, docid, SchemaAttr(attr))
+                    .document_field_count(&writer, docid, IndexedPos(attr))
                     .unwrap();
 
                 let prev = prev.unwrap_or(0);
 
                 index
                     .documents_fields_counts
-                    .put_document_field_count(&mut writer, docid, SchemaAttr(attr), prev + count)
+                    .put_document_field_count(&mut writer, docid, IndexedPos(attr), prev + count)
                     .unwrap();
             }
 

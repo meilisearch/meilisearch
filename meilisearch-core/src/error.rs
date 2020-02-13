@@ -2,16 +2,22 @@ use crate::serde::{DeserializerError, SerializerError};
 use serde_json::Error as SerdeJsonError;
 use std::{error, fmt, io};
 
+pub use heed::Error as HeedError;
+pub use fst::Error as FstError;
+pub use bincode::Error as BincodeError;
+
 pub type MResult<T> = Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
     IndexAlreadyExists,
-    SchemaDiffer,
+    MissingIdentifier,
     SchemaMissing,
     WordIndexMissing,
     MissingDocumentId,
+    MaxFieldsLimitExceeded,
+    Schema(meilisearch_schema::Error),
     Zlmdb(heed::Error),
     Fst(fst::Error),
     SerdeJson(SerdeJsonError),
@@ -27,14 +33,20 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<heed::Error> for Error {
-    fn from(error: heed::Error) -> Error {
+impl From<meilisearch_schema::Error> for Error {
+    fn from(error: meilisearch_schema::Error) -> Error {
+        Error::Schema(error)
+    }
+}
+
+impl From<HeedError> for Error {
+    fn from(error: HeedError) -> Error {
         Error::Zlmdb(error)
     }
 }
 
-impl From<fst::Error> for Error {
-    fn from(error: fst::Error) -> Error {
+impl From<FstError> for Error {
+    fn from(error: FstError) -> Error {
         Error::Fst(error)
     }
 }
@@ -45,8 +57,8 @@ impl From<SerdeJsonError> for Error {
     }
 }
 
-impl From<bincode::Error> for Error {
-    fn from(error: bincode::Error) -> Error {
+impl From<BincodeError> for Error {
+    fn from(error: BincodeError) -> Error {
         Error::Bincode(error)
     }
 }
@@ -75,10 +87,12 @@ impl fmt::Display for Error {
         match self {
             Io(e) => write!(f, "{}", e),
             IndexAlreadyExists => write!(f, "index already exists"),
-            SchemaDiffer => write!(f, "schemas differ"),
+            MissingIdentifier => write!(f, "schema cannot be built without identifier"),
             SchemaMissing => write!(f, "this index does not have a schema"),
             WordIndexMissing => write!(f, "this index does not have a word index"),
             MissingDocumentId => write!(f, "document id is missing"),
+            MaxFieldsLimitExceeded => write!(f, "maximum number of fields in a document exceeded"),
+            Schema(e) => write!(f, "schema error; {}", e),
             Zlmdb(e) => write!(f, "heed error; {}", e),
             Fst(e) => write!(f, "fst error; {}", e),
             SerdeJson(e) => write!(f, "serde json error; {}", e),

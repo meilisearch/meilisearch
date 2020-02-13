@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use heed::types::{SerdeBincode, Str};
 use log::error;
-use meilisearch_core::{Database, MainT, UpdateT, Error as MError, MResult};
+use meilisearch_core::{Database, Error as MError, MResult, MainT, UpdateT};
 use sysinfo::Pid;
 
 use crate::option::Opt;
@@ -84,13 +84,17 @@ impl DataInner {
         let mut fields_frequency = HashMap::<_, usize>::new();
         for result in all_documents_fields {
             let (_, attr, _) = result?;
-            *fields_frequency.entry(attr).or_default() += 1;
+            if let Some(field_id) = schema.indexed_pos_to_field_id(attr) {
+                *fields_frequency.entry(field_id).or_default() += 1;
+            }
         }
 
         // convert attributes to their names
         let frequency: HashMap<_, _> = fields_frequency
             .into_iter()
-            .map(|(a, c)| (schema.attribute_name(a).to_owned(), c))
+            .filter_map(|(a, c)| {
+                schema.name(a).map(|name| (name.to_string(), c))
+            })
             .collect();
 
         index
@@ -106,7 +110,7 @@ impl Data {
         let api_key = opt.api_key.clone();
         let server_pid = sysinfo::get_current_pid().unwrap();
 
-        let db = Arc::new(Database::open_or_create(opt.db_path.clone()).unwrap());
+        let db = Arc::new(Database::open_or_create(opt.db_path).unwrap());
 
         let inner_data = DataInner {
             db: db.clone(),

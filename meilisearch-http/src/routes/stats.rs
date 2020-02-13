@@ -5,11 +5,11 @@ use log::error;
 use pretty_bytes::converter::convert;
 use serde::Serialize;
 use sysinfo::{NetworkExt, Pid, ProcessExt, ProcessorExt, System, SystemExt};
-use tide::{Context, Response};
+use tide::{Request, Response};
 use walkdir::WalkDir;
 
-use crate::error::{ResponseError, SResult};
-use crate::helpers::tide::ContextExt;
+use crate::error::{IntoInternalError, SResult};
+use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
 use crate::Data;
 
@@ -21,38 +21,26 @@ struct IndexStatsResponse {
     fields_frequency: HashMap<String, usize>,
 }
 
-pub async fn index_stat(ctx: Context<Data>) -> SResult<Response> {
+pub async fn index_stats(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
     let index_uid = ctx.url_param("index")?;
     let index = ctx.index()?;
-
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-    let update_reader = db.update_read_txn().map_err(ResponseError::internal)?;
-
-    let number_of_documents = index
-        .main
-        .number_of_documents(&reader)
-        .map_err(ResponseError::internal)?;
-
-    let fields_frequency = index
-        .main
-        .fields_frequency(&reader)
-        .map_err(ResponseError::internal)?
-        .unwrap_or_default();
-
+    let reader = db.main_read_txn()?;
+    let update_reader = db.update_read_txn()?;
+    let number_of_documents = index.main.number_of_documents(&reader)?;
+    let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
     let is_indexing = ctx
         .state()
-        .is_indexing(&update_reader, &index_uid)
-        .map_err(ResponseError::internal)?
-        .ok_or(ResponseError::internal("'is_indexing' date not found"))?;
+        .is_indexing(&update_reader, &index_uid)?
+        .into_internal_error()?;
 
     let response = IndexStatsResponse {
         number_of_documents,
         is_indexing,
         fields_frequency,
     };
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
 #[derive(Serialize)]
@@ -63,14 +51,14 @@ struct StatsResult {
     indexes: HashMap<String, IndexStatsResponse>,
 }
 
-pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_stats(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
 
     let mut index_list = HashMap::new();
 
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-    let update_reader = db.update_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
+    let update_reader = db.update_read_txn()?;
 
     let indexes_set = ctx.state().db.indexes_uids();
     for index_uid in indexes_set {
@@ -78,22 +66,14 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
 
         match index {
             Some(index) => {
-                let number_of_documents = index
-                    .main
-                    .number_of_documents(&reader)
-                    .map_err(ResponseError::internal)?;
+                let number_of_documents = index.main.number_of_documents(&reader)?;
 
-                let fields_frequency = index
-                    .main
-                    .fields_frequency(&reader)
-                    .map_err(ResponseError::internal)?
-                    .unwrap_or_default();
+                let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
 
                 let is_indexing = ctx
                     .state()
-                    .is_indexing(&update_reader, &index_uid)
-                    .map_err(ResponseError::internal)?
-                    .ok_or(ResponseError::internal("'is_indexing' date not found"))?;
+                    .is_indexing(&update_reader, &index_uid)?
+                    .into_internal_error()?;
 
                 let response = IndexStatsResponse {
                     number_of_documents,
@@ -116,10 +96,7 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
         .filter(|metadata| metadata.is_file())
         .fold(0, |acc, m| acc + m.len());
 
-    let last_update = ctx
-        .state()
-        .last_update(&reader)
-        .map_err(ResponseError::internal)?;
+    let last_update = ctx.state().last_update(&reader)?;
 
     let response = StatsResult {
         database_size,
@@ -127,7 +104,7 @@ pub async fn get_stats(ctx: Context<Data>) -> SResult<Response> {
         indexes: index_list,
     };
 
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
 #[derive(Serialize)]
@@ -138,7 +115,7 @@ struct VersionResponse {
     pkg_version: String,
 }
 
-pub async fn get_version(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_version(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
     let response = VersionResponse {
         commit_sha: env!("VERGEN_SHA").to_string(),
@@ -146,7 +123,7 @@ pub async fn get_version(ctx: Context<Data>) -> SResult<Response> {
         pkg_version: env!("CARGO_PKG_VERSION").to_string(),
     };
 
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
 #[derive(Serialize)]
@@ -236,9 +213,10 @@ pub(crate) fn report(pid: Pid) -> SysInfo {
     info
 }
 
-pub async fn get_sys_info(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_sys_info(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
-    Ok(tide::response::json(report(ctx.state().server_pid)))
+    let response = report(ctx.state().server_pid);
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
 #[derive(Serialize)]
@@ -332,7 +310,8 @@ pub(crate) fn report_pretty(pid: Pid) -> SysInfoPretty {
     info
 }
 
-pub async fn get_sys_info_pretty(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_sys_info_pretty(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Admin)?;
-    Ok(tide::response::json(report_pretty(ctx.state().server_pid)))
+    let response = report_pretty(ctx.state().server_pid);
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }

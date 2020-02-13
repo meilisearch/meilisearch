@@ -4,38 +4,40 @@ use crate::Data;
 use chrono::Utc;
 use heed::types::{SerdeBincode, Str};
 use meilisearch_core::Index;
-use tide::Context;
+use tide::Request;
 
-pub trait ContextExt {
+pub trait RequestExt {
     fn is_allowed(&self, acl: ACL) -> SResult<()>;
-    fn header(&self, name: &str) -> Result<String, ResponseError>;
-    fn url_param(&self, name: &str) -> Result<String, ResponseError>;
-    fn index(&self) -> Result<Index, ResponseError>;
-    fn identifier(&self) -> Result<String, ResponseError>;
+    fn header(&self, name: &str) -> SResult<String>;
+    fn url_param(&self, name: &str) -> SResult<String>;
+    fn index(&self) -> SResult<Index>;
+    fn identifier(&self) -> SResult<String>;
 }
 
-impl ContextExt for Context<Data> {
+impl RequestExt for Request<Data> {
     fn is_allowed(&self, acl: ACL) -> SResult<()> {
         let api_key = match &self.state().api_key {
             Some(api_key) => api_key,
             None => return Ok(()),
         };
 
-        let user_api_key = self.header("X-Meili-API-Key")?;
+        let user_api_key = self
+            .header("X-Meili-API-Key")
+            .ok_or(ResponseError::missing_header("X-Meili-API-Key"))?;
+
         if user_api_key == *api_key {
             return Ok(());
         }
         let request_index: Option<String> = None; //self.param::<String>("index").ok();
 
         let db = &self.state().db;
-        let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+        let reader = db.main_read_txn()?;
 
         let token_key = format!("{}{}", TOKEN_PREFIX_KEY, user_api_key);
 
         let token_config = db
             .common_store()
-            .get::<_, Str, SerdeBincode<Token>>(&reader, &token_key)
-            .map_err(ResponseError::internal)?
+            .get::<_, Str, SerdeBincode<Token>>(&reader, &token_key)?
             .ok_or(ResponseError::invalid_token(format!(
                 "Api key does not exist: {}",
                 user_api_key
@@ -72,7 +74,7 @@ impl ContextExt for Context<Data> {
         Ok(())
     }
 
-    fn header(&self, name: &str) -> Result<String, ResponseError> {
+    fn header(&self, name: &str) -> SResult<String> {
         let header = self
             .headers()
             .get(name)
@@ -83,14 +85,14 @@ impl ContextExt for Context<Data> {
         Ok(header)
     }
 
-    fn url_param(&self, name: &str) -> Result<String, ResponseError> {
+    fn url_param(&self, name: &str) -> SResult<String> {
         let param = self
             .param::<String>(name)
-            .map_err(|e| ResponseError::bad_parameter(name, e))?;
+            .map_err(|_| ResponseError::bad_parameter("identifier", name))?;
         Ok(param)
     }
 
-    fn index(&self) -> Result<Index, ResponseError> {
+    fn index(&self) -> SResult<Index> {
         let index_uid = self.url_param("index")?;
         let index = self
             .state()
@@ -100,10 +102,10 @@ impl ContextExt for Context<Data> {
         Ok(index)
     }
 
-    fn identifier(&self) -> Result<String, ResponseError> {
+    fn identifier(&self) -> SResult<String> {
         let name = self
             .param::<String>("identifier")
-            .map_err(|e| ResponseError::bad_parameter("identifier", e))?;
+            .map_err(|_| ResponseError::bad_parameter("identifier", "identifier"))?;
 
         Ok(name)
     }

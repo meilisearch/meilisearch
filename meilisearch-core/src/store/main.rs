@@ -1,21 +1,26 @@
-use crate::database::MainT;
-use crate::RankedMap;
+use std::sync::Arc;
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
 use heed::Result as ZResult;
 use meilisearch_schema::Schema;
-use std::collections::HashMap;
-use std::sync::Arc;
+
+use crate::database::MainT;
+use crate::RankedMap;
+use crate::settings::RankingRule;
 
 const CREATED_AT_KEY: &str = "created-at";
-const CUSTOMS_KEY: &str = "customs-key";
+const RANKING_RULES_KEY: &str = "ranking-rules";
+const RANKING_DISTINCT_KEY: &str = "ranking-distinct";
+const STOP_WORDS_KEY: &str = "stop-words";
+const SYNONYMS_KEY: &str = "synonyms";
+const CUSTOMS_KEY: &str = "customs";
 const FIELDS_FREQUENCY_KEY: &str = "fields-frequency";
 const NAME_KEY: &str = "name";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY: &str = "ranked-map";
 const SCHEMA_KEY: &str = "schema";
-const STOP_WORDS_KEY: &str = "stop-words";
-const SYNONYMS_KEY: &str = "synonyms";
 const UPDATED_AT_KEY: &str = "updated-at";
 const WORDS_KEY: &str = "words";
 
@@ -91,23 +96,23 @@ impl Main {
     }
 
     pub fn put_schema(self, writer: &mut heed::RwTxn<MainT>, schema: &Schema) -> ZResult<()> {
-        self.main
-            .put::<_, Str, SerdeBincode<Schema>>(writer, SCHEMA_KEY, schema)
+        self.main.put::<_, Str, SerdeBincode<Schema>>(writer, SCHEMA_KEY, schema)
     }
 
     pub fn schema(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<Schema>> {
-        self.main
-            .get::<_, Str, SerdeBincode<Schema>>(reader, SCHEMA_KEY)
+        self.main.get::<_, Str, SerdeBincode<Schema>>(reader, SCHEMA_KEY)
+    }
+
+    pub fn delete_schema(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
+        self.main.delete::<_, Str>(writer, SCHEMA_KEY)
     }
 
     pub fn put_ranked_map(self, writer: &mut heed::RwTxn<MainT>, ranked_map: &RankedMap) -> ZResult<()> {
-        self.main
-            .put::<_, Str, SerdeBincode<RankedMap>>(writer, RANKED_MAP_KEY, &ranked_map)
+        self.main.put::<_, Str, SerdeBincode<RankedMap>>(writer, RANKED_MAP_KEY, &ranked_map)
     }
 
     pub fn ranked_map(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<RankedMap>> {
-        self.main
-            .get::<_, Str, SerdeBincode<RankedMap>>(reader, RANKED_MAP_KEY)
+        self.main.get::<_, Str, SerdeBincode<RankedMap>>(reader, RANKED_MAP_KEY)
     }
 
     pub fn put_synonyms_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
@@ -129,8 +134,7 @@ impl Main {
 
     pub fn put_stop_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
         let bytes = fst.as_fst().as_bytes();
-        self.main
-            .put::<_, Str, ByteSlice>(writer, STOP_WORDS_KEY, bytes)
+        self.main.put::<_, Str, ByteSlice>(writer, STOP_WORDS_KEY, bytes)
     }
 
     pub fn stop_words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
@@ -182,6 +186,33 @@ impl Main {
             Some(freqs) => Ok(Some(freqs)),
             None => Ok(None),
         }
+    }
+
+    pub fn ranking_rules(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<Vec<RankingRule>>> {
+        self.main.get::<_, Str, SerdeBincode<Vec<RankingRule>>>(reader, RANKING_RULES_KEY)
+    }
+
+    pub fn put_ranking_rules(self, writer: &mut heed::RwTxn<MainT>, value: &[RankingRule]) -> ZResult<()> {
+        self.main.put::<_, Str, SerdeBincode<Vec<RankingRule>>>(writer, RANKING_RULES_KEY, &value.to_vec())
+    }
+
+    pub fn delete_ranking_rules(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
+        self.main.delete::<_, Str>(writer, RANKING_RULES_KEY)
+    }
+
+    pub fn ranking_distinct(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<String>> {
+        if let Some(value) = self.main.get::<_, Str, Str>(reader, RANKING_DISTINCT_KEY)? {
+            return Ok(Some(value.to_owned()))
+        }
+        return Ok(None)
+    }
+
+    pub fn put_ranking_distinct(self, writer: &mut heed::RwTxn<MainT>, value: &str) -> ZResult<()> {
+        self.main.put::<_, Str, Str>(writer, RANKING_DISTINCT_KEY, value)
+    }
+
+    pub fn delete_ranking_distinct(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
+        self.main.delete::<_, Str>(writer, RANKING_DISTINCT_KEY)
     }
 
     pub fn put_customs(self, writer: &mut heed::RwTxn<MainT>, customs: &[u8]) -> ZResult<()> {

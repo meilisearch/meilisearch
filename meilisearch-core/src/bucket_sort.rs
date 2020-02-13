@@ -14,6 +14,7 @@ use meilisearch_types::DocIndex;
 use sdset::{Set, SetBuf, exponential_search};
 use slice_group_by::{GroupBy, GroupByMut};
 
+use crate::error::Error;
 use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
@@ -68,8 +69,11 @@ where
         None => return Ok(Vec::new()),
     };
 
+    let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
+
     let context = QTContext {
         words_set,
+        stop_words,
         synonyms: synonyms_store,
         postings_lists: postings_lists_store,
         prefix_postings_lists: prefix_postings_lists_cache_store,
@@ -161,8 +165,9 @@ where
     debug!("criterion loop took {:.02?}", before_criterion_loop.elapsed());
     debug!("proximity evaluation called {} times", proximity_count.load(Ordering::Relaxed));
 
+    let schema = main_store.schema(reader)?.ok_or(Error::SchemaMissing)?;
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
-    let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref()));
+    let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref(), &schema));
     let documents = iter.collect();
 
     debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
@@ -195,8 +200,11 @@ where
         None => return Ok(Vec::new()),
     };
 
+    let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
+
     let context = QTContext {
         words_set,
+        stop_words,
         synonyms: synonyms_store,
         postings_lists: postings_lists_store,
         prefix_postings_lists: prefix_postings_lists_cache_store,
@@ -330,6 +338,7 @@ where
     // once we classified the documents related to the current
     // automatons we save that as the next valid result
     let mut seen = BufferedDistinctMap::new(&mut distinct_map);
+    let schema = main_store.schema(reader)?.ok_or(Error::SchemaMissing)?;
 
     let mut documents = Vec::with_capacity(range.len());
     for raw_document in raw_documents.into_iter().skip(distinct_raw_offset) {
@@ -346,7 +355,7 @@ where
             };
 
             if distinct_accepted && seen.len() > range.start {
-                documents.push(Document::from_raw(raw_document, &queries_kinds, &arena, searchable_attrs.as_ref()));
+                documents.push(Document::from_raw(raw_document, &queries_kinds, &arena, searchable_attrs.as_ref(), &schema));
                 if documents.len() == range.len() {
                     break;
                 }

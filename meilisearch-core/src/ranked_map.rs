@@ -1,14 +1,14 @@
 use std::io::{Read, Write};
 
 use hashbrown::HashMap;
-use meilisearch_schema::SchemaAttr;
+use meilisearch_schema::FieldId;
 use serde::{Deserialize, Serialize};
 
 use crate::{DocumentId, Number};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct RankedMap(HashMap<(DocumentId, SchemaAttr), Number>);
+pub struct RankedMap(HashMap<(DocumentId, FieldId), Number>);
 
 impl RankedMap {
     pub fn len(&self) -> usize {
@@ -19,16 +19,16 @@ impl RankedMap {
         self.0.is_empty()
     }
 
-    pub fn insert(&mut self, document: DocumentId, attribute: SchemaAttr, number: Number) {
-        self.0.insert((document, attribute), number);
+    pub fn insert(&mut self, document: DocumentId, field: FieldId, number: Number) {
+        self.0.insert((document, field), number);
     }
 
-    pub fn remove(&mut self, document: DocumentId, attribute: SchemaAttr) {
-        self.0.remove(&(document, attribute));
+    pub fn remove(&mut self, document: DocumentId, field: FieldId) {
+        self.0.remove(&(document, field));
     }
 
-    pub fn get(&self, document: DocumentId, attribute: SchemaAttr) -> Option<Number> {
-        self.0.get(&(document, attribute)).cloned()
+    pub fn get(&self, document: DocumentId, field: FieldId) -> Option<Number> {
+        self.0.get(&(document, field)).cloned()
     }
 
     pub fn read_from_bin<R: Read>(reader: R) -> bincode::Result<RankedMap> {

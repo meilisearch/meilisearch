@@ -114,6 +114,7 @@ pub struct PostingsList {
 
 pub struct Context {
     pub words_set: fst::Set,
+    pub stop_words: fst::Set,
     pub synonyms: store::Synonyms,
     pub postings_lists: store::PostingsLists,
     pub prefix_postings_lists: store::PrefixPostingsListsCache,
@@ -180,7 +181,8 @@ pub fn create_query_tree(
 ) -> MResult<(Operation, HashMap<QueryId, Range<usize>>)>
 {
     let words = split_query_string(query).map(str::to_lowercase);
-    let words: Vec<_> = words.into_iter().enumerate().collect();
+    let words = words.filter(|w| !ctx.stop_words.contains(w));
+    let words: Vec<_> = words.enumerate().collect();
 
     let mut mapper = QueryWordsMapper::new(words.iter().map(|(_, w)| w));
 

@@ -13,7 +13,8 @@ use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use meilisearch_core::{Database, Highlight, ProcessedUpdateResult};
-use meilisearch_schema::SchemaAttr;
+use meilisearch_core::settings::Settings;
+use meilisearch_schema::FieldId;
 
 // #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -32,9 +33,9 @@ struct IndexCommand {
     #[structopt(parse(from_os_str))]
     csv_data_path: PathBuf,
 
-    /// The path to the schema.
+    /// The path to the settings.
     #[structopt(long, parse(from_os_str))]
-    schema: PathBuf,
+    settings: PathBuf,
 
     #[structopt(long)]
     update_group_size: Option<usize>,
@@ -119,25 +120,15 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
     let db = &database;
 
-    let schema = {
-        let string = fs::read_to_string(&command.schema)?;
-        toml::from_str(&string).unwrap()
+    let settings = {
+        let string = fs::read_to_string(&command.settings)?;
+        let settings: Settings = serde_json::from_str(&string).unwrap();
+        settings.into_update().unwrap()
     };
 
-    let reader = db.main_read_txn().unwrap();
     let mut update_writer = db.update_write_txn().unwrap();
-    match index.main.schema(&reader)? {
-        Some(current_schema) => {
-            if current_schema != schema {
-                return Err(meilisearch_core::Error::SchemaDiffer.into());
-            }
-            update_writer.abort();
-        }
-        None => {
-            index.schema_update(&mut update_writer, schema)?;
-            update_writer.commit().unwrap();
-        }
-    }
+    index.settings_update(&mut update_writer, settings)?;
+    update_writer.commit().unwrap();
 
     let mut rdr = if command.csv_data_path.as_os_str() == "-" {
         csv::Reader::from_reader(Box::new(io::stdin()) as Box<dyn Read>)
@@ -368,7 +359,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     };
 
                     let attr = schema
-                        .attribute(&filter)
+                        .id(filter)
                         .expect("Could not find filtered attribute");
 
                     builder.with_filter(move |document_id| {
@@ -399,11 +390,11 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                             for (name, text) in document.0 {
                                 print!("{}: ", name);
 
-                                let attr = schema.attribute(&name).unwrap();
+                                let attr = schema.id(&name).unwrap();
                                 let highlights = doc
                                     .highlights
                                     .iter()
-                                    .filter(|m| SchemaAttr::new(m.attribute) == attr)
+                                    .filter(|m| FieldId::new(m.attribute) == attr)
                                     .cloned();
                                 let (text, highlights) =
                                     crop_text(&text, highlights, command.char_context);
@@ -418,8 +409,8 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
 
                     let mut matching_attributes = HashSet::new();
                     for highlight in doc.highlights {
-                        let attr = SchemaAttr::new(highlight.attribute);
-                        let name = schema.attribute_name(attr);
+                        let attr = FieldId::new(highlight.attribute);
+                        let name = schema.name(attr);
                         matching_attributes.insert(name);
                     }
 

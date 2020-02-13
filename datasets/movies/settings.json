@@ -1,0 +1,11 @@
+{
+    "identifier": "id",
+    "searchableAttributes": ["title", "overview"],
+    "displayedAttributes": [
+        "id",
+        "title",
+        "overview",
+        "release_date",
+        "poster"
+    ]
+}

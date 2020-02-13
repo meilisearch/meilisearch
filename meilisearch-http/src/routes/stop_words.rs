@@ -1,82 +1,63 @@
-use http::StatusCode;
-use tide::response::IntoResponse;
-use tide::{Context, Response};
+use std::collections::BTreeSet;
+
+use meilisearch_core::settings::{SettingsUpdate, UpdateState};
+use tide::{Request, Response};
 
 use crate::error::{ResponseError, SResult};
-use crate::helpers::tide::ContextExt;
+use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
 use crate::routes::document::IndexUpdateResponse;
 use crate::Data;
 
-pub async fn list(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
-
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
+    let stop_words_fst = index.main.stop_words_fst(&reader)?;
+    let stop_words = stop_words_fst.unwrap_or_default().stream().into_strs()?;
 
-    let stop_words_fst = index
-        .main
-        .stop_words_fst(&reader)
-        .map_err(ResponseError::internal)?;
-
-    let stop_words = stop_words_fst
-        .unwrap_or_default()
-        .stream()
-        .into_strs()
-        .map_err(ResponseError::internal)?;
-
-    Ok(tide::response::json(stop_words))
+    Ok(tide::Response::new(200).body_json(&stop_words).unwrap())
 }
 
-pub async fn add(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
-    let data: Vec<String> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
+    let data: BTreeSet<String> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
 
     let db = &ctx.state().db;
-    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.update_write_txn()?;
 
-    let mut stop_words_addition = index.stop_words_addition();
-    for stop_word in data {
-        stop_words_addition.add_stop_word(stop_word);
-    }
+    let settings = SettingsUpdate {
+        stop_words: UpdateState::Update(data),
+        ..SettingsUpdate::default()
+    };
 
-    let update_id = stop_words_addition
-        .finalize(&mut writer)
-        .map_err(ResponseError::internal)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
 
-    writer.commit().map_err(ResponseError::internal)?;
+    writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::response::json(response_body)
-        .with_status(StatusCode::ACCEPTED)
-        .into_response())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
-pub async fn delete(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(SettingsRead)?;
     let index = ctx.index()?;
 
-    let data: Vec<String> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
-
     let db = &ctx.state().db;
-    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.update_write_txn()?;
 
-    let mut stop_words_deletion = index.stop_words_deletion();
-    for stop_word in data {
-        stop_words_deletion.delete_stop_word(stop_word);
-    }
+    let settings = SettingsUpdate {
+        stop_words: UpdateState::Clear,
+        ..SettingsUpdate::default()
+    };
 
-    let update_id = stop_words_deletion
-        .finalize(&mut writer)
-        .map_err(ResponseError::internal)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
 
-    writer.commit().map_err(ResponseError::internal)?;
+    writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::response::json(response_body)
-        .with_status(StatusCode::ACCEPTED)
-        .into_response())
+    Ok(tide::Response::new(202).body_json(&response_body)?)
 }

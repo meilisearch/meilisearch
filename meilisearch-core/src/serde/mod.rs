@@ -20,12 +20,13 @@ pub use self::convert_to_string::ConvertToString;
 pub use self::deserializer::{Deserializer, DeserializerError};
 pub use self::extract_document_id::{compute_document_id, extract_document_id, value_to_string};
 pub use self::indexer::Indexer;
-pub use self::serializer::{serialize_value, Serializer};
+pub use self::serializer::{serialize_value, serialize_value_with_id, Serializer};
 
 use std::{error::Error, fmt};
 
 use serde::ser;
 use serde_json::Error as SerdeJsonError;
+use meilisearch_schema::Error as SchemaError;
 
 use crate::ParseNumberError;
 
@@ -36,6 +37,7 @@ pub enum SerializerError {
     Zlmdb(heed::Error),
     SerdeJson(SerdeJsonError),
     ParseNumber(ParseNumberError),
+    Schema(SchemaError),
     UnserializableType { type_name: &'static str },
     UnindexableType { type_name: &'static str },
     UnrankableType { type_name: &'static str },
@@ -55,13 +57,14 @@ impl fmt::Display for SerializerError {
                 f.write_str("serialized document does not have an id according to the schema")
             }
             SerializerError::InvalidDocumentIdType => {
-                f.write_str("document identifier can only be of type string or number")
+                f.write_str("documents identifiers can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).")
             }
             SerializerError::Zlmdb(e) => write!(f, "heed related error: {}", e),
             SerializerError::SerdeJson(e) => write!(f, "serde json error: {}", e),
             SerializerError::ParseNumber(e) => {
                 write!(f, "error while trying to parse a number: {}", e)
             }
+            SerializerError::Schema(e) => write!(f, "impossible to update schema: {}", e),
             SerializerError::UnserializableType { type_name } => {
                 write!(f, "{} is not a serializable type", type_name)
             }
@@ -100,4 +103,10 @@ impl From<ParseNumberError> for SerializerError {
     fn from(error: ParseNumberError) -> SerializerError {
         SerializerError::ParseNumber(error)
     }
+}
+
+impl From<SchemaError> for SerializerError {
+    fn from(error: SchemaError) -> SerializerError {
+        SerializerError::Schema(error)
+   }
 }

@@ -28,6 +28,7 @@ pub struct DocIndex {
 
     /// The attribute in the document where the word was found
     /// along with the index in it.
+    /// This is an IndexedPos and not a FieldId. Must be converted each time.
     pub attribute: u16,
     pub word_index: u16,
 

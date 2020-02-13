@@ -1,6 +1,6 @@
 use std::cmp::{Ordering, Reverse};
 use std::collections::hash_map::{HashMap, Entry};
-use meilisearch_schema::SchemaAttr;
+use meilisearch_schema::IndexedPos;
 use slice_group_by::GroupBy;
 use crate::{RawDocument, MResult};
 use crate::bucket_sort::BareMatch;
@@ -32,7 +32,7 @@ impl Criterion for Exact {
                     for bm in group {
                         for di in ctx.postings_lists[bm.postings_list].as_ref() {
 
-                            let attr = SchemaAttr(di.attribute);
+                            let attr = IndexedPos(di.attribute);
                             let count = match fields_counts.entry(attr) {
                                 Entry::Occupied(entry) => *entry.get(),
                                 Entry::Vacant(entry) => {

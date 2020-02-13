@@ -2,9 +2,12 @@ use std::fmt::Display;
 
 use http::status::StatusCode;
 use log::{error, warn};
+use meilisearch_core::{FstError, HeedError};
 use serde::{Deserialize, Serialize};
-use tide::response::IntoResponse;
+use tide::IntoResponse;
 use tide::Response;
+
+use crate::helpers::meilisearch::Error as SearchError;
 
 pub type SResult<T> = Result<T, ResponseError>;
 
@@ -120,7 +123,56 @@ struct ErrorMessage {
 
 fn error(message: String, status: StatusCode) -> Response {
     let message = ErrorMessage { message };
-    tide::response::json(message)
-        .with_status(status)
-        .into_response()
+    tide::Response::new(status.as_u16())
+        .body_json(&message)
+        .unwrap()
+}
+
+impl From<serde_json::Error> for ResponseError {
+    fn from(err: serde_json::Error) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
+impl From<meilisearch_core::Error> for ResponseError {
+    fn from(err: meilisearch_core::Error) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
+impl From<HeedError> for ResponseError {
+    fn from(err: HeedError) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
+impl From<FstError> for ResponseError {
+    fn from(err: FstError) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
+impl From<SearchError> for ResponseError {
+    fn from(err: SearchError) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
+impl From<meilisearch_core::settings::RankingRuleConversionError> for ResponseError {
+    fn from(err: meilisearch_core::settings::RankingRuleConversionError) -> ResponseError {
+        ResponseError::internal(err)
+    }
+}
+
+pub trait IntoInternalError<T> {
+    fn into_internal_error(self) -> SResult<T>;
+}
+
+impl<T> IntoInternalError<T> for Option<T> {
+    fn into_internal_error(self) -> SResult<T> {
+        match self {
+            Some(value) => Ok(value),
+            None => Err(ResponseError::internal("Heed cannot find requested value")),
+        }
+    }
 }

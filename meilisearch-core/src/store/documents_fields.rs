@@ -1,14 +1,14 @@
 use heed::types::{ByteSlice, OwnedType};
 use crate::database::MainT;
 use heed::Result as ZResult;
-use meilisearch_schema::SchemaAttr;
+use meilisearch_schema::FieldId;
 
-use super::DocumentAttrKey;
+use super::DocumentFieldStoredKey;
 use crate::DocumentId;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFields {
-    pub(crate) documents_fields: heed::Database<OwnedType<DocumentAttrKey>, ByteSlice>,
+    pub(crate) documents_fields: heed::Database<OwnedType<DocumentFieldStoredKey>, ByteSlice>,
 }
 
 impl DocumentsFields {
@@ -16,10 +16,10 @@ impl DocumentsFields {
         self,
         writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
-        attribute: SchemaAttr,
+        field: FieldId,
         value: &[u8],
     ) -> ZResult<()> {
-        let key = DocumentAttrKey::new(document_id, attribute);
+        let key = DocumentFieldStoredKey::new(document_id, field);
         self.documents_fields.put(writer, &key, value)
     }
 
@@ -28,8 +28,8 @@ impl DocumentsFields {
         writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<usize> {
-        let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
-        let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
+        let start = DocumentFieldStoredKey::new(document_id, FieldId::min());
+        let end = DocumentFieldStoredKey::new(document_id, FieldId::max());
         self.documents_fields.delete_range(writer, &(start..=end))
     }
 
@@ -41,9 +41,9 @@ impl DocumentsFields {
         self,
         reader: &'txn heed::RoTxn<MainT>,
         document_id: DocumentId,
-        attribute: SchemaAttr,
+        field: FieldId,
     ) -> ZResult<Option<&'txn [u8]>> {
-        let key = DocumentAttrKey::new(document_id, attribute);
+        let key = DocumentFieldStoredKey::new(document_id, field);
         self.documents_fields.get(reader, &key)
     }
 
@@ -52,25 +52,25 @@ impl DocumentsFields {
         reader: &'txn heed::RoTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<DocumentFieldsIter<'txn>> {
-        let start = DocumentAttrKey::new(document_id, SchemaAttr::min());
-        let end = DocumentAttrKey::new(document_id, SchemaAttr::max());
+        let start = DocumentFieldStoredKey::new(document_id, FieldId::min());
+        let end = DocumentFieldStoredKey::new(document_id, FieldId::max());
         let iter = self.documents_fields.range(reader, &(start..=end))?;
         Ok(DocumentFieldsIter { iter })
     }
 }
 
 pub struct DocumentFieldsIter<'txn> {
-    iter: heed::RoRange<'txn, OwnedType<DocumentAttrKey>, ByteSlice>,
+    iter: heed::RoRange<'txn, OwnedType<DocumentFieldStoredKey>, ByteSlice>,
 }
 
 impl<'txn> Iterator for DocumentFieldsIter<'txn> {
-    type Item = ZResult<(SchemaAttr, &'txn [u8])>;
+    type Item = ZResult<(FieldId, &'txn [u8])>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(Ok((key, bytes))) => {
-                let attr = SchemaAttr(key.attr.get());
-                Some(Ok((attr, bytes)))
+                let field_id = FieldId(key.field_id.get());
+                Some(Ok((field_id, bytes)))
             }
             Some(Err(e)) => Some(Err(e)),
             None => None,

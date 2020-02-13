@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::raw_indexer::RawIndexer;
-use crate::serde::{extract_document_id, serialize_value, Deserializer, Serializer};
+use crate::serde::{extract_document_id, serialize_value_with_id, Deserializer, Serializer};
 use crate::store;
 use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
 use crate::{Error, MResult, RankedMap};
@@ -109,16 +109,16 @@ pub fn apply_documents_addition<'a, 'b>(
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
 
-    let schema = match index.main.schema(writer)? {
+    let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
 
-    let identifier = schema.identifier_name();
+    let identifier = schema.identifier();
 
     // 1. store documents ids for future deletion
     for document in addition {
-        let document_id = match extract_document_id(identifier, &document)? {
+        let document_id = match extract_document_id(&identifier, &document)? {
             Some(id) => id,
             None => return Err(Error::MissingDocumentId),
         };
@@ -147,7 +147,7 @@ pub fn apply_documents_addition<'a, 'b>(
     for (document_id, document) in documents_additions {
         let serializer = Serializer {
             txn: writer,
-            schema: &schema,
+            schema: &mut schema,
             document_store: index.documents_fields,
             document_fields_counts: index.documents_fields_counts,
             indexer: &mut indexer,
@@ -166,7 +166,7 @@ pub fn apply_documents_addition<'a, 'b>(
         indexer,
     )?;
 
-    compute_short_prefixes(writer, index)?;
+    index.main.put_schema(writer, &schema)?;
 
     Ok(())
 }
@@ -178,16 +178,16 @@ pub fn apply_documents_partial_addition<'a, 'b>(
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
 
-    let schema = match index.main.schema(writer)? {
+    let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
 
-    let identifier = schema.identifier_name();
+    let identifier = schema.identifier();
 
     // 1. store documents ids for future deletion
     for mut document in addition {
-        let document_id = match extract_document_id(identifier, &document)? {
+        let document_id = match extract_document_id(&identifier, &document)? {
             Some(id) => id,
             None => return Err(Error::MissingDocumentId),
         };
@@ -197,7 +197,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
             reader: writer,
             documents_fields: index.documents_fields,
             schema: &schema,
-            attributes: None,
+            fields: None,
         };
 
         // retrieve the old document and
@@ -233,7 +233,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
     for (document_id, document) in documents_additions {
         let serializer = Serializer {
             txn: writer,
-            schema: &schema,
+            schema: &mut schema,
             document_store: index.documents_fields,
             document_fields_counts: index.documents_fields_counts,
             indexer: &mut indexer,
@@ -252,7 +252,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
         indexer,
     )?;
 
-    compute_short_prefixes(writer, index)?;
+    index.main.put_schema(writer, &schema)?;
 
     Ok(())
 }
@@ -292,22 +292,22 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
 
         for document_id in documents_ids {
             for result in index.documents_fields.document_fields(writer, *document_id)? {
-                let (attr, bytes) = result?;
+                let (field_id, bytes) = result?;
                 let value: serde_json::Value = serde_json::from_slice(bytes)?;
-                ram_store.insert((document_id, attr), value);
+                ram_store.insert((document_id, field_id), value);
             }
 
-            for ((docid, attr), value) in ram_store.drain() {
-                serialize_value(
+            for ((docid, field_id), value) in ram_store.drain() {
+                serialize_value_with_id(
                     writer,
-                    attr,
-                    schema.props(attr),
+                    field_id,
+                    &schema,
                     *docid,
                     index.documents_fields,
                     index.documents_fields_counts,
                     &mut indexer,
                     &mut ranked_map,
-                    &value,
+                    &value
                 )?;
             }
         }
@@ -322,7 +322,7 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
         )?;
     }
 
-    compute_short_prefixes(writer, index)?;
+    index.main.put_schema(writer, &schema)?;
 
     Ok(())
 }

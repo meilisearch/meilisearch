@@ -1,19 +1,18 @@
-use crate::routes::setting::{RankingOrdering, Setting};
-use indexmap::IndexMap;
-use log::{error, warn};
-use meilisearch_core::criterion::*;
-use meilisearch_core::Highlight;
-use meilisearch_core::{Index, RankedMap};
-use meilisearch_core::MainT;
-use meilisearch_schema::{Schema, SchemaAttr};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::convert::From;
 use std::error;
 use std::fmt;
 use std::time::{Duration, Instant};
+
+use indexmap::IndexMap;
+use log::error;
+use meilisearch_core::criterion::*;
+use meilisearch_core::settings::RankingRule;
+use meilisearch_core::{Highlight, Index, MainT, RankedMap};
+use meilisearch_schema::{FieldId, Schema};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug)]
 pub enum Error {
@@ -64,6 +63,12 @@ impl From<meilisearch_core::Error> for Error {
     }
 }
 
+impl From<heed::Error> for Error {
+    fn from(error: heed::Error) -> Self {
+        Error::Internal(error.to_string())
+    }
+}
+
 pub trait IndexSearchExt {
     fn new_search(&self, query: String) -> SearchBuilder;
 }
@@ -77,7 +82,6 @@ impl IndexSearchExt for Index {
             limit: 20,
             attributes_to_crop: None,
             attributes_to_retrieve: None,
-            attributes_to_search_in: None,
             attributes_to_highlight: None,
             filters: None,
             timeout: Duration::from_millis(30),
@@ -93,7 +97,6 @@ pub struct SearchBuilder<'a> {
     limit: usize,
     attributes_to_crop: Option<HashMap<String, usize>>,
     attributes_to_retrieve: Option<HashSet<String>>,
-    attributes_to_search_in: Option<HashSet<String>>,
     attributes_to_highlight: Option<HashSet<String>>,
     filters: Option<String>,
     timeout: Duration,
@@ -124,17 +127,6 @@ impl<'a> SearchBuilder<'a> {
     pub fn add_retrievable_field(&mut self, value: String) -> &SearchBuilder {
         let attributes_to_retrieve = self.attributes_to_retrieve.get_or_insert(HashSet::new());
         attributes_to_retrieve.insert(value);
-        self
-    }
-
-    pub fn attributes_to_search_in(&mut self, value: HashSet<String>) -> &SearchBuilder {
-        self.attributes_to_search_in = Some(value);
-        self
-    }
-
-    pub fn add_attribute_to_search_in(&mut self, value: String) -> &SearchBuilder {
-        let attributes_to_search_in = self.attributes_to_search_in.get_or_insert(HashSet::new());
-        attributes_to_search_in.insert(value);
         self
     }
 
@@ -176,13 +168,6 @@ impl<'a> SearchBuilder<'a> {
             None => self.index.query_builder(),
         };
 
-        // Filter searchable fields
-        if let Some(fields) = &self.attributes_to_search_in {
-            for attribute in fields.iter().filter_map(|f| schema.attribute(f)) {
-                query_builder.add_searchable_attribute(attribute.0);
-            }
-        }
-
         if let Some(filters) = &self.filters {
             let mut split = filters.split(':');
             match (split.next(), split.next()) {
@@ -192,7 +177,7 @@ impl<'a> SearchBuilder<'a> {
                     let ref_index = &self.index;
                     let value = value.trim().to_lowercase();
 
-                    let attr = match schema.attribute(attr) {
+                    let attr = match schema.id(attr) {
                         Some(attr) => attr,
                         None => return Err(Error::UnknownFilteredAttribute),
                     };
@@ -221,7 +206,8 @@ impl<'a> SearchBuilder<'a> {
         query_builder.with_fetch_timeout(self.timeout);
 
         let start = Instant::now();
-        let docs = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let docs =
+            query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
         let time_ms = start.elapsed().as_millis() as usize;
 
         let mut hits = Vec::with_capacity(self.limit);
@@ -260,10 +246,8 @@ impl<'a> SearchBuilder<'a> {
             // Transform to readable matches
             let matches = calculate_matches(matches, self.attributes_to_retrieve.clone(), &schema);
 
-            if !self.matches {
-                if let Some(attributes_to_highlight) = &self.attributes_to_highlight {
-                    formatted = calculate_highlights(&formatted, &matches, attributes_to_highlight);
-                }
+            if let Some(attributes_to_highlight) = &self.attributes_to_highlight {
+                formatted = calculate_highlights(&formatted, &matches, attributes_to_highlight);
             }
 
             let matches_info = if self.matches { Some(matches) } else { None };
@@ -294,75 +278,34 @@ impl<'a> SearchBuilder<'a> {
         ranked_map: &'a RankedMap,
         schema: &Schema,
     ) -> Result<Option<Criteria<'a>>, Error> {
-        let current_settings = match self.index.main.customs(reader).unwrap() {
-            Some(bytes) => bincode::deserialize(bytes).unwrap(),
-            None => Setting::default(),
-        };
-
-        let ranking_rules = &current_settings.ranking_rules;
-        let ranking_order = &current_settings.ranking_order;
+        let ranking_rules = self.index.main.ranking_rules(reader)?;
 
         if let Some(ranking_rules) = ranking_rules {
             let mut builder = CriteriaBuilder::with_capacity(7 + ranking_rules.len());
-            if let Some(ranking_rules_order) = ranking_order {
-                for rule in ranking_rules_order {
-                    match rule.as_str() {
-                        "_typo" => builder.push(Typo),
-                        "_words" => builder.push(Words),
-                        "_proximity" => builder.push(Proximity),
-                        "_attribute" => builder.push(Attribute),
-                        "_words_position" => builder.push(WordsPosition),
-                        "_exact" => builder.push(Exact),
-                        _ => {
-                            let order = match ranking_rules.get(rule.as_str()) {
-                                Some(o) => o,
-                                None => continue,
-                            };
-
-                            let custom_ranking = match order {
-                                RankingOrdering::Asc => {
-                                    SortByAttr::lower_is_better(&ranked_map, &schema, &rule)
-                                        .unwrap()
-                                }
-                                RankingOrdering::Dsc => {
-                                    SortByAttr::higher_is_better(&ranked_map, &schema, &rule)
-                                        .unwrap()
-                                }
-                            };
-
-                            builder.push(custom_ranking);
+            for rule in ranking_rules {
+                match rule {
+                    RankingRule::Typo => builder.push(Typo),
+                    RankingRule::Words => builder.push(Words),
+                    RankingRule::Proximity => builder.push(Proximity),
+                    RankingRule::Attribute => builder.push(Attribute),
+                    RankingRule::WordsPosition => builder.push(WordsPosition),
+                    RankingRule::Exact => builder.push(Exact),
+                    RankingRule::Asc(field) => {
+                        match SortByAttr::lower_is_better(&ranked_map, &schema, &field) {
+                            Ok(rule) => builder.push(rule),
+                            Err(err) => error!("Error during criteria builder; {:?}", err),
+                        }
+                    }
+                    RankingRule::Dsc(field) => {
+                        match SortByAttr::higher_is_better(&ranked_map, &schema, &field) {
+                            Ok(rule) => builder.push(rule),
+                            Err(err) => error!("Error during criteria builder; {:?}", err),
                         }
                     }
                 }
-                builder.push(DocumentId);
-                return Ok(Some(builder.build()));
-            } else {
-                builder.push(Typo);
-                builder.push(Words);
-                builder.push(Proximity);
-                builder.push(Attribute);
-                builder.push(WordsPosition);
-                builder.push(Exact);
-                for (rule, order) in ranking_rules.iter() {
-                    let custom_ranking = match order {
-                        RankingOrdering::Asc => {
-                            SortByAttr::lower_is_better(&ranked_map, &schema, &rule)
-                        }
-                        RankingOrdering::Dsc => {
-                            SortByAttr::higher_is_better(&ranked_map, &schema, &rule)
-                        }
-                    };
-                    if let Ok(custom_ranking) = custom_ranking {
-                        builder.push(custom_ranking);
-                    } else {
-                        // TODO push this warning to a log tree
-                        warn!("Custom ranking cannot be added; Attribute {} not registered for ranking", rule)
-                    }
-
-                }
-                builder.push(DocumentId);
-                return Ok(Some(builder.build()));
             }
+            builder.push(DocumentId);
+            return Ok(Some(builder.build()));
         }
 
         Ok(None)
@@ -406,8 +349,6 @@ pub struct SearchResult {
     pub limit: usize,
     pub processing_time_ms: usize,
     pub query: String,
-    // pub parsed_query: String,
-    // pub params: Option<String>,
 }
 
 fn crop_text(
@@ -441,14 +382,14 @@ fn crop_document(
     matches.sort_unstable_by_key(|m| (m.char_index, m.char_length));
 
     for (field, length) in fields {
-        let attribute = match schema.attribute(field) {
+        let attribute = match schema.id(field) {
             Some(attribute) => attribute,
             None => continue,
         };
 
         let selected_matches = matches
             .iter()
-            .filter(|m| SchemaAttr::new(m.attribute) == attribute)
+            .filter(|m| FieldId::new(m.attribute) == attribute)
             .cloned();
 
         if let Some(Value::String(ref mut original_text)) = document.get_mut(field) {
@@ -457,7 +398,7 @@ fn crop_document(
 
             *original_text = cropped_text;
 
-            matches.retain(|m| SchemaAttr::new(m.attribute) != attribute);
+            matches.retain(|m| FieldId::new(m.attribute) != attribute);
             matches.extend_from_slice(&cropped_matches);
         }
     }
@@ -470,26 +411,28 @@ fn calculate_matches(
 ) -> MatchesInfos {
     let mut matches_result: HashMap<String, Vec<MatchPosition>> = HashMap::new();
     for m in matches.iter() {
-        let attribute = schema
-            .attribute_name(SchemaAttr::new(m.attribute))
-            .to_string();
-        if let Some(attributes_to_retrieve) = attributes_to_retrieve.clone() {
-            if !attributes_to_retrieve.contains(attribute.as_str()) {
+        if let Some(attribute) = schema.name(FieldId::new(m.attribute)) {
+            if let Some(attributes_to_retrieve) = attributes_to_retrieve.clone() {
+                if !attributes_to_retrieve.contains(attribute) {
+                    continue;
+                }
+            }
+            if !schema.displayed_name().contains(attribute) {
                 continue;
             }
-        };
-        if let Some(pos) = matches_result.get_mut(&attribute) {
-            pos.push(MatchPosition {
-                start: m.char_index as usize,
-                length: m.char_length as usize,
-            });
-        } else {
-            let mut positions = Vec::new();
-            positions.push(MatchPosition {
-                start: m.char_index as usize,
-                length: m.char_length as usize,
-            });
-            matches_result.insert(attribute, positions);
+            if let Some(pos) = matches_result.get_mut(attribute) {
+                pos.push(MatchPosition {
+                    start: m.char_index as usize,
+                    length: m.char_length as usize,
+                });
+            } else {
+                let mut positions = Vec::new();
+                positions.push(MatchPosition {
+                    start: m.char_index as usize,
+                    length: m.char_length as usize,
+                });
+                matches_result.insert(attribute.to_string(), positions);
+            }
         }
     }
     for (_, val) in matches_result.iter_mut() {

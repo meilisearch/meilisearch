@@ -1,20 +1,15 @@
 use chrono::{DateTime, Utc};
-use http::StatusCode;
 use log::error;
 use meilisearch_core::ProcessedUpdateResult;
-use meilisearch_schema::{Schema, SchemaBuilder};
+use meilisearch_schema::Schema;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tide::querystring::ContextExt as QSContextExt;
-use tide::response::IntoResponse;
-use tide::{Context, Response};
+use tide::{Request, Response};
 
-use crate::error::{ResponseError, SResult};
-use crate::helpers::tide::ContextExt;
-use crate::models::schema::SchemaBody;
+use crate::error::{IntoInternalError, ResponseError, SResult};
+use crate::helpers::tide::RequestExt;
 use crate::models::token::ACL::*;
-use crate::routes::document::IndexUpdateResponse;
 use crate::Data;
 
 fn generate_uid() -> String {
@@ -26,13 +21,13 @@ fn generate_uid() -> String {
         .collect()
 }
 
-pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
+pub async fn list_indexes(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesRead)?;
 
     let indexes_uids = ctx.state().db.indexes_uids();
 
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
 
     let mut response_body = Vec::new();
 
@@ -41,27 +36,21 @@ pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
 
         match index {
             Some(index) => {
-                let name = index
-                    .main
-                    .name(&reader)
-                    .map_err(ResponseError::internal)?
-                    .ok_or(ResponseError::internal("'name' not found"))?;
-                let created_at = index
-                    .main
-                    .created_at(&reader)
-                    .map_err(ResponseError::internal)?
-                    .ok_or(ResponseError::internal("'created_at' date not found"))?;
-                let updated_at = index
-                    .main
-                    .updated_at(&reader)
-                    .map_err(ResponseError::internal)?
-                    .ok_or(ResponseError::internal("'updated_at' date not found"))?;
+                let name = index.main.name(&reader)?.into_internal_error()?;
+                let created_at = index.main.created_at(&reader)?.into_internal_error()?;
+                let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
+
+                let identifier = match index.main.schema(&reader) {
+                    Ok(Some(schema)) => Some(schema.identifier().to_owned()),
+                    _ => None
+                };
 
                 let index_response = IndexResponse {
                     name,
                     uid: index_uid,
                     created_at,
                     updated_at,
+                    identifier,
                 };
                 response_body.push(index_response);
             }
@@ -72,7 +61,7 @@ pub async fn list_indexes(ctx: Context<Data>) -> SResult<Response> {
         }
     }
 
-    Ok(tide::response::json(response_body))
+    Ok(tide::Response::new(200).body_json(&response_body)?)
 }
 
 #[derive(Debug, Serialize)]
@@ -82,49 +71,44 @@ struct IndexResponse {
     uid: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    identifier: Option<String>,
 }
 
-pub async fn get_index(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesRead)?;
 
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
 
     let uid = ctx.url_param("index")?;
-    let name = index
-        .main
-        .name(&reader)
-        .map_err(ResponseError::internal)?
-        .ok_or(ResponseError::internal("'name' not found"))?;
-    let created_at = index
-        .main
-        .created_at(&reader)
-        .map_err(ResponseError::internal)?
-        .ok_or(ResponseError::internal("'created_at' date not found"))?;
-    let updated_at = index
-        .main
-        .updated_at(&reader)
-        .map_err(ResponseError::internal)?
-        .ok_or(ResponseError::internal("'updated_at' date not found"))?;
+    let name = index.main.name(&reader)?.into_internal_error()?;
+    let created_at = index.main.created_at(&reader)?.into_internal_error()?;
+    let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
+
+    let identifier = match index.main.schema(&reader) {
+        Ok(Some(schema)) => Some(schema.identifier().to_owned()),
+        _ => None
+    };
 
     let response_body = IndexResponse {
         name,
         uid,
         created_at,
         updated_at,
+        identifier
     };
 
-    Ok(tide::response::json(response_body))
+    Ok(tide::Response::new(200).body_json(&response_body)?)
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct IndexCreateRequest {
-    name: String,
+    name: Option<String>,
     uid: Option<String>,
-    schema: Option<SchemaBody>,
+    identifier: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -132,20 +116,24 @@ struct IndexCreateRequest {
 struct IndexCreateResponse {
     name: String,
     uid: String,
-    schema: Option<SchemaBody>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    update_id: Option<u64>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    identifier: Option<String>,
 }
 
-pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesWrite)?;
 
     let body = ctx
         .body_json::<IndexCreateRequest>()
         .await
         .map_err(ResponseError::bad_request)?;
+
+    if let (None, None) = (body.name.clone(), body.uid.clone()) {
+        return Err(ResponseError::bad_request(
+            "Index creation must have an uid",
+        ));
+    }
 
     let db = &ctx.state().db;
 
@@ -164,44 +152,42 @@ pub async fn create_index(mut ctx: Context<Data>) -> SResult<Response> {
         Err(e) => return Err(ResponseError::create_index(e)),
     };
 
-    let mut writer = db.main_write_txn().map_err(ResponseError::internal)?;
-    let mut update_writer = db.update_write_txn().map_err(ResponseError::internal)?;
-
-    created_index
+    let mut writer = db.main_write_txn()?;
+    let name = body.name.unwrap_or(uid.clone());
+    created_index.main.put_name(&mut writer, &name)?;
+    let created_at = created_index
         .main
-        .put_name(&mut writer, &body.name)
-        .map_err(ResponseError::internal)?;
+        .created_at(&writer)?
+        .into_internal_error()?;
+    let updated_at = created_index
+        .main
+        .updated_at(&writer)?
+        .into_internal_error()?;
 
-    let schema: Option<Schema> = body.schema.clone().map(Into::into);
-    let mut response_update_id = None;
-    if let Some(schema) = schema {
-        let update_id = created_index
-            .schema_update(&mut update_writer, schema)
-            .map_err(ResponseError::internal)?;
-        response_update_id = Some(update_id)
+    if let Some(id) = body.identifier.clone() {
+        created_index
+            .main
+            .put_schema(&mut writer, &Schema::with_identifier(&id))?;
     }
 
-    writer.commit().map_err(ResponseError::internal)?;
-    update_writer.commit().map_err(ResponseError::internal)?;
+    writer.commit()?;
 
     let response_body = IndexCreateResponse {
-        name: body.name,
+        name,
         uid,
-        schema: body.schema,
-        update_id: response_update_id,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
+        created_at,
+        updated_at,
+        identifier: body.identifier,
     };
 
-    Ok(tide::response::json(response_body)
-        .with_status(StatusCode::CREATED)
-        .into_response())
+    Ok(tide::Response::new(201).body_json(&response_body)?)
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateIndexRequest {
-    name: String,
+    name: Option<String>,
+    identifier: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -211,9 +197,10 @@ struct UpdateIndexResponse {
     uid: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    identifier: Option<String>,
 }
 
-pub async fn update_index(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesWrite)?;
 
     let body = ctx
@@ -225,167 +212,81 @@ pub async fn update_index(mut ctx: Context<Data>) -> SResult<Response> {
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
-    let mut writer = db.main_write_txn().map_err(ResponseError::internal)?;
+    let mut writer = db.main_write_txn()?;
 
-    index
-        .main
-        .put_name(&mut writer, &body.name)
-        .map_err(ResponseError::internal)?;
+    if let Some(name) = body.name {
+        index.main.put_name(&mut writer, &name)?;
+    }
 
-    index
-        .main
-        .put_updated_at(&mut writer)
-        .map_err(ResponseError::internal)?;
+    if let Some(identifier) = body.identifier {
+        if let Ok(Some(_)) = index.main.schema(&writer) {
+            return Err(ResponseError::bad_request("The index identifier cannot be updated"));
+        }
+        index.main.put_schema(&mut writer, &Schema::with_identifier(&identifier))?;
+    }
 
-    writer.commit().map_err(ResponseError::internal)?;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    index.main.put_updated_at(&mut writer)?;
+    writer.commit()?;
 
-    let created_at = index
-        .main
-        .created_at(&reader)
-        .map_err(ResponseError::internal)?
-        .ok_or(ResponseError::internal("'created_at' date not found"))?;
-    let updated_at = index
-        .main
-        .updated_at(&reader)
-        .map_err(ResponseError::internal)?
-        .ok_or(ResponseError::internal("'updated_at' date not found"))?;
+    let reader = db.main_read_txn()?;
+    let name = index.main.name(&reader)?.into_internal_error()?;
+    let created_at = index.main.created_at(&reader)?.into_internal_error()?;
+    let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
+
+    let identifier = match index.main.schema(&reader) {
+        Ok(Some(schema)) => Some(schema.identifier().to_owned()),
+        _ => None
+    };
 
     let response_body = UpdateIndexResponse {
-        name: body.name,
+        name,
         uid: index_uid,
         created_at,
         updated_at,
+        identifier
     };
 
-    Ok(tide::response::json(response_body)
-        .with_status(StatusCode::OK)
-        .into_response())
+    Ok(tide::Response::new(200).body_json(&response_body)?)
 }
 
-#[derive(Default, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SchemaParams {
-    raw: bool,
-}
-
-pub async fn get_index_schema(ctx: Context<Data>) -> SResult<Response> {
-    ctx.is_allowed(IndexesRead)?;
-
-    let index = ctx.index()?;
-
-    // Tide doesn't support "no query param"
-    let params: SchemaParams = ctx.url_query().unwrap_or_default();
-
-    let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-
-    let schema = index
-        .main
-        .schema(&reader)
-        .map_err(ResponseError::open_index)?;
-
-    match schema {
-        Some(schema) => {
-            if params.raw {
-                Ok(tide::response::json(schema))
-            } else {
-                Ok(tide::response::json(SchemaBody::from(schema)))
-            }
-        }
-        None => Err(ResponseError::not_found("missing index schema")),
-    }
-}
-
-pub async fn update_schema(mut ctx: Context<Data>) -> SResult<Response> {
-    ctx.is_allowed(IndexesWrite)?;
-
-    let index_uid = ctx.url_param("index")?;
-
-    let params: SchemaParams = ctx.url_query().unwrap_or_default();
-
-    let schema = if params.raw {
-        ctx.body_json::<SchemaBuilder>()
-            .await
-            .map_err(ResponseError::bad_request)?
-            .build()
-    } else {
-        ctx.body_json::<SchemaBody>()
-            .await
-            .map_err(ResponseError::bad_request)?
-            .into()
-    };
-
-    let db = &ctx.state().db;
-    let mut writer = db.update_write_txn().map_err(ResponseError::internal)?;
-
-    let index = db
-        .open_index(&index_uid)
-        .ok_or(ResponseError::index_not_found(index_uid))?;
-
-    let update_id = index
-        .schema_update(&mut writer, schema.clone())
-        .map_err(ResponseError::internal)?;
-
-    writer.commit().map_err(ResponseError::internal)?;
-
-    let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::response::json(response_body)
-        .with_status(StatusCode::ACCEPTED)
-        .into_response())
-}
-
-pub async fn get_update_status(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_update_status(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesRead)?;
 
     let db = &ctx.state().db;
-    let reader = db.update_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.update_read_txn()?;
 
     let update_id = ctx
         .param::<u64>("update_id")
         .map_err(|e| ResponseError::bad_parameter("update_id", e))?;
 
     let index = ctx.index()?;
-    let status = index
-        .update_status(&reader, update_id)
-        .map_err(ResponseError::internal)?;
+    let status = index.update_status(&reader, update_id)?;
 
     let response = match status {
-        Some(status) => tide::response::json(status)
-            .with_status(StatusCode::OK)
-            .into_response(),
-        None => tide::response::json(json!({ "message": "unknown update id" }))
-            .with_status(StatusCode::NOT_FOUND)
-            .into_response(),
+        Some(status) => tide::Response::new(200).body_json(&status).unwrap(),
+        None => tide::Response::new(404)
+            .body_json(&json!({ "message": "unknown update id" }))
+            .unwrap(),
     };
 
     Ok(response)
 }
 
-pub async fn get_all_updates_status(ctx: Context<Data>) -> SResult<Response> {
+pub async fn get_all_updates_status(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesRead)?;
-
     let db = &ctx.state().db;
-    let reader = db.update_read_txn().map_err(ResponseError::internal)?;
-
+    let reader = db.update_read_txn()?;
     let index = ctx.index()?;
-    let all_status = index
-        .all_updates_status(&reader)
-        .map_err(ResponseError::internal)?;
-
-    let response = tide::response::json(all_status)
-        .with_status(StatusCode::OK)
-        .into_response();
-
-    Ok(response)
+    let response = index.all_updates_status(&reader)?;
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
-pub async fn delete_index(ctx: Context<Data>) -> SResult<StatusCode> {
+pub async fn delete_index(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(IndexesWrite)?;
     let _ = ctx.index()?;
     let index_uid = ctx.url_param("index")?;
-    ctx.state().db.delete_index(&index_uid).map_err(ResponseError::internal)?;
-    Ok(StatusCode::NO_CONTENT)
+    ctx.state().db.delete_index(&index_uid)?;
+    Ok(tide::Response::new(204))
 }
 
 pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpdateResult) {

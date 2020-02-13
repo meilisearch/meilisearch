@@ -40,8 +40,8 @@ impl DocumentsDeletion {
     where
         D: serde::Serialize,
     {
-        let identifier = schema.identifier_name();
-        let document_id = match extract_document_id(identifier, &document)? {
+        let identifier = schema.identifier();
+        let document_id = match extract_document_id(&identifier, &document)? {
             Some(id) => id,
             None => return Err(Error::MissingDocumentId),
         };
@@ -101,23 +101,12 @@ pub fn apply_documents_deletion(
     };
 
     // collect the ranked attributes according to the schema
-    let ranked_attrs: Vec<_> = schema
-        .iter()
-        .filter_map(
-            |(_, attr, prop)| {
-                if prop.is_ranked() {
-                    Some(attr)
-                } else {
-                    None
-                }
-            },
-        )
-        .collect();
+    let ranked_fields = schema.ranked();
 
     let mut words_document_ids = HashMap::new();
     for id in idset {
         // remove all the ranked attributes from the ranked_map
-        for ranked_attr in &ranked_attrs {
+        for ranked_attr in ranked_fields {
             ranked_map.remove(id, *ranked_attr);
         }
 

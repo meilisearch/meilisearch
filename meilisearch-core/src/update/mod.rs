@@ -2,10 +2,7 @@ mod clear_all;
 mod customs_update;
 mod documents_addition;
 mod documents_deletion;
-mod schema_update;
-mod stop_words_addition;
-mod stop_words_deletion;
-mod synonyms_update;
+mod settings_update;
 
 pub use self::clear_all::{apply_clear_all, push_clear_all};
 pub use self::customs_update::{apply_customs_update, push_customs_update};
@@ -13,13 +10,10 @@ pub use self::documents_addition::{
     apply_documents_addition, apply_documents_partial_addition, DocumentsAddition,
 };
 pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
-pub use self::schema_update::{apply_schema_update, push_schema_update};
-pub use self::stop_words_addition::{apply_stop_words_addition, StopWordsAddition};
-pub use self::stop_words_deletion::{apply_stop_words_deletion, StopWordsDeletion};
-pub use self::synonyms_update::{apply_synonyms_update, SynonymsUpdate};
+pub use self::settings_update::{apply_settings_update, push_settings_update};
 
 use std::cmp;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
@@ -31,7 +25,7 @@ use sdset::Set;
 
 use crate::{store, DocumentId, MResult};
 use crate::database::{MainT, UpdateT};
-use meilisearch_schema::Schema;
+use crate::settings::SettingsUpdate;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Update {
@@ -43,13 +37,6 @@ impl Update {
     fn clear_all() -> Update {
         Update {
             data: UpdateData::ClearAll,
-            enqueued_at: Utc::now(),
-        }
-    }
-
-    fn schema(data: Schema) -> Update {
-        Update {
-            data: UpdateData::Schema(data),
             enqueued_at: Utc::now(),
         }
     }
@@ -82,23 +69,9 @@ impl Update {
         }
     }
 
-    fn synonyms_update(data: BTreeMap<String, Vec<String>>) -> Update {
+    fn settings(data: SettingsUpdate) -> Update {
         Update {
-            data: UpdateData::SynonymsUpdate(data),
-            enqueued_at: Utc::now(),
-        }
-    }
-
-    fn stop_words_addition(data: BTreeSet<String>) -> Update {
-        Update {
-            data: UpdateData::StopWordsAddition(data),
-            enqueued_at: Utc::now(),
-        }
-    }
-
-    fn stop_words_deletion(data: BTreeSet<String>) -> Update {
-        Update {
-            data: UpdateData::StopWordsDeletion(data),
+            data: UpdateData::Settings(data),
             enqueued_at: Utc::now(),
         }
     }
@@ -107,21 +80,17 @@ impl Update {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateData {
     ClearAll,
-    Schema(Schema),
     Customs(Vec<u8>),
     DocumentsAddition(Vec<HashMap<String, serde_json::Value>>),
     DocumentsPartial(Vec<HashMap<String, serde_json::Value>>),
     DocumentsDeletion(Vec<DocumentId>),
-    SynonymsUpdate(BTreeMap<String, Vec<String>>),
-    StopWordsAddition(BTreeSet<String>),
-    StopWordsDeletion(BTreeSet<String>),
+    Settings(SettingsUpdate)
 }
 
 impl UpdateData {
     pub fn update_type(&self) -> UpdateType {
         match self {
             UpdateData::ClearAll => UpdateType::ClearAll,
-            UpdateData::Schema(_) => UpdateType::Schema,
             UpdateData::Customs(_) => UpdateType::Customs,
             UpdateData::DocumentsAddition(addition) => UpdateType::DocumentsAddition {
                 number: addition.len(),
@@ -132,14 +101,8 @@ impl UpdateData {
             UpdateData::DocumentsDeletion(deletion) => UpdateType::DocumentsDeletion {
                 number: deletion.len(),
             },
-            UpdateData::SynonymsUpdate(addition) => UpdateType::SynonymsUpdate {
-                number: addition.len(),
-            },
-            UpdateData::StopWordsAddition(addition) => UpdateType::StopWordsAddition {
-                number: addition.len(),
-            },
-            UpdateData::StopWordsDeletion(deletion) => UpdateType::StopWordsDeletion {
-                number: deletion.len(),
+            UpdateData::Settings(update) => UpdateType::Settings {
+                settings: update.clone(),
             },
         }
     }
@@ -149,14 +112,11 @@ impl UpdateData {
 #[serde(tag = "name")]
 pub enum UpdateType {
     ClearAll,
-    Schema,
     Customs,
     DocumentsAddition { number: usize },
     DocumentsPartial { number: usize },
     DocumentsDeletion { number: usize },
-    SynonymsUpdate { number: usize },
-    StopWordsAddition { number: usize },
-    StopWordsDeletion { number: usize },
+    Settings { settings: SettingsUpdate },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,14 +221,6 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        UpdateData::Schema(schema) => {
-            let start = Instant::now();
-
-            let update_type = UpdateType::Schema;
-            let result = apply_schema_update(writer, &schema, index);
-
-            (update_type, result, start.elapsed())
-        }
         UpdateData::Customs(customs) => {
             let start = Instant::now();
 
@@ -310,37 +262,18 @@ pub fn update_task<'a, 'b>(
 
             (update_type, result, start.elapsed())
         }
-        UpdateData::SynonymsUpdate(synonyms) => {
+        UpdateData::Settings(settings) => {
             let start = Instant::now();
 
-            let update_type = UpdateType::SynonymsUpdate {
-                number: synonyms.len(),
+            let update_type = UpdateType::Settings {
+                settings: settings.clone(),
             };
 
-            let result = apply_synonyms_update(writer, index.main, index.synonyms, synonyms);
-
-            (update_type, result, start.elapsed())
-        }
-        UpdateData::StopWordsAddition(stop_words) => {
-            let start = Instant::now();
-
-            let update_type = UpdateType::StopWordsAddition {
-                number: stop_words.len(),
-            };
-
-            let result =
-                apply_stop_words_addition(writer, index.main, index.postings_lists, stop_words);
-
-            (update_type, result, start.elapsed())
-        }
-        UpdateData::StopWordsDeletion(stop_words) => {
-            let start = Instant::now();
-
-            let update_type = UpdateType::StopWordsDeletion {
-                number: stop_words.len(),
-            };
-
-            let result = apply_stop_words_deletion(writer, index, stop_words);
+            let result = apply_settings_update(
+                writer,
+                index,
+                settings,
+            );
 
             (update_type, result, start.elapsed())
         }

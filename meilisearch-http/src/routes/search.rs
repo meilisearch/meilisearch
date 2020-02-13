@@ -5,12 +5,11 @@ use std::time::Duration;
 use meilisearch_core::Index;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use tide::querystring::ContextExt as QSContextExt;
-use tide::{Context, Response};
+use tide::{Request, Response};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit};
-use crate::helpers::tide::ContextExt;
+use crate::helpers::tide::RequestExt;
 use crate::Data;
 
 #[derive(Deserialize)]
@@ -20,7 +19,6 @@ struct SearchQuery {
     offset: Option<usize>,
     limit: Option<usize>,
     attributes_to_retrieve: Option<String>,
-    attributes_to_search_in: Option<String>,
     attributes_to_crop: Option<String>,
     crop_length: Option<usize>,
     attributes_to_highlight: Option<String>,
@@ -29,21 +27,20 @@ struct SearchQuery {
     matches: Option<bool>,
 }
 
-pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
+pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
     // ctx.is_allowed(DocumentsRead)?;
 
     let index = ctx.index()?;
     let db = &ctx.state().db;
-    let reader = db.main_read_txn().map_err(ResponseError::internal)?;
+    let reader = db.main_read_txn()?;
 
     let schema = index
         .main
-        .schema(&reader)
-        .map_err(ResponseError::internal)?
+        .schema(&reader)?
         .ok_or(ResponseError::open_index("No Schema found"))?;
 
     let query: SearchQuery = ctx
-        .url_query()
+        .query()
         .map_err(|_| ResponseError::bad_request("invalid query parameter"))?;
 
     let mut search_builder = index.new_search(query.q.clone());
@@ -60,17 +57,14 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
             search_builder.add_retrievable_field(attr.to_string());
         }
     }
-    if let Some(attributes_to_search_in) = query.attributes_to_search_in {
-        for attr in attributes_to_search_in.split(',') {
-            search_builder.add_attribute_to_search_in(attr.to_string());
-        }
-    }
+
     if let Some(attributes_to_crop) = query.attributes_to_crop {
         let crop_length = query.crop_length.unwrap_or(200);
         if attributes_to_crop == "*" {
             let attributes_to_crop = schema
+                .displayed_name()
                 .iter()
-                .map(|(attr, ..)| (attr.to_string(), crop_length))
+                .map(|attr| (attr.to_string(), crop_length))
                 .collect();
             search_builder.attributes_to_crop(attributes_to_crop);
         } else {
@@ -84,11 +78,15 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
 
     if let Some(attributes_to_highlight) = query.attributes_to_highlight {
         let attributes_to_highlight = if attributes_to_highlight == "*" {
-            schema.iter().map(|(attr, ..)| attr.to_string()).collect()
+            schema
+                .displayed_name()
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
         } else {
             attributes_to_highlight
                 .split(',')
-                .map(ToString::to_string)
+                .map(|s| s.to_string())
                 .collect()
         };
 
@@ -115,7 +113,7 @@ pub async fn search_with_url_query(ctx: Context<Data>) -> SResult<Response> {
         Err(others) => return Err(ResponseError::bad_request(others)),
     };
 
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
 #[derive(Clone, Deserialize)]
@@ -126,7 +124,7 @@ struct SearchMultiBody {
     offset: Option<usize>,
     limit: Option<usize>,
     attributes_to_retrieve: Option<HashSet<String>>,
-    attributes_to_search_in: Option<HashSet<String>>,
+    searchable_attributes: Option<HashSet<String>>,
     attributes_to_crop: Option<HashMap<String, usize>>,
     attributes_to_highlight: Option<HashSet<String>>,
     filters: Option<String>,
@@ -144,7 +142,7 @@ struct SearchMultiBodyResponse {
     query: String,
 }
 
-pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
+pub async fn search_multi_index(mut ctx: Request<Data>) -> SResult<Response> {
     // ctx.is_allowed(DocumentsRead)?;
     let body = ctx
         .body_json::<SearchMultiBody>()
@@ -189,9 +187,6 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
             if let Some(attributes_to_retrieve) = par_body.attributes_to_retrieve.clone() {
                 search_builder.attributes_to_retrieve(attributes_to_retrieve);
             }
-            if let Some(attributes_to_search_in) = par_body.attributes_to_search_in.clone() {
-                search_builder.attributes_to_search_in(attributes_to_search_in);
-            }
             if let Some(attributes_to_crop) = par_body.attributes_to_crop.clone() {
                 search_builder.attributes_to_crop(attributes_to_crop);
             }
@@ -210,10 +205,8 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
                 }
             }
 
-            let reader = db.main_read_txn().map_err(ResponseError::internal)?;
-            let response = search_builder
-                .search(&reader)
-                .map_err(ResponseError::internal)?;
+            let reader = db.main_read_txn()?;
+            let response = search_builder.search(&reader)?;
             Ok((index_uid, response))
         })
         .collect();
@@ -239,5 +232,5 @@ pub async fn search_multi_index(mut ctx: Context<Data>) -> SResult<Response> {
         query: body.query,
     };
 
-    Ok(tide::response::json(response))
+    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
