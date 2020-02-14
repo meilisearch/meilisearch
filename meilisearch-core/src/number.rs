@@ -11,6 +11,13 @@ pub enum Number {
     Unsigned(u64),
     Signed(i64),
     Float(OrderedFloat<f64>),
+    Null,
+}
+
+impl Default for Number {
+    fn default() -> Self {
+        Self::Null
+    }
 }
 
 impl FromStr for Number {
@@ -56,7 +63,7 @@ impl PartialOrd for Number {
 
 impl Ord for Number {
     fn cmp(&self, other: &Self) -> Ordering {
-        use Number::{Float, Signed, Unsigned};
+        use Number::{Float, Signed, Unsigned, Null};
 
         match (*self, *other) {
             (Unsigned(a), Unsigned(b)) => a.cmp(&b),
@@ -80,6 +87,9 @@ impl Ord for Number {
             (Float(a), Unsigned(b)) => a.cmp(&OrderedFloat(b as f64)),
             (Float(a), Signed(b)) => a.cmp(&OrderedFloat(b as f64)),
             (Float(a), Float(b)) => a.cmp(&b),
+            (Null, Null) => Ordering::Equal,
+            (_, Null) => Ordering::Less,
+            (Null, _) => Ordering::Greater,
         }
     }
 }
