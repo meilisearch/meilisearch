@@ -6,12 +6,12 @@ use tide::{Request, Response};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::RequestExt;
-use crate::models::token::ACL::*;
+use crate::helpers::tide::ACL::*;
 use crate::routes::document::IndexUpdateResponse;
 use crate::Data;
 
 pub async fn get(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsRead)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
 
     let db = &ctx.state().db;
@@ -37,7 +37,7 @@ pub async fn get(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
 
     let data: BTreeMap<String, Vec<String>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
@@ -61,7 +61,7 @@ pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
 
     let index = ctx.index()?;
 

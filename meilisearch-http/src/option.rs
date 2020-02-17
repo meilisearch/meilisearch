@@ -1,5 +1,7 @@
 use structopt::StructOpt;
 
+const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
+
 #[derive(Debug, Clone, StructOpt)]
 pub struct Opt {
     /// The destination where the database must be created.
@@ -11,8 +13,15 @@ pub struct Opt {
     pub http_addr: String,
 
     /// The master key allowing you to do everything on the server.
-    #[structopt(long, env = "MEILI_API_KEY")]
-    pub api_key: Option<String>,
+    #[structopt(long, env = "MEILI_MASTER_KEY")]
+    pub master_key: Option<String>,
+
+    /// This environment variable must be set to `production` if your are running in production.
+    /// Could be `production` or `development`
+    /// - `production`: Force api keys
+    /// - `development`: Show logs in "info" mode + not mendatory to specify the api keys
+    #[structopt(long, env = "MEILI_ENV", default_value = "development", possible_values = &POSSIBLE_ENV)]
+    pub env: String,
 
     /// Do not send analytics to Meili.
     #[structopt(long, env = "MEILI_NO_ANALYTICS")]

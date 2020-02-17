@@ -5,12 +5,12 @@ use tide::{Request, Response};
 
 use crate::error::{ResponseError, SResult};
 use crate::helpers::tide::RequestExt;
-use crate::models::token::ACL::*;
+use crate::helpers::tide::ACL::*;
 use crate::routes::document::IndexUpdateResponse;
 use crate::Data;
 
 pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsRead)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
@@ -106,7 +106,7 @@ pub struct UpdateSettings {
 }
 
 pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let settings_update: UpdateSettings =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
@@ -131,7 +131,7 @@ pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let mut writer = db.update_write_txn()?;
@@ -156,7 +156,7 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn get_rules(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsRead)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
@@ -170,7 +170,7 @@ pub async fn get_rules(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn update_rules(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let ranking_rules: Option<Vec<String>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
@@ -190,7 +190,7 @@ pub async fn update_rules(mut ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn delete_rules(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let mut writer = db.update_write_txn()?;
@@ -209,7 +209,7 @@ pub async fn delete_rules(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn get_distinct(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsRead)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
@@ -222,7 +222,7 @@ pub async fn get_distinct(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let ranking_distinct: Option<String> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
@@ -242,7 +242,7 @@ pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn delete_distinct(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let mut writer = db.update_write_txn()?;
@@ -261,7 +261,7 @@ pub async fn delete_distinct(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn get_identifier(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsRead)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
@@ -274,7 +274,7 @@ pub async fn get_identifier(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsRead)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
@@ -290,7 +290,7 @@ pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn update_searchable(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let searchable_attributes: Option<Vec<String>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
@@ -310,7 +310,7 @@ pub async fn update_searchable(mut ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn delete_searchable(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
 
@@ -328,7 +328,7 @@ pub async fn delete_searchable(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn displayed(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsRead)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
@@ -348,7 +348,7 @@ pub async fn displayed(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn update_displayed(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let displayed_attributes: Option<HashSet<String>> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
@@ -368,7 +368,7 @@ pub async fn update_displayed(mut ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn delete_displayed(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
 
@@ -386,7 +386,7 @@ pub async fn delete_displayed(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn get_index_new_fields(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsRead)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
@@ -401,7 +401,7 @@ pub async fn get_index_new_fields(ctx: Request<Data>) -> SResult<Response> {
 }
 
 pub async fn update_index_new_fields(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(SettingsWrite)?;
+    ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let index_new_fields: Option<bool> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
