@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/bulma.min.css">
-    <title>dAppBox Search</title>
+    <title>IXXO admin search</title>
     <style>
       em {
         color: hsl(204, 86%, 25%);
@@ -80,6 +80,11 @@
         padding-left: 10px;
         color: rgba(0,0,0,.9);
       }
+
+	.img-fluid { max-width: 100%; height: auto;}
+      
+      .logo-white img { width: 120px;}
+
     </style>
   </head>
   <body>
@@ -87,11 +92,14 @@
     <section class="hero is-light">
       <div class="hero-body">
         <div class="container">
+          <a class=" bold logo-white" href="http://ixxo.io"> <img
+            src="http://ixxo.io/images/logo.png" class="img-fluid">
+          </a>
           <h1 class="title">
-            dAppBox Search
+            WeAreMad search admin test page 
           </h1>
-          <h2 class="subtitle">
-            Search in dappbox documents
+          <h2 class="subtitle"> 
+            This dashboard will help you to check the current search API for product search.
           </h2>
         </div>
       </div>
@@ -113,7 +121,7 @@
                     </span>
                   </p>
                   <p class="control">
-                    <input id="search" class="input" type="text" autofocus placeholder="e.g. George Clooney">
+                    <input id="search" class="input" type="text" autofocus placeholder="e.g. Rolex Daytona">
                   </p>
                 </div>
               </div>
@@ -161,7 +169,7 @@
         if (e.selectedIndex == -1) { return }
         var index = e.options[e.selectedIndex].value;
 
-        let theUrl = `${baseUrl}/indexes/${index}/search?q=${search.value}&attributesToHighlight=*`;
+        let theUrl = `${baseUrl}/indexes/${index}/search?q=${search.value}&attributesToHighlight=*&limit=40`;
 
         if (lastRequest) { lastRequest.abort() }
         lastRequest = new XMLHttpRequest();
