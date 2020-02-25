@@ -93,7 +93,7 @@ pub enum RankingRule {
     Proximity,
     Attribute,
     WordsPosition,
-    Exact,
+    Exactness,
     Asc(String),
     Dsc(String),
 }
@@ -106,7 +106,7 @@ impl ToString for RankingRule {
             RankingRule::Proximity => "_proximity".to_string(),
             RankingRule::Attribute => "_attribute".to_string(),
             RankingRule::WordsPosition => "_words_position".to_string(),
-            RankingRule::Exact => "_exact".to_string(),
+            RankingRule::Exactness => "_exactness".to_string(),
             RankingRule::Asc(field) => format!("asc({})", field),
             RankingRule::Dsc(field) => format!("dsc({})", field),
         }
@@ -123,7 +123,7 @@ impl FromStr for RankingRule {
             "_proximity" => RankingRule::Proximity,
             "_attribute" => RankingRule::Attribute,
             "_words_position" => RankingRule::WordsPosition,
-            "_exact" => RankingRule::Exact,
+            "_exactness" => RankingRule::Exactness,
             _ => {
                 let captures = RANKING_RULE_REGEX.captures(s).ok_or(RankingRuleConversionError)?;
                 match (captures.get(1).map(|m| m.as_str()), captures.get(2)) {

@@ -632,7 +632,7 @@ fn search_with_settings_basic() {
         "_attribute",
         "_words_position",
         "dsc(popularity)",
-        "_exact",
+        "_exactness",
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
@@ -738,7 +738,7 @@ fn search_with_settings_stop_words() {
         "_attribute",
         "_words_position",
         "dsc(popularity)",
-        "_exact",
+        "_exactness",
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
@@ -845,7 +845,7 @@ fn search_with_settings_synonyms() {
         "_attribute",
         "_words_position",
         "dsc(popularity)",
-        "_exact",
+        "_exactness",
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
@@ -957,7 +957,7 @@ fn search_with_settings_ranking_rules() {
         "_attribute",
         "_words_position",
         "asc(vote_average)",
-        "_exact",
+        "_exactness",
         "dsc(popularity)"
       ],
       "rankingDistinct": null,
@@ -1064,7 +1064,7 @@ fn search_with_settings_searchable_attributes() {
         "_attribute",
         "_words_position",
         "dsc(popularity)",
-        "_exact",
+        "_exactness",
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
@@ -1170,7 +1170,7 @@ fn search_with_settings_displayed_attributes() {
         "_attribute",
         "_words_position",
         "dsc(popularity)",
-        "_exact",
+        "_exactness",
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,
@@ -1241,7 +1241,7 @@ fn search_with_settings_searchable_attributes_2() {
         "_attribute",
         "_words_position",
         "dsc(popularity)",
-        "_exact",
+        "_exactness",
         "dsc(vote_average)"
       ],
       "rankingDistinct": null,

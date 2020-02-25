@@ -6,10 +6,10 @@ use crate::{RawDocument, MResult};
 use crate::bucket_sort::BareMatch;
 use super::{Criterion, Context, ContextMut};
 
-pub struct Exact;
+pub struct Exactness;
 
-impl Criterion for Exact {
-    fn name(&self) -> &str { "exact" }
+impl Criterion for Exactness {
+    fn name(&self) -> &str { "exactness" }
 
     fn prepare<'h, 'p, 'tag, 'txn, 'q, 'r>(
         &self,

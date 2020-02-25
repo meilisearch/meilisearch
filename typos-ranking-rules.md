@@ -50,10 +50,10 @@ What is a bucket sort? We sort all the documents with the first rule, for all do
 
 Here is the list of all the default rules that are executed in this specific order by default:
 
-- _Number of Typos_ - The less typos there are beween the query words and the document words, the better is the document.
-- _Number of Words_ - A document containing more of the query words will be more important than one that contains less.
-- _Words Proximity_ - The closer the query words are in the document the better is the document.
+- _Typo_ - The less typos there are beween the query words and the document words, the better is the document.
+- _Words_ - A document containing more of the query words will be more important than one that contains less.
+- _Proximity_ - The closer the query words are in the document the better is the document.
 - _Attribute_ - A document containing the query words in a more important attribute than another document is considered better.
-- _Position_ - A document containing the query words at the start of an attribute is considered better than a document that contains them at the end.
-- _Exact_ - A document containing the query words in their exact form, not only a prefix of them, is considered better.
+- _Words Position_ - A document containing the query words at the start of an attribute is considered better than a document that contains them at the end.
+- _Exactness_ - A document containing the query words in their exact form, not only a prefix of them, is considered better.
 

@@ -16,7 +16,7 @@ mod words;
 mod proximity;
 mod attribute;
 mod words_position;
-mod exact;
+mod exactness;
 mod document_id;
 mod sort_by_attr;
 
@@ -25,7 +25,7 @@ pub use self::words::Words;
 pub use self::proximity::Proximity;
 pub use self::attribute::Attribute;
 pub use self::words_position::WordsPosition;
-pub use self::exact::Exact;
+pub use self::exactness::Exactness;
 pub use self::document_id::DocumentId;
 pub use self::sort_by_attr::SortByAttr;
 
@@ -124,7 +124,7 @@ impl<'a> Default for Criteria<'a> {
             .add(Proximity)
             .add(Attribute)
             .add(WordsPosition)
-            .add(Exact)
+            .add(Exactness)
             .add(DocumentId)
             .build()
     }
