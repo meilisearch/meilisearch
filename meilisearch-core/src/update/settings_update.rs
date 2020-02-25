@@ -58,12 +58,12 @@ pub fn apply_settings_update(
         UpdateState::Nothing => (),
     }
 
-    match settings.ranking_distinct {
+    match settings.distinct_attribute {
         UpdateState::Update(v) => {
-            index.main.put_ranking_distinct(writer, &v)?;
+            index.main.put_distinct_attribute(writer, &v)?;
         },
         UpdateState::Clear => {
-            index.main.delete_ranking_distinct(writer)?;
+            index.main.delete_distinct_attribute(writer)?;
         },
         UpdateState::Nothing => (),
     }

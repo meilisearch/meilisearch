@@ -82,7 +82,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .post(|ctx| into_response(setting::update_rules(ctx)))
         .delete(|ctx| into_response(setting::delete_rules(ctx)));
 
-    app.at("/indexes/:index/settings/ranking-distinct")
+    app.at("/indexes/:index/settings/distinct-attribute")
         .get(|ctx| into_response(setting::get_distinct(ctx)))
         .post(|ctx| into_response(setting::update_distinct(ctx)))
         .delete(|ctx| into_response(setting::delete_distinct(ctx)));

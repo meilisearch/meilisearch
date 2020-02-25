@@ -16,7 +16,7 @@ pub struct Settings {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub ranking_rules: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub ranking_distinct: Option<Option<String>>,
+    pub distinct_attribute: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub searchable_attributes: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
@@ -49,7 +49,7 @@ impl Settings {
 
         Ok(SettingsUpdate {
             ranking_rules,
-            ranking_distinct: settings.ranking_distinct.into(),
+            distinct_attribute: settings.distinct_attribute.into(),
             identifier: UpdateState::Nothing,
             searchable_attributes: settings.searchable_attributes.into(),
             displayed_attributes: settings.displayed_attributes.into(),
@@ -155,7 +155,7 @@ impl RankingRule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettingsUpdate {
     pub ranking_rules: UpdateState<Vec<RankingRule>>,
-    pub ranking_distinct: UpdateState<String>,
+    pub distinct_attribute: UpdateState<String>,
     pub identifier: UpdateState<String>,
     pub searchable_attributes: UpdateState<Vec<String>>,
     pub displayed_attributes: UpdateState<HashSet<String>>,
@@ -168,7 +168,7 @@ impl Default for SettingsUpdate {
     fn default() -> Self {
         Self {
             ranking_rules: UpdateState::Nothing,
-            ranking_distinct: UpdateState::Nothing,
+            distinct_attribute: UpdateState::Nothing,
             identifier: UpdateState::Nothing,
             searchable_attributes: UpdateState::Nothing,
             displayed_attributes: UpdateState::Nothing,

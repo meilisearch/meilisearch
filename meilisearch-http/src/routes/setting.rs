@@ -50,7 +50,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
         Some(rules) => Some(rules.iter().map(|r| r.to_string()).collect()),
         None => None,
     };
-    let ranking_distinct = index.main.ranking_distinct(&reader)?;
+    let distinct_attribute = index.main.distinct_attribute(&reader)?;
 
     let schema = index.main.schema(&reader)?;
 
@@ -81,7 +81,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
 
     let settings = Settings {
         ranking_rules: Some(ranking_rules),
-        ranking_distinct: Some(ranking_distinct),
+        distinct_attribute: Some(distinct_attribute),
         searchable_attributes,
         displayed_attributes,
         stop_words: Some(stop_words),
@@ -96,7 +96,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateSettings {
     pub ranking_rules: Option<Vec<String>>,
-    pub ranking_distinct: Option<String>,
+    pub distinct_attribute: Option<String>,
     pub identifier: Option<String>,
     pub searchable_attributes: Option<Vec<String>>,
     pub displayed_attributes: Option<HashSet<String>>,
@@ -114,7 +114,7 @@ pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
 
     let settings = Settings {
         ranking_rules: Some(settings_update.ranking_rules),
-        ranking_distinct: Some(settings_update.ranking_distinct),
+        distinct_attribute: Some(settings_update.distinct_attribute),
         searchable_attributes: Some(settings_update.searchable_attributes),
         displayed_attributes: Some(settings_update.displayed_attributes),
         stop_words: Some(settings_update.stop_words),
@@ -138,7 +138,7 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
 
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
-        ranking_distinct: UpdateState::Clear,
+        distinct_attribute: UpdateState::Clear,
         identifier: UpdateState::Clear,
         searchable_attributes: UpdateState::Clear,
         displayed_attributes: UpdateState::Clear,
@@ -214,22 +214,22 @@ pub async fn get_distinct(ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
 
-    let ranking_distinct = index.main.ranking_distinct(&reader)?;
+    let distinct_attribute = index.main.distinct_attribute(&reader)?;
 
     Ok(tide::Response::new(200)
-        .body_json(&ranking_distinct)
+        .body_json(&distinct_attribute)
         .unwrap())
 }
 
 pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Private)?;
     let index = ctx.index()?;
-    let ranking_distinct: Option<String> =
+    let distinct_attribute: Option<String> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
-        ranking_distinct: Some(ranking_distinct),
+        distinct_attribute: Some(distinct_attribute),
         ..Settings::default()
     };
 
@@ -248,7 +248,7 @@ pub async fn delete_distinct(ctx: Request<Data>) -> SResult<Response> {
     let mut writer = db.update_write_txn()?;
 
     let settings = SettingsUpdate {
-        ranking_distinct: UpdateState::Clear,
+        distinct_attribute: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
