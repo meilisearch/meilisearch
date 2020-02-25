@@ -68,12 +68,12 @@ pub fn apply_settings_update(
         UpdateState::Nothing => (),
     }
 
-    match settings.index_new_fields {
+    match settings.accept_new_fields {
         UpdateState::Update(v) => {
-            schema.set_index_new_fields(v);
+            schema.set_accept_new_fields(v);
         },
         UpdateState::Clear => {
-            schema.set_index_new_fields(true);
+            schema.set_accept_new_fields(true);
         },
         UpdateState::Nothing => (),
     }

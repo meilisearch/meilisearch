@@ -26,7 +26,7 @@ pub struct Settings {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub index_new_fields: Option<Option<bool>>,
+    pub accept_new_fields: Option<Option<bool>>,
 }
 
 // Any value that is present is considered Some value, including null.
@@ -55,7 +55,7 @@ impl Settings {
             displayed_attributes: settings.displayed_attributes.into(),
             stop_words: settings.stop_words.into(),
             synonyms: settings.synonyms.into(),
-            index_new_fields: settings.index_new_fields.into(),
+            accept_new_fields: settings.accept_new_fields.into(),
         })
     }
 }
@@ -161,7 +161,7 @@ pub struct SettingsUpdate {
     pub displayed_attributes: UpdateState<HashSet<String>>,
     pub stop_words: UpdateState<BTreeSet<String>>,
     pub synonyms: UpdateState<BTreeMap<String, Vec<String>>>,
-    pub index_new_fields: UpdateState<bool>,
+    pub accept_new_fields: UpdateState<bool>,
 }
 
 impl Default for SettingsUpdate {
@@ -174,7 +174,7 @@ impl Default for SettingsUpdate {
             displayed_attributes: UpdateState::Nothing,
             stop_words: UpdateState::Nothing,
             synonyms: UpdateState::Nothing,
-            index_new_fields: UpdateState::Nothing,
+            accept_new_fields: UpdateState::Nothing,
         }
     }
 }

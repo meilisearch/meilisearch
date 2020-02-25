@@ -77,7 +77,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
             Some(attrs)
         }
     });
-    let index_new_fields = schema.map(|s| s.index_new_fields());
+    let accept_new_fields = schema.map(|s| s.accept_new_fields());
 
     let settings = Settings {
         ranking_rules: Some(ranking_rules),
@@ -86,7 +86,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
         displayed_attributes,
         stop_words: Some(stop_words),
         synonyms: Some(synonyms),
-        index_new_fields: Some(index_new_fields),
+        accept_new_fields: Some(accept_new_fields),
     };
 
     Ok(tide::Response::new(200).body_json(&settings).unwrap())
@@ -102,7 +102,7 @@ pub struct UpdateSettings {
     pub displayed_attributes: Option<HashSet<String>>,
     pub stop_words: Option<BTreeSet<String>>,
     pub synonyms: Option<BTreeMap<String, Vec<String>>>,
-    pub index_new_fields: Option<bool>,
+    pub accept_new_fields: Option<bool>,
 }
 
 pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
@@ -119,7 +119,7 @@ pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
         displayed_attributes: Some(settings_update.displayed_attributes),
         stop_words: Some(settings_update.stop_words),
         synonyms: Some(settings_update.synonyms),
-        index_new_fields: Some(settings_update.index_new_fields),
+        accept_new_fields: Some(settings_update.accept_new_fields),
     };
 
     let mut writer = db.update_write_txn()?;
@@ -144,7 +144,7 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
         displayed_attributes: UpdateState::Clear,
         stop_words: UpdateState::Clear,
         synonyms: UpdateState::Clear,
-        index_new_fields: UpdateState::Clear,
+        accept_new_fields: UpdateState::Clear,
     };
 
     let update_id = index.settings_update(&mut writer, settings)?;
@@ -385,7 +385,7 @@ pub async fn delete_displayed(ctx: Request<Data>) -> SResult<Response> {
     Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
-pub async fn get_index_new_fields(ctx: Request<Data>) -> SResult<Response> {
+pub async fn get_accept_new_fields(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Private)?;
     let index = ctx.index()?;
     let db = &ctx.state().db;
@@ -393,22 +393,22 @@ pub async fn get_index_new_fields(ctx: Request<Data>) -> SResult<Response> {
 
     let schema = index.main.schema(&reader)?;
 
-    let index_new_fields = schema.map(|s| s.index_new_fields());
+    let accept_new_fields = schema.map(|s| s.accept_new_fields());
 
     Ok(tide::Response::new(200)
-        .body_json(&index_new_fields)
+        .body_json(&accept_new_fields)
         .unwrap())
 }
 
-pub async fn update_index_new_fields(mut ctx: Request<Data>) -> SResult<Response> {
+pub async fn update_accept_new_fields(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Private)?;
     let index = ctx.index()?;
-    let index_new_fields: Option<bool> =
+    let accept_new_fields: Option<bool> =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
 
     let settings = Settings {
-        index_new_fields: Some(index_new_fields),
+        accept_new_fields: Some(accept_new_fields),
         ..Settings::default()
     };
 

@@ -101,8 +101,8 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .delete(|ctx| into_response(setting::delete_displayed(ctx)));
 
     app.at("/indexes/:index/settings/index-new-field")
-        .get(|ctx| into_response(setting::get_index_new_fields(ctx)))
-        .post(|ctx| into_response(setting::update_index_new_fields(ctx)));
+        .get(|ctx| into_response(setting::get_accept_new_fields(ctx)))
+        .post(|ctx| into_response(setting::update_accept_new_fields(ctx)));
 
     app.at("/indexes/:index/settings/synonyms")
         .get(|ctx| into_response(synonym::get(ctx)))
