@@ -1064,7 +1064,7 @@ mod tests {
                         "_proximity",
                         "_attribute",
                         "_words_position",
-                        "_exact",
+                        "_exactness",
                         "dsc(release_date)"
                     ],
                     "searchableAttributes": ["name", "release_date"],

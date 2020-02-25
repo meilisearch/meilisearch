@@ -63,7 +63,7 @@ pub fn enrich_server_with_movies_settings(
             "_attribute",
             "_words_position",
             "dsc(popularity)",
-            "_exact",
+            "_exactness",
             "dsc(vote_average)",
         ],
         "rankingDistinct": null,
