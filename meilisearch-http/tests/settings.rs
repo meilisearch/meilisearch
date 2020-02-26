@@ -41,12 +41,12 @@ fn write_all_and_delete() {
 
     let json = json!({
         "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exactness",
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "words_position",
+            "exactness",
             "dsc(release_date)",
             "dsc(rank)",
         ],
@@ -126,10 +126,33 @@ fn write_all_and_delete() {
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
 
     let json = json!({
-        "rankingRules": null,
+        "rankingRules": [
+          "typo",
+          "words",
+          "proximity",
+          "attribute",
+          "words_position",
+          "exactness"
+        ],
         "distinctAttribute": null,
-        "searchableAttributes": null,
-        "displayedAttributes": null,
+        "searchableAttributes": [
+          "id",
+          "release_date",
+          "poster",
+          "description",
+          "title",
+          "movie_id",
+          "rank"
+        ],
+        "displayedAttributes": [
+          "movie_id",
+          "description",
+          "poster",
+          "id",
+          "release_date",
+          "rank",
+          "title"
+        ],
         "stopWords": null,
         "synonyms": null,
         "acceptNewFields": true,
@@ -169,12 +192,12 @@ fn write_all_and_update() {
 
     let json = json!({
         "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exactness",
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "words_position",
+            "exactness",
             "dsc(release_date)",
             "dsc(rank)",
         ],
@@ -235,12 +258,12 @@ fn write_all_and_update() {
 
     let json_update = json!({
         "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exactness",
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "words_position",
+            "exactness",
             "dsc(release_date)",
         ],
         "searchableAttributes": [
@@ -288,12 +311,12 @@ fn write_all_and_update() {
 
     let res_expected = json!({
         "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exactness",
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "words_position",
+            "exactness",
             "dsc(release_date)",
         ],
         "distinctAttribute": null,

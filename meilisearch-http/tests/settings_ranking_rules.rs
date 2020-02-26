@@ -39,12 +39,12 @@ fn write_all_and_delete() {
     // 2 - Send the settings
 
     let json = json!([
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
-        "_exactness",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
+        "exactness",
         "dsc(release_date)",
         "dsc(rank)",
     ]);
@@ -95,7 +95,14 @@ fn write_all_and_delete() {
     block_on(res.into_body().read_to_end(&mut buf)).unwrap();
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
 
-    let json = json!(null);
+    let json = json!([
+      "typo",
+      "words",
+      "proximity",
+      "attribute",
+      "words_position",
+      "exactness"
+    ]);
 
     assert_json_eq!(json, res_value, ordered: false);
 }
@@ -130,12 +137,12 @@ fn write_all_and_update() {
     // 2 - Send the settings
 
     let json = json!([
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
-        "_exactness",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
+        "exactness",
         "dsc(release_date)",
         "dsc(rank)",
     ]);
@@ -167,12 +174,12 @@ fn write_all_and_update() {
     // 4 - Update all settings
 
     let json_update = json!([
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
-        "_exactness",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
+        "exactness",
         "dsc(release_date)",
     ]);
 
@@ -199,12 +206,12 @@ fn write_all_and_update() {
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
 
     let res_expected = json!([
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
-        "_exactness",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
+        "exactness",
         "dsc(release_date)",
     ]);
 

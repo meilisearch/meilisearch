@@ -57,13 +57,13 @@ pub fn enrich_server_with_movies_settings(
 ) -> Result<(), Box<dyn Error>> {
     let json = json!({
         "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "words_position",
             "dsc(popularity)",
-            "_exactness",
+            "exactness",
             "dsc(vote_average)",
         ],
         "distinctAttribute": null,

@@ -626,13 +626,13 @@ fn search_with_settings_basic() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
       "distinctAttribute": null,
@@ -732,13 +732,13 @@ fn search_with_settings_stop_words() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
       "distinctAttribute": null,
@@ -839,13 +839,13 @@ fn search_with_settings_synonyms() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
       "distinctAttribute": null,
@@ -951,13 +951,13 @@ fn search_with_settings_ranking_rules() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
         "asc(vote_average)",
-        "_exactness",
+        "exactness",
         "dsc(popularity)"
       ],
       "distinctAttribute": null,
@@ -1058,13 +1058,13 @@ fn search_with_settings_searchable_attributes() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
       "distinctAttribute": null,
@@ -1164,13 +1164,13 @@ fn search_with_settings_displayed_attributes() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
       "distinctAttribute": null,
@@ -1235,13 +1235,13 @@ fn search_with_settings_searchable_attributes_2() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "words_position",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
       "distinctAttribute": null,
