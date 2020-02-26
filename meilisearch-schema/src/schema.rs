@@ -190,6 +190,25 @@ impl Schema {
         Ok(())
     }
 
+    pub fn set_all_fields_indexed(&mut self) {
+        self.indexed.clear();
+        self.indexed_map.clear();
+
+        for (_name, id) in self.fields_map.iter() {
+            let pos = self.indexed.len() as u16;
+            self.indexed.push(*id);
+            self.indexed_map.insert(*id, pos.into());
+        }
+    }
+
+    pub fn set_all_fields_displayed(&mut self) {
+        self.displayed.clear();
+
+        for (_name, id) in self.fields_map.iter() {
+            self.displayed.insert(*id);
+        }
+    }
+
     pub fn accept_new_fields(&self) -> bool {
         self.accept_new_fields
     }
