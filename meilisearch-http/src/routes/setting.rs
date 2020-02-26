@@ -1,4 +1,4 @@
-use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState};
+use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use tide::{Request, Response};
@@ -46,10 +46,12 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
         None
     };
 
-    let ranking_rules = match index.main.ranking_rules(&reader)? {
-        Some(rules) => Some(rules.iter().map(|r| r.to_string()).collect()),
-        None => None,
-    };
+    let ranking_rules = index.main.ranking_rules(&reader)?
+        .unwrap_or(DEFAULT_RANKING_RULES.to_vec())
+        .into_iter()
+        .map(|r| r.to_string())
+        .collect();
+
     let distinct_attribute = index.main.distinct_attribute(&reader)?;
 
     let schema = index.main.schema(&reader)?;
@@ -80,7 +82,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let accept_new_fields = schema.map(|s| s.accept_new_fields());
 
     let settings = Settings {
-        ranking_rules: Some(ranking_rules),
+        ranking_rules: Some(Some(ranking_rules)),
         distinct_attribute: Some(distinct_attribute),
         searchable_attributes,
         displayed_attributes,
@@ -161,10 +163,11 @@ pub async fn get_rules(ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
 
-    let ranking_rules: Option<Vec<String>> = match index.main.ranking_rules(&reader)? {
-        Some(rules) => Some(rules.iter().map(|r| r.to_string()).collect()),
-        None => None,
-    };
+    let ranking_rules = index.main.ranking_rules(&reader)?
+        .unwrap_or(DEFAULT_RANKING_RULES.to_vec())
+        .into_iter()
+        .map(|r| r.to_string())
+        .collect::<Vec<String>>();
 
     Ok(tide::Response::new(200).body_json(&ranking_rules).unwrap())
 }

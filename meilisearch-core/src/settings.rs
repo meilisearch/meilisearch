@@ -5,6 +5,10 @@ use std::iter::IntoIterator;
 use serde::{Deserialize, Deserializer, Serialize};
 use once_cell::sync::Lazy;
 
+use self::RankingRule::*;
+
+pub const DEFAULT_RANKING_RULES: [RankingRule; 6] = [Typo, Words, Proximity, Attribute, WordsPosition, Exactness];
+
 static RANKING_RULE_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
     let regex = regex::Regex::new(r"(asc|dsc)\(([a-zA-Z0-9-_]*)\)").unwrap();
     regex
@@ -98,17 +102,17 @@ pub enum RankingRule {
     Dsc(String),
 }
 
-impl ToString for RankingRule {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for RankingRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            RankingRule::Typo => "_typo".to_string(),
-            RankingRule::Words => "_words".to_string(),
-            RankingRule::Proximity => "_proximity".to_string(),
-            RankingRule::Attribute => "_attribute".to_string(),
-            RankingRule::WordsPosition => "_words_position".to_string(),
-            RankingRule::Exactness => "_exactness".to_string(),
-            RankingRule::Asc(field) => format!("asc({})", field),
-            RankingRule::Dsc(field) => format!("dsc({})", field),
+            RankingRule::Typo => write!(f, "_typo"),
+            RankingRule::Words => write!(f, "_words"),
+            RankingRule::Proximity => write!(f, "_proximity"),
+            RankingRule::Attribute => write!(f, "_attribute"),
+            RankingRule::WordsPosition => write!(f, "_words_position"),
+            RankingRule::Exactness => write!(f, "_exactness"),
+            RankingRule::Asc(field) => write!(f, "asc({})", field),
+            RankingRule::Dsc(field) => write!(f, "dsc({})", field),
         }
     }
 }
