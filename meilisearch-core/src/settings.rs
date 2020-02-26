@@ -105,12 +105,12 @@ pub enum RankingRule {
 impl std::fmt::Display for RankingRule {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            RankingRule::Typo => write!(f, "_typo"),
-            RankingRule::Words => write!(f, "_words"),
-            RankingRule::Proximity => write!(f, "_proximity"),
-            RankingRule::Attribute => write!(f, "_attribute"),
-            RankingRule::WordsPosition => write!(f, "_words_position"),
-            RankingRule::Exactness => write!(f, "_exactness"),
+            RankingRule::Typo => write!(f, "typo"),
+            RankingRule::Words => write!(f, "words"),
+            RankingRule::Proximity => write!(f, "proximity"),
+            RankingRule::Attribute => write!(f, "attribute"),
+            RankingRule::WordsPosition => write!(f, "words_position"),
+            RankingRule::Exactness => write!(f, "exactness"),
             RankingRule::Asc(field) => write!(f, "asc({})", field),
             RankingRule::Dsc(field) => write!(f, "dsc({})", field),
         }
@@ -122,12 +122,12 @@ impl FromStr for RankingRule {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let rule = match s {
-            "_typo" => RankingRule::Typo,
-            "_words" => RankingRule::Words,
-            "_proximity" => RankingRule::Proximity,
-            "_attribute" => RankingRule::Attribute,
-            "_words_position" => RankingRule::WordsPosition,
-            "_exactness" => RankingRule::Exactness,
+            "typo" => RankingRule::Typo,
+            "words" => RankingRule::Words,
+            "proximity" => RankingRule::Proximity,
+            "attribute" => RankingRule::Attribute,
+            "words_position" => RankingRule::WordsPosition,
+            "exactness" => RankingRule::Exactness,
             _ => {
                 let captures = RANKING_RULE_REGEX.captures(s).ok_or(RankingRuleConversionError)?;
                 match (captures.get(1).map(|m| m.as_str()), captures.get(2)) {
