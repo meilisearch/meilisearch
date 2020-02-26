@@ -18,19 +18,21 @@ mod analytics;
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 pub fn main() -> Result<(), MainError> {
-
     let opt = Opt::from_args();
 
     match opt.env.as_ref() {
         "production" => {
             if opt.master_key.is_none() {
-                return Err("In production mode, the environment variable MEILI_MASTER_KEY is mandatory".into());
+                return Err(
+                    "In production mode, the environment variable MEILI_MASTER_KEY is mandatory"
+                        .into(),
+                );
             }
             env_logger::init();
-        },
+        }
         "development" => {
             env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
-        },
+        }
         _ => unreachable!(),
     }
 
@@ -58,7 +60,6 @@ pub fn main() -> Result<(), MainError> {
     Ok(())
 }
 
-
 pub fn print_launch_resume(opt: &Opt, data: &Data) {
     let ascii_name = r#"
 888b     d888          d8b 888 d8b  .d8888b.                                    888
@@ -77,8 +78,14 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
     info!("Start server on: {:?}", opt.http_addr);
     info!("Environment: {:?}", opt.env);
     info!("Commit SHA: {:?}", env!("VERGEN_SHA").to_string());
-    info!("Build date: {:?}", env!("VERGEN_BUILD_TIMESTAMP").to_string());
-    info!("Package version: {:?}", env!("CARGO_PKG_VERSION").to_string());
+    info!(
+        "Build date: {:?}",
+        env!("VERGEN_BUILD_TIMESTAMP").to_string()
+    );
+    info!(
+        "Package version: {:?}",
+        env!("CARGO_PKG_VERSION").to_string()
+    );
 
     if let Some(master_key) = &data.api_keys.master {
         info!("Master Key: {:?}", master_key);

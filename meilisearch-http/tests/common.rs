@@ -179,7 +179,7 @@ pub fn wait_update_id(server: &mut TestBackend<Service<Data>>, update_id: u64) {
         let response: Value = serde_json::from_slice(&buf).unwrap();
 
         if response["status"] == "processed" {
-            return
+            return;
         }
         block_on(sleep(Duration::from_secs(1)));
     }

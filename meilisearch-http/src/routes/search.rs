@@ -7,10 +7,10 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use tide::{Request, Response};
 
-use crate::helpers::tide::ACL::*;
 use crate::error::{ResponseError, SResult};
 use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit};
 use crate::helpers::tide::RequestExt;
+use crate::helpers::tide::ACL::*;
 use crate::Data;
 
 #[derive(Deserialize)]

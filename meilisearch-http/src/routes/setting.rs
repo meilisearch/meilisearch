@@ -46,7 +46,9 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
         None
     };
 
-    let ranking_rules = index.main.ranking_rules(&reader)?
+    let ranking_rules = index
+        .main
+        .ranking_rules(&reader)?
         .unwrap_or(DEFAULT_RANKING_RULES.to_vec())
         .into_iter()
         .map(|r| r.to_string())
@@ -57,7 +59,8 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let schema = index.main.schema(&reader)?;
 
     let searchable_attributes = schema.clone().map(|s| {
-        let attrs = s.indexed_name()
+        let attrs = s
+            .indexed_name()
             .iter()
             .map(|s| (*s).to_string())
             .collect::<Vec<String>>();
@@ -69,7 +72,8 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     });
 
     let displayed_attributes = schema.clone().map(|s| {
-        let attrs = s.displayed_name()
+        let attrs = s
+            .displayed_name()
             .iter()
             .map(|s| (*s).to_string())
             .collect::<HashSet<String>>();
@@ -163,7 +167,9 @@ pub async fn get_rules(ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
 
-    let ranking_rules = index.main.ranking_rules(&reader)?
+    let ranking_rules = index
+        .main
+        .ranking_rules(&reader)?
         .unwrap_or(DEFAULT_RANKING_RULES.to_vec())
         .into_iter()
         .map(|r| r.to_string())

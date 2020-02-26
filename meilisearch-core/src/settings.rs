@@ -105,12 +105,12 @@ pub enum RankingRule {
 impl std::fmt::Display for RankingRule {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            RankingRule::Typo => write!(f, "typo"),
-            RankingRule::Words => write!(f, "words"),
-            RankingRule::Proximity => write!(f, "proximity"),
-            RankingRule::Attribute => write!(f, "attribute"),
-            RankingRule::WordsPosition => write!(f, "words_position"),
-            RankingRule::Exactness => write!(f, "exactness"),
+            RankingRule::Typo => f.write_str("typo"),
+            RankingRule::Words => f.write_str("words"),
+            RankingRule::Proximity => f.write_str("proximity"),
+            RankingRule::Attribute => f.write_str("attribute"),
+            RankingRule::WordsPosition => f.write_str("wordsPosition"),
+            RankingRule::Exactness => f.write_str("exactness"),
             RankingRule::Asc(field) => write!(f, "asc({})", field),
             RankingRule::Dsc(field) => write!(f, "dsc({})", field),
         }

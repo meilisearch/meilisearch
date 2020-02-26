@@ -84,7 +84,7 @@ pub fn apply_settings_update(
             must_reindex = true;
         },
         UpdateState::Clear => {
-            schema.set_all_fields_indexed();
+            schema.set_all_fields_as_indexed();
             must_reindex = true;
         },
         UpdateState::Nothing => (),
@@ -92,7 +92,7 @@ pub fn apply_settings_update(
     match settings.displayed_attributes.clone() {
         UpdateState::Update(v) => schema.update_displayed(v)?,
         UpdateState::Clear => {
-            schema.set_all_fields_displayed();
+            schema.set_all_fields_as_displayed();
         },
         UpdateState::Nothing => (),
     }

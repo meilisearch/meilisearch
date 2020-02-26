@@ -42,7 +42,7 @@ pub async fn list_indexes(ctx: Request<Data>) -> SResult<Response> {
 
                 let identifier = match index.main.schema(&reader) {
                     Ok(Some(schema)) => Some(schema.identifier().to_owned()),
-                    _ => None
+                    _ => None,
                 };
 
                 let index_response = IndexResponse {
@@ -89,7 +89,7 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
 
     let identifier = match index.main.schema(&reader) {
         Ok(Some(schema)) => Some(schema.identifier().to_owned()),
-        _ => None
+        _ => None,
     };
 
     let response_body = IndexResponse {
@@ -97,7 +97,7 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
         uid,
         created_at,
         updated_at,
-        identifier
+        identifier,
     };
 
     Ok(tide::Response::new(200).body_json(&response_body)?)
@@ -220,9 +220,13 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
 
     if let Some(identifier) = body.identifier {
         if let Ok(Some(_)) = index.main.schema(&writer) {
-            return Err(ResponseError::bad_request("The index identifier cannot be updated"));
+            return Err(ResponseError::bad_request(
+                "The index identifier cannot be updated",
+            ));
         }
-        index.main.put_schema(&mut writer, &Schema::with_identifier(&identifier))?;
+        index
+            .main
+            .put_schema(&mut writer, &Schema::with_identifier(&identifier))?;
     }
 
     index.main.put_updated_at(&mut writer)?;
@@ -235,7 +239,7 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
 
     let identifier = match index.main.schema(&reader) {
         Ok(Some(schema)) => Some(schema.identifier().to_owned()),
-        _ => None
+        _ => None,
     };
 
     let response_body = UpdateIndexResponse {
@@ -243,7 +247,7 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
         uid: index_uid,
         created_at,
         updated_at,
-        identifier
+        identifier,
     };
 
     Ok(tide::Response::new(200).body_json(&response_body)?)

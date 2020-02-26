@@ -52,7 +52,6 @@ impl FieldsMap {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

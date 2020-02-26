@@ -190,7 +190,7 @@ impl Schema {
         Ok(())
     }
 
-    pub fn set_all_fields_indexed(&mut self) {
+    pub fn set_all_fields_as_indexed(&mut self) {
         self.indexed.clear();
         self.indexed_map.clear();
 
@@ -201,7 +201,7 @@ impl Schema {
         }
     }
 
-    pub fn set_all_fields_displayed(&mut self) {
+    pub fn set_all_fields_as_displayed(&mut self) {
         self.displayed.clear();
 
         for (_name, id) in self.fields_map.iter() {
