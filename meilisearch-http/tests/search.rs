@@ -635,7 +635,7 @@ fn search_with_settings_basic() {
         "_exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "title",
@@ -662,7 +662,7 @@ fn search_with_settings_basic() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -741,7 +741,7 @@ fn search_with_settings_stop_words() {
         "_exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "title",
@@ -768,7 +768,7 @@ fn search_with_settings_stop_words() {
       ],
       "stopWords": ["the"],
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -848,7 +848,7 @@ fn search_with_settings_synonyms() {
         "_exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "title",
@@ -880,7 +880,7 @@ fn search_with_settings_synonyms() {
           "Iron Man"
         ]
       },
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -960,7 +960,7 @@ fn search_with_settings_ranking_rules() {
         "_exactness",
         "dsc(popularity)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "title",
@@ -987,7 +987,7 @@ fn search_with_settings_ranking_rules() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -1067,7 +1067,7 @@ fn search_with_settings_searchable_attributes() {
         "_exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "tagline",
@@ -1093,7 +1093,7 @@ fn search_with_settings_searchable_attributes() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -1173,7 +1173,7 @@ fn search_with_settings_displayed_attributes() {
         "_exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "title",
@@ -1194,7 +1194,7 @@ fn search_with_settings_displayed_attributes() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -1244,7 +1244,7 @@ fn search_with_settings_searchable_attributes_2() {
         "_exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "tagline",
@@ -1265,7 +1265,7 @@ fn search_with_settings_searchable_attributes_2() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);

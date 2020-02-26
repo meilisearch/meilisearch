@@ -66,7 +66,7 @@ pub fn enrich_server_with_movies_settings(
             "_exactness",
             "dsc(vote_average)",
         ],
-        "rankingDistinct": null,
+        "distinctAttribute": null,
         "searchableAttributes": [
             "title",
             "tagline",
@@ -92,7 +92,7 @@ pub fn enrich_server_with_movies_settings(
         ],
         "stopWords": null,
         "synonyms": null,
-        "indexNewFields": false,
+        "acceptNewFields": false,
     });
 
     let body = json.to_string().into_bytes();

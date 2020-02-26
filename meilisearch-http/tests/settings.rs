@@ -50,7 +50,7 @@ fn write_all_and_delete() {
             "dsc(release_date)",
             "dsc(rank)",
         ],
-        "rankingDistinct": "movie_id",
+        "distinctAttribute": "movie_id",
         "searchableAttributes": [
             "id",
             "movie_id",
@@ -76,7 +76,7 @@ fn write_all_and_delete() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine"],
         },
-        "indexNewFields": false,
+        "acceptNewFields": false,
     });
 
     let body = json.to_string().into_bytes();
@@ -127,12 +127,12 @@ fn write_all_and_delete() {
 
     let json = json!({
         "rankingRules": null,
-        "rankingDistinct": null,
+        "distinctAttribute": null,
         "searchableAttributes": null,
         "displayedAttributes": null,
         "stopWords": null,
         "synonyms": null,
-        "indexNewFields": true,
+        "acceptNewFields": true,
     });
 
     assert_json_eq!(json, res_value, ordered: false);
@@ -178,7 +178,7 @@ fn write_all_and_update() {
             "dsc(release_date)",
             "dsc(rank)",
         ],
-        "rankingDistinct": "movie_id",
+        "distinctAttribute": "movie_id",
         "searchableAttributes": [
             "uid",
             "movie_id",
@@ -204,7 +204,7 @@ fn write_all_and_update() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine"],
         },
-        "indexNewFields": false,
+        "acceptNewFields": false,
     });
 
     let body = json.to_string().into_bytes();
@@ -261,7 +261,7 @@ fn write_all_and_update() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
         },
-        "indexNewFields": false,
+        "acceptNewFields": false,
     });
 
     let body_update = json_update.to_string().into_bytes();
@@ -296,7 +296,7 @@ fn write_all_and_update() {
             "_exactness",
             "dsc(release_date)",
         ],
-        "rankingDistinct": null,
+        "distinctAttribute": null,
         "searchableAttributes": [
             "title",
             "description",
@@ -314,7 +314,7 @@ fn write_all_and_update() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
         },
-        "indexNewFields": false
+        "acceptNewFields": false
     });
 
     assert_json_eq!(res_expected, res_value, ordered: false);
