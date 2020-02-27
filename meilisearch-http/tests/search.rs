@@ -630,7 +630,7 @@ fn search_with_settings_basic() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "dsc(popularity)",
         "exactness",
         "dsc(vote_average)"
@@ -736,7 +736,7 @@ fn search_with_settings_stop_words() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "dsc(popularity)",
         "exactness",
         "dsc(vote_average)"
@@ -843,7 +843,7 @@ fn search_with_settings_synonyms() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "dsc(popularity)",
         "exactness",
         "dsc(vote_average)"
@@ -955,7 +955,7 @@ fn search_with_settings_ranking_rules() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "asc(vote_average)",
         "exactness",
         "dsc(popularity)"
@@ -1062,7 +1062,7 @@ fn search_with_settings_searchable_attributes() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "dsc(popularity)",
         "exactness",
         "dsc(vote_average)"
@@ -1168,7 +1168,7 @@ fn search_with_settings_displayed_attributes() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "dsc(popularity)",
         "exactness",
         "dsc(vote_average)"
@@ -1239,7 +1239,7 @@ fn search_with_settings_searchable_attributes_2() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "dsc(popularity)",
         "exactness",
         "dsc(vote_average)"

@@ -43,7 +43,7 @@ fn write_all_and_delete() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "exactness",
         "dsc(release_date)",
         "dsc(rank)",
@@ -100,7 +100,7 @@ fn write_all_and_delete() {
       "words",
       "proximity",
       "attribute",
-      "words_position",
+      "wordsPosition",
       "exactness"
     ]);
 
@@ -141,7 +141,7 @@ fn write_all_and_update() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "exactness",
         "dsc(release_date)",
         "dsc(rank)",
@@ -178,7 +178,7 @@ fn write_all_and_update() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "exactness",
         "dsc(release_date)",
     ]);
@@ -210,7 +210,7 @@ fn write_all_and_update() {
         "words",
         "proximity",
         "attribute",
-        "words_position",
+        "wordsPosition",
         "exactness",
         "dsc(release_date)",
     ]);

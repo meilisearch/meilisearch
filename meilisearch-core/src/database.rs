@@ -1063,7 +1063,7 @@ mod tests {
                         "words",
                         "proximity",
                         "attribute",
-                        "words_position",
+                        "wordsPosition",
                         "exactness",
                         "dsc(release_date)"
                     ],

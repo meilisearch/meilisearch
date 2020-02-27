@@ -61,7 +61,7 @@ pub fn enrich_server_with_movies_settings(
             "words",
             "proximity",
             "attribute",
-            "words_position",
+            "wordsPosition",
             "dsc(popularity)",
             "exactness",
             "dsc(vote_average)",

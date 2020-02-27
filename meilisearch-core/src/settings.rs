@@ -126,7 +126,7 @@ impl FromStr for RankingRule {
             "words" => RankingRule::Words,
             "proximity" => RankingRule::Proximity,
             "attribute" => RankingRule::Attribute,
-            "words_position" => RankingRule::WordsPosition,
+            "wordsPosition" => RankingRule::WordsPosition,
             "exactness" => RankingRule::Exactness,
             _ => {
                 let captures = RANKING_RULE_REGEX.captures(s).ok_or(RankingRuleConversionError)?;
