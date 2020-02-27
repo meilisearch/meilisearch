@@ -32,9 +32,11 @@ mime = "0.3.16"
 pretty-bytes = "0.2.2"
 rand = "0.7.2"
 rayon = "1.2.0"
+sentry = { version = "0.18.0", features = ["with_rustls", "with_env_logger"] }
 serde = { version = "1.0.101", features = ["derive"] }
 serde_json = { version = "1.0.41", features = ["preserve_order"] }
 serde_qs = "0.5.1"
+sha2 = "0.8.1"
 siphasher = "0.3.1"
 structopt = "0.3.3"
 sysinfo = "0.9.5"
@@ -42,7 +44,6 @@ tide = "0.6.0"
 ureq = { version = "0.11.2", features = ["tls"], default-features = false }
 walkdir = "2.2.9"
 whoami = "0.6"
-sha2 = "0.8.1"
 
 [dev-dependencies]
 http-service-mock = "0.4.0"

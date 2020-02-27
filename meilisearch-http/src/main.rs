@@ -28,8 +28,21 @@ pub fn main() -> Result<(), MainError> {
                         .into(),
                 );
             }
-            env_logger::init();
-        }
+
+            if !opt.no_analytics {
+                let _sentry = sentry::init((
+                    "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337",
+                    sentry::ClientOptions {
+                        release: sentry::release_name!(),
+                        ..Default::default()
+                    },
+                ));
+                sentry::integrations::panic::register_panic_handler();
+                sentry::integrations::env_logger::init(None, Default::default());
+            } else {
+                env_logger::init();
+            }
+        },
         "development" => {
             env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
         }
@@ -72,7 +85,7 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
 888       888  "Y8888  888 888 888  "Y8888P"   "Y8888  "Y888888 888     "Y8888P 888  888
 "#;
 
-    println!("{}", ascii_name);
+    info!("{}", ascii_name);
 
     info!("Database path: {:?}", opt.db_path);
     info!("Start server on: {:?}", opt.http_addr);
