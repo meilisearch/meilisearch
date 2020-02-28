@@ -41,16 +41,16 @@ fn write_all_and_delete() {
 
     let json = json!({
         "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exactness",
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness",
             "dsc(release_date)",
             "dsc(rank)",
         ],
-        "rankingDistinct": "movie_id",
+        "distinctAttribute": "movie_id",
         "searchableAttributes": [
             "id",
             "movie_id",
@@ -76,7 +76,7 @@ fn write_all_and_delete() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine"],
         },
-        "indexNewFields": false,
+        "acceptNewFields": false,
     });
 
     let body = json.to_string().into_bytes();
@@ -126,13 +126,36 @@ fn write_all_and_delete() {
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
 
     let json = json!({
-        "rankingRules": null,
-        "rankingDistinct": null,
-        "searchableAttributes": null,
-        "displayedAttributes": null,
+        "rankingRules": [
+          "typo",
+          "words",
+          "proximity",
+          "attribute",
+          "wordsPosition",
+          "exactness"
+        ],
+        "distinctAttribute": null,
+        "searchableAttributes": [
+          "id",
+          "release_date",
+          "poster",
+          "description",
+          "title",
+          "movie_id",
+          "rank"
+        ],
+        "displayedAttributes": [
+          "movie_id",
+          "description",
+          "poster",
+          "id",
+          "release_date",
+          "rank",
+          "title"
+        ],
         "stopWords": null,
         "synonyms": null,
-        "indexNewFields": true,
+        "acceptNewFields": true,
     });
 
     assert_json_eq!(json, res_value, ordered: false);
@@ -169,16 +192,16 @@ fn write_all_and_update() {
 
     let json = json!({
         "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exactness",
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness",
             "dsc(release_date)",
             "dsc(rank)",
         ],
-        "rankingDistinct": "movie_id",
+        "distinctAttribute": "movie_id",
         "searchableAttributes": [
             "uid",
             "movie_id",
@@ -204,7 +227,7 @@ fn write_all_and_update() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine"],
         },
-        "indexNewFields": false,
+        "acceptNewFields": false,
     });
 
     let body = json.to_string().into_bytes();
@@ -235,12 +258,12 @@ fn write_all_and_update() {
 
     let json_update = json!({
         "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exactness",
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness",
             "dsc(release_date)",
         ],
         "searchableAttributes": [
@@ -261,7 +284,7 @@ fn write_all_and_update() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
         },
-        "indexNewFields": false,
+        "acceptNewFields": false,
     });
 
     let body_update = json_update.to_string().into_bytes();
@@ -288,15 +311,15 @@ fn write_all_and_update() {
 
     let res_expected = json!({
         "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
-            "_exactness",
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness",
             "dsc(release_date)",
         ],
-        "rankingDistinct": null,
+        "distinctAttribute": null,
         "searchableAttributes": [
             "title",
             "description",
@@ -314,7 +337,7 @@ fn write_all_and_update() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
         },
-        "indexNewFields": false
+        "acceptNewFields": false
     });
 
     assert_json_eq!(res_expected, res_value, ordered: false);

@@ -5,6 +5,10 @@ use std::iter::IntoIterator;
 use serde::{Deserialize, Deserializer, Serialize};
 use once_cell::sync::Lazy;
 
+use self::RankingRule::*;
+
+pub const DEFAULT_RANKING_RULES: [RankingRule; 6] = [Typo, Words, Proximity, Attribute, WordsPosition, Exactness];
+
 static RANKING_RULE_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
     let regex = regex::Regex::new(r"(asc|dsc)\(([a-zA-Z0-9-_]*)\)").unwrap();
     regex
@@ -16,7 +20,7 @@ pub struct Settings {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub ranking_rules: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub ranking_distinct: Option<Option<String>>,
+    pub distinct_attribute: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub searchable_attributes: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
@@ -26,7 +30,7 @@ pub struct Settings {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub index_new_fields: Option<Option<bool>>,
+    pub accept_new_fields: Option<Option<bool>>,
 }
 
 // Any value that is present is considered Some value, including null.
@@ -49,13 +53,13 @@ impl Settings {
 
         Ok(SettingsUpdate {
             ranking_rules,
-            ranking_distinct: settings.ranking_distinct.into(),
+            distinct_attribute: settings.distinct_attribute.into(),
             identifier: UpdateState::Nothing,
             searchable_attributes: settings.searchable_attributes.into(),
             displayed_attributes: settings.displayed_attributes.into(),
             stop_words: settings.stop_words.into(),
             synonyms: settings.synonyms.into(),
-            index_new_fields: settings.index_new_fields.into(),
+            accept_new_fields: settings.accept_new_fields.into(),
         })
     }
 }
@@ -98,17 +102,17 @@ pub enum RankingRule {
     Dsc(String),
 }
 
-impl ToString for RankingRule {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for RankingRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            RankingRule::Typo => "_typo".to_string(),
-            RankingRule::Words => "_words".to_string(),
-            RankingRule::Proximity => "_proximity".to_string(),
-            RankingRule::Attribute => "_attribute".to_string(),
-            RankingRule::WordsPosition => "_words_position".to_string(),
-            RankingRule::Exactness => "_exactness".to_string(),
-            RankingRule::Asc(field) => format!("asc({})", field),
-            RankingRule::Dsc(field) => format!("dsc({})", field),
+            RankingRule::Typo => f.write_str("typo"),
+            RankingRule::Words => f.write_str("words"),
+            RankingRule::Proximity => f.write_str("proximity"),
+            RankingRule::Attribute => f.write_str("attribute"),
+            RankingRule::WordsPosition => f.write_str("wordsPosition"),
+            RankingRule::Exactness => f.write_str("exactness"),
+            RankingRule::Asc(field) => write!(f, "asc({})", field),
+            RankingRule::Dsc(field) => write!(f, "dsc({})", field),
         }
     }
 }
@@ -118,12 +122,12 @@ impl FromStr for RankingRule {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let rule = match s {
-            "_typo" => RankingRule::Typo,
-            "_words" => RankingRule::Words,
-            "_proximity" => RankingRule::Proximity,
-            "_attribute" => RankingRule::Attribute,
-            "_words_position" => RankingRule::WordsPosition,
-            "_exactness" => RankingRule::Exactness,
+            "typo" => RankingRule::Typo,
+            "words" => RankingRule::Words,
+            "proximity" => RankingRule::Proximity,
+            "attribute" => RankingRule::Attribute,
+            "wordsPosition" => RankingRule::WordsPosition,
+            "exactness" => RankingRule::Exactness,
             _ => {
                 let captures = RANKING_RULE_REGEX.captures(s).ok_or(RankingRuleConversionError)?;
                 match (captures.get(1).map(|m| m.as_str()), captures.get(2)) {
@@ -155,26 +159,26 @@ impl RankingRule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettingsUpdate {
     pub ranking_rules: UpdateState<Vec<RankingRule>>,
-    pub ranking_distinct: UpdateState<String>,
+    pub distinct_attribute: UpdateState<String>,
     pub identifier: UpdateState<String>,
     pub searchable_attributes: UpdateState<Vec<String>>,
     pub displayed_attributes: UpdateState<HashSet<String>>,
     pub stop_words: UpdateState<BTreeSet<String>>,
     pub synonyms: UpdateState<BTreeMap<String, Vec<String>>>,
-    pub index_new_fields: UpdateState<bool>,
+    pub accept_new_fields: UpdateState<bool>,
 }
 
 impl Default for SettingsUpdate {
     fn default() -> Self {
         Self {
             ranking_rules: UpdateState::Nothing,
-            ranking_distinct: UpdateState::Nothing,
+            distinct_attribute: UpdateState::Nothing,
             identifier: UpdateState::Nothing,
             searchable_attributes: UpdateState::Nothing,
             displayed_attributes: UpdateState::Nothing,
             stop_words: UpdateState::Nothing,
             synonyms: UpdateState::Nothing,
-            index_new_fields: UpdateState::Nothing,
+            accept_new_fields: UpdateState::Nothing,
         }
     }
 }

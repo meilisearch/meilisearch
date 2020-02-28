@@ -12,7 +12,7 @@ use crate::settings::RankingRule;
 
 const CREATED_AT_KEY: &str = "created-at";
 const RANKING_RULES_KEY: &str = "ranking-rules";
-const RANKING_DISTINCT_KEY: &str = "ranking-distinct";
+const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute";
 const STOP_WORDS_KEY: &str = "stop-words";
 const SYNONYMS_KEY: &str = "synonyms";
 const CUSTOMS_KEY: &str = "customs";
@@ -200,19 +200,19 @@ impl Main {
         self.main.delete::<_, Str>(writer, RANKING_RULES_KEY)
     }
 
-    pub fn ranking_distinct(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<String>> {
-        if let Some(value) = self.main.get::<_, Str, Str>(reader, RANKING_DISTINCT_KEY)? {
+    pub fn distinct_attribute(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<String>> {
+        if let Some(value) = self.main.get::<_, Str, Str>(reader, DISTINCT_ATTRIBUTE_KEY)? {
             return Ok(Some(value.to_owned()))
         }
         return Ok(None)
     }
 
-    pub fn put_ranking_distinct(self, writer: &mut heed::RwTxn<MainT>, value: &str) -> ZResult<()> {
-        self.main.put::<_, Str, Str>(writer, RANKING_DISTINCT_KEY, value)
+    pub fn put_distinct_attribute(self, writer: &mut heed::RwTxn<MainT>, value: &str) -> ZResult<()> {
+        self.main.put::<_, Str, Str>(writer, DISTINCT_ATTRIBUTE_KEY, value)
     }
 
-    pub fn delete_ranking_distinct(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
-        self.main.delete::<_, Str>(writer, RANKING_DISTINCT_KEY)
+    pub fn delete_distinct_attribute(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
+        self.main.delete::<_, Str>(writer, DISTINCT_ATTRIBUTE_KEY)
     }
 
     pub fn put_customs(self, writer: &mut heed::RwTxn<MainT>, customs: &[u8]) -> ZResult<()> {

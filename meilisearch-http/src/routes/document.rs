@@ -145,7 +145,7 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
                 None => return Err(ResponseError::bad_request("Could not infer a schema")),
             },
         };
-        let settings_update = SettingsUpdate{
+        let settings_update = SettingsUpdate {
             identifier: UpdateState::Update(id),
             ..SettingsUpdate::default()
         };

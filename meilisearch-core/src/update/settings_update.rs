@@ -58,22 +58,22 @@ pub fn apply_settings_update(
         UpdateState::Nothing => (),
     }
 
-    match settings.ranking_distinct {
+    match settings.distinct_attribute {
         UpdateState::Update(v) => {
-            index.main.put_ranking_distinct(writer, &v)?;
+            index.main.put_distinct_attribute(writer, &v)?;
         },
         UpdateState::Clear => {
-            index.main.delete_ranking_distinct(writer)?;
+            index.main.delete_distinct_attribute(writer)?;
         },
         UpdateState::Nothing => (),
     }
 
-    match settings.index_new_fields {
+    match settings.accept_new_fields {
         UpdateState::Update(v) => {
-            schema.set_index_new_fields(v);
+            schema.set_accept_new_fields(v);
         },
         UpdateState::Clear => {
-            schema.set_index_new_fields(true);
+            schema.set_accept_new_fields(true);
         },
         UpdateState::Nothing => (),
     }
@@ -84,8 +84,7 @@ pub fn apply_settings_update(
             must_reindex = true;
         },
         UpdateState::Clear => {
-            let clear: Vec<&str> = Vec::new();
-            schema.update_indexed(clear)?;
+            schema.set_all_fields_as_indexed();
             must_reindex = true;
         },
         UpdateState::Nothing => (),
@@ -93,8 +92,7 @@ pub fn apply_settings_update(
     match settings.displayed_attributes.clone() {
         UpdateState::Update(v) => schema.update_displayed(v)?,
         UpdateState::Clear => {
-            let clear: Vec<&str> = Vec::new();
-            schema.update_displayed(clear)?;
+            schema.set_all_fields_as_displayed();
         },
         UpdateState::Nothing => (),
     }

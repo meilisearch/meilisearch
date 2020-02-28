@@ -626,16 +626,16 @@ fn search_with_settings_basic() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "wordsPosition",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "title",
@@ -662,7 +662,7 @@ fn search_with_settings_basic() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -732,16 +732,16 @@ fn search_with_settings_stop_words() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "wordsPosition",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "title",
@@ -768,7 +768,7 @@ fn search_with_settings_stop_words() {
       ],
       "stopWords": ["the"],
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -839,16 +839,16 @@ fn search_with_settings_synonyms() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "wordsPosition",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "title",
@@ -880,7 +880,7 @@ fn search_with_settings_synonyms() {
           "Iron Man"
         ]
       },
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -951,16 +951,16 @@ fn search_with_settings_ranking_rules() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "wordsPosition",
         "asc(vote_average)",
-        "_exactness",
+        "exactness",
         "dsc(popularity)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "title",
@@ -987,7 +987,7 @@ fn search_with_settings_ranking_rules() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -1058,16 +1058,16 @@ fn search_with_settings_searchable_attributes() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "wordsPosition",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "tagline",
@@ -1093,7 +1093,7 @@ fn search_with_settings_searchable_attributes() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -1164,16 +1164,16 @@ fn search_with_settings_displayed_attributes() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "wordsPosition",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "title",
@@ -1194,7 +1194,7 @@ fn search_with_settings_displayed_attributes() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);
@@ -1235,16 +1235,16 @@ fn search_with_settings_searchable_attributes_2() {
 
     let config = json!({
       "rankingRules": [
-        "_typo",
-        "_words",
-        "_proximity",
-        "_attribute",
-        "_words_position",
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "wordsPosition",
         "dsc(popularity)",
-        "_exactness",
+        "exactness",
         "dsc(vote_average)"
       ],
-      "rankingDistinct": null,
+      "distinctAttribute": null,
       "identifier": "id",
       "searchableAttributes": [
         "tagline",
@@ -1265,7 +1265,7 @@ fn search_with_settings_searchable_attributes_2() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "indexNewFields": false,
+      "acceptNewFields": false,
     });
 
     common::update_config(&mut server, config);

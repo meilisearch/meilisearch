@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::hash_map::Iter;
 
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +45,10 @@ impl FieldsMap {
 
     pub fn name<I: Into<FieldId>>(&self, id: I) -> Option<&str> {
         self.id_map.get(&id.into()).map(|s| s.as_str())
+    }
+
+    pub fn iter(&self) -> Iter<'_, String, FieldId> {
+        self.name_map.iter()
     }
 }
 

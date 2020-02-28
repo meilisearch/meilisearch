@@ -1059,12 +1059,12 @@ mod tests {
             let data = r#"
                 {
                     "rankingRules": [
-                        "_typo",
-                        "_words",
-                        "_proximity",
-                        "_attribute",
-                        "_words_position",
-                        "_exactness",
+                        "typo",
+                        "words",
+                        "proximity",
+                        "attribute",
+                        "wordsPosition",
+                        "exactness",
                         "dsc(release_date)"
                     ],
                     "searchableAttributes": ["name", "release_date"],

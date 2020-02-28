@@ -23,19 +23,15 @@ async fn into_response<T: IntoResponse, U: IntoResponse>(
 }
 
 pub fn load_routes(app: &mut tide::Server<Data>) {
-    app.at("/").get(|_| {
-        async move {
-            tide::Response::new(200)
-                .body_string(include_str!("../../public/interface.html").to_string())
-                .set_mime(mime::TEXT_HTML_UTF_8)
-        }
+    app.at("/").get(|_| async {
+        tide::Response::new(200)
+            .body_string(include_str!("../../public/interface.html").to_string())
+            .set_mime(mime::TEXT_HTML_UTF_8)
     });
-    app.at("/bulma.min.css").get(|_| {
-        async {
-            tide::Response::new(200)
-                .body_string(include_str!("../../public/bulma.min.css").to_string())
-                .set_mime(mime::TEXT_CSS_UTF_8)
-        }
+    app.at("/bulma.min.css").get(|_| async {
+        tide::Response::new(200)
+            .body_string(include_str!("../../public/bulma.min.css").to_string())
+            .set_mime(mime::TEXT_CSS_UTF_8)
     });
 
     app.at("/indexes")
@@ -82,7 +78,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .post(|ctx| into_response(setting::update_rules(ctx)))
         .delete(|ctx| into_response(setting::delete_rules(ctx)));
 
-    app.at("/indexes/:index/settings/ranking-distinct")
+    app.at("/indexes/:index/settings/distinct-attribute")
         .get(|ctx| into_response(setting::get_distinct(ctx)))
         .post(|ctx| into_response(setting::update_distinct(ctx)))
         .delete(|ctx| into_response(setting::delete_distinct(ctx)));
@@ -101,8 +97,8 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .delete(|ctx| into_response(setting::delete_displayed(ctx)));
 
     app.at("/indexes/:index/settings/index-new-field")
-        .get(|ctx| into_response(setting::get_index_new_fields(ctx)))
-        .post(|ctx| into_response(setting::update_index_new_fields(ctx)));
+        .get(|ctx| into_response(setting::get_accept_new_fields(ctx)))
+        .post(|ctx| into_response(setting::update_accept_new_fields(ctx)));
 
     app.at("/indexes/:index/settings/synonyms")
         .get(|ctx| into_response(synonym::get(ctx)))
@@ -117,8 +113,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
     app.at("/indexes/:index/stats")
         .get(|ctx| into_response(stats::index_stats(ctx)));
 
-    app.at("/keys/")
-        .get(|ctx| into_response(key::list(ctx)));
+    app.at("/keys/").get(|ctx| into_response(key::list(ctx)));
 
     app.at("/health")
         .get(|ctx| into_response(health::get_health(ctx)))

@@ -6,7 +6,7 @@ use tide::Request;
 pub enum ACL {
     Admin,
     Private,
-    Public
+    Public,
 }
 
 pub trait RequestExt {
@@ -23,31 +23,33 @@ impl RequestExt for Request<Data> {
         match acl {
             ACL::Admin => {
                 if user_api_key == self.state().api_keys.master.as_deref() {
-                    return Ok(())
+                    return Ok(());
                 }
-            },
+            }
             ACL::Private => {
                 if user_api_key == self.state().api_keys.master.as_deref() {
-                    return Ok(())
+                    return Ok(());
                 }
                 if user_api_key == self.state().api_keys.private.as_deref() {
-                    return Ok(())
+                    return Ok(());
                 }
-            },
+            }
             ACL::Public => {
                 if user_api_key == self.state().api_keys.master.as_deref() {
-                    return Ok(())
+                    return Ok(());
                 }
                 if user_api_key == self.state().api_keys.private.as_deref() {
-                    return Ok(())
+                    return Ok(());
                 }
                 if user_api_key == self.state().api_keys.public.as_deref() {
-                    return Ok(())
+                    return Ok(());
                 }
             }
         }
 
-        Err(ResponseError::InvalidToken(user_api_key.unwrap_or("Need a token").to_owned()))
+        Err(ResponseError::InvalidToken(
+            user_api_key.unwrap_or("Need a token").to_owned(),
+        ))
     }
 
     fn url_param(&self, name: &str) -> SResult<String> {

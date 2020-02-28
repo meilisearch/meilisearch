@@ -57,16 +57,16 @@ pub fn enrich_server_with_movies_settings(
 ) -> Result<(), Box<dyn Error>> {
     let json = json!({
         "rankingRules": [
-            "_typo",
-            "_words",
-            "_proximity",
-            "_attribute",
-            "_words_position",
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
             "dsc(popularity)",
-            "_exactness",
+            "exactness",
             "dsc(vote_average)",
         ],
-        "rankingDistinct": null,
+        "distinctAttribute": null,
         "searchableAttributes": [
             "title",
             "tagline",
@@ -92,7 +92,7 @@ pub fn enrich_server_with_movies_settings(
         ],
         "stopWords": null,
         "synonyms": null,
-        "indexNewFields": false,
+        "acceptNewFields": false,
     });
 
     let body = json.to_string().into_bytes();
@@ -179,7 +179,7 @@ pub fn wait_update_id(server: &mut TestBackend<Service<Data>>, update_id: u64) {
         let response: Value = serde_json::from_slice(&buf).unwrap();
 
         if response["status"] == "processed" {
-            return
+            return;
         }
         block_on(sleep(Duration::from_secs(1)));
     }

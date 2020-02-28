@@ -6,8 +6,8 @@ use chrono::{DateTime, Utc};
 use heed::types::{SerdeBincode, Str};
 use log::error;
 use meilisearch_core::{Database, Error as MError, MResult, MainT, UpdateT};
-use sysinfo::Pid;
 use sha2::Digest;
+use sysinfo::Pid;
 
 use crate::option::Opt;
 use crate::routes::index::index_update_callback;
@@ -117,9 +117,7 @@ impl DataInner {
         // convert attributes to their names
         let frequency: HashMap<_, _> = fields_frequency
             .into_iter()
-            .filter_map(|(a, c)| {
-                schema.name(a).map(|name| (name.to_string(), c))
-            })
+            .filter_map(|(a, c)| schema.name(a).map(|name| (name.to_string(), c)))
             .collect();
 
         index

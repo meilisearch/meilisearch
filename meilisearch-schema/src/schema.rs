@@ -13,7 +13,7 @@ pub struct Schema {
     indexed: Vec<FieldId>,
     indexed_map: HashMap<FieldId, IndexedPos>,
 
-    index_new_fields: bool,
+    accept_new_fields: bool,
 }
 
 impl Schema {
@@ -28,7 +28,7 @@ impl Schema {
             displayed: HashSet::new(),
             indexed: Vec::new(),
             indexed_map: HashMap::new(),
-            index_new_fields: true,
+            accept_new_fields: true,
         }
     }
 
@@ -68,7 +68,7 @@ impl Schema {
                 Ok(id)
             }
             None => {
-                if self.index_new_fields {
+                if self.accept_new_fields {
                     self.set_indexed(name)?;
                     self.set_displayed(name)
                 } else {
@@ -190,11 +190,30 @@ impl Schema {
         Ok(())
     }
 
-    pub fn index_new_fields(&self) -> bool {
-        self.index_new_fields
+    pub fn set_all_fields_as_indexed(&mut self) {
+        self.indexed.clear();
+        self.indexed_map.clear();
+
+        for (_name, id) in self.fields_map.iter() {
+            let pos = self.indexed.len() as u16;
+            self.indexed.push(*id);
+            self.indexed_map.insert(*id, pos.into());
+        }
     }
 
-    pub fn set_index_new_fields(&mut self, value: bool) {
-        self.index_new_fields = value;
+    pub fn set_all_fields_as_displayed(&mut self) {
+        self.displayed.clear();
+
+        for (_name, id) in self.fields_map.iter() {
+            self.displayed.insert(*id);
+        }
+    }
+
+    pub fn accept_new_fields(&self) -> bool {
+        self.accept_new_fields
+    }
+
+    pub fn set_accept_new_fields(&mut self, value: bool) {
+        self.accept_new_fields = value;
     }
 }
