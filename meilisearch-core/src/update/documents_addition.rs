@@ -279,48 +279,45 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
     index.postings_lists.clear(writer)?;
     index.docs_words.clear(writer)?;
 
-    // 3. re-index chunks of documents (otherwise we make the borrow checker unhappy)
-    for documents_ids in documents_ids_to_reindex.chunks(100) {
-        let stop_words = match index.main.stop_words_fst(writer)? {
-            Some(stop_words) => stop_words,
-            None => fst::Set::default(),
-        };
+    let stop_words = match index.main.stop_words_fst(writer)? {
+        Some(stop_words) => stop_words,
+        None => fst::Set::default(),
+    };
 
-        let number_of_inserted_documents = documents_ids.len();
-        let mut indexer = RawIndexer::new(stop_words);
-        let mut ram_store = HashMap::new();
+    let number_of_inserted_documents = documents_ids_to_reindex.len();
+    let mut indexer = RawIndexer::new(stop_words);
+    let mut ram_store = HashMap::new();
 
-        for document_id in documents_ids {
-            for result in index.documents_fields.document_fields(writer, *document_id)? {
-                let (field_id, bytes) = result?;
-                let value: serde_json::Value = serde_json::from_slice(bytes)?;
-                ram_store.insert((document_id, field_id), value);
-            }
-
-            for ((docid, field_id), value) in ram_store.drain() {
-                serialize_value_with_id(
-                    writer,
-                    field_id,
-                    &schema,
-                    *docid,
-                    index.documents_fields,
-                    index.documents_fields_counts,
-                    &mut indexer,
-                    &mut ranked_map,
-                    &value
-                )?;
-            }
+    for document_id in documents_ids_to_reindex {
+        for result in index.documents_fields.document_fields(writer, document_id)? {
+            let (field_id, bytes) = result?;
+            let value: serde_json::Value = serde_json::from_slice(bytes)?;
+            ram_store.insert((document_id, field_id), value);
         }
 
-        // 4. write the new index in the main store
-        write_documents_addition_index(
-            writer,
-            index,
-            &ranked_map,
-            number_of_inserted_documents,
-            indexer,
-        )?;
+        for ((docid, field_id), value) in ram_store.drain() {
+            serialize_value_with_id(
+                writer,
+                field_id,
+                &schema,
+                docid,
+                index.documents_fields,
+                index.documents_fields_counts,
+                &mut indexer,
+                &mut ranked_map,
+                &value
+            )?;
+        }
     }
+
+    // 4. write the new index in the main store
+    write_documents_addition_index(
+        writer,
+        index,
+        &ranked_map,
+        number_of_inserted_documents,
+        indexer,
+    )?;
 
     index.main.put_schema(writer, &schema)?;
 
