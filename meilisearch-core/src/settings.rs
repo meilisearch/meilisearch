@@ -10,7 +10,7 @@ use self::RankingRule::*;
 pub const DEFAULT_RANKING_RULES: [RankingRule; 6] = [Typo, Words, Proximity, Attribute, WordsPosition, Exactness];
 
 static RANKING_RULE_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
-    let regex = regex::Regex::new(r"(asc|dsc)\(([a-zA-Z0-9-_]*)\)").unwrap();
+    let regex = regex::Regex::new(r"(asc|desc)\(([a-zA-Z0-9-_]*)\)").unwrap();
     regex
 });
 
@@ -99,7 +99,7 @@ pub enum RankingRule {
     WordsPosition,
     Exactness,
     Asc(String),
-    Dsc(String),
+    Desc(String),
 }
 
 impl std::fmt::Display for RankingRule {
@@ -112,7 +112,7 @@ impl std::fmt::Display for RankingRule {
             RankingRule::WordsPosition => f.write_str("wordsPosition"),
             RankingRule::Exactness => f.write_str("exactness"),
             RankingRule::Asc(field) => write!(f, "asc({})", field),
-            RankingRule::Dsc(field) => write!(f, "dsc({})", field),
+            RankingRule::Desc(field) => write!(f, "desc({})", field),
         }
     }
 }
@@ -132,7 +132,7 @@ impl FromStr for RankingRule {
                 let captures = RANKING_RULE_REGEX.captures(s).ok_or(RankingRuleConversionError)?;
                 match (captures.get(1).map(|m| m.as_str()), captures.get(2)) {
                     (Some("asc"), Some(field)) => RankingRule::Asc(field.as_str().to_string()),
-                    (Some("dsc"), Some(field)) => RankingRule::Dsc(field.as_str().to_string()),
+                    (Some("desc"), Some(field)) => RankingRule::Desc(field.as_str().to_string()),
                     _ => return Err(RankingRuleConversionError)
                 }
             }
@@ -144,7 +144,7 @@ impl FromStr for RankingRule {
 impl RankingRule {
     pub fn field(&self) -> Option<&str> {
         match self {
-            RankingRule::Asc(field) | RankingRule::Dsc(field) => Some(field),
+            RankingRule::Asc(field) | RankingRule::Desc(field) => Some(field),
             _ => None,
         }
     }

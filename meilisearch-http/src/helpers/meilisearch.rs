@@ -313,7 +313,7 @@ impl<'a> SearchBuilder<'a> {
                             Err(err) => error!("Error during criteria builder; {:?}", err),
                         }
                     }
-                    RankingRule::Dsc(field) => {
+                    RankingRule::Desc(field) => {
                         match SortByAttr::higher_is_better(&ranked_map, &schema, &field) {
                             Ok(rule) => builder.push(rule),
                             Err(err) => error!("Error during criteria builder; {:?}", err),

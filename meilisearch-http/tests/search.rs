@@ -631,9 +631,9 @@ fn search_with_settings_basic() {
         "proximity",
         "attribute",
         "wordsPosition",
-        "dsc(popularity)",
+        "desc(popularity)",
         "exactness",
-        "dsc(vote_average)"
+        "desc(vote_average)"
       ],
       "distinctAttribute": null,
       "identifier": "id",
@@ -737,9 +737,9 @@ fn search_with_settings_stop_words() {
         "proximity",
         "attribute",
         "wordsPosition",
-        "dsc(popularity)",
+        "desc(popularity)",
         "exactness",
-        "dsc(vote_average)"
+        "desc(vote_average)"
       ],
       "distinctAttribute": null,
       "identifier": "id",
@@ -844,9 +844,9 @@ fn search_with_settings_synonyms() {
         "proximity",
         "attribute",
         "wordsPosition",
-        "dsc(popularity)",
+        "desc(popularity)",
         "exactness",
-        "dsc(vote_average)"
+        "desc(vote_average)"
       ],
       "distinctAttribute": null,
       "identifier": "id",
@@ -958,7 +958,7 @@ fn search_with_settings_ranking_rules() {
         "wordsPosition",
         "asc(vote_average)",
         "exactness",
-        "dsc(popularity)"
+        "desc(popularity)"
       ],
       "distinctAttribute": null,
       "identifier": "id",
@@ -1063,9 +1063,9 @@ fn search_with_settings_searchable_attributes() {
         "proximity",
         "attribute",
         "wordsPosition",
-        "dsc(popularity)",
+        "desc(popularity)",
         "exactness",
-        "dsc(vote_average)"
+        "desc(vote_average)"
       ],
       "distinctAttribute": null,
       "identifier": "id",
@@ -1169,9 +1169,9 @@ fn search_with_settings_displayed_attributes() {
         "proximity",
         "attribute",
         "wordsPosition",
-        "dsc(popularity)",
+        "desc(popularity)",
         "exactness",
-        "dsc(vote_average)"
+        "desc(vote_average)"
       ],
       "distinctAttribute": null,
       "identifier": "id",
@@ -1240,9 +1240,9 @@ fn search_with_settings_searchable_attributes_2() {
         "proximity",
         "attribute",
         "wordsPosition",
-        "dsc(popularity)",
+        "desc(popularity)",
         "exactness",
-        "dsc(vote_average)"
+        "desc(vote_average)"
       ],
       "distinctAttribute": null,
       "identifier": "id",

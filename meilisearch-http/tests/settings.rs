@@ -47,8 +47,8 @@ fn write_all_and_delete() {
             "attribute",
             "wordsPosition",
             "exactness",
-            "dsc(release_date)",
-            "dsc(rank)",
+            "desc(release_date)",
+            "desc(rank)",
         ],
         "distinctAttribute": "movie_id",
         "searchableAttributes": [
@@ -198,8 +198,8 @@ fn write_all_and_update() {
             "attribute",
             "wordsPosition",
             "exactness",
-            "dsc(release_date)",
-            "dsc(rank)",
+            "desc(release_date)",
+            "desc(rank)",
         ],
         "distinctAttribute": "movie_id",
         "searchableAttributes": [
@@ -264,7 +264,7 @@ fn write_all_and_update() {
             "attribute",
             "wordsPosition",
             "exactness",
-            "dsc(release_date)",
+            "desc(release_date)",
         ],
         "searchableAttributes": [
             "title",
@@ -317,7 +317,7 @@ fn write_all_and_update() {
             "attribute",
             "wordsPosition",
             "exactness",
-            "dsc(release_date)",
+            "desc(release_date)",
         ],
         "distinctAttribute": null,
         "searchableAttributes": [

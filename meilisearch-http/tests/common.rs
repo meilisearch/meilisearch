@@ -62,9 +62,9 @@ pub fn enrich_server_with_movies_settings(
             "proximity",
             "attribute",
             "wordsPosition",
-            "dsc(popularity)",
+            "desc(popularity)",
             "exactness",
-            "dsc(vote_average)",
+            "desc(vote_average)",
         ],
         "distinctAttribute": null,
         "searchableAttributes": [

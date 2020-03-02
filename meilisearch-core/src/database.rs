@@ -1065,7 +1065,7 @@ mod tests {
                         "attribute",
                         "wordsPosition",
                         "exactness",
-                        "dsc(release_date)"
+                        "desc(release_date)"
                     ],
                     "searchableAttributes": ["name", "release_date"],
                     "displayedAttributes": ["name", "release_date"]

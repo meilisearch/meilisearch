@@ -45,8 +45,8 @@ fn write_all_and_delete() {
         "attribute",
         "wordsPosition",
         "exactness",
-        "dsc(release_date)",
-        "dsc(rank)",
+        "desc(release_date)",
+        "desc(rank)",
     ]);
 
     let body = json.to_string().into_bytes();
@@ -143,8 +143,8 @@ fn write_all_and_update() {
         "attribute",
         "wordsPosition",
         "exactness",
-        "dsc(release_date)",
-        "dsc(rank)",
+        "desc(release_date)",
+        "desc(rank)",
     ]);
 
     let body = json.to_string().into_bytes();
@@ -180,7 +180,7 @@ fn write_all_and_update() {
         "attribute",
         "wordsPosition",
         "exactness",
-        "dsc(release_date)",
+        "desc(release_date)",
     ]);
 
     let body_update = json_update.to_string().into_bytes();
@@ -212,7 +212,7 @@ fn write_all_and_update() {
         "attribute",
         "wordsPosition",
         "exactness",
-        "dsc(release_date)",
+        "desc(release_date)",
     ]);
 
     assert_json_eq!(res_expected, res_value, ordered: false);
