@@ -113,7 +113,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
     app.at("/indexes/:index/stats")
         .get(|ctx| into_response(stats::index_stats(ctx)));
 
-    app.at("/keys/").get(|ctx| into_response(key::list(ctx)));
+    app.at("/keys").get(|ctx| into_response(key::list(ctx)));
 
     app.at("/health")
         .get(|ctx| into_response(health::get_health(ctx)))
