@@ -96,12 +96,12 @@ fn write_all_and_delete() {
     let res_value: Value = serde_json::from_slice(&buf).unwrap();
 
     let json = json!([
-      "typo",
-      "words",
-      "proximity",
-      "attribute",
-      "wordsPosition",
-      "exactness"
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "wordsPosition",
+        "exactness"
     ]);
 
     assert_json_eq!(json, res_value, ordered: false);

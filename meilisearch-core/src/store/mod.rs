@@ -254,6 +254,21 @@ impl Index {
         }
     }
 
+    pub fn document_attribute_bytes<'txn>(
+        &self,
+        reader: &'txn heed::RoTxn<MainT>,
+        document_id: DocumentId,
+        attribute: FieldId,
+    ) -> MResult<Option<&'txn [u8]>> {
+        let bytes = self
+            .documents_fields
+            .document_attribute(reader, document_id, attribute)?;
+        match bytes {
+            Some(bytes) => Ok(Some(bytes)),
+            None => Ok(None),
+        }
+    }
+
     pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> ZResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
         update::push_customs_update(writer, self.updates, self.updates_results, customs)

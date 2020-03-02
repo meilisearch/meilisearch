@@ -125,6 +125,10 @@ impl Schema {
         Ok((id, pos.into()))
     }
 
+    pub fn clear_ranked(&mut self) {
+        self.ranked.clear();
+    }
+
     pub fn remove_ranked(&mut self, name: &str) {
         if let Some(id) = self.fields_map.id(name) {
             self.ranked.remove(&id);
