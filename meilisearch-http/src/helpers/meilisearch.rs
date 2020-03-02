@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::From;
 use std::error;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
 use indexmap::IndexMap;
@@ -13,6 +14,7 @@ use meilisearch_core::{Highlight, Index, MainT, RankedMap};
 use meilisearch_schema::{FieldId, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use siphasher::sip::SipHasher;
 
 #[derive(Debug)]
 pub enum Error {
@@ -204,6 +206,21 @@ impl<'a> SearchBuilder<'a> {
         }
 
         query_builder.with_fetch_timeout(self.timeout);
+
+        if let Some(field) = self.index.main.distinct_attribute(reader)? {
+            if let Some(field_id) = schema.id(&field) {
+                query_builder.with_distinct(1, move |id| {
+                    match self.index.document_attribute_bytes(reader, id, field_id) {
+                        Ok(Some(bytes)) => {
+                            let mut s = SipHasher::new();
+                            bytes.hash(&mut s);
+                            Some(s.finish())
+                        }
+                        _ => None,
+                    }
+                });
+            }
+        }
 
         let start = Instant::now();
         let docs =

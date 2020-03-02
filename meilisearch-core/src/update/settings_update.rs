@@ -50,9 +50,8 @@ pub fn apply_settings_update(
             must_reindex = true;
         },
         UpdateState::Clear => {
-            let clear: Vec<&str> = Vec::new();
-            schema.update_ranked(clear)?;
             index.main.delete_ranking_rules(writer)?;
+            schema.clear_ranked();
             must_reindex = true;
         },
         UpdateState::Nothing => (),

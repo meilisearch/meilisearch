@@ -75,7 +75,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         self.timeout = Some(timeout)
     }
 
-    pub fn with_distinct<F, K>(&mut self, function: F, size: usize)
+    pub fn with_distinct<F>(&mut self, size: usize, function: F)
     where
         F: Fn(DocumentId) -> Option<u64> + 'd,
     {
