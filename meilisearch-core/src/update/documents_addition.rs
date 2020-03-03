@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use fst::{set::OpBuilder, SetBuilder};
+use indexmap::IndexMap;
 use sdset::{duo::Union, SetOperation};
 use serde::{Deserialize, Serialize};
 
@@ -105,7 +106,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
 pub fn apply_documents_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
-    addition: Vec<HashMap<String, serde_json::Value>>,
+    addition: Vec<IndexMap<String, serde_json::Value>>,
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
 
@@ -174,7 +175,7 @@ pub fn apply_documents_addition<'a, 'b>(
 pub fn apply_documents_partial_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
-    addition: Vec<HashMap<String, serde_json::Value>>,
+    addition: Vec<IndexMap<String, serde_json::Value>>,
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
 
