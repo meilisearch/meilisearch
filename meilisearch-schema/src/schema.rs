@@ -21,13 +21,21 @@ impl Schema {
         let mut fields_map = FieldsMap::default();
         let field_id = fields_map.insert(name).unwrap();
 
+        let mut displayed = HashSet::new();
+        let mut indexed = Vec::new();
+        let mut indexed_map = HashMap::new();
+
+        displayed.insert(field_id);
+        indexed.push(field_id);
+        indexed_map.insert(field_id, 0.into());
+
         Schema {
             fields_map,
             identifier: field_id,
             ranked: HashSet::new(),
-            displayed: HashSet::new(),
-            indexed: Vec::new(),
-            indexed_map: HashMap::new(),
+            displayed,
+            indexed,
+            indexed_map,
             accept_new_fields: true,
         }
     }

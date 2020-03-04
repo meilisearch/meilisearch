@@ -1,4 +1,5 @@
 use serde_json::json;
+use assert_json_diff::assert_json_eq;
 
 mod common;
 
@@ -466,4 +467,34 @@ fn create_index_failed() {
     let message = res_value["message"].as_str().unwrap();
     assert_eq!(res_value.as_object().unwrap().len(), 1);
     assert_eq!(message, "invalid data");
+}
+
+
+#[test]
+fn create_index_with_identifier() {
+    let mut server = common::Server::with_uid("movies");
+
+    let body = json!({
+        "uid": "movies",
+        "identifier": "id",
+    });
+
+    let (_response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
+
+    let body = json!([{
+        "id": 123,
+        "text": "The mask"
+    }]);
+
+    server.add_or_replace_multiple_documents(body.clone());
+
+    let (response, _status_code) = server.get_document(123);
+
+    let expect = json!({
+        "id": 123,
+        "text": "The mask"
+    });
+
+    assert_json_eq!(response, expect, ordered: false);
 }
