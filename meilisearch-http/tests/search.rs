@@ -1,16 +1,13 @@
 use std::convert::Into;
-
 use serde_json::json;
+use assert_json_diff::assert_json_eq;
 
 mod common;
 
 #[test]
 fn basic_search() {
-    let mut server = common::setup_server().unwrap();
-
-    common::enrich_server_with_movies_index(&mut server).unwrap();
-    common::enrich_server_with_movies_settings(&mut server).unwrap();
-    common::enrich_server_with_movies_documents(&mut server).unwrap();
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies();
 
     // 1 - Simple search
     // q: Captain
@@ -18,7 +15,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=3";
 
-    let json = json!([
+    let expect = json!([
       {
         "id": 299537,
         "popularity": 44.726,
@@ -72,7 +69,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 2 - Simple search with offset
     // q: Captain
@@ -81,7 +79,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=3&offset=1";
 
-    let json = json!([
+    let expect = json!([
       {
         "id": 271110,
         "popularity": 37.431,
@@ -136,7 +134,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 3 - Simple search with attribute to highlight all
     // q: Captain
@@ -145,7 +144,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=1&attributesToHighlight=*";
 
-    let json = json!([
+    let expect = json!([
       {
         "id": 299537,
         "popularity": 44.726,
@@ -182,7 +181,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 4 - Simple search with attribute to highlight title
     // q: Captain
@@ -191,7 +191,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=1&attributesToHighlight=title";
 
-    let json = json!([
+    let expect = json!([
       {
         "id": 299537,
         "popularity": 44.726,
@@ -228,7 +228,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 1 - Simple search with attribute to highlight title and tagline
     // q: Captain
@@ -237,7 +238,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=1&attributesToHighlight=title,tagline";
 
-    let json = json!([
+    let expect = json!([
       {
         "id": 299537,
         "popularity": 44.726,
@@ -274,7 +275,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 1 - Simple search with attribute to highlight title and overview
     // q: Captain
@@ -283,7 +285,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=1&attributesToHighlight=title,overview";
 
-    let json = json!([
+    let expect = json!([
       {
         "id": 299537,
         "popularity": 44.726,
@@ -320,7 +322,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 1 - Simple search with matches
     // q: Captain
@@ -329,7 +332,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=1&matches=true";
 
-    let json = json!([
+    let expect = json!([
       {
         "id": 299537,
         "popularity": 44.726,
@@ -363,7 +366,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 1 - Simple search with crop
     // q: Captain
@@ -373,7 +377,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=1&attributesToCrop=overview&cropLength=20";
 
-    let json = json!([
+    let expect = json!([
       {
         "id": 299537,
         "popularity": 44.726,
@@ -410,7 +414,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 1 - Simple search with attributes to retrieve
     // q: Captain
@@ -419,7 +424,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=1&attributesToRetrieve=title,tagline,overview,poster_path";
 
-    let json = json!([
+    let expect = json!([
       {
         "title": "Captain Marvel",
         "tagline": "Higher. Further. Faster.",
@@ -428,7 +433,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 1 - Simple search with filter
     // q: Captain
@@ -437,7 +443,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=3&filters=director:Anthony%20Russo";
 
-    let json = json!([
+    let expect = json!([
       {
         "id": 271110,
         "popularity": 37.431,
@@ -491,7 +497,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 1 - Simple search with attributes to highlight and matches
     // q: Captain
@@ -501,7 +508,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=1&attributesToHighlight=title,overview&matches=true";
 
-    let json = json!( [
+    let expect = json!( [
       {
         "id": 299537,
         "popularity": 44.726,
@@ -552,7 +559,8 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 
     // 1 - Simple search with attributes to highlight and matches and crop
     // q: Captain
@@ -564,7 +572,7 @@ fn basic_search() {
 
     let query = "q=captain&limit=1&attributesToCrop=overview&cropLength=20&attributesToHighlight=title,overview&matches=true";
 
-    let json = json!([
+    let expect = json!([
       {
         "id": 299537,
         "popularity": 44.726,
@@ -615,14 +623,14 @@ fn basic_search() {
       }
     ]);
 
-    common::search(&mut server, query, json);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
 #[test]
 fn search_with_settings_basic() {
-    let mut server = common::setup_server().unwrap();
-    common::enrich_server_with_movies_index(&mut server).unwrap();
-    common::enrich_server_with_movies_documents(&mut server).unwrap();
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies();
 
     let config = json!({
       "rankingRules": [
@@ -665,10 +673,10 @@ fn search_with_settings_basic() {
       "acceptNewFields": false,
     });
 
-    common::update_config(&mut server, config);
+    server.update_all_settings(config);
 
     let query = "q=the%20avangers&limit=3";
-    let response = json!([
+    let expect = json!([
       {
         "id": 24428,
         "popularity": 44.506,
@@ -722,13 +730,14 @@ fn search_with_settings_basic() {
       }
     ]);
 
-    common::search(&mut server, query, response);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
 #[test]
 fn search_with_settings_stop_words() {
-    let mut server = common::setup_server().unwrap();
-    common::enrich_server_with_movies_index(&mut server).unwrap();
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies();
 
     let config = json!({
       "rankingRules": [
@@ -771,11 +780,10 @@ fn search_with_settings_stop_words() {
       "acceptNewFields": false,
     });
 
-    common::update_config(&mut server, config);
-    common::enrich_server_with_movies_documents(&mut server).unwrap();
+    server.update_all_settings(config);
 
     let query = "q=the%20avangers&limit=3";
-    let response = json!([
+    let expect = json!([
       {
         "id": 299536,
         "popularity": 65.013,
@@ -829,13 +837,14 @@ fn search_with_settings_stop_words() {
       }
     ]);
 
-    common::search(&mut server, query, response);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
 #[test]
 fn search_with_settings_synonyms() {
-    let mut server = common::setup_server().unwrap();
-    common::enrich_server_with_movies_index(&mut server).unwrap();
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies();
 
     let config = json!({
       "rankingRules": [
@@ -883,11 +892,10 @@ fn search_with_settings_synonyms() {
       "acceptNewFields": false,
     });
 
-    common::update_config(&mut server, config);
-    common::enrich_server_with_movies_documents(&mut server).unwrap();
+    server.update_all_settings(config);
 
     let query = "q=avangers&limit=3";
-    let response = json!([
+    let expect = json!([
       {
         "id": 299536,
         "popularity": 65.013,
@@ -941,13 +949,14 @@ fn search_with_settings_synonyms() {
       }
     ]);
 
-    common::search(&mut server, query, response);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
 #[test]
 fn search_with_settings_ranking_rules() {
-    let mut server = common::setup_server().unwrap();
-    common::enrich_server_with_movies_index(&mut server).unwrap();
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies();
 
     let config = json!({
       "rankingRules": [
@@ -990,11 +999,10 @@ fn search_with_settings_ranking_rules() {
       "acceptNewFields": false,
     });
 
-    common::update_config(&mut server, config);
-    common::enrich_server_with_movies_documents(&mut server).unwrap();
+    server.update_all_settings(config);
 
     let query = "q=avangers&limit=3";
-    let response = json!([
+    let expect = json!([
       {
         "id": 99861,
         "popularity": 33.938,
@@ -1048,13 +1056,14 @@ fn search_with_settings_ranking_rules() {
       }
     ]);
 
-    common::search(&mut server, query, response);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
 #[test]
 fn search_with_settings_searchable_attributes() {
-    let mut server = common::setup_server().unwrap();
-    common::enrich_server_with_movies_index(&mut server).unwrap();
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies();
 
     let config = json!({
       "rankingRules": [
@@ -1096,11 +1105,10 @@ fn search_with_settings_searchable_attributes() {
       "acceptNewFields": false,
     });
 
-    common::update_config(&mut server, config);
-    common::enrich_server_with_movies_documents(&mut server).unwrap();
+    server.update_all_settings(config);
 
     let query = "q=avangers&limit=3";
-    let response = json!([
+    let expect = json!([
       {
         "id": 299536,
         "popularity": 65.013,
@@ -1154,13 +1162,14 @@ fn search_with_settings_searchable_attributes() {
       }
     ]);
 
-    common::search(&mut server, query, response);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
 #[test]
 fn search_with_settings_displayed_attributes() {
-    let mut server = common::setup_server().unwrap();
-    common::enrich_server_with_movies_index(&mut server).unwrap();
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies();
 
     let config = json!({
       "rankingRules": [
@@ -1197,11 +1206,10 @@ fn search_with_settings_displayed_attributes() {
       "acceptNewFields": false,
     });
 
-    common::update_config(&mut server, config);
-    common::enrich_server_with_movies_documents(&mut server).unwrap();
+    server.update_all_settings(config);
 
     let query = "q=avangers&limit=3";
-    let response = json!([
+    let expect = json!([
       {
         "id": 299536,
         "title": "Avengers: Infinity War",
@@ -1225,13 +1233,14 @@ fn search_with_settings_displayed_attributes() {
       }
     ]);
 
-    common::search(&mut server, query, response);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
 #[test]
 fn search_with_settings_searchable_attributes_2() {
-    let mut server = common::setup_server().unwrap();
-    common::enrich_server_with_movies_index(&mut server).unwrap();
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies();
 
     let config = json!({
       "rankingRules": [
@@ -1268,11 +1277,10 @@ fn search_with_settings_searchable_attributes_2() {
       "acceptNewFields": false,
     });
 
-    common::update_config(&mut server, config);
-    common::enrich_server_with_movies_documents(&mut server).unwrap();
+    server.update_all_settings(config);
 
     let query = "q=avangers&limit=3";
-    let response = json!([
+    let expect = json!([
       {
         "id": 299536,
         "title": "Avengers: Infinity War",
@@ -1296,5 +1304,6 @@ fn search_with_settings_searchable_attributes_2() {
       }
     ]);
 
-    common::search(&mut server, query, response);
+    let (response, _status_code) = server.search(query);
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }

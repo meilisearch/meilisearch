@@ -1,45 +1,17 @@
 use std::convert::Into;
-use std::time::Duration;
-
 use assert_json_diff::assert_json_eq;
-use async_std::io::prelude::*;
-use async_std::task::{block_on, sleep};
-use http_service::Body;
 use serde_json::json;
-use serde_json::Value;
 
 mod common;
 
-// Process:
-// - Write a full settings update
-// - Delete all settings
-// Check:
-// - Settings are deleted, all fields are null
-// - POST success repond Status Code 202
-// - Get success repond Status Code 200
-// - Delete success repond Status Code 202
 #[test]
 fn write_all_and_delete() {
-    let mut server = common::setup_server().unwrap();
-
-    // 1 - Create the index
-
-    let body = json!({
-        "uid": "movies",
-        "identifier": "id",
-    })
-    .to_string()
-    .into_bytes();
-
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies();
 
     // 2 - Send the settings
 
-    let json = json!({
+    let body = json!({
         "rankingRules": [
             "typo",
             "words",
@@ -79,53 +51,23 @@ fn write_all_and_delete() {
         "acceptNewFields": false,
     });
 
-    let body = json.to_string().into_bytes();
-
-    let req = http::Request::post("/indexes/movies/settings")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 202);
-
-    block_on(sleep(Duration::from_secs(1)));
+    server.update_all_settings(body.clone());
 
     // 3 - Get all settings and compare to the previous one
 
-    let req = http::Request::get("/indexes/movies/settings")
-        .body(Body::empty())
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
+    let (response, _status_code) = server.get_all_settings();
 
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res_value: Value = serde_json::from_slice(&buf).unwrap();
-
-    assert_json_eq!(json, res_value, ordered: false);
+    assert_json_eq!(body, response, ordered: false);
 
     // 4 - Delete all settings
 
-    let req = http::Request::delete("/indexes/movies/settings")
-        .body(Body::empty())
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 202);
+    server.delete_all_settings();
 
-    block_on(sleep(Duration::from_secs(2)));
+    // 5 - Get all settings and check if they are set to default values
 
-    // 5 - Get all settings and check if they are empty
+    let (response, _status_code) = server.get_all_settings();
 
-    let req = http::Request::get("/indexes/movies/settings")
-        .body(Body::empty())
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res_value: Value = serde_json::from_slice(&buf).unwrap();
-
-    let json = json!({
+    let expect = json!({
         "rankingRules": [
           "typo",
           "words",
@@ -136,61 +78,61 @@ fn write_all_and_delete() {
         ],
         "distinctAttribute": null,
         "searchableAttributes": [
+          "poster_path",
+          "director",
           "id",
-          "release_date",
+          "production_companies",
+          "producer",
           "poster",
-          "description",
-          "title",
           "movie_id",
-          "rank"
+          "vote_count",
+          "cast",
+          "release_date",
+          "vote_average",
+          "rank",
+          "genres",
+          "overview",
+          "description",
+          "tagline",
+          "popularity",
+          "title"
         ],
         "displayedAttributes": [
-          "movie_id",
-          "description",
+          "poster_path",
           "poster",
+          "vote_count",
           "id",
-          "release_date",
+          "movie_id",
+          "title",
           "rank",
-          "title"
+          "tagline",
+          "cast",
+          "producer",
+          "production_companies",
+          "description",
+          "director",
+          "genres",
+          "release_date",
+          "overview",
+          "vote_average",
+          "popularity"
         ],
         "stopWords": null,
         "synonyms": null,
         "acceptNewFields": true,
     });
 
-    assert_json_eq!(json, res_value, ordered: false);
+    assert_json_eq!(expect, response, ordered: false);
 }
 
-// Process:
-// - Write a full setting update
-// - Rewrite an other settings confirmation
-// Check:
-// - Settings are overwrited
-// - Forgotten attributes are deleted
-// - Null attributes are deleted
-// - Empty attribute are deleted
 #[test]
 fn write_all_and_update() {
-    let mut server = common::setup_server().unwrap();
-
-    // 1 - Create the index
-
-    let body = json!({
-        "uid": "movies",
-        "identifier": "id",
-    })
-    .to_string()
-    .into_bytes();
-
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies();
 
     // 2 - Send the settings
 
-    let json = json!({
+    let body = json!({
         "rankingRules": [
             "typo",
             "words",
@@ -230,33 +172,17 @@ fn write_all_and_update() {
         "acceptNewFields": false,
     });
 
-    let body = json.to_string().into_bytes();
-
-    let req = http::Request::post("/indexes/movies/settings")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 202);
-
-    block_on(sleep(Duration::from_secs(1)));
+    server.update_all_settings(body.clone());
 
     // 3 - Get all settings and compare to the previous one
 
-    let req = http::Request::get("/indexes/movies/settings")
-        .body(Body::empty())
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
+    let (response, _status_code) = server.get_all_settings();
 
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res_value: Value = serde_json::from_slice(&buf).unwrap();
-
-    assert_json_eq!(json, res_value, ordered: false);
+    assert_json_eq!(body, response, ordered: false);
 
     // 4 - Update all settings
 
-    let json_update = json!({
+    let body = json!({
         "rankingRules": [
             "typo",
             "words",
@@ -287,29 +213,13 @@ fn write_all_and_update() {
         "acceptNewFields": false,
     });
 
-    let body_update = json_update.to_string().into_bytes();
-
-    let req = http::Request::post("/indexes/movies/settings")
-        .body(Body::from(body_update))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 202);
-
-    block_on(sleep(Duration::from_secs(1)));
+    server.update_all_settings(body);
 
     // 5 - Get all settings and check if the content is the same of (4)
 
-    let req = http::Request::get("/indexes/movies/settings")
-        .body(Body::empty())
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
+    let (response, _status_code) = server.get_all_settings();
 
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res_value: Value = serde_json::from_slice(&buf).unwrap();
-
-    let res_expected = json!({
+    let expected = json!({
         "rankingRules": [
             "typo",
             "words",
@@ -340,5 +250,5 @@ fn write_all_and_update() {
         "acceptNewFields": false
     });
 
-    assert_json_eq!(res_expected, res_value, ordered: false);
+    assert_json_eq!(expected, response, ordered: false);
 }
