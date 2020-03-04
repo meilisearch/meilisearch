@@ -290,7 +290,7 @@ pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
 
     let schema = index.main.schema(&reader)?;
 
-    let searchable_attributes: Option<HashSet<String>> =
+    let searchable_attributes: Option<Vec<String>> =
         schema.map(|s| s.indexed_name().iter().map(|i| (*i).to_string()).collect());
 
     Ok(tide::Response::new(200)

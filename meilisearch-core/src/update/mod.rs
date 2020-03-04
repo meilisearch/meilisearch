@@ -13,15 +13,15 @@ pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
 pub use self::settings_update::{apply_settings_update, push_settings_update};
 
 use std::cmp;
-use std::collections::HashMap;
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
-use heed::Result as ZResult;
-use log::debug;
-use serde::{Deserialize, Serialize};
 use fst::{IntoStreamer, Streamer};
+use heed::Result as ZResult;
+use indexmap::IndexMap;
+use log::debug;
 use sdset::Set;
+use serde::{Deserialize, Serialize};
 
 use crate::{store, DocumentId, MResult};
 use crate::database::{MainT, UpdateT};
@@ -48,14 +48,14 @@ impl Update {
         }
     }
 
-    fn documents_addition(data: Vec<HashMap<String, serde_json::Value>>) -> Update {
+    fn documents_addition(data: Vec<IndexMap<String, serde_json::Value>>) -> Update {
         Update {
             data: UpdateData::DocumentsAddition(data),
             enqueued_at: Utc::now(),
         }
     }
 
-    fn documents_partial(data: Vec<HashMap<String, serde_json::Value>>) -> Update {
+    fn documents_partial(data: Vec<IndexMap<String, serde_json::Value>>) -> Update {
         Update {
             data: UpdateData::DocumentsPartial(data),
             enqueued_at: Utc::now(),
@@ -81,8 +81,8 @@ impl Update {
 pub enum UpdateData {
     ClearAll,
     Customs(Vec<u8>),
-    DocumentsAddition(Vec<HashMap<String, serde_json::Value>>),
-    DocumentsPartial(Vec<HashMap<String, serde_json::Value>>),
+    DocumentsAddition(Vec<IndexMap<String, serde_json::Value>>),
+    DocumentsPartial(Vec<IndexMap<String, serde_json::Value>>),
     DocumentsDeletion(Vec<DocumentId>),
     Settings(SettingsUpdate)
 }
