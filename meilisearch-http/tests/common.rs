@@ -58,6 +58,7 @@ impl Server {
             let response: Value = serde_json::from_slice(&buf).unwrap();
 
             if response["status"] == "processed" {
+                eprintln!("{:?}", response);
                 return;
             }
             block_on(sleep(Duration::from_secs(1)));
@@ -219,14 +220,14 @@ impl Server {
         self.delete_request_async(&url);
     }
 
-    pub fn get_document(&mut self, document_id: u64) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/documents/{}", self.uid, document_id);
+    pub fn get_document(&mut self, document_id: impl ToString) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents/{}", self.uid, document_id.to_string());
         self.get_request(&url)
     }
 
-    pub fn delete_document(&mut self, document_id: u64) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/documents/{}", self.uid, document_id);
-        self.delete_request(&url)
+    pub fn delete_document(&mut self, document_id: impl ToString) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents/{}", self.uid, document_id.to_string());
+        self.delete_request_async(&url)
     }
 
     pub fn delete_multiple_documents(&mut self, body: Value) {
