@@ -1,7 +1,6 @@
 use std::collections::{BTreeSet, HashSet};
 
 use indexmap::IndexMap;
-use meilisearch_schema::Schema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tide::{Request, Response};
@@ -134,10 +133,11 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
     let query: UpdateDocumentsQuery = ctx.query().unwrap_or_default();
 
     let db = &ctx.state().db;
-    let reader = db.main_read_txn()?;
 
-    let current_schema = index.main.schema(&reader)?;
-    if current_schema.is_none() {
+    let reader = db.main_read_txn()?;
+    let mut schema = index.main.schema(&reader)?.ok_or(ResponseError::internal("schema not found"))?;
+
+    if schema.identifier().is_none() {
         let id = match query.identifier {
             Some(id) => id,
             None => match data.first().and_then(|docs| find_identifier(docs)) {
@@ -145,9 +145,12 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
                 None => return Err(ResponseError::bad_request("Could not infer a schema")),
             },
         };
-        let mut writer = db.main_write_txn()?;
-        index.main.put_schema(&mut writer, &Schema::with_identifier(&id))?;
-        writer.commit()?;
+
+        if schema.set_identifier(&id).is_ok() {
+            let mut writer = db.main_write_txn()?;
+            index.main.put_schema(&mut writer, &schema)?;
+            writer.commit()?;
+        }
     }
 
     let mut document_addition = if is_partial {

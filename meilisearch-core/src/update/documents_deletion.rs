@@ -40,7 +40,7 @@ impl DocumentsDeletion {
     where
         D: serde::Serialize,
     {
-        let identifier = schema.identifier();
+        let identifier = schema.identifier().ok_or(Error::MissingIdentifier)?;
         let document_id = match extract_document_id(&identifier, &document)? {
             Some(id) => id,
             None => return Err(Error::MissingDocumentId),

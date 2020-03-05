@@ -8,6 +8,7 @@ use crossbeam_channel::{Receiver, Sender};
 use heed::types::{Str, Unit};
 use heed::{CompactionOption, Result as ZResult};
 use log::debug;
+use meilisearch_schema::Schema;
 
 use crate::{store, update, Index, MResult};
 
@@ -242,6 +243,7 @@ impl Database {
                 index.main.put_name(&mut writer, name)?;
                 index.main.put_created_at(&mut writer)?;
                 index.main.put_updated_at(&mut writer)?;
+                index.main.put_schema(&mut writer, &Schema::new())?;
 
                 let env_clone = self.env.clone();
                 let update_env_clone = self.update_env.clone();

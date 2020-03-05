@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use log::error;
 use meilisearch_core::ProcessedUpdateResult;
-use meilisearch_schema::Schema;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -41,7 +40,10 @@ pub async fn list_indexes(ctx: Request<Data>) -> SResult<Response> {
                 let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
 
                 let identifier = match index.main.schema(&reader) {
-                    Ok(Some(schema)) => Some(schema.identifier().to_owned()),
+                    Ok(Some(schema)) => match schema.identifier() {
+                        Some(identifier) => Some(identifier.to_owned()),
+                        None => None
+                    },
                     _ => None,
                 };
 
@@ -88,7 +90,10 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
     let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
 
     let identifier = match index.main.schema(&reader) {
-        Ok(Some(schema)) => Some(schema.identifier().to_owned()),
+        Ok(Some(schema)) => match schema.identifier() {
+            Some(identifier) => Some(identifier.to_owned()),
+            None => None
+        },
         _ => None,
     };
 
@@ -171,9 +176,11 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         .into_internal_error()?;
 
     if let Some(id) = body.identifier.clone() {
-        created_index
-            .main
-            .put_schema(&mut writer, &Schema::with_identifier(&id))?;
+        if let Some(mut schema) = created_index.main.schema(&mut writer)? {
+            if let Ok(_) = schema.set_identifier(&id) {
+                created_index.main.put_schema(&mut writer, &schema)?;
+            }
+        }
     }
 
     writer.commit()?;
@@ -224,15 +231,19 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
         index.main.put_name(&mut writer, &name)?;
     }
 
-    if let Some(identifier) = body.identifier {
-        if let Ok(Some(_)) = index.main.schema(&writer) {
-            return Err(ResponseError::bad_request(
-                "The index identifier cannot be updated",
-            ));
+    if let Some(id) = body.identifier.clone() {
+        if let Some(mut schema) = index.main.schema(&mut writer)? {
+            match schema.identifier() {
+                Some(_) => {
+                    return Err(ResponseError::bad_request("The index identifier cannot be updated"));
+                },
+                None => {
+                    if let Ok(_) = schema.set_identifier(&id) {
+                        index.main.put_schema(&mut writer, &schema)?;
+                    }
+                }
+            }
         }
-        index
-            .main
-            .put_schema(&mut writer, &Schema::with_identifier(&identifier))?;
     }
 
     index.main.put_updated_at(&mut writer)?;
@@ -244,7 +255,15 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
     let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
 
     let identifier = match index.main.schema(&reader) {
-        Ok(Some(schema)) => Some(schema.identifier().to_owned()),
+        Ok(Some(schema)) => {
+            match schema.identifier() {
+                Some(identifier) => {
+                    Some(identifier.to_owned())
+                },
+                None => None
+            }
+
+        },
         _ => None,
     };
 

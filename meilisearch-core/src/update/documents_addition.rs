@@ -115,7 +115,7 @@ pub fn apply_documents_addition<'a, 'b>(
         None => return Err(Error::SchemaMissing),
     };
 
-    let identifier = schema.identifier();
+    let identifier = schema.identifier().ok_or(Error::MissingIdentifier)?;
 
     // 1. store documents ids for future deletion
     for document in addition {
@@ -184,7 +184,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
         None => return Err(Error::SchemaMissing),
     };
 
-    let identifier = schema.identifier();
+    let identifier = schema.identifier().ok_or(Error::MissingIdentifier)?;
 
     // 1. store documents ids for future deletion
     for mut document in addition {

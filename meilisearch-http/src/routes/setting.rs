@@ -50,11 +50,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
             .iter()
             .map(|s| (*s).to_string())
             .collect::<Vec<String>>();
-        if attrs.is_empty() {
-            None
-        } else {
-            Some(attrs)
-        }
+        Some(attrs)
     });
 
     let displayed_attributes = schema.clone().map(|s| {
@@ -63,11 +59,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
             .iter()
             .map(|s| (*s).to_string())
             .collect::<HashSet<String>>();
-        if attrs.is_empty() {
-            None
-        } else {
-            Some(attrs)
-        }
+        Some(attrs)
     });
     let accept_new_fields = schema.map(|s| s.accept_new_fields());
 
