@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use indexmap::IndexMap;
-use meilisearch_core::settings::{SettingsUpdate, UpdateState};
+use meilisearch_schema::Schema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tide::{Request, Response};
@@ -135,7 +135,7 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
 
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
-    let mut update_writer = db.update_write_txn()?;
+
     let current_schema = index.main.schema(&reader)?;
     if current_schema.is_none() {
         let id = match query.identifier {
@@ -145,11 +145,9 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
                 None => return Err(ResponseError::bad_request("Could not infer a schema")),
             },
         };
-        let settings_update = SettingsUpdate {
-            identifier: UpdateState::Update(id),
-            ..SettingsUpdate::default()
-        };
-        index.settings_update(&mut update_writer, settings_update)?;
+        let mut writer = db.main_write_txn()?;
+        index.main.put_schema(&mut writer, &Schema::with_identifier(&id))?;
+        writer.commit()?;
     }
 
     let mut document_addition = if is_partial {
@@ -162,6 +160,7 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
         document_addition.update_document(document);
     }
 
+    let mut update_writer = db.update_write_txn()?;
     let update_id = document_addition.finalize(&mut update_writer)?;
     update_writer.commit()?;
 
