@@ -138,7 +138,13 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
     let db = &ctx.state().db;
 
     let uid = match body.uid {
-        Some(uid) => uid,
+        Some(uid) => {
+            if uid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
+                uid
+            } else {
+                return Err(ResponseError::InvalidIndexUid)
+            }
+        },
         None => loop {
             let uid = generate_uid();
             if db.open_index(&uid).is_none() {

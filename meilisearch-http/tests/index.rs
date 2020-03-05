@@ -470,8 +470,10 @@ fn create_index_failed() {
 }
 
 
+
+// Resolve issue https://github.com/meilisearch/MeiliSearch/issues/492
 #[test]
-fn create_index_with_identifier() {
+fn create_index_with_identifier_and_index() {
     let mut server = common::Server::with_uid("movies");
 
     let body = json!({
@@ -497,4 +499,54 @@ fn create_index_with_identifier() {
     });
 
     assert_json_eq!(response, expect, ordered: false);
+}
+
+// Resolve issue https://github.com/meilisearch/MeiliSearch/issues/497
+#[test]
+fn create_index_with_invalid_uid() {
+    let mut server = common::Server::with_uid("");
+
+    let body = json!({
+        "uid": "the movies"
+    });
+
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
+
+    let message = response["message"].as_str().unwrap();
+    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
+
+    let body = json!({
+        "uid": "%$#"
+    });
+
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
+
+    let message = response["message"].as_str().unwrap();
+    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
+
+    let body = json!({
+        "uid": "the~movies"
+    });
+
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
+
+    let message = response["message"].as_str().unwrap();
+    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
+
+    let body = json!({
+        "uid": "🎉"
+    });
+
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
+
+    let message = response["message"].as_str().unwrap();
+    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
 }
