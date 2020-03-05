@@ -255,19 +255,6 @@ pub async fn delete_distinct(ctx: Request<Data>) -> SResult<Response> {
     Ok(tide::Response::new(202).body_json(&response_body)?)
 }
 
-pub async fn get_identifier(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Private)?;
-    let index = ctx.index()?;
-    let db = &ctx.state().db;
-    let reader = db.main_read_txn()?;
-
-    let schema = index.main.schema(&reader)?;
-
-    let identifier = schema.map(|s| s.identifier().to_string());
-
-    Ok(tide::Response::new(200).body_json(&identifier).unwrap())
-}
-
 pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Private)?;
     let index = ctx.index()?;

@@ -83,9 +83,6 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .post(|ctx| into_response(setting::update_distinct(ctx)))
         .delete(|ctx| into_response(setting::delete_distinct(ctx)));
 
-    app.at("/indexes/:index/settings/identifier")
-        .get(|ctx| into_response(setting::get_identifier(ctx)));
-
     app.at("/indexes/:index/settings/searchable-attributes")
         .get(|ctx| into_response(setting::get_searchable(ctx)))
         .post(|ctx| into_response(setting::update_searchable(ctx)))
