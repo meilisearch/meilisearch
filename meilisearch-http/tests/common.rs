@@ -58,7 +58,7 @@ impl Server {
             let response: Value = serde_json::from_slice(&buf).unwrap();
 
             if response["status"] == "processed" {
-                eprintln!("{:?}", response);
+                eprintln!("{:#?}", response);
                 return;
             }
             block_on(sleep(Duration::from_secs(1)));

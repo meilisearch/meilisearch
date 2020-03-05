@@ -117,8 +117,8 @@ fn write_all_and_delete() {
           "vote_average",
           "popularity"
         ],
-        "stopWords": null,
-        "synonyms": null,
+        "stopWords": [],
+        "synonyms": {},
         "acceptNewFields": true,
     });
 
@@ -242,7 +242,7 @@ fn write_all_and_update() {
             "rank",
             "poster",
         ],
-        "stopWords": null,
+        "stopWords": [],
         "synonyms": {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],

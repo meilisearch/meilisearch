@@ -96,7 +96,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .post(|ctx| into_response(setting::update_displayed(ctx)))
         .delete(|ctx| into_response(setting::delete_displayed(ctx)));
 
-    app.at("/indexes/:index/settings/index-new-field")
+    app.at("/indexes/:index/settings/accept-new-fields")
         .get(|ctx| into_response(setting::get_accept_new_fields(ctx)))
         .post(|ctx| into_response(setting::update_accept_new_fields(ctx)));
 
