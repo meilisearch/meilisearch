@@ -18,33 +18,19 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let stop_words_fst = index.main.stop_words_fst(&reader)?;
     let stop_words = stop_words_fst.unwrap_or_default().stream().into_strs()?;
     let stop_words: BTreeSet<String> = stop_words.into_iter().collect();
-    let stop_words = if !stop_words.is_empty() {
-        Some(stop_words)
-    } else {
-        None
-    };
 
     let synonyms_fst = index.main.synonyms_fst(&reader)?.unwrap_or_default();
     let synonyms_list = synonyms_fst.stream().into_strs()?;
 
     let mut synonyms = BTreeMap::new();
-
     let index_synonyms = &index.synonyms;
-
     for synonym in synonyms_list {
         let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
-
         if let Some(list) = alternative_list {
             let list = list.stream().into_strs()?;
             synonyms.insert(synonym, list);
         }
     }
-
-    let synonyms = if !synonyms.is_empty() {
-        Some(synonyms)
-    } else {
-        None
-    };
 
     let ranking_rules = index
         .main
@@ -90,8 +76,8 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
         distinct_attribute: Some(distinct_attribute),
         searchable_attributes,
         displayed_attributes,
-        stop_words: Some(stop_words),
-        synonyms: Some(synonyms),
+        stop_words: Some(Some(stop_words)),
+        synonyms: Some(Some(synonyms)),
         accept_new_fields: Some(accept_new_fields),
     };
 

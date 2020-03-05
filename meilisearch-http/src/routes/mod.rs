@@ -105,7 +105,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .post(|ctx| into_response(synonym::update(ctx)))
         .delete(|ctx| into_response(synonym::delete(ctx)));
 
-    app.at("/indexes/:index/settings/stop_words")
+    app.at("/indexes/:index/settings/stop-words")
         .get(|ctx| into_response(stop_words::get(ctx)))
         .post(|ctx| into_response(stop_words::update(ctx)))
         .delete(|ctx| into_response(stop_words::delete(ctx)));
