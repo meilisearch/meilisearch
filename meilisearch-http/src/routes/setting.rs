@@ -115,7 +115,8 @@ pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -177,7 +178,8 @@ pub async fn update_rules(mut ctx: Request<Data>) -> SResult<Response> {
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -229,7 +231,8 @@ pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -284,7 +287,8 @@ pub async fn update_searchable(mut ctx: Request<Data>) -> SResult<Response> {
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -342,7 +346,8 @@ pub async fn update_displayed(mut ctx: Request<Data>) -> SResult<Response> {
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };
@@ -395,7 +400,8 @@ pub async fn update_accept_new_fields(mut ctx: Request<Data>) -> SResult<Respons
     };
 
     let mut writer = db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings.into_update()?)?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
     let response_body = IndexUpdateResponse { update_id };

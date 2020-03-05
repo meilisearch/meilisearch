@@ -260,6 +260,11 @@ impl Server {
         self.post_request_async(&url, body);
     }
 
+    pub fn update_ranking_rules_sync(&mut self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/ranking-rules", self.uid);
+        self.post_request(&url, body)
+    }
+
     pub fn delete_ranking_rules(&mut self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings/ranking-rules", self.uid);
         self.delete_request_async(&url)

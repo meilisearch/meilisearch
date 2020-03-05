@@ -37,7 +37,7 @@ fn write_all_and_delete() {
 
     let (response, _status_code) = server.get_ranking_rules();
 
-    let json = json!([
+    let expected = json!([
         "typo",
         "words",
         "proximity",
@@ -46,7 +46,7 @@ fn write_all_and_delete() {
         "exactness"
     ]);
 
-    assert_json_eq!(expect, response, ordered: false);
+    assert_json_eq!(expected, response, ordered: false);
 }
 
 #[test]
@@ -104,4 +104,38 @@ fn write_all_and_update() {
     ]);
 
     assert_json_eq!(expected, response, ordered: false);
+}
+
+#[test]
+fn send_undefined_rule() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+        "identifier": "id",
+    });
+    server.create_index(body);
+
+    let body = json!([
+        "typos",
+    ]);
+
+    let (_response, status_code) = server.update_ranking_rules_sync(body);
+    assert_eq!(status_code, 400);
+}
+
+#[test]
+fn send_malformed_custom_rule() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+        "identifier": "id",
+    });
+    server.create_index(body);
+
+    let body = json!([
+        "dsc(truc)",
+    ]);
+
+    let (_response, status_code) = server.update_ranking_rules_sync(body);
+    assert_eq!(status_code, 400);
 }
