@@ -1,0 +1,290 @@
+use assert_json_diff::assert_json_eq;
+use serde_json::json;
+
+mod common;
+
+#[test]
+fn index_new_fields_default() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+        "identifier": "id",
+    });
+    server.create_index(body);
+
+    // 1 - Add a document
+
+    let body = json!([{
+        "id": 1,
+        "title": "I'm a legend",
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 2 - Get the complete document
+
+    let expected = json!({
+        "id": 1,
+        "title": "I'm a legend",
+    });
+
+    let (response, status_code) = server.get_document(1);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+
+    // 3 - Add a document with more fields
+
+    let body = json!([{
+        "id": 2,
+        "title": "I'm not a legend",
+        "description": "A bad copy of the original movie I'm a lengend"
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 4 - Get the complete document
+
+    let expected = json!({
+        "id": 2,
+        "title": "I'm not a legend",
+        "description": "A bad copy of the original movie I'm a lengend"
+    });
+
+    let (response, status_code) = server.get_document(2);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+}
+
+#[test]
+fn index_new_fields_true() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+        "identifier": "id",
+    });
+    server.create_index(body);
+
+    // 1 - Set indexNewFields = true
+
+    server.update_accept_new_fields(json!(true));
+
+    // 2 - Add a document
+
+    let body = json!([{
+        "id": 1,
+        "title": "I'm a legend",
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 3 - Get the complete document
+
+    let expected = json!({
+        "id": 1,
+        "title": "I'm a legend",
+    });
+
+    let (response, status_code) = server.get_document(1);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+
+    // 4 - Add a document with more fields
+
+    let body = json!([{
+        "id": 2,
+        "title": "I'm not a legend",
+        "description": "A bad copy of the original movie I'm a lengend"
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 5 - Get the complete document
+
+    let expected = json!({
+        "id": 2,
+        "title": "I'm not a legend",
+        "description": "A bad copy of the original movie I'm a lengend"
+    });
+
+    let (response, status_code) = server.get_document(2);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+}
+
+#[test]
+fn index_new_fields_false() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+        "identifier": "id",
+    });
+    server.create_index(body);
+
+    // 1 - Set indexNewFields = false
+
+    server.update_accept_new_fields(json!(false));
+
+    // 2 - Add a document
+
+    let body = json!([{
+        "id": 1,
+        "title": "I'm a legend",
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 3 - Get the complete document
+
+    let expected = json!({
+        "id": 1,
+    });
+
+    let (response, status_code) = server.get_document(1);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+
+    // 4 - Add a document with more fields
+
+    let body = json!([{
+        "id": 2,
+        "title": "I'm not a legend",
+        "description": "A bad copy of the original movie I'm a lengend"
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 5 - Get the complete document
+
+    let expected = json!({
+        "id": 2,
+    });
+
+    let (response, status_code) = server.get_document(2);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+}
+
+#[test]
+fn index_new_fields_true_then_false() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+        "identifier": "id",
+    });
+    server.create_index(body);
+
+    // 1 - Set indexNewFields = true
+
+    server.update_accept_new_fields(json!(true));
+
+    // 2 - Add a document
+
+    let body = json!([{
+        "id": 1,
+        "title": "I'm a legend",
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 3 - Get the complete document
+
+    let expected = json!({
+        "id": 1,
+        "title": "I'm a legend",
+    });
+
+    let (response, status_code) = server.get_document(1);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+
+    // 4 - Set indexNewFields = false
+
+    server.update_accept_new_fields(json!(false));
+
+    // 5 - Add a document with more fields
+
+    let body = json!([{
+        "id": 2,
+        "title": "I'm not a legend",
+        "description": "A bad copy of the original movie I'm a lengend"
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 6 - Get the complete document
+
+    let expected = json!({
+        "id": 2,
+        "title": "I'm not a legend",
+    });
+
+    let (response, status_code) = server.get_document(2);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+}
+
+#[test]
+fn index_new_fields_false_then_true() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+        "identifier": "id",
+    });
+    server.create_index(body);
+
+    // 1 - Set indexNewFields = false
+
+    server.update_accept_new_fields(json!(false));
+
+    // 2 - Add a document
+
+    let body = json!([{
+        "id": 1,
+        "title": "I'm a legend",
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 3 - Get the complete document
+
+    let expected = json!({
+        "id": 1,
+    });
+
+    let (response, status_code) = server.get_document(1);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+
+    // 4 - Set indexNewFields = false
+
+    server.update_accept_new_fields(json!(true));
+
+    // 5 - Add a document with more fields
+
+    let body = json!([{
+        "id": 2,
+        "title": "I'm not a legend",
+        "description": "A bad copy of the original movie I'm a lengend"
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 6 - Get the complete document
+
+    let expected = json!({
+        "id": 1,
+    });
+
+    let (response, status_code) = server.get_document(1);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+
+    let expected = json!({
+        "id": 2,
+        "description": "A bad copy of the original movie I'm a lengend"
+    });
+
+    let (response, status_code) = server.get_document(2);
+    assert_eq!(status_code, 200);
+    assert_json_eq!(response, expected);
+}

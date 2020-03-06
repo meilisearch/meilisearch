@@ -1,14 +1,11 @@
-use async_std::io::prelude::*;
-use async_std::task::block_on;
-use http_service::Body;
 use serde_json::json;
-use serde_json::Value;
+use assert_json_diff::assert_json_eq;
 
 mod common;
 
 #[test]
 fn create_index_with_name() {
-    let mut server = common::setup_server().unwrap();
+    let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
     // Index with only a name "movies"
@@ -16,20 +13,10 @@ fn create_index_with_name() {
 
     let body = json!({
         "name": "movies",
-    })
-    .to_string()
-    .into_bytes();
+    });
 
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res1_value: Value = serde_json::from_slice(&buf).unwrap();
-
+    let (res1_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
     let r1_uid = res1_value["uid"].as_str().unwrap();
@@ -45,14 +32,8 @@ fn create_index_with_name() {
     // Must have 1 index with the exact same content that the request 1
     // GET: /indexes
 
-    let req = http::Request::get("/indexes").body(Body::empty()).unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res2_value: Value = serde_json::from_slice(&buf).unwrap();
-
+    let (res2_value, status_code) = server.list_indexes();
+    assert_eq!(status_code, 200);
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
     assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
     let r2_name = res2_value[0]["name"].as_str().unwrap();
@@ -68,7 +49,7 @@ fn create_index_with_name() {
 
 #[test]
 fn create_index_with_uid() {
-    let mut server = common::setup_server().unwrap();
+    let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
     // Index with only an uid "movies"
@@ -76,20 +57,10 @@ fn create_index_with_uid() {
 
     let body = json!({
         "uid": "movies",
-    })
-    .to_string()
-    .into_bytes();
+    });
 
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res1_value: Value = serde_json::from_slice(&buf).unwrap();
-
+    let (res1_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
     let r1_uid = res1_value["uid"].as_str().unwrap();
@@ -105,14 +76,8 @@ fn create_index_with_uid() {
     // Must have 1 index with the exact same content that the request 1
     // GET: /indexes
 
-    let req = http::Request::get("/indexes").body(Body::empty()).unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res2_value: Value = serde_json::from_slice(&buf).unwrap();
-
+    let (res2_value, status_code) = server.list_indexes();
+    assert_eq!(status_code, 200);
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
     assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
     let r2_name = res2_value[0]["name"].as_str().unwrap();
@@ -128,7 +93,7 @@ fn create_index_with_uid() {
 
 #[test]
 fn create_index_with_name_and_uid() {
-    let mut server = common::setup_server().unwrap();
+    let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
     // Index with a name "Films" and an uid "fn_movies"
@@ -137,19 +102,9 @@ fn create_index_with_name_and_uid() {
     let body = json!({
         "name": "Films",
         "uid": "fr_movies",
-    })
-    .to_string()
-    .into_bytes();
-
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res1_value: Value = serde_json::from_slice(&buf).unwrap();
+    });
+    let (res1_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
 
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
@@ -166,13 +121,8 @@ fn create_index_with_name_and_uid() {
     // Must have 1 index with the exact same content that the request 1
     // GET: /indexes
 
-    let req = http::Request::get("/indexes").body(Body::empty()).unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res2_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res2_value, status_code) = server.list_indexes();
+    assert_eq!(status_code, 200);
 
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
     assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
@@ -189,26 +139,18 @@ fn create_index_with_name_and_uid() {
 
 #[test]
 fn rename_index() {
-    let mut server = common::setup_server().unwrap();
+    let mut server = common::Server::with_uid("movies");
     // 1 - Create a new index
     // Index with only a name "movies"
     // POST: /indexes
 
     let body = json!({
         "name": "movies",
-    })
-    .to_string()
-    .into_bytes();
+        "uid": "movies",
+    });
 
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res1_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res1_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
 
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
@@ -217,7 +159,7 @@ fn rename_index() {
     let r1_updated_at = res1_value["updatedAt"].as_str().unwrap();
 
     assert_eq!(r1_name, "movies");
-    assert_eq!(r1_uid.len(), 8);
+    assert_eq!(r1_uid.len(), 6);
     assert!(r1_created_at.len() > 1);
     assert!(r1_updated_at.len() > 1);
 
@@ -227,19 +169,10 @@ fn rename_index() {
 
     let body = json!({
         "name": "TV Shows",
-    })
-    .to_string()
-    .into_bytes();
+    });
 
-    let req = http::Request::put(format!("/indexes/{}", r1_uid))
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res2_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res2_value, status_code) = server.update_index(body);
+    assert_eq!(status_code, 200);
 
     assert_eq!(res2_value.as_object().unwrap().len(), 5);
     let r2_name = res2_value["name"].as_str().unwrap();
@@ -256,13 +189,8 @@ fn rename_index() {
     // Must have 1 index with the exact same content that the request 2
     // GET: /indexes
 
-    let req = http::Request::get("/indexes").body(Body::empty()).unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res3_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res3_value, status_code) = server.list_indexes();
+    assert_eq!(status_code, 200);
 
     assert_eq!(res3_value.as_array().unwrap().len(), 1);
     assert_eq!(res3_value[0].as_object().unwrap().len(), 5);
@@ -279,7 +207,7 @@ fn rename_index() {
 
 #[test]
 fn delete_index_and_recreate_it() {
-    let mut server = common::setup_server().unwrap();
+    let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
     // Index with only a name "movies"
@@ -287,19 +215,11 @@ fn delete_index_and_recreate_it() {
 
     let body = json!({
         "name": "movies",
-    })
-    .to_string()
-    .into_bytes();
+        "uid": "movies",
+    });
 
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res1_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res1_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
 
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
@@ -308,7 +228,7 @@ fn delete_index_and_recreate_it() {
     let r1_updated_at = res1_value["updatedAt"].as_str().unwrap();
 
     assert_eq!(r1_name, "movies");
-    assert_eq!(r1_uid.len(), 8);
+    assert_eq!(r1_uid.len(), 6);
     assert!(r1_created_at.len() > 1);
     assert!(r1_updated_at.len() > 1);
 
@@ -316,13 +236,8 @@ fn delete_index_and_recreate_it() {
     // Must have 1 index with the exact same content that the request 1
     // GET: /indexes
 
-    let req = http::Request::get("/indexes").body(Body::empty()).unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res2_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res2_value, status_code) = server.list_indexes();
+    assert_eq!(status_code, 200);
 
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
     assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
@@ -340,27 +255,15 @@ fn delete_index_and_recreate_it() {
     // Update "movies" to "TV Shows"
     // DELETE: /indexes/:uid
 
-    let req = http::Request::delete(format!("/indexes/{}", r1_uid))
-        .body(Body::empty())
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 204);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    assert_eq!(buf.len(), 0);
+    let (_res2_value, status_code) = server.delete_index();
+    assert_eq!(status_code, 204);
 
     // 4 - Check the list of indexes
     // Must have 0 index
     // GET: /indexes
 
-    let req = http::Request::get("/indexes").body(Body::empty()).unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res2_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res2_value, status_code) = server.list_indexes();
+    assert_eq!(status_code, 200);
 
     assert_eq!(res2_value.as_array().unwrap().len(), 0);
 
@@ -370,19 +273,10 @@ fn delete_index_and_recreate_it() {
 
     let body = json!({
         "name": "movies",
-    })
-    .to_string()
-    .into_bytes();
+    });
 
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res1_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res1_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
 
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
@@ -399,13 +293,8 @@ fn delete_index_and_recreate_it() {
     // Must have 1 index with the exact same content that the request 1
     // GET: /indexes
 
-    let req = http::Request::get("/indexes").body(Body::empty()).unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res2_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res2_value, status_code) = server.list_indexes();
+    assert_eq!(status_code, 200);
 
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
     assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
@@ -422,7 +311,7 @@ fn delete_index_and_recreate_it() {
 
 #[test]
 fn check_multiples_indexes() {
-    let mut server = common::setup_server().unwrap();
+    let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
     // Index with only a name "movies"
@@ -430,19 +319,10 @@ fn check_multiples_indexes() {
 
     let body = json!({
         "name": "movies",
-    })
-    .to_string()
-    .into_bytes();
+    });
 
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res1_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res1_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
 
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
     let r1_name = res1_value["name"].as_str().unwrap();
@@ -459,13 +339,8 @@ fn check_multiples_indexes() {
     // Must have 1 index with the exact same content that the request 1
     // GET: /indexes
 
-    let req = http::Request::get("/indexes").body(Body::empty()).unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res2_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res2_value, status_code) = server.list_indexes();
+    assert_eq!(status_code, 200);
 
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
     assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
@@ -485,19 +360,10 @@ fn check_multiples_indexes() {
 
     let body = json!({
         "name": "films",
-    })
-    .to_string()
-    .into_bytes();
+    });
 
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 201);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res3_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res3_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
 
     assert_eq!(res3_value.as_object().unwrap().len(), 5);
     let r3_name = res3_value["name"].as_str().unwrap();
@@ -514,13 +380,8 @@ fn check_multiples_indexes() {
     // Must have 2 index with the exact same content that the request 1 and 3
     // GET: /indexes
 
-    let req = http::Request::get("/indexes").body(Body::empty()).unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 200);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res4_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res4_value, status_code) = server.list_indexes();
+    assert_eq!(status_code, 200);
 
     assert_eq!(res4_value.as_array().unwrap().len(), 2);
 
@@ -563,37 +424,15 @@ fn check_multiples_indexes() {
 
 #[test]
 fn create_index_failed() {
-    let mut server = common::setup_server().unwrap();
-
-    // 1 - Push index creation with empty body
-    // POST: /indexes
-
-    let req = http::Request::post("/indexes").body(Body::empty()).unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 400);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res_value: Value = serde_json::from_slice(&buf).unwrap();
-
-    let message = res_value["message"].as_str().unwrap();
-    assert_eq!(res_value.as_object().unwrap().len(), 1);
-    assert_eq!(message, "invalid data");
+    let mut server = common::Server::with_uid("movies");
 
     // 2 - Push index creation with empty json body
     // POST: /indexes
 
-    let body = json!({}).to_string().into_bytes();
+    let body = json!({});
 
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 400);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
 
     let message = res_value["message"].as_str().unwrap();
     assert_eq!(res_value.as_object().unwrap().len(), 1);
@@ -605,19 +444,10 @@ fn create_index_failed() {
     let body = json!({
         "name": "movies",
         "active": true
-    })
-    .to_string()
-    .into_bytes();
+    });
 
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 400);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
 
     let message = res_value["message"].as_str().unwrap();
     assert_eq!(res_value.as_object().unwrap().len(), 1);
@@ -629,21 +459,94 @@ fn create_index_failed() {
     let body = json!({
         "name": "movies",
         "uid": 0
-    })
-    .to_string()
-    .into_bytes();
+    });
 
-    let req = http::Request::post("/indexes")
-        .body(Body::from(body))
-        .unwrap();
-    let res = server.simulate(req).unwrap();
-    assert_eq!(res.status(), 400);
-
-    let mut buf = Vec::new();
-    block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-    let res_value: Value = serde_json::from_slice(&buf).unwrap();
+    let (res_value, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
 
     let message = res_value["message"].as_str().unwrap();
     assert_eq!(res_value.as_object().unwrap().len(), 1);
     assert_eq!(message, "invalid data");
+}
+
+
+
+// Resolve issue https://github.com/meilisearch/MeiliSearch/issues/492
+#[test]
+fn create_index_with_identifier_and_index() {
+    let mut server = common::Server::with_uid("movies");
+
+    let body = json!({
+        "uid": "movies",
+        "identifier": "id",
+    });
+
+    let (_response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
+
+    let body = json!([{
+        "id": 123,
+        "text": "The mask"
+    }]);
+
+    server.add_or_replace_multiple_documents(body.clone());
+
+    let (response, _status_code) = server.get_document(123);
+
+    let expect = json!({
+        "id": 123,
+        "text": "The mask"
+    });
+
+    assert_json_eq!(response, expect, ordered: false);
+}
+
+// Resolve issue https://github.com/meilisearch/MeiliSearch/issues/497
+#[test]
+fn create_index_with_invalid_uid() {
+    let mut server = common::Server::with_uid("");
+
+    let body = json!({
+        "uid": "the movies"
+    });
+
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
+
+    let message = response["message"].as_str().unwrap();
+    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
+
+    let body = json!({
+        "uid": "%$#"
+    });
+
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
+
+    let message = response["message"].as_str().unwrap();
+    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
+
+    let body = json!({
+        "uid": "the~movies"
+    });
+
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
+
+    let message = response["message"].as_str().unwrap();
+    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
+
+    let body = json!({
+        "uid": "🎉"
+    });
+
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 400);
+
+    let message = response["message"].as_str().unwrap();
+    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
 }

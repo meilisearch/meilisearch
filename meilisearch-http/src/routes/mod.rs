@@ -65,7 +65,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .get(|ctx| into_response(document::get_document(ctx)))
         .delete(|ctx| into_response(document::delete_document(ctx)));
 
-    app.at("/indexes/:index/documents/:identifier/delete-batch")
+    app.at("/indexes/:index/documents/delete-batch")
         .post(|ctx| into_response(document::delete_multiple_documents(ctx)));
 
     app.at("/indexes/:index/settings")
@@ -83,9 +83,6 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .post(|ctx| into_response(setting::update_distinct(ctx)))
         .delete(|ctx| into_response(setting::delete_distinct(ctx)));
 
-    app.at("/indexes/:index/settings/identifier")
-        .get(|ctx| into_response(setting::get_identifier(ctx)));
-
     app.at("/indexes/:index/settings/searchable-attributes")
         .get(|ctx| into_response(setting::get_searchable(ctx)))
         .post(|ctx| into_response(setting::update_searchable(ctx)))
@@ -96,7 +93,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .post(|ctx| into_response(setting::update_displayed(ctx)))
         .delete(|ctx| into_response(setting::delete_displayed(ctx)));
 
-    app.at("/indexes/:index/settings/index-new-field")
+    app.at("/indexes/:index/settings/accept-new-fields")
         .get(|ctx| into_response(setting::get_accept_new_fields(ctx)))
         .post(|ctx| into_response(setting::update_accept_new_fields(ctx)));
 
@@ -105,7 +102,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .post(|ctx| into_response(synonym::update(ctx)))
         .delete(|ctx| into_response(synonym::delete(ctx)));
 
-    app.at("/indexes/:index/settings/stop_words")
+    app.at("/indexes/:index/settings/stop-words")
         .get(|ctx| into_response(stop_words::get(ctx)))
         .post(|ctx| into_response(stop_words::update(ctx)))
         .delete(|ctx| into_response(stop_words::delete(ctx)));
@@ -113,7 +110,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
     app.at("/indexes/:index/stats")
         .get(|ctx| into_response(stats::index_stats(ctx)));
 
-    app.at("/keys/").get(|ctx| into_response(key::list(ctx)));
+    app.at("/keys").get(|ctx| into_response(key::list(ctx)));
 
     app.at("/health")
         .get(|ctx| into_response(health::get_health(ctx)))

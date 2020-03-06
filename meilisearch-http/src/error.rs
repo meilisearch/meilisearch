@@ -22,6 +22,7 @@ pub enum ResponseError {
     BadParameter(String, String),
     OpenIndex(String),
     CreateIndex(String),
+    InvalidIndexUid,
     Maintenance,
 }
 
@@ -106,6 +107,10 @@ impl IntoResponse for ResponseError {
             ),
             ResponseError::OpenIndex(err) => error(
                 format!("Impossible to open index; {}", err),
+                StatusCode::BAD_REQUEST,
+            ),
+            ResponseError::InvalidIndexUid => error(
+                "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).".to_string(),
                 StatusCode::BAD_REQUEST,
             ),
             ResponseError::Maintenance => error(

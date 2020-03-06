@@ -17,9 +17,9 @@ pub struct Opt {
     pub master_key: Option<String>,
 
     /// This environment variable must be set to `production` if your are running in production.
-    /// Could be `production` or `development`
-    /// - `production`: Force api keys
-    /// - `development`: Show logs in "info" mode + not mendatory to specify the api keys
+    /// If the server is running in development mode more logs will be displayed,
+    /// and the master key can be avoided which implies that there is no security on the updates routes.
+    /// This is useful to debug when integrating the engine with another service.
     #[structopt(long, env = "MEILI_ENV", default_value = "development", possible_values = &POSSIBLE_ENV)]
     pub env: String,
 
