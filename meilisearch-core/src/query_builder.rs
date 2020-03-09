@@ -196,16 +196,6 @@ mod tests {
         }
     }
 
-    const fn doc_attr_index(document_id: u64, attribute: u16, word_index: u16) -> DocIndex {
-        DocIndex {
-            document_id: DocumentId(document_id),
-            attribute,
-            word_index,
-            char_index: 0,
-            char_length: 0,
-        }
-    }
-
     pub struct TempDatabase {
         database: Database,
         index: Index,
