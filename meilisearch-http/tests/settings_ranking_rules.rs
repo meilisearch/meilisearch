@@ -111,7 +111,7 @@ fn send_undefined_rule() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     server.create_index(body);
 
@@ -128,7 +128,7 @@ fn send_malformed_custom_rule() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     server.create_index(body);
 

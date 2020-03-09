@@ -13,7 +13,7 @@ pub trait RequestExt {
     fn is_allowed(&self, acl: ACL) -> SResult<()>;
     fn url_param(&self, name: &str) -> SResult<String>;
     fn index(&self) -> SResult<Index>;
-    fn identifier(&self) -> SResult<String>;
+    fn document_id(&self) -> SResult<String>;
 }
 
 impl RequestExt for Request<Data> {
@@ -55,7 +55,7 @@ impl RequestExt for Request<Data> {
     fn url_param(&self, name: &str) -> SResult<String> {
         let param = self
             .param::<String>(name)
-            .map_err(|_| ResponseError::bad_parameter("identifier", name))?;
+            .map_err(|e| ResponseError::bad_parameter(name, e))?;
         Ok(param)
     }
 
@@ -69,10 +69,10 @@ impl RequestExt for Request<Data> {
         Ok(index)
     }
 
-    fn identifier(&self) -> SResult<String> {
+    fn document_id(&self) -> SResult<String> {
         let name = self
-            .param::<String>("identifier")
-            .map_err(|_| ResponseError::bad_parameter("identifier", "identifier"))?;
+            .param::<String>("documentId")
+            .map_err(|_| ResponseError::bad_parameter("documentId", "primaryKey"))?;
 
         Ok(name)
     }

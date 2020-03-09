@@ -285,8 +285,8 @@ impl Server {
         self.delete_request_async(&url)
     }
 
-    pub fn get_identifier(&mut self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/settings/identifier", self.uid);
+    pub fn get_primary_key(&mut self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/primary_key", self.uid);
         self.get_request(&url)
     }
 
@@ -394,7 +394,7 @@ impl Server {
     pub fn populate_movies(&mut self) {
         let body = json!({
             "uid": "movies",
-            "identifier": "id",
+            "primaryKey": "id",
         });
         self.create_index(body);
 

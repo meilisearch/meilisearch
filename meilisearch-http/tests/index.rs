@@ -417,14 +417,14 @@ fn create_index_failed() {
 
 // Resolve issue https://github.com/meilisearch/MeiliSearch/issues/492
 #[test]
-fn create_index_with_identifier_and_index() {
+fn create_index_with_primary_key_and_index() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create the index
 
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
 
     let (_response, status_code) = server.create_index(body);
@@ -512,84 +512,84 @@ fn create_index_with_invalid_uid() {
     assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
 }
 
-// Test that it's possible to add identifier if it's not already set on index creation
+// Test that it's possible to add primary_key if it's not already set on index creation
 #[test]
 fn create_index_and_add_indentifier_after() {
     let mut server = common::Server::with_uid("movies");
 
-    // 1 - Create the index with no identifier
+    // 1 - Create the index with no primary_key
 
     let body = json!({
         "uid": "movies",
     });
     let (response, status_code) = server.create_index(body);
     assert_eq!(status_code, 201);
-    assert_eq!(response["identifier"], json!(null));
+    assert_eq!(response["primaryKey"], json!(null));
 
-    // 2 - Update the index and add an identifier.
+    // 2 - Update the index and add an primary_key.
 
     let body = json!({
-        "identifier": "id",
+        "primaryKey": "id",
     });
 
     let (response, status_code) = server.update_index(body);
     assert_eq!(status_code, 200);
     eprintln!("response: {:#?}", response);
-    assert_eq!(response["identifier"].as_str().unwrap(), "id");
+    assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 
-    // 3 - Get index to verify if the identifier is good
+    // 3 - Get index to verify if the primary_key is good
 
     let (response, status_code) = server.get_index();
     assert_eq!(status_code, 200);
-    assert_eq!(response["identifier"].as_str().unwrap(), "id");
+    assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 
 }
 
-// Test that it's impossible to change the identifier
+// Test that it's impossible to change the primary_key
 #[test]
 fn create_index_and_update_indentifier_after() {
     let mut server = common::Server::with_uid("movies");
 
-    // 1 - Create the index with no identifier
+    // 1 - Create the index with no primary_key
 
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     let (response, status_code) = server.create_index(body);
     assert_eq!(status_code, 201);
-    assert_eq!(response["identifier"].as_str().unwrap(), "id");
+    assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 
-    // 2 - Update the index and add an identifier.
+    // 2 - Update the index and add an primary_key.
 
     let body = json!({
-        "identifier": "skuid",
+        "primaryKey": "skuid",
     });
 
     let (_response, status_code) = server.update_index(body);
     assert_eq!(status_code, 400);
 
-    // 3 - Get index to verify if the identifier still the first one
+    // 3 - Get index to verify if the primary_key still the first one
 
     let (response, status_code) = server.get_index();
     assert_eq!(status_code, 200);
-    assert_eq!(response["identifier"].as_str().unwrap(), "id");
+    assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 }
 
 
 // Test that schema inference work well
 #[test]
-fn create_index_without_identifier_and_add_document() {
+fn create_index_without_primary_key_and_add_document() {
     let mut server = common::Server::with_uid("movies");
 
-    // 1 - Create the index with no identifier
+    // 1 - Create the index with no primary_key
 
     let body = json!({
         "uid": "movies",
     });
     let (response, status_code) = server.create_index(body);
     assert_eq!(status_code, 201);
-    assert_eq!(response["identifier"], json!(null));
+    assert_eq!(response["primaryKey"], json!(null));
 
     // 2 - Add a document
 
@@ -600,27 +600,27 @@ fn create_index_without_identifier_and_add_document() {
 
     server.add_or_update_multiple_documents(body);
 
-    // 3 - Get index to verify if the identifier is good
+    // 3 - Get index to verify if the primary_key is good
 
     let (response, status_code) = server.get_index();
     assert_eq!(status_code, 200);
-    assert_eq!(response["identifier"].as_str().unwrap(), "id");
+    assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 }
 
 
-// Test search with no identifier
+// Test search with no primary_key
 #[test]
-fn create_index_without_identifier_and_search() {
+fn create_index_without_primary_key_and_search() {
     let mut server = common::Server::with_uid("movies");
 
-    // 1 - Create the index with no identifier
+    // 1 - Create the index with no primary_key
 
     let body = json!({
         "uid": "movies",
     });
     let (response, status_code) = server.create_index(body);
     assert_eq!(status_code, 201);
-    assert_eq!(response["identifier"], json!(null));
+    assert_eq!(response["primaryKey"], json!(null));
 
     // 2 - Search
 

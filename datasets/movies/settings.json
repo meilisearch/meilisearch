@@ -1,5 +1,5 @@
 {
-    "identifier": "id",
+    "primaryKey": "id",
     "searchableAttributes": ["title", "overview"],
     "displayedAttributes": [
         "id",

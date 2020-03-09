@@ -81,7 +81,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
 pub struct UpdateSettings {
     pub ranking_rules: Option<Vec<String>>,
     pub distinct_attribute: Option<String>,
-    pub identifier: Option<String>,
+    pub primary_key: Option<String>,
     pub searchable_attributes: Option<Vec<String>>,
     pub displayed_attributes: Option<HashSet<String>>,
     pub stop_words: Option<BTreeSet<String>>,
@@ -124,7 +124,7 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
         distinct_attribute: UpdateState::Clear,
-        identifier: UpdateState::Clear,
+        primary_key: UpdateState::Clear,
         searchable_attributes: UpdateState::Clear,
         displayed_attributes: UpdateState::Clear,
         stop_words: UpdateState::Clear,

@@ -8,13 +8,13 @@ use siphasher::sip::SipHasher;
 use super::{ConvertToString, SerializerError};
 
 pub fn extract_document_id<D>(
-    identifier: &str,
+    primary_key: &str,
     document: &D,
 ) -> Result<Option<DocumentId>, SerializerError>
 where
     D: serde::Serialize,
 {
-    let serializer = ExtractDocumentId { identifier };
+    let serializer = ExtractDocumentId { primary_key };
     document.serialize(serializer)
 }
 
@@ -52,7 +52,7 @@ pub fn compute_document_id<H: Hash>(t: H) -> DocumentId {
 }
 
 struct ExtractDocumentId<'a> {
-    identifier: &'a str,
+    primary_key: &'a str,
 }
 
 impl<'a> ser::Serializer for ExtractDocumentId<'a> {
@@ -188,7 +188,7 @@ impl<'a> ser::Serializer for ExtractDocumentId<'a> {
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
         let serializer = ExtractDocumentIdMapSerializer {
-            identifier: self.identifier,
+            primary_key: self.primary_key,
             document_id: None,
             current_key_name: None,
         };
@@ -202,7 +202,7 @@ impl<'a> ser::Serializer for ExtractDocumentId<'a> {
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         let serializer = ExtractDocumentIdStructSerializer {
-            identifier: self.identifier,
+            primary_key: self.primary_key,
             document_id: None,
         };
 
@@ -223,7 +223,7 @@ impl<'a> ser::Serializer for ExtractDocumentId<'a> {
 }
 
 pub struct ExtractDocumentIdMapSerializer<'a> {
-    identifier: &'a str,
+    primary_key: &'a str,
     document_id: Option<DocumentId>,
     current_key_name: Option<String>,
 }
@@ -260,7 +260,7 @@ impl<'a> ser::SerializeMap for ExtractDocumentIdMapSerializer<'a> {
     {
         let key = key.serialize(ConvertToString)?;
 
-        if self.identifier == key {
+        if self.primary_key == key {
             let value = serde_json::to_string(value).and_then(|s| serde_json::from_str(&s))?;
             match value_to_string(&value).map(|s| compute_document_id(&s)) {
                 Some(document_id) => self.document_id = Some(document_id),
@@ -277,7 +277,7 @@ impl<'a> ser::SerializeMap for ExtractDocumentIdMapSerializer<'a> {
 }
 
 pub struct ExtractDocumentIdStructSerializer<'a> {
-    identifier: &'a str,
+    primary_key: &'a str,
     document_id: Option<DocumentId>,
 }
 
@@ -293,7 +293,7 @@ impl<'a> ser::SerializeStruct for ExtractDocumentIdStructSerializer<'a> {
     where
         T: Serialize,
     {
-        if self.identifier == key {
+        if self.primary_key == key {
             let value = serde_json::to_string(value).and_then(|s| serde_json::from_str(&s))?;
             match value_to_string(&value).map(compute_document_id) {
                 Some(document_id) => self.document_id = Some(document_id),

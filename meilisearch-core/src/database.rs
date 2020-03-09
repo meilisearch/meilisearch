@@ -380,7 +380,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
+            primary_key: UpdateState::Update("id".to_string()),
             ..SettingsUpdate::default()
         };
 
@@ -451,7 +451,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
+            primary_key: UpdateState::Update("id".to_string()),
             ..SettingsUpdate::default()
         };
 
@@ -521,7 +521,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
+            primary_key: UpdateState::Update("id".to_string()),
             ..SettingsUpdate::default()
         };
 
@@ -584,7 +584,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
+            primary_key: UpdateState::Update("id".to_string()),
             ..SettingsUpdate::default()
         };
 
@@ -736,7 +736,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
+            primary_key: UpdateState::Update("id".to_string()),
             ..SettingsUpdate::default()
         };
 
@@ -824,7 +824,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
+            primary_key: UpdateState::Update("id".to_string()),
             ..SettingsUpdate::default()
         };
 
@@ -971,7 +971,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
+            primary_key: UpdateState::Update("id".to_string()),
             ..SettingsUpdate::default()
         };
 
@@ -1046,7 +1046,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
+            primary_key: UpdateState::Update("id".to_string()),
             ..SettingsUpdate::default()
         };
 

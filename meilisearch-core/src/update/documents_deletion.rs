@@ -40,8 +40,8 @@ impl DocumentsDeletion {
     where
         D: serde::Serialize,
     {
-        let identifier = schema.identifier().ok_or(Error::MissingIdentifier)?;
-        let document_id = match extract_document_id(&identifier, &document)? {
+        let primary_key = schema.primary_key().ok_or(Error::MissingPrimaryKey)?;
+        let document_id = match extract_document_id(&primary_key, &document)? {
             Some(id) => id,
             None => return Err(Error::MissingDocumentId),
         };

@@ -35,9 +35,9 @@ pub fn apply_settings_update(
     let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => {
-            match settings.identifier.clone() {
-                UpdateState::Update(id) => Schema::with_identifier(&id),
-                _ => return Err(Error::MissingIdentifier)
+            match settings.primary_key.clone() {
+                UpdateState::Update(id) => Schema::with_primary_key(&id),
+                _ => return Err(Error::MissingPrimaryKey)
             }
         }
     };

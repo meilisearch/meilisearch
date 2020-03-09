@@ -39,9 +39,9 @@ pub async fn list_indexes(ctx: Request<Data>) -> SResult<Response> {
                 let created_at = index.main.created_at(&reader)?.into_internal_error()?;
                 let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
 
-                let identifier = match index.main.schema(&reader) {
-                    Ok(Some(schema)) => match schema.identifier() {
-                        Some(identifier) => Some(identifier.to_owned()),
+                let primary_key = match index.main.schema(&reader) {
+                    Ok(Some(schema)) => match schema.primary_key() {
+                        Some(primary_key) => Some(primary_key.to_owned()),
                         None => None
                     },
                     _ => None,
@@ -52,7 +52,7 @@ pub async fn list_indexes(ctx: Request<Data>) -> SResult<Response> {
                     uid: index_uid,
                     created_at,
                     updated_at,
-                    identifier,
+                    primary_key,
                 };
                 response_body.push(index_response);
             }
@@ -73,7 +73,7 @@ struct IndexResponse {
     uid: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    identifier: Option<String>,
+    primary_key: Option<String>,
 }
 
 pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
@@ -89,9 +89,9 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
     let created_at = index.main.created_at(&reader)?.into_internal_error()?;
     let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
 
-    let identifier = match index.main.schema(&reader) {
-        Ok(Some(schema)) => match schema.identifier() {
-            Some(identifier) => Some(identifier.to_owned()),
+    let primary_key = match index.main.schema(&reader) {
+        Ok(Some(schema)) => match schema.primary_key() {
+            Some(primary_key) => Some(primary_key.to_owned()),
             None => None
         },
         _ => None,
@@ -102,7 +102,7 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
         uid,
         created_at,
         updated_at,
-        identifier,
+        primary_key,
     };
 
     Ok(tide::Response::new(200).body_json(&response_body)?)
@@ -113,7 +113,7 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
 struct IndexCreateRequest {
     name: Option<String>,
     uid: Option<String>,
-    identifier: Option<String>,
+    primary_key: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -123,7 +123,7 @@ struct IndexCreateResponse {
     uid: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    identifier: Option<String>,
+    primary_key: Option<String>,
 }
 
 pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
@@ -175,9 +175,9 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         .updated_at(&writer)?
         .into_internal_error()?;
 
-    if let Some(id) = body.identifier.clone() {
+    if let Some(id) = body.primary_key.clone() {
         if let Some(mut schema) = created_index.main.schema(&mut writer)? {
-            if let Ok(_) = schema.set_identifier(&id) {
+            if let Ok(_) = schema.set_primary_key(&id) {
                 created_index.main.put_schema(&mut writer, &schema)?;
             }
         }
@@ -190,7 +190,7 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
         uid,
         created_at,
         updated_at,
-        identifier: body.identifier,
+        primary_key: body.primary_key,
     };
 
     Ok(tide::Response::new(201).body_json(&response_body)?)
@@ -200,7 +200,7 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateIndexRequest {
     name: Option<String>,
-    identifier: Option<String>,
+    primary_key: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -210,7 +210,7 @@ struct UpdateIndexResponse {
     uid: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    identifier: Option<String>,
+    primary_key: Option<String>,
 }
 
 pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
@@ -231,14 +231,14 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
         index.main.put_name(&mut writer, &name)?;
     }
 
-    if let Some(id) = body.identifier.clone() {
+    if let Some(id) = body.primary_key.clone() {
         if let Some(mut schema) = index.main.schema(&mut writer)? {
-            match schema.identifier() {
+            match schema.primary_key() {
                 Some(_) => {
-                    return Err(ResponseError::bad_request("The index identifier cannot be updated"));
+                    return Err(ResponseError::bad_request("The index primary key cannot be updated"));
                 },
                 None => {
-                    if let Ok(_) = schema.set_identifier(&id) {
+                    if let Ok(_) = schema.set_primary_key(&id) {
                         index.main.put_schema(&mut writer, &schema)?;
                     }
                 }
@@ -254,11 +254,11 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
     let created_at = index.main.created_at(&reader)?.into_internal_error()?;
     let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
 
-    let identifier = match index.main.schema(&reader) {
+    let primary_key = match index.main.schema(&reader) {
         Ok(Some(schema)) => {
-            match schema.identifier() {
-                Some(identifier) => {
-                    Some(identifier.to_owned())
+            match schema.primary_key() {
+                Some(primary_key) => {
+                    Some(primary_key.to_owned())
                 },
                 None => None
             }
@@ -272,7 +272,7 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
         uid: index_uid,
         created_at,
         updated_at,
-        identifier,
+        primary_key,
     };
 
     Ok(tide::Response::new(200).body_json(&response_body)?)

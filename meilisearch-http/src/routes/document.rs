@@ -15,18 +15,18 @@ pub async fn get_document(ctx: Request<Data>) -> SResult<Response> {
 
     let index = ctx.index()?;
 
-    let identifier = ctx.identifier()?;
-    let document_id = meilisearch_core::serde::compute_document_id(identifier.clone());
+    let original_document_id = ctx.document_id()?;
+    let document_id = meilisearch_core::serde::compute_document_id(original_document_id.clone());
 
     let db = &ctx.state().db;
     let reader = db.main_read_txn()?;
 
     let response = index
         .document::<IndexMap<String, Value>>(&reader, None, document_id)?
-        .ok_or(ResponseError::document_not_found(&identifier))?;
+        .ok_or(ResponseError::document_not_found(&original_document_id))?;
 
     if response.is_empty() {
-        return Err(ResponseError::document_not_found(identifier));
+        return Err(ResponseError::document_not_found(&original_document_id));
     }
 
     Ok(tide::Response::new(200).body_json(&response)?)
@@ -42,8 +42,8 @@ pub async fn delete_document(ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Private)?;
 
     let index = ctx.index()?;
-    let identifier = ctx.identifier()?;
-    let document_id = meilisearch_core::serde::compute_document_id(identifier);
+    let document_id = ctx.document_id()?;
+    let document_id = meilisearch_core::serde::compute_document_id(document_id);
     let db = &ctx.state().db;
     let mut update_writer = db.update_write_txn()?;
     let mut documents_deletion = index.documents_deletion();
@@ -108,7 +108,7 @@ pub async fn get_all_documents(ctx: Request<Data>) -> SResult<Response> {
     Ok(tide::Response::new(200).body_json(&response_body)?)
 }
 
-fn find_identifier(document: &IndexMap<String, Value>) -> Option<String> {
+fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
     for key in document.keys() {
         if key.to_lowercase().contains("id") {
             return Some(key.to_string());
@@ -120,7 +120,7 @@ fn find_identifier(document: &IndexMap<String, Value>) -> Option<String> {
 #[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UpdateDocumentsQuery {
-    identifier: Option<String>,
+    document_id: Option<String>,
 }
 
 async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> SResult<Response> {
@@ -137,16 +137,16 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
     let reader = db.main_read_txn()?;
     let mut schema = index.main.schema(&reader)?.ok_or(ResponseError::internal("schema not found"))?;
 
-    if schema.identifier().is_none() {
-        let id = match query.identifier {
+    if schema.primary_key().is_none() {
+        let id = match query.document_id {
             Some(id) => id,
-            None => match data.first().and_then(|docs| find_identifier(docs)) {
+            None => match data.first().and_then(|docs| find_primary_key(docs)) {
                 Some(id) => id,
                 None => return Err(ResponseError::bad_request("Could not infer a schema")),
             },
         };
 
-        if schema.set_identifier(&id).is_ok() {
+        if schema.set_primary_key(&id).is_ok() {
             let mut writer = db.main_write_txn()?;
             index.main.put_schema(&mut writer, &schema)?;
             writer.commit()?;
@@ -190,10 +190,10 @@ pub async fn delete_multiple_documents(mut ctx: Request<Data>) -> SResult<Respon
 
     let mut documents_deletion = index.documents_deletion();
 
-    for identifier in data {
-        if let Some(identifier) = meilisearch_core::serde::value_to_string(&identifier) {
+    for document_id in data {
+        if let Some(document_id) = meilisearch_core::serde::value_to_string(&document_id) {
             documents_deletion
-                .delete_document_by_id(meilisearch_core::serde::compute_document_id(identifier));
+                .delete_document_by_id(meilisearch_core::serde::compute_document_id(document_id));
         }
     }
 

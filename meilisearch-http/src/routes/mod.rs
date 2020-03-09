@@ -61,7 +61,7 @@ pub fn load_routes(app: &mut tide::Server<Data>) {
         .put(|ctx| into_response(document::add_or_update_multiple_documents(ctx)))
         .delete(|ctx| into_response(document::clear_all_documents(ctx)));
 
-    app.at("/indexes/:index/documents/:identifier")
+    app.at("/indexes/:index/documents/:document_id")
         .get(|ctx| into_response(document::get_document(ctx)))
         .delete(|ctx| into_response(document::delete_document(ctx)));
 

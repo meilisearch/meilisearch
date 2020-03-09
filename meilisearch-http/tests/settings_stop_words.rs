@@ -8,7 +8,7 @@ fn update_stop_words() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     server.create_index(body);
 

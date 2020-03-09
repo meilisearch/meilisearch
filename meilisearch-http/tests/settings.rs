@@ -291,7 +291,7 @@ fn test_default_settings_2() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     server.create_index(body);
 

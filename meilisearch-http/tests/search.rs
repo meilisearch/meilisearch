@@ -644,7 +644,7 @@ fn search_with_settings_basic() {
         "desc(vote_average)"
       ],
       "distinctAttribute": null,
-      "identifier": "id",
+      "primaryKey": "id",
       "searchableAttributes": [
         "title",
         "tagline",
@@ -751,7 +751,7 @@ fn search_with_settings_stop_words() {
         "desc(vote_average)"
       ],
       "distinctAttribute": null,
-      "identifier": "id",
+      "primaryKey": "id",
       "searchableAttributes": [
         "title",
         "tagline",
@@ -858,7 +858,7 @@ fn search_with_settings_synonyms() {
         "desc(vote_average)"
       ],
       "distinctAttribute": null,
-      "identifier": "id",
+      "primaryKey": "id",
       "searchableAttributes": [
         "title",
         "tagline",
@@ -970,7 +970,7 @@ fn search_with_settings_ranking_rules() {
         "desc(popularity)"
       ],
       "distinctAttribute": null,
-      "identifier": "id",
+      "primaryKey": "id",
       "searchableAttributes": [
         "title",
         "tagline",
@@ -1077,7 +1077,7 @@ fn search_with_settings_searchable_attributes() {
         "desc(vote_average)"
       ],
       "distinctAttribute": null,
-      "identifier": "id",
+      "primaryKey": "id",
       "searchableAttributes": [
         "tagline",
         "overview",
@@ -1183,7 +1183,7 @@ fn search_with_settings_displayed_attributes() {
         "desc(vote_average)"
       ],
       "distinctAttribute": null,
-      "identifier": "id",
+      "primaryKey": "id",
       "searchableAttributes": [
         "title",
         "tagline",
@@ -1254,7 +1254,7 @@ fn search_with_settings_searchable_attributes_2() {
         "desc(vote_average)"
       ],
       "distinctAttribute": null,
-      "identifier": "id",
+      "primaryKey": "id",
       "searchableAttributes": [
         "tagline",
         "overview",
