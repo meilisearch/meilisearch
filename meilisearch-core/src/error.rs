@@ -87,7 +87,7 @@ impl fmt::Display for Error {
         match self {
             Io(e) => write!(f, "{}", e),
             IndexAlreadyExists => write!(f, "index already exists"),
-            MissingPrimaryKey => write!(f, "schema cannot be built without primary key"),
+            MissingPrimaryKey => write!(f, "schema cannot be built without a primary key"),
             SchemaMissing => write!(f, "this index does not have a schema"),
             WordIndexMissing => write!(f, "this index does not have a word index"),
             MissingDocumentId => write!(f, "document id is missing"),

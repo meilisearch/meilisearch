@@ -149,11 +149,10 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
             },
         };
 
-        if schema.set_primary_key(&id).is_ok() {
-            let mut writer = db.main_write_txn()?;
-            index.main.put_schema(&mut writer, &schema)?;
-            writer.commit()?;
-        }
+        let mut writer = db.main_write_txn()?;
+        schema.set_primary_key(&id).map_err(ResponseError::bad_request)?;
+        index.main.put_schema(&mut writer, &schema)?;
+        writer.commit()?;
     }
 
     let mut document_addition = if is_partial {

@@ -180,9 +180,8 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
 
     if let Some(id) = body.primary_key.clone() {
         if let Some(mut schema) = created_index.main.schema(&mut writer)? {
-            if let Ok(_) = schema.set_primary_key(&id) {
-                created_index.main.put_schema(&mut writer, &schema)?;
-            }
+            schema.set_primary_key(&id).map_err(ResponseError::bad_request)?;
+            created_index.main.put_schema(&mut writer, &schema)?;
         }
     }
 
@@ -239,13 +238,14 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
             match schema.primary_key() {
                 Some(_) => {
                     return Err(ResponseError::bad_request(
-                        "The index primary key cannot be updated",
+                        "The primary key cannot be updated",
                     ));
                 }
                 None => {
-                    if let Ok(_) = schema.set_primary_key(&id) {
-                        index.main.put_schema(&mut writer, &schema)?;
-                    }
+                    schema
+                        .set_primary_key(&id)
+                        .map_err(ResponseError::bad_request)?;
+                    index.main.put_schema(&mut writer, &schema)?;
                 }
             }
         }

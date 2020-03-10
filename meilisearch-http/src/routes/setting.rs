@@ -45,29 +45,26 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let schema = index.main.schema(&reader)?;
 
     let searchable_attributes = schema.clone().map(|s| {
-        let attrs = s
-            .indexed_name()
+        s.indexed_name()
             .iter()
             .map(|s| (*s).to_string())
-            .collect::<Vec<String>>();
-        Some(attrs)
+            .collect::<Vec<String>>()
     });
 
     let displayed_attributes = schema.clone().map(|s| {
-        let attrs = s
-            .displayed_name()
+        s.displayed_name()
             .iter()
             .map(|s| (*s).to_string())
-            .collect::<HashSet<String>>();
-        Some(attrs)
+            .collect::<HashSet<String>>()
     });
+
     let accept_new_fields = schema.map(|s| s.accept_new_fields());
 
     let settings = Settings {
         ranking_rules: Some(Some(ranking_rules)),
         distinct_attribute: Some(distinct_attribute),
-        searchable_attributes,
-        displayed_attributes,
+        searchable_attributes: Some(searchable_attributes),
+        displayed_attributes: Some(displayed_attributes),
         stop_words: Some(Some(stop_words)),
         synonyms: Some(Some(synonyms)),
         accept_new_fields: Some(accept_new_fields),
