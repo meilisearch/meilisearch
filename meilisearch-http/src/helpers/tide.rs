@@ -20,6 +20,10 @@ impl RequestExt for Request<Data> {
     fn is_allowed(&self, acl: ACL) -> SResult<()> {
         let user_api_key = self.header("X-Meili-API-Key");
 
+        if self.state().api_keys.master.is_none() {
+            return Ok(())
+        }
+
         match acl {
             ACL::Admin => {
                 if user_api_key == self.state().api_keys.master.as_deref() {
