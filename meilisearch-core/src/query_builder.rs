@@ -196,16 +196,6 @@ mod tests {
         }
     }
 
-    const fn doc_attr_index(document_id: u64, attribute: u16, word_index: u16) -> DocIndex {
-        DocIndex {
-            document_id: DocumentId(document_id),
-            attribute,
-            word_index,
-            char_index: 0,
-            char_length: 0,
-        }
-    }
-
     pub struct TempDatabase {
         database: Database,
         index: Index,
@@ -269,7 +259,7 @@ mod tests {
             let mut postings_lists = HashMap::new();
             let mut fields_counts = HashMap::<_, u16>::new();
 
-            let mut schema = Schema::with_identifier("id");
+            let mut schema = Schema::with_primary_key("id");
 
             for (word, indexes) in iter {
                 let mut final_indexes = Vec::new();

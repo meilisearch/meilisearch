@@ -8,7 +8,7 @@ fn update_stop_words() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     server.create_index(body);
 
@@ -19,10 +19,7 @@ fn update_stop_words() {
 
     // 2 - Update stop words
 
-    let body = json!([
-        "the",
-        "a"
-    ]);
+    let body = json!(["the", "a"]);
     server.update_stop_words(body.clone());
 
     // 3 - Get all stop words and compare to the previous one

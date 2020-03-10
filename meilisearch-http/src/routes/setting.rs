@@ -45,37 +45,26 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     let schema = index.main.schema(&reader)?;
 
     let searchable_attributes = schema.clone().map(|s| {
-        let attrs = s
-            .indexed_name()
+        s.indexed_name()
             .iter()
             .map(|s| (*s).to_string())
-            .collect::<Vec<String>>();
-        if attrs.is_empty() {
-            None
-        } else {
-            Some(attrs)
-        }
+            .collect::<Vec<String>>()
     });
 
     let displayed_attributes = schema.clone().map(|s| {
-        let attrs = s
-            .displayed_name()
+        s.displayed_name()
             .iter()
             .map(|s| (*s).to_string())
-            .collect::<HashSet<String>>();
-        if attrs.is_empty() {
-            None
-        } else {
-            Some(attrs)
-        }
+            .collect::<HashSet<String>>()
     });
+
     let accept_new_fields = schema.map(|s| s.accept_new_fields());
 
     let settings = Settings {
         ranking_rules: Some(Some(ranking_rules)),
         distinct_attribute: Some(distinct_attribute),
-        searchable_attributes,
-        displayed_attributes,
+        searchable_attributes: Some(searchable_attributes),
+        displayed_attributes: Some(displayed_attributes),
         stop_words: Some(Some(stop_words)),
         synonyms: Some(Some(synonyms)),
         accept_new_fields: Some(accept_new_fields),
@@ -89,7 +78,7 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
 pub struct UpdateSettings {
     pub ranking_rules: Option<Vec<String>>,
     pub distinct_attribute: Option<String>,
-    pub identifier: Option<String>,
+    pub primary_key: Option<String>,
     pub searchable_attributes: Option<Vec<String>>,
     pub displayed_attributes: Option<HashSet<String>>,
     pub stop_words: Option<BTreeSet<String>>,
@@ -132,7 +121,7 @@ pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
         distinct_attribute: UpdateState::Clear,
-        identifier: UpdateState::Clear,
+        primary_key: UpdateState::Clear,
         searchable_attributes: UpdateState::Clear,
         displayed_attributes: UpdateState::Clear,
         stop_words: UpdateState::Clear,

@@ -8,6 +8,7 @@ use crossbeam_channel::{Receiver, Sender};
 use heed::types::{Str, Unit};
 use heed::{CompactionOption, Result as ZResult};
 use log::debug;
+use meilisearch_schema::Schema;
 
 use crate::{store, update, Index, MResult};
 
@@ -242,6 +243,7 @@ impl Database {
                 index.main.put_name(&mut writer, name)?;
                 index.main.put_created_at(&mut writer)?;
                 index.main.put_updated_at(&mut writer)?;
+                index.main.put_schema(&mut writer, &Schema::new())?;
 
                 let env_clone = self.env.clone();
                 let update_env_clone = self.update_env.clone();
@@ -357,7 +359,7 @@ mod tests {
 
     use crate::criterion::{self, CriteriaBuilder};
     use crate::update::{ProcessedUpdateResult, UpdateStatus};
-    use crate::settings::{Settings, SettingsUpdate, UpdateState};
+    use crate::settings::Settings;
     use crate::{Document, DocumentId};
     use serde::de::IgnoredAny;
     use std::sync::mpsc;
@@ -377,17 +379,11 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
-            ..SettingsUpdate::default()
-        };
-
-        let mut writer = db.update_write_txn().unwrap();
-        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        let mut writer = db.main_write_txn().unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
 
         // block until the transaction is processed
-        let _ = receiver.iter().find(|id| *id == update_id);
 
         let settings = {
             let data = r#"
@@ -448,17 +444,9 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
-            ..SettingsUpdate::default()
-        };
-
-        let mut writer = db.update_write_txn().unwrap();
-        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        let mut writer = db.main_write_txn().unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
-
-        // block until the transaction is processed
-        let _ = receiver.iter().find(|id| *id == update_id);
 
         let settings = {
             let data = r#"
@@ -518,17 +506,9 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
-            ..SettingsUpdate::default()
-        };
-
-        let mut writer = db.update_write_txn().unwrap();
-        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        let mut writer = db.main_write_txn().unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
-
-        // block until the transaction is processed
-        let _ = receiver.iter().find(|id| *id == update_id);
 
         let settings = {
             let data = r#"
@@ -581,17 +561,9 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
-            ..SettingsUpdate::default()
-        };
-
-        let mut writer = db.update_write_txn().unwrap();
-        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        let mut writer = db.main_write_txn().unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
-
-        // block until the transaction is processed
-        let _ = receiver.iter().find(|id| *id == update_id);
 
         let settings = {
             let data = r#"
@@ -733,17 +705,9 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
-            ..SettingsUpdate::default()
-        };
-
-        let mut writer = db.update_write_txn().unwrap();
-        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        let mut writer = db.main_write_txn().unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
-
-        // block until the transaction is processed
-        let _ = receiver.iter().find(|id| *id == update_id);
 
         let settings = {
             let data = r#"
@@ -821,17 +785,9 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
-            ..SettingsUpdate::default()
-        };
-
-        let mut writer = db.update_write_txn().unwrap();
-        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        let mut writer = db.main_write_txn().unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
-
-        // block until the transaction is processed
-        let _ = receiver.iter().find(|id| *id == update_id);
 
         let settings = {
             let data = r#"
@@ -968,17 +924,9 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
-            ..SettingsUpdate::default()
-        };
-
-        let mut writer = db.update_write_txn().unwrap();
-        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        let mut writer = db.main_write_txn().unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
-
-        // block until the transaction is processed
-        let _ = receiver.iter().find(|id| *id == update_id);
 
         let settings = {
             let data = r#"
@@ -1043,17 +991,9 @@ mod tests {
 
         database.set_update_callback(Box::new(update_fn));
 
-        let settings_update = SettingsUpdate{
-            identifier: UpdateState::Update("id".to_string()),
-            ..SettingsUpdate::default()
-        };
-
-        let mut writer = db.update_write_txn().unwrap();
-        let update_id = index.settings_update(&mut writer, settings_update).unwrap();
+        let mut writer = db.main_write_txn().unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
-
-        // block until the transaction is processed
-        let _ = receiver.iter().find(|id| *id == update_id);
 
         let settings = {
             let data = r#"

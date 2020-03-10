@@ -8,7 +8,7 @@ fn index_new_fields_default() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     server.create_index(body);
 
@@ -60,7 +60,7 @@ fn index_new_fields_true() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     server.create_index(body);
 
@@ -116,7 +116,7 @@ fn index_new_fields_false() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     server.create_index(body);
 
@@ -169,7 +169,7 @@ fn index_new_fields_true_then_false() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     server.create_index(body);
 
@@ -228,7 +228,7 @@ fn index_new_fields_false_then_true() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
-        "identifier": "id",
+        "primaryKey": "id",
     });
     server.create_index(body);
 

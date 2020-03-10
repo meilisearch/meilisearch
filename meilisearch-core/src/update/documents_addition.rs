@@ -115,11 +115,11 @@ pub fn apply_documents_addition<'a, 'b>(
         None => return Err(Error::SchemaMissing),
     };
 
-    let identifier = schema.identifier();
+    let primary_key = schema.primary_key().ok_or(Error::MissingPrimaryKey)?;
 
     // 1. store documents ids for future deletion
     for document in addition {
-        let document_id = match extract_document_id(&identifier, &document)? {
+        let document_id = match extract_document_id(&primary_key, &document)? {
             Some(id) => id,
             None => return Err(Error::MissingDocumentId),
         };
@@ -184,11 +184,11 @@ pub fn apply_documents_partial_addition<'a, 'b>(
         None => return Err(Error::SchemaMissing),
     };
 
-    let identifier = schema.identifier();
+    let primary_key = schema.primary_key().ok_or(Error::MissingPrimaryKey)?;
 
     // 1. store documents ids for future deletion
     for mut document in addition {
-        let document_id = match extract_document_id(&identifier, &document)? {
+        let document_id = match extract_document_id(&primary_key, &document)? {
             Some(id) => id,
             None => return Err(Error::MissingDocumentId),
         };

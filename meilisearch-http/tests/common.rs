@@ -57,7 +57,7 @@ impl Server {
             block_on(res.into_body().read_to_end(&mut buf)).unwrap();
             let response: Value = serde_json::from_slice(&buf).unwrap();
 
-            if response["status"] == "processed" {
+            if response["status"] == "processed" || response["status"] == "error" {
                 eprintln!("{:#?}", response);
                 return;
             }
@@ -69,9 +69,7 @@ impl Server {
 
     fn get_request(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("get_request: {}", url);
-        let req = http::Request::get(url)
-            .body(Body::empty())
-            .unwrap();
+        let req = http::Request::get(url).body(Body::empty()).unwrap();
         let res = self.mock.simulate(req).unwrap();
         let status_code = res.status().clone();
 
@@ -97,7 +95,7 @@ impl Server {
         (response, status_code)
     }
 
-    fn post_request_async(&mut self, url: &str, body: Value)  -> (Value, StatusCode) {
+    fn post_request_async(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("post_request_async: {}", url);
         let (response, status_code) = self.post_request(url, body);
         assert_eq!(status_code, 202);
@@ -133,9 +131,7 @@ impl Server {
 
     fn delete_request(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("delete_request: {}", url);
-        let req = http::Request::delete(url)
-            .body(Body::empty())
-            .unwrap();
+        let req = http::Request::delete(url).body(Body::empty()).unwrap();
         let res = self.mock.simulate(req).unwrap();
         let status_code = res.status().clone();
 
@@ -153,7 +149,6 @@ impl Server {
         self.wait_update_id(response["updateId"].as_u64().unwrap());
         (response, status_code)
     }
-
 
     // // All Routes
 
@@ -221,12 +216,20 @@ impl Server {
     }
 
     pub fn get_document(&mut self, document_id: impl ToString) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/documents/{}", self.uid, document_id.to_string());
+        let url = format!(
+            "/indexes/{}/documents/{}",
+            self.uid,
+            document_id.to_string()
+        );
         self.get_request(&url)
     }
 
     pub fn delete_document(&mut self, document_id: impl ToString) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/documents/{}", self.uid, document_id.to_string());
+        let url = format!(
+            "/indexes/{}/documents/{}",
+            self.uid,
+            document_id.to_string()
+        );
         self.delete_request_async(&url)
     }
 
@@ -285,8 +288,8 @@ impl Server {
         self.delete_request_async(&url)
     }
 
-    pub fn get_identifier(&mut self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/settings/identifier", self.uid);
+    pub fn get_primary_key(&mut self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/primary_key", self.uid);
         self.get_request(&url)
     }
 
@@ -394,7 +397,7 @@ impl Server {
     pub fn populate_movies(&mut self) {
         let body = json!({
             "uid": "movies",
-            "identifier": "id",
+            "primaryKey": "id",
         });
         self.create_index(body);
 
@@ -443,5 +446,4 @@ impl Server {
 
         self.add_or_replace_multiple_documents(body);
     }
-
 }

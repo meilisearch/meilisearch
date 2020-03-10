@@ -54,7 +54,7 @@ impl Settings {
         Ok(SettingsUpdate {
             ranking_rules,
             distinct_attribute: settings.distinct_attribute.into(),
-            identifier: UpdateState::Nothing,
+            primary_key: UpdateState::Nothing,
             searchable_attributes: settings.searchable_attributes.into(),
             displayed_attributes: settings.displayed_attributes.into(),
             stop_words: settings.stop_words.into(),
@@ -160,7 +160,7 @@ impl RankingRule {
 pub struct SettingsUpdate {
     pub ranking_rules: UpdateState<Vec<RankingRule>>,
     pub distinct_attribute: UpdateState<String>,
-    pub identifier: UpdateState<String>,
+    pub primary_key: UpdateState<String>,
     pub searchable_attributes: UpdateState<Vec<String>>,
     pub displayed_attributes: UpdateState<HashSet<String>>,
     pub stop_words: UpdateState<BTreeSet<String>>,
@@ -173,7 +173,7 @@ impl Default for SettingsUpdate {
         Self {
             ranking_rules: UpdateState::Nothing,
             distinct_attribute: UpdateState::Nothing,
-            identifier: UpdateState::Nothing,
+            primary_key: UpdateState::Nothing,
             searchable_attributes: UpdateState::Nothing,
             displayed_attributes: UpdateState::Nothing,
             stop_words: UpdateState::Nothing,

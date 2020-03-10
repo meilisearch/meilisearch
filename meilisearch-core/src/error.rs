@@ -12,7 +12,7 @@ pub type MResult<T> = Result<T, Error>;
 pub enum Error {
     Io(io::Error),
     IndexAlreadyExists,
-    MissingIdentifier,
+    MissingPrimaryKey,
     SchemaMissing,
     WordIndexMissing,
     MissingDocumentId,
@@ -87,7 +87,7 @@ impl fmt::Display for Error {
         match self {
             Io(e) => write!(f, "{}", e),
             IndexAlreadyExists => write!(f, "index already exists"),
-            MissingIdentifier => write!(f, "schema cannot be built without identifier"),
+            MissingPrimaryKey => write!(f, "schema cannot be built without a primary key"),
             SchemaMissing => write!(f, "this index does not have a schema"),
             WordIndexMissing => write!(f, "this index does not have a word index"),
             MissingDocumentId => write!(f, "document id is missing"),
@@ -109,7 +109,7 @@ impl error::Error for Error {}
 #[derive(Debug)]
 pub enum UnsupportedOperation {
     SchemaAlreadyExists,
-    CannotUpdateSchemaIdentifier,
+    CannotUpdateSchemaPrimaryKey,
     CannotReorderSchemaAttribute,
     CanOnlyIntroduceNewSchemaAttributesAtEnd,
     CannotRemoveSchemaAttribute,
@@ -120,7 +120,7 @@ impl fmt::Display for UnsupportedOperation {
         use self::UnsupportedOperation::*;
         match self {
             SchemaAlreadyExists => write!(f, "Cannot update index which already have a schema"),
-            CannotUpdateSchemaIdentifier => write!(f, "Cannot update the identifier of a schema"),
+            CannotUpdateSchemaPrimaryKey => write!(f, "Cannot update the primary key of a schema"),
             CannotReorderSchemaAttribute => write!(f, "Cannot reorder the attributes of a schema"),
             CanOnlyIntroduceNewSchemaAttributesAtEnd => {
                 write!(f, "Can only introduce new attributes at end of a schema")

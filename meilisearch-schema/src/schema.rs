@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 pub struct Schema {
     fields_map: FieldsMap,
 
-    identifier: FieldId,
+    primary_key: Option<FieldId>,
     ranked: HashSet<FieldId>,
     displayed: HashSet<FieldId>,
 
@@ -17,7 +17,19 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub fn with_identifier(name: &str) -> Schema {
+    pub fn new() -> Schema {
+        Schema {
+            fields_map: FieldsMap::default(),
+            primary_key: None,
+            ranked: HashSet::new(),
+            displayed: HashSet::new(),
+            indexed: Vec::new(),
+            indexed_map: HashMap::new(),
+            accept_new_fields: true,
+        }
+    }
+
+    pub fn with_primary_key(name: &str) -> Schema {
         let mut fields_map = FieldsMap::default();
         let field_id = fields_map.insert(name).unwrap();
 
@@ -31,7 +43,7 @@ impl Schema {
 
         Schema {
             fields_map,
-            identifier: field_id,
+            primary_key: Some(field_id),
             ranked: HashSet::new(),
             displayed,
             indexed,
@@ -40,18 +52,21 @@ impl Schema {
         }
     }
 
-    pub fn identifier(&self) -> &str {
-        self.fields_map.name(self.identifier).unwrap()
+    pub fn primary_key(&self) -> Option<&str> {
+        self.primary_key.map(|id| self.fields_map.name(id).unwrap())
     }
 
-    pub fn set_identifier(&mut self, id: &str) -> SResult<()> {
-        match self.id(id) {
-            Some(id) => {
-                self.identifier = id;
-                Ok(())
-            },
-            None => Err(Error::FieldNameNotFound(id.to_string()))
+    pub fn set_primary_key(&mut self, name: &str) -> SResult<FieldId> {
+        if self.primary_key.is_some() {
+            return Err(Error::PrimaryKeyAlreadyPresent)
         }
+
+        let id = self.insert(name)?;
+        self.primary_key = Some(id);
+        self.set_indexed(name)?;
+        self.set_displayed(name)?;
+
+        Ok(id)
     }
 
     pub fn id(&self, name: &str) -> Option<FieldId> {

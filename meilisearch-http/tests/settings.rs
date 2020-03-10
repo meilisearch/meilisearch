@@ -1,6 +1,6 @@
-use std::convert::Into;
 use assert_json_diff::assert_json_eq;
 use serde_json::json;
+use std::convert::Into;
 
 mod common;
 
@@ -251,4 +251,73 @@ fn write_all_and_update() {
     });
 
     assert_json_eq!(expected, response, ordered: false);
+}
+
+#[test]
+fn test_default_settings() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+    });
+    server.create_index(body);
+
+    // 1 - Get all settings and compare to the previous one
+
+    let body = json!({
+        "rankingRules": [
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness"
+        ],
+        "distinctAttribute": null,
+        "searchableAttributes": [],
+        "displayedAttributes": [],
+        "stopWords": [],
+        "synonyms": {},
+        "acceptNewFields": true,
+    });
+
+    let (response, _status_code) = server.get_all_settings();
+
+    assert_json_eq!(body, response, ordered: false);
+}
+
+#[test]
+fn test_default_settings_2() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+        "primaryKey": "id",
+    });
+    server.create_index(body);
+
+    // 1 - Get all settings and compare to the previous one
+
+    let body = json!({
+        "rankingRules": [
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness"
+        ],
+        "distinctAttribute": null,
+        "searchableAttributes": [
+            "id"
+        ],
+        "displayedAttributes": [
+            "id"
+        ],
+        "stopWords": [],
+        "synonyms": {},
+        "acceptNewFields": true,
+    });
+
+    let (response, _status_code) = server.get_all_settings();
+
+    assert_json_eq!(body, response, ordered: false);
 }
