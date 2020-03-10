@@ -135,7 +135,10 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
     let db = &ctx.state().db;
 
     let reader = db.main_read_txn()?;
-    let mut schema = index.main.schema(&reader)?.ok_or(ResponseError::internal("schema not found"))?;
+    let mut schema = index
+        .main
+        .schema(&reader)?
+        .ok_or(ResponseError::internal("schema not found"))?;
 
     if schema.primary_key().is_none() {
         let id = match query.document_id {

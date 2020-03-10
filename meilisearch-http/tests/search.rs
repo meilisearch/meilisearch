@@ -1,6 +1,6 @@
-use std::convert::Into;
-use serde_json::json;
 use assert_json_diff::assert_json_eq;
+use serde_json::json;
+use std::convert::Into;
 
 mod common;
 

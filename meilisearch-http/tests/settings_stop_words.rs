@@ -19,10 +19,7 @@ fn update_stop_words() {
 
     // 2 - Update stop words
 
-    let body = json!([
-        "the",
-        "a"
-    ]);
+    let body = json!(["the", "a"]);
     server.update_stop_words(body.clone());
 
     // 3 - Get all stop words and compare to the previous one

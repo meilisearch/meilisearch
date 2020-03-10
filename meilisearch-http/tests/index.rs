@@ -1,5 +1,5 @@
-use serde_json::json;
 use assert_json_diff::assert_json_eq;
+use serde_json::json;
 
 mod common;
 
@@ -413,8 +413,6 @@ fn create_index_failed() {
     assert_eq!(message, "invalid data");
 }
 
-
-
 // Resolve issue https://github.com/meilisearch/MeiliSearch/issues/492
 #[test]
 fn create_index_with_primary_key_and_index() {
@@ -542,7 +540,6 @@ fn create_index_and_add_indentifier_after() {
     let (response, status_code) = server.get_index();
     assert_eq!(status_code, 200);
     assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
-
 }
 
 // Test that it's impossible to change the primary_key
@@ -576,7 +573,6 @@ fn create_index_and_update_indentifier_after() {
     assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 }
 
-
 // Test that schema inference work well
 #[test]
 fn create_index_without_primary_key_and_add_document() {
@@ -606,7 +602,6 @@ fn create_index_without_primary_key_and_add_document() {
     assert_eq!(status_code, 200);
     assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 }
-
 
 // Test search with no primary_key
 #[test]

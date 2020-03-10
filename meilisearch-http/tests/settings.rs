@@ -1,6 +1,6 @@
-use std::convert::Into;
 use assert_json_diff::assert_json_eq;
 use serde_json::json;
+use std::convert::Into;
 
 mod common;
 
@@ -252,7 +252,6 @@ fn write_all_and_update() {
 
     assert_json_eq!(expected, response, ordered: false);
 }
-
 
 #[test]
 fn test_default_settings() {

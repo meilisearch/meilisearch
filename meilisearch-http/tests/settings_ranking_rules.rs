@@ -115,9 +115,7 @@ fn send_undefined_rule() {
     });
     server.create_index(body);
 
-    let body = json!([
-        "typos",
-    ]);
+    let body = json!(["typos",]);
 
     let (_response, status_code) = server.update_ranking_rules_sync(body);
     assert_eq!(status_code, 400);
@@ -132,9 +130,7 @@ fn send_malformed_custom_rule() {
     });
     server.create_index(body);
 
-    let body = json!([
-        "dsc(truc)",
-    ]);
+    let body = json!(["dsc(truc)",]);
 
     let (_response, status_code) = server.update_ranking_rules_sync(body);
     assert_eq!(status_code, 400);

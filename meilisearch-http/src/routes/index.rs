@@ -42,7 +42,7 @@ pub async fn list_indexes(ctx: Request<Data>) -> SResult<Response> {
                 let primary_key = match index.main.schema(&reader) {
                     Ok(Some(schema)) => match schema.primary_key() {
                         Some(primary_key) => Some(primary_key.to_owned()),
-                        None => None
+                        None => None,
                     },
                     _ => None,
                 };
@@ -92,7 +92,7 @@ pub async fn get_index(ctx: Request<Data>) -> SResult<Response> {
     let primary_key = match index.main.schema(&reader) {
         Ok(Some(schema)) => match schema.primary_key() {
             Some(primary_key) => Some(primary_key.to_owned()),
-            None => None
+            None => None,
         },
         _ => None,
     };
@@ -144,12 +144,15 @@ pub async fn create_index(mut ctx: Request<Data>) -> SResult<Response> {
 
     let uid = match body.uid {
         Some(uid) => {
-            if uid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
+            if uid
+                .chars()
+                .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+            {
                 uid
             } else {
-                return Err(ResponseError::InvalidIndexUid)
+                return Err(ResponseError::InvalidIndexUid);
             }
-        },
+        }
         None => loop {
             let uid = generate_uid();
             if db.open_index(&uid).is_none() {
@@ -235,8 +238,10 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
         if let Some(mut schema) = index.main.schema(&mut writer)? {
             match schema.primary_key() {
                 Some(_) => {
-                    return Err(ResponseError::bad_request("The index primary key cannot be updated"));
-                },
+                    return Err(ResponseError::bad_request(
+                        "The index primary key cannot be updated",
+                    ));
+                }
                 None => {
                     if let Ok(_) = schema.set_primary_key(&id) {
                         index.main.put_schema(&mut writer, &schema)?;
@@ -255,14 +260,9 @@ pub async fn update_index(mut ctx: Request<Data>) -> SResult<Response> {
     let updated_at = index.main.updated_at(&reader)?.into_internal_error()?;
 
     let primary_key = match index.main.schema(&reader) {
-        Ok(Some(schema)) => {
-            match schema.primary_key() {
-                Some(primary_key) => {
-                    Some(primary_key.to_owned())
-                },
-                None => None
-            }
-
+        Ok(Some(schema)) => match schema.primary_key() {
+            Some(primary_key) => Some(primary_key.to_owned()),
+            None => None,
         },
         _ => None,
     };
