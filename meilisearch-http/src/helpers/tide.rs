@@ -71,7 +71,7 @@ impl RequestExt for Request<Data> {
 
     fn document_id(&self) -> SResult<String> {
         let name = self
-            .param::<String>("documentId")
+            .param::<String>("document_id")
             .map_err(|_| ResponseError::bad_parameter("documentId", "primaryKey"))?;
 
         Ok(name)
