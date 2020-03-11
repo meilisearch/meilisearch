@@ -288,3 +288,62 @@ fn index_new_fields_false_then_true() {
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 }
+
+
+// Fix issue https://github.com/meilisearch/MeiliSearch/issues/518
+#[test]
+fn accept_new_fields_does_not_take_into_account_the_primary_key () {
+    let mut server = common::Server::with_uid("movies");
+
+    // 1 - Create an index with no primary-key
+
+    let body = json!({
+        "uid": "movies",
+    });
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
+    assert_eq!(response["primaryKey"], json!(null));
+
+    // 2 - Add searchable and displayed attributes as: ["title"] & Set acceptNewFields to false
+
+    let body = json!({
+        "searchableAttributes": ["title"],
+        "displayedAttributes": ["title"],
+        "acceptNewFields": false,
+    });
+
+    server.update_all_settings(body);
+
+    // 4 - Add a document
+
+    let body = json!([{
+      "id": 1,
+      "title": "Test",
+      "comment": "comment test"
+    }]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 5 - Get settings, they should not changed
+
+    let (response, _status_code) = server.get_all_settings();
+
+    let expected = json!({
+        "rankingRules": [
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness",
+        ],
+        "distinctAttribute": null,
+        "searchableAttributes": ["title"],
+        "displayedAttributes": ["title"],
+        "stopWords": [],
+        "synonyms": {},
+        "acceptNewFields": false,
+    });
+
+    assert_json_eq!(response, expected, ordered: false);
+}
