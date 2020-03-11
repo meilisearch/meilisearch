@@ -657,4 +657,3 @@ fn check_add_documents_without_primary_key() {
     assert_eq!(status_code, 400);
     assert_json_eq!(response, expected, ordered: false);
 }
-

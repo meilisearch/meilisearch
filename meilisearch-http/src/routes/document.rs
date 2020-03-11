@@ -118,9 +118,9 @@ fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
 }
 
 #[derive(Default, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateDocumentsQuery {
-    document_id: Option<String>,
+    primary_key: Option<String>,
 }
 
 async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> SResult<Response> {
@@ -141,7 +141,7 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
         .ok_or(ResponseError::internal("schema not found"))?;
 
     if schema.primary_key().is_none() {
-        let id = match query.document_id {
+        let id = match query.primary_key {
             Some(id) => id,
             None => match data.first().and_then(|docs| find_primary_key(docs)) {
                 Some(id) => id,
