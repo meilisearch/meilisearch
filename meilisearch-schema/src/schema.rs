@@ -63,8 +63,10 @@ impl Schema {
 
         let id = self.insert(name)?;
         self.primary_key = Some(id);
-        self.set_indexed(name)?;
-        self.set_displayed(name)?;
+        if self.accept_new_fields {
+            self.set_indexed(name)?;
+            self.set_displayed(name)?;
+        }
 
         Ok(id)
     }

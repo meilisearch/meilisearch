@@ -625,3 +625,35 @@ fn create_index_without_primary_key_and_search() {
     assert_eq!(status_code, 200);
     assert_eq!(response["hits"].as_array().unwrap().len(), 0);
 }
+
+// Test the error message when we push an document update and impossibility to find primary key
+// Test issue https://github.com/meilisearch/MeiliSearch/issues/517
+#[test]
+fn check_add_documents_without_primary_key() {
+    let mut server = common::Server::with_uid("movies");
+
+    // 1 - Create the index with no primary_key
+
+    let body = json!({
+        "uid": "movies",
+    });
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
+    assert_eq!(response["primaryKey"], json!(null));
+
+    // 2- Add document
+
+    let body = json!([{
+      "title": "Test",
+      "comment": "comment test"
+    }]);
+
+    let (response, status_code) = server.add_or_replace_multiple_documents_sync(body);
+
+    let expected = json!({
+        "message": "Could not infer a primary key"
+    });
+
+    assert_eq!(status_code, 400);
+    assert_json_eq!(response, expected, ordered: false);
+}

@@ -44,30 +44,23 @@ impl Server {
         }
     }
 
-    fn wait_update_id(&mut self, update_id: u64) {
+    pub fn wait_update_id(&mut self, update_id: u64) {
         loop {
-            let req = http::Request::get(format!("/indexes/{}/updates/{}", self.uid, update_id))
-                .body(Body::empty())
-                .unwrap();
-
-            let res = self.mock.simulate(req).unwrap();
-            assert_eq!(res.status(), 200);
-
-            let mut buf = Vec::new();
-            block_on(res.into_body().read_to_end(&mut buf)).unwrap();
-            let response: Value = serde_json::from_slice(&buf).unwrap();
+            let (response, status_code) = self.get_update_status(update_id);
+            assert_eq!(status_code, 200);
 
             if response["status"] == "processed" || response["status"] == "error" {
                 eprintln!("{:#?}", response);
                 return;
             }
+
             block_on(sleep(Duration::from_secs(1)));
         }
     }
 
-    // // Global Http request GET/POST/DELETE async or sync
+    // Global Http request GET/POST/DELETE async or sync
 
-    fn get_request(&mut self, url: &str) -> (Value, StatusCode) {
+    pub fn get_request(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("get_request: {}", url);
         let req = http::Request::get(url).body(Body::empty()).unwrap();
         let res = self.mock.simulate(req).unwrap();
@@ -79,7 +72,7 @@ impl Server {
         (response, status_code)
     }
 
-    fn post_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
+    pub fn post_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("post_request: {}", url);
         let body_bytes = body.to_string().into_bytes();
 
@@ -95,7 +88,7 @@ impl Server {
         (response, status_code)
     }
 
-    fn post_request_async(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
+    pub fn post_request_async(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("post_request_async: {}", url);
         let (response, status_code) = self.post_request(url, body);
         assert_eq!(status_code, 202);
@@ -104,7 +97,7 @@ impl Server {
         (response, status_code)
     }
 
-    fn put_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
+    pub fn put_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("put_request: {}", url);
         let body_bytes = body.to_string().into_bytes();
 
@@ -120,7 +113,7 @@ impl Server {
         (response, status_code)
     }
 
-    fn put_request_async(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
+    pub fn put_request_async(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("put_request_async: {}", url);
         let (response, status_code) = self.put_request(url, body);
         assert!(response["updateId"].as_u64().is_some());
@@ -129,7 +122,7 @@ impl Server {
         (response, status_code)
     }
 
-    fn delete_request(&mut self, url: &str) -> (Value, StatusCode) {
+    pub fn delete_request(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("delete_request: {}", url);
         let req = http::Request::delete(url).body(Body::empty()).unwrap();
         let res = self.mock.simulate(req).unwrap();
@@ -141,7 +134,7 @@ impl Server {
         (response, status_code)
     }
 
-    fn delete_request_async(&mut self, url: &str) -> (Value, StatusCode) {
+    pub fn delete_request_async(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("delete_request_async: {}", url);
         let (response, status_code) = self.delete_request(url);
         assert!(response["updateId"].as_u64().is_some());
@@ -150,7 +143,7 @@ impl Server {
         (response, status_code)
     }
 
-    // // All Routes
+    // All Routes
 
     pub fn list_indexes(&mut self) -> (Value, StatusCode) {
         self.get_request("/indexes")
@@ -203,6 +196,11 @@ impl Server {
     pub fn add_or_replace_multiple_documents(&mut self, body: Value) {
         let url = format!("/indexes/{}/documents", self.uid);
         self.post_request_async(&url, body);
+    }
+
+    pub fn add_or_replace_multiple_documents_sync(&mut self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents", self.uid);
+        self.post_request(&url, body)
     }
 
     pub fn add_or_update_multiple_documents(&mut self, body: Value) {
