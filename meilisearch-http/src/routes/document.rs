@@ -145,7 +145,7 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
             Some(id) => id,
             None => match data.first().and_then(|docs| find_primary_key(docs)) {
                 Some(id) => id,
-                None => return Err(ResponseError::bad_request("Could not infer a schema")),
+                None => return Err(ResponseError::bad_request("Could not infer a primary key")),
             },
         };
 

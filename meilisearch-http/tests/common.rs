@@ -205,6 +205,11 @@ impl Server {
         self.post_request_async(&url, body);
     }
 
+    pub fn add_or_replace_multiple_documents_sync(&mut self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents", self.uid);
+        self.post_request(&url, body)
+    }
+
     pub fn add_or_update_multiple_documents(&mut self, body: Value) {
         let url = format!("/indexes/{}/documents", self.uid);
         self.put_request_async(&url, body);
