@@ -1,5 +1,4 @@
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
-use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use tide::{Request, Response};
 
@@ -73,35 +72,12 @@ pub async fn get_all(ctx: Request<Data>) -> SResult<Response> {
     Ok(tide::Response::new(200).body_json(&settings).unwrap())
 }
 
-#[derive(Default, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct UpdateSettings {
-    pub ranking_rules: Option<Vec<String>>,
-    pub distinct_attribute: Option<String>,
-    pub primary_key: Option<String>,
-    pub searchable_attributes: Option<Vec<String>>,
-    pub displayed_attributes: Option<HashSet<String>>,
-    pub stop_words: Option<BTreeSet<String>>,
-    pub synonyms: Option<BTreeMap<String, Vec<String>>>,
-    pub accept_new_fields: Option<bool>,
-}
-
 pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
     ctx.is_allowed(Private)?;
     let index = ctx.index()?;
-    let settings_update: UpdateSettings =
+    let settings: Settings =
         ctx.body_json().await.map_err(ResponseError::bad_request)?;
     let db = &ctx.state().db;
-
-    let settings = Settings {
-        ranking_rules: Some(settings_update.ranking_rules),
-        distinct_attribute: Some(settings_update.distinct_attribute),
-        searchable_attributes: Some(settings_update.searchable_attributes),
-        displayed_attributes: Some(settings_update.displayed_attributes),
-        stop_words: Some(settings_update.stop_words),
-        synonyms: Some(settings_update.synonyms),
-        accept_new_fields: Some(settings_update.accept_new_fields),
-    };
 
     let mut writer = db.update_write_txn()?;
     let settings = settings.into_update().map_err(ResponseError::bad_request)?;

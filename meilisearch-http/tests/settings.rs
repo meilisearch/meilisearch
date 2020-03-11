@@ -192,6 +192,7 @@ fn write_all_and_update() {
             "exactness",
             "desc(release_date)",
         ],
+        "distinctAttribute": null,
         "searchableAttributes": [
             "title",
             "description",
@@ -204,8 +205,7 @@ fn write_all_and_update() {
             "rank",
             "poster",
         ],
-        "stopWords": [
-        ],
+        "stopWords": [],
         "synonyms": {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
@@ -320,4 +320,112 @@ fn test_default_settings_2() {
     let (response, _status_code) = server.get_all_settings();
 
     assert_json_eq!(body, response, ordered: false);
+}
+
+// Test issue https://github.com/meilisearch/MeiliSearch/issues/516
+#[test]
+fn write_setting_and_update_partial() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+    });
+    server.create_index(body);
+
+    // 2 - Send the settings
+
+    let body = json!({
+        "searchableAttributes": [
+            "uid",
+            "movie_id",
+            "title",
+            "description",
+            "poster",
+            "release_date",
+            "rank",
+        ],
+        "displayedAttributes": [
+            "title",
+            "description",
+            "poster",
+            "release_date",
+            "rank",
+        ]
+    });
+
+    server.update_all_settings(body.clone());
+
+    // 2 - Send the settings
+
+    let body = json!({
+        "rankingRules": [
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness",
+            "desc(release_date)",
+            "desc(rank)",
+        ],
+        "distinctAttribute": "movie_id",
+        "stopWords": [
+            "the",
+            "a",
+            "an",
+        ],
+        "synonyms": {
+            "wolverine": ["xmen", "logan"],
+            "logan": ["wolverine"],
+        },
+        "acceptNewFields": false,
+    });
+
+    server.update_all_settings(body.clone());
+
+    // 2 - Send the settings
+
+    let expected = json!({
+        "rankingRules": [
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness",
+            "desc(release_date)",
+            "desc(rank)",
+        ],
+        "distinctAttribute": "movie_id",
+        "searchableAttributes": [
+            "uid",
+            "movie_id",
+            "title",
+            "description",
+            "poster",
+            "release_date",
+            "rank",
+        ],
+        "displayedAttributes": [
+            "title",
+            "description",
+            "poster",
+            "release_date",
+            "rank",
+        ],
+        "stopWords": [
+            "the",
+            "a",
+            "an",
+        ],
+        "synonyms": {
+            "wolverine": ["xmen", "logan"],
+            "logan": ["wolverine"],
+        },
+        "acceptNewFields": false,
+    });
+
+    let (response, _status_code) = server.get_all_settings();
+
+    assert_json_eq!(expected, response, ordered: false);
+
 }
