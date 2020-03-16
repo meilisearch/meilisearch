@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-schema"
-version = "0.8.4"
+version = "0.9.0-rc.1"
 license = "MIT"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
 edition = "2018"
