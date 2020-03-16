@@ -135,3 +135,54 @@ fn send_malformed_custom_rule() {
     let (_response, status_code) = server.update_ranking_rules_sync(body);
     assert_eq!(status_code, 400);
 }
+
+// Test issue https://github.com/meilisearch/MeiliSearch/issues/521
+#[test]
+fn write_custom_ranking_and_index_documents() {
+    let mut server = common::Server::with_uid("movies");
+    let body = json!({
+        "uid": "movies",
+        "primaryKey": "id",
+    });
+    server.create_index(body);
+
+    // 1 - Add ranking rules with one custom ranking on a string
+
+    let body = json!([
+        "asc(title)",
+        "typo"
+    ]);
+
+    server.update_ranking_rules(body);
+
+    // 2 - Add documents
+
+    let body = json!([
+      {
+        "id": 1,
+        "title": "Le Petit Prince",
+        "author": "Exupéry"
+      },
+      {
+        "id": 2,
+        "title": "Pride and Prejudice",
+        "author": "Jane Austen"
+      }
+    ]);
+
+    server.add_or_replace_multiple_documents(body);
+
+    // 3 - Get the first document and compare
+
+    let expected = json!({
+        "id": 1,
+        "title": "Le Petit Prince",
+        "author": "Exupéry"
+    });
+
+    let (response, status_code) = server.get_document(1);
+    assert_eq!(status_code, 200);
+
+    assert_json_eq!(response, expected, ordered: false);
+
+}

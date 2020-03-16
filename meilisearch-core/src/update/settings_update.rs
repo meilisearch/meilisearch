@@ -45,7 +45,13 @@ pub fn apply_settings_update(
     match settings.ranking_rules {
         UpdateState::Update(v) => {
             let ranked_field: Vec<&str> = v.iter().filter_map(RankingRule::field).collect();
-            schema.update_ranked(ranked_field)?;
+            schema.update_ranked(&ranked_field)?;
+            for name in ranked_field {
+                if schema.accept_new_fields() {
+                    schema.set_indexed(name.as_ref())?;
+                    schema.set_displayed(name.as_ref())?;
+                }
+            }
             index.main.put_ranking_rules(writer, &v)?;
             must_reindex = true;
         },
