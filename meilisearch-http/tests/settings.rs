@@ -427,5 +427,4 @@ fn write_setting_and_update_partial() {
     let (response, _status_code) = server.get_all_settings();
 
     assert_json_eq!(expected, response, ordered: false);
-
 }
