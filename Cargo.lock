@@ -1021,7 +1021,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "meilisearch-core"
-version = "0.9.0-rc.1"
+version = "0.9.0"
 dependencies = [
  "arc-swap 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "assert_matches 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1043,9 +1043,9 @@ dependencies = [
  "jemallocator 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "levenshtein_automata 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "meilisearch-schema 0.9.0-rc.1",
- "meilisearch-tokenizer 0.9.0-rc.1",
- "meilisearch-types 0.9.0-rc.1",
+ "meilisearch-schema 0.9.0",
+ "meilisearch-tokenizer 0.9.0",
+ "meilisearch-types 0.9.0",
  "once_cell 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ordered-float 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1063,7 +1063,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-http"
-version = "0.9.0-rc.1"
+version = "0.9.0"
 dependencies = [
  "assert-json-diff 1.0.1 (git+https://github.com/qdequele/assert-json-diff)",
  "async-std 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1079,8 +1079,8 @@ dependencies = [
  "jemallocator 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "main_error 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "meilisearch-core 0.9.0-rc.1",
- "meilisearch-schema 0.9.0-rc.1",
+ "meilisearch-core 0.9.0",
+ "meilisearch-schema 0.9.0",
  "mime 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
  "pretty-bytes 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1102,7 +1102,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-schema"
-version = "0.9.0-rc.1"
+version = "0.9.0"
 dependencies = [
  "bincode 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "indexmap 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1113,7 +1113,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-tokenizer"
-version = "0.9.0-rc.1"
+version = "0.9.0"
 dependencies = [
  "deunicode 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "slice-group-by 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1121,7 +1121,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "0.9.0-rc.1"
+version = "0.9.0"
 dependencies = [
  "serde 1.0.102 (registry+https://github.com/rust-lang/crates.io-index)",
  "zerocopy 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",

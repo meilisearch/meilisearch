@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-tokenizer"
-version = "0.9.0-rc.1"
+version = "0.9.0"
 license = "MIT"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
 edition = "2018"
