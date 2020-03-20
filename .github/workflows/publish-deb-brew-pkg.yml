@@ -1,15 +1,14 @@
-name: Publish deb pkg to GitHub release & apt repository
+name: Publish deb pkg to GitHub release & apt repository & Homebrew
 
 on:
   push:
     tags:
-      - '*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-  publish:
+  debian:
     name: Publish debian packagge
     runs-on: ubuntu-latest
-
     steps:
     - uses: hecrj/setup-rust-action@master
       with:
@@ -28,3 +27,13 @@ jobs:
         tag: ${{ github.ref }}
     - name: Upload debian pkg to apt repository
       run: curl -F package=@target/debian/meilisearch.deb https://${{ secrets.GEMFURY_PUSH_TOKEN }}@push.fury.io/meilisearch/
+
+  homebrew:
+    name: Bump Homebrew formula
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mislav/bump-homebrew-formula-action@v1
+        with:
+          formula-name: meilisearch
+        env:
+          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_COMMITTER_TOKEN }}
