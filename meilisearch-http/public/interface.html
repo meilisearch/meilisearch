@@ -147,7 +147,7 @@
   </body>
 
   <script>
-    function sanitizeHTMLEntities (str) {
+    function sanitizeHTMLEntities(str) {
         if (str && typeof str === 'string') {
             str = str.replace(/</g,"&lt;");
             str = str.replace(/>/g,"&gt;");
@@ -177,7 +177,7 @@
         lastRequest.open("GET", theUrl, true);
         lastRequest.onload = function (e) {
             if (lastRequest.readyState === 4 && lastRequest.status === 200) {
-                let sanitizedResponseText = lastRequest.responseText;
+                let sanitizedResponseText = sanitizeHTMLEntities(lastRequest.responseText);
                 let httpResults = JSON.parse(sanitizedResponseText);
                 results.innerHTML = '';
 
