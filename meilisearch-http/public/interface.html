@@ -148,11 +148,11 @@
 
   <script>
     function sanitizeHTMLEntities (str) {
-        if(str && typeof str === 'string') {
+        if (str && typeof str === 'string') {
             str = str.replace(/</g,"&lt;");
             str = str.replace(/>/g,"&gt;");
-          }
-    return str;
+        }
+        return str;
     }
 
     function httpGet(theUrl) {
