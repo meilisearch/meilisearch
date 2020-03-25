@@ -223,12 +223,12 @@ impl<'a> SearchBuilder<'a> {
         }
 
         let start = Instant::now();
-        let docs =
-            query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let (docs, nb_hits) = result.map_err(|e| Error::SearchDocuments(e.to_string()))?;
         let time_ms = start.elapsed().as_millis() as usize;
 
         let mut hits = Vec::with_capacity(self.limit);
-        for doc in docs.map_err(|e| Error::SearchDocuments(e.to_string()))? {
+        for doc in docs {
             // retrieve the content of document in kv store
             let mut fields: Option<HashSet<&str>> = None;
             if let Some(attributes_to_retrieve) = &self.attributes_to_retrieve {
@@ -282,6 +282,8 @@ impl<'a> SearchBuilder<'a> {
             hits,
             offset: self.offset,
             limit: self.limit,
+            nb_hits,
+            exhaustive_nb_hits: false,
             processing_time_ms: time_ms,
             query: self.query.to_string(),
         };
@@ -358,12 +360,14 @@ pub struct SearchHit {
     pub matches_info: Option<MatchesInfos>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     pub offset: usize,
     pub limit: usize,
+    pub nb_hits: usize,
+    pub exhaustive_nb_hits: bool,
     pub processing_time_ms: usize,
     pub query: String,
 }

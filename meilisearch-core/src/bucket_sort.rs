@@ -37,7 +37,7 @@ pub fn bucket_sort<'c, FI>(
     synonyms_store: store::Synonyms,
     prefix_documents_cache_store: store::PrefixDocumentsCache,
     prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
-) -> MResult<Vec<Document>>
+) -> MResult<(Vec<Document>, usize)>
 where
     FI: Fn(DocumentId) -> bool,
 {
@@ -66,7 +66,7 @@ where
 
     let words_set = match unsafe { main_store.static_words_fst(reader)? } {
         Some(words) => words,
-        None => return Ok(Vec::new()),
+        None => return Ok((Vec::new(), 0)),
     };
 
     let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
@@ -172,7 +172,7 @@ where
 
     debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
 
-    Ok(documents)
+    Ok((documents, docids.len()))
 }
 
 pub fn bucket_sort_with_distinct<'c, FI, FD>(
@@ -190,14 +190,14 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     synonyms_store: store::Synonyms,
     _prefix_documents_cache_store: store::PrefixDocumentsCache,
     prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
-) -> MResult<Vec<Document>>
+) -> MResult<(Vec<Document>, usize)>
 where
     FI: Fn(DocumentId) -> bool,
     FD: Fn(DocumentId) -> Option<u64>,
 {
     let words_set = match unsafe { main_store.static_words_fst(reader)? } {
         Some(words) => words,
-        None => return Ok(Vec::new()),
+        None => return Ok((Vec::new(), 0)),
     };
 
     let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
@@ -363,7 +363,7 @@ where
         }
     }
 
-    Ok(documents)
+    Ok((documents, docids.len()))
 }
 
 fn cleanup_bare_matches<'tag, 'txn>(
