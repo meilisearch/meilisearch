@@ -3,6 +3,7 @@
 [![Build Status](https://github.com/meilisearch/MeiliSearch/workflows/Cargo%20test/badge.svg)](https://github.com/meilisearch/MeiliSearch/actions)
 [![dependency status](https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliSearch)
 [![License](https://img.shields.io/badge/license-MIT-informational)](https://github.com/meilisearch/MeiliSearch/blob/master/LICENSE)
+[![Slack](https://img.shields.io/badge/slack-MeiliSearch-blue.svg?logo=slack)](https://slack.meilisearch.com)
 
 ⚡ Ultra relevant and instant full-text search API 🔍
 
