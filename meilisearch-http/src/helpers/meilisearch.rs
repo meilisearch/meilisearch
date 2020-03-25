@@ -224,8 +224,8 @@ impl<'a> SearchBuilder<'a> {
 
         let start = Instant::now();
         let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
-        let time_ms = start.elapsed().as_millis() as usize;
         let (docs, nb_hits) = result.map_err(|e| Error::SearchDocuments(e.to_string()))?;
+        let time_ms = start.elapsed().as_millis() as usize;
 
         let mut hits = Vec::with_capacity(self.limit);
         for doc in docs {
