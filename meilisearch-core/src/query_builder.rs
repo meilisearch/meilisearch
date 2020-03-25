@@ -92,7 +92,7 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         reader: &heed::RoTxn<MainT>,
         query: &str,
         range: Range<usize>,
-    ) -> MResult<Vec<Document>> {
+    ) -> MResult<(Vec<Document>, usize)> {
         match self.distinct {
             Some((distinct, distinct_size)) => bucket_sort_with_distinct(
                 reader,

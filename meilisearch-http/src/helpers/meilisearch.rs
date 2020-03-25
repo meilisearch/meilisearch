@@ -223,12 +223,12 @@ impl<'a> SearchBuilder<'a> {
         }
 
         let start = Instant::now();
-        let docs =
-            query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
         let time_ms = start.elapsed().as_millis() as usize;
+        let (docs, nb_hits) = result.map_err(|e| Error::SearchDocuments(e.to_string()))?;
 
         let mut hits = Vec::with_capacity(self.limit);
-        for doc in docs.map_err(|e| Error::SearchDocuments(e.to_string()))? {
+        for doc in docs {
             // retrieve the content of document in kv store
             let mut fields: Option<HashSet<&str>> = None;
             if let Some(attributes_to_retrieve) = &self.attributes_to_retrieve {
@@ -282,7 +282,7 @@ impl<'a> SearchBuilder<'a> {
             hits,
             offset: self.offset,
             limit: self.limit,
-            nb_hits: 0,
+            nb_hits,
             exhaustive_nb_hits: false,
             processing_time_ms: time_ms,
             query: self.query.to_string(),
