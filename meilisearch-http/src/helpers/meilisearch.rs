@@ -372,6 +372,28 @@ pub struct SearchResult {
     pub query: String,
 }
 
+fn aligned_crop(text: &str, match_index: usize, context: usize) -> (usize, usize) {
+
+    if context == 0 {
+        return (match_index, text.chars().skip(match_index).take_while(|c| c.is_alphanumeric()).count());
+    }
+
+    let word_end_index = |mut index| {
+        if let Some(true) = text.chars().nth(index - 1).map(|c| c.is_alphanumeric()) {
+            index += text.chars().skip(index).take_while(|c| c.is_alphanumeric()).count();
+        }
+        index
+    };
+
+    let start = match match_index.saturating_sub(context) {
+        n if n == 0 => n,
+        n => word_end_index(n)
+    };
+    let end = word_end_index(start + 2 * context);
+
+    (start, end - start)
+}
+
 fn crop_text(
     text: &str,
     matches: impl IntoIterator<Item = Highlight>,
@@ -380,8 +402,9 @@ fn crop_text(
     let mut matches = matches.into_iter().peekable();
 
     let char_index = matches.peek().map(|m| m.char_index as usize).unwrap_or(0);
-    let start = char_index.saturating_sub(context);
-    let text = text.chars().skip(start).take(context * 2).collect();
+    let (start, count) = aligned_crop(text, char_index, context);
+
+    let text = text.chars().skip(start).take(count).collect::<String>().trim().into();
 
     let matches = matches
         .take_while(|m| (m.char_index as usize) + (m.char_length as usize) <= start + (context * 2))
