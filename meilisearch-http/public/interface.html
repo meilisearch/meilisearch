@@ -151,6 +151,8 @@
         if (str && typeof str === 'string') {
             str = str.replace(/</g,"&lt;");
             str = str.replace(/>/g,"&gt;");
+            str = str.replace(/&lt;em&gt;/g,"<em>");
+            str = str.replace(/&lt;\/em&gt;/g,"<\/em>");
         }
         return str;
     }
