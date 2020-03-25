@@ -360,7 +360,7 @@ pub struct SearchHit {
     pub matches_info: Option<MatchesInfos>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
