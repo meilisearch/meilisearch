@@ -282,6 +282,8 @@ impl<'a> SearchBuilder<'a> {
             hits,
             offset: self.offset,
             limit: self.limit,
+            nb_hits: 0,
+            exhaustive_nb_hits: false,
             processing_time_ms: time_ms,
             query: self.query.to_string(),
         };
@@ -364,6 +366,8 @@ pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     pub offset: usize,
     pub limit: usize,
+    pub nb_hits: usize,
+    pub exhaustive_nb_hits: bool,
     pub processing_time_ms: usize,
     pub query: String,
 }
