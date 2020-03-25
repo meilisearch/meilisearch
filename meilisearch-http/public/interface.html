@@ -147,6 +147,16 @@
   </body>
 
   <script>
+    function sanitizeHTMLEntities(str) {
+        if (str && typeof str === 'string') {
+            str = str.replace(/</g,"&lt;");
+            str = str.replace(/>/g,"&gt;");
+            str = str.replace(/&lt;em&gt;/g,"<em>");
+            str = str.replace(/&lt;\/em&gt;/g,"<\/em>");
+        }
+        return str;
+    }
+
     function httpGet(theUrl) {
         var xmlHttp = new XMLHttpRequest();
         xmlHttp.open("GET", theUrl, false); // false for synchronous request
@@ -169,7 +179,8 @@
         lastRequest.open("GET", theUrl, true);
         lastRequest.onload = function (e) {
             if (lastRequest.readyState === 4 && lastRequest.status === 200) {
-                let httpResults = JSON.parse(lastRequest.responseText);
+                let sanitizedResponseText = sanitizeHTMLEntities(lastRequest.responseText);
+                let httpResults = JSON.parse(sanitizedResponseText);
                 results.innerHTML = '';
 
                 let processingTimeMs = httpResults.processingTimeMs;
