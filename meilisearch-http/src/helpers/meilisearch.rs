@@ -533,6 +533,39 @@ mod tests {
     use super::*;
 
     #[test]
+    fn aligned_crops() {
+        let text = r#"En ce début de trentième millénaire, l'Empire n'a jamais été aussi puissant, aussi étendu à travers toute la galaxie. C'est dans sa capitale, Trantor, que l'éminent savant Hari Seldon invente la psychohistoire, une science toute nouvelle, à base de psychologie et de mathématiques, qui lui permet de prédire l'avenir... C'est-à-dire l'effondrement de l'Empire d'ici cinq siècles et au-delà, trente mille années de chaos et de ténèbres. Pour empêcher cette catastrophe et sauver la civilisation, Seldon crée la Fondation."#;
+
+        // simple test
+        let (start, length) = aligned_crop(&text, 6, 2);
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
+        assert_eq!("début", cropped);
+
+        // first word test
+        let (start, length) = aligned_crop(&text, 0, 1);
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
+        assert_eq!("En", cropped);
+        // last word test
+        let (start, length) = aligned_crop(&text, 510, 2);
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
+        assert_eq!("Fondation", cropped);
+
+        // CJK tests
+        let text = "this isのス foo myタイリ test";
+
+        // mixed charset
+        let (start, length) = aligned_crop(&text, 5, 3);
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
+        assert_eq!("isのス", cropped);
+        
+        // split regular word / CJK word, no space 
+        let (start, length) = aligned_crop(&text, 7, 1);
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
+        assert_eq!("のス", cropped);
+
+    }
+
+    #[test]
     fn calculate_highlights() {
         let data = r#"{
             "title": "Fondation (Isaac ASIMOV)",
