@@ -156,6 +156,8 @@ We also deliver an **out-of-the-box web interface** in which you can test MeiliS
 
 You can access the web interface in your web browser at the root of the server. The default URL is [http://127.0.0.1:7700](http://127.0.0.1:7700). All you need to do is open your web browser and enter MeiliSearch’s address to visit it. This will lead you to a web page with a search bar that will allow you to search in the selected index.
 
+![web interface gif](https://docs.meilisearch.com/movies-web-demo.gif)
+
 ### Documentation
 
 Now that your MeiliSearch server is up and running, you can learn more about how to tune your search engine in [the documentation](https://docs.meilisearch.com).
