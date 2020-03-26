@@ -75,11 +75,16 @@ curl -L https://install.meilisearch.com | sh
 
 #### Compile and run it from sources
 
-If you have the Rust toolchain already installed on your local system, clone the repository and change it to your working directory. In the cloned repository, compile MeiliSearch.
+If you have the Rust toolchain already installed on your local system, clone the repository and change it to your working directory.
 
 ```bash
 git clone https://github.com/meilisearch/MeiliSearch.git
 cd MeiliSearch
+```
+
+In the cloned repository, compile MeiliSearch.
+
+```bash
 cargo run --release
 ```
 
