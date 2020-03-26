@@ -1,22 +1,26 @@
-# MeiliSearch
+<h1 align="center">
+  <img src="assets/logo.png" alt="MeiliSearch" />
+</h1>
+
+<h1 align="center">MeiliSearch</h1>
 
 [![Build Status](https://github.com/meilisearch/MeiliSearch/workflows/Cargo%20test/badge.svg)](https://github.com/meilisearch/MeiliSearch/actions)
 [![dependency status](https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliSearch)
 [![License](https://img.shields.io/badge/license-MIT-informational)](https://github.com/meilisearch/MeiliSearch/blob/master/LICENSE)
 [![Slack](https://img.shields.io/badge/slack-MeiliSearch-blue.svg?logo=slack)](https://slack.meilisearch.com)
 
-⚡ Ultra relevant and instant full-text search API 🔍
+⚡ Ultra relevant and instant full-text **search API** 🔍
 
-MeiliSearch is a powerful, fast, open-source, easy to use and deploy search engine. Both searching and indexing are highly customizable. Features such as typo-tolerance, filters, and synonyms are provided out-of-the-box.
+**MeiliSearch** is a powerful, fast, open-source, easy to use and deploy search engine. Both searching and indexing are highly customizable. Features such as typo-tolerance, filters, and synonyms are provided out-of-the-box.
 For more information about features go to [our documentation](https://docs.meilisearch.com/).
 
 [![crates.io demo gif](misc/crates-io-demo.gif)](https://crates.meilisearch.com)
 > Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
 
 ## Features
-* Search as-you-type experience (answers < 50ms)
+* Search as-you-type experience (answers < 50 milliseconds)
 * Full-text search
-* Typo tolerant (understands typos and spelling mistakes)
+* Typo tolerant (understands typos and miss-spelling)
 * Supports Kanji
 * Supports Synonym
 * Easy to install, deploy, and maintain
@@ -97,7 +101,7 @@ curl -i -X POST 'http://127.0.0.1:7700/indexes/movies/documents' \
 
 #### In command line
 
-The search engine is now aware of your documents and can serve those via a HTTP server.
+The search engine is now aware of your documents and can serve those via a HTTP server.  
 The [`jq` command-line tool](https://stedolan.github.io/jq/) can greatly help you read the server responses.
 
 ```bash
@@ -131,7 +135,7 @@ curl 'http://127.0.0.1:7700/indexes/movies/search?q=botman+robin&limit=2' | jq
 
 #### Use the Web Interface
 
-We also deliver an out-of-the-box web interface in which you can test MeiliSearch interactively.
+We also deliver an **out-of-the-box web interface** in which you can test MeiliSearch interactively.
 
 You can access the web interface in your web browser at the root of the server. The default URL is [http://127.0.0.1:7700](http://127.0.0.1:7700). All you need to do is open your web browser and enter MeiliSearch’s address to visit it. This will lead you to a web page with a search bar that allows you to search in a given set of documents.
 
@@ -153,7 +157,7 @@ You can read [this document](deep-dive.md) if you want to dive deeper into the e
 - Can [distinct](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L324-L329) and [filter](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L313-L318) returned documents based on context defined rules
 - Searches for [concatenated](https://github.com/meilisearch/MeiliSearch/pull/164) and [splitted query words](https://github.com/meilisearch/MeiliSearch/pull/232) to improve the search quality.
 - Can store complete documents or only [user schema specified fields](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/datasets/movies/schema.toml)
-- The [default tokenizer](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-tokenizer/src/lib.rs) can index latin and kanji based languages
+- The [default tokenizer](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-tokenizer/src/lib.rs) can index Latin and Kanji based languages
 - Returns [the matching text areas](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-types/src/lib.rs#L49-L65), useful to highlight matched words in results
 - Accepts query time search config like the [searchable attributes](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L331-L336)
 - Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/store/mod.rs#L143-L212)
