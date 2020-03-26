@@ -1,6 +1,6 @@
-<h1 align="center">
+<p align="center">
   <img src="assets/logo.png" alt="MeiliSearch" />
-</h1>
+</p>
 
 <h1 align="center">MeiliSearch</h1>
 
