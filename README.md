@@ -4,6 +4,13 @@
 
 <h1 align="center">MeiliSearch</h1>
 
+<p align="center"><b>
+  <a href="https://www.meilisearch.com">Website</a> | 
+  <a href="https://blog.meilisearch.com">Blog</a> | 
+  <a href="https://docs.meilisearch.com">Documentation</a> | 
+  <a href="https://docs.meilisearch.com/resources/faq.html">FAQ</a>
+</b></p>
+
 [![Build Status](https://github.com/meilisearch/MeiliSearch/workflows/Cargo%20test/badge.svg)](https://github.com/meilisearch/MeiliSearch/actions)
 [![dependency status](https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliSearch)
 [![License](https://img.shields.io/badge/license-MIT-informational)](https://github.com/meilisearch/MeiliSearch/blob/master/LICENSE)
