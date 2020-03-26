@@ -115,7 +115,7 @@ curl -i -X POST 'http://127.0.0.1:7700/indexes/movies/documents' \
 
 #### In command line
 
-The search engine is now aware of your documents and can serve those via a HTTP server. 
+The search engine is now aware of your documents and can serve those via an HTTP server. 
 
 The [`jq` command-line tool](https://stedolan.github.io/jq/) can greatly help you read the server responses.
 
@@ -220,4 +220,3 @@ Feel free to contact us about any questions you may have:
 * By opening an issue.
 
 Any suggestion or feedback is highly appreciated. Thank you for your support!
-
