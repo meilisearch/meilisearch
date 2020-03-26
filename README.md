@@ -175,19 +175,19 @@ Now that your MeiliSearch server is up and running, you can learn more about how
 
 ## Performances
 
-When processing a dataset composed of _100 353_ documents with _352_ attributes each and _3_ of them indexed, which means more than _300 000_ fields indexed for _35 million_ stored, MeiliSearch is able to carry out more than _2.8k req/sec_ with an average response time of _9 ms_ on an Intel i7-7700 (8) @ 4.2GHz.
+When processing a dataset composed of 5M books composed of a title and an author name, MeiliSearch is able to carry out more than 553 req/sec with an average response time of 21 ms on an Intel i7-7700 (8) @ 4.2GHz.
 
 Requests are made using [wrk](https://github.com/wg/wrk) and scripted to simulate real users' queries.
 
 ```
-Running 10s test @ http://localhost:2230
-  2 threads and 25 connections
+Running 10s test @ http://1.2.3.4:7700
+  2 threads and 10 connections
   Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency     9.52ms    7.61ms  99.25ms   84.58%
-    Req/Sec     1.41k   119.11     1.78k    64.50%
-  28080 requests in 10.01s, 7.42MB read
-Requests/sec:   2806.46
-Transfer/sec:    759.17KB
+    Latency    21.45ms   15.64ms 214.10ms   85.95%
+    Req/Sec   256.48     37.66   330.00     69.50%
+  5132 requests in 10.05s, 2.31MB read
+Requests/sec:    510.46
+Transfer/sec:    234.77KB
 ```
 
 We also indexed a dataset containing about _12 millions_ cities names in _24 minutes_ on a _8 cores_, _64 GB of RAM_, and a _300 GB NMVe_ SSD machine.<br/>
