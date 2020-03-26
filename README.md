@@ -205,3 +205,13 @@ Hey! We're glad you're thinking about contributing to MeiliSearch! If you think 
 Once a day, events are being sent to our Amplitude instance so we can know how many people are using MeiliSearch.<br/>
 Only information concerning the platform on which the server runs is concerned. No other information is being sent.<br/>
 If this doesn't suit you, you can disable these analytics by using the `MEILI_NO_ANALYTICS` env variable.
+
+## Contact
+
+Feel free to contact us about any questions you may have:
+* At [bonjour@meilisearch.com](mailto:bonjour@meilisearch.com): English or French is welcome! 🇫🇷 🇬🇧
+* Via the chat box available on every page of [our documentation](https://docs.meilisearch.com/) and on [our landing page](https://www.meilisearch.com/).
+* By opening an issue.
+
+Every feedback is appreciated. Thank you for your support!
+
