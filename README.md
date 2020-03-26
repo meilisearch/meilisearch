@@ -160,12 +160,6 @@ You can access the web interface in your web browser at the root of the server. 
 
 Now that your MeiliSearch server is up and running, you can learn more about how to tune your search engine in [the documentation](https://docs.meilisearch.com).
 
-## How it works
-
-MeiliSearch uses [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) as the internal key-value store. The key-value store allows to handle updates and queries with small memory and CPU overheads. The whole ranking system is [data oriented](https://github.com/meilisearch/MeiliSearch/issues/82) and ensures great performances.
-
-You can read [this document](deep-dive.md) if you want to dive deeper into the engine. The whole process of generating updates and handling queries is described in it. Besides, to learn the default rules used for sorting documents, you can take a look at this [typos and ranking rules explanation](typos-ranking-rules.md).
-
 ### Technical features
 
 - Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/criterion/mod.rs#L106-L111) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
