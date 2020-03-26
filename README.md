@@ -197,11 +197,6 @@ Transfer/sec:    759.17KB
 We also indexed a dataset containing about _12 millions_ cities names in _24 minutes_ on a _8 cores_, _64 GB of RAM_, and a _300 GB NMVe_ SSD machine.<br/>
 The size of the resulting database reached _16 GB_ and search results were presented between _30 ms_ and _4 seconds_ for short prefix queries.
 
-### Notes
-
-In Rust 1.32, the allocator has been [changed to use the system allocator](https://blog.rust-lang.org/2019/01/17/Rust-1.32.0.html#jemalloc-is-removed-by-default).
-We observed significant performance improvements when [using jemalloc as the global allocator](https://github.com/alexcrichton/jemallocator#documentation).
-
 ## Contributing
 
 Hey! We're glad you're thinking about contributing to MeiliSearch! If you think something is missing or could be improved, please open issues and pull requests. If you'd like to help this project grow, we'd love to have you! To start contributing, checking [issues tagged as "good-first-issue"](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) is a good start!
