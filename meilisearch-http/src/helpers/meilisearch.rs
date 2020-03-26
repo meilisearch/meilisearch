@@ -11,6 +11,7 @@ use log::error;
 use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
 use meilisearch_core::{Highlight, Index, MainT, RankedMap};
+use meilisearch_tokenizer::is_cjk;
 use meilisearch_schema::{FieldId, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -372,19 +373,21 @@ pub struct SearchResult {
     pub query: String,
 }
 
+/// returns the start index and the length on the crop. 
 fn aligned_crop(text: &str, match_index: usize, context: usize) -> (usize, usize) {
-
-    if context == 0 {
-        return (match_index, text.chars().skip(match_index).take_while(|c| c.is_alphanumeric()).count());
-    }
+    let is_word_component = |c: &char| c.is_alphanumeric() && !is_cjk(*c);
 
     let word_end_index = |mut index| {
-        if let Some(true) = text.chars().nth(index - 1).map(|c| c.is_alphanumeric()) {
-            index += text.chars().skip(index).take_while(|c| c.is_alphanumeric()).count();
+        if text.chars().nth(index - 1).map_or(false, |c| is_word_component(&c)) {
+            index += text.chars().skip(index).take_while(is_word_component).count();
         }
         index
     };
 
+    if context == 0 {
+        // count need to be at least 1 for cjk queries to return something
+        return (match_index, 1 + text.chars().skip(match_index).take_while(is_word_component).count());
+    }
     let start = match match_index.saturating_sub(context) {
         n if n == 0 => n,
         n => word_end_index(n)
@@ -404,8 +407,10 @@ fn crop_text(
     let char_index = matches.peek().map(|m| m.char_index as usize).unwrap_or(0);
     let (start, count) = aligned_crop(text, char_index, context);
 
-    let text = text.chars().skip(start).take(count).collect::<String>().trim().into();
+    //TODO do something about the double allocation
+    let text = text.chars().skip(start).take(count).collect::<String>().trim().to_string();
 
+    // update matches index to match the new cropped text
     let matches = matches
         .take_while(|m| (m.char_index as usize) + (m.char_length as usize) <= start + (context * 2))
         .map(|match_| Highlight {
