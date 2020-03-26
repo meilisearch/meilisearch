@@ -209,7 +209,7 @@ Hey! We're glad you're thinking about contributing to MeiliSearch! If you think 
 ### Analytic Events
 
 Once a day, events are being sent to our Amplitude instance so we can know how many people are using MeiliSearch.<br/>
-Only information concerning the platform on which the server runs is concerned. No other information is being sent.<br/>
+Only information about the platform on which the server runs is concerned. No other information is being sent.<br/>
 If this doesn't suit you, you can disable these analytics by using the `MEILI_NO_ANALYTICS` env variable.
 
 ## Contact
