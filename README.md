@@ -13,12 +13,14 @@
   <a href="https://docs.meilisearch.com/resources/faq.html">FAQ</a>
 </h4>
 
-[![Build Status](https://github.com/meilisearch/MeiliSearch/workflows/Cargo%20test/badge.svg)](https://github.com/meilisearch/MeiliSearch/actions)
-[![dependency status](https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg)](https://deps.rs/repo/github/meilisearch/MeiliSearch)
-[![License](https://img.shields.io/badge/license-MIT-informational)](https://github.com/meilisearch/MeiliSearch/blob/master/LICENSE)
-[![Slack](https://img.shields.io/badge/slack-MeiliSearch-blue.svg?logo=slack)](https://slack.meilisearch.com)
+<p align="center">
+  <a href="https://github.com/meilisearch/MeiliSearch/actions"><img src="https://github.com/meilisearch/MeiliSearch/workflows/Cargo%20test/badge.svg" alt="Build Status"></a>
+  <a href="https://deps.rs/repo/github/meilisearch/MeiliSearch"><img src="https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg" alt="Dependency status"></a>
+  <a href="https://github.com/meilisearch/MeiliSearch/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-informational" alt="License"></a>
+  <a href="https://slack.meilisearch.com"><img src="https://img.shields.io/badge/slack-MeiliSearch-blue.svg?logo=slack" alt="Slack"></a>
+</p>
 
-⚡ Ultra relevant and instant full-text **search API** 🔍
+<p align="center">⚡ Ultra relevant and instant full-text search API 🔍</p>
 
 **MeiliSearch** is a powerful, fast, open-source, easy to use and deploy search engine. Both searching and indexing are highly customizable. Features such as typo-tolerance, filters, and synonyms are provided out-of-the-box.
 For more information about features go to [our documentation](https://docs.meilisearch.com/).
