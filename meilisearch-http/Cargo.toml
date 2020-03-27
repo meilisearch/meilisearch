@@ -27,6 +27,7 @@ log = "0.4.8"
 main_error = "0.1.0"
 meilisearch-core = { path = "../meilisearch-core", version = "0.9.0" }
 meilisearch-schema = { path = "../meilisearch-schema", version = "0.9.0" }
+meilisearch-tokenizer = {path = "../meilisearch-tokenizer", version = "0.9.0"}
 mime = "0.3.16"
 pretty-bytes = "0.2.2"
 rand = "0.7.2"

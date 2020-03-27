@@ -1081,6 +1081,7 @@ dependencies = [
  "main_error 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "meilisearch-core 0.9.0",
  "meilisearch-schema 0.9.0",
+ "meilisearch-tokenizer 0.9.0",
  "mime 0.3.16 (registry+https://github.com/rust-lang/crates.io-index)",
  "pretty-bytes 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
