@@ -25,7 +25,10 @@
 **MeiliSearch** is a powerful, fast, open-source, easy to use and deploy search engine. Both searching and indexing are highly customizable. Features such as typo-tolerance, filters, and synonyms are provided out-of-the-box.
 For more information about features go to [our documentation](https://docs.meilisearch.com/).
 
-[![crates.io demo gif](assets/crates-io-demo.gif)](https://crates.meilisearch.com)
+<p align="center">
+  <a href="https://crates.meilisearch.com"><img src="assets/crates-io-demo.gif" alt="crates.io demo gif" /></a>
+</p>
+
 > Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
 
 ## Features
