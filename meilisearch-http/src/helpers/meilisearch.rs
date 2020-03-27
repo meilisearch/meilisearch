@@ -11,6 +11,7 @@ use log::error;
 use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
 use meilisearch_core::{Highlight, Index, MainT, RankedMap};
+use meilisearch_tokenizer::is_cjk;
 use meilisearch_schema::{FieldId, Schema};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -372,6 +373,30 @@ pub struct SearchResult {
     pub query: String,
 }
 
+/// returns the start index and the length on the crop. 
+fn aligned_crop(text: &str, match_index: usize, context: usize) -> (usize, usize) {
+    let is_word_component = |c: &char| c.is_alphanumeric() && !is_cjk(*c);
+
+    let word_end_index = |mut index| {
+        if text.chars().nth(index - 1).map_or(false, |c| is_word_component(&c)) {
+            index += text.chars().skip(index).take_while(is_word_component).count();
+        }
+        index
+    };
+
+    if context == 0 {
+        // count need to be at least 1 for cjk queries to return something
+        return (match_index, 1 + text.chars().skip(match_index).take_while(is_word_component).count());
+    }
+    let start = match match_index.saturating_sub(context) {
+        n if n == 0 => n,
+        n => word_end_index(n)
+    };
+    let end = word_end_index(start + 2 * context);
+
+    (start, end - start)
+}
+
 fn crop_text(
     text: &str,
     matches: impl IntoIterator<Item = Highlight>,
@@ -380,9 +405,12 @@ fn crop_text(
     let mut matches = matches.into_iter().peekable();
 
     let char_index = matches.peek().map(|m| m.char_index as usize).unwrap_or(0);
-    let start = char_index.saturating_sub(context);
-    let text = text.chars().skip(start).take(context * 2).collect();
+    let (start, count) = aligned_crop(text, char_index, context);
 
+    //TODO do something about the double allocation
+    let text = text.chars().skip(start).take(count).collect::<String>().trim().to_string();
+
+    // update matches index to match the new cropped text
     let matches = matches
         .take_while(|m| (m.char_index as usize) + (m.char_length as usize) <= start + (context * 2))
         .map(|match_| Highlight {
@@ -503,6 +531,39 @@ fn calculate_highlights(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn aligned_crops() {
+        let text = r#"En ce début de trentième millénaire, l'Empire n'a jamais été aussi puissant, aussi étendu à travers toute la galaxie. C'est dans sa capitale, Trantor, que l'éminent savant Hari Seldon invente la psychohistoire, une science toute nouvelle, à base de psychologie et de mathématiques, qui lui permet de prédire l'avenir... C'est-à-dire l'effondrement de l'Empire d'ici cinq siècles et au-delà, trente mille années de chaos et de ténèbres. Pour empêcher cette catastrophe et sauver la civilisation, Seldon crée la Fondation."#;
+
+        // simple test
+        let (start, length) = aligned_crop(&text, 6, 2);
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
+        assert_eq!("début", cropped);
+
+        // first word test
+        let (start, length) = aligned_crop(&text, 0, 1);
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
+        assert_eq!("En", cropped);
+        // last word test
+        let (start, length) = aligned_crop(&text, 510, 2);
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
+        assert_eq!("Fondation", cropped);
+
+        // CJK tests
+        let text = "this isのス foo myタイリ test";
+
+        // mixed charset
+        let (start, length) = aligned_crop(&text, 5, 3);
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
+        assert_eq!("isのス", cropped);
+        
+        // split regular word / CJK word, no space 
+        let (start, length) = aligned_crop(&text, 7, 1);
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
+        assert_eq!("のス", cropped);
+
+    }
 
     #[test]
     fn calculate_highlights() {
