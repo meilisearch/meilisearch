@@ -215,7 +215,11 @@
 
                         const content = document.createElement('div');
                         content.classList.add("content");
-                        content.innerHTML = element[prop];
+                        if (typeof (element[prop]) === "object") {
+                          content.innerHTML = JSON.stringify(element[prop]);
+                        } else {
+                          content.innerHTML = element[prop];
+                        }
 
                         field.appendChild(attribute);
                         field.appendChild(content);
