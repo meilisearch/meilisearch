@@ -182,7 +182,7 @@ Now that your MeiliSearch server is up and running, you can learn more about how
 
 ## Performances
 
-When processing a dataset composed of 5M books composed of a title and an author name, MeiliSearch is able to carry out more than 553 req/sec with an average response time of 21 ms on an Intel i7-7700 (8) @ 4.2GHz.
+When processing a dataset composed of 5M books, each with their own titles and authors, MeiliSearch is able to carry out more than 553 req/sec with an average response time of 21 ms on an Intel i7-7700 (8) @ 4.2GHz.
 
 Requests are made using [wrk](https://github.com/wg/wrk) and scripted to simulate real users' queries.
 
