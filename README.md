@@ -215,6 +215,7 @@ If this doesn't suit you, you can disable these analytics by using the `MEILI_NO
 Feel free to contact us about any questions you may have:
 * At [bonjour@meilisearch.com](mailto:bonjour@meilisearch.com): English or French is welcome! 🇬🇧 🇫🇷
 * Via the chat box available on every page of [our documentation](https://docs.meilisearch.com/) and on [our landing page](https://www.meilisearch.com/).
+* Join our [Slack community](https://slack.meilisearch.com/).
 * By opening an issue.
 
 Any suggestion or feedback is highly appreciated. Thank you for your support!
