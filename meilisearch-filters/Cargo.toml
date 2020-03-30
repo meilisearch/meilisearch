@@ -1,0 +1,15 @@
+[package]
+name = "meilisearch-filters"
+version = "0.9.0"
+authors = ["mposmta <postma.marin@protonmail.com>"]
+edition = "2018"
+
+license = "MIT"
+
+[dependencies]
+lazy_static = "1.4.0"
+meilisearch-core = { path = "../meilisearch-core", version = "0.9.0" }
+pest = "2.0"
+pest_derive = "2.0"
+heed = "0.6.1"
+
