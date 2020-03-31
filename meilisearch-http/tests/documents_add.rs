@@ -129,7 +129,7 @@ fn check_add_documents_with_nested_sequence() {
     let body = json!([{ 
         "id": 0, 
         "foo": { 
-            "bar": [123],
+            "bar": [123,456],
             "fez": [{
                 "id": 255,
                 "baz": "leesz",
@@ -137,6 +137,22 @@ fn check_add_documents_with_nested_sequence() {
                     "fax": [234]
                 },
                 "sas": []
+            }],
+            "foz": [{
+                "id": 255,
+                "baz": "leesz",
+                "fuzz": {
+                    "fax": [234]
+                },
+                "sas": []
+            },
+            {
+                "id": 256,
+                "baz": "loss",
+                "fuzz": {
+                    "fax": [235]
+                },
+                "sas": [321, 321]
             }]
         }
     }]);
