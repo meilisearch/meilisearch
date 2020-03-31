@@ -8,7 +8,7 @@ pub struct ConvertToString;
 impl ser::Serializer for ConvertToString {
     type Ok = String;
     type Error = SerializerError;
-    type SerializeSeq = ser::Impossible<Self::Ok, Self::Error>;
+    type SerializeSeq = SeqConvertToString;
     type SerializeTuple = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleStruct = ser::Impossible<Self::Ok, Self::Error>;
     type SerializeTupleVariant = ser::Impossible<Self::Ok, Self::Error>;
@@ -135,8 +135,8 @@ impl ser::Serializer for ConvertToString {
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        Err(SerializerError::UnserializableType {
-            type_name: "sequence",
+        Ok(SeqConvertToString {
+            text: String::new(),
         })
     }
 
@@ -247,6 +247,29 @@ impl ser::SerializeStruct for StructConvertToString {
         self.text.push_str(key);
         self.text.push_str(" ");
         self.text.push_str(&value);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        Ok(self.text)
+    }
+}
+
+pub struct SeqConvertToString {
+    text: String,
+}
+
+impl ser::SerializeSeq for SeqConvertToString {
+    type Ok = String;
+    type Error = SerializerError;
+
+    fn serialize_element<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
+    where
+        T: ser::Serialize,
+    {
+        let text = key.serialize(ConvertToString)?;
+        self.text.push_str(&text);
+        self.text.push_str(" ");
         Ok(())
     }
 
