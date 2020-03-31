@@ -16,10 +16,8 @@ impl ser::Serializer for ConvertToString {
     type SerializeStruct = StructConvertToString;
     type SerializeStructVariant = ser::Impossible<Self::Ok, Self::Error>;
 
-    fn serialize_bool(self, _value: bool) -> Result<Self::Ok, Self::Error> {
-        Err(SerializerError::UnserializableType {
-            type_name: "boolean",
-        })
+    fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
+        Ok(value.to_string())
     }
 
     fn serialize_char(self, value: char) -> Result<Self::Ok, Self::Error> {
