@@ -531,7 +531,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let docids = SetBuf::new(docids).unwrap();
                     debug!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
-                    let matches = Cow::Owned(SetBuf::new(matches).unwrap());
+                    let matches = Cow::Owned(SetBuf::from_dirty(matches));
                     let key = PostingsKey { query, input: vec![], distance: 0, is_exact: true };
                     postings.insert(key, matches);
 
