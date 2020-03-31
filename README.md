@@ -49,7 +49,7 @@ For more information about features go to [our documentation](https://docs.meili
 #### Run it using Docker
 
 ```bash
-docker run -it -p 7700:7700 --rm getmeili/meilisearch
+docker run -p 7700:7700 -v $(pwd)/data.ms:/data.ms getmeili/meilisearch
 ```
 
 #### Installing with Homebrew
@@ -73,10 +73,6 @@ meilisearch
 curl -L https://install.meilisearch.com | sh
 ./meilisearch
 ```
-
-#### Run it on heroku
-
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/meilisearch/MeiliSearch)
 
 #### Compile and run it from sources
 
