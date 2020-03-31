@@ -79,7 +79,7 @@ fn check_add_documents_with_nested_boolean() {
 
 // Test issue https://github.com/meilisearch/MeiliSearch/issues/571
 #[test]
-fn check_add_documents_with_nested_sequence() {
+fn check_add_documents_with_nested_null() {
     let mut server = common::Server::with_uid("tasks");
 
     // 1 - Create the index with no primary_key
@@ -91,7 +91,12 @@ fn check_add_documents_with_nested_sequence() {
 
     // 2 - Add a document that contains a null in a nested object
 
-    let body = serde_json::from_str("[{\"id\":0,\"foo\":{\"bar\":null}}]").unwrap();
+    let body = json!([{ 
+        "id": 0, 
+        "foo": { 
+            "bar": null
+        } 
+    }]);
 
     let url = "/indexes/tasks/documents";
     let (response, status_code) = server.post_request(&url, body);
