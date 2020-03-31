@@ -135,7 +135,8 @@ fn check_add_documents_with_nested_sequence() {
                 "baz": "leesz",
                 "fuzz": {
                     "fax": [234]
-                }
+                },
+                "sas": []
             }]
         }
     }]);
