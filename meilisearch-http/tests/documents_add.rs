@@ -76,3 +76,38 @@ fn check_add_documents_with_nested_boolean() {
     assert_eq!(status_code, 200);
     assert_eq!(response["status"], "processed");
 }
+
+// Test issue https://github.com/meilisearch/MeiliSearch/issues/571
+#[test]
+fn check_add_documents_with_nested_null() {
+    let mut server = common::Server::with_uid("tasks");
+
+    // 1 - Create the index with no primary_key
+
+    let body = json!({ "uid": "tasks" });
+    let (response, status_code) = server.create_index(body);
+    assert_eq!(status_code, 201);
+    assert_eq!(response["primaryKey"], json!(null));
+
+    // 2 - Add a document that contains a null in a nested object
+
+    let body = json!([{ 
+        "id": 0, 
+        "foo": { 
+            "bar": null
+        } 
+    }]);
+
+    let url = "/indexes/tasks/documents";
+    let (response, status_code) = server.post_request(&url, body);
+    eprintln!("{:#?}", response);
+    assert_eq!(status_code, 202);
+    let update_id = response["updateId"].as_u64().unwrap();
+    server.wait_update_id(update_id);
+
+    // 3 - Check update sucess
+
+    let (response, status_code) = server.get_update_status(update_id);
+    assert_eq!(status_code, 200);
+    assert_eq!(response["status"], "processed");
+}
