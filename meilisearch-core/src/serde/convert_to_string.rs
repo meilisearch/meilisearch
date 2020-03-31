@@ -88,7 +88,7 @@ impl ser::Serializer for ConvertToString {
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        Ok("".to_string())
+        Ok(String::new())
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
