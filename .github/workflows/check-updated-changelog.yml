@@ -9,6 +9,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Checking the CHANGELOG.md has been updated in this PR
+      continue-on-error: true
       run: |
         set -e
         git fetch origin ${{ github.base_ref }}
