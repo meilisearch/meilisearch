@@ -21,6 +21,18 @@ async fn main() -> Result<(), MainError> {
     // let local = tokio::task::LocalSet::new();
     // let _sys = actix_rt::System::run_in_tokio("server", &local);
 
+    let _sentry = if !opt.no_analytics {
+        sentry::init((
+            "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337",
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                ..Default::default()
+            },
+        ))
+    } else {
+        sentry::init(sentry::ClientOptions::default())
+    };
+
     match opt.env.as_ref() {
         "production" => {
             if opt.master_key.is_none() {
@@ -29,26 +41,15 @@ async fn main() -> Result<(), MainError> {
                         .into(),
                 );
             }
-
-            if !opt.no_analytics {
-                let _sentry = sentry::init((
-                    "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337",
-                    sentry::ClientOptions {
-                        release: sentry::release_name!(),
-                        ..Default::default()
-                    },
-                ));
-                sentry::integrations::panic::register_panic_handler();
-                sentry::integrations::env_logger::init(None, Default::default());
-            } else {
-                env_logger::init();
-            }
         },
         "development" => {
             env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
         }
         _ => unreachable!(),
     }
+
+    sentry::integrations::panic::register_panic_handler();
+    sentry::integrations::env_logger::init(None, Default::default());
 
     if !opt.no_analytics {
         thread::spawn(analytics::analytics_sender);

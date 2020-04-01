@@ -47,7 +47,11 @@ actix-cors = "0.2.0"
 actix-service = "1.0.5"
 actix-web-macros = "0.1.0"
 tokio = { version = "0.2.18", features = ["macros"] }
-sentry = { version = "0.18.0", features = ["with_rustls", "with_env_logger"] }
+
+[dependencies.sentry]
+git = "https://github.com/qdequele/sentry-rust"
+branch = "fix-segfault-on-panic"
+features = ["with_rustls", "with_env_logger"]
 
 [dev-dependencies]
 http-service = "0.4.0"
