@@ -6,11 +6,11 @@ authors = ["Clément Renault <renault.cle@gmail.com>"]
 edition = "2018"
 
 [dependencies.zerocopy]
-version = "0.2.8"
+version = "0.3.0"
 optional = true
 
 [dependencies.serde]
-version = "1.0.101"
+version = "1.0.105"
 features = ["derive"]
 optional = true
 

@@ -192,7 +192,7 @@ pub(crate) fn report(pid: Pid) -> SysInfo {
 
     info.memory_usage = sys.get_used_memory() as f64 / sys.get_total_memory() as f64 * 100.0;
 
-    for processor in sys.get_processor_list() {
+    for processor in sys.get_processors() {
         info.processor_usage.push(processor.get_cpu_usage() * 100.0);
     }
 
@@ -200,8 +200,8 @@ pub(crate) fn report(pid: Pid) -> SysInfo {
     info.global.used_memory = sys.get_used_memory();
     info.global.total_swap = sys.get_total_swap();
     info.global.used_swap = sys.get_used_swap();
-    info.global.input_data = sys.get_network().get_income();
-    info.global.output_data = sys.get_network().get_outcome();
+    info.global.input_data = sys.get_networks().into_iter().map(|(_, n)| n.get_received()).sum::<u64>();
+    info.global.output_data = sys.get_networks().into_iter().map(|(_, n)| n.get_transmitted()).sum::<u64>();
 
     if let Some(process) = sys.get_process(pid) {
         info.process.memory = process.memory();
@@ -288,7 +288,7 @@ pub(crate) fn report_pretty(pid: Pid) -> SysInfoPretty {
         sys.get_used_memory() as f64 / sys.get_total_memory() as f64 * 100.0
     );
 
-    for processor in sys.get_processor_list() {
+    for processor in sys.get_processors() {
         info.processor_usage
             .push(format!("{:.1} %", processor.get_cpu_usage() * 100.0));
     }
@@ -297,8 +297,8 @@ pub(crate) fn report_pretty(pid: Pid) -> SysInfoPretty {
     info.global.used_memory = convert(sys.get_used_memory() as f64 * 1024.0);
     info.global.total_swap = convert(sys.get_total_swap() as f64 * 1024.0);
     info.global.used_swap = convert(sys.get_used_swap() as f64 * 1024.0);
-    info.global.input_data = convert(sys.get_network().get_income() as f64);
-    info.global.output_data = convert(sys.get_network().get_outcome() as f64);
+    info.global.input_data = convert(sys.get_networks().into_iter().map(|(_, n)| n.get_received()).sum::<u64>() as f64);
+    info.global.output_data = convert(sys.get_networks().into_iter().map(|(_, n)| n.get_transmitted()).sum::<u64>() as f64);
 
     if let Some(process) = sys.get_process(pid) {
         info.process.memory = convert(process.memory() as f64 * 1024.0);
