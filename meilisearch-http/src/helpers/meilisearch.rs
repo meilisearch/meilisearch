@@ -12,8 +12,8 @@ use meilisearch_core::Filter;
 use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
 use meilisearch_core::{Highlight, Index, MainT, RankedMap};
-use meilisearch_tokenizer::is_cjk;
 use meilisearch_schema::{FieldId, Schema};
+use meilisearch_tokenizer::is_cjk;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use siphasher::sip::SipHasher;
@@ -220,36 +220,51 @@ impl<'a> SearchBuilder<'a> {
         }
 
         let start = Instant::now();
-        let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let result =
+            query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
         let (docs, nb_hits) = result.map_err(|e| Error::SearchDocuments(e.to_string()))?;
         let time_ms = start.elapsed().as_millis() as usize;
 
+        let mut all_attributes: HashSet<&str> = HashSet::new();
+        let mut all_formatted: HashSet<&str> = HashSet::new();
+
+        match &self.attributes_to_retrieve {
+            Some(to_retrieve) => {
+                all_attributes.extend(to_retrieve.iter().map(String::as_str));
+
+                if let Some(to_highlight) = &self.attributes_to_highlight {
+                    all_formatted.extend(to_highlight.iter().map(String::as_str));
+                }
+
+                if let Some(to_crop) = &self.attributes_to_crop {
+                    all_formatted.extend(to_crop.keys().map(String::as_str));
+                }
+
+                all_attributes.extend(&all_formatted);
+            },
+            None => {
+                all_attributes.extend(schema.displayed_name());
+                // If we specified at least one attribute to highlight or crop then
+                // all available attributes will be returned in the _formatted field.
+                if self.attributes_to_highlight.is_some() || self.attributes_to_crop.is_some() {
+                    all_formatted.extend(all_attributes.iter().cloned());
+                }
+            },
+        }
+
         let mut hits = Vec::with_capacity(self.limit);
         for doc in docs {
-            // retrieve the content of document in kv store
-            let mut fields: Option<HashSet<&str>> = None;
-            if let Some(attributes_to_retrieve) = &self.attributes_to_retrieve {
-                let mut set = HashSet::new();
-                for field in attributes_to_retrieve {
-                    set.insert(field.as_str());
-                }
-                fields = Some(set);
-            }
-
-            let document: IndexMap<String, Value> = self
+            let mut document: IndexMap<String, Value> = self
                 .index
-                .document(reader, fields.as_ref(), doc.id)
+                .document(reader, Some(&all_attributes), doc.id)
                 .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
                 .ok_or(Error::DocumentNotFound(doc.id.0))?;
 
-            let has_attributes_to_highlight = self.attributes_to_highlight.is_some();
-            let has_attributes_to_crop = self.attributes_to_crop.is_some();
+            let mut formatted = document.iter()
+                .filter(|(key, _)| all_formatted.contains(key.as_str()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
 
-            let mut formatted = if has_attributes_to_highlight || has_attributes_to_crop {
-                document.clone()
-            } else {
-                IndexMap::new()
-            };
             let mut matches = doc.highlights.clone();
 
             // Crops fields if needed
@@ -258,13 +273,24 @@ impl<'a> SearchBuilder<'a> {
             }
 
             // Transform to readable matches
-            let matches = calculate_matches(matches, self.attributes_to_retrieve.clone(), &schema);
-
             if let Some(attributes_to_highlight) = &self.attributes_to_highlight {
+                let matches = calculate_matches(
+                    matches.clone(),
+                    self.attributes_to_highlight.clone(),
+                    &schema,
+                );
                 formatted = calculate_highlights(&formatted, &matches, attributes_to_highlight);
             }
 
-            let matches_info = if self.matches { Some(matches) } else { None };
+            let matches_info = if self.matches {
+                Some(calculate_matches(matches, self.attributes_to_retrieve.clone(), &schema))
+            } else {
+                None
+            };
+
+            if let Some(attributes_to_retrieve) = &self.attributes_to_retrieve {
+                document.retain(|key, _| attributes_to_retrieve.contains(&key.to_string()))
+            }
 
             let hit = SearchHit {
                 document,
@@ -369,7 +395,7 @@ pub struct SearchResult {
     pub query: String,
 }
 
-/// returns the start index and the length on the crop. 
+/// returns the start index and the length on the crop.
 fn aligned_crop(text: &str, match_index: usize, context: usize) -> (usize, usize) {
     let is_word_component = |c: &char| c.is_alphanumeric() && !is_cjk(*c);
 
@@ -553,8 +579,8 @@ mod tests {
         let (start, length) = aligned_crop(&text, 5, 3);
         let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
         assert_eq!("isのス", cropped);
-        
-        // split regular word / CJK word, no space 
+
+        // split regular word / CJK word, no space
         let (start, length) = aligned_crop(&text, 7, 1);
         let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
         assert_eq!("のス", cropped);
