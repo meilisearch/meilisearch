@@ -4,12 +4,13 @@ extern crate assert_matches;
 
 use std::sync::mpsc;
 use std::path::Path;
-use std::{fs, fs::File, io::BufReader};
+use std::fs::File;
+use std::io::BufReader;
 use std::iter;
 
 use meilisearch_core::Database;
 use meilisearch_core::{ProcessedUpdateResult, UpdateStatus};
-use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState};
+use meilisearch_core::settings::{Settings, SettingsUpdate};
 use meilisearch_schema::Schema;
 use serde_json::Value;
 
@@ -41,14 +42,13 @@ fn prepare_database(path: &Path) -> Database {
 
     let mut update_writer = db.update_write_txn().unwrap();
     let _update_id = index.settings_update(&mut update_writer, settings_update).unwrap();
-
     update_writer.commit().unwrap();
 
     let mut additions = index.documents_addition();
 
     let json: Value = {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../datasets/movies/movies.json");
-        let movies_file = fs::File::open(path).expect("find movies");
+        let movies_file = File::open(path).expect("find movies");
         serde_json::from_reader(movies_file).unwrap()
     };
 
