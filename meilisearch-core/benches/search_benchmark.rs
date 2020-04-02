@@ -4,11 +4,14 @@ extern crate assert_matches;
 
 use std::sync::mpsc;
 use std::path::Path;
-use std::fs;
+use std::fs::File;
+use std::io::BufReader;
 use std::iter;
 
 use meilisearch_core::Database;
 use meilisearch_core::{ProcessedUpdateResult, UpdateStatus};
+use meilisearch_core::settings::{Settings, SettingsUpdate};
+use meilisearch_schema::Schema;
 use serde_json::Value;
 
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
@@ -24,22 +27,28 @@ fn prepare_database(path: &Path) -> Database {
     let index = database.create_index("bench").unwrap();
 
     database.set_update_callback(Box::new(update_fn));
+    
+    let mut writer = db.main_write_txn().unwrap();
+    index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
+    writer.commit().unwrap();
 
-    let schema = {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../datasets/movies/schema.toml");
-        let string = fs::read_to_string(path).expect("find schema");
-        toml::from_str(&string).unwrap()
+    let settings_update: SettingsUpdate = {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../datasets/movies/settings.json");
+        let file = File::open(path).unwrap();
+        let reader = BufReader::new(file);
+        let settings: Settings = serde_json::from_reader(reader).unwrap();
+        settings.into_update().unwrap()
     };
 
     let mut update_writer = db.update_write_txn().unwrap();
-    let _update_id = index.schema_update(&mut update_writer, schema).unwrap();
+    let _update_id = index.settings_update(&mut update_writer, settings_update).unwrap();
     update_writer.commit().unwrap();
 
     let mut additions = index.documents_addition();
 
     let json: Value = {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../datasets/movies/movies.json");
-        let movies_file = fs::File::open(path).expect("find movies");
+        let movies_file = File::open(path).expect("find movies");
         serde_json::from_reader(movies_file).unwrap()
     };
 
