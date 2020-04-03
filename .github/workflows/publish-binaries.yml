@@ -61,3 +61,27 @@ jobs:
           file: target/release/meilisearch
           asset_name: meilisearch-linux-armv7
           tag: ${{ github.ref }}
+
+  publish-armv8:
+    name: Publish for ARMv8
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v1.0.0
+      - uses: uraimo/run-on-arch-action@v1.0.7
+        id: runcmd
+        with:
+          architecture: aarch64 # aka ARMv8
+          distribution: ubuntu18.04
+          run: |
+            apt update
+            apt install -y curl gcc make
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+            source $HOME/.cargo/env
+            cargo build --release --locked
+      - name: Upload the binary to release
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/release/meilisearch
+          asset_name: meilisearch-linux-armv8
+          tag: ${{ github.ref }}
