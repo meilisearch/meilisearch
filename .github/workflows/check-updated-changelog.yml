@@ -5,6 +5,7 @@ on: [pull_request]
 jobs:
   check:
     name: Test on ${{ matrix.os }}
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'ignore-changelog') }}
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
