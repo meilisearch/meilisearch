@@ -660,7 +660,7 @@ fn check_add_documents_without_primary_key() {
 }
 
 #[test]
-fn check_first_update_should_bring_up_enqueued_status_before_processing(){
+fn check_first_update_should_bring_up_processed_status_after_first_docs_addition(){
     let mut server = common::Server::with_uid("movies");
 
     let body = json!({
