@@ -1,12 +1,15 @@
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
+#[macro_use]
+extern crate pest_derive;
 
 mod automaton;
 mod bucket_sort;
 mod database;
 mod distinct_map;
 mod error;
+mod filters;
 mod levenshtein;
 mod number;
 mod query_builder;
@@ -23,7 +26,8 @@ pub mod serde;
 pub mod store;
 
 pub use self::database::{BoxUpdateFn, Database, MainT, UpdateT};
-pub use self::error::{Error, HeedError, FstError, MResult};
+pub use self::error::{Error, HeedError, FstError, MResult, pest_error};
+pub use self::filters::Filter;
 pub use self::number::{Number, ParseNumberError};
 pub use self::ranked_map::RankedMap;
 pub use self::raw_document::RawDocument;

@@ -19,6 +19,7 @@ pub enum ResponseError {
     IndexNotFound(String),
     DocumentNotFound(String),
     MissingHeader(String),
+    FilterParsing(String),
     BadParameter(String, String),
     OpenIndex(String),
     CreateIndex(String),
@@ -73,10 +74,14 @@ impl IntoResponse for ResponseError {
         match self {
             ResponseError::Internal(err) => {
                 error!("internal server error: {}", err);
-                error(
-                    String::from("Internal server error"),
+                error("Internal server error".to_string(),
                     StatusCode::INTERNAL_SERVER_ERROR,
                 )
+            }
+            ResponseError::FilterParsing(err) => {
+                warn!("error paring filter: {}", err);
+                error(format!("parsing error: {}", err),
+                StatusCode::BAD_REQUEST)
             }
             ResponseError::BadRequest(err) => {
                 warn!("bad request: {}", err);
@@ -159,7 +164,10 @@ impl From<FstError> for ResponseError {
 
 impl From<SearchError> for ResponseError {
     fn from(err: SearchError) -> ResponseError {
-        ResponseError::internal(err)
+        match err {
+            SearchError::FilterParsing(s) => ResponseError::FilterParsing(s),
+            _ => ResponseError::internal(err),
+        }
     }
 }
 

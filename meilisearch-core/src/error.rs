@@ -1,10 +1,13 @@
 use crate::serde::{DeserializerError, SerializerError};
 use serde_json::Error as SerdeJsonError;
+use pest::error::Error as PestError;
+use crate::filters::Rule;
 use std::{error, fmt, io};
 
-pub use heed::Error as HeedError;
-pub use fst::Error as FstError;
 pub use bincode::Error as BincodeError;
+pub use fst::Error as FstError;
+pub use heed::Error as HeedError;
+pub use pest::error as pest_error;
 
 pub type MResult<T> = Result<T, Error>;
 
@@ -25,6 +28,7 @@ pub enum Error {
     Serializer(SerializerError),
     Deserializer(DeserializerError),
     UnsupportedOperation(UnsupportedOperation),
+    FilterParseError(PestError<Rule>)
 }
 
 impl From<io::Error> for Error {
@@ -42,11 +46,11 @@ impl From<PestError<Rule>> for Error {
                 Rule::not => "NOT",
                 Rule::string => "string",
                 Rule::word => "word",
-                Rule::greater => "field>value",
-                Rule::less => "field<value",
-                Rule::eq => "field:value",
-                Rule::leq => "field<=value",
-                Rule::geq => "field>=value",
+                Rule::greater => "field > value",
+                Rule::less => "field < value",
+                Rule::eq => "field = value",
+                Rule::leq => "field <= value",
+                Rule::geq => "field >= value",
                 Rule::key => "key",
                 _ => "other",
             };
@@ -122,6 +126,7 @@ impl fmt::Display for Error {
             Serializer(e) => write!(f, "serializer error; {}", e),
             Deserializer(e) => write!(f, "deserializer error; {}", e),
             UnsupportedOperation(op) => write!(f, "unsupported operation; {}", op),
+            FilterParseError(e) => write!(f, "error parsing filter; {}", e),
         }
     }
 }
