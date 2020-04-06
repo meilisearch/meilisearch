@@ -1,0 +1,28 @@
+key = _{quoted | word}
+value = _{quoted | word}
+quoted = _{ (PUSH("'") | PUSH("\"")) ~ string ~ POP  }
+string = {char*}
+word = ${(LETTER | NUMBER | "_" | "-")+}
+
+char =  _{ !(PEEK | "\\") ~ ANY
+    | "\\" ~ (PEEK | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})}
+
+condition = _{eq | greater | less | geq | leq | neq}
+geq = {key ~ ">=" ~ value}
+leq = {key ~ "<=" ~ value}
+neq = {key ~ "!=" ~ value}
+eq = {key ~ "=" ~ value}
+greater = {key ~ ">" ~ value}
+less = {key ~ "<" ~ value}
+
+prgm = {SOI ~ expr ~ EOI}
+expr = _{ ( term ~ (operation ~ term)* ) }
+term = _{ ("(" ~ expr ~ ")") | condition | not }
+operation = _{ and | or }
+	and = {"AND"}
+	or = {"OR"}
+
+not = {"NOT" ~ term}
+
+WHITESPACE = _{ " " }

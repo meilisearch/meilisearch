@@ -1,12 +1,8 @@
-pub mod operation;
-
 use lazy_static::lazy_static;
 use pest::prec_climber::{Operator, Assoc, PrecClimber};
 
-pub use operation::Operation;
-
 lazy_static! {
-    static ref PREC_CLIMBER: PrecClimber<Rule> = {
+    pub static ref PREC_CLIMBER: PrecClimber<Rule> = {
         use Assoc::*;
         use Rule::*;
         pest::prec_climber::PrecClimber::new(vec![Operator::new(or, Left), Operator::new(and, Left)])
@@ -14,5 +10,5 @@ lazy_static! {
 }
 
 #[derive(Parser)]
-#[grammar = "parser/grammar.pest"]
+#[grammar = "filters/parser/grammar.pest"]
 pub struct FilterParser;

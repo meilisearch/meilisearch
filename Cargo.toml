@@ -5,7 +5,6 @@ members = [
     "meilisearch-schema",
     "meilisearch-tokenizer",
     "meilisearch-types",
-    "meilisearch-filters",
 ]
 
 [profile.release]
