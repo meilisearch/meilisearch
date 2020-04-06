@@ -198,3 +198,70 @@ impl<'a> Condition<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use serde_json::Number;
+    use std::cmp::Ordering;
+
+    #[test]
+    fn test_number_comp() {
+        // test both u64
+        let n1 = Number::from(1u64);
+        let n2 = Number::from(2u64);
+        assert_eq!(Some(Ordering::Less), compare_numbers(&n1, &n2));
+        assert_eq!(Some(Ordering::Greater), compare_numbers(&n2, &n1));
+        let n1 = Number::from(1u64);
+        let n2 = Number::from(1u64);
+        assert_eq!(Some(Ordering::Equal), compare_numbers(&n1, &n2));
+
+        // test both i64
+        let n1 = Number::from(1i64);
+        let n2 = Number::from(2i64);
+        assert_eq!(Some(Ordering::Less), compare_numbers(&n1, &n2));
+        assert_eq!(Some(Ordering::Greater), compare_numbers(&n2, &n1));
+        let n1 = Number::from(1i64);
+        let n2 = Number::from(1i64);
+        assert_eq!(Some(Ordering::Equal), compare_numbers(&n1, &n2));
+
+        // test both f64
+        let n1 = Number::from_f64(1f64).unwrap();
+        let n2 = Number::from_f64(2f64).unwrap();
+        assert_eq!(Some(Ordering::Less), compare_numbers(&n1, &n2));
+        assert_eq!(Some(Ordering::Greater), compare_numbers(&n2, &n1));
+        let n1 = Number::from_f64(1f64).unwrap();
+        let n2 = Number::from_f64(1f64).unwrap();
+        assert_eq!(Some(Ordering::Equal), compare_numbers(&n1, &n2));
+
+        // test one u64 and one f64
+        let n1 = Number::from_f64(1f64).unwrap();
+        let n2 = Number::from(2u64);
+        assert_eq!(Some(Ordering::Less), compare_numbers(&n1, &n2));
+        assert_eq!(Some(Ordering::Greater), compare_numbers(&n2, &n1));
+
+        // equality
+        let n1 = Number::from_f64(1f64).unwrap();
+        let n2 = Number::from(1u64);
+        assert_eq!(Some(Ordering::Equal), compare_numbers(&n1, &n2));
+        assert_eq!(Some(Ordering::Equal), compare_numbers(&n2, &n1));
+
+        // float is neg
+        let n1 = Number::from_f64(-1f64).unwrap();
+        let n2 = Number::from(1u64);
+        assert_eq!(Some(Ordering::Less), compare_numbers(&n1, &n2));
+        assert_eq!(Some(Ordering::Greater), compare_numbers(&n2, &n1));
+
+        // float is too big
+        let n1 = Number::from_f64(std::f64::MAX).unwrap();
+        let n2 = Number::from(1u64);
+        assert_eq!(Some(Ordering::Greater), compare_numbers(&n1, &n2));
+        assert_eq!(Some(Ordering::Less), compare_numbers(&n2, &n1));
+
+        // misc
+        let n1 = Number::from_f64(std::f64::MAX).unwrap();
+        let n2 = Number::from(std::u64::MAX);
+        assert_eq!(Some(Ordering::Greater), compare_numbers(&n1, &n2));
+        assert_eq!(Some( Ordering::Less ), compare_numbers(&n2, &n1));
+    }
+}
