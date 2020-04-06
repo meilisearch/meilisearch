@@ -33,6 +33,28 @@ impl From<io::Error> for Error {
     }
 }
 
+impl From<PestError<Rule>> for Error {
+    fn from(error: PestError<Rule>) -> Error {
+        Error::FilterParseError(error.renamed_rules(|r| {
+            let s  = match r {
+                Rule::or => "OR",
+                Rule::and => "AND",
+                Rule::not => "NOT",
+                Rule::string => "string",
+                Rule::word => "word",
+                Rule::greater => "field>value",
+                Rule::less => "field<value",
+                Rule::eq => "field:value",
+                Rule::leq => "field<=value",
+                Rule::geq => "field>=value",
+                Rule::key => "key",
+                _ => "other",
+            };
+            s.to_string()
+        }))
+    }
+} 
+
 impl From<meilisearch_schema::Error> for Error {
     fn from(error: meilisearch_schema::Error) -> Error {
         Error::Schema(error)
