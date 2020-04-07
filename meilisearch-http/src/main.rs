@@ -63,6 +63,7 @@ async fn main() -> Result<(), MainError> {
             .service(routes::document::update_documents)
             .service(routes::document::delete_documents)
             .service(routes::document::clear_all_documents)
+            .service(routes::key::list)
             .service(routes::health::get_health)
             .service(routes::health::change_healthyness)
         )
