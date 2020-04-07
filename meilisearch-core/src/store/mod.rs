@@ -214,17 +214,17 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn document<T: de::DeserializeOwned>(
+    pub fn document<T: de::DeserializeOwned, R: AsRef<str>>(
         &self,
         reader: &heed::RoTxn<MainT>,
-        attributes: Option<&HashSet<&str>>,
+        attributes: Option<HashSet<R>>,
         document_id: DocumentId,
     ) -> MResult<Option<T>> {
         let schema = self.main.schema(reader)?;
         let schema = schema.ok_or(Error::SchemaMissing)?;
 
         let attributes = match attributes {
-            Some(attributes) => Some(attributes.iter().filter_map(|name| schema.id(*name)).collect()),
+            Some(attributes) => Some(attributes.iter().filter_map(|name| schema.id(name.as_ref())).collect()),
             None => None,
         };
 
