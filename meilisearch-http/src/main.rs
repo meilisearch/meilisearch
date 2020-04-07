@@ -1,4 +1,4 @@
-use std::{env, thread};
+use std::{env, thread, fs};
 
 use log::info;
 use main_error::MainError;
@@ -54,6 +54,8 @@ async fn main() -> Result<(), MainError> {
         App::new()
             .wrap(Logger::default())
             .app_data(web::Data::new(data.clone()))
+            .service(routes::load_html)
+            .service(routes::load_css)
             .service(routes::document::get_document)
             .service(routes::document::delete_document)
             .service(routes::document::get_all_documents)
@@ -61,6 +63,8 @@ async fn main() -> Result<(), MainError> {
             .service(routes::document::update_documents)
             .service(routes::document::delete_documents)
             .service(routes::document::clear_all_documents)
+            .service(routes::health::get_health)
+            .service(routes::health::change_healthyness)
         )
         .bind(opt.http_addr)?
         .run()
