@@ -242,7 +242,7 @@ impl<'a> SearchBuilder<'a> {
 
             let document: IndexMap<String, Value> = self
                 .index
-                .document(reader, fields.as_ref(), doc.id)
+                .document(reader, fields, doc.id)
                 .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
                 .ok_or(Error::DocumentNotFound(doc.id.0))?;
 
@@ -373,7 +373,7 @@ pub struct SearchResult {
     pub query: String,
 }
 
-/// returns the start index and the length on the crop. 
+/// returns the start index and the length on the crop.
 fn aligned_crop(text: &str, match_index: usize, context: usize) -> (usize, usize) {
     let is_word_component = |c: &char| c.is_alphanumeric() && !is_cjk(*c);
 
@@ -557,8 +557,8 @@ mod tests {
         let (start, length) = aligned_crop(&text, 5, 3);
         let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
         assert_eq!("isのス", cropped);
-        
-        // split regular word / CJK word, no space 
+
+        // split regular word / CJK word, no space
         let (start, length) = aligned_crop(&text, 7, 1);
         let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
         assert_eq!("のス", cropped);
