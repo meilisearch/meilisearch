@@ -75,7 +75,7 @@ impl From<meilisearch_core::Error> for Error {
                 };
                 let message = format!("parsing error on line {} at column {}: {}", line, column, e.variant.message());
 
-                Error::FilterParsing(message) 
+                Error::FilterParsing(message)
             },
             _ => Error::Internal(error.to_string()),
         }
@@ -257,7 +257,7 @@ impl<'a> SearchBuilder<'a> {
         for doc in docs {
             let mut document: IndexMap<String, Value> = self
                 .index
-                .document(reader, Some(&all_attributes), doc.id)
+                .document(reader, Some(all_attributes.clone()), doc.id)
                 .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
                 .ok_or(Error::DocumentNotFound(doc.id.0))?;
 

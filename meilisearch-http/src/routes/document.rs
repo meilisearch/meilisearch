@@ -45,7 +45,7 @@ pub async fn delete_document(
     documents_deletion.delete_document_by_id(document_id);
 
     let update_id = documents_deletion.finalize(&mut update_writer)
-        .map_err(|_| ResponseError::Internal(path.1.clone()))?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     update_writer.commit()
         .map_err(|_| ResponseError::CommitTransaction)?;

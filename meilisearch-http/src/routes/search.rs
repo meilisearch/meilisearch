@@ -6,12 +6,12 @@ use log::warn;
 use meilisearch_core::Index;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use tide::{Request, Response};
+use actix_web::*;
 
-use crate::error::{ResponseError, SResult};
-use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit};
-use crate::helpers::tide::RequestExt;
-use crate::helpers::tide::ACL::*;
+use crate::error::ResponseError;
+use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit, SearchResult};
+// use crate::helpers::tide::RequestExt;
+// use crate::helpers::tide::ACL::*;
 use crate::Data;
 
 #[derive(Deserialize)]
@@ -29,34 +29,37 @@ struct SearchQuery {
     matches: Option<bool>,
 }
 
-pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Public)?;
+#[get("/indexes/{index_uid}/search")]
+pub async fn search_with_url_query(
+    data: web::Data<Data>,
+    path: web::Path<String>,
+    params: web::Query<SearchQuery>,
+) -> Result<web::Json<SearchResult>> {
 
-    let index = ctx.index()?;
-    let db = &ctx.state().db;
-    let reader = db.main_read_txn()?;
+    let index = data.db.open_index(path.clone())
+        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+
+    let reader = data.db.main_read_txn()
+        .map_err(|_| ResponseError::CreateTransaction)?;
 
     let schema = index
         .main
-        .schema(&reader)?
-        .ok_or(ResponseError::open_index("No Schema found"))?;
+        .schema(&reader)
+        .map_err(|_| ResponseError::Schema)?
+        .ok_or(ResponseError::Schema)?;
 
-    let query: SearchQuery = ctx
-        .query()
-        .map_err(|_| ResponseError::bad_request("invalid query parameter"))?;
+    let mut search_builder = index.new_search(params.q.clone());
 
-    let mut search_builder = index.new_search(query.q.clone());
-
-    if let Some(offset) = query.offset {
+    if let Some(offset) = params.offset {
         search_builder.offset(offset);
     }
-    if let Some(limit) = query.limit {
+    if let Some(limit) = params.limit {
         search_builder.limit(limit);
     }
 
     let available_attributes = schema.displayed_name();
     let mut restricted_attributes: HashSet<&str>;
-    match &query.attributes_to_retrieve {
+    match &params.attributes_to_retrieve {
         Some(attributes_to_retrieve) => {
             let attributes_to_retrieve: HashSet<&str> = attributes_to_retrieve.split(',').collect();
             if attributes_to_retrieve.contains("*") {
@@ -78,8 +81,8 @@ pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
         }
     }
 
-    if let Some(attributes_to_crop) = query.attributes_to_crop {
-        let default_length = query.crop_length.unwrap_or(200);
+    if let Some(attributes_to_crop) = &params.attributes_to_crop {
+        let default_length = params.crop_length.unwrap_or(200);
         let mut final_attributes: HashMap<String, usize> = HashMap::new();
 
         for attribute in attributes_to_crop.split(',') {
@@ -106,7 +109,7 @@ pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
         search_builder.attributes_to_crop(final_attributes);
     }
 
-    if let Some(attributes_to_highlight) = query.attributes_to_highlight {
+    if let Some(attributes_to_highlight) = &params.attributes_to_highlight {
         let mut final_attributes: HashSet<String> = HashSet::new();
         for attribute in attributes_to_highlight.split(',') {
             if attribute == "*" {
@@ -125,15 +128,15 @@ pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
         search_builder.attributes_to_highlight(final_attributes);
     }
 
-    if let Some(filters) = query.filters {
-        search_builder.filters(filters);
+    if let Some(filters) = &params.filters {
+        search_builder.filters(filters.to_string());
     }
 
-    if let Some(timeout_ms) = query.timeout_ms {
+    if let Some(timeout_ms) = params.timeout_ms {
         search_builder.timeout(Duration::from_millis(timeout_ms));
     }
 
-    if let Some(matches) = query.matches {
+    if let Some(matches) = params.matches {
         if matches {
             search_builder.get_matches();
         }
@@ -141,11 +144,11 @@ pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
 
     let response = match search_builder.search(&reader) {
         Ok(response) => response,
-        Err(Error::Internal(message)) => return Err(ResponseError::Internal(message)),
-        Err(others) => return Err(ResponseError::bad_request(others)),
+        Err(Error::Internal(message)) => return Err(ResponseError::Internal(message))?,
+        Err(others) => return Err(ResponseError::BadRequest(others.to_string()))?,
     };
 
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
+    Ok(web::Json(response))
 }
 
 #[derive(Clone, Deserialize)]
@@ -174,24 +177,24 @@ struct SearchMultiBodyResponse {
     query: String,
 }
 
-pub async fn search_multi_index(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Public)?;
-    let body = ctx
-        .body_json::<SearchMultiBody>()
-        .await
-        .map_err(ResponseError::bad_request)?;
+#[post("/indexes/search")]
+pub async fn search_multi_index(
+    data: web::Data<Data>,
+    body: web::Json<SearchMultiBody>,
+) -> Result<web::Json<SearchMultiBodyResponse>> {
 
     let mut index_list = body.clone().indexes;
 
     for index in index_list.clone() {
         if index == "*" {
-            index_list = ctx.state().db.indexes_uids().into_iter().collect();
+            index_list = data.db.indexes_uids().into_iter().collect();
             break;
         }
     }
 
     let mut offset = 0;
     let mut count = 20;
+    let query = body.query.clone();
 
     if let Some(body_offset) = body.offset {
         if let Some(limit) = body.limit {
@@ -200,16 +203,12 @@ pub async fn search_multi_index(mut ctx: Request<Data>) -> SResult<Response> {
         }
     }
 
-    let offset = offset;
-    let count = count;
-    let db = &ctx.state().db;
+
     let par_body = body.clone();
-    let responses_per_index: Vec<SResult<_>> = index_list
+    let responses_per_index: Vec<(String, SearchResult)> = index_list
         .into_par_iter()
         .map(move |index_uid| {
-            let index: Index = db
-                .open_index(&index_uid)
-                .ok_or(ResponseError::index_not_found(&index_uid))?;
+            let index = data.db.open_index(&index_uid).unwrap();
 
             let mut search_builder = index.new_search(par_body.query.clone());
 
@@ -237,9 +236,10 @@ pub async fn search_multi_index(mut ctx: Request<Data>) -> SResult<Response> {
                 }
             }
 
-            let reader = db.main_read_txn()?;
-            let response = search_builder.search(&reader)?;
-            Ok((index_uid, response))
+            let reader = data.db.main_read_txn().unwrap();
+            let response = search_builder.search(&reader).unwrap();
+
+            (index_uid, response)
         })
         .collect();
 
@@ -247,13 +247,11 @@ pub async fn search_multi_index(mut ctx: Request<Data>) -> SResult<Response> {
 
     let mut max_query_time = 0;
 
-    for response in responses_per_index {
-        if let Ok((index_uid, response)) = response {
-            if response.processing_time_ms > max_query_time {
-                max_query_time = response.processing_time_ms;
-            }
-            hits_map.insert(index_uid, response.hits);
+    for (index_uid, response) in responses_per_index {
+        if response.processing_time_ms > max_query_time {
+            max_query_time = response.processing_time_ms;
         }
+        hits_map.insert(index_uid, response.hits);
     }
 
     let response = SearchMultiBodyResponse {
@@ -261,8 +259,8 @@ pub async fn search_multi_index(mut ctx: Request<Data>) -> SResult<Response> {
         offset,
         hits_per_page: count,
         processing_time_ms: max_query_time,
-        query: body.query,
+        query,
     };
 
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
+    Ok(web::Json(response))
 }
