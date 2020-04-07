@@ -6,4 +6,5 @@
   - Add support of nested null, boolean and seq values (#571 and #568, #574)
   - Fixed the core benchmark (#576)
   - Publish an ARMv7 and ARMv8 binaries on releases (#540 and #581)
-  - Fixing a bug where the result of the update status after the first update was empty (#542)
+  - Fixed a bug where the result of the update status after the first update was empty (#542)
+  - Fixed a bug where stop words were not handled correctly (#594)

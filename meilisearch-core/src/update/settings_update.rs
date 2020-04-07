@@ -135,52 +135,61 @@ pub fn apply_stop_words_update(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     stop_words: BTreeSet<String>,
-) -> MResult<bool> {
+) -> MResult<bool>
+{
+    let mut must_reindex = false;
 
     let old_stop_words: BTreeSet<String> = index.main
         .stop_words_fst(writer)?
         .unwrap_or_default()
         .stream()
-        .into_strs().unwrap().into_iter().collect();
+        .into_strs()?
+        .into_iter()
+        .collect();
 
     let deletion: BTreeSet<String> = old_stop_words.difference(&stop_words).cloned().collect();
     let addition: BTreeSet<String> = stop_words.difference(&old_stop_words).cloned().collect();
 
     if !addition.is_empty() {
-        apply_stop_words_addition(
-            writer,
-            index,
-            addition
-        )?;
+        apply_stop_words_addition(writer, index, addition)?;
     }
 
     if !deletion.is_empty() {
-        apply_stop_words_deletion(
-            writer,
-            index,
-            deletion
-        )?;
-        return Ok(true)
+        must_reindex = true;
+        apply_stop_words_deletion(writer, index, deletion)?;
     }
 
-    let stop_words_fst = fst::Set::from_iter(stop_words)?;
-    index.main.put_words_fst(writer, &stop_words_fst)?;
-    Ok(false)
+    if let Some(words_fst) = index.main.words_fst(writer)? {
+        let stop_words = fst::Set::from_iter(stop_words)?;
+        let op = OpBuilder::new()
+            .add(&words_fst)
+            .add(&stop_words)
+            .difference();
+
+        let mut builder = fst::SetBuilder::memory();
+        builder.extend_stream(op)?;
+        let words_fst = builder.into_inner().and_then(fst::Set::from_bytes)?;
+
+        index.main.put_words_fst(writer, &words_fst)?;
+        index.main.put_stop_words_fst(writer, &stop_words)?;
+    }
+
+    Ok(must_reindex)
 }
 
 fn apply_stop_words_addition(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     addition: BTreeSet<String>,
-) -> MResult<()> {
-
+) -> MResult<()>
+{
     let main_store = index.main;
     let postings_lists_store = index.postings_lists;
 
     let mut stop_words_builder = SetBuilder::memory();
 
     for word in addition {
-        stop_words_builder.insert(&word).unwrap();
+        stop_words_builder.insert(&word)?;
         // we remove every posting list associated to a new stop word
         postings_lists_store.del_postings_list(writer, word.as_bytes())?;
     }
@@ -188,8 +197,7 @@ fn apply_stop_words_addition(
     // create the new delta stop words fst
     let delta_stop_words = stop_words_builder
         .into_inner()
-        .and_then(fst::Set::from_bytes)
-        .unwrap();
+        .and_then(fst::Set::from_bytes)?;
 
     // we also need to remove all the stop words from the main fst
     if let Some(word_fst) = main_store.words_fst(writer)? {
@@ -199,11 +207,10 @@ fn apply_stop_words_addition(
             .difference();
 
         let mut word_fst_builder = SetBuilder::memory();
-        word_fst_builder.extend_stream(op).unwrap();
+        word_fst_builder.extend_stream(op)?;
         let word_fst = word_fst_builder
             .into_inner()
-            .and_then(fst::Set::from_bytes)
-            .unwrap();
+            .and_then(fst::Set::from_bytes)?;
 
         main_store.put_words_fst(writer, &word_fst)?;
     }
@@ -217,11 +224,10 @@ fn apply_stop_words_addition(
         .r#union();
 
     let mut stop_words_builder = SetBuilder::memory();
-    stop_words_builder.extend_stream(op).unwrap();
+    stop_words_builder.extend_stream(op)?;
     let stop_words_fst = stop_words_builder
         .into_inner()
-        .and_then(fst::Set::from_bytes)
-        .unwrap();
+        .and_then(fst::Set::from_bytes)?;
 
     main_store.put_stop_words_fst(writer, &stop_words_fst)?;
 
@@ -237,14 +243,13 @@ fn apply_stop_words_deletion(
     let mut stop_words_builder = SetBuilder::memory();
 
     for word in deletion {
-        stop_words_builder.insert(&word).unwrap();
+        stop_words_builder.insert(&word)?;
     }
 
     // create the new delta stop words fst
     let delta_stop_words = stop_words_builder
         .into_inner()
-        .and_then(fst::Set::from_bytes)
-        .unwrap();
+        .and_then(fst::Set::from_bytes)?;
 
     // now we delete all of these stop words from the main store
     let stop_words_fst = index.main.stop_words_fst(writer)?.unwrap_or_default();
@@ -255,11 +260,8 @@ fn apply_stop_words_deletion(
         .difference();
 
     let mut stop_words_builder = SetBuilder::memory();
-    stop_words_builder.extend_stream(op).unwrap();
-    let stop_words_fst = stop_words_builder
-        .into_inner()
-        .and_then(fst::Set::from_bytes)
-        .unwrap();
+    stop_words_builder.extend_stream(op)?;
+    let stop_words_fst = stop_words_builder.into_inner().and_then(fst::Set::from_bytes)?;
 
     Ok(index.main.put_stop_words_fst(writer, &stop_words_fst)?)
 }
@@ -276,14 +278,14 @@ pub fn apply_synonyms_update(
     let mut synonyms_builder = SetBuilder::memory();
     synonyms_store.clear(writer)?;
     for (word, alternatives) in synonyms.clone() {
-        synonyms_builder.insert(&word).unwrap();
+        synonyms_builder.insert(&word)?;
 
         let alternatives = {
             let alternatives = SetBuf::from_dirty(alternatives);
             let mut alternatives_builder = SetBuilder::memory();
-            alternatives_builder.extend_iter(alternatives).unwrap();
-            let bytes = alternatives_builder.into_inner().unwrap();
-            fst::Set::from_bytes(bytes).unwrap()
+            alternatives_builder.extend_iter(alternatives)?;
+            let bytes = alternatives_builder.into_inner()?;
+            fst::Set::from_bytes(bytes)?
         };
 
         synonyms_store.put_synonyms(writer, word.as_bytes(), &alternatives)?;
@@ -291,8 +293,7 @@ pub fn apply_synonyms_update(
 
     let synonyms_set = synonyms_builder
         .into_inner()
-        .and_then(fst::Set::from_bytes)
-        .unwrap();
+        .and_then(fst::Set::from_bytes)?;
 
     main_store.put_synonyms_fst(writer, &synonyms_set)?;
 
