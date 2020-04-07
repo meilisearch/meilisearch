@@ -1,17 +1,15 @@
-use crate::error::SResult;
-use crate::helpers::tide::RequestExt;
-use crate::helpers::tide::ACL::*;
 use crate::Data;
 use serde_json::json;
-use tide::{Request, Response};
+use actix_web::*;
 
-pub async fn list(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Admin)?;
+#[get("/keys")]
+pub async fn list(
+    data: web::Data<Data>,
+) -> Result<HttpResponse> {
+    let keys = &data.api_keys;
 
-    let keys = &ctx.state().api_keys;
-
-    Ok(tide::Response::new(200).body_json(&json!({
+    HttpResponse::Ok().json(&json!({
         "private": keys.private,
         "public": keys.public,
-    }))?)
+    })).await
 }
