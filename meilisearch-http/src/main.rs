@@ -1,16 +1,14 @@
 use std::{env, thread};
 
-use async_std::task;
 use log::info;
 use main_error::MainError;
 use structopt::StructOpt;
-use tide::middleware::{Cors, RequestLogger, Origin};
-use http::header::HeaderValue;
-
+use actix_web::middleware::Logger;
+use actix_web::{post, web, App, HttpServer, HttpResponse, Responder};
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
 use meilisearch_http::routes;
-use meilisearch_http::routes::index::index_update_callback;
+// use meilisearch_http::routes::index::index_update_callback;
 
 mod analytics;
 
@@ -18,8 +16,11 @@ mod analytics;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-pub fn main() -> Result<(), MainError> {
+#[tokio::main]
+async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
+    let local = tokio::task::LocalSet::new();
+    let _sys = actix_rt::System::run_in_tokio("server", &local);
 
     match opt.env.as_ref() {
         "production" => {
@@ -29,8 +30,7 @@ pub fn main() -> Result<(), MainError> {
                         .into(),
                 );
             }
-            env_logger::init();
-        }
+        },
         "development" => {
             env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
         }
@@ -45,22 +45,27 @@ pub fn main() -> Result<(), MainError> {
 
     let data_cloned = data.clone();
     data.db.set_update_callback(Box::new(move |name, status| {
-        index_update_callback(name, &data_cloned, status);
+        // index_update_callback(name, &data_cloned, status);
     }));
 
     print_launch_resume(&opt, &data);
 
-    let mut app = tide::with_state(data);
+    HttpServer::new(move ||
+        App::new()
+            .wrap(Logger::default())
+            .app_data(web::Data::new(data.clone()))
+            .service(routes::document::get_document)
+            .service(routes::document::delete_document)
+            .service(routes::document::get_all_documents)
+            .service(routes::document::add_documents)
+            .service(routes::document::update_documents)
+            .service(routes::document::delete_documents)
+            .service(routes::document::clear_all_documents)
+        )
+        .bind(opt.http_addr)?
+        .run()
+        .await?;
 
-    app.middleware(Cors::new()
-        .allow_methods(HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"))
-        .allow_headers(HeaderValue::from_static("X-Meili-API-Key"))
-        .allow_origin(Origin::from("*")));
-    app.middleware(RequestLogger::new());
-
-    routes::load_routes(&mut app);
-
-    task::block_on(app.listen(opt.http_addr))?;
     Ok(())
 }
 
@@ -76,7 +81,7 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
 888       888  "Y8888  888 888 888  "Y8888P"   "Y8888  "Y888888 888     "Y8888P 888  888
 "#;
 
-    println!("{}", ascii_name);
+    info!("{}", ascii_name);
 
     info!("Database path: {:?}", opt.db_path);
     info!("Start server on: {:?}", opt.http_addr);

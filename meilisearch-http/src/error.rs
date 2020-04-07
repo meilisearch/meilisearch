@@ -1,16 +1,14 @@
-use std::fmt::Display;
-
-use http::status::StatusCode;
-use log::{error, warn};
+use std::fmt;
 use meilisearch_core::{FstError, HeedError};
-use serde::{Deserialize, Serialize};
-use tide::IntoResponse;
-use tide::Response;
+use serde_json::json;
+use actix_http::{ResponseBuilder, Response};
+use actix_web::http::StatusCode;
+use actix_web::*;
+use futures::future::{ok, Ready};
 
-use crate::helpers::meilisearch::Error as SearchError;
+// use crate::helpers::meilisearch::Error as SearchError;
 
-pub type SResult<T> = Result<T, ResponseError>;
-
+#[derive(Debug)]
 pub enum ResponseError {
     Internal(String),
     BadRequest(String),
@@ -23,169 +21,113 @@ pub enum ResponseError {
     BadParameter(String, String),
     OpenIndex(String),
     CreateIndex(String),
+    CreateTransaction,
+    CommitTransaction,
+    Schema,
+    InferPrimaryKey,
     InvalidIndexUid,
     Maintenance,
 }
 
-impl ResponseError {
-    pub fn internal(message: impl Display) -> ResponseError {
-        ResponseError::Internal(message.to_string())
-    }
-
-    pub fn bad_request(message: impl Display) -> ResponseError {
-        ResponseError::BadRequest(message.to_string())
-    }
-
-    pub fn invalid_token(message: impl Display) -> ResponseError {
-        ResponseError::InvalidToken(message.to_string())
-    }
-
-    pub fn not_found(message: impl Display) -> ResponseError {
-        ResponseError::NotFound(message.to_string())
-    }
-
-    pub fn index_not_found(message: impl Display) -> ResponseError {
-        ResponseError::IndexNotFound(message.to_string())
-    }
-
-    pub fn document_not_found(message: impl Display) -> ResponseError {
-        ResponseError::DocumentNotFound(message.to_string())
-    }
-
-    pub fn missing_header(message: impl Display) -> ResponseError {
-        ResponseError::MissingHeader(message.to_string())
-    }
-
-    pub fn bad_parameter(name: impl Display, message: impl Display) -> ResponseError {
-        ResponseError::BadParameter(name.to_string(), message.to_string())
-    }
-
-    pub fn open_index(message: impl Display) -> ResponseError {
-        ResponseError::OpenIndex(message.to_string())
-    }
-
-    pub fn create_index(message: impl Display) -> ResponseError {
-        ResponseError::CreateIndex(message.to_string())
-    }
-}
-
-impl IntoResponse for ResponseError {
-    fn into_response(self) -> Response {
+impl fmt::Display for ResponseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ResponseError::Internal(err) => {
-                error!("internal server error: {}", err);
-                error("Internal server error".to_string(),
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                )
-            }
-            ResponseError::FilterParsing(err) => {
-                warn!("error paring filter: {}", err);
-                error(format!("parsing error: {}", err),
-                StatusCode::BAD_REQUEST)
-            }
-            ResponseError::BadRequest(err) => {
-                warn!("bad request: {}", err);
-                error(err, StatusCode::BAD_REQUEST)
-            }
-            ResponseError::InvalidToken(err) => {
-                error(format!("Invalid API key: {}", err), StatusCode::FORBIDDEN)
-            }
-            ResponseError::NotFound(err) => error(err, StatusCode::NOT_FOUND),
-            ResponseError::IndexNotFound(index) => {
-                error(format!("Index {} not found", index), StatusCode::NOT_FOUND)
-            }
-            ResponseError::DocumentNotFound(id) => error(
-                format!("Document with id {} not found", id),
-                StatusCode::NOT_FOUND,
-            ),
-            ResponseError::MissingHeader(header) => error(
-                format!("Header {} is missing", header),
-                StatusCode::UNAUTHORIZED,
-            ),
-            ResponseError::BadParameter(param, e) => error(
-                format!("Url parameter {} error: {}", param, e),
-                StatusCode::BAD_REQUEST,
-            ),
-            ResponseError::CreateIndex(err) => error(
-                format!("Impossible to create index; {}", err),
-                StatusCode::BAD_REQUEST,
-            ),
-            ResponseError::OpenIndex(err) => error(
-                format!("Impossible to open index; {}", err),
-                StatusCode::BAD_REQUEST,
-            ),
-            ResponseError::InvalidIndexUid => error(
-                "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).".to_string(),
-                StatusCode::BAD_REQUEST,
-            ),
-            ResponseError::Maintenance => error(
-                String::from("Server is in maintenance, please try again later"),
-                StatusCode::SERVICE_UNAVAILABLE,
-            ),
+            Self::Internal(err) => write!(f, "Internal server error: {}", err),
+            Self::BadRequest(err) => write!(f, "Bad request: {}", err),
+            Self::InvalidToken(err) => write!(f, "Invalid API key: {}", err),
+            Self::NotFound(err) => write!(f, "{} not found", err),
+            Self::IndexNotFound(index_uid) => write!(f, "Index {} not found", index_uid),
+            Self::DocumentNotFound(document_id) => write!(f, "Document with id {} not found", document_id),
+            Self::MissingHeader(header) => write!(f, "Header {} is missing", header),
+            Self::BadParameter(param, err) => write!(f, "Url parameter {} error: {}", param, err),
+            Self::OpenIndex(err) => write!(f, "Impossible to open index; {}", err),
+            Self::CreateIndex(err) => write!(f, "Impossible to create index; {}", err),
+            Self::CreateTransaction => write!(f, "Impossible to create transaction"),
+            Self::CommitTransaction => write!(f, "Impossible to commit transaction"),
+            Self::Schema => write!(f, "Internal schema is innaccessible"),
+            Self::InferPrimaryKey => write!(f, "Could not infer primary key"),
+            Self::InvalidIndexUid => write!(f, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_)."),
+            Self::Maintenance => write!(f, "Server is in maintenance, please try again later"),
+            Self::FilterParsing(err) => write!(f, "parsing error: {}", err),
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct ErrorMessage {
-    message: String,
+impl error::ResponseError for ResponseError {
+    fn error_response(&self) -> HttpResponse {
+        ResponseBuilder::new(self.status_code()).json(json!({
+            "message": self.to_string(),
+        }))
+    }
+
+    fn status_code(&self) -> StatusCode {
+        match *self {
+            Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::InvalidToken(_) => StatusCode::FORBIDDEN,
+            Self::NotFound(_) => StatusCode::NOT_FOUND,
+            Self::IndexNotFound(_) => StatusCode::NOT_FOUND,
+            Self::DocumentNotFound(_) => StatusCode::NOT_FOUND,
+            Self::MissingHeader(_) => StatusCode::UNAUTHORIZED,
+            Self::BadParameter(_, _) => StatusCode::BAD_REQUEST,
+            Self::OpenIndex(_) => StatusCode::BAD_REQUEST,
+            Self::CreateIndex(_) => StatusCode::BAD_REQUEST,
+            Self::CreateTransaction => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::CommitTransaction => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::Schema => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::InferPrimaryKey => StatusCode::BAD_REQUEST,
+            Self::InvalidIndexUid => StatusCode::BAD_REQUEST,
+            Self::Maintenance => StatusCode::SERVICE_UNAVAILABLE,
+            Self::FilterParsing(_) => StatusCode::BAD_REQUEST,
+        }
+    }
 }
 
-fn error(message: String, status: StatusCode) -> Response {
-    let message = ErrorMessage { message };
-    tide::Response::new(status.as_u16())
-        .body_json(&message)
-        .unwrap()
-}
+// impl Responder for ResponseError {
+//     type Error = Error;
+//     type Future = Ready<Result<Response, Error>>;
+
+//     #[inline]
+//     fn respond_to(self, req: &HttpRequest) -> Self::Future {
+//         ok(self.error_response())
+//     }
+// }
 
 impl From<serde_json::Error> for ResponseError {
     fn from(err: serde_json::Error) -> ResponseError {
-        ResponseError::internal(err)
+        ResponseError::Internal(err.to_string())
     }
 }
 
 impl From<meilisearch_core::Error> for ResponseError {
     fn from(err: meilisearch_core::Error) -> ResponseError {
-        ResponseError::internal(err)
+        ResponseError::Internal(err.to_string())
     }
 }
 
 impl From<HeedError> for ResponseError {
     fn from(err: HeedError) -> ResponseError {
-        ResponseError::internal(err)
+        ResponseError::Internal(err.to_string())
     }
 }
 
 impl From<FstError> for ResponseError {
     fn from(err: FstError) -> ResponseError {
-        ResponseError::internal(err)
+        ResponseError::Internal(err.to_string())
     }
 }
 
-impl From<SearchError> for ResponseError {
-    fn from(err: SearchError) -> ResponseError {
-        match err {
-            SearchError::FilterParsing(s) => ResponseError::FilterParsing(s),
-            _ => ResponseError::internal(err),
-        }
-    }
-}
+// impl From<SearchError> for ResponseError {
+//     fn from(err: SearchError) -> ResponseError {
+//         match err {
+//             SearchError::FilterParsing(s) => ResponseError::FilterParsing(s),
+//             _ => ResponseError::Internal(err),
+//         }
+//     }
+// }
 
 impl From<meilisearch_core::settings::RankingRuleConversionError> for ResponseError {
     fn from(err: meilisearch_core::settings::RankingRuleConversionError) -> ResponseError {
-        ResponseError::internal(err)
-    }
-}
-
-pub trait IntoInternalError<T> {
-    fn into_internal_error(self) -> SResult<T>;
-}
-
-impl<T> IntoInternalError<T> for Option<T> {
-    fn into_internal_error(self) -> SResult<T> {
-        match self {
-            Some(value) => Ok(value),
-            None => Err(ResponseError::internal("Heed cannot find requested value")),
-        }
+        ResponseError::Internal(err.to_string())
     }
 }
