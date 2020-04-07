@@ -1,8 +1,9 @@
 
+use actix_web::*;
 use serde::Serialize;
 
 pub mod document;
-// pub mod health;
+pub mod health;
 // pub mod index;
 // pub mod key;
 // pub mod search;
@@ -27,10 +28,24 @@ impl IndexUpdateResponse {
     }
 }
 
+#[get("/")]
+pub async fn load_html() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(include_str!("../../public/interface.html").to_string())
+}
+
+#[get("/bulma.min.css")]
+pub async fn load_css() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type("text/css; charset=utf-8")
+        .body(include_str!("../../public/bulma.min.css").to_string())
+}
+
 // pub fn load_routes(app: &mut tide::Server<Data>) {
 //     app.at("/").get(|_| async {
 //         tide::Response::new(200)
-//             .body_string(include_str!("../../public/interface.html").to_string())
+//             .body_string()
 //             .set_mime(mime::TEXT_HTML_UTF_8)
 //     });
 //     app.at("/bulma.min.css").get(|_| async {
