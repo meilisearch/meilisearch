@@ -10,7 +10,7 @@ use sha2::Digest;
 use sysinfo::Pid;
 
 use crate::option::Opt;
-// use crate::routes::index::index_update_callback;
+use crate::routes::index_update_callback;
 
 const LAST_UPDATE_KEY: &str = "last-update";
 
@@ -155,7 +155,7 @@ impl Data {
 
         let callback_context = data.clone();
         db.set_update_callback(Box::new(move |index_uid, status| {
-            // index_update_callback(&index_uid, &callback_context, status);
+            index_update_callback(&index_uid, &callback_context, status);
         }));
 
         data

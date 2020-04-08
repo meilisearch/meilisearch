@@ -1,15 +1,21 @@
 use crate::Data;
-use serde_json::json;
 use actix_web::*;
+use serde::Serialize;
+
+
+#[derive(Default, Serialize)]
+pub struct KeysResponse {
+    private: Option<String>,
+    public: Option<String>,
+}
 
 #[get("/keys")]
 pub async fn list(
     data: web::Data<Data>,
-) -> Result<HttpResponse> {
-    let keys = &data.api_keys;
-
-    HttpResponse::Ok().json(&json!({
-        "private": keys.private,
-        "public": keys.public,
-    })).await
+) -> web::Json<KeysResponse> {
+    let api_keys = data.api_keys.clone();
+    web::Json(KeysResponse{
+        private: api_keys.private,
+        public: api_keys.public,
+    })
 }

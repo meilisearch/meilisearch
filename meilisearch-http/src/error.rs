@@ -1,12 +1,8 @@
 use std::fmt;
-use meilisearch_core::{FstError, HeedError};
 use serde_json::json;
-use actix_http::{ResponseBuilder, Response};
+use actix_http::ResponseBuilder;
 use actix_web::http::StatusCode;
 use actix_web::*;
-use futures::future::{ok, Ready};
-
-// use crate::helpers::meilisearch::Error as SearchError;
 
 #[derive(Debug)]
 pub enum ResponseError {
@@ -16,6 +12,7 @@ pub enum ResponseError {
     NotFound(String),
     IndexNotFound(String),
     DocumentNotFound(String),
+    UpdateNotFound(u64),
     MissingHeader(String),
     FilterParsing(String),
     BadParameter(String, String),
@@ -38,6 +35,7 @@ impl fmt::Display for ResponseError {
             Self::NotFound(err) => write!(f, "{} not found", err),
             Self::IndexNotFound(index_uid) => write!(f, "Index {} not found", index_uid),
             Self::DocumentNotFound(document_id) => write!(f, "Document with id {} not found", document_id),
+            Self::UpdateNotFound(update_id) => write!(f, "Update with id {} not found", update_id),
             Self::MissingHeader(header) => write!(f, "Header {} is missing", header),
             Self::BadParameter(param, err) => write!(f, "Url parameter {} error: {}", param, err),
             Self::OpenIndex(err) => write!(f, "Impossible to open index; {}", err),
@@ -68,6 +66,7 @@ impl error::ResponseError for ResponseError {
             Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::IndexNotFound(_) => StatusCode::NOT_FOUND,
             Self::DocumentNotFound(_) => StatusCode::NOT_FOUND,
+            Self::UpdateNotFound(_) => StatusCode::NOT_FOUND,
             Self::MissingHeader(_) => StatusCode::UNAUTHORIZED,
             Self::BadParameter(_, _) => StatusCode::BAD_REQUEST,
             Self::OpenIndex(_) => StatusCode::BAD_REQUEST,
@@ -80,54 +79,5 @@ impl error::ResponseError for ResponseError {
             Self::Maintenance => StatusCode::SERVICE_UNAVAILABLE,
             Self::FilterParsing(_) => StatusCode::BAD_REQUEST,
         }
-    }
-}
-
-// impl Responder for ResponseError {
-//     type Error = Error;
-//     type Future = Ready<Result<Response, Error>>;
-
-//     #[inline]
-//     fn respond_to(self, req: &HttpRequest) -> Self::Future {
-//         ok(self.error_response())
-//     }
-// }
-
-impl From<serde_json::Error> for ResponseError {
-    fn from(err: serde_json::Error) -> ResponseError {
-        ResponseError::Internal(err.to_string())
-    }
-}
-
-impl From<meilisearch_core::Error> for ResponseError {
-    fn from(err: meilisearch_core::Error) -> ResponseError {
-        ResponseError::Internal(err.to_string())
-    }
-}
-
-impl From<HeedError> for ResponseError {
-    fn from(err: HeedError) -> ResponseError {
-        ResponseError::Internal(err.to_string())
-    }
-}
-
-impl From<FstError> for ResponseError {
-    fn from(err: FstError) -> ResponseError {
-        ResponseError::Internal(err.to_string())
-    }
-}
-
-// impl From<SearchError> for ResponseError {
-//     fn from(err: SearchError) -> ResponseError {
-//         match err {
-//             SearchError::FilterParsing(s) => ResponseError::FilterParsing(s),
-//             _ => ResponseError::Internal(err),
-//         }
-//     }
-// }
-
-impl From<meilisearch_core::settings::RankingRuleConversionError> for ResponseError {
-    fn from(err: meilisearch_core::settings::RankingRuleConversionError) -> ResponseError {
-        ResponseError::Internal(err.to_string())
     }
 }

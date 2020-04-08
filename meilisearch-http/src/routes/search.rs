@@ -10,13 +10,11 @@ use actix_web::*;
 
 use crate::error::ResponseError;
 use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit, SearchResult};
-// use crate::helpers::tide::RequestExt;
-// use crate::helpers::tide::ACL::*;
 use crate::Data;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SearchQuery {
+pub struct SearchQuery {
     q: String,
     offset: Option<usize>,
     limit: Option<usize>,
@@ -153,7 +151,7 @@ pub async fn search_with_url_query(
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SearchMultiBody {
+pub struct SearchMultiBody {
     indexes: HashSet<String>,
     query: String,
     offset: Option<usize>,
@@ -169,7 +167,7 @@ struct SearchMultiBody {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SearchMultiBodyResponse {
+pub struct SearchMultiBodyResponse {
     hits: HashMap<String, Vec<SearchHit>>,
     offset: usize,
     hits_per_page: usize,

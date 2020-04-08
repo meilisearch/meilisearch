@@ -1,16 +1,20 @@
-
 use actix_web::*;
 use serde::Serialize;
+use log::error;
+use meilisearch_core::ProcessedUpdateResult;
+
+use crate::Data;
 
 pub mod document;
 pub mod health;
-// pub mod index;
+pub mod index;
 pub mod key;
 pub mod search;
 // pub mod setting;
-// pub mod stats;
+pub mod stats;
 // pub mod stop_words;
 // pub mod synonym;
+pub mod update;
 
 #[derive(Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +45,41 @@ pub async fn load_css() -> HttpResponse {
         .content_type("text/css; charset=utf-8")
         .body(include_str!("../../public/bulma.min.css").to_string())
 }
+
+
+pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpdateResult) {
+    if status.error.is_some() {
+        return;
+    }
+
+    if let Some(index) = data.db.open_index(&index_uid) {
+        let db = &data.db;
+        let mut writer = match db.main_write_txn() {
+            Ok(writer) => writer,
+            Err(e) => {
+                error!("Impossible to get write_txn; {}", e);
+                return;
+            }
+        };
+
+        if let Err(e) = data.compute_stats(&mut writer, &index_uid) {
+            error!("Impossible to compute stats; {}", e)
+        }
+
+        if let Err(e) = data.set_last_update(&mut writer) {
+            error!("Impossible to update last_update; {}", e)
+        }
+
+        if let Err(e) = index.main.put_updated_at(&mut writer) {
+            error!("Impossible to update updated_at; {}", e)
+        }
+
+        if let Err(e) = writer.commit() {
+            error!("Impossible to get write_txn; {}", e);
+        }
+    }
+}
+
 
 // pub fn load_routes(app: &mut tide::Server<Data>) {
 //     app.at("/").get(|_| async {

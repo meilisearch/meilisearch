@@ -1,79 +1,93 @@
 use std::collections::HashMap;
 
+use actix_web::*;
 use chrono::{DateTime, Utc};
 use log::error;
 use pretty_bytes::converter::convert;
 use serde::Serialize;
-use sysinfo::{NetworkExt, Pid, ProcessExt, ProcessorExt, System, SystemExt};
-use tide::{Request, Response};
+use sysinfo::{NetworkExt, ProcessExt, ProcessorExt, System, SystemExt};
 use walkdir::WalkDir;
 
-use crate::error::{IntoInternalError, SResult};
-use crate::helpers::tide::RequestExt;
-use crate::helpers::tide::ACL::*;
 use crate::Data;
+use crate::error::ResponseError;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct IndexStatsResponse {
+pub struct IndexStatsResponse {
     number_of_documents: u64,
     is_indexing: bool,
     fields_frequency: HashMap<String, usize>,
 }
 
-pub async fn index_stats(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Admin)?;
-    let index_uid = ctx.url_param("index")?;
-    let index = ctx.index()?;
-    let db = &ctx.state().db;
-    let reader = db.main_read_txn()?;
-    let update_reader = db.update_read_txn()?;
-    let number_of_documents = index.main.number_of_documents(&reader)?;
-    let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
-    let is_indexing = ctx
-        .state()
-        .is_indexing(&update_reader, &index_uid)?
-        .into_internal_error()?;
+#[get("/indexes/{index_uid}/stats")]
+pub async fn index_stats(
+    data: web::Data<Data>,
+    path: web::Path<String>,
+) -> Result<web::Json<IndexStatsResponse>> {
+    let index = data.db.open_index(path.clone())
+        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
 
-    let response = IndexStatsResponse {
+    let reader = data.db.main_read_txn()
+        .map_err(|_| ResponseError::CreateTransaction)?;
+
+    let number_of_documents = index.main.number_of_documents(&reader)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+
+    let fields_frequency = index.main.fields_frequency(&reader)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?
+        .unwrap_or_default();
+
+    let update_reader = data.db.update_read_txn()
+        .map_err(|_| ResponseError::CreateTransaction)?;
+
+    let is_indexing = data
+        .is_indexing(&update_reader, &path)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?
+        .unwrap_or_default();
+
+    Ok(web::Json(IndexStatsResponse {
         number_of_documents,
         is_indexing,
         fields_frequency,
-    };
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
+    }))
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct StatsResult {
+pub struct StatsResult {
     database_size: u64,
     last_update: Option<DateTime<Utc>>,
     indexes: HashMap<String, IndexStatsResponse>,
 }
 
-pub async fn get_stats(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Admin)?;
+#[get("/stats")]
+pub async fn get_stats(
+    data: web::Data<Data>,
+) -> Result<web::Json<StatsResult>> {
 
     let mut index_list = HashMap::new();
 
-    let db = &ctx.state().db;
-    let reader = db.main_read_txn()?;
-    let update_reader = db.update_read_txn()?;
+    let reader = data.db.main_read_txn()
+        .map_err(|_| ResponseError::CreateTransaction)?;
+    let update_reader = data.db.update_read_txn()
+        .map_err(|_| ResponseError::CreateTransaction)?;
 
-    let indexes_set = ctx.state().db.indexes_uids();
+    let indexes_set = data.db.indexes_uids();
     for index_uid in indexes_set {
-        let index = ctx.state().db.open_index(&index_uid);
-
+        let index = data.db.open_index(&index_uid);
         match index {
             Some(index) => {
-                let number_of_documents = index.main.number_of_documents(&reader)?;
+                let number_of_documents = index.main.number_of_documents(&reader)
+                    .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-                let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
+                let fields_frequency = index.main.fields_frequency(&reader)
+                    .map_err(|err| ResponseError::Internal(err.to_string()))?
+                    .unwrap_or_default();
 
-                let is_indexing = ctx
-                    .state()
-                    .is_indexing(&update_reader, &index_uid)?
-                    .into_internal_error()?;
+                let is_indexing = data
+                    .is_indexing(&update_reader, &index_uid)
+                    .map_err(|err| ResponseError::Internal(err.to_string()))?
+                    .unwrap_or_default();
 
                 let response = IndexStatsResponse {
                     number_of_documents,
@@ -89,46 +103,43 @@ pub async fn get_stats(ctx: Request<Data>) -> SResult<Response> {
         }
     }
 
-    let database_size = WalkDir::new(ctx.state().db_path.clone())
+    let database_size = WalkDir::new(data.db_path.clone())
         .into_iter()
         .filter_map(|entry| entry.ok())
         .filter_map(|entry| entry.metadata().ok())
         .filter(|metadata| metadata.is_file())
         .fold(0, |acc, m| acc + m.len());
 
-    let last_update = ctx.state().last_update(&reader)?;
+    let last_update = data.last_update(&reader)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    let response = StatsResult {
+    Ok(web::Json(StatsResult {
         database_size,
         last_update,
         indexes: index_list,
-    };
-
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
+    }))
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct VersionResponse {
+pub struct VersionResponse {
     commit_sha: String,
     build_date: String,
     pkg_version: String,
 }
 
-pub async fn get_version(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Admin)?;
-    let response = VersionResponse {
+#[get("/version")]
+pub async fn get_version() -> web::Json<VersionResponse> {
+    web::Json(VersionResponse {
         commit_sha: env!("VERGEN_SHA").to_string(),
         build_date: env!("VERGEN_BUILD_TIMESTAMP").to_string(),
         pkg_version: env!("CARGO_PKG_VERSION").to_string(),
-    };
-
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
+    })
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SysGlobal {
+pub struct SysGlobal {
     total_memory: u64,
     used_memory: u64,
     total_swap: u64,
@@ -152,7 +163,7 @@ impl SysGlobal {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SysProcess {
+pub struct SysProcess {
     memory: u64,
     cpu: f32,
 }
@@ -168,7 +179,7 @@ impl SysProcess {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SysInfo {
+pub struct SysInfo {
     memory_usage: f64,
     processor_usage: Vec<f32>,
     global: SysGlobal,
@@ -186,7 +197,10 @@ impl SysInfo {
     }
 }
 
-pub(crate) fn report(pid: Pid) -> SysInfo {
+#[get("/sys-info")]
+pub async fn get_sys_info(
+    data: web::Data<Data>,
+) -> web::Json<SysInfo> {
     let mut sys = System::new();
     let mut info = SysInfo::new();
 
@@ -200,28 +214,27 @@ pub(crate) fn report(pid: Pid) -> SysInfo {
     info.global.used_memory = sys.get_used_memory();
     info.global.total_swap = sys.get_total_swap();
     info.global.used_swap = sys.get_used_swap();
-    info.global.input_data = sys.get_networks().into_iter().map(|(_, n)| n.get_received()).sum::<u64>();
-    info.global.output_data = sys.get_networks().into_iter().map(|(_, n)| n.get_transmitted()).sum::<u64>();
+    info.global.input_data = sys.get_networks()
+        .into_iter()
+        .map(|(_, n)| n.get_received())
+        .sum::<u64>();
+    info.global.output_data = sys.get_networks()
+        .into_iter()
+        .map(|(_, n)| n.get_transmitted())
+        .sum::<u64>();
 
-    if let Some(process) = sys.get_process(pid) {
+    if let Some(process) = sys.get_process(data.server_pid) {
         info.process.memory = process.memory();
         info.process.cpu = process.cpu_usage() * 100.0;
     }
 
     sys.refresh_all();
-
-    info
-}
-
-pub async fn get_sys_info(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Admin)?;
-    let response = report(ctx.state().server_pid);
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
+    web::Json(info)
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SysGlobalPretty {
+pub struct SysGlobalPretty {
     total_memory: String,
     used_memory: String,
     total_swap: String,
@@ -245,7 +258,7 @@ impl SysGlobalPretty {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SysProcessPretty {
+pub struct SysProcessPretty {
     memory: String,
     cpu: String,
 }
@@ -261,7 +274,7 @@ impl SysProcessPretty {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SysInfoPretty {
+pub struct SysInfoPretty {
     memory_usage: String,
     processor_usage: Vec<String>,
     global: SysGlobalPretty,
@@ -279,7 +292,11 @@ impl SysInfoPretty {
     }
 }
 
-pub(crate) fn report_pretty(pid: Pid) -> SysInfoPretty {
+
+#[get("/sys-info/pretty")]
+pub async fn get_sys_info_pretty(
+    data: web::Data<Data>,
+) -> web::Json<SysInfoPretty> {
     let mut sys = System::new();
     let mut info = SysInfoPretty::new();
 
@@ -300,18 +317,12 @@ pub(crate) fn report_pretty(pid: Pid) -> SysInfoPretty {
     info.global.input_data = convert(sys.get_networks().into_iter().map(|(_, n)| n.get_received()).sum::<u64>() as f64);
     info.global.output_data = convert(sys.get_networks().into_iter().map(|(_, n)| n.get_transmitted()).sum::<u64>() as f64);
 
-    if let Some(process) = sys.get_process(pid) {
+    if let Some(process) = sys.get_process(data.server_pid) {
         info.process.memory = convert(process.memory() as f64 * 1024.0);
         info.process.cpu = format!("{:.1} %", process.cpu_usage() * 100.0);
     }
 
     sys.refresh_all();
 
-    info
-}
-
-pub async fn get_sys_info_pretty(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Admin)?;
-    let response = report_pretty(ctx.state().server_pid);
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
+    web::Json(info)
 }
