@@ -14,7 +14,7 @@ type Document = IndexMap<String, Value>;
 pub async fn get_document(
     data: web::Data<Data>,
     path: web::Path<(String, String)>,
-) -> Result<HttpResponse> {
+) -> Result<web::Json<Document>> {
     let index = data.db.open_index(&path.0)
         .ok_or(ResponseError::IndexNotFound(path.0.clone()))?;
     let document_id = meilisearch_core::serde::compute_document_id(path.1.clone());
@@ -26,7 +26,7 @@ pub async fn get_document(
         .map_err(|_| ResponseError::DocumentNotFound(path.1.clone()))?
         .ok_or(ResponseError::DocumentNotFound(path.1.clone()))?;
 
-    Ok(HttpResponse::Ok().json(response))
+    Ok(web::Json(response))
 }
 
 #[delete("/indexes/{index_uid}/documents/{document_id}")]
@@ -67,7 +67,7 @@ pub async fn get_all_documents(
     data: web::Data<Data>,
     path: web::Path<String>,
     params: web::Query<BrowseQuery>,
-) -> Result<HttpResponse> {
+) -> Result<web::Json<Vec<Document>>> {
 
     let index = data.db.open_index(path.clone())
         .ok_or(ResponseError::IndexNotFound(path.clone()))?;
@@ -86,19 +86,20 @@ pub async fn get_all_documents(
         .take(limit)
         .collect();
 
-    let documents_ids = documents_ids.map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let documents_ids = documents_ids
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let attributes = params.attributes_to_retrieve.clone()
         .map(|a| a.split(',').map(|a| a.to_string()).collect());
 
-    let mut response_body = Vec::<IndexMap<String, Value>>::new();
+    let mut response_body = Vec::<Document>::new();
     for document_id in documents_ids {
         if let Ok(Some(document)) = index.document(&reader, attributes.clone(), document_id) {
             response_body.push(document);
         }
     }
 
-    Ok(HttpResponse::Ok().json(response_body))
+    Ok(web::Json(response_body))
 }
 
 fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {

@@ -1,14 +1,14 @@
-use std::{env, thread, fs};
+use std::{env, thread};
 
 use log::info;
 use main_error::MainError;
 use structopt::StructOpt;
 use actix_web::middleware::Logger;
-use actix_web::{post, web, App, HttpServer, HttpResponse, Responder};
+use actix_web::*;
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
 use meilisearch_http::routes;
-// use meilisearch_http::routes::index::index_update_callback;
+use meilisearch_http::routes::index_update_callback;
 
 mod analytics;
 
@@ -45,7 +45,7 @@ async fn main() -> Result<(), MainError> {
 
     let data_cloned = data.clone();
     data.db.set_update_callback(Box::new(move |name, status| {
-        // index_update_callback(name, &data_cloned, status);
+        index_update_callback(name, &data_cloned, status);
     }));
 
     print_launch_resume(&opt, &data);
@@ -56,6 +56,13 @@ async fn main() -> Result<(), MainError> {
             .app_data(web::Data::new(data.clone()))
             .service(routes::load_html)
             .service(routes::load_css)
+            .service(routes::index::list_indexes)
+            .service(routes::index::get_index)
+            .service(routes::index::create_index)
+            .service(routes::index::update_index)
+            .service(routes::index::delete_index)
+            .service(routes::search::search_with_url_query)
+            .service(routes::search::search_multi_index)
             .service(routes::document::get_document)
             .service(routes::document::delete_document)
             .service(routes::document::get_all_documents)
@@ -63,7 +70,14 @@ async fn main() -> Result<(), MainError> {
             .service(routes::document::update_documents)
             .service(routes::document::delete_documents)
             .service(routes::document::clear_all_documents)
+            .service(routes::update::get_update_status)
+            .service(routes::update::get_all_updates_status)
             .service(routes::key::list)
+            .service(routes::stats::index_stats)
+            .service(routes::stats::get_stats)
+            .service(routes::stats::get_version)
+            .service(routes::stats::get_sys_info)
+            .service(routes::stats::get_sys_info_pretty)
             .service(routes::health::get_health)
             .service(routes::health::change_healthyness)
         )
