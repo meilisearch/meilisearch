@@ -438,10 +438,10 @@ fn basic_search() {
 
     // 1 - Simple search with filter
     // q: Captain
-    // limit: 1
+    // limit: 3
     // filters: director:Anthony%20Russo
 
-    let query = "q=captain&limit=3&filters=director:Anthony%20Russo";
+    let query = "q=captain&filters=director%20%3D%20%22Anthony%20Russo%22&limit=3";
 
     let expect = json!([
       {
