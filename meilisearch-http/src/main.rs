@@ -4,7 +4,7 @@ use log::info;
 use main_error::MainError;
 use structopt::StructOpt;
 use actix_web::middleware::Logger;
-use actix_web::*;
+use actix_web::{web, HttpServer, App};
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
 use meilisearch_http::routes;
@@ -61,6 +61,8 @@ async fn main() -> Result<(), MainError> {
             .service(routes::index::create_index)
             .service(routes::index::update_index)
             .service(routes::index::delete_index)
+            .service(routes::index::get_update_status)
+            .service(routes::index::get_all_updates_status)
             .service(routes::search::search_with_url_query)
             .service(routes::search::search_multi_index)
             .service(routes::document::get_document)
@@ -70,8 +72,6 @@ async fn main() -> Result<(), MainError> {
             .service(routes::document::update_documents)
             .service(routes::document::delete_documents)
             .service(routes::document::clear_all_documents)
-            .service(routes::update::get_update_status)
-            .service(routes::update::get_all_updates_status)
             .service(routes::key::list)
             .service(routes::stats::index_stats)
             .service(routes::stats::get_stats)

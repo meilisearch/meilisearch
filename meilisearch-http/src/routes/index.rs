@@ -2,7 +2,9 @@ use chrono::{DateTime, Utc};
 use log::error;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use actix_web::*;
+use actix_web::{web, get, post, delete, HttpResponse};
+use actix_web as aweb;
+use meilisearch_core::UpdateStatus;
 
 use crate::error::ResponseError;
 use crate::Data;
@@ -29,10 +31,10 @@ pub struct IndexResponse {
 #[get("/indexes")]
 pub async fn list_indexes(
     data: web::Data<Data>,
-) -> Result<web::Json<Vec<IndexResponse>>> {
+) -> aweb::Result<web::Json<Vec<IndexResponse>>> {
 
     let reader = data.db.main_read_txn()
-        .map_err(|_| ResponseError::CreateTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let mut response_body = Vec::new();
 
@@ -82,13 +84,13 @@ pub async fn list_indexes(
 pub async fn get_index(
     data: web::Data<Data>,
     path: web::Path<String>,
-) -> Result<web::Json<IndexResponse>> {
+) -> aweb::Result<web::Json<IndexResponse>> {
 
     let index = data.db.open_index(path.clone())
         .ok_or(ResponseError::IndexNotFound(path.clone()))?;
 
     let reader = data.db.main_read_txn()
-        .map_err(|_| ResponseError::CreateTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let name = index.main.name(&reader)
         .map_err(|e| ResponseError::Internal(e.to_string()))?
@@ -129,10 +131,10 @@ pub struct IndexCreateRequest {
 pub async fn create_index(
     data: web::Data<Data>,
     body: web::Json<IndexCreateRequest>
-) -> Result<web::Json<IndexResponse>> {
+) -> aweb::Result<web::Json<IndexResponse>> {
 
     if let (None, None) = (body.name.clone(), body.uid.clone()) {
-        return Err(ResponseError::BadRequest("Index creation must have an uid".to_string()))?;
+        return Err(ResponseError::BadRequest("Index creation must have an uid".to_string()).into());
     }
 
     let uid = match body.uid.clone() {
@@ -143,7 +145,7 @@ pub async fn create_index(
             {
                 uid
             } else {
-                return Err(ResponseError::InvalidIndexUid)?;
+                return Err(ResponseError::InvalidIndexUid.into());
             }
         }
         None => loop {
@@ -158,7 +160,7 @@ pub async fn create_index(
         .map_err(|e| ResponseError::CreateIndex(e.to_string()))?;
 
     let mut writer = data.db.main_write_txn()
-        .map_err(|_| ResponseError::CreateTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let name = body.name.clone().unwrap_or(uid.clone());
     created_index.main.put_name(&mut writer, &name)
@@ -187,7 +189,7 @@ pub async fn create_index(
     }
 
     writer.commit()
-        .map_err(|_| ResponseError::CommitTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     Ok(web::Json(IndexResponse {
         name,
@@ -220,13 +222,13 @@ pub async fn update_index(
     data: web::Data<Data>,
     path: web::Path<String>,
     body: web::Json<IndexCreateRequest>
-) -> Result<web::Json<IndexResponse>> {
+) -> aweb::Result<web::Json<IndexResponse>> {
 
     let index = data.db.open_index(path.clone())
         .ok_or(ResponseError::IndexNotFound(path.clone()))?;
 
     let mut writer = data.db.main_write_txn()
-            .map_err(|_| ResponseError::CreateTransaction)?;
+            .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     if let Some(name) = body.name.clone() {
         index.main.put_name(&mut writer, &name)
@@ -238,7 +240,7 @@ pub async fn update_index(
             .map_err(|e| ResponseError::Internal(e.to_string()))? {
             match schema.primary_key() {
                 Some(_) => {
-                    return Err(ResponseError::BadRequest("The primary key cannot be updated".to_string()))?;
+                    return Err(ResponseError::BadRequest("The primary key cannot be updated".to_string()).into());
                 }
                 None => {
                     schema
@@ -254,10 +256,10 @@ pub async fn update_index(
     index.main.put_updated_at(&mut writer)
         .map_err(|e| ResponseError::Internal(e.to_string()))?;
     writer.commit()
-        .map_err(|_| ResponseError::CommitTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let reader = data.db.main_read_txn()
-        .map_err(|_| ResponseError::CreateTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let name = index.main.name(&reader)
         .map_err(|e| ResponseError::Internal(e.to_string()))?
@@ -290,10 +292,50 @@ pub async fn update_index(
 pub async fn delete_index(
     data: web::Data<Data>,
     path: web::Path<String>,
-) -> Result<HttpResponse> {
+) -> aweb::Result<HttpResponse> {
 
     data.db.delete_index(&path.to_string())
         .map_err(|e| ResponseError::Internal(e.to_string()))?;
 
     HttpResponse::NoContent().await
+}
+
+
+#[get("/indexes/{index_uid}/updates/{update_id}")]
+pub async fn get_update_status(
+    data: web::Data<Data>,
+    path: web::Path<(String, u64)>,
+) -> aweb::Result<web::Json<UpdateStatus>> {
+
+    let index = data.db.open_index(path.0.clone())
+        .ok_or(ResponseError::IndexNotFound(path.0.clone()))?;
+
+    let reader = data.db.update_read_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+
+    let status = index.update_status(&reader, path.1)
+        .map_err(|e| ResponseError::Internal(e.to_string()))?;
+
+    match status {
+        Some(status) => Ok(web::Json(status)),
+        None => Err(ResponseError::NotFound(format!("Update {} not found", path.1)).into())
+    }
+}
+
+#[get("/indexes/{index_uid}/updates")]
+pub async fn get_all_updates_status(
+    data: web::Data<Data>,
+    path: web::Path<String>,
+) -> aweb::Result<web::Json<Vec<UpdateStatus>>> {
+
+    let index = data.db.open_index(path.clone())
+        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+
+    let reader = data.db.update_read_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+
+    let response = index.all_updates_status(&reader)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+
+    Ok(web::Json(response))
 }

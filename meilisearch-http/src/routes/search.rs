@@ -6,7 +6,8 @@ use log::warn;
 use meilisearch_core::Index;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use actix_web::*;
+use actix_web::{web, get, post};
+use actix_web as aweb;
 
 use crate::error::ResponseError;
 use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit, SearchResult};
@@ -32,19 +33,19 @@ pub async fn search_with_url_query(
     data: web::Data<Data>,
     path: web::Path<String>,
     params: web::Query<SearchQuery>,
-) -> Result<web::Json<SearchResult>> {
+) -> aweb::Result<web::Json<SearchResult>> {
 
     let index = data.db.open_index(path.clone())
         .ok_or(ResponseError::IndexNotFound(path.clone()))?;
 
     let reader = data.db.main_read_txn()
-        .map_err(|_| ResponseError::CreateTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let schema = index
         .main
         .schema(&reader)
-        .map_err(|_| ResponseError::Schema)?
-        .ok_or(ResponseError::Schema)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?
+        .ok_or(ResponseError::Internal("Impossible to retrieve the schema".to_string()))?;
 
     let mut search_builder = index.new_search(params.q.clone());
 
@@ -142,8 +143,8 @@ pub async fn search_with_url_query(
 
     let response = match search_builder.search(&reader) {
         Ok(response) => response,
-        Err(Error::Internal(message)) => return Err(ResponseError::Internal(message))?,
-        Err(others) => return Err(ResponseError::BadRequest(others.to_string()))?,
+        Err(Error::Internal(message)) => return Err(ResponseError::Internal(message).into()),
+        Err(others) => return Err(ResponseError::BadRequest(others.to_string()).into()),
     };
 
     Ok(web::Json(response))
@@ -179,7 +180,7 @@ pub struct SearchMultiBodyResponse {
 pub async fn search_multi_index(
     data: web::Data<Data>,
     body: web::Json<SearchMultiBody>,
-) -> Result<web::Json<SearchMultiBodyResponse>> {
+) -> aweb::Result<web::Json<SearchMultiBodyResponse>> {
 
     let mut index_list = body.clone().indexes;
 
