@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use actix_web::*;
+use actix_web as aweb;
+use actix_web::{web, get};
 use chrono::{DateTime, Utc};
 use log::error;
 use pretty_bytes::converter::convert;
@@ -23,12 +24,12 @@ pub struct IndexStatsResponse {
 pub async fn index_stats(
     data: web::Data<Data>,
     path: web::Path<String>,
-) -> Result<web::Json<IndexStatsResponse>> {
+) -> aweb::Result<web::Json<IndexStatsResponse>> {
     let index = data.db.open_index(path.clone())
         .ok_or(ResponseError::IndexNotFound(path.clone()))?;
 
     let reader = data.db.main_read_txn()
-        .map_err(|_| ResponseError::CreateTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let number_of_documents = index.main.number_of_documents(&reader)
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
@@ -38,7 +39,7 @@ pub async fn index_stats(
         .unwrap_or_default();
 
     let update_reader = data.db.update_read_txn()
-        .map_err(|_| ResponseError::CreateTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let is_indexing = data
         .is_indexing(&update_reader, &path)
@@ -63,14 +64,14 @@ pub struct StatsResult {
 #[get("/stats")]
 pub async fn get_stats(
     data: web::Data<Data>,
-) -> Result<web::Json<StatsResult>> {
+) -> aweb::Result<web::Json<StatsResult>> {
 
     let mut index_list = HashMap::new();
 
     let reader = data.db.main_read_txn()
-        .map_err(|_| ResponseError::CreateTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
     let update_reader = data.db.update_read_txn()
-        .map_err(|_| ResponseError::CreateTransaction)?;
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let indexes_set = data.db.indexes_uids();
     for index_uid in indexes_set {

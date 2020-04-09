@@ -1,4 +1,4 @@
-use actix_web::*;
+use actix_web::{get, HttpResponse};
 use serde::Serialize;
 use log::error;
 use meilisearch_core::ProcessedUpdateResult;
@@ -10,24 +10,21 @@ pub mod health;
 pub mod index;
 pub mod key;
 pub mod search;
-// pub mod setting;
 pub mod stats;
+// pub mod setting;
 // pub mod stop_words;
 // pub mod synonym;
-pub mod update;
 
 #[derive(Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexUpdateResponse {
     pub update_id: u64,
-    pub see_more: String,
 }
 
 impl IndexUpdateResponse {
     pub fn with_id(update_id: u64) -> Self {
         Self {
             update_id,
-            see_more: "https://docs.meilisearch.com/guides/advanced_guides/asynchronous_updates.html".to_string()
         }
     }
 }

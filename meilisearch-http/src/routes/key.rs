@@ -1,5 +1,5 @@
 use crate::Data;
-use actix_web::*;
+use actix_web::{web, get};
 use serde::Serialize;
 
 
