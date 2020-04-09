@@ -7,25 +7,31 @@ use actix_web as aweb;
 
 use crate::error::ResponseError;
 use crate::Data;
-use crate::routes::IndexUpdateResponse;
+use crate::routes::{IndexUpdateResponse, IndexParam};
 
 type Document = IndexMap<String, Value>;
+
+#[derive(Default, Deserialize)]
+pub struct DocumentParam {
+    index_uid: String,
+    document_id: String
+}
 
 #[get("/indexes/{index_uid}/documents/{document_id}")]
 pub async fn get_document(
     data: web::Data<Data>,
-    path: web::Path<(String, String)>,
+    path: web::Path<DocumentParam>,
 ) -> aweb::Result<web::Json<Document>> {
-    let index = data.db.open_index(&path.0)
-        .ok_or(ResponseError::IndexNotFound(path.0.clone()))?;
-    let document_id = meilisearch_core::serde::compute_document_id(path.1.clone());
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+    let document_id = meilisearch_core::serde::compute_document_id(path.document_id.clone());
 
     let reader = data.db.main_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let response = index.document::<Document, String>(&reader, None, document_id)
-        .map_err(|_| ResponseError::DocumentNotFound(path.1.clone()))?
-        .ok_or(ResponseError::DocumentNotFound(path.1.clone()))?;
+        .map_err(|_| ResponseError::DocumentNotFound(path.document_id.clone()))?
+        .ok_or(ResponseError::DocumentNotFound(path.document_id.clone()))?;
 
     Ok(web::Json(response))
 }
@@ -33,11 +39,11 @@ pub async fn get_document(
 #[delete("/indexes/{index_uid}/documents/{document_id}")]
 pub async fn delete_document(
     data: web::Data<Data>,
-    path: web::Path<(String, String)>,
+    path: web::Path<DocumentParam>,
 ) -> aweb::Result<HttpResponse> {
-    let index = data.db.open_index(&path.0)
-        .ok_or(ResponseError::IndexNotFound(path.0.clone()))?;
-    let document_id = meilisearch_core::serde::compute_document_id(path.1.clone());
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+    let document_id = meilisearch_core::serde::compute_document_id(path.document_id.clone());
 
     let mut update_writer = data.db.update_write_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
@@ -66,12 +72,12 @@ pub struct BrowseQuery {
 #[get("/indexes/{index_uid}/documents")]
 pub async fn get_all_documents(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
 ) -> aweb::Result<web::Json<Vec<Document>>> {
 
-    let index = data.db.open_index(path.clone())
-        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let offset = params.offset.unwrap_or(0);
     let limit = params.limit.unwrap_or(20);
@@ -82,7 +88,7 @@ pub async fn get_all_documents(
     let documents_ids: Result<BTreeSet<_>, _> = index
         .documents_fields_counts
         .documents_ids(&reader)
-        .map_err(|_| ResponseError::Internal(path.clone()))?
+        .map_err(|_| ResponseError::Internal(path.index_uid.clone()))?
         .skip(offset)
         .take(limit)
         .collect();
@@ -120,14 +126,14 @@ pub struct UpdateDocumentsQuery {
 
 async fn update_multiple_documents(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
     is_partial: bool
 ) -> aweb::Result<HttpResponse> {
 
-    let index = data.db.open_index(path.clone())
-        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+    let index = data.db.open_index(path.index_uid.clone())
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let reader = data.db.main_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
@@ -182,7 +188,7 @@ async fn update_multiple_documents(
 #[post("/indexes/{index_uid}/documents")]
 pub async fn add_documents(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>
 ) -> aweb::Result<HttpResponse> {
@@ -192,7 +198,7 @@ pub async fn add_documents(
 #[put("/indexes/{index_uid}/documents")]
 pub async fn update_documents(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>
 ) -> aweb::Result<HttpResponse> {
@@ -202,12 +208,12 @@ pub async fn update_documents(
 #[post("/indexes/{index_uid}/documents/delete-batch")]
 pub async fn delete_documents(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>
 ) -> aweb::Result<HttpResponse> {
 
-    let index = data.db.open_index(path.clone())
-        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+    let index = data.db.open_index(path.index_uid.clone())
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let mut writer = data.db.update_write_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
@@ -233,11 +239,11 @@ pub async fn delete_documents(
 #[delete("/indexes/{index_uid}/documents")]
 pub async fn clear_all_documents(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
 ) -> aweb::Result<HttpResponse> {
 
-    let index = data.db.open_index(path.clone())
-        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+    let index = data.db.open_index(path.index_uid.clone())
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let mut writer = data.db.update_write_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;

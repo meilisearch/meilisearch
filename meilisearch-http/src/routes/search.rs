@@ -12,6 +12,7 @@ use actix_web as aweb;
 use crate::error::ResponseError;
 use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit, SearchResult};
 use crate::Data;
+use crate::routes::IndexParam;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -31,12 +32,12 @@ pub struct SearchQuery {
 #[get("/indexes/{index_uid}/search")]
 pub async fn search_with_url_query(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
     params: web::Query<SearchQuery>,
 ) -> aweb::Result<web::Json<SearchResult>> {
 
-    let index = data.db.open_index(path.clone())
-        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+    let index = data.db.open_index(path.index_uid.clone())
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let reader = data.db.main_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
