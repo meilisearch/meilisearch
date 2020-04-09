@@ -1,5 +1,5 @@
 use actix_web::{get, HttpResponse};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use log::error;
 use meilisearch_core::ProcessedUpdateResult;
 
@@ -14,6 +14,11 @@ pub mod stats;
 // pub mod setting;
 // pub mod stop_words;
 // pub mod synonym;
+
+#[derive(Default, Deserialize)]
+pub struct IndexParam {
+    index_uid: String
+}
 
 #[derive(Default, Serialize)]
 #[serde(rename_all = "camelCase")]

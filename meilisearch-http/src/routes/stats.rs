@@ -11,6 +11,7 @@ use walkdir::WalkDir;
 
 use crate::Data;
 use crate::error::ResponseError;
+use crate::routes::IndexParam;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,10 +24,10 @@ pub struct IndexStatsResponse {
 #[get("/indexes/{index_uid}/stats")]
 pub async fn index_stats(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
 ) -> aweb::Result<web::Json<IndexStatsResponse>> {
-    let index = data.db.open_index(path.clone())
-        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+    let index = data.db.open_index(path.index_uid.clone())
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let reader = data.db.main_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
@@ -42,7 +43,7 @@ pub async fn index_stats(
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let is_indexing = data
-        .is_indexing(&update_reader, &path)
+        .is_indexing(&update_reader, &path.index_uid)
         .map_err(|err| ResponseError::Internal(err.to_string()))?
         .unwrap_or_default();
 

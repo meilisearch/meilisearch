@@ -8,6 +8,7 @@ use meilisearch_core::UpdateStatus;
 
 use crate::error::ResponseError;
 use crate::Data;
+use crate::routes::IndexParam;
 
 fn generate_uid() -> String {
     let mut rng = rand::thread_rng();
@@ -83,11 +84,11 @@ pub async fn list_indexes(
 #[get("/indexes/{index_uid}")]
 pub async fn get_index(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
 ) -> aweb::Result<web::Json<IndexResponse>> {
 
-    let index = data.db.open_index(path.clone())
-        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+    let index = data.db.open_index(path.index_uid.clone())
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let reader = data.db.main_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
@@ -112,7 +113,7 @@ pub async fn get_index(
 
     Ok(web::Json(IndexResponse {
         name,
-        uid: path.to_string(),
+        uid: path.index_uid.clone(),
         created_at,
         updated_at,
         primary_key,
@@ -220,12 +221,12 @@ pub struct UpdateIndexResponse {
 #[post("/indexes/{index_uid}")]
 pub async fn update_index(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
     body: web::Json<IndexCreateRequest>
 ) -> aweb::Result<web::Json<IndexResponse>> {
 
-    let index = data.db.open_index(path.clone())
-        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+    let index = data.db.open_index(path.index_uid.clone())
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let mut writer = data.db.main_write_txn()
             .map_err(|err| ResponseError::Internal(err.to_string()))?;
@@ -281,7 +282,7 @@ pub async fn update_index(
 
     Ok(web::Json(IndexResponse {
         name,
-        uid: path.clone(),
+        uid: path.index_uid.clone(),
         created_at,
         updated_at,
         primary_key,
@@ -291,45 +292,50 @@ pub async fn update_index(
 #[delete("/indexes/{index_uid}")]
 pub async fn delete_index(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
 ) -> aweb::Result<HttpResponse> {
 
-    data.db.delete_index(&path.to_string())
+    data.db.delete_index(&path.index_uid)
         .map_err(|e| ResponseError::Internal(e.to_string()))?;
 
     HttpResponse::NoContent().await
 }
 
+#[derive(Default, Deserialize)]
+pub struct UpdateParam {
+    index_uid: String,
+    update_id: u64
+}
 
 #[get("/indexes/{index_uid}/updates/{update_id}")]
 pub async fn get_update_status(
     data: web::Data<Data>,
-    path: web::Path<(String, u64)>,
+    path: web::Path<UpdateParam>,
 ) -> aweb::Result<web::Json<UpdateStatus>> {
 
-    let index = data.db.open_index(path.0.clone())
-        .ok_or(ResponseError::IndexNotFound(path.0.clone()))?;
+    let index = data.db.open_index(path.index_uid.clone())
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let reader = data.db.update_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    let status = index.update_status(&reader, path.1)
+    let status = index.update_status(&reader, path.update_id)
         .map_err(|e| ResponseError::Internal(e.to_string()))?;
 
     match status {
         Some(status) => Ok(web::Json(status)),
-        None => Err(ResponseError::NotFound(format!("Update {} not found", path.1)).into())
+        None => Err(ResponseError::NotFound(format!("Update {} not found", path.update_id)).into())
     }
 }
 
 #[get("/indexes/{index_uid}/updates")]
 pub async fn get_all_updates_status(
     data: web::Data<Data>,
-    path: web::Path<String>,
+    path: web::Path<IndexParam>,
 ) -> aweb::Result<web::Json<Vec<UpdateStatus>>> {
 
-    let index = data.db.open_index(path.clone())
-        .ok_or(ResponseError::IndexNotFound(path.clone()))?;
+    let index = data.db.open_index(path.index_uid.clone())
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let reader = data.db.update_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
