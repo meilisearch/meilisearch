@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use indexmap::IndexMap;
 use log::error;
+use meilisearch_core::Filter;
 use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
 use meilisearch_core::{Highlight, Index, MainT, RankedMap};
@@ -23,6 +24,7 @@ pub enum Error {
     RetrieveDocument(u64, String),
     DocumentNotFound(u64),
     CropFieldWrongType(String),
+    FilterParsing(String),
     AttributeNotFoundOnDocument(String),
     AttributeNotFoundOnSchema(String),
     MissingFilterValue,
@@ -56,13 +58,26 @@ impl fmt::Display for Error {
                 f.write_str("a filter is specifying an unknown schema attribute")
             }
             Internal(err) => write!(f, "internal error; {}", err),
+            FilterParsing(err) => write!(f, "filter parsing error: {}", err),
         }
     }
 }
 
 impl From<meilisearch_core::Error> for Error {
     fn from(error: meilisearch_core::Error) -> Self {
-        Error::Internal(error.to_string())
+        use meilisearch_core::pest_error::LineColLocation::*;
+        match error {
+            meilisearch_core::Error::FilterParseError(e) => {
+                let (line, column) = match e.line_col {
+                    Span((line, _), (column, _)) => (line, column),
+                    Pos((line, column)) => (line, column),
+                };
+                let message = format!("parsing error on line {} at column {}: {}", line, column, e.variant.message());
+
+                Error::FilterParsing(message) 
+            },
+            _ => Error::Internal(error.to_string()),
+        }
     }
 }
 
@@ -171,39 +186,20 @@ impl<'a> SearchBuilder<'a> {
             None => self.index.query_builder(),
         };
 
-        if let Some(filters) = &self.filters {
-            let mut split = filters.split(':');
-            match (split.next(), split.next()) {
-                (Some(_), None) | (Some(_), Some("")) => return Err(Error::MissingFilterValue),
-                (Some(attr), Some(value)) => {
-                    let ref_reader = reader;
-                    let ref_index = &self.index;
-                    let value = value.trim().to_lowercase();
-
-                    let attr = match schema.id(attr) {
-                        Some(attr) => attr,
-                        None => return Err(Error::UnknownFilteredAttribute),
-                    };
-
-                    query_builder.with_filter(move |id| {
-                        let attr = attr;
-                        let index = ref_index;
-                        let reader = ref_reader;
-
-                        match index.document_attribute::<Value>(reader, id, attr) {
-                            Ok(Some(Value::String(s))) => s.to_lowercase() == value,
-                            Ok(Some(Value::Bool(b))) => {
-                                (value == "true" && b) || (value == "false" && !b)
-                            }
-                            Ok(Some(Value::Array(a))) => {
-                                a.into_iter().any(|s| s.as_str() == Some(&value))
-                            }
-                            _ => false,
-                        }
-                    });
+        if let Some(filter_expression) = &self.filters {
+            let filter = Filter::parse(filter_expression, &schema)?;
+            query_builder.with_filter(move |id| {
+                let index = &self.index;
+                let reader = &reader;
+                let filter = &filter;
+                match filter.test(reader, index, id) {
+                    Ok(res) => res,
+                    Err(e) => {
+                        log::warn!("unexpected error during filtering: {}", e);
+                        false
+                    }
                 }
-                (_, _) => (),
-            }
+            });
         }
 
         query_builder.with_fetch_timeout(self.timeout);

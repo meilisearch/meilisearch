@@ -79,6 +79,10 @@ impl Schema {
         self.fields_map.name(id)
     }
 
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.fields_map.iter().map(|(k, _)| k.as_ref())
+    }
+
     pub fn contains(&self, name: &str) -> bool {
         self.fields_map.id(name).is_some()
     }
