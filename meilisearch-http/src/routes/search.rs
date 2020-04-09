@@ -58,8 +58,20 @@ pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
     let mut restricted_attributes: HashSet<&str>;
     match &query.attributes_to_retrieve {
         Some(attributes_to_retrieve) => {
-            restricted_attributes = attributes_to_retrieve.split(',').collect();
-            restricted_attributes.retain(|attr| available_attributes.contains(attr));
+            let attributes_to_retrieve: HashSet<&str> = attributes_to_retrieve.split(',').collect();
+            if attributes_to_retrieve.contains("*") {
+                restricted_attributes = available_attributes.clone();
+            } else {
+                restricted_attributes = HashSet::new();
+                for attr in attributes_to_retrieve {
+                    if available_attributes.contains(attr) {
+                        restricted_attributes.insert(attr);
+                        search_builder.add_retrievable_field(attr.to_string());
+                    } else {
+                        warn!("The attributes {:?} present in attributesToCrop parameter doesn't exist", attr);
+                    }
+                }
+            }
         },
         None => {
             restricted_attributes = available_attributes.clone();
@@ -94,10 +106,9 @@ pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
         search_builder.attributes_to_crop(final_attributes);
     }
 
-    if let Some(inline_attributes) = query.attributes_to_highlight {
+    if let Some(attributes_to_highlight) = query.attributes_to_highlight {
         let mut final_attributes: HashSet<String> = HashSet::new();
-
-        for attribute in inline_attributes.split(',') {
+        for attribute in attributes_to_highlight.split(',') {
             if attribute == "*" {
                 for attr in &restricted_attributes {
                     final_attributes.insert(attr.to_string());

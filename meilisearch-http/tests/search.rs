@@ -458,6 +458,38 @@ fn search_with_attributes_to_retrieve() {
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
+// Search with attributes to retrieve wildcard
+// q: Captain
+// limit: 1
+// attributesToRetrieve: *
+#[test]
+fn search_with_attributes_to_retrieve_wildcard() {
+    let query = "q=captain&limit=1&attributesToRetrieve=*";
+
+    let expected = json!([
+      {
+        "id": 299537,
+        "popularity": 44.726,
+        "vote_average": 7.0,
+        "title": "Captain Marvel",
+        "tagline": "Higher. Further. Faster.",
+        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
+        "director": "Ryan Fleck",
+        "producer": "Kevin Feige",
+        "genres": [
+          "Action",
+          "Adventure",
+          "Science Fiction"
+        ],
+        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
+        "vote_count": 7858
+      }
+    ]);
+
+    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+}
+
 // Search with filter
 // q: Captain
 // limit: 1
