@@ -12,8 +12,8 @@ pub mod key;
 pub mod search;
 pub mod stats;
 pub mod setting;
-// pub mod stop_words;
-// pub mod synonym;
+pub mod stop_words;
+pub mod synonym;
 
 #[derive(Default, Deserialize)]
 pub struct IndexParam {
