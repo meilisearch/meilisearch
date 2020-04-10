@@ -1,4 +1,4 @@
-## 0.9.1 (unreleased)
+## v0.10
 
   - Refined filtering (#592)
   - Add the number of hits in search result (#541)
