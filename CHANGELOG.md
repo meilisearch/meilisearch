@@ -10,3 +10,4 @@
   - Fixed a bug where the result of the update status after the first update was empty (#542)
   - Fixed a bug where stop words were not handled correctly (#594)
   - Fix CORS issues (#602)
+  - Support wildcard on attributes to retrieve, highlight, and crop (#549, #565, and #598)
