@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use actix_web as aweb;
-use actix_web::{web, get};
+use actix_web::{get, web};
 use chrono::{DateTime, Utc};
 use log::error;
 use pretty_bytes::converter::convert;
@@ -9,9 +9,9 @@ use serde::Serialize;
 use sysinfo::{NetworkExt, ProcessExt, ProcessorExt, System, SystemExt};
 use walkdir::WalkDir;
 
-use crate::Data;
 use crate::error::ResponseError;
 use crate::routes::IndexParam;
+use crate::Data;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,20 +26,30 @@ pub async fn index_stats(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> aweb::Result<web::Json<IndexStatsResponse>> {
-    let index = data.db.open_index(path.index_uid.clone())
+    let index = data
+        .db
+        .open_index(path.index_uid.clone())
         .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-    let reader = data.db.main_read_txn()
+    let reader = data
+        .db
+        .main_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    let number_of_documents = index.main.number_of_documents(&reader)
+    let number_of_documents = index
+        .main
+        .number_of_documents(&reader)
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    let fields_frequency = index.main.fields_frequency(&reader)
+    let fields_frequency = index
+        .main
+        .fields_frequency(&reader)
         .map_err(|err| ResponseError::Internal(err.to_string()))?
         .unwrap_or_default();
 
-    let update_reader = data.db.update_read_txn()
+    let update_reader = data
+        .db
+        .update_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let is_indexing = data
@@ -63,15 +73,16 @@ pub struct StatsResult {
 }
 
 #[get("/stats")]
-pub async fn get_stats(
-    data: web::Data<Data>,
-) -> aweb::Result<web::Json<StatsResult>> {
-
+pub async fn get_stats(data: web::Data<Data>) -> aweb::Result<web::Json<StatsResult>> {
     let mut index_list = HashMap::new();
 
-    let reader = data.db.main_read_txn()
+    let reader = data
+        .db
+        .main_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let update_reader = data.db.update_read_txn()
+    let update_reader = data
+        .db
+        .update_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let indexes_set = data.db.indexes_uids();
@@ -79,10 +90,14 @@ pub async fn get_stats(
         let index = data.db.open_index(&index_uid);
         match index {
             Some(index) => {
-                let number_of_documents = index.main.number_of_documents(&reader)
+                let number_of_documents = index
+                    .main
+                    .number_of_documents(&reader)
                     .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-                let fields_frequency = index.main.fields_frequency(&reader)
+                let fields_frequency = index
+                    .main
+                    .fields_frequency(&reader)
                     .map_err(|err| ResponseError::Internal(err.to_string()))?
                     .unwrap_or_default();
 
@@ -112,7 +127,8 @@ pub async fn get_stats(
         .filter(|metadata| metadata.is_file())
         .fold(0, |acc, m| acc + m.len());
 
-    let last_update = data.last_update(&reader)
+    let last_update = data
+        .last_update(&reader)
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     Ok(web::Json(StatsResult {
@@ -200,9 +216,7 @@ impl SysInfo {
 }
 
 #[get("/sys-info")]
-pub async fn get_sys_info(
-    data: web::Data<Data>,
-) -> web::Json<SysInfo> {
+pub async fn get_sys_info(data: web::Data<Data>) -> web::Json<SysInfo> {
     let mut sys = System::new();
     let mut info = SysInfo::new();
 
@@ -216,11 +230,13 @@ pub async fn get_sys_info(
     info.global.used_memory = sys.get_used_memory();
     info.global.total_swap = sys.get_total_swap();
     info.global.used_swap = sys.get_used_swap();
-    info.global.input_data = sys.get_networks()
+    info.global.input_data = sys
+        .get_networks()
         .into_iter()
         .map(|(_, n)| n.get_received())
         .sum::<u64>();
-    info.global.output_data = sys.get_networks()
+    info.global.output_data = sys
+        .get_networks()
         .into_iter()
         .map(|(_, n)| n.get_transmitted())
         .sum::<u64>();
@@ -294,11 +310,8 @@ impl SysInfoPretty {
     }
 }
 
-
 #[get("/sys-info/pretty")]
-pub async fn get_sys_info_pretty(
-    data: web::Data<Data>,
-) -> web::Json<SysInfoPretty> {
+pub async fn get_sys_info_pretty(data: web::Data<Data>) -> web::Json<SysInfoPretty> {
     let mut sys = System::new();
     let mut info = SysInfoPretty::new();
 
@@ -316,8 +329,18 @@ pub async fn get_sys_info_pretty(
     info.global.used_memory = convert(sys.get_used_memory() as f64 * 1024.0);
     info.global.total_swap = convert(sys.get_total_swap() as f64 * 1024.0);
     info.global.used_swap = convert(sys.get_used_swap() as f64 * 1024.0);
-    info.global.input_data = convert(sys.get_networks().into_iter().map(|(_, n)| n.get_received()).sum::<u64>() as f64);
-    info.global.output_data = convert(sys.get_networks().into_iter().map(|(_, n)| n.get_transmitted()).sum::<u64>() as f64);
+    info.global.input_data = convert(
+        sys.get_networks()
+            .into_iter()
+            .map(|(_, n)| n.get_received())
+            .sum::<u64>() as f64,
+    );
+    info.global.output_data = convert(
+        sys.get_networks()
+            .into_iter()
+            .map(|(_, n)| n.get_transmitted())
+            .sum::<u64>() as f64,
+    );
 
     if let Some(process) = sys.get_process(data.server_pid) {
         info.process.memory = convert(process.memory() as f64 * 1024.0);

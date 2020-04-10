@@ -148,10 +148,7 @@ fn write_custom_ranking_and_index_documents() {
 
     // 1 - Add ranking rules with one custom ranking on a string
 
-    let body = json!([
-        "asc(title)",
-        "typo"
-    ]);
+    let body = json!(["asc(title)", "typo"]);
 
     server.update_ranking_rules(body);
 
@@ -184,5 +181,4 @@ fn write_custom_ranking_and_index_documents() {
     assert_eq!(status_code, 200);
 
     assert_json_eq!(response, expected, ordered: false);
-
 }

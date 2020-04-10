@@ -4,15 +4,15 @@ use std::time::Duration;
 
 use log::warn;
 use meilisearch_core::Index;
+use actix_web as aweb;
+use actix_web::{get, post, web};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use actix_web::{web, get, post};
-use actix_web as aweb;
 
 use crate::error::ResponseError;
 use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit, SearchResult};
-use crate::Data;
 use crate::routes::IndexParam;
+use crate::Data;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -35,18 +35,23 @@ pub async fn search_with_url_query(
     path: web::Path<IndexParam>,
     params: web::Query<SearchQuery>,
 ) -> aweb::Result<web::Json<SearchResult>> {
-
-    let index = data.db.open_index(path.index_uid.clone())
+    let index = data
+        .db
+        .open_index(path.index_uid.clone())
         .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-    let reader = data.db.main_read_txn()
+    let reader = data
+        .db
+        .main_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let schema = index
         .main
         .schema(&reader)
         .map_err(|err| ResponseError::Internal(err.to_string()))?
-        .ok_or(ResponseError::Internal("Impossible to retrieve the schema".to_string()))?;
+        .ok_or(ResponseError::Internal(
+            "Impossible to retrieve the schema".to_string(),
+        ))?;
 
     let mut search_builder = index.new_search(params.q.clone());
 
@@ -182,7 +187,6 @@ pub async fn search_multi_index(
     data: web::Data<Data>,
     body: web::Json<SearchMultiBody>,
 ) -> aweb::Result<web::Json<SearchMultiBodyResponse>> {
-
     let mut index_list = body.clone().indexes;
 
     for index in index_list.clone() {
@@ -202,7 +206,6 @@ pub async fn search_multi_index(
             count = limit;
         }
     }
-
 
     let par_body = body.clone();
     let responses_per_index: Vec<(String, SearchResult)> = index_list

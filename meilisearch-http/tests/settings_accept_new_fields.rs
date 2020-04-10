@@ -289,10 +289,9 @@ fn index_new_fields_false_then_true() {
     assert_json_eq!(response, expected);
 }
 
-
 // Fix issue https://github.com/meilisearch/MeiliSearch/issues/518
 #[test]
-fn accept_new_fields_does_not_take_into_account_the_primary_key () {
+fn accept_new_fields_does_not_take_into_account_the_primary_key() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create an index with no primary-key
