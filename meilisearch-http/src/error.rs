@@ -1,8 +1,9 @@
 use std::fmt;
-use serde_json::json;
-use actix_web as aweb;
+
 use actix_http::ResponseBuilder;
+use actix_web as aweb;
 use actix_web::http::StatusCode;
+use serde_json::json;
 
 #[derive(Debug)]
 pub enum ResponseError {

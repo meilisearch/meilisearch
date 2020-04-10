@@ -1,7 +1,6 @@
 use crate::Data;
-use actix_web::{web, get};
+use actix_web::{get, web};
 use serde::Serialize;
-
 
 #[derive(Default, Serialize)]
 pub struct KeysResponse {
@@ -10,11 +9,9 @@ pub struct KeysResponse {
 }
 
 #[get("/keys")]
-pub async fn list(
-    data: web::Data<Data>,
-) -> web::Json<KeysResponse> {
+pub async fn list(data: web::Data<Data>) -> web::Json<KeysResponse> {
     let api_keys = data.api_keys.clone();
-    web::Json(KeysResponse{
+    web::Json(KeysResponse {
         private: api_keys.private,
         public: api_keys.public,
     })

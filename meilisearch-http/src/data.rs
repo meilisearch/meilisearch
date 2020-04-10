@@ -135,7 +135,7 @@ impl Data {
         let db = Arc::new(Database::open_or_create(opt.db_path).unwrap());
 
         let mut api_keys = ApiKeys {
-            master: opt.master_key.clone(),
+            master: opt.master_key,
             private: None,
             public: None,
         };

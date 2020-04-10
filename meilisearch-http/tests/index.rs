@@ -660,7 +660,7 @@ fn check_add_documents_without_primary_key() {
 }
 
 #[test]
-fn check_first_update_should_bring_up_processed_status_after_first_docs_addition(){
+fn check_first_update_should_bring_up_processed_status_after_first_docs_addition() {
     let mut server = common::Server::with_uid("movies");
 
     let body = json!({
@@ -678,11 +678,11 @@ fn check_first_update_should_bring_up_processed_status_after_first_docs_addition
 
     // 2. Index the documents from movies.json, present inside of assets directory
     server.add_or_replace_multiple_documents(body);
-    
+
     // 3. Fetch the status of the indexing done above.
     let (response, status_code) = server.get_all_updates_status();
-    
+
     // 4. Verify the fetch is successful and indexing status is 'processed'
     assert_eq!(status_code, 200);
-    assert_eq!(response[0]["status"], "processed");    
+    assert_eq!(response[0]["status"], "processed");
 }

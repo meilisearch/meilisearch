@@ -1,14 +1,14 @@
 use std::{env, thread};
 
+use actix_web::middleware::Logger;
+use actix_web::{web, App, HttpServer};
 use log::info;
 use main_error::MainError;
-use structopt::StructOpt;
-use actix_web::middleware::Logger;
-use actix_web::{web, HttpServer, App};
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
 use meilisearch_http::routes;
 use meilisearch_http::routes::index_update_callback;
+use structopt::StructOpt;
 
 mod analytics;
 
@@ -30,7 +30,7 @@ async fn main() -> Result<(), MainError> {
                         .into(),
                 );
             }
-        },
+        }
         "development" => {
             env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
         }
@@ -50,7 +50,7 @@ async fn main() -> Result<(), MainError> {
 
     print_launch_resume(&opt, &data);
 
-    HttpServer::new(move ||
+    HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
             .app_data(web::Data::new(data.clone()))
@@ -103,10 +103,10 @@ async fn main() -> Result<(), MainError> {
             .service(routes::stats::get_sys_info_pretty)
             .service(routes::health::get_health)
             .service(routes::health::change_healthyness)
-        )
-        .bind(opt.http_addr)?
-        .run()
-        .await?;
+    })
+    .bind(opt.http_addr)?
+    .run()
+    .await?;
 
     Ok(())
 }

@@ -91,11 +91,11 @@ fn check_add_documents_with_nested_null() {
 
     // 2 - Add a document that contains a null in a nested object
 
-    let body = json!([{ 
-        "id": 0, 
-        "foo": { 
+    let body = json!([{
+        "id": 0,
+        "foo": {
             "bar": null
-        } 
+        }
     }]);
 
     let url = "/indexes/tasks/documents";
@@ -126,9 +126,9 @@ fn check_add_documents_with_nested_sequence() {
 
     // 2 - Add a document that contains a seq in a nested object
 
-    let body = json!([{ 
-        "id": 0, 
-        "foo": { 
+    let body = json!([{
+        "id": 0,
+        "foo": {
             "bar": [123,456],
             "fez": [{
                 "id": 255,

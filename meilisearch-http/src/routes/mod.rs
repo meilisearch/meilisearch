@@ -1,7 +1,7 @@
 use actix_web::{get, HttpResponse};
-use serde::{Serialize, Deserialize};
 use log::error;
 use meilisearch_core::ProcessedUpdateResult;
+use serde::{Deserialize, Serialize};
 
 use crate::Data;
 
@@ -10,14 +10,14 @@ pub mod health;
 pub mod index;
 pub mod key;
 pub mod search;
-pub mod stats;
 pub mod setting;
+pub mod stats;
 pub mod stop_words;
 pub mod synonym;
 
 #[derive(Default, Deserialize)]
 pub struct IndexParam {
-    index_uid: String
+    index_uid: String,
 }
 
 #[derive(Default, Serialize)]
@@ -28,9 +28,7 @@ pub struct IndexUpdateResponse {
 
 impl IndexUpdateResponse {
     pub fn with_id(update_id: u64) -> Self {
-        Self {
-            update_id,
-        }
+        Self { update_id }
     }
 }
 
@@ -47,7 +45,6 @@ pub async fn load_css() -> HttpResponse {
         .content_type("text/css; charset=utf-8")
         .body(include_str!("../../public/bulma.min.css").to_string())
 }
-
 
 pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpdateResult) {
     if status.error.is_some() {
@@ -81,7 +78,6 @@ pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpda
         }
     }
 }
-
 
 // pub fn load_routes(app: &mut tide::Server<Data>) {
 //     app.at("/").get(|_| async {
