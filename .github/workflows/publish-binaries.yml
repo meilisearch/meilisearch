@@ -33,7 +33,7 @@ jobs:
     - name: Upload binaries to release
       uses: svenstaro/upload-release-action@v1-release
       with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        repo_token: ${{ secrets.PUBLISH_TOKEN }}
         file: target/release/${{ matrix.artifact_name }}
         asset_name: ${{ matrix.asset_name }}
         tag: ${{ github.ref }}
@@ -57,7 +57,7 @@ jobs:
       - name: Upload the binary to release
         uses: svenstaro/upload-release-action@v1-release
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          repo_token: ${{ secrets.PUBLISH_TOKEN }}
           file: target/release/meilisearch
           asset_name: meilisearch-linux-armv7
           tag: ${{ github.ref }}
@@ -81,7 +81,7 @@ jobs:
       - name: Upload the binary to release
         uses: svenstaro/upload-release-action@v1-release
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          repo_token: ${{ secrets.PUBLISH_TOKEN }}
           file: target/release/meilisearch
           asset_name: meilisearch-linux-armv8
           tag: ${{ github.ref }}
