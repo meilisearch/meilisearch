@@ -2,81 +2,92 @@ use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
-use tide::{Request, Response};
+use actix_web::{web, get, post, delete, HttpResponse};
+use actix_web as aweb;
 
-use crate::error::{ResponseError, SResult};
-use crate::helpers::tide::RequestExt;
-use crate::helpers::tide::ACL::*;
-use crate::routes::document::IndexUpdateResponse;
+use crate::error::{ResponseError};
 use crate::Data;
+use crate::routes::{IndexUpdateResponse, IndexParam};
 
-pub async fn get(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Private)?;
-    let index = ctx.index()?;
+#[get("/indexes/{index_uid}/settings/synonyms")]
+pub async fn get(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-    let db = &ctx.state().db;
-    let reader = db.main_read_txn()?;
+    let reader = data.db.main_read_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    let synonyms_fst = index.main.synonyms_fst(&reader)?.unwrap_or_default();
-    let synonyms_list = synonyms_fst.stream().into_strs()?;
+    let synonyms_fst = index.main.synonyms_fst(&reader)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?
+        .unwrap_or_default();
+    let synonyms_list = synonyms_fst.stream().into_strs()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let mut synonyms = IndexMap::new();
 
     let index_synonyms = &index.synonyms;
 
     for synonym in synonyms_list {
-        let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
+        let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())
+            .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
         if let Some(list) = alternative_list {
-            let list = list.stream().into_strs()?;
+            let list = list.stream().into_strs()
+                .map_err(|err| ResponseError::Internal(err.to_string()))?;
             synonyms.insert(synonym, list);
         }
     }
 
-    Ok(tide::Response::new(200).body_json(&synonyms).unwrap())
+    Ok(HttpResponse::Ok().json(synonyms))
 }
 
-pub async fn update(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Private)?;
-
-    let data: BTreeMap<String, Vec<String>> =
-        ctx.body_json().await.map_err(ResponseError::bad_request)?;
-
-    let index = ctx.index()?;
-
-    let db = &ctx.state().db;
-    let mut writer = db.update_write_txn()?;
+#[post("/indexes/{index_uid}/settings/synonyms")]
+pub async fn update(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<BTreeMap<String, Vec<String>>>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let settings = SettingsUpdate {
-        synonyms: UpdateState::Update(data),
+        synonyms: UpdateState::Update(body.into_inner()),
         ..SettingsUpdate::default()
     };
 
-    let update_id = index.settings_update(&mut writer, settings)?;
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    writer.commit()?;
-
-    let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body)?)
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-pub async fn delete(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Private)?;
-
-    let index = ctx.index()?;
-
-    let db = &ctx.state().db;
-    let mut writer = db.update_write_txn()?;
+#[delete("/indexes/{index_uid}/settings/synonyms")]
+pub async fn delete(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
     let settings = SettingsUpdate {
         synonyms: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let update_id = index.settings_update(&mut writer, settings)?;
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    writer.commit()?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body)?)
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
