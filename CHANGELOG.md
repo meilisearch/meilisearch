@@ -9,3 +9,4 @@
   - Publish an ARMv7 and ARMv8 binaries on releases (#540 and #581)
   - Fixed a bug where the result of the update status after the first update was empty (#542)
   - Fixed a bug where stop words were not handled correctly (#594)
+  - Fix CORS issues (#602)

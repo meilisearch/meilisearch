@@ -4,7 +4,8 @@ use async_std::task;
 use log::info;
 use main_error::MainError;
 use structopt::StructOpt;
-use tide::middleware::{Cors, RequestLogger};
+use tide::middleware::{Cors, RequestLogger, Origin};
+use http::header::HeaderValue;
 
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
@@ -51,7 +52,10 @@ pub fn main() -> Result<(), MainError> {
 
     let mut app = tide::with_state(data);
 
-    app.middleware(Cors::new());
+    app.middleware(Cors::new()
+        .allow_methods(HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"))
+        .allow_headers(HeaderValue::from_static("X-Meili-API-Key"))
+        .allow_origin(Origin::from("*")));
     app.middleware(RequestLogger::new());
 
     routes::load_routes(&mut app);
