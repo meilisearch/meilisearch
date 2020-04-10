@@ -1,14 +1,14 @@
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use actix_web::{web, get, post, put, delete, HttpResponse};
+use actix_web::{web, get, post, delete, HttpResponse};
 use actix_web as aweb;
 
 use crate::error::{ResponseError};
 use crate::Data;
 use crate::routes::{IndexUpdateResponse, IndexParam};
 
-#[get("/indexes/{index_uid}/settings")]
-pub async fn get_all(
+#[post("/indexes/{index_uid}/settings")]
+pub async fn update_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> aweb::Result<HttpResponse> {
@@ -86,303 +86,371 @@ pub async fn get_all(
     Ok(HttpResponse::Ok().json(settings))
 }
 
-// pub async fn update_all(mut ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let settings: Settings =
-//         ctx.body_json().await.map_err(ResponseError::bad_request)?;
-//     let db = &ctx.state().db;
+#[get("/indexes/{index_uid}/settings")]
+pub async fn get_all(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<Settings>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-//     let mut writer = db.update_write_txn()?;
-//     let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-//     let update_id = index.settings_update(&mut writer, settings)?;
-//     writer.commit()?;
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let settings = body.into_inner().into_update()
+        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
 
-// pub async fn delete_all(ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let db = &ctx.state().db;
-//     let mut writer = db.update_write_txn()?;
+#[delete("/indexes/{index_uid}/settings")]
+pub async fn delete_all(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let settings = SettingsUpdate {
-//         ranking_rules: UpdateState::Clear,
-//         distinct_attribute: UpdateState::Clear,
-//         primary_key: UpdateState::Clear,
-//         searchable_attributes: UpdateState::Clear,
-//         displayed_attributes: UpdateState::Clear,
-//         stop_words: UpdateState::Clear,
-//         synonyms: UpdateState::Clear,
-//         accept_new_fields: UpdateState::Clear,
-//     };
+    let settings = SettingsUpdate {
+        ranking_rules: UpdateState::Clear,
+        distinct_attribute: UpdateState::Clear,
+        primary_key: UpdateState::Clear,
+        searchable_attributes: UpdateState::Clear,
+        displayed_attributes: UpdateState::Clear,
+        stop_words: UpdateState::Clear,
+        synonyms: UpdateState::Clear,
+        accept_new_fields: UpdateState::Clear,
+    };
 
-//     let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     writer.commit()?;
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
 
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+#[get("/indexes/{index_uid}/settings/ranking-rules")]
+pub async fn get_rules(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+    let reader = data.db.main_read_txn()
+            .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-// pub async fn get_rules(ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let db = &ctx.state().db;
-//     let reader = db.main_read_txn()?;
+    let ranking_rules = index
+        .main
+        .ranking_rules(&reader)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?
+        .unwrap_or(DEFAULT_RANKING_RULES.to_vec())
+        .into_iter()
+        .map(|r| r.to_string())
+        .collect::<Vec<String>>();
 
-//     let ranking_rules = index
-//         .main
-//         .ranking_rules(&reader)?
-//         .unwrap_or(DEFAULT_RANKING_RULES.to_vec())
-//         .into_iter()
-//         .map(|r| r.to_string())
-//         .collect::<Vec<String>>();
+    Ok(HttpResponse::Ok().json(ranking_rules))
+}
 
-//     Ok(tide::Response::new(200).body_json(&ranking_rules).unwrap())
-// }
+#[post("/indexes/{index_uid}/settings/ranking-rules")]
+pub async fn update_rules(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<Option<Vec<String>>>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-// pub async fn update_rules(mut ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let ranking_rules: Option<Vec<String>> =
-//         ctx.body_json().await.map_err(ResponseError::bad_request)?;
-//     let db = &ctx.state().db;
+    let settings = Settings {
+        ranking_rules: Some(body.into_inner()),
+        ..Settings::default()
+    };
 
-//     let settings = Settings {
-//         ranking_rules: Some(ranking_rules),
-//         ..Settings::default()
-//     };
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let settings = settings.into_update()
+        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let mut writer = db.update_write_txn()?;
-//     let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-//     let update_id = index.settings_update(&mut writer, settings)?;
-//     writer.commit()?;
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
 
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+#[delete("/indexes/{index_uid}/settings/ranking-rules")]
+pub async fn delete_rules(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-// pub async fn delete_rules(ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let db = &ctx.state().db;
-//     let mut writer = db.update_write_txn()?;
+    let settings = SettingsUpdate {
+        ranking_rules: UpdateState::Clear,
+        ..SettingsUpdate::default()
+    };
 
-//     let settings = SettingsUpdate {
-//         ranking_rules: UpdateState::Clear,
-//         ..SettingsUpdate::default()
-//     };
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     writer.commit()?;
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
 
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+#[get("/indexes/{index_uid}/settings/distinct-attribute")]
+pub async fn get_distinct(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+    let reader = data.db.main_read_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let distinct_attribute = index.main.distinct_attribute(&reader)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-// pub async fn get_distinct(ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let db = &ctx.state().db;
-//     let reader = db.main_read_txn()?;
+    Ok(HttpResponse::Ok().json(distinct_attribute))
+}
 
-//     let distinct_attribute = index.main.distinct_attribute(&reader)?;
+#[post("/indexes/{index_uid}/settings/distinct-attribute")]
+pub async fn update_distinct(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<Option<String>>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-//     Ok(tide::Response::new(200)
-//         .body_json(&distinct_attribute)
-//         .unwrap())
-// }
+    let settings = Settings {
+        distinct_attribute: Some(body.into_inner()),
+        ..Settings::default()
+    };
 
-// pub async fn update_distinct(mut ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let distinct_attribute: Option<String> =
-//         ctx.body_json().await.map_err(ResponseError::bad_request)?;
-//     let db = &ctx.state().db;
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let settings = settings.into_update()
+        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let settings = Settings {
-//         distinct_attribute: Some(distinct_attribute),
-//         ..Settings::default()
-//     };
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
 
-//     let mut writer = db.update_write_txn()?;
-//     let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-//     let update_id = index.settings_update(&mut writer, settings)?;
-//     writer.commit()?;
+#[delete("/indexes/{index_uid}/settings/distinct-attribute")]
+pub async fn delete_distinct(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+    let mut writer = data.db.update_write_txn()
+            .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+    let settings = SettingsUpdate {
+        distinct_attribute: UpdateState::Clear,
+        ..SettingsUpdate::default()
+    };
 
-// pub async fn delete_distinct(ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let db = &ctx.state().db;
-//     let mut writer = db.update_write_txn()?;
+    let update_id = index.settings_update(&mut writer, settings)
+            .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let settings = SettingsUpdate {
-//         distinct_attribute: UpdateState::Clear,
-//         ..SettingsUpdate::default()
-//     };
+    writer.commit()
+            .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let update_id = index.settings_update(&mut writer, settings)?;
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
 
-//     writer.commit()?;
+#[get("/indexes/{index_uid}/settings/searchable-attributes")]
+pub async fn get_searchable(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+    let reader = data.db.main_read_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let schema = index.main.schema(&reader)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let searchable_attributes: Option<Vec<String>> =
+        schema.map(|s| s.indexed_name().iter().map(|i| (*i).to_string()).collect());
 
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+    Ok(HttpResponse::Ok().json(searchable_attributes))
+}
 
-// pub async fn get_searchable(ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let db = &ctx.state().db;
-//     let reader = db.main_read_txn()?;
+#[post("/indexes/{index_uid}/settings/searchable-attributes")]
+pub async fn update_searchable(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<Option<Vec<String>>>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-//     let schema = index.main.schema(&reader)?;
+    let settings = Settings {
+        searchable_attributes: Some(body.into_inner()),
+        ..Settings::default()
+    };
 
-//     let searchable_attributes: Option<Vec<String>> =
-//         schema.map(|s| s.indexed_name().iter().map(|i| (*i).to_string()).collect());
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let settings = settings.into_update()
+        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     Ok(tide::Response::new(200)
-//         .body_json(&searchable_attributes)
-//         .unwrap())
-// }
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
 
-// pub async fn update_searchable(mut ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let searchable_attributes: Option<Vec<String>> =
-//         ctx.body_json().await.map_err(ResponseError::bad_request)?;
-//     let db = &ctx.state().db;
+#[delete("/indexes/{index_uid}/settings/searchable-attributes")]
+pub async fn delete_searchable(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-//     let settings = Settings {
-//         searchable_attributes: Some(searchable_attributes),
-//         ..Settings::default()
-//     };
+    let settings = SettingsUpdate {
+        searchable_attributes: UpdateState::Clear,
+        ..SettingsUpdate::default()
+    };
 
-//     let mut writer = db.update_write_txn()?;
-//     let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-//     let update_id = index.settings_update(&mut writer, settings)?;
-//     writer.commit()?;
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
 
-// pub async fn delete_searchable(ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let db = &ctx.state().db;
+#[get("/indexes/{index_uid}/settings/displayed-attributes")]
+pub async fn get_displayed(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+    let reader = data.db.main_read_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let settings = SettingsUpdate {
-//         searchable_attributes: UpdateState::Clear,
-//         ..SettingsUpdate::default()
-//     };
+    let schema = index.main.schema(&reader)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let mut writer = db.update_write_txn()?;
-//     let update_id = index.settings_update(&mut writer, settings)?;
-//     writer.commit()?;
+    let displayed_attributes: Option<HashSet<String>> = schema.map(|s| {
+        s.displayed_name()
+            .iter()
+            .map(|i| (*i).to_string())
+            .collect()
+    });
 
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+    Ok(HttpResponse::Ok().json(displayed_attributes))
+}
 
-// pub async fn displayed(ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let db = &ctx.state().db;
-//     let reader = db.main_read_txn()?;
+#[post("/indexes/{index_uid}/settings/displayed-attributes")]
+pub async fn update_displayed(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<Option<HashSet<String>>>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-//     let schema = index.main.schema(&reader)?;
+    let settings = Settings {
+        displayed_attributes: Some(body.into_inner()),
+        ..Settings::default()
+    };
 
-//     let displayed_attributes: Option<HashSet<String>> = schema.map(|s| {
-//         s.displayed_name()
-//             .iter()
-//             .map(|i| (*i).to_string())
-//             .collect()
-//     });
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let settings = settings.into_update()
+        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     Ok(tide::Response::new(200)
-//         .body_json(&displayed_attributes)
-//         .unwrap())
-// }
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
 
-// pub async fn update_displayed(mut ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let displayed_attributes: Option<HashSet<String>> =
-//         ctx.body_json().await.map_err(ResponseError::bad_request)?;
-//     let db = &ctx.state().db;
+#[delete("/indexes/{index_uid}/settings/displayed-attributes")]
+pub async fn delete_displayed(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-//     let settings = Settings {
-//         displayed_attributes: Some(displayed_attributes),
-//         ..Settings::default()
-//     };
+    let settings = SettingsUpdate {
+        displayed_attributes: UpdateState::Clear,
+        ..SettingsUpdate::default()
+    };
 
-//     let mut writer = db.update_write_txn()?;
-//     let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-//     let update_id = index.settings_update(&mut writer, settings)?;
-//     writer.commit()?;
+    let mut writer = data.db.update_write_txn()
+            .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)
+            .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()
+            .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
 
-// pub async fn delete_displayed(ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let db = &ctx.state().db;
+#[get("/indexes/{index_uid}/settings/accept-new-fields")]
+pub async fn get_accept_new_fields(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+    let reader = data.db.main_read_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let settings = SettingsUpdate {
-//         displayed_attributes: UpdateState::Clear,
-//         ..SettingsUpdate::default()
-//     };
+    let schema = index.main.schema(&reader)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     let mut writer = db.update_write_txn()?;
-//     let update_id = index.settings_update(&mut writer, settings)?;
-//     writer.commit()?;
+    let accept_new_fields = schema.map(|s| s.accept_new_fields());
 
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+    Ok(HttpResponse::Ok().json(accept_new_fields))
+}
 
-// pub async fn get_accept_new_fields(ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let db = &ctx.state().db;
-//     let reader = db.main_read_txn()?;
+#[post("/indexes/{index_uid}/settings/accept-new-fields")]
+pub async fn update_accept_new_fields(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<Option<bool>>,
+) -> aweb::Result<HttpResponse> {
+    let index = data.db.open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
 
-//     let schema = index.main.schema(&reader)?;
+    let settings = Settings {
+        accept_new_fields: Some(body.into_inner()),
+        ..Settings::default()
+    };
 
-//     let accept_new_fields = schema.map(|s| s.accept_new_fields());
+    let mut writer = data.db.update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let settings = settings.into_update()
+        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-//     Ok(tide::Response::new(200)
-//         .body_json(&accept_new_fields)
-//         .unwrap())
-// }
-
-// pub async fn update_accept_new_fields(mut ctx: Request<Data>) -> SResult<Response> {
-//     ctx.is_allowed(Private)?;
-//     let index = ctx.index()?;
-//     let accept_new_fields: Option<bool> =
-//         ctx.body_json().await.map_err(ResponseError::bad_request)?;
-//     let db = &ctx.state().db;
-
-//     let settings = Settings {
-//         accept_new_fields: Some(accept_new_fields),
-//         ..Settings::default()
-//     };
-
-//     let mut writer = db.update_write_txn()?;
-//     let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-//     let update_id = index.settings_update(&mut writer, settings)?;
-//     writer.commit()?;
-
-//     let response_body = IndexUpdateResponse { update_id };
-//     Ok(tide::Response::new(202).body_json(&response_body)?)
-// }
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
