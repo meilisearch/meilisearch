@@ -1,7 +1,7 @@
 use std::{env, thread};
 
-use actix_web::middleware::Logger;
-use actix_web::{web, App, HttpServer};
+use actix_cors::Cors;
+use actix_web::{web, App, HttpServer, middleware};
 use log::info;
 use main_error::MainError;
 use meilisearch_http::data::Data;
@@ -52,7 +52,14 @@ async fn main() -> Result<(), MainError> {
 
     HttpServer::new(move || {
         App::new()
-            .wrap(Logger::default())
+            .wrap(
+                Cors::new()
+                  .send_wildcard()
+                  .allowed_header("x-meili-api-key")
+                  .finish()
+            )
+            .wrap(middleware::Logger::default())
+            .wrap(middleware::Compress::default())
             .app_data(web::Data::new(data.clone()))
             .service(routes::load_html)
             .service(routes::load_css)
