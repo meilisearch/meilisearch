@@ -1,7 +1,7 @@
 use std::{env, thread};
 
 use actix_cors::Cors;
-use actix_web::{web, App, HttpServer, middleware};
+use actix_web::{middleware, web, App, HttpServer};
 use log::info;
 use main_error::MainError;
 use meilisearch_http::data::Data;
@@ -54,15 +54,21 @@ async fn main() -> Result<(), MainError> {
         App::new()
             .wrap(
                 Cors::new()
-                  .send_wildcard()
-                  .allowed_header("x-meili-api-key")
-                  .finish()
+                    .send_wildcard()
+                    .allowed_header("x-meili-api-key")
+                    .finish(),
             )
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .app_data(web::Data::new(data.clone()))
+            .wrap(routes::Authentication::Public)
             .service(routes::load_html)
             .service(routes::load_css)
+            .service(routes::search::search_with_url_query)
+            .service(routes::search::search_multi_index)
+            .service(routes::document::get_document)
+            .service(routes::document::get_all_documents)
+            .wrap(routes::Authentication::Private)
             .service(routes::index::list_indexes)
             .service(routes::index::get_index)
             .service(routes::index::create_index)
@@ -70,11 +76,7 @@ async fn main() -> Result<(), MainError> {
             .service(routes::index::delete_index)
             .service(routes::index::get_update_status)
             .service(routes::index::get_all_updates_status)
-            .service(routes::search::search_with_url_query)
-            .service(routes::search::search_multi_index)
-            .service(routes::document::get_document)
             .service(routes::document::delete_document)
-            .service(routes::document::get_all_documents)
             .service(routes::document::add_documents)
             .service(routes::document::update_documents)
             .service(routes::document::delete_documents)
@@ -102,7 +104,6 @@ async fn main() -> Result<(), MainError> {
             .service(routes::synonym::get)
             .service(routes::synonym::update)
             .service(routes::synonym::delete)
-            .service(routes::key::list)
             .service(routes::stats::index_stats)
             .service(routes::stats::get_stats)
             .service(routes::stats::get_version)
@@ -110,6 +111,8 @@ async fn main() -> Result<(), MainError> {
             .service(routes::stats::get_sys_info_pretty)
             .service(routes::health::get_health)
             .service(routes::health::change_healthyness)
+            .wrap(routes::Authentication::Admin)
+            .service(routes::key::list)
     })
     .bind(opt.http_addr)?
     .run()

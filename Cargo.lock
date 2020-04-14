@@ -1341,6 +1341,7 @@ dependencies = [
  "actix-files 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-http 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-rt 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "actix-service 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "actix-web 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "assert-json-diff 1.0.1 (git+https://github.com/qdequele/assert-json-diff)",
  "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
