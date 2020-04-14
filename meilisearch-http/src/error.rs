@@ -9,6 +9,7 @@ use serde_json::json;
 pub enum ResponseError {
     Internal(String),
     BadRequest(String),
+    MissingAuthorizationHeader,
     InvalidToken(String),
     NotFound(String),
     IndexNotFound(String),
@@ -27,6 +28,7 @@ impl fmt::Display for ResponseError {
         match self {
             Self::Internal(err) => write!(f, "Internal server error: {}", err),
             Self::BadRequest(err) => write!(f, "Bad request: {}", err),
+            Self::MissingAuthorizationHeader => write!(f, "You must have an authorization token"),
             Self::InvalidToken(err) => write!(f, "Invalid API key: {}", err),
             Self::NotFound(err) => write!(f, "{} not found", err),
             Self::IndexNotFound(index_uid) => write!(f, "Index {} not found", index_uid),
@@ -53,7 +55,8 @@ impl aweb::error::ResponseError for ResponseError {
         match *self {
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
-            Self::InvalidToken(_) => StatusCode::FORBIDDEN,
+            Self::MissingAuthorizationHeader => StatusCode::FORBIDDEN,
+            Self::InvalidToken(_) => StatusCode::UNAUTHORIZED,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::IndexNotFound(_) => StatusCode::NOT_FOUND,
             Self::DocumentNotFound(_) => StatusCode::NOT_FOUND,
