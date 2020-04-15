@@ -54,7 +54,7 @@ fn classify_separator(c: char) -> Option<SeparatorCategory> {
         c if c.is_whitespace() => Some(Soft), // whitespaces
         c if deunicode_char(c) == Some("'") => Some(Soft), // quotes
         c if deunicode_char(c) == Some("\"") => Some(Soft), // double quotes
-        '-' | '_' | '\'' | ':' | '/' | '\\' => Some(Soft),
+        '-' | '_' | '\'' | ':' | '/' | '\\' | '@' => Some(Soft),
         '.' | ';' | ',' | '!' | '?' | '(' | ')' => Some(Hard),
         _ => None,
     }
