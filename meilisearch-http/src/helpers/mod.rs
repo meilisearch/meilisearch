@@ -1,2 +1,4 @@
+pub mod authentication;
 pub mod meilisearch;
-// pub mod tide;
+
+pub use authentication::Authentication;
