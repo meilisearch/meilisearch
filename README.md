@@ -29,13 +29,13 @@ For more information about features go to [our documentation](https://docs.meili
   <a href="https://crates.meilisearch.com"><img src="assets/crates-io-demo.gif" alt="crates.io demo gif" /></a>
 </p>
 
-> Meili helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
+> MeiliSearch helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
 
 ## Features
 * Search as-you-type experience (answers < 50 milliseconds)
 * Full-text search
 * Typo tolerant (understands typos and miss-spelling)
-* Supports Kanji
+* Supports Kanji characters
 * Supports Synonym
 * Easy to install, deploy, and maintain
 * Whole documents are returned
@@ -171,7 +171,7 @@ Now that your MeiliSearch server is up and running, you can learn more about how
 - Can [distinct](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L324-L329) and [filter](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L313-L318) returned documents based on context defined rules
 - Searches for [concatenated](https://github.com/meilisearch/MeiliSearch/pull/164) and [splitted query words](https://github.com/meilisearch/MeiliSearch/pull/232) to improve the search quality.
 - Can store complete documents or only [user schema specified fields](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/datasets/movies/schema.toml)
-- The [default tokenizer](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-tokenizer/src/lib.rs) can index Latin and Kanji based languages
+- The [default tokenizer](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-tokenizer/src/lib.rs) can index Latin based languages and Kanji characters
 - Returns [the matching text areas](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-types/src/lib.rs#L49-L65), useful to highlight matched words in results
 - Accepts query time search config like the [searchable attributes](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L331-L336)
 - Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/store/mod.rs#L143-L212)
