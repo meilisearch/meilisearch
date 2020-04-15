@@ -9,8 +9,8 @@ use meilisearch_core::{Database, Error as MError, MResult, MainT, UpdateT};
 use sha2::Digest;
 use sysinfo::Pid;
 
+use crate::index_update_callback;
 use crate::option::Opt;
-use crate::routes::index_update_callback;
 
 const LAST_UPDATE_KEY: &str = "last-update";
 
