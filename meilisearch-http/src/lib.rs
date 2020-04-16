@@ -28,6 +28,7 @@ pub fn create_app(
 > {
     App::new()
         .app_data(web::Data::new(data.clone()))
+        .app_data(web::JsonConfig::default().limit(1024 * 1024 * 10)) // Json Limit of 10Mb
         .wrap(helpers::Authentication::Public)
         .service(routes::load_html)
         .service(routes::load_css)

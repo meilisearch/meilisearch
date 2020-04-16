@@ -1,8 +1,7 @@
 use actix_web as aweb;
-use actix_web::{delete, get, post, web, HttpResponse};
+use actix_web::{delete, get, post, put, web, HttpResponse};
 use chrono::{DateTime, Utc};
 use log::error;
-use meilisearch_core::UpdateStatus;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
@@ -30,13 +29,13 @@ pub struct IndexResponse {
 }
 
 #[get("/indexes")]
-pub async fn list_indexes(data: web::Data<Data>) -> aweb::Result<web::Json<Vec<IndexResponse>>> {
+pub async fn list_indexes(data: web::Data<Data>) -> aweb::Result<HttpResponse> {
     let reader = data
         .db
         .main_read_txn()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    let mut response_body = Vec::new();
+    let mut response = Vec::new();
 
     for index_uid in data.db.indexes_uids() {
         let index = data.db.open_index(&index_uid);
@@ -80,7 +79,7 @@ pub async fn list_indexes(data: web::Data<Data>) -> aweb::Result<web::Json<Vec<I
                     updated_at,
                     primary_key,
                 };
-                response_body.push(index_response);
+                response.push(index_response);
             }
             None => error!(
                 "Index {} is referenced in the indexes list but cannot be found",
@@ -89,14 +88,14 @@ pub async fn list_indexes(data: web::Data<Data>) -> aweb::Result<web::Json<Vec<I
         }
     }
 
-    Ok(web::Json(response_body))
+    Ok(HttpResponse::Ok().json(response))
 }
 
 #[get("/indexes/{index_uid}")]
 pub async fn get_index(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<web::Json<IndexResponse>> {
+) -> aweb::Result<HttpResponse> {
     let index = data
         .db
         .open_index(path.index_uid.clone())
@@ -137,7 +136,7 @@ pub async fn get_index(
         _ => None,
     };
 
-    Ok(web::Json(IndexResponse {
+    Ok(HttpResponse::Ok().json(IndexResponse {
         name,
         uid: path.index_uid.clone(),
         created_at,
@@ -158,7 +157,7 @@ pub struct IndexCreateRequest {
 pub async fn create_index(
     data: web::Data<Data>,
     body: web::Json<IndexCreateRequest>,
-) -> aweb::Result<web::Json<IndexResponse>> {
+) -> aweb::Result<HttpResponse> {
     if let (None, None) = (body.name.clone(), body.uid.clone()) {
         return Err(
             ResponseError::BadRequest("Index creation must have an uid".to_string()).into(),
@@ -232,7 +231,7 @@ pub async fn create_index(
         .commit()
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    Ok(web::Json(IndexResponse {
+    Ok(HttpResponse::Created().json(IndexResponse {
         name,
         uid,
         created_at,
@@ -258,12 +257,12 @@ pub struct UpdateIndexResponse {
     primary_key: Option<String>,
 }
 
-#[post("/indexes/{index_uid}")]
+#[put("/indexes/{index_uid}")]
 pub async fn update_index(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<IndexCreateRequest>,
-) -> aweb::Result<web::Json<IndexResponse>> {
+) -> aweb::Result<HttpResponse> {
     let index = data
         .db
         .open_index(path.index_uid.clone())
@@ -350,7 +349,7 @@ pub async fn update_index(
         _ => None,
     };
 
-    Ok(web::Json(IndexResponse {
+    Ok(HttpResponse::Ok().json(IndexResponse {
         name,
         uid: path.index_uid.clone(),
         created_at,
@@ -381,7 +380,7 @@ pub struct UpdateParam {
 pub async fn get_update_status(
     data: web::Data<Data>,
     path: web::Path<UpdateParam>,
-) -> aweb::Result<web::Json<UpdateStatus>> {
+) -> aweb::Result<HttpResponse> {
     let index = data
         .db
         .open_index(path.index_uid.clone())
@@ -397,7 +396,7 @@ pub async fn get_update_status(
         .map_err(|e| ResponseError::Internal(e.to_string()))?;
 
     match status {
-        Some(status) => Ok(web::Json(status)),
+        Some(status) => Ok(HttpResponse::Ok().json(status)),
         None => Err(ResponseError::NotFound(format!("Update {} not found", path.update_id)).into()),
     }
 }
@@ -406,7 +405,7 @@ pub async fn get_update_status(
 pub async fn get_all_updates_status(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<web::Json<Vec<UpdateStatus>>> {
+) -> aweb::Result<HttpResponse> {
     let index = data
         .db
         .open_index(path.index_uid.clone())
@@ -421,5 +420,5 @@ pub async fn get_all_updates_status(
         .all_updates_status(&reader)
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    Ok(web::Json(response))
+    Ok(HttpResponse::Ok().json(response))
 }

@@ -26,8 +26,8 @@ pub enum ResponseError {
 impl fmt::Display for ResponseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Internal(err) => write!(f, "Internal server error: {}", err),
-            Self::BadRequest(err) => write!(f, "Bad request: {}", err),
+            Self::Internal(err) => write!(f, "{}", err),
+            Self::BadRequest(err) => write!(f, "{}", err),
             Self::MissingAuthorizationHeader => write!(f, "You must have an authorization token"),
             Self::InvalidToken(err) => write!(f, "Invalid API key: {}", err),
             Self::NotFound(err) => write!(f, "{} not found", err),

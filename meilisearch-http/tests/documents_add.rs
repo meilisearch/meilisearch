@@ -3,8 +3,8 @@ use serde_json::json;
 mod common;
 
 // Test issue https://github.com/meilisearch/MeiliSearch/issues/519
-#[test]
-fn check_add_documents_with_primary_key_param() {
+#[actix_rt::test]
+async fn check_add_documents_with_primary_key_param() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create the index with no primary_key
@@ -12,7 +12,7 @@ fn check_add_documents_with_primary_key_param() {
     let body = json!({
         "uid": "movies",
     });
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
@@ -24,28 +24,28 @@ fn check_add_documents_with_primary_key_param() {
     }]);
 
     let url = "/indexes/movies/documents?primaryKey=title";
-    let (response, status_code) = server.post_request(&url, body);
+    let (response, status_code) = server.post_request(&url, body).await;
     eprintln!("{:#?}", response);
     assert_eq!(status_code, 202);
     let update_id = response["updateId"].as_u64().unwrap();
-    server.wait_update_id(update_id);
+    server.wait_update_id(update_id).await;
 
     // 3 - Check update success
 
-    let (response, status_code) = server.get_update_status(update_id);
+    let (response, status_code) = server.get_update_status(update_id).await;
     assert_eq!(status_code, 200);
     assert_eq!(response["status"], "processed");
 }
 
 // Test issue https://github.com/meilisearch/MeiliSearch/issues/568
-#[test]
-fn check_add_documents_with_nested_boolean() {
+#[actix_rt::test]
+async fn check_add_documents_with_nested_boolean() {
     let mut server = common::Server::with_uid("tasks");
 
     // 1 - Create the index with no primary_key
 
     let body = json!({ "uid": "tasks" });
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
@@ -64,28 +64,28 @@ fn check_add_documents_with_nested_boolean() {
     }]);
 
     let url = "/indexes/tasks/documents";
-    let (response, status_code) = server.post_request(&url, body);
+    let (response, status_code) = server.post_request(&url, body).await;
     eprintln!("{:#?}", response);
     assert_eq!(status_code, 202);
     let update_id = response["updateId"].as_u64().unwrap();
-    server.wait_update_id(update_id);
+    server.wait_update_id(update_id).await;
 
     // 3 - Check update success
 
-    let (response, status_code) = server.get_update_status(update_id);
+    let (response, status_code) = server.get_update_status(update_id).await;
     assert_eq!(status_code, 200);
     assert_eq!(response["status"], "processed");
 }
 
 // Test issue https://github.com/meilisearch/MeiliSearch/issues/571
-#[test]
-fn check_add_documents_with_nested_null() {
+#[actix_rt::test]
+async fn check_add_documents_with_nested_null() {
     let mut server = common::Server::with_uid("tasks");
 
     // 1 - Create the index with no primary_key
 
     let body = json!({ "uid": "tasks" });
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
@@ -99,28 +99,28 @@ fn check_add_documents_with_nested_null() {
     }]);
 
     let url = "/indexes/tasks/documents";
-    let (response, status_code) = server.post_request(&url, body);
+    let (response, status_code) = server.post_request(&url, body).await;
     eprintln!("{:#?}", response);
     assert_eq!(status_code, 202);
     let update_id = response["updateId"].as_u64().unwrap();
-    server.wait_update_id(update_id);
+    server.wait_update_id(update_id).await;
 
     // 3 - Check update success
 
-    let (response, status_code) = server.get_update_status(update_id);
+    let (response, status_code) = server.get_update_status(update_id).await;
     assert_eq!(status_code, 200);
     assert_eq!(response["status"], "processed");
 }
 
 // Test issue https://github.com/meilisearch/MeiliSearch/issues/574
-#[test]
-fn check_add_documents_with_nested_sequence() {
+#[actix_rt::test]
+async fn check_add_documents_with_nested_sequence() {
     let mut server = common::Server::with_uid("tasks");
 
     // 1 - Create the index with no primary_key
 
     let body = json!({ "uid": "tasks" });
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
@@ -158,20 +158,20 @@ fn check_add_documents_with_nested_sequence() {
     }]);
 
     let url = "/indexes/tasks/documents";
-    let (response, status_code) = server.post_request(&url, body.clone());
+    let (response, status_code) = server.post_request(&url, body.clone()).await;
     eprintln!("{:#?}", response);
     assert_eq!(status_code, 202);
     let update_id = response["updateId"].as_u64().unwrap();
-    server.wait_update_id(update_id);
+    server.wait_update_id(update_id).await;
 
     // 3 - Check update success
 
-    let (response, status_code) = server.get_update_status(update_id);
+    let (response, status_code) = server.get_update_status(update_id).await;
     assert_eq!(status_code, 200);
     assert_eq!(response["status"], "processed");
 
     let url = "/indexes/tasks/search?q=leesz";
-    let (response, status_code) = server.get_request(&url);
+    let (response, status_code) = server.get_request(&url).await;
     assert_eq!(status_code, 200);
     assert_eq!(response["hits"], body);
 }
