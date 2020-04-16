@@ -1527,7 +1527,6 @@ dependencies = [
  "once_cell",
  "pretty-bytes",
  "rand 0.7.3",
- "rayon",
  "serde",
  "serde_json",
  "serde_qs",
