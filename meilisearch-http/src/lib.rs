@@ -33,7 +33,6 @@ pub fn create_app(
         .service(routes::load_html)
         .service(routes::load_css)
         .service(routes::search::search_with_url_query)
-        .service(routes::search::search_multi_index)
         .service(routes::document::get_document)
         .service(routes::document::get_all_documents)
         .wrap(helpers::Authentication::Private)
