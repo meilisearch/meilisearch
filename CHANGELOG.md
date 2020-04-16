@@ -1,3 +1,7 @@
+## v0.10.1
+
+  - Added filter string condition case-insensitive contains represented by `field _= value`
+
 ## v0.10
 
   - Refined filtering (#592)
