@@ -257,7 +257,7 @@ impl<'a> SearchBuilder<'a> {
         for doc in docs {
             let mut document: IndexMap<String, Value> = self
                 .index
-                .document(reader, Some(all_attributes.clone()), doc.id)
+                .document(reader, Some(&all_attributes), doc.id)
                 .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
                 .ok_or(Error::DocumentNotFound(doc.id.0))?;
 
