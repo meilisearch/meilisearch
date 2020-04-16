@@ -1,3 +1,7 @@
+## v0.10.1 (unreleased)
+
+  - Add '@' character as tokenizer separator (#607)
+
 ## v0.10
 
   - Refined filtering (#592)
