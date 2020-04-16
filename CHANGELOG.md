@@ -1,6 +1,6 @@
-## v0.10.1
+## v0.10.2
 
-  - Added filter string condition case-insensitive contains represented by `field _= value`
+  - Added filter string condition case-insensitive contains represented by `field *= value`
 
 ## v0.10
 

@@ -15,7 +15,7 @@ neq = {key ~ "!=" ~ value}
 eq = {key ~ "=" ~ value}
 greater = {key ~ ">" ~ value}
 less = {key ~ "<" ~ value}
-contains = {key ~ "_=" ~ value}
+contains = {key ~ "*=" ~ value}
 
 prgm = {SOI ~ expr ~ EOI}
 expr = _{ ( term ~ (operation ~ term)* ) }

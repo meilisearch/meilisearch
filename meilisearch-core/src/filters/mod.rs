@@ -122,6 +122,6 @@ mod test {
         assert!(FilterParser::parse(Rule::prgm, r#"'foo bar' <= 10"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"'foo bar' != 10"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"bar != 10"#).is_ok());
-        assert!(FilterParser::parse(Rule::prgm, r#"field _= id"#).is_ok());
+        assert!(FilterParser::parse(Rule::prgm, r#"field *= id"#).is_ok());
     }
 }

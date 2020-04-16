@@ -52,7 +52,7 @@ impl From<PestError<Rule>> for Error {
                 Rule::leq => "field <= value",
                 Rule::geq => "field >= value",
                 Rule::key => "key",
-                Rule::contains => "field _= value",
+                Rule::contains => "field *= value",
                 _ => "other",
             };
             s.to_string()
