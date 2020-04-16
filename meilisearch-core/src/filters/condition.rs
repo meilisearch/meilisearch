@@ -9,7 +9,6 @@ use pest::error::{Error as PestError, ErrorVariant};
 use pest::iterators::Pair;
 use serde_json::{Value, Number};
 use super::parser::Rule;
-use regex::Regex;
 
 #[derive(Debug)]
 enum ConditionType {
@@ -29,7 +28,7 @@ struct ConditionValue<'a> {
     string: &'a str,
     boolean: Option<bool>,
     number: Option<Number>,
-    re: Regex,
+    re: regex::Regex,
 }
 
 impl<'a> ConditionValue<'a> {
@@ -43,7 +42,7 @@ impl<'a> ConditionValue<'a> {
                     _ => None,
                 };
                 let number = Number::from_str(value.as_str()).ok();
-                let re = Regex::new(format!(r"(?i){}", value.as_str()).as_str()).unwrap();
+                let re = regex::Regex::new(format!(r"(?i){}", regex::escape(value.as_str())).as_str()).unwrap();
                 ConditionValue { string, boolean, number, re }
             },
             _ => unreachable!(),
@@ -63,7 +62,7 @@ impl<'a> ConditionValue<'a> {
         self.boolean
     }
 
-    pub fn as_regex(&self) -> &Regex {
+    pub fn as_regex(&self) -> &regex::Regex {
         &self.re
     }
 }
