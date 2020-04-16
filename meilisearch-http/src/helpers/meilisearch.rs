@@ -231,18 +231,13 @@ impl<'a> SearchBuilder<'a> {
         let mut hits = Vec::with_capacity(self.limit);
         for doc in docs {
             // retrieve the content of document in kv store
-            let mut fields: Option<HashSet<&str>> = None;
-            if let Some(attributes_to_retrieve) = &self.attributes_to_retrieve {
-                let mut set = HashSet::new();
-                for field in attributes_to_retrieve {
-                    set.insert(field.as_str());
-                }
-                fields = Some(set);
-            }
+            let attributes: Option<HashSet<&str>> = self
+                .attributes_to_retrieve.as_ref()
+                .map(|a| a.iter().map(|a| a.as_str()).collect());
 
             let document: IndexMap<String, Value> = self
                 .index
-                .document(reader, fields, doc.id)
+                .document(reader, attributes.as_ref(), doc.id)
                 .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
                 .ok_or(Error::DocumentNotFound(doc.id.0))?;
 

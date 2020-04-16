@@ -756,16 +756,16 @@ mod tests {
         update_reader.abort();
 
         let reader = db.main_read_txn().unwrap();
-        let document: Option<IgnoredAny> = index.document::<_, String>(&reader, None, DocumentId(25)).unwrap();
+        let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
         assert!(document.is_none());
 
         let document: Option<IgnoredAny> = index
-            .document::<_, String>(&reader, None, DocumentId(7_900_334_843_754_999_545))
+            .document(&reader, None, DocumentId(7_900_334_843_754_999_545))
             .unwrap();
         assert!(document.is_some());
 
         let document: Option<IgnoredAny> = index
-            .document::<_, String>(&reader, None, DocumentId(8_367_468_610_878_465_872))
+            .document(&reader, None, DocumentId(8_367_468_610_878_465_872))
             .unwrap();
         assert!(document.is_some());
     }
@@ -836,16 +836,16 @@ mod tests {
         update_reader.abort();
 
         let reader = db.main_read_txn().unwrap();
-        let document: Option<IgnoredAny> = index.document::<_, String>(&reader, None, DocumentId(25)).unwrap();
+        let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
         assert!(document.is_none());
 
         let document: Option<IgnoredAny> = index
-            .document::<_, String>(&reader, None, DocumentId(7_900_334_843_754_999_545))
+            .document(&reader, None, DocumentId(7_900_334_843_754_999_545))
             .unwrap();
         assert!(document.is_some());
 
         let document: Option<IgnoredAny> = index
-            .document::<_, String>(&reader, None, DocumentId(8_367_468_610_878_465_872))
+            .document(&reader, None, DocumentId(8_367_468_610_878_465_872))
             .unwrap();
         assert!(document.is_some());
 
@@ -882,7 +882,7 @@ mod tests {
 
         let reader = db.main_read_txn().unwrap();
         let document: Option<serde_json::Value> = index
-            .document::<_, String>(&reader, None, DocumentId(7_900_334_843_754_999_545))
+            .document(&reader, None, DocumentId(7_900_334_843_754_999_545))
             .unwrap();
 
         let new_doc1 = serde_json::json!({
@@ -893,7 +893,7 @@ mod tests {
         assert_eq!(document, Some(new_doc1));
 
         let document: Option<serde_json::Value> = index
-            .document::<_, String>(&reader, None, DocumentId(8_367_468_610_878_465_872))
+            .document(&reader, None, DocumentId(8_367_468_610_878_465_872))
             .unwrap();
 
         let new_doc2 = serde_json::json!({

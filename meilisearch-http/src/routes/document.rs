@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::collections::BTreeSet;
 
 use actix_web as aweb;
@@ -35,7 +36,7 @@ pub async fn get_document(
         .map_err(|err| ResponseError::Internal(err.to_string()))?;
 
     let response = index
-        .document::<Document, String>(&reader, None, document_id)
+        .document::<Document>(&reader, None, document_id)
         .map_err(|_| ResponseError::DocumentNotFound(path.document_id.clone()))?
         .ok_or(ResponseError::DocumentNotFound(path.document_id.clone()))?;
 
@@ -109,14 +110,13 @@ pub async fn get_all_documents(
 
     let documents_ids = documents_ids.map_err(|err| ResponseError::Internal(err.to_string()))?;
 
-    let attributes = params
-        .attributes_to_retrieve
-        .clone()
-        .map(|a| a.split(',').map(|a| a.to_string()).collect());
+    let attributes: Option<HashSet<&str>> = params
+        .attributes_to_retrieve.as_ref()
+        .map(|a| a.split(',').collect());
 
     let mut response = Vec::<Document>::new();
     for document_id in documents_ids {
-        if let Ok(Some(document)) = index.document(&reader, attributes.clone(), document_id) {
+        if let Ok(Some(document)) = index.document(&reader, attributes.as_ref(), document_id) {
             response.push(document);
         }
     }
