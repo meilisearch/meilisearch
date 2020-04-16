@@ -3,14 +3,14 @@ use serde_json::json;
 
 mod common;
 
-#[test]
-fn index_new_fields_default() {
+#[actix_rt::test]
+async fn index_new_fields_default() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
         "primaryKey": "id",
     });
-    server.create_index(body);
+    server.create_index(body).await;
 
     // 1 - Add a document
 
@@ -19,7 +19,7 @@ fn index_new_fields_default() {
         "title": "I'm a legend",
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 2 - Get the complete document
 
@@ -28,7 +28,7 @@ fn index_new_fields_default() {
         "title": "I'm a legend",
     });
 
-    let (response, status_code) = server.get_document(1);
+    let (response, status_code) = server.get_document(1).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 
@@ -40,7 +40,7 @@ fn index_new_fields_default() {
         "description": "A bad copy of the original movie I'm a lengend"
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 4 - Get the complete document
 
@@ -50,23 +50,23 @@ fn index_new_fields_default() {
         "description": "A bad copy of the original movie I'm a lengend"
     });
 
-    let (response, status_code) = server.get_document(2);
+    let (response, status_code) = server.get_document(2).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 }
 
-#[test]
-fn index_new_fields_true() {
+#[actix_rt::test]
+async fn index_new_fields_true() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
         "primaryKey": "id",
     });
-    server.create_index(body);
+    server.create_index(body).await;
 
     // 1 - Set indexNewFields = true
 
-    server.update_accept_new_fields(json!(true));
+    server.update_accept_new_fields(json!(true)).await;
 
     // 2 - Add a document
 
@@ -75,7 +75,7 @@ fn index_new_fields_true() {
         "title": "I'm a legend",
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 3 - Get the complete document
 
@@ -84,7 +84,7 @@ fn index_new_fields_true() {
         "title": "I'm a legend",
     });
 
-    let (response, status_code) = server.get_document(1);
+    let (response, status_code) = server.get_document(1).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 
@@ -96,7 +96,7 @@ fn index_new_fields_true() {
         "description": "A bad copy of the original movie I'm a lengend"
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 5 - Get the complete document
 
@@ -106,23 +106,23 @@ fn index_new_fields_true() {
         "description": "A bad copy of the original movie I'm a lengend"
     });
 
-    let (response, status_code) = server.get_document(2);
+    let (response, status_code) = server.get_document(2).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 }
 
-#[test]
-fn index_new_fields_false() {
+#[actix_rt::test]
+async fn index_new_fields_false() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
         "primaryKey": "id",
     });
-    server.create_index(body);
+    server.create_index(body).await;
 
     // 1 - Set indexNewFields = false
 
-    server.update_accept_new_fields(json!(false));
+    server.update_accept_new_fields(json!(false)).await;
 
     // 2 - Add a document
 
@@ -131,7 +131,7 @@ fn index_new_fields_false() {
         "title": "I'm a legend",
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 3 - Get the complete document
 
@@ -139,7 +139,7 @@ fn index_new_fields_false() {
         "id": 1,
     });
 
-    let (response, status_code) = server.get_document(1);
+    let (response, status_code) = server.get_document(1).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 
@@ -151,7 +151,7 @@ fn index_new_fields_false() {
         "description": "A bad copy of the original movie I'm a lengend"
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 5 - Get the complete document
 
@@ -159,23 +159,23 @@ fn index_new_fields_false() {
         "id": 2,
     });
 
-    let (response, status_code) = server.get_document(2);
+    let (response, status_code) = server.get_document(2).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 }
 
-#[test]
-fn index_new_fields_true_then_false() {
+#[actix_rt::test]
+async fn index_new_fields_true_then_false() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
         "primaryKey": "id",
     });
-    server.create_index(body);
+    server.create_index(body).await;
 
     // 1 - Set indexNewFields = true
 
-    server.update_accept_new_fields(json!(true));
+    server.update_accept_new_fields(json!(true)).await;
 
     // 2 - Add a document
 
@@ -184,7 +184,7 @@ fn index_new_fields_true_then_false() {
         "title": "I'm a legend",
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 3 - Get the complete document
 
@@ -193,13 +193,13 @@ fn index_new_fields_true_then_false() {
         "title": "I'm a legend",
     });
 
-    let (response, status_code) = server.get_document(1);
+    let (response, status_code) = server.get_document(1).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 
     // 4 - Set indexNewFields = false
 
-    server.update_accept_new_fields(json!(false));
+    server.update_accept_new_fields(json!(false)).await;
 
     // 5 - Add a document with more fields
 
@@ -209,7 +209,7 @@ fn index_new_fields_true_then_false() {
         "description": "A bad copy of the original movie I'm a lengend"
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 6 - Get the complete document
 
@@ -218,23 +218,23 @@ fn index_new_fields_true_then_false() {
         "title": "I'm not a legend",
     });
 
-    let (response, status_code) = server.get_document(2);
+    let (response, status_code) = server.get_document(2).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 }
 
-#[test]
-fn index_new_fields_false_then_true() {
+#[actix_rt::test]
+async fn index_new_fields_false_then_true() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
         "primaryKey": "id",
     });
-    server.create_index(body);
+    server.create_index(body).await;
 
     // 1 - Set indexNewFields = false
 
-    server.update_accept_new_fields(json!(false));
+    server.update_accept_new_fields(json!(false)).await;
 
     // 2 - Add a document
 
@@ -243,7 +243,7 @@ fn index_new_fields_false_then_true() {
         "title": "I'm a legend",
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 3 - Get the complete document
 
@@ -251,13 +251,13 @@ fn index_new_fields_false_then_true() {
         "id": 1,
     });
 
-    let (response, status_code) = server.get_document(1);
+    let (response, status_code) = server.get_document(1).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 
     // 4 - Set indexNewFields = false
 
-    server.update_accept_new_fields(json!(true));
+    server.update_accept_new_fields(json!(true)).await;
 
     // 5 - Add a document with more fields
 
@@ -267,7 +267,7 @@ fn index_new_fields_false_then_true() {
         "description": "A bad copy of the original movie I'm a lengend"
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 6 - Get the complete document
 
@@ -275,7 +275,7 @@ fn index_new_fields_false_then_true() {
         "id": 1,
     });
 
-    let (response, status_code) = server.get_document(1);
+    let (response, status_code) = server.get_document(1).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 
@@ -284,14 +284,14 @@ fn index_new_fields_false_then_true() {
         "description": "A bad copy of the original movie I'm a lengend"
     });
 
-    let (response, status_code) = server.get_document(2);
+    let (response, status_code) = server.get_document(2).await;
     assert_eq!(status_code, 200);
     assert_json_eq!(response, expected);
 }
 
 // Fix issue https://github.com/meilisearch/MeiliSearch/issues/518
-#[test]
-fn accept_new_fields_does_not_take_into_account_the_primary_key() {
+#[actix_rt::test]
+async fn accept_new_fields_does_not_take_into_account_the_primary_key() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create an index with no primary-key
@@ -299,7 +299,7 @@ fn accept_new_fields_does_not_take_into_account_the_primary_key() {
     let body = json!({
         "uid": "movies",
     });
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
@@ -311,7 +311,7 @@ fn accept_new_fields_does_not_take_into_account_the_primary_key() {
         "acceptNewFields": false,
     });
 
-    server.update_all_settings(body);
+    server.update_all_settings(body).await;
 
     // 4 - Add a document
 
@@ -321,11 +321,11 @@ fn accept_new_fields_does_not_take_into_account_the_primary_key() {
       "comment": "comment test"
     }]);
 
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 5 - Get settings, they should not changed
 
-    let (response, _status_code) = server.get_all_settings();
+    let (response, _status_code) = server.get_all_settings().await;
 
     let expected = json!({
         "rankingRules": [

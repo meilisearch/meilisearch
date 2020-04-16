@@ -11,6 +11,35 @@ use crate::Data;
 pub async fn update_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
+    body: web::Json<Settings>,
+) -> aweb::Result<HttpResponse> {
+    let index = data
+        .db
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+
+    let mut writer = data
+        .db
+        .update_write_txn()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let settings = body
+        .into_inner()
+        .into_update()
+        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
+    let update_id = index
+        .settings_update(&mut writer, settings)
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer
+        .commit()
+        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
+
+#[get("/indexes/{index_uid}/settings")]
+pub async fn get_all(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
 ) -> aweb::Result<HttpResponse> {
     let index = data
         .db
@@ -104,35 +133,6 @@ pub async fn update_all(
     };
 
     Ok(HttpResponse::Ok().json(settings))
-}
-
-#[get("/indexes/{index_uid}/settings")]
-pub async fn get_all(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    body: web::Json<Settings>,
-) -> aweb::Result<HttpResponse> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let settings = body
-        .into_inner()
-        .into_update()
-        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
 #[delete("/indexes/{index_uid}/settings")]

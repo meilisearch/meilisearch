@@ -46,7 +46,7 @@ actix-http = "1"
 actix-files = "0.2.1"
 actix-cors = "0.2.0"
 actix-service = "1.0.5"
-tokio = { version = "0.2.0", features = ["macros"] }
+tokio = { version = "0.2.18", features = ["macros", "time"] }
 
 [dev-dependencies]
 http-service = "0.4.0"

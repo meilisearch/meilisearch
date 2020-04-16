@@ -4,10 +4,10 @@ use std::convert::Into;
 
 mod common;
 
-#[test]
-fn write_all_and_delete() {
+#[actix_rt::test]
+async fn write_all_and_delete() {
     let mut server = common::Server::with_uid("movies");
-    server.populate_movies();
+    server.populate_movies().await;
 
     // 2 - Send the settings
 
@@ -51,21 +51,21 @@ fn write_all_and_delete() {
         "acceptNewFields": false,
     });
 
-    server.update_all_settings(body.clone());
+    server.update_all_settings(body.clone()).await;
 
     // 3 - Get all settings and compare to the previous one
 
-    let (response, _status_code) = server.get_all_settings();
+    let (response, _status_code) = server.get_all_settings().await;
 
     assert_json_eq!(body, response, ordered: false);
 
     // 4 - Delete all settings
 
-    server.delete_all_settings();
+    server.delete_all_settings().await;
 
     // 5 - Get all settings and check if they are set to default values
 
-    let (response, _status_code) = server.get_all_settings();
+    let (response, _status_code) = server.get_all_settings().await;
 
     let expect = json!({
         "rankingRules": [
@@ -125,10 +125,10 @@ fn write_all_and_delete() {
     assert_json_eq!(expect, response, ordered: false);
 }
 
-#[test]
-fn write_all_and_update() {
+#[actix_rt::test]
+async fn write_all_and_update() {
     let mut server = common::Server::with_uid("movies");
-    server.populate_movies();
+    server.populate_movies().await;
 
     // 2 - Send the settings
 
@@ -172,11 +172,11 @@ fn write_all_and_update() {
         "acceptNewFields": false,
     });
 
-    server.update_all_settings(body.clone());
+    server.update_all_settings(body.clone()).await;
 
     // 3 - Get all settings and compare to the previous one
 
-    let (response, _status_code) = server.get_all_settings();
+    let (response, _status_code) = server.get_all_settings().await;
 
     assert_json_eq!(body, response, ordered: false);
 
@@ -213,11 +213,11 @@ fn write_all_and_update() {
         "acceptNewFields": false,
     });
 
-    server.update_all_settings(body);
+    server.update_all_settings(body).await;
 
     // 5 - Get all settings and check if the content is the same of (4)
 
-    let (response, _status_code) = server.get_all_settings();
+    let (response, _status_code) = server.get_all_settings().await;
 
     let expected = json!({
         "rankingRules": [
@@ -253,13 +253,13 @@ fn write_all_and_update() {
     assert_json_eq!(expected, response, ordered: false);
 }
 
-#[test]
-fn test_default_settings() {
+#[actix_rt::test]
+async fn test_default_settings() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
     });
-    server.create_index(body);
+    server.create_index(body).await;
 
     // 1 - Get all settings and compare to the previous one
 
@@ -280,19 +280,19 @@ fn test_default_settings() {
         "acceptNewFields": true,
     });
 
-    let (response, _status_code) = server.get_all_settings();
+    let (response, _status_code) = server.get_all_settings().await;
 
     assert_json_eq!(body, response, ordered: false);
 }
 
-#[test]
-fn test_default_settings_2() {
+#[actix_rt::test]
+async fn test_default_settings_2() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
         "primaryKey": "id",
     });
-    server.create_index(body);
+    server.create_index(body).await;
 
     // 1 - Get all settings and compare to the previous one
 
@@ -317,19 +317,19 @@ fn test_default_settings_2() {
         "acceptNewFields": true,
     });
 
-    let (response, _status_code) = server.get_all_settings();
+    let (response, _status_code) = server.get_all_settings().await;
 
     assert_json_eq!(body, response, ordered: false);
 }
 
 // Test issue https://github.com/meilisearch/MeiliSearch/issues/516
-#[test]
-fn write_setting_and_update_partial() {
+#[actix_rt::test]
+async fn write_setting_and_update_partial() {
     let mut server = common::Server::with_uid("movies");
     let body = json!({
         "uid": "movies",
     });
-    server.create_index(body);
+    server.create_index(body).await;
 
     // 2 - Send the settings
 
@@ -352,7 +352,7 @@ fn write_setting_and_update_partial() {
         ]
     });
 
-    server.update_all_settings(body.clone());
+    server.update_all_settings(body.clone()).await;
 
     // 2 - Send the settings
 
@@ -380,7 +380,7 @@ fn write_setting_and_update_partial() {
         "acceptNewFields": false,
     });
 
-    server.update_all_settings(body.clone());
+    server.update_all_settings(body.clone()).await;
 
     // 2 - Send the settings
 
@@ -424,7 +424,7 @@ fn write_setting_and_update_partial() {
         "acceptNewFields": false,
     });
 
-    let (response, _status_code) = server.get_all_settings();
+    let (response, _status_code) = server.get_all_settings().await;
 
     assert_json_eq!(expected, response, ordered: false);
 }

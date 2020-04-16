@@ -22,7 +22,7 @@ pub struct DocumentParam {
 pub async fn get_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
-) -> aweb::Result<web::Json<Document>> {
+) -> aweb::Result<HttpResponse> {
     let index = data
         .db
         .open_index(&path.index_uid)
@@ -39,7 +39,7 @@ pub async fn get_document(
         .map_err(|_| ResponseError::DocumentNotFound(path.document_id.clone()))?
         .ok_or(ResponseError::DocumentNotFound(path.document_id.clone()))?;
 
-    Ok(web::Json(response))
+    Ok(HttpResponse::Ok().json(response))
 }
 
 #[delete("/indexes/{index_uid}/documents/{document_id}")]
@@ -85,7 +85,7 @@ pub async fn get_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
-) -> aweb::Result<web::Json<Vec<Document>>> {
+) -> aweb::Result<HttpResponse> {
     let index = data
         .db
         .open_index(&path.index_uid)
@@ -114,14 +114,14 @@ pub async fn get_all_documents(
         .clone()
         .map(|a| a.split(',').map(|a| a.to_string()).collect());
 
-    let mut response_body = Vec::<Document>::new();
+    let mut response = Vec::<Document>::new();
     for document_id in documents_ids {
         if let Ok(Some(document)) = index.document(&reader, attributes.clone(), document_id) {
-            response_body.push(document);
+            response.push(document);
         }
     }
 
-    Ok(web::Json(response_body))
+    Ok(HttpResponse::Ok().json(response))
 }
 
 fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
@@ -168,7 +168,7 @@ async fn update_multiple_documents(
         let id = match params.primary_key.clone() {
             Some(id) => id,
             None => body.first().and_then(|docs| find_primary_key(docs)).ok_or(
-                ResponseError::BadRequest("Impossible to infer the primary key".to_string()),
+                ResponseError::BadRequest("Could not infer a primary key".to_string()),
             )?,
         };
 

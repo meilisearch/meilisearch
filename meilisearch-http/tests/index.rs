@@ -4,8 +4,8 @@ use serde_json::Value;
 
 mod common;
 
-#[test]
-fn create_index_with_name() {
+#[actix_rt::test]
+async fn create_index_with_name() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
@@ -14,7 +14,7 @@ fn create_index_with_name() {
         "name": "movies",
     });
 
-    let (res1_value, status_code) = server.create_index(body);
+    let (res1_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 201);
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
@@ -29,7 +29,7 @@ fn create_index_with_name() {
 
     // 2 - Check the list of indexes
 
-    let (res2_value, status_code) = server.list_indexes();
+    let (res2_value, status_code) = server.list_indexes().await;
 
     assert_eq!(status_code, 200);
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
@@ -44,8 +44,8 @@ fn create_index_with_name() {
     assert_eq!(r2_updated_at.len(), r1_updated_at.len());
 }
 
-#[test]
-fn create_index_with_uid() {
+#[actix_rt::test]
+async fn create_index_with_uid() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
@@ -54,7 +54,7 @@ fn create_index_with_uid() {
         "uid": "movies",
     });
 
-    let (res1_value, status_code) = server.create_index(body);
+    let (res1_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 201);
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
@@ -69,7 +69,7 @@ fn create_index_with_uid() {
 
     // 2 - Check the list of indexes
 
-    let (res2_value, status_code) = server.list_indexes();
+    let (res2_value, status_code) = server.list_indexes().await;
 
     assert_eq!(status_code, 200);
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
@@ -84,8 +84,8 @@ fn create_index_with_uid() {
     assert_eq!(r2_updated_at.len(), r1_updated_at.len());
 }
 
-#[test]
-fn create_index_with_name_and_uid() {
+#[actix_rt::test]
+async fn create_index_with_name_and_uid() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
@@ -94,7 +94,7 @@ fn create_index_with_name_and_uid() {
         "name": "Films",
         "uid": "fr_movies",
     });
-    let (res1_value, status_code) = server.create_index(body);
+    let (res1_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 201);
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
@@ -109,7 +109,7 @@ fn create_index_with_name_and_uid() {
 
     // 2 - Check the list of indexes
 
-    let (res2_value, status_code) = server.list_indexes();
+    let (res2_value, status_code) = server.list_indexes().await;
 
     assert_eq!(status_code, 200);
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
@@ -124,8 +124,8 @@ fn create_index_with_name_and_uid() {
     assert_eq!(r2_updated_at.len(), r1_updated_at.len());
 }
 
-#[test]
-fn rename_index() {
+#[actix_rt::test]
+async fn rename_index() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
@@ -135,7 +135,7 @@ fn rename_index() {
         "uid": "movies",
     });
 
-    let (res1_value, status_code) = server.create_index(body);
+    let (res1_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 201);
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
@@ -154,7 +154,7 @@ fn rename_index() {
         "name": "TV Shows",
     });
 
-    let (res2_value, status_code) = server.update_index(body);
+    let (res2_value, status_code) = server.update_index(body).await;
 
     assert_eq!(status_code, 200);
     assert_eq!(res2_value.as_object().unwrap().len(), 5);
@@ -169,7 +169,7 @@ fn rename_index() {
 
     // 3 - Check the list of indexes
 
-    let (res3_value, status_code) = server.list_indexes();
+    let (res3_value, status_code) = server.list_indexes().await;
 
     assert_eq!(status_code, 200);
     assert_eq!(res3_value.as_array().unwrap().len(), 1);
@@ -184,8 +184,8 @@ fn rename_index() {
     assert_eq!(r3_updated_at.len(), r2_updated_at.len());
 }
 
-#[test]
-fn delete_index_and_recreate_it() {
+#[actix_rt::test]
+async fn delete_index_and_recreate_it() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
@@ -195,7 +195,7 @@ fn delete_index_and_recreate_it() {
         "uid": "movies",
     });
 
-    let (res1_value, status_code) = server.create_index(body);
+    let (res1_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 201);
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
@@ -210,7 +210,7 @@ fn delete_index_and_recreate_it() {
 
     // 2 - Check the list of indexes
 
-    let (res2_value, status_code) = server.list_indexes();
+    let (res2_value, status_code) = server.list_indexes().await;
 
     assert_eq!(status_code, 200);
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
@@ -226,13 +226,13 @@ fn delete_index_and_recreate_it() {
 
     // 3- Delete an index
 
-    let (_res2_value, status_code) = server.delete_index();
+    let (_res2_value, status_code) = server.delete_index().await;
 
     assert_eq!(status_code, 204);
 
     // 4 - Check the list of indexes
 
-    let (res2_value, status_code) = server.list_indexes();
+    let (res2_value, status_code) = server.list_indexes().await;
 
     assert_eq!(status_code, 200);
     assert_eq!(res2_value.as_array().unwrap().len(), 0);
@@ -243,7 +243,7 @@ fn delete_index_and_recreate_it() {
         "name": "movies",
     });
 
-    let (res1_value, status_code) = server.create_index(body);
+    let (res1_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 201);
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
@@ -258,7 +258,7 @@ fn delete_index_and_recreate_it() {
 
     // 6 - Check the list of indexes
 
-    let (res2_value, status_code) = server.list_indexes();
+    let (res2_value, status_code) = server.list_indexes().await;
     assert_eq!(status_code, 200);
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
     assert_eq!(res2_value[0].as_object().unwrap().len(), 5);
@@ -272,8 +272,8 @@ fn delete_index_and_recreate_it() {
     assert_eq!(r2_updated_at.len(), r1_updated_at.len());
 }
 
-#[test]
-fn check_multiples_indexes() {
+#[actix_rt::test]
+async fn check_multiples_indexes() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create a new index
@@ -282,7 +282,7 @@ fn check_multiples_indexes() {
         "name": "movies",
     });
 
-    let (res1_value, status_code) = server.create_index(body);
+    let (res1_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 201);
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
@@ -297,7 +297,7 @@ fn check_multiples_indexes() {
 
     // 2 - Check the list of indexes
 
-    let (res2_value, status_code) = server.list_indexes();
+    let (res2_value, status_code) = server.list_indexes().await;
 
     assert_eq!(status_code, 200);
     assert_eq!(res2_value.as_array().unwrap().len(), 1);
@@ -317,7 +317,7 @@ fn check_multiples_indexes() {
         "name": "films",
     });
 
-    let (res3_value, status_code) = server.create_index(body);
+    let (res3_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 201);
     assert_eq!(res3_value.as_object().unwrap().len(), 5);
@@ -332,7 +332,7 @@ fn check_multiples_indexes() {
 
     // 4 - Check the list of indexes
 
-    let (res4_value, status_code) = server.list_indexes();
+    let (res4_value, status_code) = server.list_indexes().await;
 
     assert_eq!(status_code, 200);
     assert_eq!(res4_value.as_array().unwrap().len(), 2);
@@ -370,15 +370,15 @@ fn check_multiples_indexes() {
     }
 }
 
-#[test]
-fn create_index_failed() {
+#[actix_rt::test]
+async fn create_index_failed() {
     let mut server = common::Server::with_uid("movies");
 
     // 2 - Push index creation with empty json body
 
     let body = json!({});
 
-    let (res_value, status_code) = server.create_index(body);
+    let (res_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 400);
     let message = res_value["message"].as_str().unwrap();
@@ -392,12 +392,9 @@ fn create_index_failed() {
         "active": true
     });
 
-    let (res_value, status_code) = server.create_index(body);
+    let (_res_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 400);
-    let message = res_value["message"].as_str().unwrap();
-    assert_eq!(res_value.as_object().unwrap().len(), 1);
-    assert_eq!(message, "invalid data");
 
     // 3 - Create a index with wrong data type
 
@@ -406,17 +403,14 @@ fn create_index_failed() {
         "uid": 0
     });
 
-    let (res_value, status_code) = server.create_index(body);
+    let (_res_value, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 400);
-    let message = res_value["message"].as_str().unwrap();
-    assert_eq!(res_value.as_object().unwrap().len(), 1);
-    assert_eq!(message, "invalid data");
 }
 
 // Resolve issue https://github.com/meilisearch/MeiliSearch/issues/492
-#[test]
-fn create_index_with_primary_key_and_index() {
+#[actix_rt::test]
+async fn create_index_with_primary_key_and_index() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create the index
@@ -426,7 +420,7 @@ fn create_index_with_primary_key_and_index() {
         "primaryKey": "id",
     });
 
-    let (_response, status_code) = server.create_index(body);
+    let (_response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
 
     // 2 - Add content
@@ -436,11 +430,11 @@ fn create_index_with_primary_key_and_index() {
         "text": "The mask"
     }]);
 
-    server.add_or_replace_multiple_documents(body.clone());
+    server.add_or_replace_multiple_documents(body.clone()).await;
 
     // 3 - Retreive document
 
-    let (response, _status_code) = server.get_document(123);
+    let (response, _status_code) = server.get_document(123).await;
 
     let expect = json!({
         "id": 123,
@@ -454,8 +448,8 @@ fn create_index_with_primary_key_and_index() {
 // Test when the given index uid is not valid
 // Should have a 400 status code
 // Should have the right error message
-#[test]
-fn create_index_with_invalid_uid() {
+#[actix_rt::test]
+async fn create_index_with_invalid_uid() {
     let mut server = common::Server::with_uid("");
 
     // 1 - Create the index with invalid uid
@@ -464,7 +458,7 @@ fn create_index_with_invalid_uid() {
         "uid": "the movies"
     });
 
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 400);
     let message = response["message"].as_str().unwrap();
@@ -477,7 +471,7 @@ fn create_index_with_invalid_uid() {
         "uid": "%$#"
     });
 
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 400);
     let message = response["message"].as_str().unwrap();
@@ -490,7 +484,7 @@ fn create_index_with_invalid_uid() {
         "uid": "the~movies"
     });
 
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 400);
     let message = response["message"].as_str().unwrap();
@@ -503,7 +497,7 @@ fn create_index_with_invalid_uid() {
         "uid": "🎉"
     });
 
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 400);
     let message = response["message"].as_str().unwrap();
@@ -512,8 +506,8 @@ fn create_index_with_invalid_uid() {
 }
 
 // Test that it's possible to add primary_key if it's not already set on index creation
-#[test]
-fn create_index_and_add_indentifier_after() {
+#[actix_rt::test]
+async fn create_index_and_add_indentifier_after() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create the index with no primary_key
@@ -521,7 +515,7 @@ fn create_index_and_add_indentifier_after() {
     let body = json!({
         "uid": "movies",
     });
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
@@ -531,21 +525,21 @@ fn create_index_and_add_indentifier_after() {
         "primaryKey": "id",
     });
 
-    let (response, status_code) = server.update_index(body);
+    let (response, status_code) = server.update_index(body).await;
     assert_eq!(status_code, 200);
     eprintln!("response: {:#?}", response);
     assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 
     // 3 - Get index to verify if the primary_key is good
 
-    let (response, status_code) = server.get_index();
+    let (response, status_code) = server.get_index().await;
     assert_eq!(status_code, 200);
     assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 }
 
 // Test that it's impossible to change the primary_key
-#[test]
-fn create_index_and_update_indentifier_after() {
+#[actix_rt::test]
+async fn create_index_and_update_indentifier_after() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create the index with no primary_key
@@ -554,7 +548,7 @@ fn create_index_and_update_indentifier_after() {
         "uid": "movies",
         "primaryKey": "id",
     });
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 
@@ -564,19 +558,19 @@ fn create_index_and_update_indentifier_after() {
         "primaryKey": "skuid",
     });
 
-    let (_response, status_code) = server.update_index(body);
+    let (_response, status_code) = server.update_index(body).await;
     assert_eq!(status_code, 400);
 
     // 3 - Get index to verify if the primary_key still the first one
 
-    let (response, status_code) = server.get_index();
+    let (response, status_code) = server.get_index().await;
     assert_eq!(status_code, 200);
     assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 }
 
 // Test that schema inference work well
-#[test]
-fn create_index_without_primary_key_and_add_document() {
+#[actix_rt::test]
+async fn create_index_without_primary_key_and_add_document() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create the index with no primary_key
@@ -584,7 +578,7 @@ fn create_index_without_primary_key_and_add_document() {
     let body = json!({
         "uid": "movies",
     });
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
@@ -595,18 +589,18 @@ fn create_index_without_primary_key_and_add_document() {
         "title": "I'm a legend",
     }]);
 
-    server.add_or_update_multiple_documents(body);
+    server.add_or_update_multiple_documents(body).await;
 
     // 3 - Get index to verify if the primary_key is good
 
-    let (response, status_code) = server.get_index();
+    let (response, status_code) = server.get_index().await;
     assert_eq!(status_code, 200);
     assert_eq!(response["primaryKey"].as_str().unwrap(), "id");
 }
 
 // Test search with no primary_key
-#[test]
-fn create_index_without_primary_key_and_search() {
+#[actix_rt::test]
+async fn create_index_without_primary_key_and_search() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create the index with no primary_key
@@ -614,7 +608,7 @@ fn create_index_without_primary_key_and_search() {
     let body = json!({
         "uid": "movies",
     });
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
@@ -622,15 +616,15 @@ fn create_index_without_primary_key_and_search() {
 
     let query = "q=captain&limit=3";
 
-    let (response, status_code) = server.search(&query);
+    let (response, status_code) = server.search(&query).await;
     assert_eq!(status_code, 200);
     assert_eq!(response["hits"].as_array().unwrap().len(), 0);
 }
 
 // Test the error message when we push an document update and impossibility to find primary key
 // Test issue https://github.com/meilisearch/MeiliSearch/issues/517
-#[test]
-fn check_add_documents_without_primary_key() {
+#[actix_rt::test]
+async fn check_add_documents_without_primary_key() {
     let mut server = common::Server::with_uid("movies");
 
     // 1 - Create the index with no primary_key
@@ -638,7 +632,7 @@ fn check_add_documents_without_primary_key() {
     let body = json!({
         "uid": "movies",
     });
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
@@ -649,7 +643,7 @@ fn check_add_documents_without_primary_key() {
       "comment": "comment test"
     }]);
 
-    let (response, status_code) = server.add_or_replace_multiple_documents_sync(body);
+    let (response, status_code) = server.add_or_replace_multiple_documents_sync(body).await;
 
     let expected = json!({
         "message": "Could not infer a primary key"
@@ -659,8 +653,8 @@ fn check_add_documents_without_primary_key() {
     assert_json_eq!(response, expected, ordered: false);
 }
 
-#[test]
-fn check_first_update_should_bring_up_processed_status_after_first_docs_addition() {
+#[actix_rt::test]
+async fn check_first_update_should_bring_up_processed_status_after_first_docs_addition() {
     let mut server = common::Server::with_uid("movies");
 
     let body = json!({
@@ -668,7 +662,7 @@ fn check_first_update_should_bring_up_processed_status_after_first_docs_addition
     });
 
     // 1. Create Index
-    let (response, status_code) = server.create_index(body);
+    let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
@@ -677,10 +671,10 @@ fn check_first_update_should_bring_up_processed_status_after_first_docs_addition
     let body: Value = serde_json::from_slice(dataset).unwrap();
 
     // 2. Index the documents from movies.json, present inside of assets directory
-    server.add_or_replace_multiple_documents(body);
+    server.add_or_replace_multiple_documents(body).await;
 
     // 3. Fetch the status of the indexing done above.
-    let (response, status_code) = server.get_all_updates_status();
+    let (response, status_code) = server.get_all_updates_status().await;
 
     // 4. Verify the fetch is successful and indexing status is 'processed'
     assert_eq!(status_code, 200);
