@@ -52,12 +52,13 @@ impl From<PestError<Rule>> for Error {
                 Rule::leq => "field <= value",
                 Rule::geq => "field >= value",
                 Rule::key => "key",
+                Rule::contains => "field _= value",
                 _ => "other",
             };
             s.to_string()
         }))
     }
-} 
+}
 
 impl From<meilisearch_schema::Error> for Error {
     fn from(error: meilisearch_schema::Error) -> Error {
