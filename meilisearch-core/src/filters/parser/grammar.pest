@@ -8,13 +8,14 @@ char =  _{ !(PEEK | "\\") ~ ANY
     | "\\" ~ (PEEK | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})}
 
-condition = _{eq | greater | less | geq | leq | neq}
+condition = _{eq | greater | less | geq | leq | neq | contains}
 geq = {key ~ ">=" ~ value}
 leq = {key ~ "<=" ~ value}
 neq = {key ~ "!=" ~ value}
 eq = {key ~ "=" ~ value}
 greater = {key ~ ">" ~ value}
 less = {key ~ "<" ~ value}
+contains = {key ~ "_=" ~ value}
 
 prgm = {SOI ~ expr ~ EOI}
 expr = _{ ( term ~ (operation ~ term)* ) }

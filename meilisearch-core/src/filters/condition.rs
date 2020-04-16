@@ -9,6 +9,7 @@ use pest::error::{Error as PestError, ErrorVariant};
 use pest::iterators::Pair;
 use serde_json::{Value, Number};
 use super::parser::Rule;
+use regex::Regex;
 
 #[derive(Debug)]
 enum ConditionType {
@@ -18,6 +19,7 @@ enum ConditionType {
     LessEqual,
     GreaterEqual,
     NotEqual,
+    Contains,
 }
 
 /// We need to infer type when the filter is constructed
@@ -26,7 +28,8 @@ enum ConditionType {
 struct ConditionValue<'a> {
     string: &'a str,
     boolean: Option<bool>,
-    number: Option<Number>
+    number: Option<Number>,
+    re: Regex,
 }
 
 impl<'a> ConditionValue<'a> {
@@ -40,7 +43,8 @@ impl<'a> ConditionValue<'a> {
                     _ => None,
                 };
                 let number = Number::from_str(value.as_str()).ok();
-                ConditionValue { string, boolean, number }
+                let re = Regex::new(format!(r"(?i){}", value.as_str()).as_str()).unwrap();
+                ConditionValue { string, boolean, number, re }
             },
             _ => unreachable!(),
         };
@@ -57,6 +61,10 @@ impl<'a> ConditionValue<'a> {
 
     pub fn as_bool(&self) -> Option<bool> {
         self.boolean
+    }
+
+    pub fn as_regex(&self) -> &Regex {
+        &self.re
     }
 }
 
@@ -153,6 +161,15 @@ impl<'a> Condition<'a> {
         Ok(Self { field, condition, value })
     }
 
+    pub fn contains(
+        item: Pair<'a, Rule>,
+        schema: &'a Schema,
+    ) -> Result<Self, Error> {
+        let (field, value) = get_field_value(schema, item)?;
+        let condition = ConditionType::Contains;
+        Ok(Self { field, condition, value })
+    }
+
     pub fn test(
         &self,
         reader: &RoTxn<MainT>,
@@ -162,13 +179,15 @@ impl<'a> Condition<'a> {
         match index.document_attribute::<Value>(reader, document_id, self.field)? {
             Some(Value::String(s)) => {
                 let value = self.value.as_str();
+                let re = self.value.as_regex();
                 match self.condition {
                     ConditionType::Equal => Ok(unicase::eq(value, &s)),
                     ConditionType::NotEqual => Ok(!unicase::eq(value, &s)),
+                    ConditionType::Contains => Ok(re.is_match(&s)),
                     _ => Ok(false)
                 }
             },
-            Some(Value::Number(n)) => { 
+            Some(Value::Number(n)) => {
                 if let Some(value) = self.value.as_number() {
                     if let Some(ord) = compare_numbers(&n, value) {
                         let res =  match self.condition {
@@ -178,10 +197,11 @@ impl<'a> Condition<'a> {
                             ConditionType::LessEqual => ord != Ordering::Greater,
                             ConditionType::Greater => ord == Ordering::Greater,
                             ConditionType::Less => ord == Ordering::Less,
+                            ConditionType::Contains => false,
                         };
                         return Ok(res)
-                    } 
-                } 
+                    }
+                }
                 Ok(false)
             },
             Some(Value::Bool(b)) => {
