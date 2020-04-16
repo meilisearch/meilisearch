@@ -64,6 +64,7 @@ impl<'a> Filter<'a> {
                     pair.into_inner(),
                     schema,
                 )?))),
+                Rule::contains => Ok(Filter::Condition(Condition::contains(pair, schema)?)),
                 _ => unreachable!(),
             },
             |lhs: FilterResult, op: Pair<Rule>, rhs: FilterResult| match op.as_rule() {
@@ -121,5 +122,6 @@ mod test {
         assert!(FilterParser::parse(Rule::prgm, r#"'foo bar' <= 10"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"'foo bar' != 10"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"bar != 10"#).is_ok());
+        assert!(FilterParser::parse(Rule::prgm, r#"field _= id"#).is_ok());
     }
 }
