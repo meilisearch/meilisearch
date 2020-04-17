@@ -1,8 +1,5 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::convert::From;
-use std::error;
-use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
@@ -17,60 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use siphasher::sip::SipHasher;
 
-#[derive(Debug)]
-pub enum Error {
-    SearchDocuments(String),
-    RetrieveDocument(u64, String),
-    DocumentNotFound(u64),
-    CropFieldWrongType(String),
-    AttributeNotFoundOnDocument(String),
-    AttributeNotFoundOnSchema(String),
-    MissingFilterValue,
-    UnknownFilteredAttribute,
-    Internal(String),
-}
-
-impl error::Error for Error {}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Error::*;
-
-        match self {
-            SearchDocuments(err) => write!(f, "impossible to search documents; {}", err),
-            RetrieveDocument(id, err) => write!(
-                f,
-                "impossible to retrieve the document with id: {}; {}",
-                id, err
-            ),
-            DocumentNotFound(id) => write!(f, "document {} not found", id),
-            CropFieldWrongType(field) => {
-                write!(f, "the field {} cannot be cropped it's not a string", field)
-            }
-            AttributeNotFoundOnDocument(field) => {
-                write!(f, "field {} is not found on document", field)
-            }
-            AttributeNotFoundOnSchema(field) => write!(f, "field {} is not found on schema", field),
-            MissingFilterValue => f.write_str("a filter doesn't have a value to compare it with"),
-            UnknownFilteredAttribute => {
-                f.write_str("a filter is specifying an unknown schema attribute")
-            }
-            Internal(err) => write!(f, "internal error; {}", err),
-        }
-    }
-}
-
-impl From<meilisearch_core::Error> for Error {
-    fn from(error: meilisearch_core::Error) -> Self {
-        Error::Internal(error.to_string())
-    }
-}
-
-impl From<heed::Error> for Error {
-    fn from(error: heed::Error) -> Self {
-        Error::Internal(error.to_string())
-    }
-}
+use crate::error::ResponseError;
 
 pub trait IndexSearchExt {
     fn new_search(&self, query: String) -> SearchBuilder;
@@ -153,17 +97,14 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn search(&self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, Error> {
-        let schema = self.index.main.schema(reader);
-        let schema = schema.map_err(|e| Error::Internal(e.to_string()))?;
-        let schema = match schema {
-            Some(schema) => schema,
-            None => return Err(Error::Internal(String::from("missing schema"))),
-        };
+    pub fn search(&self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, ResponseError> {
+        let schema = self
+            .index
+            .main
+            .schema(reader)?
+            .ok_or(ResponseError::internal("missing schema"))?;
 
-        let ranked_map = self.index.main.ranked_map(reader);
-        let ranked_map = ranked_map.map_err(|e| Error::Internal(e.to_string()))?;
-        let ranked_map = ranked_map.unwrap_or_default();
+        let ranked_map = self.index.main.ranked_map(reader)?.unwrap_or_default();
 
         // Change criteria
         let mut query_builder = match self.get_criteria(reader, &ranked_map, &schema)? {
@@ -174,17 +115,17 @@ impl<'a> SearchBuilder<'a> {
         if let Some(filters) = &self.filters {
             let mut split = filters.split(':');
             match (split.next(), split.next()) {
-                (Some(_), None) | (Some(_), Some("")) => return Err(Error::MissingFilterValue),
+                (Some(_), None) | (Some(_), Some("")) => {
+                    return Err(ResponseError::MissingFilterValue)
+                }
                 (Some(attr), Some(value)) => {
                     let ref_reader = reader;
                     let ref_index = &self.index;
                     let value = value.trim().to_lowercase();
 
-                    let attr = match schema.id(attr) {
-                        Some(attr) => attr,
-                        None => return Err(Error::UnknownFilteredAttribute),
-                    };
-
+                    let attr = schema
+                        .id(attr)
+                        .ok_or(ResponseError::UnknownFilteredAttribute)?;
                     query_builder.with_filter(move |id| {
                         let attr = attr;
                         let index = ref_index;
@@ -225,21 +166,24 @@ impl<'a> SearchBuilder<'a> {
 
         let start = Instant::now();
         let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
-        let (docs, nb_hits) = result.map_err(|e| Error::SearchDocuments(e.to_string()))?;
+        let (docs, nb_hits) = result.map_err(ResponseError::search_documents)?;
         let time_ms = start.elapsed().as_millis() as usize;
 
         let mut hits = Vec::with_capacity(self.limit);
         for doc in docs {
             // retrieve the content of document in kv store
             let attributes: Option<HashSet<&str>> = self
-                .attributes_to_retrieve.as_ref()
+                .attributes_to_retrieve
+                .as_ref()
                 .map(|a| a.iter().map(|a| a.as_str()).collect());
 
             let document: IndexMap<String, Value> = self
                 .index
                 .document(reader, attributes.as_ref(), doc.id)
-                .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
-                .ok_or(Error::DocumentNotFound(doc.id.0))?;
+                .map_err(|e| ResponseError::retrieve_document(doc.id.0, e))?
+                .ok_or(ResponseError::internal(
+                    "Impossible to retrieve a document id returned by the engine",
+                ))?;
 
             let has_attributes_to_highlight = self.attributes_to_highlight.is_some();
             let has_attributes_to_crop = self.attributes_to_crop.is_some();
@@ -292,7 +236,7 @@ impl<'a> SearchBuilder<'a> {
         reader: &heed::RoTxn<MainT>,
         ranked_map: &'a RankedMap,
         schema: &Schema,
-    ) -> Result<Option<Criteria<'a>>, Error> {
+    ) -> Result<Option<Criteria<'a>>, ResponseError> {
         let ranking_rules = self.index.main.ranking_rules(reader)?;
 
         if let Some(ranking_rules) = ranking_rules {

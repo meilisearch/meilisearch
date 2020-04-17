@@ -1,7 +1,5 @@
-use std::collections::HashSet;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
-use actix_web as aweb;
 use actix_web::{delete, get, post, put, web, HttpResponse};
 use indexmap::IndexMap;
 use serde::Deserialize;
@@ -23,22 +21,18 @@ pub struct DocumentParam {
 pub async fn get_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let document_id = meilisearch_core::serde::compute_document_id(path.document_id.clone());
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let document_id = meilisearch_core::serde::compute_document_id(&path.document_id);
 
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let reader = data.db.main_read_txn()?;
 
     let response = index
-        .document::<Document>(&reader, None, document_id)
-        .map_err(|_| ResponseError::DocumentNotFound(path.document_id.clone()))?
-        .ok_or(ResponseError::DocumentNotFound(path.document_id.clone()))?;
+        .document::<Document>(&reader, None, document_id)?
+        .ok_or(ResponseError::document_not_found(&path.document_id))?;
 
     Ok(HttpResponse::Ok().json(response))
 }
@@ -47,28 +41,21 @@ pub async fn get_document(
 pub async fn delete_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let document_id = meilisearch_core::serde::compute_document_id(path.document_id.clone());
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let document_id = meilisearch_core::serde::compute_document_id(&path.document_id);
 
-    let mut update_writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut update_writer = data.db.update_write_txn()?;
 
     let mut documents_deletion = index.documents_deletion();
     documents_deletion.delete_document_by_id(document_id);
 
-    let update_id = documents_deletion
-        .finalize(&mut update_writer)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let update_id = documents_deletion.finalize(&mut update_writer)?;
 
-    update_writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    update_writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -86,32 +73,29 @@ pub async fn get_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let offset = params.offset.unwrap_or(0);
     let limit = params.limit.unwrap_or(20);
 
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let reader = data.db.main_read_txn()?;
 
     let documents_ids: Result<BTreeSet<_>, _> = index
         .documents_fields_counts
-        .documents_ids(&reader)
-        .map_err(|_| ResponseError::Internal(path.index_uid.clone()))?
+        .documents_ids(&reader)?
         .skip(offset)
         .take(limit)
         .collect();
 
-    let documents_ids = documents_ids.map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let documents_ids = documents_ids?;
 
     let attributes: Option<HashSet<&str>> = params
-        .attributes_to_retrieve.as_ref()
+        .attributes_to_retrieve
+        .as_ref()
         .map(|a| a.split(',').collect());
 
     let mut response = Vec::<Document>::new();
@@ -145,48 +129,33 @@ async fn update_multiple_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
     is_partial: bool,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(path.index_uid.clone())
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let reader = data.db.main_read_txn()?;
 
     let mut schema = index
         .main
-        .schema(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?
-        .ok_or(ResponseError::Internal(
-            "Impossible to retrieve the schema".to_string(),
-        ))?;
+        .schema(&reader)?
+        .ok_or(ResponseError::internal("Impossible to retrieve the schema"))?;
 
     if schema.primary_key().is_none() {
-        let id = match params.primary_key.clone() {
-            Some(id) => id,
-            None => body.first().and_then(|docs| find_primary_key(docs)).ok_or(
-                ResponseError::BadRequest("Could not infer a primary key".to_string()),
-            )?,
+        let id = match &params.primary_key {
+            Some(id) => id.to_string(),
+            None => body
+                .first()
+                .and_then(find_primary_key)
+                .ok_or(ResponseError::bad_request("Could not infer a primary key"))?,
         };
 
-        let mut writer = data
-            .db
-            .main_write_txn()
-            .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        let mut writer = data.db.main_write_txn()?;
 
-        schema
-            .set_primary_key(&id)
-            .map_err(|e| ResponseError::Internal(e.to_string()))?;
-        index
-            .main
-            .put_schema(&mut writer, &schema)
-            .map_err(|e| ResponseError::Internal(e.to_string()))?;
-        writer
-            .commit()
-            .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        schema.set_primary_key(&id)?;
+        index.main.put_schema(&mut writer, &schema)?;
+        writer.commit()?;
     }
 
     let mut document_addition = if is_partial {
@@ -199,16 +168,9 @@ async fn update_multiple_documents(
         document_addition.update_document(document);
     }
 
-    let mut update_writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let update_id = document_addition
-        .finalize(&mut update_writer)
-        .map_err(|e| ResponseError::Internal(e.to_string()))?;
-    update_writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut update_writer = data.db.update_write_txn()?;
+    let update_id = document_addition.finalize(&mut update_writer)?;
+    update_writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -219,7 +181,7 @@ pub async fn add_documents(
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     update_multiple_documents(data, path, params, body, false).await
 }
 
@@ -229,7 +191,7 @@ pub async fn update_documents(
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     update_multiple_documents(data, path, params, body, true).await
 }
 
@@ -238,16 +200,13 @@ pub async fn delete_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(path.index_uid.clone())
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
 
     let mut documents_deletion = index.documents_deletion();
 
@@ -258,13 +217,9 @@ pub async fn delete_documents(
         }
     }
 
-    let update_id = documents_deletion
-        .finalize(&mut writer)
-        .map_err(|e| ResponseError::Internal(e.to_string()))?;
+    let update_id = documents_deletion.finalize(&mut writer)?;
 
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -273,24 +228,17 @@ pub async fn delete_documents(
 pub async fn clear_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(path.index_uid.clone())
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
 
-    let update_id = index
-        .clear_all(&mut writer)
-        .map_err(|e| ResponseError::Internal(e.to_string()))?;
+    let update_id = index.clear_all(&mut writer)?;
 
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

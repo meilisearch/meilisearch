@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use actix_web as aweb;
 use actix_web::{get, web};
 use chrono::{DateTime, Utc};
 use log::error;
@@ -25,36 +24,22 @@ pub struct IndexStatsResponse {
 pub async fn index_stats(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<web::Json<IndexStatsResponse>> {
+) -> Result<web::Json<IndexStatsResponse>, ResponseError> {
     let index = data
         .db
-        .open_index(path.index_uid.clone())
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let reader = data.db.main_read_txn()?;
 
-    let number_of_documents = index
-        .main
-        .number_of_documents(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let number_of_documents = index.main.number_of_documents(&reader)?;
 
-    let fields_frequency = index
-        .main
-        .fields_frequency(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?
-        .unwrap_or_default();
+    let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
 
-    let update_reader = data
-        .db
-        .update_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let update_reader = data.db.update_read_txn()?;
 
     let is_indexing = data
-        .is_indexing(&update_reader, &path.index_uid)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?
+        .is_indexing(&update_reader, &path.index_uid)?
         .unwrap_or_default();
 
     Ok(web::Json(IndexStatsResponse {
@@ -73,37 +58,23 @@ pub struct StatsResult {
 }
 
 #[get("/stats")]
-pub async fn get_stats(data: web::Data<Data>) -> aweb::Result<web::Json<StatsResult>> {
+pub async fn get_stats(data: web::Data<Data>) -> Result<web::Json<StatsResult>, ResponseError> {
     let mut index_list = HashMap::new();
 
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let update_reader = data
-        .db
-        .update_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let reader = data.db.main_read_txn()?;
+    let update_reader = data.db.update_read_txn()?;
 
     let indexes_set = data.db.indexes_uids();
     for index_uid in indexes_set {
         let index = data.db.open_index(&index_uid);
         match index {
             Some(index) => {
-                let number_of_documents = index
-                    .main
-                    .number_of_documents(&reader)
-                    .map_err(|err| ResponseError::Internal(err.to_string()))?;
+                let number_of_documents = index.main.number_of_documents(&reader)?;
 
-                let fields_frequency = index
-                    .main
-                    .fields_frequency(&reader)
-                    .map_err(|err| ResponseError::Internal(err.to_string()))?
-                    .unwrap_or_default();
+                let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
 
                 let is_indexing = data
-                    .is_indexing(&update_reader, &index_uid)
-                    .map_err(|err| ResponseError::Internal(err.to_string()))?
+                    .is_indexing(&update_reader, &index_uid)?
                     .unwrap_or_default();
 
                 let response = IndexStatsResponse {
@@ -120,16 +91,14 @@ pub async fn get_stats(data: web::Data<Data>) -> aweb::Result<web::Json<StatsRes
         }
     }
 
-    let database_size = WalkDir::new(data.db_path.clone())
+    let database_size = WalkDir::new(&data.db_path)
         .into_iter()
         .filter_map(|entry| entry.ok())
         .filter_map(|entry| entry.metadata().ok())
         .filter(|metadata| metadata.is_file())
         .fold(0, |acc, m| acc + m.len());
 
-    let last_update = data
-        .last_update(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let last_update = data.last_update(&reader)?;
 
     Ok(web::Json(StatsResult {
         database_size,

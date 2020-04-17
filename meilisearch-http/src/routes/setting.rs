@@ -1,4 +1,3 @@
-use actix_web as aweb;
 use actix_web::{delete, get, post, web, HttpResponse};
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -12,26 +11,19 @@ pub async fn update_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Settings>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
     let settings = body
         .into_inner()
         .into_update()
-        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        .map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -40,71 +32,42 @@ pub async fn update_all(
 pub async fn get_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let reader = data.db.main_read_txn()?;
 
-    let stop_words_fst = index
-        .main
-        .stop_words_fst(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let stop_words = stop_words_fst
-        .unwrap_or_default()
-        .stream()
-        .into_strs()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let stop_words_fst = index.main.stop_words_fst(&reader)?;
+    let stop_words = stop_words_fst.unwrap_or_default().stream().into_strs()?;
     let stop_words: BTreeSet<String> = stop_words.into_iter().collect();
 
-    let synonyms_fst = index
-        .main
-        .synonyms_fst(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?
-        .unwrap_or_default();
-    let synonyms_list = synonyms_fst
-        .stream()
-        .into_strs()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let synonyms_fst = index.main.synonyms_fst(&reader)?.unwrap_or_default();
+    let synonyms_list = synonyms_fst.stream().into_strs()?;
 
     let mut synonyms = BTreeMap::new();
     let index_synonyms = &index.synonyms;
     for synonym in synonyms_list {
-        let alternative_list = index_synonyms
-            .synonyms(&reader, synonym.as_bytes())
-            .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
         if let Some(list) = alternative_list {
-            let list = list
-                .stream()
-                .into_strs()
-                .map_err(|err| ResponseError::Internal(err.to_string()))?;
+            let list = list.stream().into_strs()?;
             synonyms.insert(synonym, list);
         }
     }
 
     let ranking_rules = index
         .main
-        .ranking_rules(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?
+        .ranking_rules(&reader)?
         .unwrap_or(DEFAULT_RANKING_RULES.to_vec())
         .into_iter()
         .map(|r| r.to_string())
         .collect();
 
-    let distinct_attribute = index
-        .main
-        .distinct_attribute(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let distinct_attribute = index.main.distinct_attribute(&reader)?;
 
-    let schema = index
-        .main
-        .schema(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let schema = index.main.schema(&reader)?;
 
     let searchable_attributes = schema.clone().map(|s| {
         s.indexed_name()
@@ -139,15 +102,12 @@ pub async fn get_all(
 pub async fn delete_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let mut writer = data.db.update_write_txn()?;
 
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
@@ -160,12 +120,8 @@ pub async fn delete_all(
         accept_new_fields: UpdateState::Clear,
     };
 
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -174,20 +130,16 @@ pub async fn delete_all(
 pub async fn get_rules(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let reader = data.db.main_read_txn()?;
 
     let ranking_rules = index
         .main
-        .ranking_rules(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?
+        .ranking_rules(&reader)?
         .unwrap_or(DEFAULT_RANKING_RULES.to_vec())
         .into_iter()
         .map(|r| r.to_string())
@@ -201,30 +153,21 @@ pub async fn update_rules(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<Vec<String>>>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         ranking_rules: Some(body.into_inner()),
         ..Settings::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let settings = settings
-        .into_update()
-        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -233,28 +176,21 @@ pub async fn update_rules(
 pub async fn delete_rules(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let mut writer = data.db.update_write_txn()?;
 
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)?;
 
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -263,19 +199,13 @@ pub async fn delete_rules(
 pub async fn get_distinct(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let distinct_attribute = index
-        .main
-        .distinct_attribute(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let reader = data.db.main_read_txn()?;
+    let distinct_attribute = index.main.distinct_attribute(&reader)?;
 
     Ok(HttpResponse::Ok().json(distinct_attribute))
 }
@@ -285,30 +215,21 @@ pub async fn update_distinct(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<String>>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         distinct_attribute: Some(body.into_inner()),
         ..Settings::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let settings = settings
-        .into_update()
-        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -317,28 +238,21 @@ pub async fn update_distinct(
 pub async fn delete_distinct(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let mut writer = data.db.update_write_txn()?;
 
     let settings = SettingsUpdate {
         distinct_attribute: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let update_id = index.settings_update(&mut writer, settings)?;
 
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -347,19 +261,13 @@ pub async fn delete_distinct(
 pub async fn get_searchable(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let schema = index
-        .main
-        .schema(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let reader = data.db.main_read_txn()?;
+    let schema = index.main.schema(&reader)?;
     let searchable_attributes: Option<Vec<String>> =
         schema.map(|s| s.indexed_name().iter().map(|i| (*i).to_string()).collect());
 
@@ -371,30 +279,21 @@ pub async fn update_searchable(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<Vec<String>>>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         searchable_attributes: Some(body.into_inner()),
         ..Settings::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let settings = settings
-        .into_update()
-        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -403,27 +302,20 @@ pub async fn update_searchable(
 pub async fn delete_searchable(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         searchable_attributes: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -432,20 +324,14 @@ pub async fn delete_searchable(
 pub async fn get_displayed(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let reader = data.db.main_read_txn()?;
 
-    let schema = index
-        .main
-        .schema(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let schema = index.main.schema(&reader)?;
 
     let displayed_attributes: Option<HashSet<String>> = schema.map(|s| {
         s.displayed_name()
@@ -462,30 +348,21 @@ pub async fn update_displayed(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<HashSet<String>>>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         displayed_attributes: Some(body.into_inner()),
         ..Settings::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let settings = settings
-        .into_update()
-        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -494,27 +371,20 @@ pub async fn update_displayed(
 pub async fn delete_displayed(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         displayed_attributes: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -523,20 +393,14 @@ pub async fn delete_displayed(
 pub async fn get_accept_new_fields(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let reader = data.db.main_read_txn()?;
 
-    let schema = index
-        .main
-        .schema(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let schema = index.main.schema(&reader)?;
 
     let accept_new_fields = schema.map(|s| s.accept_new_fields());
 
@@ -548,30 +412,21 @@ pub async fn update_accept_new_fields(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<bool>>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         accept_new_fields: Some(body.into_inner()),
         ..Settings::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let settings = settings
-        .into_update()
-        .map_err(|e| ResponseError::BadRequest(e.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

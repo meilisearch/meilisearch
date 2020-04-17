@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use actix_web as aweb;
 use actix_web::{delete, get, post, web, HttpResponse};
 use indexmap::IndexMap;
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
@@ -10,41 +9,27 @@ use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
 
 #[get("/indexes/{index_uid}/settings/synonyms")]
-pub async fn get(data: web::Data<Data>, path: web::Path<IndexParam>) -> aweb::Result<HttpResponse> {
+pub async fn get(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let reader = data.db.main_read_txn()?;
 
-    let synonyms_fst = index
-        .main
-        .synonyms_fst(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?
-        .unwrap_or_default();
-    let synonyms_list = synonyms_fst
-        .stream()
-        .into_strs()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let synonyms_fst = index.main.synonyms_fst(&reader)?.unwrap_or_default();
+    let synonyms_list = synonyms_fst.stream().into_strs()?;
 
     let mut synonyms = IndexMap::new();
-
     let index_synonyms = &index.synonyms;
-
     for synonym in synonyms_list {
-        let alternative_list = index_synonyms
-            .synonyms(&reader, synonym.as_bytes())
-            .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
 
         if let Some(list) = alternative_list {
-            let list = list
-                .stream()
-                .into_strs()
-                .map_err(|err| ResponseError::Internal(err.to_string()))?;
+            let list = list.stream().into_strs()?;
             synonyms.insert(synonym, list);
         }
     }
@@ -57,27 +42,20 @@ pub async fn update(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<BTreeMap<String, Vec<String>>>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         synonyms: UpdateState::Update(body.into_inner()),
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -86,28 +64,21 @@ pub async fn update(
 pub async fn delete(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         synonyms: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let update_id = index.settings_update(&mut writer, settings)?;
 
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
