@@ -2,13 +2,11 @@ use std::collections::{HashSet, HashMap};
 use std::time::Duration;
 
 use log::warn;
-use meilisearch_core::Index;
-use actix_web as aweb;
 use actix_web::{get, web};
-use serde::{Deserialize};
+use serde::Deserialize;
 
 use crate::error::ResponseError;
-use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchResult};
+use crate::helpers::meilisearch::{IndexSearchExt, SearchResult};
 use crate::routes::IndexParam;
 use crate::Data;
 
@@ -32,24 +30,18 @@ pub async fn search_with_url_query(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQuery>,
-) -> aweb::Result<web::Json<SearchResult>> {
+) -> Result<web::Json<SearchResult>, ResponseError> {
     let index = data
         .db
-        .open_index(path.index_uid.clone())
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let reader = data.db.main_read_txn()?;
 
     let schema = index
         .main
-        .schema(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?
-        .ok_or(ResponseError::Internal(
-            "Impossible to retrieve the schema".to_string(),
-        ))?;
+        .schema(&reader)?
+        .ok_or(ResponseError::internal("Impossible to retrieve the schema"))?;
 
     let mut search_builder = index.new_search(params.q.clone());
 
@@ -145,11 +137,5 @@ pub async fn search_with_url_query(
         }
     }
 
-    let response = match search_builder.search(&reader) {
-        Ok(response) => response,
-        Err(Error::Internal(message)) => return Err(ResponseError::Internal(message).into()),
-        Err(others) => return Err(ResponseError::BadRequest(others.to_string()).into()),
-    };
-
-    Ok(web::Json(response))
+    Ok(web::Json(search_builder.search(&reader)?))
 }

@@ -1,8 +1,5 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::convert::From;
-use std::error;
-use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
 
@@ -19,74 +16,7 @@ use serde_json::Value;
 use siphasher::sip::SipHasher;
 use slice_group_by::GroupBy;
 
-#[derive(Debug)]
-pub enum Error {
-    SearchDocuments(String),
-    RetrieveDocument(u64, String),
-    DocumentNotFound(u64),
-    CropFieldWrongType(String),
-    FilterParsing(String),
-    AttributeNotFoundOnDocument(String),
-    AttributeNotFoundOnSchema(String),
-    MissingFilterValue,
-    UnknownFilteredAttribute,
-    Internal(String),
-}
-
-impl error::Error for Error {}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Error::*;
-
-        match self {
-            SearchDocuments(err) => write!(f, "impossible to search documents; {}", err),
-            RetrieveDocument(id, err) => write!(
-                f,
-                "impossible to retrieve the document with id: {}; {}",
-                id, err
-            ),
-            DocumentNotFound(id) => write!(f, "document {} not found", id),
-            CropFieldWrongType(field) => {
-                write!(f, "the field {} cannot be cropped it's not a string", field)
-            }
-            AttributeNotFoundOnDocument(field) => {
-                write!(f, "field {} is not found on document", field)
-            }
-            AttributeNotFoundOnSchema(field) => write!(f, "field {} is not found on schema", field),
-            MissingFilterValue => f.write_str("a filter doesn't have a value to compare it with"),
-            UnknownFilteredAttribute => {
-                f.write_str("a filter is specifying an unknown schema attribute")
-            }
-            Internal(err) => write!(f, "internal error; {}", err),
-            FilterParsing(err) => write!(f, "filter parsing error: {}", err),
-        }
-    }
-}
-
-impl From<meilisearch_core::Error> for Error {
-    fn from(error: meilisearch_core::Error) -> Self {
-        use meilisearch_core::pest_error::LineColLocation::*;
-        match error {
-            meilisearch_core::Error::FilterParseError(e) => {
-                let (line, column) = match e.line_col {
-                    Span((line, _), (column, _)) => (line, column),
-                    Pos((line, column)) => (line, column),
-                };
-                let message = format!("parsing error on line {} at column {}: {}", line, column, e.variant.message());
-
-                Error::FilterParsing(message)
-            },
-            _ => Error::Internal(error.to_string()),
-        }
-    }
-}
-
-impl From<heed::Error> for Error {
-    fn from(error: heed::Error) -> Self {
-        Error::Internal(error.to_string())
-    }
-}
+use crate::error::ResponseError;
 
 pub trait IndexSearchExt {
     fn new_search(&self, query: String) -> SearchBuilder;
@@ -169,17 +99,14 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn search(&self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, Error> {
-        let schema = self.index.main.schema(reader);
-        let schema = schema.map_err(|e| Error::Internal(e.to_string()))?;
-        let schema = match schema {
-            Some(schema) => schema,
-            None => return Err(Error::Internal(String::from("missing schema"))),
-        };
+    pub fn search(&self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, ResponseError> {
+        let schema = self
+            .index
+            .main
+            .schema(reader)?
+            .ok_or(ResponseError::internal("missing schema"))?;
 
-        let ranked_map = self.index.main.ranked_map(reader);
-        let ranked_map = ranked_map.map_err(|e| Error::Internal(e.to_string()))?;
-        let ranked_map = ranked_map.unwrap_or_default();
+        let ranked_map = self.index.main.ranked_map(reader)?.unwrap_or_default();
 
         // Change criteria
         let mut query_builder = match self.get_criteria(reader, &ranked_map, &schema)? {
@@ -221,9 +148,8 @@ impl<'a> SearchBuilder<'a> {
         }
 
         let start = Instant::now();
-        let result =
-            query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
-        let (docs, nb_hits) = result.map_err(|e| Error::SearchDocuments(e.to_string()))?;
+        let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let (docs, nb_hits) = result.map_err(ResponseError::search_documents)?;
         let time_ms = start.elapsed().as_millis() as usize;
 
         let mut all_attributes: HashSet<&str> = HashSet::new();
@@ -255,11 +181,19 @@ impl<'a> SearchBuilder<'a> {
 
         let mut hits = Vec::with_capacity(self.limit);
         for doc in docs {
+            // retrieve the content of document in kv store
+            let attributes: Option<HashSet<&str>> = self
+                .attributes_to_retrieve
+                .as_ref()
+                .map(|a| a.iter().map(|a| a.as_str()).collect());
+
             let mut document: IndexMap<String, Value> = self
                 .index
-                .document(reader, Some(&all_attributes), doc.id)
-                .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
-                .ok_or(Error::DocumentNotFound(doc.id.0))?;
+                .document(reader, attributes.as_ref(), doc.id)
+                .map_err(|e| ResponseError::retrieve_document(doc.id.0, e))?
+                .ok_or(ResponseError::internal(
+                    "Impossible to retrieve a document id returned by the engine",
+                ))?;
 
             let mut formatted = document.iter()
                 .filter(|(key, _)| all_formatted.contains(key.as_str()))
@@ -320,7 +254,7 @@ impl<'a> SearchBuilder<'a> {
         reader: &heed::RoTxn<MainT>,
         ranked_map: &'a RankedMap,
         schema: &Schema,
-    ) -> Result<Option<Criteria<'a>>, Error> {
+    ) -> Result<Option<Criteria<'a>>, ResponseError> {
         let ranking_rules = self.index.main.ranking_rules(reader)?;
 
         if let Some(ranking_rules) = ranking_rules {

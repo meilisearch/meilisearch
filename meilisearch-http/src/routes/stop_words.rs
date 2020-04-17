@@ -1,32 +1,23 @@
-use std::collections::BTreeSet;
-
-use actix_web as aweb;
 use actix_web::{delete, get, post, web, HttpResponse};
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
+use std::collections::BTreeSet;
 
 use crate::error::ResponseError;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
 
 #[get("/indexes/{index_uid}/settings/stop-words")]
-pub async fn get(data: web::Data<Data>, path: web::Path<IndexParam>) -> aweb::Result<HttpResponse> {
+pub async fn get(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
-    let reader = data
-        .db
-        .main_read_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let stop_words_fst = index
-        .main
-        .stop_words_fst(&reader)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let stop_words = stop_words_fst
-        .unwrap_or_default()
-        .stream()
-        .into_strs()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let reader = data.db.main_read_txn()?;
+    let stop_words_fst = index.main.stop_words_fst(&reader)?;
+    let stop_words = stop_words_fst.unwrap_or_default().stream().into_strs()?;
 
     Ok(HttpResponse::Ok().json(stop_words))
 }
@@ -36,27 +27,20 @@ pub async fn update(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<BTreeSet<String>>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Update(body.into_inner()),
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -65,27 +49,20 @@ pub async fn update(
 pub async fn delete(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> aweb::Result<HttpResponse> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::IndexNotFound(path.index_uid.clone()))?;
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data
-        .db
-        .update_write_txn()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    let update_id = index
-        .settings_update(&mut writer, settings)
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
-    writer
-        .commit()
-        .map_err(|err| ResponseError::Internal(err.to_string()))?;
+    let mut writer = data.db.update_write_txn()?;
+    let update_id = index.settings_update(&mut writer, settings)?;
+    writer.commit()?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
