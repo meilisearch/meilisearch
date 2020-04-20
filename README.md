@@ -2,6 +2,7 @@
   <img src="assets/logo.svg" alt="MeiliSearch" width="200" height="200" />
 </p>
 
+
 <h1 align="center">MeiliSearch</h1>
 
 <h4 align="center">
@@ -18,6 +19,7 @@
   <a href="https://deps.rs/repo/github/meilisearch/MeiliSearch"><img src="https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg" alt="Dependency status"></a>
   <a href="https://github.com/meilisearch/MeiliSearch/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-informational" alt="License"></a>
   <a href="https://slack.meilisearch.com"><img src="https://img.shields.io/badge/slack-MeiliSearch-blue.svg?logo=slack" alt="Slack"></a>
+  <a href="https://github.com/meilisearch/MeiliSearch/discussions" alt="Discussions"><img src="https://img.shields.io/badge/github-discussions-red" /></a>
 </p>
 
 <p align="center">⚡ Lightning Fast, Ultra Relevant, and Typo-Tolerant Search Engine 🔍</p>
@@ -211,6 +213,7 @@ If this doesn't suit you, you can disable these analytics by using the `MEILI_NO
 Feel free to contact us about any questions you may have:
 * At [bonjour@meilisearch.com](mailto:bonjour@meilisearch.com): English or French is welcome! 🇬🇧 🇫🇷
 * Via the chat box available on every page of [our documentation](https://docs.meilisearch.com/) and on [our landing page](https://www.meilisearch.com/).
+* 🆕 Join our [GitHub Discussions forum](https://github.com/meilisearch/MeiliSearch/discussions) (BETA hype!)
 * Join our [Slack community](https://slack.meilisearch.com/).
 * By opening an issue.
 
