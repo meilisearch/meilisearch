@@ -10,7 +10,7 @@ use pest::iterators::Pair;
 use serde_json::{Value, Number};
 use super::parser::Rule;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum ConditionType {
     Greater,
     Less,
@@ -160,12 +160,19 @@ impl<'a> Condition<'a> {
         document_id: DocumentId,
     ) -> Result<bool, Error> {
         match index.document_attribute::<Value>(reader, document_id, self.field)? {
+            Some(Value::Array(values)) => Ok(values.iter().any(|v| self.match_value(Some(v)))),
+            other => Ok(self.match_value(other.as_ref())),
+        }
+    }
+
+    fn match_value(&self, value: Option<&Value>) -> bool {
+        match value {
             Some(Value::String(s)) => {
                 let value = self.value.as_str();
                 match self.condition {
-                    ConditionType::Equal => Ok(unicase::eq(value, &s)),
-                    ConditionType::NotEqual => Ok(!unicase::eq(value, &s)),
-                    _ => Ok(false)
+                    ConditionType::Equal => unicase::eq(value, &s),
+                    ConditionType::NotEqual => !unicase::eq(value, &s),
+                    _ => false
                 }
             },
             Some(Value::Number(n)) => { 
@@ -179,22 +186,25 @@ impl<'a> Condition<'a> {
                             ConditionType::Greater => ord == Ordering::Greater,
                             ConditionType::Less => ord == Ordering::Less,
                         };
-                        return Ok(res)
+                        return res
                     } 
                 } 
-                Ok(false)
+                false
             },
             Some(Value::Bool(b)) => {
                 if let Some(value) = self.value.as_bool() {
-                    return match self.condition {
-                        ConditionType::Equal => Ok(b == value),
-                        ConditionType::NotEqual => Ok(b != value),
-                        _ => Ok(false)
-                    }
+                    let res = match self.condition {
+                        ConditionType::Equal => *b == value,
+                        ConditionType::NotEqual => *b != value,
+                        _ => false
+                    };
+                    return res
                 }
-                Ok(false)
+                false
             },
-            _ => Ok(false),
+            // if field is not supported (or not found), all values are different from it,
+            // so != should always return true in this case.
+            _ => self.condition == ConditionType::NotEqual,
         }
     }
 }
