@@ -17,6 +17,7 @@ pub enum Authentication {
     Admin,
 }
 
+
 impl<S: 'static, B> Transform<S> for Authentication
 where
     S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = Error>,

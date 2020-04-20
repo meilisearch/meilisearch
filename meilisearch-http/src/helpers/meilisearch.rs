@@ -182,7 +182,7 @@ impl<'a> SearchBuilder<'a> {
                 .document(reader, attributes.as_ref(), doc.id)
                 .map_err(|e| ResponseError::retrieve_document(doc.id.0, e))?
                 .ok_or(ResponseError::internal(
-                    "Impossible to retrieve a document id returned by the engine",
+                    "Impossible to retrieve the document; Corrupted data",
                 ))?;
 
             let has_attributes_to_highlight = self.attributes_to_highlight.is_some();

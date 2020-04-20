@@ -121,23 +121,23 @@ impl aweb::error::ResponseError for ResponseError {
 
     fn status_code(&self) -> StatusCode {
         match *self {
-            Self::BadParameter(_, _) => StatusCode::BAD_REQUEST,
-            Self::BadRequest(_) => StatusCode::BAD_REQUEST,
-            Self::CreateIndex(_) => StatusCode::BAD_REQUEST,
-            Self::DocumentNotFound(_) => StatusCode::NOT_FOUND,
-            Self::IndexNotFound(_) => StatusCode::NOT_FOUND,
+            Self::BadParameter(_, _)
+            | Self::BadRequest(_)
+            | Self::CreateIndex(_)
+            | Self::InvalidIndexUid
+            | Self::MissingFilterValue
+            | Self::OpenIndex(_)
+            | Self::RetrieveDocument(_, _)
+            | Self::SearchDocuments(_)
+            | Self::UnknownFilteredAttribute => StatusCode::BAD_REQUEST,
+            Self::DocumentNotFound(_)
+            | Self::IndexNotFound(_)
+            | Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::InvalidIndexUid => StatusCode::BAD_REQUEST,
-            Self::InvalidToken(_) => StatusCode::UNAUTHORIZED,
+            Self::InvalidToken(_)
+            | Self::MissingHeader(_) => StatusCode::UNAUTHORIZED,
             Self::Maintenance => StatusCode::SERVICE_UNAVAILABLE,
             Self::MissingAuthorizationHeader => StatusCode::FORBIDDEN,
-            Self::MissingFilterValue => StatusCode::BAD_REQUEST,
-            Self::MissingHeader(_) => StatusCode::UNAUTHORIZED,
-            Self::NotFound(_) => StatusCode::NOT_FOUND,
-            Self::OpenIndex(_) => StatusCode::BAD_REQUEST,
-            Self::RetrieveDocument(_, _) => StatusCode::BAD_REQUEST,
-            Self::SearchDocuments(_) => StatusCode::BAD_REQUEST,
-            Self::UnknownFilteredAttribute => StatusCode::BAD_REQUEST,
         }
     }
 }
