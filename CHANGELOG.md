@@ -1,6 +1,7 @@
 ## v0.10.1 (unreleased)
 
   - Add '@' character as tokenizer separator (#607)
+  - Add support for filtering on arrays of strings (#611)
 
 ## v0.10
 
