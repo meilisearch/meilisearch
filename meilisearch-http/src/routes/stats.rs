@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use actix_web::{get, web};
+use actix_web::web;
+use actix_web_macros::get;
 use chrono::{DateTime, Utc};
 use log::error;
 use pretty_bytes::converter::convert;
@@ -9,19 +10,28 @@ use sysinfo::{NetworkExt, ProcessExt, ProcessorExt, System, SystemExt};
 use walkdir::WalkDir;
 
 use crate::error::ResponseError;
+use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
 
+pub fn services(cfg: &mut web::ServiceConfig) {
+    cfg.service(index_stats)
+        .service(get_stats)
+        .service(get_version)
+        .service(get_sys_info)
+        .service(get_sys_info_pretty);
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IndexStatsResponse {
+struct IndexStatsResponse {
     number_of_documents: u64,
     is_indexing: bool,
     fields_frequency: HashMap<String, usize>,
 }
 
-#[get("/indexes/{index_uid}/stats")]
-pub async fn index_stats(
+#[get("/indexes/{index_uid}/stats", wrap = "Authentication::Private")]
+async fn index_stats(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<web::Json<IndexStatsResponse>, ResponseError> {
@@ -51,14 +61,14 @@ pub async fn index_stats(
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct StatsResult {
+struct StatsResult {
     database_size: u64,
     last_update: Option<DateTime<Utc>>,
     indexes: HashMap<String, IndexStatsResponse>,
 }
 
-#[get("/stats")]
-pub async fn get_stats(data: web::Data<Data>) -> Result<web::Json<StatsResult>, ResponseError> {
+#[get("/stats", wrap = "Authentication::Private")]
+async fn get_stats(data: web::Data<Data>) -> Result<web::Json<StatsResult>, ResponseError> {
     let mut index_list = HashMap::new();
 
     let reader = data.db.main_read_txn()?;
@@ -109,14 +119,14 @@ pub async fn get_stats(data: web::Data<Data>) -> Result<web::Json<StatsResult>, 
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct VersionResponse {
+struct VersionResponse {
     commit_sha: String,
     build_date: String,
     pkg_version: String,
 }
 
-#[get("/version")]
-pub async fn get_version() -> web::Json<VersionResponse> {
+#[get("/version", wrap = "Authentication::Private")]
+async fn get_version() -> web::Json<VersionResponse> {
     web::Json(VersionResponse {
         commit_sha: env!("VERGEN_SHA").to_string(),
         build_date: env!("VERGEN_BUILD_TIMESTAMP").to_string(),
@@ -126,7 +136,7 @@ pub async fn get_version() -> web::Json<VersionResponse> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SysGlobal {
+struct SysGlobal {
     total_memory: u64,
     used_memory: u64,
     total_swap: u64,
@@ -150,7 +160,7 @@ impl SysGlobal {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SysProcess {
+struct SysProcess {
     memory: u64,
     cpu: f32,
 }
@@ -166,7 +176,7 @@ impl SysProcess {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SysInfo {
+struct SysInfo {
     memory_usage: f64,
     processor_usage: Vec<f32>,
     global: SysGlobal,
@@ -184,8 +194,8 @@ impl SysInfo {
     }
 }
 
-#[get("/sys-info")]
-pub async fn get_sys_info(data: web::Data<Data>) -> web::Json<SysInfo> {
+#[get("/sys-info", wrap = "Authentication::Private")]
+async fn get_sys_info(data: web::Data<Data>) -> web::Json<SysInfo> {
     let mut sys = System::new();
     let mut info = SysInfo::new();
 
@@ -221,7 +231,7 @@ pub async fn get_sys_info(data: web::Data<Data>) -> web::Json<SysInfo> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SysGlobalPretty {
+struct SysGlobalPretty {
     total_memory: String,
     used_memory: String,
     total_swap: String,
@@ -245,7 +255,7 @@ impl SysGlobalPretty {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SysProcessPretty {
+struct SysProcessPretty {
     memory: String,
     cpu: String,
 }
@@ -261,7 +271,7 @@ impl SysProcessPretty {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SysInfoPretty {
+struct SysInfoPretty {
     memory_usage: String,
     processor_usage: Vec<String>,
     global: SysGlobalPretty,
@@ -279,8 +289,8 @@ impl SysInfoPretty {
     }
 }
 
-#[get("/sys-info/pretty")]
-pub async fn get_sys_info_pretty(data: web::Data<Data>) -> web::Json<SysInfoPretty> {
+#[get("/sys-info/pretty", wrap = "Authentication::Private")]
+async fn get_sys_info_pretty(data: web::Data<Data>) -> web::Json<SysInfoPretty> {
     let mut sys = System::new();
     let mut info = SysInfoPretty::new();
 

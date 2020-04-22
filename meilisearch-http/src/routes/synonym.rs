@@ -1,15 +1,24 @@
 use std::collections::BTreeMap;
 
-use actix_web::{delete, get, post, web, HttpResponse};
+use actix_web::{web, HttpResponse};
+use actix_web_macros::{delete, get, post};
 use indexmap::IndexMap;
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
 
 use crate::error::ResponseError;
+use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
 
-#[get("/indexes/{index_uid}/settings/synonyms")]
-pub async fn get(
+pub fn services(cfg: &mut web::ServiceConfig) {
+    cfg.service(get).service(update).service(delete);
+}
+
+#[get(
+    "/indexes/{index_uid}/settings/synonyms",
+    wrap = "Authentication::Private"
+)]
+async fn get(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -37,8 +46,11 @@ pub async fn get(
     Ok(HttpResponse::Ok().json(synonyms))
 }
 
-#[post("/indexes/{index_uid}/settings/synonyms")]
-pub async fn update(
+#[post(
+    "/indexes/{index_uid}/settings/synonyms",
+    wrap = "Authentication::Private"
+)]
+async fn update(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<BTreeMap<String, Vec<String>>>,
@@ -60,8 +72,11 @@ pub async fn update(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[delete("/indexes/{index_uid}/settings/synonyms")]
-pub async fn delete(
+#[delete(
+    "/indexes/{index_uid}/settings/synonyms",
+    wrap = "Authentication::Private"
+)]
+async fn delete(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {

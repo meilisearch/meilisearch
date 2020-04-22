@@ -1,13 +1,35 @@
-use actix_web::{delete, get, post, web, HttpResponse};
+use actix_web::{web, HttpResponse};
+use actix_web_macros::{delete, get, post};
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::error::ResponseError;
+use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
 
-#[post("/indexes/{index_uid}/settings")]
-pub async fn update_all(
+pub fn services(cfg: &mut web::ServiceConfig) {
+    cfg.service(update_all)
+        .service(get_all)
+        .service(delete_all)
+        .service(get_rules)
+        .service(update_rules)
+        .service(delete_rules)
+        .service(get_distinct)
+        .service(update_distinct)
+        .service(delete_distinct)
+        .service(get_searchable)
+        .service(update_searchable)
+        .service(delete_searchable)
+        .service(get_displayed)
+        .service(update_displayed)
+        .service(delete_displayed)
+        .service(get_accept_new_fields)
+        .service(update_accept_new_fields);
+}
+
+#[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
+async fn update_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Settings>,
@@ -28,8 +50,8 @@ pub async fn update_all(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[get("/indexes/{index_uid}/settings")]
-pub async fn get_all(
+#[get("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
+async fn get_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -98,8 +120,8 @@ pub async fn get_all(
     Ok(HttpResponse::Ok().json(settings))
 }
 
-#[delete("/indexes/{index_uid}/settings")]
-pub async fn delete_all(
+#[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
+async fn delete_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -126,8 +148,11 @@ pub async fn delete_all(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[get("/indexes/{index_uid}/settings/ranking-rules")]
-pub async fn get_rules(
+#[get(
+    "/indexes/{index_uid}/settings/ranking-rules",
+    wrap = "Authentication::Private"
+)]
+async fn get_rules(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -148,8 +173,11 @@ pub async fn get_rules(
     Ok(HttpResponse::Ok().json(ranking_rules))
 }
 
-#[post("/indexes/{index_uid}/settings/ranking-rules")]
-pub async fn update_rules(
+#[post(
+    "/indexes/{index_uid}/settings/ranking-rules",
+    wrap = "Authentication::Private"
+)]
+async fn update_rules(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<Vec<String>>>,
@@ -172,8 +200,11 @@ pub async fn update_rules(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[delete("/indexes/{index_uid}/settings/ranking-rules")]
-pub async fn delete_rules(
+#[delete(
+    "/indexes/{index_uid}/settings/ranking-rules",
+    wrap = "Authentication::Private"
+)]
+async fn delete_rules(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -195,8 +226,11 @@ pub async fn delete_rules(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[get("/indexes/{index_uid}/settings/distinct-attribute")]
-pub async fn get_distinct(
+#[get(
+    "/indexes/{index_uid}/settings/distinct-attribute",
+    wrap = "Authentication::Private"
+)]
+async fn get_distinct(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -210,8 +244,11 @@ pub async fn get_distinct(
     Ok(HttpResponse::Ok().json(distinct_attribute))
 }
 
-#[post("/indexes/{index_uid}/settings/distinct-attribute")]
-pub async fn update_distinct(
+#[post(
+    "/indexes/{index_uid}/settings/distinct-attribute",
+    wrap = "Authentication::Private"
+)]
+async fn update_distinct(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<String>>,
@@ -234,8 +271,11 @@ pub async fn update_distinct(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[delete("/indexes/{index_uid}/settings/distinct-attribute")]
-pub async fn delete_distinct(
+#[delete(
+    "/indexes/{index_uid}/settings/distinct-attribute",
+    wrap = "Authentication::Private"
+)]
+async fn delete_distinct(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -257,8 +297,11 @@ pub async fn delete_distinct(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[get("/indexes/{index_uid}/settings/searchable-attributes")]
-pub async fn get_searchable(
+#[get(
+    "/indexes/{index_uid}/settings/searchable-attributes",
+    wrap = "Authentication::Private"
+)]
+async fn get_searchable(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -274,8 +317,11 @@ pub async fn get_searchable(
     Ok(HttpResponse::Ok().json(searchable_attributes))
 }
 
-#[post("/indexes/{index_uid}/settings/searchable-attributes")]
-pub async fn update_searchable(
+#[post(
+    "/indexes/{index_uid}/settings/searchable-attributes",
+    wrap = "Authentication::Private"
+)]
+async fn update_searchable(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<Vec<String>>>,
@@ -298,8 +344,11 @@ pub async fn update_searchable(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[delete("/indexes/{index_uid}/settings/searchable-attributes")]
-pub async fn delete_searchable(
+#[delete(
+    "/indexes/{index_uid}/settings/searchable-attributes",
+    wrap = "Authentication::Private"
+)]
+async fn delete_searchable(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -320,8 +369,11 @@ pub async fn delete_searchable(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[get("/indexes/{index_uid}/settings/displayed-attributes")]
-pub async fn get_displayed(
+#[get(
+    "/indexes/{index_uid}/settings/displayed-attributes",
+    wrap = "Authentication::Private"
+)]
+async fn get_displayed(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -343,8 +395,11 @@ pub async fn get_displayed(
     Ok(HttpResponse::Ok().json(displayed_attributes))
 }
 
-#[post("/indexes/{index_uid}/settings/displayed-attributes")]
-pub async fn update_displayed(
+#[post(
+    "/indexes/{index_uid}/settings/displayed-attributes",
+    wrap = "Authentication::Private"
+)]
+async fn update_displayed(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<HashSet<String>>>,
@@ -367,8 +422,11 @@ pub async fn update_displayed(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[delete("/indexes/{index_uid}/settings/displayed-attributes")]
-pub async fn delete_displayed(
+#[delete(
+    "/indexes/{index_uid}/settings/displayed-attributes",
+    wrap = "Authentication::Private"
+)]
+async fn delete_displayed(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -389,8 +447,11 @@ pub async fn delete_displayed(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[get("/indexes/{index_uid}/settings/accept-new-fields")]
-pub async fn get_accept_new_fields(
+#[get(
+    "/indexes/{index_uid}/settings/accept-new-fields",
+    wrap = "Authentication::Private"
+)]
+async fn get_accept_new_fields(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -407,8 +468,11 @@ pub async fn get_accept_new_fields(
     Ok(HttpResponse::Ok().json(accept_new_fields))
 }
 
-#[post("/indexes/{index_uid}/settings/accept-new-fields")]
-pub async fn update_accept_new_fields(
+#[post(
+    "/indexes/{index_uid}/settings/accept-new-fields",
+    wrap = "Authentication::Private"
+)]
+async fn update_accept_new_fields(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<bool>>,

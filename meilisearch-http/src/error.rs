@@ -130,12 +130,11 @@ impl aweb::error::ResponseError for ResponseError {
             | Self::RetrieveDocument(_, _)
             | Self::SearchDocuments(_)
             | Self::UnknownFilteredAttribute => StatusCode::BAD_REQUEST,
-            Self::DocumentNotFound(_)
-            | Self::IndexNotFound(_)
-            | Self::NotFound(_) => StatusCode::NOT_FOUND,
+            Self::DocumentNotFound(_) | Self::IndexNotFound(_) | Self::NotFound(_) => {
+                StatusCode::NOT_FOUND
+            }
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::InvalidToken(_)
-            | Self::MissingHeader(_) => StatusCode::UNAUTHORIZED,
+            Self::InvalidToken(_) | Self::MissingHeader(_) => StatusCode::UNAUTHORIZED,
             Self::Maintenance => StatusCode::SERVICE_UNAVAILABLE,
             Self::MissingAuthorizationHeader => StatusCode::FORBIDDEN,
         }

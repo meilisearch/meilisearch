@@ -1,16 +1,22 @@
 use std::time::Duration;
 
-use actix_web::{get, web};
+use actix_web::web;
+use actix_web_macros::get;
 use serde::Deserialize;
 
 use crate::error::ResponseError;
 use crate::helpers::meilisearch::{IndexSearchExt, SearchResult};
+use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
 
+pub fn services(cfg: &mut web::ServiceConfig) {
+    cfg.service(search_with_url_query);
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SearchQuery {
+struct SearchQuery {
     q: String,
     offset: Option<usize>,
     limit: Option<usize>,
@@ -23,8 +29,8 @@ pub struct SearchQuery {
     matches: Option<bool>,
 }
 
-#[get("/indexes/{index_uid}/search")]
-pub async fn search_with_url_query(
+#[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
+async fn search_with_url_query(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQuery>,
