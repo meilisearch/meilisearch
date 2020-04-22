@@ -1,24 +1,39 @@
 use std::collections::{BTreeSet, HashSet};
 
-use actix_web::{delete, get, post, put, web, HttpResponse};
+use actix_web::{web, HttpResponse};
+use actix_web_macros::{delete, get, post, put};
 use indexmap::IndexMap;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ResponseError;
+use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
 
 type Document = IndexMap<String, Value>;
 
 #[derive(Default, Deserialize)]
-pub struct DocumentParam {
+struct DocumentParam {
     index_uid: String,
     document_id: String,
 }
 
-#[get("/indexes/{index_uid}/documents/{document_id}")]
-pub async fn get_document(
+pub fn services(cfg: &mut web::ServiceConfig) {
+    cfg.service(get_document)
+        .service(delete_document)
+        .service(get_all_documents)
+        .service(add_documents)
+        .service(update_documents)
+        .service(delete_documents)
+        .service(clear_all_documents);
+}
+
+#[get(
+    "/indexes/{index_uid}/documents/{document_id}",
+    wrap = "Authentication::Public"
+)]
+async fn get_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -37,8 +52,11 @@ pub async fn get_document(
     Ok(HttpResponse::Ok().json(response))
 }
 
-#[delete("/indexes/{index_uid}/documents/{document_id}")]
-pub async fn delete_document(
+#[delete(
+    "/indexes/{index_uid}/documents/{document_id}",
+    wrap = "Authentication::Private"
+)]
+async fn delete_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -62,14 +80,14 @@ pub async fn delete_document(
 
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct BrowseQuery {
+struct BrowseQuery {
     offset: Option<usize>,
     limit: Option<usize>,
     attributes_to_retrieve: Option<String>,
 }
 
-#[get("/indexes/{index_uid}/documents")]
-pub async fn get_all_documents(
+#[get("/indexes/{index_uid}/documents", wrap = "Authentication::Public")]
+async fn get_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
@@ -119,7 +137,7 @@ fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
 
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct UpdateDocumentsQuery {
+struct UpdateDocumentsQuery {
     primary_key: Option<String>,
 }
 
@@ -175,8 +193,8 @@ async fn update_multiple_documents(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[post("/indexes/{index_uid}/documents")]
-pub async fn add_documents(
+#[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn add_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
@@ -185,8 +203,8 @@ pub async fn add_documents(
     update_multiple_documents(data, path, params, body, false).await
 }
 
-#[put("/indexes/{index_uid}/documents")]
-pub async fn update_documents(
+#[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn update_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
@@ -195,8 +213,11 @@ pub async fn update_documents(
     update_multiple_documents(data, path, params, body, true).await
 }
 
-#[post("/indexes/{index_uid}/documents/delete-batch")]
-pub async fn delete_documents(
+#[post(
+    "/indexes/{index_uid}/documents/delete-batch",
+    wrap = "Authentication::Private"
+)]
+async fn delete_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>,
@@ -224,8 +245,8 @@ pub async fn delete_documents(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[delete("/indexes/{index_uid}/documents")]
-pub async fn clear_all_documents(
+#[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn clear_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {

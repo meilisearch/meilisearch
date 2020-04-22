@@ -1,12 +1,24 @@
-use actix_web::{delete, get, post, put, web, HttpResponse};
+use actix_web::{web, HttpResponse};
+use actix_web_macros::{delete, get, post, put};
 use chrono::{DateTime, Utc};
 use log::error;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ResponseError;
+use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
+
+pub fn services(cfg: &mut web::ServiceConfig) {
+    cfg.service(list_indexes)
+        .service(get_index)
+        .service(create_index)
+        .service(update_index)
+        .service(delete_index)
+        .service(get_update_status)
+        .service(get_all_updates_status);
+}
 
 fn generate_uid() -> String {
     let mut rng = rand::thread_rng();
@@ -19,7 +31,7 @@ fn generate_uid() -> String {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct IndexResponse {
+struct IndexResponse {
     name: String,
     uid: String,
     created_at: DateTime<Utc>,
@@ -27,8 +39,8 @@ pub struct IndexResponse {
     primary_key: Option<String>,
 }
 
-#[get("/indexes")]
-pub async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
+#[get("/indexes", wrap = "Authentication::Private")]
+async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let reader = data.db.main_read_txn()?;
 
     let mut response = Vec::new();
@@ -81,8 +93,8 @@ pub async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, Respons
     Ok(HttpResponse::Ok().json(response))
 }
 
-#[get("/indexes/{index_uid}")]
-pub async fn get_index(
+#[get("/indexes/{index_uid}", wrap = "Authentication::Private")]
+async fn get_index(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -128,14 +140,14 @@ pub async fn get_index(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct IndexCreateRequest {
+struct IndexCreateRequest {
     name: Option<String>,
     uid: Option<String>,
     primary_key: Option<String>,
 }
 
-#[post("/indexes")]
-pub async fn create_index(
+#[post("/indexes", wrap = "Authentication::Private")]
+async fn create_index(
     data: web::Data<Data>,
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -206,14 +218,14 @@ pub async fn create_index(
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct UpdateIndexRequest {
+struct UpdateIndexRequest {
     name: Option<String>,
     primary_key: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UpdateIndexResponse {
+struct UpdateIndexResponse {
     name: String,
     uid: String,
     created_at: DateTime<Utc>,
@@ -221,8 +233,8 @@ pub struct UpdateIndexResponse {
     primary_key: Option<String>,
 }
 
-#[put("/indexes/{index_uid}")]
-pub async fn update_index(
+#[put("/indexes/{index_uid}", wrap = "Authentication::Private")]
+async fn update_index(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<IndexCreateRequest>,
@@ -292,8 +304,8 @@ pub async fn update_index(
     }))
 }
 
-#[delete("/indexes/{index_uid}")]
-pub async fn delete_index(
+#[delete("/indexes/{index_uid}", wrap = "Authentication::Private")]
+async fn delete_index(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -303,13 +315,16 @@ pub async fn delete_index(
 }
 
 #[derive(Default, Deserialize)]
-pub struct UpdateParam {
+struct UpdateParam {
     index_uid: String,
     update_id: u64,
 }
 
-#[get("/indexes/{index_uid}/updates/{update_id}")]
-pub async fn get_update_status(
+#[get(
+    "/indexes/{index_uid}/updates/{update_id}",
+    wrap = "Authentication::Private"
+)]
+async fn get_update_status(
     data: web::Data<Data>,
     path: web::Path<UpdateParam>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -331,8 +346,8 @@ pub async fn get_update_status(
     }
 }
 
-#[get("/indexes/{index_uid}/updates")]
-pub async fn get_all_updates_status(
+#[get("/indexes/{index_uid}/updates", wrap = "Authentication::Private")]
+async fn get_all_updates_status(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {

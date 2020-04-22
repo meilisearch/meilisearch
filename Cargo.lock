@@ -291,6 +291,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "actix-web-macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5ec7f5e4b361aeb648381a33cf81bd0e7a9d2cf9b49cf05fb4e161d8096bb25"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "adler32"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1507,6 +1518,7 @@ dependencies = [
  "actix-rt",
  "actix-service",
  "actix-web",
+ "actix-web-macros",
  "assert-json-diff",
  "chrono",
  "crossbeam-channel",
