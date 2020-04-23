@@ -164,7 +164,6 @@ You can access the web interface in your web browser at the root of the server. 
 ### Documentation
 
 Now that your MeiliSearch server is up and running, you can learn more about how to tune your search engine in [the documentation](https://docs.meilisearch.com). 
-Also, added the performance and technical features tab under the documentation ;)
 
 
 ## Contributing
