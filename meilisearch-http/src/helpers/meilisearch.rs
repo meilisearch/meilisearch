@@ -17,6 +17,7 @@ use meilisearch_tokenizer::is_cjk;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use siphasher::sip::SipHasher;
+use slice_group_by::GroupBy;
 
 #[derive(Debug)]
 pub enum Error {
@@ -526,7 +527,12 @@ fn calculate_highlights(
                 let value: Vec<_> = value.chars().collect();
                 let mut highlighted_value = String::new();
                 let mut index = 0;
-                for m in matches {
+
+                let longest_matches = matches
+                    .linear_group_by_key(|m| m.start)
+                    .map(|group| group.last().unwrap());
+
+                for m in longest_matches {
                     if m.start >= index {
                         let before = value.get(index..m.start);
                         let highlighted = value.get(m.start..(m.start + m.length));
