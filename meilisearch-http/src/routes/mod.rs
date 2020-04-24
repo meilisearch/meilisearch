@@ -11,12 +11,12 @@ pub mod stats;
 pub mod stop_words;
 pub mod synonym;
 
-#[derive(Default, Deserialize)]
+#[derive(Deserialize)]
 pub struct IndexParam {
     index_uid: String,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexUpdateResponse {
     pub update_id: u64,

@@ -37,7 +37,7 @@ pub struct DataInner {
     pub server_pid: Pid,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct ApiKeys {
     pub public: Option<String>,
     pub private: Option<String>,

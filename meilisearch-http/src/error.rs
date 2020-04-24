@@ -91,11 +91,11 @@ impl fmt::Display for ResponseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BadParameter(param, err) => write!(f, "Url parameter {} error: {}", param, err),
-            Self::BadRequest(err) => write!(f, "{}", err),
+            Self::BadRequest(err) => f.write_str(err),
             Self::CreateIndex(err) => write!(f, "Impossible to create index; {}", err),
             Self::DocumentNotFound(document_id) => write!(f, "Document with id {} not found", document_id),
             Self::IndexNotFound(index_uid) => write!(f, "Index {} not found", index_uid),
-            Self::Internal(err) => write!(f, "{}", err),
+            Self::Internal(err) => f.write_str(err),
             Self::InvalidIndexUid => f.write_str("Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_)."),
             Self::InvalidToken(err) => write!(f, "Invalid API key: {}", err),
             Self::Maintenance => f.write_str("Server is in maintenance, please try again later"),

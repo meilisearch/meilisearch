@@ -157,13 +157,13 @@ async fn create_index(
         ));
     }
 
-    let uid = match body.uid.clone() {
+    let uid = match &body.uid {
         Some(uid) => {
             if uid
                 .chars()
                 .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
             {
-                uid
+                uid.to_owned()
             } else {
                 return Err(ResponseError::InvalidIndexUid);
             }
@@ -183,8 +183,8 @@ async fn create_index(
 
     let mut writer = data.db.main_write_txn()?;
 
-    let name = body.name.clone().unwrap_or(uid.clone());
-    created_index.main.put_name(&mut writer, &name)?;
+    let name = body.name.as_ref().unwrap_or(&uid);
+    created_index.main.put_name(&mut writer, name)?;
 
     let created_at = created_index
         .main
@@ -208,7 +208,7 @@ async fn create_index(
     writer.commit()?;
 
     Ok(HttpResponse::Created().json(IndexResponse {
-        name,
+        name: name.to_string(),
         uid,
         created_at,
         updated_at,
@@ -246,8 +246,8 @@ async fn update_index(
 
     let mut writer = data.db.main_write_txn()?;
 
-    if let Some(name) = body.name.clone() {
-        index.main.put_name(&mut writer, &name)?;
+    if let Some(name) = &body.name {
+        index.main.put_name(&mut writer, name)?;
     }
 
     if let Some(id) = body.primary_key.clone() {
@@ -314,7 +314,7 @@ async fn delete_index(
     Ok(HttpResponse::NoContent().finish())
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Deserialize)]
 struct UpdateParam {
     index_uid: String,
     update_id: u64,

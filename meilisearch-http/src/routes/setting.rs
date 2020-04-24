@@ -94,14 +94,14 @@ async fn get_all(
     let searchable_attributes = schema.clone().map(|s| {
         s.indexed_name()
             .iter()
-            .map(|s| (*s).to_string())
+            .map(|s| s.to_string())
             .collect::<Vec<String>>()
     });
 
     let displayed_attributes = schema.clone().map(|s| {
         s.displayed_name()
             .iter()
-            .map(|s| (*s).to_string())
+            .map(|s| s.to_string())
             .collect::<HashSet<String>>()
     });
 
@@ -312,7 +312,7 @@ async fn get_searchable(
     let reader = data.db.main_read_txn()?;
     let schema = index.main.schema(&reader)?;
     let searchable_attributes: Option<Vec<String>> =
-        schema.map(|s| s.indexed_name().iter().map(|i| (*i).to_string()).collect());
+        schema.map(|s| s.indexed_name().iter().map(|i| i.to_string()).collect());
 
     Ok(HttpResponse::Ok().json(searchable_attributes))
 }
@@ -385,12 +385,8 @@ async fn get_displayed(
 
     let schema = index.main.schema(&reader)?;
 
-    let displayed_attributes: Option<HashSet<String>> = schema.map(|s| {
-        s.displayed_name()
-            .iter()
-            .map(|i| (*i).to_string())
-            .collect()
-    });
+    let displayed_attributes: Option<HashSet<String>> =
+        schema.map(|s| s.displayed_name().iter().map(|i| i.to_string()).collect());
 
     Ok(HttpResponse::Ok().json(displayed_attributes))
 }

@@ -13,7 +13,7 @@ use crate::Data;
 
 type Document = IndexMap<String, Value>;
 
-#[derive(Default, Deserialize)]
+#[derive(Deserialize)]
 struct DocumentParam {
     index_uid: String,
     document_id: String,
@@ -46,7 +46,7 @@ async fn get_document(
     let reader = data.db.main_read_txn()?;
 
     let response = index
-        .document::<Document>(&reader, None, document_id)?
+        .document(&reader, None, document_id)?
         .ok_or(ResponseError::document_not_found(&path.document_id))?;
 
     Ok(HttpResponse::Ok().json(response))
@@ -78,7 +78,7 @@ async fn delete_document(
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BrowseQuery {
     offset: Option<usize>,
@@ -116,9 +116,11 @@ async fn get_all_documents(
         .as_ref()
         .map(|a| a.split(',').collect());
 
-    let mut response = Vec::<Document>::new();
+    let mut response = Vec::new();
     for document_id in documents_ids {
-        if let Ok(Some(document)) = index.document(&reader, attributes.as_ref(), document_id) {
+        if let Ok(Some(document)) =
+            index.document::<Document>(&reader, attributes.as_ref(), document_id)
+        {
             response.push(document);
         }
     }
@@ -135,7 +137,7 @@ fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
     None
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateDocumentsQuery {
     primary_key: Option<String>,
@@ -171,7 +173,9 @@ async fn update_multiple_documents(
 
         let mut writer = data.db.main_write_txn()?;
 
-        schema.set_primary_key(&id)?;
+        schema
+            .set_primary_key(&id)
+            .map_err(ResponseError::bad_request)?;
         index.main.put_schema(&mut writer, &schema)?;
         writer.commit()?;
     }

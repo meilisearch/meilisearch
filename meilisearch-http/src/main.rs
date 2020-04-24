@@ -18,8 +18,6 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 #[actix_rt::main]
 async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
-    // let local = tokio::task::LocalSet::new();
-    // let _sys = actix_rt::System::run_in_tokio("server", &local);
 
     match opt.env.as_ref() {
         "production" => {

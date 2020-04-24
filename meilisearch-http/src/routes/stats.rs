@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use actix_web::web;
+use actix_web::HttpResponse;
 use actix_web_macros::get;
 use chrono::{DateTime, Utc};
 use log::error;
@@ -34,7 +35,7 @@ struct IndexStatsResponse {
 async fn index_stats(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<web::Json<IndexStatsResponse>, ResponseError> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
@@ -48,11 +49,13 @@ async fn index_stats(
 
     let update_reader = data.db.update_read_txn()?;
 
-    let is_indexing = data
-        .is_indexing(&update_reader, &path.index_uid)?
-        .unwrap_or_default();
+    let is_indexing =
+        data.is_indexing(&update_reader, &path.index_uid)?
+            .ok_or(ResponseError::internal(
+                "Impossible to know if the database is indexing",
+            ))?;
 
-    Ok(web::Json(IndexStatsResponse {
+    Ok(HttpResponse::Ok().json(IndexStatsResponse {
         number_of_documents,
         is_indexing,
         fields_frequency,
@@ -68,7 +71,7 @@ struct StatsResult {
 }
 
 #[get("/stats", wrap = "Authentication::Private")]
-async fn get_stats(data: web::Data<Data>) -> Result<web::Json<StatsResult>, ResponseError> {
+async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let mut index_list = HashMap::new();
 
     let reader = data.db.main_read_txn()?;
@@ -83,9 +86,9 @@ async fn get_stats(data: web::Data<Data>) -> Result<web::Json<StatsResult>, Resp
 
                 let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
 
-                let is_indexing = data
-                    .is_indexing(&update_reader, &index_uid)?
-                    .unwrap_or_default();
+                let is_indexing = data.is_indexing(&update_reader, &index_uid)?.ok_or(
+                    ResponseError::internal("Impossible to know if the database is indexing"),
+                )?;
 
                 let response = IndexStatsResponse {
                     number_of_documents,
@@ -110,7 +113,7 @@ async fn get_stats(data: web::Data<Data>) -> Result<web::Json<StatsResult>, Resp
 
     let last_update = data.last_update(&reader)?;
 
-    Ok(web::Json(StatsResult {
+    Ok(HttpResponse::Ok().json(StatsResult {
         database_size,
         last_update,
         indexes: index_list,
@@ -126,8 +129,8 @@ struct VersionResponse {
 }
 
 #[get("/version", wrap = "Authentication::Private")]
-async fn get_version() -> web::Json<VersionResponse> {
-    web::Json(VersionResponse {
+async fn get_version() -> HttpResponse {
+    HttpResponse::Ok().json(VersionResponse {
         commit_sha: env!("VERGEN_SHA").to_string(),
         build_date: env!("VERGEN_BUILD_TIMESTAMP").to_string(),
         pkg_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -195,7 +198,7 @@ impl SysInfo {
 }
 
 #[get("/sys-info", wrap = "Authentication::Private")]
-async fn get_sys_info(data: web::Data<Data>) -> web::Json<SysInfo> {
+async fn get_sys_info(data: web::Data<Data>) -> HttpResponse {
     let mut sys = System::new();
     let mut info = SysInfo::new();
 
@@ -226,7 +229,7 @@ async fn get_sys_info(data: web::Data<Data>) -> web::Json<SysInfo> {
     }
 
     sys.refresh_all();
-    web::Json(info)
+    HttpResponse::Ok().json(info)
 }
 
 #[derive(Serialize)]
@@ -290,7 +293,7 @@ impl SysInfoPretty {
 }
 
 #[get("/sys-info/pretty", wrap = "Authentication::Private")]
-async fn get_sys_info_pretty(data: web::Data<Data>) -> web::Json<SysInfoPretty> {
+async fn get_sys_info_pretty(data: web::Data<Data>) -> HttpResponse {
     let mut sys = System::new();
     let mut info = SysInfoPretty::new();
 
@@ -328,5 +331,5 @@ async fn get_sys_info_pretty(data: web::Data<Data>) -> web::Json<SysInfoPretty> 
 
     sys.refresh_all();
 
-    web::Json(info)
+    HttpResponse::Ok().json(info)
 }

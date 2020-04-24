@@ -2,11 +2,12 @@ use std::collections::{HashSet, HashMap};
 
 use log::warn;
 use actix_web::web;
+use actix_web::HttpResponse;
 use actix_web_macros::get;
 use serde::Deserialize;
 
 use crate::error::ResponseError;
-use crate::helpers::meilisearch::{IndexSearchExt, SearchResult};
+use crate::helpers::meilisearch::IndexSearchExt;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
@@ -34,7 +35,7 @@ async fn search_with_url_query(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<SearchQuery>,
-) -> Result<web::Json<SearchResult>, ResponseError> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
@@ -137,5 +138,5 @@ async fn search_with_url_query(
         }
     }
 
-    Ok(web::Json(search_builder.search(&reader)?))
+    Ok(HttpResponse::Ok().json(search_builder.search(&reader)?))
 }

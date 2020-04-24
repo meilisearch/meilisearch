@@ -33,7 +33,7 @@ where
 
     fn new_transform(&self, service: S) -> Self::Future {
         ok(LoggingMiddleware {
-            acl: (*self).clone(),
+            acl: self.clone(),
             service: Rc::new(RefCell::new(service)),
         })
     }
@@ -61,6 +61,8 @@ where
 
     fn call(&mut self, req: ServiceRequest) -> Self::Future {
         let mut svc = self.service.clone();
+        // This unwrap is left because this error should never appear. If that's the case, then
+        // it means that actix-web has an issue or someone changes the type `Data`.
         let data = req.app_data::<Data>().unwrap();
 
         if data.api_keys.master.is_none() {
