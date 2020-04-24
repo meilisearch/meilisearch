@@ -15,11 +15,11 @@ mod analytics;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-#[tokio::main]
+#[actix_rt::main]
 async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
-    let local = tokio::task::LocalSet::new();
-    let _sys = actix_rt::System::run_in_tokio("server", &local);
+    // let local = tokio::task::LocalSet::new();
+    // let _sys = actix_rt::System::run_in_tokio("server", &local);
 
     match opt.env.as_ref() {
         "production" => {

@@ -1,5 +1,4 @@
 use std::collections::{HashSet, HashMap};
-use std::time::Duration;
 
 use log::warn;
 use actix_web::web;
@@ -27,7 +26,6 @@ struct SearchQuery {
     crop_length: Option<usize>,
     attributes_to_highlight: Option<String>,
     filters: Option<String>,
-    timeout_ms: Option<u64>,
     matches: Option<bool>,
 }
 
@@ -131,10 +129,6 @@ async fn search_with_url_query(
 
     if let Some(filters) = &params.filters {
         search_builder.filters(filters.to_string());
-    }
-
-    if let Some(timeout_ms) = params.timeout_ms {
-        search_builder.timeout(Duration::from_millis(timeout_ms));
     }
 
     if let Some(matches) = params.matches {

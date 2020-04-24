@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use indexmap::IndexMap;
 use log::error;
@@ -33,7 +33,6 @@ impl IndexSearchExt for Index {
             attributes_to_retrieve: None,
             attributes_to_highlight: None,
             filters: None,
-            timeout: Duration::from_millis(30),
             matches: false,
         }
     }
@@ -48,7 +47,6 @@ pub struct SearchBuilder<'a> {
     attributes_to_retrieve: Option<HashSet<String>>,
     attributes_to_highlight: Option<HashSet<String>>,
     filters: Option<String>,
-    timeout: Duration,
     matches: bool,
 }
 
@@ -89,11 +87,6 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn timeout(&mut self, value: Duration) -> &SearchBuilder {
-        self.timeout = value;
-        self
-    }
-
     pub fn get_matches(&mut self) -> &SearchBuilder {
         self.matches = true;
         self
@@ -129,8 +122,6 @@ impl<'a> SearchBuilder<'a> {
                 }
             });
         }
-
-        query_builder.with_fetch_timeout(self.timeout);
 
         if let Some(field) = self.index.main.distinct_attribute(reader)? {
             if let Some(field_id) = schema.id(&field) {
@@ -192,7 +183,7 @@ impl<'a> SearchBuilder<'a> {
                 .document(reader, attributes.as_ref(), doc.id)
                 .map_err(|e| ResponseError::retrieve_document(doc.id.0, e))?
                 .ok_or(ResponseError::internal(
-                    "Impossible to retrieve a document id returned by the engine",
+                    "Impossible to retrieve the document; Corrupted data",
                 ))?;
 
             let mut formatted = document.iter()
