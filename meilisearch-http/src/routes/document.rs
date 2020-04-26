@@ -41,11 +41,12 @@ async fn get_document(
         .db
         .open_index(&path.index_uid)
         .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+
     let document_id = meilisearch_core::serde::compute_document_id(&path.document_id);
 
     let reader = data.db.main_read_txn()?;
 
-    let response = index
+    let response: Document = index
         .document(&reader, None, document_id)?
         .ok_or(ResponseError::document_not_found(&path.document_id))?;
 

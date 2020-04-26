@@ -172,15 +172,9 @@ impl<'a> SearchBuilder<'a> {
 
         let mut hits = Vec::with_capacity(self.limit);
         for doc in docs {
-            // retrieve the content of document in kv store
-            let attributes: Option<HashSet<&str>> = self
-                .attributes_to_retrieve
-                .as_ref()
-                .map(|a| a.iter().map(|a| a.as_str()).collect());
-
             let mut document: IndexMap<String, Value> = self
                 .index
-                .document(reader, attributes.as_ref(), doc.id)
+                .document(reader, Some(&all_attributes), doc.id)
                 .map_err(|e| ResponseError::retrieve_document(doc.id.0, e))?
                 .ok_or(ResponseError::internal(
                     "Impossible to retrieve the document; Corrupted data",
