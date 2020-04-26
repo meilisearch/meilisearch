@@ -76,7 +76,7 @@ curl -L https://install.meilisearch.com | sh
 
 #### Compile and run it from sources
 
-If you have the Rust toolchain already installed on your local system, clone the repository and change it to your working directory.
+If you have the latest stable Rust toolchain installed on your local system, clone the repository and change it to your working directory.
 
 ```bash
 git clone https://github.com/meilisearch/MeiliSearch.git
