@@ -17,6 +17,7 @@ use meilisearch_tokenizer::is_cjk;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use siphasher::sip::SipHasher;
+use slice_group_by::GroupBy;
 
 #[derive(Debug)]
 pub enum Error {
@@ -526,7 +527,12 @@ fn calculate_highlights(
                 let value: Vec<_> = value.chars().collect();
                 let mut highlighted_value = String::new();
                 let mut index = 0;
-                for m in matches {
+
+                let longest_matches = matches
+                    .linear_group_by_key(|m| m.start)
+                    .map(|group| group.last().unwrap());
+
+                for m in longest_matches {
                     if m.start >= index {
                         let before = value.get(index..m.start);
                         let highlighted = value.get(m.start..(m.start + m.length));
@@ -588,6 +594,35 @@ mod tests {
     }
 
     #[test]
+    fn calculate_matches() {
+        let mut matches = Vec::new();
+        matches.push(Highlight { attribute: 0, char_index: 0, char_length: 3});
+        matches.push(Highlight { attribute: 0, char_index: 0, char_length: 2});
+
+        let mut attributes_to_retrieve: HashSet<String> = HashSet::new();
+        attributes_to_retrieve.insert("title".to_string());
+
+        let schema = Schema::with_primary_key("title");
+
+        let matches_result = super::calculate_matches(matches, Some(attributes_to_retrieve), &schema);
+
+        let mut matches_result_expected: HashMap<String, Vec<MatchPosition>> = HashMap::new();
+
+        let mut positions = Vec::new();
+        positions.push(MatchPosition {
+            start: 0,
+            length: 2,
+        });
+        positions.push(MatchPosition {
+            start: 0,
+            length: 3,
+        });
+        matches_result_expected.insert("title".to_string(), positions);
+
+        assert_eq!(matches_result, matches_result_expected);
+    }
+
+    #[test]
     fn calculate_highlights() {
         let data = r#"{
             "title": "Fondation (Isaac ASIMOV)",
@@ -622,6 +657,40 @@ mod tests {
             Value::String("<em>Fondation</em> (Isaac ASIMOV)".to_string()),
         );
         result_expected.insert("description".to_string(), Value::String("En ce début de trentième millénaire, l'Empire n'a jamais été aussi puissant, aussi étendu à travers toute la galaxie. C'est dans sa capitale, Trantor, que l'éminent savant Hari Seldon invente la psychohistoire, une science toute nouvelle, à base de psychologie et de mathématiques, qui lui permet de prédire l'avenir... C'est-à-dire l'effondrement de l'Empire d'ici cinq siècles et au-delà, trente mille années de chaos et de ténèbres. Pour empêcher cette catastrophe et sauver la civilisation, Seldon crée la <em>Fondation</em>.".to_string()));
+
+        assert_eq!(result, result_expected);
+    }
+
+    #[test]
+    fn highlight_longest_match() {
+        let data = r#"{
+            "title": "Ice"
+        }"#;
+
+        let document: IndexMap<String, Value> = serde_json::from_str(data).unwrap();
+        let mut attributes_to_highlight = HashSet::new();
+        attributes_to_highlight.insert("title".to_string());
+
+        let mut matches = HashMap::new();
+
+        let mut m = Vec::new();
+        m.push(MatchPosition {
+            start: 0,
+            length: 2,
+        });
+        m.push(MatchPosition {
+            start: 0,
+            length: 3,
+        });
+        matches.insert("title".to_string(), m);
+
+        let result = super::calculate_highlights(&document, &matches, &attributes_to_highlight);
+
+        let mut result_expected = IndexMap::new();
+        result_expected.insert(
+            "title".to_string(),
+            Value::String("<em>Ice</em>".to_string()),
+        );
 
         assert_eq!(result, result_expected);
     }

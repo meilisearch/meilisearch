@@ -1141,6 +1141,7 @@ dependencies = [
  "serde_qs",
  "sha2",
  "siphasher",
+ "slice-group-by",
  "structopt",
  "sysinfo",
  "tempdir",
