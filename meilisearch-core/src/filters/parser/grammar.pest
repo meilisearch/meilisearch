@@ -2,7 +2,7 @@ key = _{quoted | word}
 value = _{quoted | word}
 quoted = _{ (PUSH("'") | PUSH("\"")) ~ string ~ POP  }
 string = {char*}
-word = ${(LETTER | NUMBER | "_" | "-")+}
+word = ${(LETTER | NUMBER | "_" | "-" | ".")+}
 
 char =  _{ !(PEEK | "\\") ~ ANY
     | "\\" ~ (PEEK | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
