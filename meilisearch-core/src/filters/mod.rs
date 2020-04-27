@@ -60,6 +60,7 @@ impl<'a> Filter<'a> {
                 Rule::geq => Ok(Filter::Condition(Condition::geq(pair, schema)?)),
                 Rule::leq => Ok(Filter::Condition(Condition::leq(pair, schema)?)),
                 Rule::prgm => Self::build(pair.into_inner(), schema),
+                Rule::term => Self::build(pair.into_inner(), schema),
                 Rule::not => Ok(Filter::Not(Box::new(Self::build(
                     pair.into_inner(),
                     schema,
@@ -109,6 +110,7 @@ mod test {
         assert!(FilterParser::parse(Rule::prgm, r#"field > 10"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"field < 10"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"field < 10 AND NOT field=5"#).is_ok());
+        assert!(FilterParser::parse(Rule::prgm, r#"field < 10 AND NOT field > 7.5"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"field=true OR NOT field=5"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"NOT field=true OR NOT field=5"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"field='hello world' OR ( NOT field=true OR NOT field=5 )"#).is_ok());

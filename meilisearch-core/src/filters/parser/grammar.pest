@@ -18,7 +18,7 @@ less = {key ~ "<" ~ value}
 
 prgm = {SOI ~ expr ~ EOI}
 expr = _{ ( term ~ (operation ~ term)* ) }
-term = _{ ("(" ~ expr ~ ")") | condition | not }
+term = { ("(" ~ expr ~ ")") | condition | not }
 operation = _{ and | or }
 	and = {"AND"}
 	or = {"OR"}
