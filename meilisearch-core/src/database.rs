@@ -135,20 +135,34 @@ fn update_awaiter(
     Ok(())
 }
 
+pub struct DatabaseOptions {
+    pub main_map_size: usize,
+    pub update_map_size: usize
+}
+
+impl Default for DatabaseOptions {
+    fn default() -> DatabaseOptions {
+        DatabaseOptions {
+            main_map_size: 100 * 1024 * 1024 * 1024, // 100GB
+            update_map_size: 100 * 1024 * 1024 * 1024 // 100GB
+        }
+    }
+}
+
 impl Database {
-    pub fn open_or_create(path: impl AsRef<Path>) -> MResult<Database> {
+    pub fn open_or_create(path: impl AsRef<Path>, options: DatabaseOptions) -> MResult<Database> {
         let main_path = path.as_ref().join("main");
         let update_path = path.as_ref().join("update");
 
         fs::create_dir_all(&main_path)?;
         let env = heed::EnvOpenOptions::new()
-            .map_size(100 * 1024 * 1024 * 1024) // 100GB
+            .map_size(options.main_map_size)
             .max_dbs(3000)
             .open(main_path)?;
 
         fs::create_dir_all(&update_path)?;
         let update_env = heed::EnvOpenOptions::new()
-            .map_size(100 * 1024 * 1024 * 1024) // 100GB
+            .map_size(options.update_map_size)
             .max_dbs(3000)
             .open(update_path)?;
 

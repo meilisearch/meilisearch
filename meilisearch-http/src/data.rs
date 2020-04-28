@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use heed::types::{SerdeBincode, Str};
 use log::error;
-use meilisearch_core::{Database, Error as MError, MResult, MainT, UpdateT};
+use meilisearch_core::{Database, DatabaseOptions, Error as MError, MResult, MainT, UpdateT};
 use sha2::Digest;
 use sysinfo::Pid;
 
@@ -132,7 +132,12 @@ impl Data {
         let db_path = opt.db_path.clone();
         let server_pid = sysinfo::get_current_pid().unwrap();
 
-        let db = Arc::new(Database::open_or_create(opt.db_path).unwrap());
+        let db_opt = DatabaseOptions {
+            main_map_size: opt.main_map_size,
+            update_map_size: opt.update_map_size
+        };
+
+        let db = Arc::new(Database::open_or_create(opt.db_path, db_opt).unwrap());
 
         let mut api_keys = ApiKeys {
             master: opt.master_key,
