@@ -1,4 +1,4 @@
-## v0.10.1 (unreleased)
+## v0.10.1
 
   - Add support for floating points in filters (#640)
   - Add '@' character as tokenizer separator (#607)
