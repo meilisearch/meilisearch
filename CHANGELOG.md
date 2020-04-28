@@ -1,5 +1,6 @@
 ## v0.10.1 (unreleased)
 
+  - Add support for floating points in filters (#640)
   - Add '@' character as tokenizer separator (#607)
   - Add support for filtering on arrays of strings (#611)
 
