@@ -14,7 +14,13 @@ name = "meilisearch"
 path = "src/main.rs"
 
 [dependencies]
-async-std = { version = "1.5.0", features = ["attributes"] }
+actix-cors = "0.2.0"
+actix-files = "0.2.1"
+actix-http = "1"
+actix-rt = "1"
+actix-service = "1.0.5"
+actix-web = "2"
+actix-web-macros = "0.1.0"
 chrono = { version = "0.4.11", features = ["serde"] }
 crossbeam-channel = "0.4.2"
 env_logger = "0.7.1"
@@ -30,25 +36,24 @@ meilisearch-tokenizer = {path = "../meilisearch-tokenizer", version = "0.10.1"}
 mime = "0.3.16"
 pretty-bytes = "0.2.2"
 rand = "0.7.3"
-rayon = "1.3.0"
 serde = { version = "1.0.105", features = ["derive"] }
 serde_json = { version = "1.0.50", features = ["preserve_order"] }
 serde_qs = "0.5.2"
 sha2 = "0.8.1"
 siphasher = "0.3.2"
+slice-group-by = "0.2.6"
 structopt = "0.3.12"
 sysinfo = "0.12.0"
-tide = "0.6.0"
+tokio = { version = "0.2.18", features = ["macros"] }
 ureq = { version = "0.12.0", features = ["tls"], default-features = false }
 walkdir = "2.3.1"
 whoami = "0.8.1"
-slice-group-by = "0.2.6"
 
 [dev-dependencies]
 http-service = "0.4.0"
 http-service-mock = "0.4.0"
 tempdir = "0.3.7"
-once_cell = "1.3.1"
+tokio = { version = "0.2.18", features = ["macros", "time"] }
 
 [dev-dependencies.assert-json-diff]
 git = "https://github.com/qdequele/assert-json-diff"

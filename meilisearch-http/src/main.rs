@@ -1,16 +1,13 @@
 use std::{env, thread};
 
-use async_std::task;
+use actix_cors::Cors;
+use actix_web::{middleware, HttpServer};
 use log::info;
 use main_error::MainError;
-use structopt::StructOpt;
-use tide::middleware::{Cors, RequestLogger, Origin};
-use http::header::HeaderValue;
-
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
-use meilisearch_http::routes;
-use meilisearch_http::routes::index::index_update_callback;
+use meilisearch_http::{create_app, index_update_callback};
+use structopt::StructOpt;
 
 mod analytics;
 
@@ -18,7 +15,8 @@ mod analytics;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-pub fn main() -> Result<(), MainError> {
+#[actix_rt::main]
+async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
 
     match opt.env.as_ref() {
@@ -29,7 +27,6 @@ pub fn main() -> Result<(), MainError> {
                         .into(),
                 );
             }
-            env_logger::init();
         }
         "development" => {
             env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -50,17 +47,21 @@ pub fn main() -> Result<(), MainError> {
 
     print_launch_resume(&opt, &data);
 
-    let mut app = tide::with_state(data);
+    HttpServer::new(move || {
+        create_app(&data)
+            .wrap(
+                Cors::new()
+                    .send_wildcard()
+                    .allowed_header("x-meili-api-key")
+                    .finish(),
+            )
+            .wrap(middleware::Logger::default())
+            .wrap(middleware::Compress::default())
+    })
+    .bind(opt.http_addr)?
+    .run()
+    .await?;
 
-    app.middleware(Cors::new()
-        .allow_methods(HeaderValue::from_static("GET, POST, PUT, DELETE, OPTIONS"))
-        .allow_headers(HeaderValue::from_static("X-Meili-API-Key"))
-        .allow_origin(Origin::from("*")));
-    app.middleware(RequestLogger::new());
-
-    routes::load_routes(&mut app);
-
-    task::block_on(app.listen(opt.http_addr))?;
     Ok(())
 }
 
@@ -76,7 +77,7 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
 888       888  "Y8888  888 888 888  "Y8888P"   "Y8888  "Y888888 888     "Y8888P 888  888
 "#;
 
-    println!("{}", ascii_name);
+    info!("{}", ascii_name);
 
     info!("Database path: {:?}", opt.db_path);
     info!("Start server on: {:?}", opt.http_addr);

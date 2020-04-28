@@ -9,8 +9,8 @@ use meilisearch_core::{Database, Error as MError, MResult, MainT, UpdateT};
 use sha2::Digest;
 use sysinfo::Pid;
 
+use crate::index_update_callback;
 use crate::option::Opt;
-use crate::routes::index::index_update_callback;
 
 const LAST_UPDATE_KEY: &str = "last-update";
 
@@ -37,7 +37,7 @@ pub struct DataInner {
     pub server_pid: Pid,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct ApiKeys {
     pub public: Option<String>,
     pub private: Option<String>,
@@ -135,7 +135,7 @@ impl Data {
         let db = Arc::new(Database::open_or_create(opt.db_path).unwrap());
 
         let mut api_keys = ApiKeys {
-            master: opt.master_key.clone(),
+            master: opt.master_key,
             private: None,
             public: None,
         };

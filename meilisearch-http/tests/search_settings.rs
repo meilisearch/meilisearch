@@ -4,10 +4,10 @@ use std::convert::Into;
 
 mod common;
 
-#[test]
-fn search_with_settings_basic() {
+#[actix_rt::test]
+async fn search_with_settings_basic() {
     let mut server = common::Server::with_uid("movies");
-    server.populate_movies();
+    server.populate_movies().await;
 
     let config = json!({
       "rankingRules": [
@@ -49,7 +49,7 @@ fn search_with_settings_basic() {
       "acceptNewFields": false,
     });
 
-    server.update_all_settings(config);
+    server.update_all_settings(config).await;
 
     let query = "q=the%20avangers&limit=3";
     let expect = json!([
@@ -106,14 +106,14 @@ fn search_with_settings_basic() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
-#[test]
-fn search_with_settings_stop_words() {
+#[actix_rt::test]
+async fn search_with_settings_stop_words() {
     let mut server = common::Server::with_uid("movies");
-    server.populate_movies();
+    server.populate_movies().await;
 
     let config = json!({
       "rankingRules": [
@@ -155,7 +155,7 @@ fn search_with_settings_stop_words() {
       "acceptNewFields": false,
     });
 
-    server.update_all_settings(config);
+    server.update_all_settings(config).await;
 
     let query = "q=the%20avangers&limit=3";
     let expect = json!([
@@ -212,14 +212,14 @@ fn search_with_settings_stop_words() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
-#[test]
-fn search_with_settings_synonyms() {
+#[actix_rt::test]
+async fn search_with_settings_synonyms() {
     let mut server = common::Server::with_uid("movies");
-    server.populate_movies();
+    server.populate_movies().await;
 
     let config = json!({
       "rankingRules": [
@@ -266,7 +266,7 @@ fn search_with_settings_synonyms() {
       "acceptNewFields": false,
     });
 
-    server.update_all_settings(config);
+    server.update_all_settings(config).await;
 
     let query = "q=avangers&limit=3";
     let expect = json!([
@@ -323,14 +323,14 @@ fn search_with_settings_synonyms() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
-#[test]
-fn search_with_settings_ranking_rules() {
+#[actix_rt::test]
+async fn search_with_settings_ranking_rules() {
     let mut server = common::Server::with_uid("movies");
-    server.populate_movies();
+    server.populate_movies().await;
 
     let config = json!({
       "rankingRules": [
@@ -372,7 +372,7 @@ fn search_with_settings_ranking_rules() {
       "acceptNewFields": false,
     });
 
-    server.update_all_settings(config);
+    server.update_all_settings(config).await;
 
     let query = "q=avangers&limit=3";
     let expect = json!([
@@ -429,14 +429,14 @@ fn search_with_settings_ranking_rules() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
-#[test]
-fn search_with_settings_searchable_attributes() {
+#[actix_rt::test]
+async fn search_with_settings_searchable_attributes() {
     let mut server = common::Server::with_uid("movies");
-    server.populate_movies();
+    server.populate_movies().await;
 
     let config = json!({
       "rankingRules": [
@@ -477,7 +477,7 @@ fn search_with_settings_searchable_attributes() {
       "acceptNewFields": false,
     });
 
-    server.update_all_settings(config);
+    server.update_all_settings(config).await;
 
     let query = "q=avangers&limit=3";
     let expect = json!([
@@ -534,14 +534,14 @@ fn search_with_settings_searchable_attributes() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
-#[test]
-fn search_with_settings_displayed_attributes() {
+#[actix_rt::test]
+async fn search_with_settings_displayed_attributes() {
     let mut server = common::Server::with_uid("movies");
-    server.populate_movies();
+    server.populate_movies().await;
 
     let config = json!({
       "rankingRules": [
@@ -577,7 +577,7 @@ fn search_with_settings_displayed_attributes() {
       "acceptNewFields": false,
     });
 
-    server.update_all_settings(config);
+    server.update_all_settings(config).await;
 
     let query = "q=avangers&limit=3";
     let expect = json!([
@@ -604,14 +604,14 @@ fn search_with_settings_displayed_attributes() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
-#[test]
-fn search_with_settings_searchable_attributes_2() {
+#[actix_rt::test]
+async fn search_with_settings_searchable_attributes_2() {
     let mut server = common::Server::with_uid("movies");
-    server.populate_movies();
+    server.populate_movies().await;
 
     let config = json!({
       "rankingRules": [
@@ -647,7 +647,7 @@ fn search_with_settings_searchable_attributes_2() {
       "acceptNewFields": false,
     });
 
-    server.update_all_settings(config);
+    server.update_all_settings(config).await;
 
     let query = "q=avangers&limit=3";
     let expect = json!([
@@ -674,6 +674,6 @@ fn search_with_settings_searchable_attributes_2() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
