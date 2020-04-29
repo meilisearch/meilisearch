@@ -1,23 +1,18 @@
 use std::convert::Into;
-use std::sync::Mutex;
 
 use assert_json_diff::assert_json_eq;
-use once_cell::sync::Lazy;
 use serde_json::json;
 
 mod common;
 
-static GLOBAL_SERVER: Lazy<Mutex<common::Server>> = Lazy::new(|| {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies();
-    Mutex::new(server)
-});
-
 // Search
 // q: Captain
 // limit: 3
-#[test]
-fn search_with_limit() {
+#[actix_rt::test]
+async fn search_with_limit() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=3";
 
     let expected = json!([
@@ -74,7 +69,7 @@ fn search_with_limit() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -82,8 +77,11 @@ fn search_with_limit() {
 // q: Captain
 // limit: 3
 // offset: 1
-#[test]
-fn search_with_offset() {
+#[actix_rt::test]
+async fn search_with_offset() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=3&offset=1";
 
     let expected = json!([
@@ -141,7 +139,7 @@ fn search_with_offset() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -149,8 +147,11 @@ fn search_with_offset() {
 // q: Captain
 // limit: 1
 // attributeToHighlight: *
-#[test]
-fn search_with_attribute_to_highlight_wildcard() {
+#[actix_rt::test]
+async fn search_with_attribute_to_highlight_wildcard() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToHighlight=*";
 
     let expected = json!([
@@ -190,7 +191,7 @@ fn search_with_attribute_to_highlight_wildcard() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -198,8 +199,11 @@ fn search_with_attribute_to_highlight_wildcard() {
 // q: Captain
 // limit: 1
 // attributeToHighlight: title
-#[test]
-fn search_with_attribute_to_highlight_1() {
+#[actix_rt::test]
+async fn search_with_attribute_to_highlight_1() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToHighlight=title";
 
     let expected = json!([
@@ -239,7 +243,7 @@ fn search_with_attribute_to_highlight_1() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -247,8 +251,11 @@ fn search_with_attribute_to_highlight_1() {
 // q: Captain
 // limit: 1
 // attributeToHighlight: title,tagline
-#[test]
-fn search_with_attribute_to_highlight_title_tagline() {
+#[actix_rt::test]
+async fn search_with_attribute_to_highlight_title_tagline() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToHighlight=title,tagline";
 
     let expected = json!([
@@ -288,7 +295,7 @@ fn search_with_attribute_to_highlight_title_tagline() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -296,8 +303,11 @@ fn search_with_attribute_to_highlight_title_tagline() {
 // q: Captain
 // limit: 1
 // attributeToHighlight: title,overview
-#[test]
-fn search_with_attribute_to_highlight_title_overview() {
+#[actix_rt::test]
+async fn search_with_attribute_to_highlight_title_overview() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToHighlight=title,overview";
 
     let expected = json!([
@@ -337,7 +347,7 @@ fn search_with_attribute_to_highlight_title_overview() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -345,8 +355,11 @@ fn search_with_attribute_to_highlight_title_overview() {
 // q: Captain
 // limit: 1
 // matches: true
-#[test]
-fn search_with_matches() {
+#[actix_rt::test]
+async fn search_with_matches() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&matches=true";
 
     let expected = json!([
@@ -383,7 +396,7 @@ fn search_with_matches() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -392,8 +405,11 @@ fn search_with_matches() {
 // limit: 1
 // attributesToCrop: overview
 // cropLength: 20
-#[test]
-fn search_witch_crop() {
+#[actix_rt::test]
+async fn search_witch_crop() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToCrop=overview&cropLength=20";
 
     let expected = json!([
@@ -433,7 +449,7 @@ fn search_witch_crop() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -441,8 +457,11 @@ fn search_witch_crop() {
 // q: Captain
 // limit: 1
 // attributesToRetrieve: [title,tagline,overview,poster_path]
-#[test]
-fn search_with_attributes_to_retrieve() {
+#[actix_rt::test]
+async fn search_with_attributes_to_retrieve() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToRetrieve=title,tagline,overview,poster_path";
 
     let expected = json!([
@@ -454,7 +473,7 @@ fn search_with_attributes_to_retrieve() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -462,8 +481,11 @@ fn search_with_attributes_to_retrieve() {
 // q: Captain
 // limit: 1
 // attributesToRetrieve: *
-#[test]
-fn search_with_attributes_to_retrieve_wildcard() {
+#[actix_rt::test]
+async fn search_with_attributes_to_retrieve_wildcard() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToRetrieve=*";
 
     let expected = json!([
@@ -486,7 +508,7 @@ fn search_with_attributes_to_retrieve_wildcard() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -494,8 +516,11 @@ fn search_with_attributes_to_retrieve_wildcard() {
 // q: Captain
 // limit: 3
 // filters: director:Anthony%20Russo
-#[test]
-fn search_with_filter() {
+#[actix_rt::test]
+async fn search_with_filter() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&filters=director%20%3D%20%22Anthony%20Russo%22&limit=3";
     let expected = json!([
       {
@@ -550,7 +575,7 @@ fn search_with_filter() {
         "vote_count": 10497
       }
     ]);
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 
     let expected = json!([
@@ -574,7 +599,7 @@ fn search_with_filter() {
 
     // filters: title = "american pie 2"
     let query = "q=american&filters=title%20%3D%20%22american%20pie%202%22";
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 
     let expected = json!([
@@ -615,7 +640,7 @@ fn search_with_filter() {
     ]);
     // limit: 3, director = "anthony russo" AND  (title = "captain america: civil war" OR title = "Captain America: The Winter Soldier")
     let query = "q=a&limit=3&filters=director%20%3D%20%22anthony%20russo%22%20AND%20%20(title%20%3D%20%22captain%20america%3A%20civil%20war%22%20OR%20title%20%3D%20%22Captain%20America%3A%20The%20Winter%20Soldier%22)";
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 
     let expected = json!([
@@ -673,7 +698,7 @@ fn search_with_filter() {
         ]);
     // director = "anthony russo" AND  (title = "captain america: civil war" OR vote_average > 8.0)
     let query = "q=a&limit=3&filters=director%20%3D%20%22anthony%20russo%22%20AND%20%20(title%20%3D%20%22captain%20america%3A%20civil%20war%22%20OR%20vote_average%20%3E%208.0)";
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 
     let expected = json!([
@@ -730,12 +755,12 @@ fn search_with_filter() {
         ]);
         // NOT director = "anthony russo" AND vote_average > 7.5
     let query = "q=a&limit=3&filters=NOT%20director%20%3D%20%22anthony%20russo%22%20AND%20vote_average%20%3E%207.5";
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 
     let expected = json!([]);
     let query = "q=a&filters=NOT%20director%20%3D%20%22anthony%20russo%22%20AND%20title%20%20%3D%20%22Avengers%3A%20Endgame%22";
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -744,8 +769,11 @@ fn search_with_filter() {
 // limit: 1
 // attributesToHighlight: [title,overview]
 // matches: true
-#[test]
-fn search_with_attributes_to_highlight_and_matches() {
+#[actix_rt::test]
+async fn search_with_attributes_to_highlight_and_matches() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToHighlight=title,overview&matches=true";
 
     let expected = json!( [
@@ -799,7 +827,7 @@ fn search_with_attributes_to_highlight_and_matches() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -810,8 +838,11 @@ fn search_with_attributes_to_highlight_and_matches() {
 // matches: true
 // cropLength: 20
 // attributesToCrop: overview
-#[test]
-fn search_with_attributes_to_highlight_and_matches_and_crop() {
+#[actix_rt::test]
+async fn search_with_attributes_to_highlight_and_matches_and_crop() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToCrop=overview&cropLength=20&attributesToHighlight=title,overview&matches=true";
 
     let expected = json!([
@@ -865,7 +896,7 @@ fn search_with_attributes_to_highlight_and_matches_and_crop() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -874,8 +905,11 @@ fn search_with_attributes_to_highlight_and_matches_and_crop() {
 // limit: 1
 // attributesToRetrieve: [title,producer,director]
 // attributesToHighlight: [title]
-#[test]
-fn search_with_differents_attributes() {
+#[actix_rt::test]
+async fn search_with_differents_attributes() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToHighlight=title";
 
     let expected = json!([
@@ -889,7 +923,7 @@ fn search_with_differents_attributes() {
       }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -899,8 +933,11 @@ fn search_with_differents_attributes() {
 // attributesToRetrieve: [title,producer,director]
 // attributesToCrop: [overview]
 // cropLength: 10
-#[test]
-fn search_with_differents_attributes_2() {
+#[actix_rt::test]
+async fn search_with_differents_attributes_2() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=overview&cropLength=10";
 
     let expected = json!([
@@ -914,7 +951,7 @@ fn search_with_differents_attributes_2() {
     }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -923,8 +960,11 @@ fn search_with_differents_attributes_2() {
 // limit: 1
 // attributesToRetrieve: [title,producer,director]
 // attributesToCrop: [overview:10]
-#[test]
-fn search_with_differents_attributes_3() {
+#[actix_rt::test]
+async fn search_with_differents_attributes_3() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=overview:10";
 
     let expected = json!([
@@ -938,7 +978,7 @@ fn search_with_differents_attributes_3() {
     }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -947,8 +987,11 @@ fn search_with_differents_attributes_3() {
 // limit: 1
 // attributesToRetrieve: [title,producer,director]
 // attributesToCrop: [overview:10,title:0]
-#[test]
-fn search_with_differents_attributes_4() {
+#[actix_rt::test]
+async fn search_with_differents_attributes_4() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=overview:10,title:0";
 
     let expected = json!([
@@ -963,7 +1006,7 @@ fn search_with_differents_attributes_4() {
     }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -972,8 +1015,11 @@ fn search_with_differents_attributes_4() {
 // limit: 1
 // attributesToRetrieve: [title,producer,director]
 // attributesToCrop: [*,overview:10]
-#[test]
-fn search_with_differents_attributes_5() {
+#[actix_rt::test]
+async fn search_with_differents_attributes_5() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=*,overview:10";
 
     let expected = json!([
@@ -990,7 +1036,7 @@ fn search_with_differents_attributes_5() {
     }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -1000,8 +1046,11 @@ fn search_with_differents_attributes_5() {
 // attributesToRetrieve: [title,producer,director]
 // attributesToCrop: [*,overview:10]
 // attributesToHighlight: [title]
-#[test]
-fn search_with_differents_attributes_6() {
+#[actix_rt::test]
+async fn search_with_differents_attributes_6() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=*,overview:10&attributesToHighlight=title";
 
     let expected = json!([
@@ -1018,7 +1067,7 @@ fn search_with_differents_attributes_6() {
     }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -1028,8 +1077,11 @@ fn search_with_differents_attributes_6() {
 // attributesToRetrieve: [title,producer,director]
 // attributesToCrop: [*,overview:10]
 // attributesToHighlight: [*]
-#[test]
-fn search_with_differents_attributes_7() {
+#[actix_rt::test]
+async fn search_with_differents_attributes_7() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=*,overview:10&attributesToHighlight=*";
 
     let expected = json!([
@@ -1046,7 +1098,7 @@ fn search_with_differents_attributes_7() {
     }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }
 
@@ -1056,8 +1108,11 @@ fn search_with_differents_attributes_7() {
 // attributesToRetrieve: [title,producer,director]
 // attributesToCrop: [*,overview:10]
 // attributesToHighlight: [*,tagline]
-#[test]
-fn search_with_differents_attributes_8() {
+#[actix_rt::test]
+async fn search_with_differents_attributes_8() {
+    let mut server = common::Server::with_uid("movies");
+    server.populate_movies().await;
+
     let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=*,overview:10&attributesToHighlight=*,tagline";
 
     let expected = json!([
@@ -1075,6 +1130,6 @@ fn search_with_differents_attributes_8() {
     }
     ]);
 
-    let (response, _status_code) = GLOBAL_SERVER.lock().unwrap().search(query);
+    let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
 }

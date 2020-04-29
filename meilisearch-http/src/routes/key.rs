@@ -1,17 +1,26 @@
-use crate::error::SResult;
-use crate::helpers::tide::RequestExt;
-use crate::helpers::tide::ACL::*;
+use actix_web::web;
+use actix_web::HttpResponse;
+use actix_web_macros::get;
+use serde::Serialize;
+
+use crate::helpers::Authentication;
 use crate::Data;
-use serde_json::json;
-use tide::{Request, Response};
 
-pub async fn list(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Admin)?;
+pub fn services(cfg: &mut web::ServiceConfig) {
+    cfg.service(list);
+}
 
-    let keys = &ctx.state().api_keys;
+#[derive(Serialize)]
+struct KeysResponse {
+    private: Option<String>,
+    public: Option<String>,
+}
 
-    Ok(tide::Response::new(200).body_json(&json!({
-        "private": keys.private,
-        "public": keys.public,
-    }))?)
+#[get("/keys", wrap = "Authentication::Admin")]
+async fn list(data: web::Data<Data>) -> HttpResponse {
+    let api_keys = data.api_keys.clone();
+    HttpResponse::Ok().json(KeysResponse {
+        private: api_keys.private,
+        public: api_keys.public,
+    })
 }

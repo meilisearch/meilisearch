@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-use meilisearch_core::{Database, Highlight, ProcessedUpdateResult};
+use meilisearch_core::{Database, DatabaseOptions, Highlight, ProcessedUpdateResult};
 use meilisearch_core::settings::Settings;
 use meilisearch_schema::FieldId;
 
@@ -463,7 +463,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let opt = Command::from_args();
-    let database = Database::open_or_create(opt.path())?;
+    let database = Database::open_or_create(opt.path(), DatabaseOptions::default())?;
 
     match opt {
         Command::Index(command) => index_command(command, database),

@@ -1,62 +1,85 @@
 use std::collections::{BTreeSet, HashSet};
 
+use actix_web::{web, HttpResponse};
+use actix_web_macros::{delete, get, post, put};
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
-use tide::{Request, Response};
 
-use crate::error::{ResponseError, SResult};
-use crate::helpers::tide::RequestExt;
-use crate::helpers::tide::ACL::*;
+use crate::error::ResponseError;
+use crate::helpers::Authentication;
+use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
 
-pub async fn get_document(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Public)?;
+type Document = IndexMap<String, Value>;
 
-    let index = ctx.index()?;
-
-    let original_document_id = ctx.document_id()?;
-    let document_id = meilisearch_core::serde::compute_document_id(original_document_id.clone());
-
-    let db = &ctx.state().db;
-    let reader = db.main_read_txn()?;
-
-    let response = index
-        .document::<IndexMap<String, Value>>(&reader, None, document_id)?
-        .ok_or(ResponseError::document_not_found(&original_document_id))?;
-
-    if response.is_empty() {
-        return Err(ResponseError::document_not_found(&original_document_id));
-    }
-
-    Ok(tide::Response::new(200).body_json(&response)?)
+#[derive(Deserialize)]
+struct DocumentParam {
+    index_uid: String,
+    document_id: String,
 }
 
-#[derive(Default, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct IndexUpdateResponse {
-    pub update_id: u64,
+pub fn services(cfg: &mut web::ServiceConfig) {
+    cfg.service(get_document)
+        .service(delete_document)
+        .service(get_all_documents)
+        .service(add_documents)
+        .service(update_documents)
+        .service(delete_documents)
+        .service(clear_all_documents);
 }
 
-pub async fn delete_document(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Private)?;
+#[get(
+    "/indexes/{index_uid}/documents/{document_id}",
+    wrap = "Authentication::Public"
+)]
+async fn get_document(
+    data: web::Data<Data>,
+    path: web::Path<DocumentParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let index = ctx.index()?;
-    let document_id = ctx.document_id()?;
-    let document_id = meilisearch_core::serde::compute_document_id(document_id);
-    let db = &ctx.state().db;
-    let mut update_writer = db.update_write_txn()?;
+    let document_id = meilisearch_core::serde::compute_document_id(&path.document_id);
+
+    let reader = data.db.main_read_txn()?;
+
+    let response: Document = index
+        .document(&reader, None, document_id)?
+        .ok_or(ResponseError::document_not_found(&path.document_id))?;
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+#[delete(
+    "/indexes/{index_uid}/documents/{document_id}",
+    wrap = "Authentication::Private"
+)]
+async fn delete_document(
+    data: web::Data<Data>,
+    path: web::Path<DocumentParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+    let document_id = meilisearch_core::serde::compute_document_id(&path.document_id);
+
+    let mut update_writer = data.db.update_write_txn()?;
+
     let mut documents_deletion = index.documents_deletion();
     documents_deletion.delete_document_by_id(document_id);
+
     let update_id = documents_deletion.finalize(&mut update_writer)?;
 
     update_writer.commit()?;
 
-    let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body)?)
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BrowseQuery {
     offset: Option<usize>,
@@ -64,17 +87,21 @@ struct BrowseQuery {
     attributes_to_retrieve: Option<String>,
 }
 
-pub async fn get_all_documents(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Private)?;
+#[get("/indexes/{index_uid}/documents", wrap = "Authentication::Public")]
+async fn get_all_documents(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    params: web::Query<BrowseQuery>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let index = ctx.index()?;
-    let query: BrowseQuery = ctx.query().unwrap_or_default();
+    let offset = params.offset.unwrap_or(0);
+    let limit = params.limit.unwrap_or(20);
 
-    let offset = query.offset.unwrap_or(0);
-    let limit = query.limit.unwrap_or(20);
-
-    let db = &ctx.state().db;
-    let reader = db.main_read_txn()?;
+    let reader = data.db.main_read_txn()?;
 
     let documents_ids: Result<BTreeSet<_>, _> = index
         .documents_fields_counts
@@ -83,29 +110,23 @@ pub async fn get_all_documents(ctx: Request<Data>) -> SResult<Response> {
         .take(limit)
         .collect();
 
-    let documents_ids = match documents_ids {
-        Ok(documents_ids) => documents_ids,
-        Err(e) => return Err(ResponseError::internal(e)),
-    };
+    let documents_ids = documents_ids?;
 
-    let mut response_body = Vec::<IndexMap<String, Value>>::new();
+    let attributes: Option<HashSet<&str>> = params
+        .attributes_to_retrieve
+        .as_ref()
+        .map(|a| a.split(',').collect());
 
-    if let Some(attributes) = query.attributes_to_retrieve {
-        let attributes = attributes.split(',').collect::<HashSet<&str>>();
-        for document_id in documents_ids {
-            if let Ok(Some(document)) = index.document(&reader, Some(&attributes), document_id) {
-                response_body.push(document);
-            }
-        }
-    } else {
-        for document_id in documents_ids {
-            if let Ok(Some(document)) = index.document(&reader, None, document_id) {
-                response_body.push(document);
-            }
+    let mut response = Vec::new();
+    for document_id in documents_ids {
+        if let Ok(Some(document)) =
+            index.document::<Document>(&reader, attributes.as_ref(), document_id)
+        {
+            response.push(document);
         }
     }
 
-    Ok(tide::Response::new(200).body_json(&response_body)?)
+    Ok(HttpResponse::Ok().json(response))
 }
 
 fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
@@ -117,40 +138,45 @@ fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
     None
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateDocumentsQuery {
     primary_key: Option<String>,
 }
 
-async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> SResult<Response> {
-    ctx.is_allowed(Private)?;
+async fn update_multiple_documents(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: web::Json<Vec<Document>>,
+    is_partial: bool,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let index = ctx.index()?;
+    let reader = data.db.main_read_txn()?;
 
-    let data: Vec<IndexMap<String, Value>> =
-        ctx.body_json().await.map_err(ResponseError::bad_request)?;
-    let query: UpdateDocumentsQuery = ctx.query().unwrap_or_default();
-
-    let db = &ctx.state().db;
-
-    let reader = db.main_read_txn()?;
     let mut schema = index
         .main
         .schema(&reader)?
-        .ok_or(ResponseError::internal("schema not found"))?;
+        .ok_or(ResponseError::internal("Impossible to retrieve the schema"))?;
 
     if schema.primary_key().is_none() {
-        let id = match query.primary_key {
-            Some(id) => id,
-            None => match data.first().and_then(|docs| find_primary_key(docs)) {
-                Some(id) => id,
-                None => return Err(ResponseError::bad_request("Could not infer a primary key")),
-            },
+        let id = match &params.primary_key {
+            Some(id) => id.to_string(),
+            None => body
+                .first()
+                .and_then(find_primary_key)
+                .ok_or(ResponseError::bad_request("Could not infer a primary key"))?,
         };
 
-        let mut writer = db.main_write_txn()?;
-        schema.set_primary_key(&id).map_err(ResponseError::bad_request)?;
+        let mut writer = data.db.main_write_txn()?;
+
+        schema
+            .set_primary_key(&id)
+            .map_err(ResponseError::bad_request)?;
         index.main.put_schema(&mut writer, &schema)?;
         writer.commit()?;
     }
@@ -161,38 +187,56 @@ async fn update_multiple_documents(mut ctx: Request<Data>, is_partial: bool) -> 
         index.documents_addition()
     };
 
-    for document in data {
+    for document in body.into_inner() {
         document_addition.update_document(document);
     }
 
-    let mut update_writer = db.update_write_txn()?;
+    let mut update_writer = data.db.update_write_txn()?;
     let update_id = document_addition.finalize(&mut update_writer)?;
     update_writer.commit()?;
 
-    let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body)?)
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-pub async fn add_or_replace_multiple_documents(ctx: Request<Data>) -> SResult<Response> {
-    update_multiple_documents(ctx, false).await
+#[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn add_documents(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: web::Json<Vec<Document>>,
+) -> Result<HttpResponse, ResponseError> {
+    update_multiple_documents(data, path, params, body, false).await
 }
 
-pub async fn add_or_update_multiple_documents(ctx: Request<Data>) -> SResult<Response> {
-    update_multiple_documents(ctx, true).await
+#[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn update_documents(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: web::Json<Vec<Document>>,
+) -> Result<HttpResponse, ResponseError> {
+    update_multiple_documents(data, path, params, body, true).await
 }
 
-pub async fn delete_multiple_documents(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Private)?;
+#[post(
+    "/indexes/{index_uid}/documents/delete-batch",
+    wrap = "Authentication::Private"
+)]
+async fn delete_documents(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<Vec<Value>>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let data: Vec<Value> = ctx.body_json().await.map_err(ResponseError::bad_request)?;
-    let index = ctx.index()?;
-
-    let db = &ctx.state().db;
-    let mut writer = db.update_write_txn()?;
+    let mut writer = data.db.update_write_txn()?;
 
     let mut documents_deletion = index.documents_deletion();
 
-    for document_id in data {
+    for document_id in body.into_inner() {
         if let Some(document_id) = meilisearch_core::serde::value_to_string(&document_id) {
             documents_deletion
                 .delete_document_by_id(meilisearch_core::serde::compute_document_id(document_id));
@@ -203,21 +247,24 @@ pub async fn delete_multiple_documents(mut ctx: Request<Data>) -> SResult<Respon
 
     writer.commit()?;
 
-    let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body)?)
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-pub async fn clear_all_documents(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Private)?;
+#[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn clear_all_documents(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&path.index_uid)
+        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let index = ctx.index()?;
-
-    let db = &ctx.state().db;
-    let mut writer = db.update_write_txn()?;
+    let mut writer = data.db.update_write_txn()?;
 
     let update_id = index.clear_all(&mut writer)?;
+
     writer.commit()?;
 
-    let response_body = IndexUpdateResponse { update_id };
-    Ok(tide::Response::new(202).body_json(&response_body)?)
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

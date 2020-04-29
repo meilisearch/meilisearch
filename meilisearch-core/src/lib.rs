@@ -25,7 +25,7 @@ pub mod raw_indexer;
 pub mod serde;
 pub mod store;
 
-pub use self::database::{BoxUpdateFn, Database, MainT, UpdateT};
+pub use self::database::{BoxUpdateFn, Database, DatabaseOptions, MainT, UpdateT};
 pub use self::error::{Error, HeedError, FstError, MResult, pest_error};
 pub use self::filters::Filter;
 pub use self::number::{Number, ParseNumberError};

@@ -1,3 +1,7 @@
+## v0.10.2
+
+- Add support for configuring the lmdb map size (#646)
+
 ## v0.10.1
 
   - Add support for floating points in filters (#640)
