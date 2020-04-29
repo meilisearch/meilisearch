@@ -143,7 +143,7 @@ mod tests {
     use crate::DocIndex;
     use crate::automaton::normalize_str;
     use crate::bucket_sort::SimpleMatch;
-    use crate::database::Database;
+    use crate::database::{Database,DatabaseOptions};
     use crate::store::Index;
     use meilisearch_schema::Schema;
 
@@ -249,7 +249,7 @@ mod tests {
     impl<'a> FromIterator<(&'a str, &'a [DocIndex])> for TempDatabase {
         fn from_iter<I: IntoIterator<Item = (&'a str, &'a [DocIndex])>>(iter: I) -> Self {
             let tempdir = TempDir::new().unwrap();
-            let database = Database::open_or_create(&tempdir).unwrap();
+            let database = Database::open_or_create(&tempdir, DatabaseOptions::default()).unwrap();
             let index = database.create_index("default").unwrap();
 
             let db = &database;
