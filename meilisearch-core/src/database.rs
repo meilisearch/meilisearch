@@ -382,7 +382,7 @@ mod tests {
     fn valid_updates() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -447,7 +447,7 @@ mod tests {
     fn invalid_updates() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -509,7 +509,7 @@ mod tests {
     fn ignored_words_too_long() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -564,7 +564,7 @@ mod tests {
     fn add_schema_attributes_at_end() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -708,7 +708,7 @@ mod tests {
     fn deserialize_documents() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -788,7 +788,7 @@ mod tests {
     fn partial_document_update() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -922,7 +922,7 @@ mod tests {
     fn delete_index() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Arc::new(Database::open_or_create(dir.path()).unwrap());
+        let database = Arc::new(Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap());
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -994,7 +994,7 @@ mod tests {
     fn check_number_ordering() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
