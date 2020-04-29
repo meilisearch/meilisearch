@@ -18,12 +18,16 @@ impl Server {
     pub fn with_uid(uid: &str) -> Server {
         let tmp_dir = TempDir::new("meilisearch").unwrap();
 
+        let default_db_options = meilisearch_core::DatabaseOptions::default();
+
         let opt = Opt {
             db_path: tmp_dir.path().to_str().unwrap().to_string(),
             http_addr: "127.0.0.1:7700".to_owned(),
             master_key: None,
             env: "development".to_owned(),
             no_analytics: true,
+            main_map_size: default_db_options.main_map_size,
+            update_map_size: default_db_options.update_map_size
         };
 
         let data = Data::new(opt.clone());

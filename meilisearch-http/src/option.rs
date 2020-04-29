@@ -26,4 +26,12 @@ pub struct Opt {
     /// Do not send analytics to Meili.
     #[structopt(long, env = "MEILI_NO_ANALYTICS")]
     pub no_analytics: bool,
+
+    /// The maximum size, in bytes, of the main lmdb database directory
+    #[structopt(long, env = "MEILI_MAIN_MAP_SIZE", default_value = "meilisearch_core::DatabaseOptions::default().main_map_size")]
+    pub main_map_size: usize,
+
+    /// The maximum size, in bytes, of the update lmdb database directory
+    #[structopt(long, env = "MEILI_UPDATE_MAP_SIZE", default_value = "meilisearch_core::DatabaseOptions::default().update_map_size")]
+    pub update_map_size: usize
 }
