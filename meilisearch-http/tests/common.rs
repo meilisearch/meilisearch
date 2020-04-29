@@ -6,6 +6,7 @@ use std::time::Duration;
 use actix_web::{http::StatusCode, test};
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
+use meilisearch_core::DatabaseOptions;
 use tempdir::TempDir;
 use tokio::time::delay_for;
 
@@ -14,11 +15,16 @@ pub struct Server {
     data: Data,
 }
 
+const DB_OPTS: DatabaseOptions = DatabaseOptions {
+    main_map_size: 100 * 1024 * 1024 * 1024,
+    update_map_size: 100 * 1024 * 1024 * 1024,
+};
+
 impl Server {
     pub fn with_uid(uid: &str) -> Server {
         let tmp_dir = TempDir::new("meilisearch").unwrap();
 
-        let default_db_options = meilisearch_core::DatabaseOptions::default();
+        let default_db_options = DB_OPTS;
 
         let opt = Opt {
             db_path: tmp_dir.path().to_str().unwrap().to_string(),
@@ -34,7 +40,7 @@ impl Server {
 
         Server {
             uid: uid.to_string(),
-            data: data,
+            data,
         }
     }
 
