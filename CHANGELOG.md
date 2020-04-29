@@ -1,6 +1,6 @@
 ## v0.10.2
 
-- Add support for configuring the lmdb map size (#646)
+- Add support for configuring the lmdb map size (#646, #647)
 
 ## v0.10.1
 
