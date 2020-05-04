@@ -1,6 +1,7 @@
 ## v0.10.2
 
-- Add support for configuring the lmdb map size (#646, #647)
+  - Add support for configuring the lmdb map size (#646, #647)
+  - Add exposed port for Dockerfile (#654)
 
 ## v0.10.1
 
