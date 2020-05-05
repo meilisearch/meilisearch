@@ -90,12 +90,12 @@ get_latest() {
             fi
             i=1
         elif [ $i -eq 1 ]; then # Checking draft boolean
-            if [ "$release_info" == "true" ]; then
+            if [ "$release_info" = "true" ]; then
                 current_tag=""
             fi
             i=2
         elif [ $i -eq 2 ]; then # Checking prerelease boolean
-            if [ "$release_info" == "true" ]; then
+            if [ "$release_info" = "true" ]; then
                 current_tag=""
             fi
             i=0
@@ -116,24 +116,38 @@ get_latest() {
     echo $latest
 }
 
+# Gets the OS by setting the $os variable
+# Returns 0 in case of success, 1 otherwise.
 get_os() {
     os_name=$(uname -s)
-    if [ "$os_name" != "Darwin" ]; then
-        os_name=$(cat /etc/os-release | grep '^ID=' | tr -d '"' | cut -d '=' -f 2)
-    fi
     case "$os_name" in
     'Darwin')
         os='macos'
         ;;
-    'ubuntu' | 'debian')
+    'Linux')
         os='linux'
         ;;
     *)
-        failure_usage
-        exit 1
+        return 1
     esac
+    return 0
+}
 
-    echo "$os"
+# Gets the architecture by setting the $archi variable
+# Returns 0 in case of success, 1 otherwise.
+get_archi() {
+    architecture=$(uname -m)
+    case "$architecture" in
+    'x86_64' | 'amd64')
+        archi='amd64'
+        ;;
+    'aarch64')
+        archi='armv8'
+        ;;
+    *)
+        return 1
+    esac
+    return 0
 }
 
 success_usage() {
@@ -146,18 +160,26 @@ success_usage() {
 }
 
 failure_usage() {
-    printf "$RED%s\n$DEFAULT" 'ERROR: MeiliSearch binary is not available for your OS distribution yet.'
+    printf "$RED%s\n$DEFAULT" 'ERROR: MeiliSearch binary is not available for your OS distribution or your architecture yet.'
     echo ''
     echo 'However, you can easily compile the binary from the source files.'
-    echo 'Follow the steps on the docs: https://docs.meilisearch.com/advanced_guides/binary.html#how-to-compile-meilisearch'
+    echo 'Follow the steps at the page ("Source" tab): https://docs.meilisearch.com/guides/advanced_guides/installation.html'
 }
 
 # MAIN
-os="$(get_os)"
 latest="$(get_latest)"
-echo "Downloading MeiliSearch binary $latest for $os..."
-
-release_file="meilisearch-$os-amd64"
+get_os
+if [ "$?" -eq 1 ]; then
+    failure_usage
+    exit 1
+fi
+get_archi
+if [ "$?" -eq 1 ]; then
+    failure_usage
+    exit 1
+fi
+echo "Downloading MeiliSearch binary $latest for $os, architecture $archi..."
+release_file="meilisearch-$os-$archi"
 link="https://github.com/meilisearch/MeiliSearch/releases/download/$latest/$release_file"
 curl -OL "$link"
 mv "$release_file" "$BINARY_NAME"
