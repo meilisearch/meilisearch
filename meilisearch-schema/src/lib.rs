@@ -6,6 +6,7 @@ pub use error::{Error, SResult};
 pub use fields_map::FieldsMap;
 pub use schema::Schema;
 use serde::{Deserialize, Serialize};
+use zerocopy::{AsBytes, FromBytes};
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct IndexedPos(pub u16);

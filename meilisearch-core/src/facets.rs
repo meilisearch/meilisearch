@@ -70,7 +70,7 @@ impl FacetFilter {
                 }
                 return Ok(Self(filter));
             }
-            bad_value => Err(FacetError::unexpected_token(&["String"], bad_value)),
+            bad_value => Err(FacetError::unexpected_token(&["Array"], bad_value)),
         }
     }
 }

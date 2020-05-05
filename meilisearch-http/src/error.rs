@@ -120,7 +120,7 @@ impl aweb::error::ResponseError for ResponseError {
     }
 
     fn status_code(&self) -> StatusCode {
-        match *self {
+       match *self {
             Self::BadParameter(_, _)
             | Self::BadRequest(_)
             | Self::CreateIndex(_)

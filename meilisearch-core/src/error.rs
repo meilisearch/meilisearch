@@ -197,7 +197,7 @@ impl fmt::Display for FacetError {
             InvalidFormat(found) => write!(f, "invalid facet: {}, facets should be \"facetName:facetValue\"", found),
             AttributeNotFound(attr) => write!(f, "unknown {:?} attribute", attr),
             AttributeNotSet { found, expected } => write!(f, "`{}` is not set as a faceted attribute. available facet attributes: {}", found, expected.join(", ")),
-            InvalidDocumentAttribute(attr) => write!(f, "invalid document attribute {}, accepted types: string and [string]", attr),
+            InvalidDocumentAttribute(attr) => write!(f, "invalid document attribute {}, accepted types: String and [String]", attr),
         }
     }
 }

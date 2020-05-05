@@ -6,6 +6,7 @@ use sdset::{duo::DifferenceByKey, SetBuf, SetOperation};
 
 use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
+use crate::facets;
 use crate::serde::extract_document_id;
 use crate::store;
 use crate::update::{next_update_id, compute_short_prefixes, Update};
@@ -88,8 +89,6 @@ pub fn apply_documents_deletion(
     index: &store::Index,
     deletion: Vec<DocumentId>,
 ) -> MResult<()> {
-    let idset = SetBuf::from_dirty(deletion);
-
     let schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
@@ -100,9 +99,16 @@ pub fn apply_documents_deletion(
         None => RankedMap::default(),
     };
 
+    // facet filters deletion
+    if let Some(attributes_for_facetting) = index.main.attributes_for_faceting(writer)? {
+        let facet_map = facets::facet_map_from_docids(writer, &index, &deletion, &attributes_for_facetting)?;
+        index.facets.remove(writer, facet_map)?;
+    }
+
     // collect the ranked attributes according to the schema
     let ranked_fields = schema.ranked();
 
+    let idset = SetBuf::from_dirty(deletion);
     let mut words_document_ids = HashMap::new();
     for id in idset {
         // remove all the ranked attributes from the ranked_map

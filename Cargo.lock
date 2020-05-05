@@ -1685,6 +1685,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
+ "zerocopy",
 ]
 
 [[package]]
