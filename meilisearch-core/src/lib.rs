@@ -19,14 +19,15 @@ mod ranked_map;
 mod raw_document;
 mod reordered_attrs;
 mod update;
-pub mod settings;
 pub mod criterion;
+pub mod facets;
 pub mod raw_indexer;
+pub mod settings;
 pub mod serde;
 pub mod store;
 
 pub use self::database::{BoxUpdateFn, Database, DatabaseOptions, MainT, UpdateT};
-pub use self::error::{Error, HeedError, FstError, MResult, pest_error};
+pub use self::error::{Error, HeedError, FstError, MResult, pest_error, FacetError};
 pub use self::filters::Filter;
 pub use self::number::{Number, ParseNumberError};
 pub use self::ranked_map::RankedMap;

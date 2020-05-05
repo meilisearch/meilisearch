@@ -36,7 +36,10 @@ impl Into<u16> for IndexedPos {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Copy, Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize)]
+#[derive(AsBytes, FromBytes)]
+#[repr(C)]
 pub struct FieldId(pub u16);
 
 impl FieldId {
@@ -63,8 +66,8 @@ impl From<u16> for FieldId {
     }
 }
 
-impl Into<u16> for FieldId {
-    fn into(self) -> u16 {
-        self.0
+impl From<FieldId> for u16 {
+    fn from(other: FieldId) -> u16 {
+        other.0
     }
 }
