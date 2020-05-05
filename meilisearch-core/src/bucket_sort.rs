@@ -11,7 +11,7 @@ use std::fmt;
 use compact_arena::{SmallArena, Idx32, mk_arena};
 use log::debug;
 use meilisearch_types::DocIndex;
-use sdset::{Set, SetBuf, exponential_search};
+use sdset::{Set, SetBuf, exponential_search, SetOperation};
 use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::error::Error;
@@ -28,6 +28,7 @@ pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
     query: &str,
     range: Range<usize>,
+    facets_docids: Option<SetBuf<DocumentId>>,
     filter: Option<FI>,
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
@@ -50,6 +51,7 @@ where
             reader,
             query,
             range,
+            facets_docids,
             filter,
             distinct,
             distinct_size,
@@ -94,9 +96,16 @@ where
     let mut queries_kinds = HashMap::new();
     recurs_operation(&mut queries_kinds, &operation);
 
-    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation)?;
+    let QueryResult { mut docids, queries } = traverse_query_tree(reader, &context, &operation)?;
     debug!("found {} documents", docids.len());
     debug!("number of postings {:?}", queries.len());
+
+    if let Some(facets_docids) = facets_docids {
+        let intersection = sdset::duo::OpBuilder::new(docids.as_ref(), facets_docids.as_set())
+            .intersection()
+            .into_set_buf();
+        docids = Cow::Owned(intersection);
+    }
 
     let before = Instant::now();
     mk_arena!(arena);
@@ -179,6 +188,7 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     reader: &heed::RoTxn<MainT>,
     query: &str,
     range: Range<usize>,
+    facets_docids: Option<SetBuf<DocumentId>>,
     filter: Option<FI>,
     distinct: FD,
     distinct_size: usize,
@@ -225,9 +235,16 @@ where
     let mut queries_kinds = HashMap::new();
     recurs_operation(&mut queries_kinds, &operation);
 
-    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation)?;
+    let QueryResult { mut docids, queries } = traverse_query_tree(reader, &context, &operation)?;
     debug!("found {} documents", docids.len());
     debug!("number of postings {:?}", queries.len());
+
+    if let Some(facets_docids) = facets_docids {
+        let intersection = sdset::duo::OpBuilder::new(docids.as_ref(), facets_docids.as_set())
+            .intersection()
+            .into_set_buf();
+        docids = Cow::Owned(intersection);
+    }
 
     let before = Instant::now();
     mk_arena!(arena);
