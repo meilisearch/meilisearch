@@ -1,12 +1,15 @@
 #!/bin/sh
 
-# COLORS
-RED='\033[31m'
-GREEN='\033[32m'
-DEFAULT='\033[0m'
+# Checks if the current tag should be the latest (in terms of semver and not of release date).
+# Ex: previous tag -> v0.10.1
+#     new tag -> v0.8.12
+#     The new tag should not be the latest
+#     So it returns "false", the CI should not run for the release v0.8.2
 
-# GLOBALS
-BINARY_NAME='meilisearch'
+# Used in GHA in publish-docker-latest.yml
+# Returns "true" or "false" (as a string) to be used in the `if` in GHA
+
+# GLOBAL
 GREP_SEMVER_REGEXP='v\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)$' # i.e. v[number].[number].[number]
 
 # FUNCTIONS
@@ -116,50 +119,14 @@ get_latest() {
     echo $latest
 }
 
-get_os() {
-    os_name=$(uname -s)
-    if [ "$os_name" != "Darwin" ]; then
-        os_name=$(cat /etc/os-release | grep '^ID=' | tr -d '"' | cut -d '=' -f 2)
-    fi
-    case "$os_name" in
-    'Darwin')
-        os='macos'
-        ;;
-    'ubuntu' | 'debian')
-        os='linux'
-        ;;
-    *)
-        failure_usage
-        exit 1
-    esac
-
-    echo "$os"
-}
-
-success_usage() {
-    printf "$GREEN%s\n$DEFAULT" "MeiliSearch binary successfully downloaded as '$BINARY_NAME' file."
-    echo ''
-    echo 'Run it:'
-    echo '    $ ./meilisearch'
-    echo 'Usage:'
-    echo '    $ ./meilisearch --help'
-}
-
-failure_usage() {
-    printf "$RED%s\n$DEFAULT" 'ERROR: MeiliSearch binary is not available for your OS distribution yet.'
-    echo ''
-    echo 'However, you can easily compile the binary from the source files.'
-    echo 'Follow the steps on the docs: https://docs.meilisearch.com/advanced_guides/binary.html#how-to-compile-meilisearch'
-}
-
 # MAIN
-os="$(get_os)"
+current_tag="$(echo $GITHUB_REF | tr -d 'refs/tags/')"
 latest="$(get_latest)"
-echo "Downloading MeiliSearch binary $latest for $os..."
 
-release_file="meilisearch-$os-amd64"
-link="https://github.com/meilisearch/MeiliSearch/releases/download/v$latest/$release_file"
-curl -OL "$link"
-mv "$release_file" "$BINARY_NAME"
-chmod 744 "$BINARY_NAME"
-success_usage
+if [ "$current_tag" != "$latest" ]; then
+    # The current release tag is not the latest
+    echo "false"
+else
+    # The current release tag is the latest
+    echo "true"
+then
