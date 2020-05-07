@@ -1,27 +1,31 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::{Range, Deref};
 use std::time::Duration;
 
 use crate::database::MainT;
-use crate::bucket_sort::{bucket_sort, bucket_sort_with_distinct};
-use crate::{criterion::Criteria, Document, DocumentId};
+use crate::bucket_sort::{bucket_sort, bucket_sort_with_distinct, SortResult};
+use crate::{criterion::Criteria, DocumentId};
 use crate::{reordered_attrs::ReorderedAttrs, store, MResult};
 use crate::facets::FacetFilter;
 
 use either::Either;
 use sdset::SetOperation;
 
-pub struct QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
+use meilisearch_schema::FieldId;
+
+pub struct QueryBuilder<'c, 'f, 'd, 'i, 'q> {
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
     filter: Option<Box<dyn Fn(DocumentId) -> bool + 'f>>,
     distinct: Option<(Box<dyn Fn(DocumentId) -> Option<u64> + 'd>, usize)>,
     timeout: Option<Duration>,
     index: &'i store::Index,
-    facets: Option<&'fa FacetFilter>,
+    facet_fitlers: Option<&'q FacetFilter>,
+    facets: Option<&'q [FieldId]>,
 }
 
-impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
+impl<'c, 'f, 'd, 'i, 'q> QueryBuilder<'c, 'f, 'd, 'i, 'q> {
     pub fn new(index: &'i store::Index) -> Self {
         QueryBuilder::with_criteria(
             index,
@@ -29,7 +33,13 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
         )
     }
 
-    pub fn set_facets(&mut self, facets: Option<&'fa FacetFilter>) {
+    /// sets facet attributes to filter on
+    pub fn set_facet_filters(&mut self, facets: Option<&'q FacetFilter>) {
+        self.facet_fitlers = facets;
+    }
+
+    /// sets facet attributes for which to return the count
+    pub fn set_facets(&mut self, facets: Option<&'q [FieldId]>) {
         self.facets = facets;
     }
 
@@ -44,6 +54,7 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
             distinct: None,
             timeout: None,
             index,
+            facet_fitlers: None,
             facets: None,
         }
     }
@@ -76,8 +87,8 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
         reader: &heed::RoTxn<MainT>,
         query: &str,
         range: Range<usize>,
-    ) -> MResult<(Vec<Document>, usize)> {
-        let facets_docids = match self.facets {
+    ) -> MResult<SortResult> {
+        let facets_docids = match self.facet_fitlers {
             Some(facets) => {
                 let mut ands = Vec::with_capacity(facets.len());
                 let mut ors = Vec::new();
@@ -98,7 +109,7 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
                             match self.index.facets.facet_document_ids(reader, &key)? {
                                 Some(docids) => ands.push(docids),
                                 // no candidates for search, early return.
-                                None => return Ok((vec![], 0)),
+                                None => return Ok(SortResult::default()),
                             }
                         }
                     };
@@ -109,12 +120,29 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
             None => None
         };
 
+        let facet_count_docids = match self.facets {
+            Some(field_ids) => {
+                let mut facet_count_map = HashMap::new();
+                for field_id in field_ids {
+                    for pair in self.index.facets.field_document_ids(reader, *field_id)? {
+                        let (facet_key, document_ids) = pair?;
+                        let facet_key_string = facet_key.to_parts(schema)?;
+                        facet_count_map.insert(facet_key, document_ids);
+                    }
+                }
+                Some(facet_count_map)
+            }
+            None => None,
+        };
+
+
         match self.distinct {
             Some((distinct, distinct_size)) => bucket_sort_with_distinct(
                 reader,
                 query,
                 range,
                 facets_docids,
+                facet_count_docids,
                 self.filter,
                 distinct,
                 distinct_size,
@@ -132,6 +160,7 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
                 query,
                 range,
                 facets_docids,
+                facet_count_docids,
                 self.filter,
                 self.criteria,
                 self.searchable_attrs,

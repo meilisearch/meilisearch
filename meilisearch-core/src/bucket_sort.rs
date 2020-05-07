@@ -11,12 +11,13 @@ use std::fmt;
 use compact_arena::{SmallArena, Idx32, mk_arena};
 use log::debug;
 use meilisearch_types::DocIndex;
-use sdset::{Set, SetBuf, exponential_search, SetOperation};
+use sdset::{Set, SetBuf, exponential_search, SetOperation, Counter, duo::OpBuilder};
 use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::error::Error;
 use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
+use crate::facets::FacetKey;
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
@@ -24,11 +25,20 @@ use crate::query_tree::{create_query_tree, traverse_query_tree};
 use crate::query_tree::{Operation, QueryResult, QueryKind, QueryId, PostingsKey};
 use crate::query_tree::Context as QTContext;
 
+#[derive(Debug, Default)]
+pub struct SortResult {
+    pub documents: Vec<Document>,
+    pub nb_hits: usize,
+    pub is_exhaustive: bool,
+    pub facets: Option<HashMap<FacetKey, usize>>,
+}
+
 pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
     query: &str,
     range: Range<usize>,
     facets_docids: Option<SetBuf<DocumentId>>,
+    facet_count_docids: Option<HashMap<FacetKey, Cow<Set<DocumentId>>>>,
     filter: Option<FI>,
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
@@ -38,7 +48,7 @@ pub fn bucket_sort<'c, FI>(
     synonyms_store: store::Synonyms,
     prefix_documents_cache_store: store::PrefixDocumentsCache,
     prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
-) -> MResult<(Vec<Document>, usize)>
+) -> MResult<SortResult>
 where
     FI: Fn(DocumentId) -> bool,
 {
@@ -52,6 +62,7 @@ where
             query,
             range,
             facets_docids,
+            facet_count_docids,
             filter,
             distinct,
             distinct_size,
@@ -66,9 +77,11 @@ where
         );
     }
 
+    let mut result = SortResult::default();
+
     let words_set = match unsafe { main_store.static_words_fst(reader)? } {
         Some(words) => words,
-        None => return Ok((Vec::new(), 0)),
+        None => return Ok(SortResult::default()),
     };
 
     let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
@@ -105,6 +118,17 @@ where
             .intersection()
             .into_set_buf();
         docids = Cow::Owned(intersection);
+    }
+
+    if let Some(facet_count_docids) = facet_count_docids {
+        let mut facets = HashMap::new();
+        for (key, document_ids) in facet_count_docids {
+            let mut counter = Counter::new();
+            let op = OpBuilder::new(document_ids.as_ref(), document_ids.as_ref()).intersection();
+            SetOperation::<DocumentId>::extend_collection(op, &mut counter);
+            facets.insert(key, counter.0);
+        }
+        result.facets = Some(facets);
     }
 
     let before = Instant::now();
@@ -181,7 +205,10 @@ where
 
     debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
 
-    Ok((documents, docids.len()))
+    result.documents = documents;
+    result.nb_hits = docids.len();
+
+    Ok(result)
 }
 
 pub fn bucket_sort_with_distinct<'c, FI, FD>(
@@ -189,6 +216,7 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     query: &str,
     range: Range<usize>,
     facets_docids: Option<SetBuf<DocumentId>>,
+    facet_count_docids: Option<HashMap<FacetKey, Cow<Set<DocumentId>>>>,
     filter: Option<FI>,
     distinct: FD,
     distinct_size: usize,
@@ -200,14 +228,16 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     synonyms_store: store::Synonyms,
     _prefix_documents_cache_store: store::PrefixDocumentsCache,
     prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
-) -> MResult<(Vec<Document>, usize)>
+) -> MResult<SortResult>
 where
     FI: Fn(DocumentId) -> bool,
     FD: Fn(DocumentId) -> Option<u64>,
 {
+    let mut result = SortResult::default();
+
     let words_set = match unsafe { main_store.static_words_fst(reader)? } {
         Some(words) => words,
-        None => return Ok((Vec::new(), 0)),
+        None => return Ok(SortResult::default()),
     };
 
     let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
@@ -240,10 +270,21 @@ where
     debug!("number of postings {:?}", queries.len());
 
     if let Some(facets_docids) = facets_docids {
-        let intersection = sdset::duo::OpBuilder::new(docids.as_ref(), facets_docids.as_set())
+        let intersection = OpBuilder::new(docids.as_ref(), facets_docids.as_set())
             .intersection()
             .into_set_buf();
         docids = Cow::Owned(intersection);
+    }
+
+    if let Some(facet_count_docids) = facet_count_docids {
+        let mut facets = HashMap::new();
+        for (key, document_ids) in facet_count_docids {
+            let mut counter = Counter::new();
+            let op = OpBuilder::new(document_ids.as_ref(), document_ids.as_ref()).intersection();
+            SetOperation::<DocumentId>::extend_collection(op, &mut counter);
+            facets.insert(key, counter.0);
+        }
+        result.facets = Some(facets);
     }
 
     let before = Instant::now();
@@ -379,8 +420,10 @@ where
             }
         }
     }
+    result.documents = documents;
+    result.nb_hits = docids.len();
 
-    Ok((documents, docids.len()))
+    Ok(result)
 }
 
 fn cleanup_bare_matches<'tag, 'txn>(

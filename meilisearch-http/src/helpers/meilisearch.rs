@@ -36,6 +36,7 @@ impl IndexSearchExt for Index {
             filters: None,
             matches: false,
             facet_filters: None,
+            facets: None,
         }
     }
 }
@@ -51,6 +52,7 @@ pub struct SearchBuilder<'a> {
     filters: Option<String>,
     matches: bool,
     facet_filters: Option<FacetFilter>,
+    facets: Option<Vec<FieldId>>
 }
 
 impl<'a> SearchBuilder<'a> {
@@ -100,6 +102,11 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
+    pub fn add_facets(&mut self, facets: Vec<FieldId>) -> &SearchBuilder {
+        self.facets = Some(facets);
+        self
+    }
+
     pub fn search(&self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, ResponseError> {
         let schema = self
             .index
@@ -146,11 +153,12 @@ impl<'a> SearchBuilder<'a> {
             }
         }
 
-        query_builder.set_facets(self.facet_filters.as_ref());
+        query_builder.set_facet_filters(self.facet_filters.as_ref());
+        query_builder.set_facets(self.facets.as_deref());
 
         let start = Instant::now();
         let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
-        let (docs, nb_hits) = result.map_err(ResponseError::search_documents)?;
+        let search_result = result.map_err(ResponseError::search_documents)?;
         let time_ms = start.elapsed().as_millis() as usize;
 
         let mut all_attributes: HashSet<&str> = HashSet::new();
@@ -181,7 +189,7 @@ impl<'a> SearchBuilder<'a> {
         }
 
         let mut hits = Vec::with_capacity(self.limit);
-        for doc in docs {
+        for doc in search_result.documents {
             let mut document: IndexMap<String, Value> = self
                 .index
                 .document(reader, Some(&all_attributes), doc.id)
@@ -235,10 +243,11 @@ impl<'a> SearchBuilder<'a> {
             hits,
             offset: self.offset,
             limit: self.limit,
-            nb_hits,
-            exhaustive_nb_hits: false,
+            nb_hits: search_result.nb_hits,
+            exhaustive_nb_hits: search_result.is_exhaustive,
             processing_time_ms: time_ms,
             query: self.query.to_string(),
+            facets: search_result.facets
         };
 
         Ok(results)

@@ -5,6 +5,7 @@ use actix_web::web;
 use actix_web::HttpResponse;
 use actix_web_macros::get;
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::error::ResponseError;
 use crate::helpers::meilisearch::IndexSearchExt;
@@ -13,6 +14,7 @@ use crate::routes::IndexParam;
 use crate::Data;
 
 use meilisearch_core::facets::FacetFilter;
+use meilisearch_schema::{Schema, FieldId};
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(search_with_url_query);
@@ -31,6 +33,7 @@ struct SearchQuery {
     filters: Option<String>,
     matches: Option<bool>,
     facet_filters: Option<String>,
+    facets: Option<String>
 }
 
 #[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
@@ -91,6 +94,14 @@ async fn search_with_url_query(
         }
     }
 
+    if let Some(ref facets) = params.facets {
+        match index.main.attributes_for_faceting(&reader)? {
+            Some(ref attrs) => { search_builder.add_facets(prepare_facet_list(facets, &schema, attrs)?); },
+            None => return Err(ResponseError::FacetExpression("can't return facets count, as no facet is set".to_string()))
+        }
+
+    }
+
     if let Some(attributes_to_crop) = &params.attributes_to_crop {
         let default_length = params.crop_length.unwrap_or(200);
         let mut final_attributes: HashMap<String, usize> = HashMap::new();
@@ -149,4 +160,28 @@ async fn search_with_url_query(
     }
 
     Ok(HttpResponse::Ok().json(search_builder.search(&reader)?))
+}
+
+fn prepare_facet_list<'fa>(facets: &str, schema: &Schema, facet_attrs: &'fa [FieldId]) -> Result<Vec<FieldId>, ResponseError> {
+    let facet_array = serde_json::from_str(facets).expect("do error handling"); // TODO
+    match facet_array {
+        Value::Array(facet_array) => {
+            let wild_card = Value::String("*".to_string());
+            if facet_array.iter().any(|it| it == &wild_card) {
+                return Ok(Vec::from(facet_attrs)); // TODO can make cow?
+            }
+            let mut fields = Vec::with_capacity(facet_attrs.len());
+            for v in facet_array {
+                match v {
+                    Value::String(name) => {
+                        let id = schema.id(&name).expect("not found error"); // TODO
+                        fields.push(id);
+                    }
+                    _ => todo!("expected string, found {}", v),
+                }
+            }
+            return Ok(fields);
+        }
+        _ => todo!("error, bad syntax, expected array")
+    }
 }
