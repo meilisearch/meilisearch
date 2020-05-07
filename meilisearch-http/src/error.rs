@@ -4,6 +4,7 @@ use actix_http::ResponseBuilder;
 use actix_web as aweb;
 use actix_web::http::StatusCode;
 use serde_json::json;
+use actix_web::error::JsonPayloadError;
 
 #[derive(Debug)]
 pub enum ResponseError {
@@ -23,6 +24,8 @@ pub enum ResponseError {
     FilterParsing(String),
     RetrieveDocument(u64, String),
     SearchDocuments(String),
+    PayloadTooLarge,
+    UnsupportedMediaType,
     FacetExpression(String),
 }
 
@@ -108,6 +111,8 @@ impl fmt::Display for ResponseError {
             Self::RetrieveDocument(id, err) => write!(f, "impossible to retrieve the document with id: {}; {}", id, err),
             Self::SearchDocuments(err) => write!(f, "impossible to search documents; {}", err),
             Self::FacetExpression(e) => write!(f, "error parsing facet filter expression: {}", e),
+            Self::PayloadTooLarge => f.write_str("Payload to large"),
+            Self::UnsupportedMediaType => f.write_str("Unsupported media type")
         }
     }
 }
@@ -138,6 +143,8 @@ impl aweb::error::ResponseError for ResponseError {
             Self::MissingAuthorizationHeader => StatusCode::FORBIDDEN,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Maintenance => StatusCode::SERVICE_UNAVAILABLE,
+            Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
         }
     }
 }
@@ -189,4 +196,20 @@ impl From<actix_http::Error> for ResponseError {
     fn from(err: actix_http::Error) -> ResponseError {
         ResponseError::Internal(err.to_string())
     }
+}
+
+impl From<JsonPayloadError> for ResponseError {
+    fn from(err: JsonPayloadError) -> ResponseError {
+        match err {
+                JsonPayloadError::Deserialize(err) => ResponseError::BadRequest(format!("BAD_JSON: {}", err)),
+                JsonPayloadError::Overflow => ResponseError::PayloadTooLarge,
+                JsonPayloadError::ContentType => ResponseError::UnsupportedMediaType,
+                JsonPayloadError::Payload(err) => ResponseError::BadRequest(format!("Problem decoding request: {}", err)),
+            }
+    }
+}
+
+
+pub fn json_error_handler(err: JsonPayloadError) -> ResponseError {
+	err.into()
 }
