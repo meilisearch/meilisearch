@@ -33,5 +33,5 @@ pub struct Opt {
 
     /// The maximum size, in bytes, of the update lmdb database directory
     #[structopt(long, env = "MEILI_UPDATE_MAP_SIZE", default_value = "107374182400")] // 100GB
-    pub update_map_size: usize
+    pub update_map_size: usize,
 }
