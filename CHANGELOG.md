@@ -6,7 +6,7 @@
   - Add sentry probe
   - Fix url trailing slash and double slash issues (#659)
   - Fix accept all Content-Type by default (#653)
-  - Fix returned message on deserialization error
+  - Return the error message from Serde when a deserialization error is encountered
 
 ## v0.10.1
 
