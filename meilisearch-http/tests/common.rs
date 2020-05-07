@@ -15,16 +15,11 @@ pub struct Server {
     data: Data,
 }
 
-const DB_OPTS: DatabaseOptions = DatabaseOptions {
-    main_map_size: 100 * 1024 * 1024 * 1024,
-    update_map_size: 100 * 1024 * 1024 * 1024,
-};
-
 impl Server {
     pub fn with_uid(uid: &str) -> Server {
         let tmp_dir = TempDir::new("meilisearch").unwrap();
 
-        let default_db_options = DB_OPTS;
+        let default_db_options = DatabaseOptions::default();
 
         let opt = Opt {
             db_path: tmp_dir.path().to_str().unwrap().to_string(),
