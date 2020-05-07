@@ -2,6 +2,7 @@
 
   - Add support for configuring the lmdb map size (#646, #647)
   - Add exposed port for Dockerfile (#654)
+  - Add sentry probe
 
 ## v0.10.1
 
