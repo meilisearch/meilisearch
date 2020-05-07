@@ -31,7 +31,7 @@ pub fn create_app(
         .app_data(web::Data::new(data.clone()))
         .app_data(
             web::JsonConfig::default()
-                .limit(1024 * 1024 * 10)
+                .limit(1024 * 1024 * 10) // Json Limit of 10Mb
                 .content_type(|_mime| true) // Accept all mime types
                 .error_handler(|err, _req| json_error_handler(err).into()),
         )

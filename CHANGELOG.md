@@ -3,10 +3,10 @@
   - Add support for faceted search (#631)
   - Add support for configuring the lmdb map size (#646, #647)
   - Add exposed port for Dockerfile (#654)
-  - Add sentry probe
+  - Add sentry probe (#664)
   - Fix url trailing slash and double slash issues (#659)
   - Fix accept all Content-Type by default (#653)
-  - Return the error message from Serde when a deserialization error is encountered
+  - Return the error message from Serde when a deserialization error is encountered (#661)
 
 ## v0.10.1
 

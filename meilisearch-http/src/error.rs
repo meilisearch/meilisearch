@@ -201,10 +201,10 @@ impl From<actix_http::Error> for ResponseError {
 impl From<JsonPayloadError> for ResponseError {
     fn from(err: JsonPayloadError) -> ResponseError {
         match err {
-                JsonPayloadError::Deserialize(err) => ResponseError::BadRequest(format!("BAD_JSON: {}", err)),
+                JsonPayloadError::Deserialize(err) => ResponseError::BadRequest(format!("Invalid JSON: {}", err)),
                 JsonPayloadError::Overflow => ResponseError::PayloadTooLarge,
                 JsonPayloadError::ContentType => ResponseError::UnsupportedMediaType,
-                JsonPayloadError::Payload(err) => ResponseError::BadRequest(format!("Problem decoding request: {}", err)),
+                JsonPayloadError::Payload(err) => ResponseError::BadRequest(format!("Problem while decoding the request: {}", err)),
             }
     }
 }
