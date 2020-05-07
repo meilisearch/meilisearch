@@ -19,6 +19,15 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
 
+    #[cfg(feature = "sentry")]
+    let _sentry = sentry::init((
+        "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            ..Default::default()
+        },
+    ));
+
     match opt.env.as_ref() {
         "production" => {
             if opt.master_key.is_none() {
@@ -26,6 +35,12 @@ async fn main() -> Result<(), MainError> {
                     "In production mode, the environment variable MEILI_MASTER_KEY is mandatory"
                         .into(),
                 );
+            }
+
+            #[cfg(feature = "sentry")]
+            if !opt.no_analytics {
+                sentry::integrations::panic::register_panic_handler();
+                sentry::integrations::env_logger::init(None, Default::default());
             }
         }
         "development" => {
