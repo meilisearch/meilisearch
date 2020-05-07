@@ -27,6 +27,20 @@ pub struct Database {
     update_fn: Arc<ArcSwapFn>,
 }
 
+pub struct DatabaseOptions {
+    pub main_map_size: usize,
+    pub update_map_size: usize,
+}
+
+impl Default for DatabaseOptions {
+    fn default() -> DatabaseOptions {
+        DatabaseOptions {
+            main_map_size: 100 * 1024 * 1024 * 1024, //100Gb
+            update_map_size: 100 * 1024 * 1024 * 1024, //100Gb
+        }
+    }
+}
+
 macro_rules! r#break_try {
     ($expr:expr, $msg:tt) => {
         match $expr {
@@ -133,11 +147,6 @@ fn update_awaiter(
     debug!("update loop system stopped");
 
     Ok(())
-}
-
-pub struct DatabaseOptions {
-    pub main_map_size: usize,
-    pub update_map_size: usize,
 }
 
 impl Database {
@@ -369,16 +378,11 @@ mod tests {
     use serde::de::IgnoredAny;
     use std::sync::mpsc;
 
-    const DB_OPTS: DatabaseOptions = DatabaseOptions {
-        main_map_size: 100 * 1024 * 1024 * 1024,
-        update_map_size: 100 * 1024 * 1024 * 1024,
-    };
-
     #[test]
     fn valid_updates() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path(), DB_OPTS).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -443,7 +447,7 @@ mod tests {
     fn invalid_updates() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path(), DB_OPTS).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -505,7 +509,7 @@ mod tests {
     fn ignored_words_too_long() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path(), DB_OPTS).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -560,7 +564,7 @@ mod tests {
     fn add_schema_attributes_at_end() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path(), DB_OPTS).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -704,7 +708,7 @@ mod tests {
     fn deserialize_documents() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path(), DB_OPTS).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -784,7 +788,7 @@ mod tests {
     fn partial_document_update() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path(), DB_OPTS).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -918,7 +922,7 @@ mod tests {
     fn delete_index() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Arc::new(Database::open_or_create(dir.path(), DB_OPTS).unwrap());
+        let database = Arc::new(Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap());
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -990,7 +994,7 @@ mod tests {
     fn check_number_ordering() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path(), DB_OPTS).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);

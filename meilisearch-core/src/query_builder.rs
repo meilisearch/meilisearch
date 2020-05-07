@@ -147,11 +147,6 @@ mod tests {
     use crate::store::Index;
     use meilisearch_schema::Schema;
 
-    const DB_OPTS: DatabaseOptions = DatabaseOptions {
-        main_map_size: 100 * 1024 * 1024 * 1024,
-        update_map_size: 100 * 1024 * 1024 * 1024,
-    };
-
     fn set_from_stream<'f, I, S>(stream: I) -> Set
     where
         I: for<'a> fst::IntoStreamer<'a, Into = S, Item = &'a [u8]>,
@@ -254,7 +249,7 @@ mod tests {
     impl<'a> FromIterator<(&'a str, &'a [DocIndex])> for TempDatabase {
         fn from_iter<I: IntoIterator<Item = (&'a str, &'a [DocIndex])>>(iter: I) -> Self {
             let tempdir = TempDir::new().unwrap();
-            let database = Database::open_or_create(&tempdir, DB_OPTS).unwrap();
+            let database = Database::open_or_create(&tempdir, DatabaseOptions::default()).unwrap();
             let index = database.create_index("default").unwrap();
 
             let db = &database;

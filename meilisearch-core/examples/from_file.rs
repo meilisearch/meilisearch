@@ -463,11 +463,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let opt = Command::from_args();
-    let db_opts = DatabaseOptions {
-        main_map_size: 100 * 1024 * 1024 * 1024,
-        update_map_size: 100 * 1024 * 1024 * 1024,
-    };
-    let database = Database::open_or_create(opt.path(), db_opts)?;
+    let database = Database::open_or_create(opt.path(), DatabaseOptions::default())?;
 
     match opt {
         Command::Index(command) => index_command(command, database),
