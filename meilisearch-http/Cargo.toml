@@ -22,7 +22,7 @@ actix-files = "0.2.1"
 actix-http = "1"
 actix-rt = "1"
 actix-service = "1.0.5"
-actix-web = "2"
+actix-web = { version = "2.0.0", features = ["rustls"] }
 actix-web-macros = "0.1.0"
 bytes = "0.5.4"
 chrono = { version = "0.4.11", features = ["serde"] }
@@ -41,6 +41,7 @@ mime = "0.3.16"
 pretty-bytes = "0.2.2"
 rand = "0.7.3"
 regex = "1.3.6"
+rustls = "0.16.0"
 serde = { version = "1.0.105", features = ["derive"] }
 serde_json = { version = "1.0.50", features = ["preserve_order"] }
 serde_qs = "0.5.2"

@@ -7,6 +7,7 @@ use meilisearch_http::data::Data;
 use meilisearch_http::helpers::NormalizePath;
 use meilisearch_http::option::Opt;
 use meilisearch_http::{create_app, index_update_callback};
+
 use structopt::StructOpt;
 
 mod analytics;
@@ -21,11 +22,11 @@ async fn main() -> Result<(), MainError> {
 
     #[cfg(all(not(debug_assertions), feature = "sentry"))]
     let _sentry = sentry::init((
-            "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337",
-            sentry::ClientOptions {
-                release: sentry::release_name!(),
-                ..Default::default()
-            },
+        "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            ..Default::default()
+        },
     ));
 
     match opt.env.as_ref() {
@@ -62,7 +63,7 @@ async fn main() -> Result<(), MainError> {
 
     print_launch_resume(&opt, &data);
 
-    HttpServer::new(move || {
+    let http_server = HttpServer::new(move || {
         create_app(&data)
             .wrap(
                 Cors::new()
@@ -73,10 +74,16 @@ async fn main() -> Result<(), MainError> {
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .wrap(NormalizePath)
-    })
-    .bind(opt.http_addr)?
-    .run()
-    .await?;
+    });
+
+    if let Some(config) = opt.get_ssl_config()? {
+        http_server
+            .bind_rustls(opt.http_addr, config)?
+            .run()
+            .await?;
+    } else {
+        http_server.bind(opt.http_addr)?.run().await?;
+    }
 
     Ok(())
 }
