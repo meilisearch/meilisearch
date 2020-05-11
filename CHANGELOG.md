@@ -1,5 +1,6 @@
 ## v0.10.2
 
+  - Add support for faceted search (#631)
   - Add support for configuring the lmdb map size (#646, #647)
   - Add exposed port for Dockerfile (#654)
   - Add sentry probe

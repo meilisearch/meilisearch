@@ -1,16 +1,20 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
 use heed::Result as ZResult;
-use meilisearch_schema::Schema;
+use meilisearch_schema::{FieldId, Schema};
+use sdset::Set;
 
 use crate::database::MainT;
 use crate::RankedMap;
 use crate::settings::RankingRule;
+use super::cow_set::CowSet;
 
 const CREATED_AT_KEY: &str = "created-at";
+const ATTRIBUTES_FOR_FACETING: &str = "attributes-for-faceting";
 const RANKING_RULES_KEY: &str = "ranking-rules";
 const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute";
 const STOP_WORDS_KEY: &str = "stop-words";
@@ -186,6 +190,18 @@ impl Main {
             Some(freqs) => Ok(Some(freqs)),
             None => Ok(None),
         }
+    }
+
+    pub fn attributes_for_faceting<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<Cow<'txn, Set<FieldId>>>> {
+        self.main.get::<_, Str, CowSet<FieldId>>(reader, ATTRIBUTES_FOR_FACETING)
+    }
+
+    pub fn put_attributes_for_faceting(self, writer: &mut heed::RwTxn<MainT>, attributes: &Set<FieldId>) -> ZResult<()> {
+        self.main.put::<_, Str, CowSet<FieldId>>(writer, ATTRIBUTES_FOR_FACETING, attributes)
+    }
+
+    pub fn delete_attributes_for_faceting(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
+        self.main.delete::<_, Str>(writer, ATTRIBUTES_FOR_FACETING)
     }
 
     pub fn ranking_rules(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<Vec<RankingRule>>> {

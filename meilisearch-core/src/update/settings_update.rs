@@ -102,6 +102,18 @@ pub fn apply_settings_update(
         UpdateState::Nothing => (),
     }
 
+    match settings.attributes_for_faceting {
+        UpdateState::Update(attrs) => {
+            apply_attributes_for_faceting_update(writer, index, &mut schema, &attrs)?;
+            must_reindex = true;
+        },
+        UpdateState::Clear => {
+            index.main.delete_attributes_for_faceting(writer)?;
+            index.facets.clear(writer)?;
+        },
+        UpdateState::Nothing => (),
+    }
+
     index.main.put_schema(writer, &schema)?;
 
     match settings.stop_words {
@@ -128,6 +140,21 @@ pub fn apply_settings_update(
         reindex_all_documents(writer, index)?;
     }
 
+    Ok(())
+}
+
+fn apply_attributes_for_faceting_update(
+    writer: &mut heed::RwTxn<MainT>,
+    index: &store::Index,
+    schema: &mut Schema,
+    attributes: &[String]
+    ) -> MResult<()> {
+    let mut attribute_ids = Vec::new();
+    for name in attributes {
+        attribute_ids.push(schema.insert(name)?);
+    }
+    let attributes_for_faceting = SetBuf::from_dirty(attribute_ids);
+    index.main.put_attributes_for_faceting(writer, &attributes_for_faceting)?;
     Ok(())
 }
 

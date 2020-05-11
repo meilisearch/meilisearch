@@ -1,3 +1,4 @@
+mod cow_set;
 mod docs_words;
 mod prefix_documents_cache;
 mod prefix_postings_lists_cache;
@@ -8,8 +9,10 @@ mod postings_lists;
 mod synonyms;
 mod updates;
 mod updates_results;
+mod facets;
 
 pub use self::docs_words::DocsWords;
+pub use self::facets::Facets;
 pub use self::prefix_documents_cache::PrefixDocumentsCache;
 pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
 pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
@@ -42,7 +45,7 @@ use crate::settings::SettingsUpdate;
 use crate::{query_builder::QueryBuilder, update, DocIndex, DocumentId, Error, MResult};
 
 type BEU64 = zerocopy::U64<byteorder::BigEndian>;
-type BEU16 = zerocopy::U16<byteorder::BigEndian>;
+pub type BEU16 = zerocopy::U16<byteorder::BigEndian>;
 
 #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]
@@ -197,12 +200,17 @@ fn updates_results_name(name: &str) -> String {
     format!("store-{}-updates-results", name)
 }
 
+fn facets_name(name: &str) -> String {
+    format!("store-{}-facets", name)
+}
+
 #[derive(Clone)]
 pub struct Index {
     pub main: Main,
     pub postings_lists: PostingsLists,
     pub documents_fields: DocumentsFields,
     pub documents_fields_counts: DocumentsFieldsCounts,
+    pub facets: Facets,
     pub synonyms: Synonyms,
     pub docs_words: DocsWords,
     pub prefix_documents_cache: PrefixDocumentsCache,
@@ -352,29 +360,14 @@ impl Index {
     }
 
     pub fn query_builder(&self) -> QueryBuilder {
-        QueryBuilder::new(
-            self.main,
-            self.postings_lists,
-            self.documents_fields_counts,
-            self.synonyms,
-            self.prefix_documents_cache,
-            self.prefix_postings_lists_cache,
-        )
+        QueryBuilder::new(self)
     }
 
-    pub fn query_builder_with_criteria<'c, 'f, 'd>(
-        &self,
+    pub fn query_builder_with_criteria<'c, 'f, 'd, 'fa, 'i>(
+        &'i self,
         criteria: Criteria<'c>,
-    ) -> QueryBuilder<'c, 'f, 'd> {
-        QueryBuilder::with_criteria(
-            self.main,
-            self.postings_lists,
-            self.documents_fields_counts,
-            self.synonyms,
-            self.prefix_documents_cache,
-            self.prefix_postings_lists_cache,
-            criteria,
-        )
+    ) -> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
+        QueryBuilder::with_criteria(self, criteria)
     }
 }
 
@@ -395,12 +388,14 @@ pub fn create(
     let prefix_postings_lists_cache_name = prefix_postings_lists_cache_name(name);
     let updates_name = updates_name(name);
     let updates_results_name = updates_results_name(name);
+    let facets_name = facets_name(name);
 
     // open all the stores
     let main = env.create_poly_database(Some(&main_name))?;
     let postings_lists = env.create_database(Some(&postings_lists_name))?;
     let documents_fields = env.create_database(Some(&documents_fields_name))?;
     let documents_fields_counts = env.create_database(Some(&documents_fields_counts_name))?;
+    let facets = env.create_database(Some(&facets_name))?;
     let synonyms = env.create_database(Some(&synonyms_name))?;
     let docs_words = env.create_database(Some(&docs_words_name))?;
     let prefix_documents_cache = env.create_database(Some(&prefix_documents_cache_name))?;
@@ -417,6 +412,8 @@ pub fn create(
         docs_words: DocsWords { docs_words },
         prefix_postings_lists_cache: PrefixPostingsListsCache { prefix_postings_lists_cache },
         prefix_documents_cache: PrefixDocumentsCache { prefix_documents_cache },
+        facets: Facets { facets },
+
         updates: Updates { updates },
         updates_results: UpdatesResults { updates_results },
         updates_notifier,
@@ -437,6 +434,7 @@ pub fn open(
     let synonyms_name = synonyms_name(name);
     let docs_words_name = docs_words_name(name);
     let prefix_documents_cache_name = prefix_documents_cache_name(name);
+    let facets_name = facets_name(name);
     let prefix_postings_lists_cache_name = prefix_postings_lists_cache_name(name);
     let updates_name = updates_name(name);
     let updates_results_name = updates_results_name(name);
@@ -470,6 +468,10 @@ pub fn open(
         Some(prefix_documents_cache) => prefix_documents_cache,
         None => return Ok(None),
     };
+    let facets = match env.open_database(Some(&facets_name))? {
+        Some(facets) => facets,
+        None => return Ok(None),
+    };
     let prefix_postings_lists_cache = match env.open_database(Some(&prefix_postings_lists_cache_name))? {
         Some(prefix_postings_lists_cache) => prefix_postings_lists_cache,
         None => return Ok(None),
@@ -491,6 +493,7 @@ pub fn open(
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
         prefix_documents_cache: PrefixDocumentsCache { prefix_documents_cache },
+        facets: Facets { facets },
         prefix_postings_lists_cache: PrefixPostingsListsCache { prefix_postings_lists_cache },
         updates: Updates { updates },
         updates_results: UpdatesResults { updates_results },

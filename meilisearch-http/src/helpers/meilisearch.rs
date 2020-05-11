@@ -6,6 +6,7 @@ use std::time::Instant;
 use indexmap::IndexMap;
 use log::error;
 use meilisearch_core::Filter;
+use meilisearch_core::facets::FacetFilter;
 use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
 use meilisearch_core::{Highlight, Index, MainT, RankedMap};
@@ -34,6 +35,7 @@ impl IndexSearchExt for Index {
             attributes_to_highlight: None,
             filters: None,
             matches: false,
+            facet_filters: None,
         }
     }
 }
@@ -48,6 +50,7 @@ pub struct SearchBuilder<'a> {
     attributes_to_highlight: Option<HashSet<String>>,
     filters: Option<String>,
     matches: bool,
+    facet_filters: Option<FacetFilter>,
 }
 
 impl<'a> SearchBuilder<'a> {
@@ -79,6 +82,11 @@ impl<'a> SearchBuilder<'a> {
 
     pub fn attributes_to_highlight(&mut self, value: HashSet<String>) -> &SearchBuilder {
         self.attributes_to_highlight = Some(value);
+        self
+    }
+
+    pub fn add_facet_filters(&mut self, filters: FacetFilter) -> &SearchBuilder {
+        self.facet_filters = Some(filters);
         self
     }
 
@@ -137,6 +145,8 @@ impl<'a> SearchBuilder<'a> {
                 });
             }
         }
+
+        query_builder.set_facets(self.facet_filters.as_ref());
 
         let start = Instant::now();
         let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));

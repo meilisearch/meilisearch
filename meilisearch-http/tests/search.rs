@@ -2,6 +2,7 @@ use std::convert::Into;
 
 use assert_json_diff::assert_json_eq;
 use serde_json::json;
+use serde_json::Value;
 
 mod common;
 
@@ -1132,4 +1133,162 @@ async fn search_with_differents_attributes_8() {
 
     let (response, _status_code) = server.search(query).await;
     assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+}
+
+#[actix_rt::test]
+async fn test_faceted_search_valid() {
+    let mut server = common::Server::test_server().await;
+
+    // simple tests on attributes with string value
+    let body = json!({
+        "attributesForFaceting": ["color"]
+    });
+    server.update_all_settings(body).await;
+    let query = "q=a&facetFilters=%5B%22color%3Agreen%22%5D";
+    let (response, _status_code) = server.search(query).await;
+    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+    assert!(response
+        .get("hits")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|value| value.get("color").unwrap() == "green"));
+    let query = "q=a&facetFilters=%5B%22color%3Ablue%22%5D";
+    let (response, _status_code) = server.search(query).await;
+    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+    assert!(response
+        .get("hits")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|value| value.get("color").unwrap() == "blue"));
+
+    // test case insensitive : ["color:Blue"]
+    let query = "q=a&facetFilters=%5B%22color%3ABlue%22%5D";
+    let (response, _status_code) = server.search(query).await;
+    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+    assert!(response
+        .get("hits")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|value| value.get("color").unwrap() == "blue"));
+
+    // test on arrays: ["tags:bug"]
+    let body = json!({
+        "attributesForFaceting": ["color", "tags"]
+    });
+    server.update_all_settings(body).await;
+
+    let query = "q=a&facetFilters=%5B%22tags%3Abug%22%5D";
+    let (response, _status_code) = server.search(query).await;
+    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+    assert!(response
+        .get("hits")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|value| value.get("tags").unwrap().as_array().unwrap().contains(&Value::String("bug".to_owned()))));
+
+    // test and: ["color:blue", "tags:bug"]
+    let query = "q=a&facetFilters=%5B%22color%3Ablue%22,%20%22tags%3Abug%22%20%5D";
+    let (response, _status_code) = server.search(query).await;
+    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+    assert!(response
+        .get("hits")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|value| value
+            .get("color")
+            .unwrap() == "blue"
+            && value.get("tags").unwrap().as_array().unwrap().contains(&Value::String("bug".to_owned()))));
+
+    // test or: [["color:blue", "color:green"]]
+    let query = "q=a&facetFilters=%5B%5B%22color%3Ablue%22,%20%22color%3Agreen%22%5D%5D";
+    let (response, _status_code) = server.search(query).await;
+    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+    assert!(response
+        .get("hits")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|value|
+            value
+            .get("color")
+            .unwrap() == "blue"
+            || value
+            .get("color")
+            .unwrap() == "green"));
+    // test and-or: ["tags:bug", ["color:blue", "color:green"]]
+    let query = "q=a&facetFilters=%5B%22color%3Ablue%22,%20%22tags%3Abug%22%20%5D";
+    let (response, _status_code) = server.search(query).await;
+    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+    assert!(response
+        .get("hits")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|value|
+            value
+            .get("tags")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .contains(&Value::String("bug".to_owned()))
+            && (value
+                .get("color")
+                .unwrap() == "blue"
+                || value
+                .get("color")
+                .unwrap() == "green")));
+}
+
+#[actix_rt::test]
+async fn test_faceted_search_invalid() {
+    let mut server = common::Server::test_server().await;
+
+    //no faceted attributes set
+    let query = "q=a&facetFilters=%5B%22color%3Ablue%22,%20%22tags%3Abug%22%20%5D";
+    let (_response, status_code) = server.search(query).await;
+    assert_ne!(status_code, 202);
+
+    let body = json!({
+        "attributesForFaceting": ["color", "tags"]
+    });
+    server.update_all_settings(body).await;
+    // empty arrays are error
+    // []
+    let query = "q=a&facetFilters=%5B%5D";
+    let (_response, status_code) = server.search(query).await;
+    assert_ne!(status_code, 202);
+    // [[]]
+    let query = "q=a&facetFilters=%5B%5B%5D";
+    let (_response, status_code) = server.search(query).await;
+    assert_ne!(status_code, 202);
+    // ["color:green", []]
+    let query = "q=a&facetFilters=%5B%22color%3Agreen%22,%20%5B%5D";
+    let (_response, status_code) = server.search(query).await;
+    assert_ne!(status_code, 202);
+
+    // too much depth
+    // [[[]]]
+    let query = "q=a&facetFilters=%5B%5B%5B%5D%5D%5D";
+    let (_response, status_code) = server.search(query).await;
+    assert_ne!(status_code, 202);
+    // [["color:green", ["color:blue"]]]
+    let query = "q=a&facetFilters=%5B%5B%22color%3Agreen%22,%20%5B%22color%3Ablue%22%5D%5D%5D";
+    let (_response, status_code) = server.search(query).await;
+    assert_ne!(status_code, 202);
+    // "color:green"
+    let query = "q=a&facetFilters=%22color%3Agreen%22";
+    let (_response, status_code) = server.search(query).await;
+    assert_ne!(status_code, 202);
 }

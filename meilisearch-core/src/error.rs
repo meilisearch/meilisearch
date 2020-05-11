@@ -28,7 +28,8 @@ pub enum Error {
     Serializer(SerializerError),
     Deserializer(DeserializerError),
     UnsupportedOperation(UnsupportedOperation),
-    FilterParseError(PestError<Rule>)
+    FilterParseError(PestError<Rule>),
+    FacetError(FacetError),
 }
 
 impl From<io::Error> for Error {
@@ -57,7 +58,13 @@ impl From<PestError<Rule>> for Error {
             s.to_string()
         }))
     }
-} 
+}
+
+impl From<FacetError> for Error {
+    fn from(error: FacetError) -> Error {
+        Error::FacetError(error)
+    }
+}
 
 impl From<meilisearch_schema::Error> for Error {
     fn from(error: meilisearch_schema::Error) -> Error {
@@ -127,6 +134,7 @@ impl fmt::Display for Error {
             Deserializer(e) => write!(f, "deserializer error; {}", e),
             UnsupportedOperation(op) => write!(f, "unsupported operation; {}", op),
             FilterParseError(e) => write!(f, "error parsing filter; {}", e),
+            FacetError(e) => write!(f, "error processing facet filter: {}", e),
         }
     }
 }
@@ -153,6 +161,43 @@ impl fmt::Display for UnsupportedOperation {
                 write!(f, "Can only introduce new attributes at end of a schema")
             }
             CannotRemoveSchemaAttribute => write!(f, "Cannot remove attributes from a schema"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum FacetError {
+    EmptyArray,
+    ParsingError(String),
+    UnexpectedToken { expected: &'static [&'static str], found: String },
+    InvalidFormat(String),
+    AttributeNotFound(String),
+    AttributeNotSet { expected: Vec<String>, found: String },
+    InvalidDocumentAttribute(String),
+}
+
+impl FacetError {
+    pub fn unexpected_token(expected: &'static [&'static str], found: impl ToString) -> FacetError {
+        FacetError::UnexpectedToken{ expected, found: found.to_string() }
+    }
+
+    pub fn attribute_not_set(expected: Vec<String>, found: impl ToString) -> FacetError {
+        FacetError::AttributeNotSet{ expected, found: found.to_string() }
+    }
+}
+
+impl fmt::Display for FacetError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use FacetError::*;
+
+        match self {
+            EmptyArray => write!(f, "empty array in facet filter is unspecified behavior"),
+            ParsingError(msg) => write!(f, "parsing error: {}", msg),
+            UnexpectedToken { expected, found } => write!(f, "unexpected token {}, expected {}", found, expected.join("or")),
+            InvalidFormat(found) => write!(f, "invalid facet: {}, facets should be \"facetName:facetValue\"", found),
+            AttributeNotFound(attr) => write!(f, "unknown {:?} attribute", attr),
+            AttributeNotSet { found, expected } => write!(f, "`{}` is not set as a faceted attribute. available facet attributes: {}", found, expected.join(", ")),
+            InvalidDocumentAttribute(attr) => write!(f, "invalid document attribute {}, accepted types: String and [String]", attr),
         }
     }
 }

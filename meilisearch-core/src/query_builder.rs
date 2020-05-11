@@ -1,66 +1,50 @@
-use std::ops::Range;
+use std::borrow::Cow;
+use std::ops::{Range, Deref};
 use std::time::Duration;
 
 use crate::database::MainT;
 use crate::bucket_sort::{bucket_sort, bucket_sort_with_distinct};
 use crate::{criterion::Criteria, Document, DocumentId};
 use crate::{reordered_attrs::ReorderedAttrs, store, MResult};
+use crate::facets::FacetFilter;
 
-pub struct QueryBuilder<'c, 'f, 'd> {
+use either::Either;
+use sdset::SetOperation;
+
+pub struct QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
     filter: Option<Box<dyn Fn(DocumentId) -> bool + 'f>>,
     distinct: Option<(Box<dyn Fn(DocumentId) -> Option<u64> + 'd>, usize)>,
     timeout: Option<Duration>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    synonyms_store: store::Synonyms,
-    prefix_documents_cache_store: store::PrefixDocumentsCache,
-    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
+    index: &'i store::Index,
+    facets: Option<&'fa FacetFilter>,
 }
 
-impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
-    pub fn new(
-        main: store::Main,
-        postings_lists: store::PostingsLists,
-        documents_fields_counts: store::DocumentsFieldsCounts,
-        synonyms: store::Synonyms,
-        prefix_documents_cache: store::PrefixDocumentsCache,
-        prefix_postings_lists_cache: store::PrefixPostingsListsCache,
-    ) -> QueryBuilder<'c, 'f, 'd> {
+impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
+    pub fn new(index: &'i store::Index) -> Self {
         QueryBuilder::with_criteria(
-            main,
-            postings_lists,
-            documents_fields_counts,
-            synonyms,
-            prefix_documents_cache,
-            prefix_postings_lists_cache,
+            index,
             Criteria::default(),
         )
     }
 
+    pub fn set_facets(&mut self, facets: Option<&'fa FacetFilter>) {
+        self.facets = facets;
+    }
+
     pub fn with_criteria(
-        main: store::Main,
-        postings_lists: store::PostingsLists,
-        documents_fields_counts: store::DocumentsFieldsCounts,
-        synonyms: store::Synonyms,
-        prefix_documents_cache: store::PrefixDocumentsCache,
-        prefix_postings_lists_cache: store::PrefixPostingsListsCache,
+        index: &'i store::Index,
         criteria: Criteria<'c>,
-    ) -> QueryBuilder<'c, 'f, 'd> {
+    ) -> Self {
         QueryBuilder {
             criteria,
             searchable_attrs: None,
             filter: None,
             distinct: None,
             timeout: None,
-            main_store: main,
-            postings_lists_store: postings_lists,
-            documents_fields_counts_store: documents_fields_counts,
-            synonyms_store: synonyms,
-            prefix_documents_cache_store: prefix_documents_cache,
-            prefix_postings_lists_cache_store: prefix_postings_lists_cache,
+            index,
+            facets: None,
         }
     }
 
@@ -93,36 +77,70 @@ impl<'c, 'f, 'd> QueryBuilder<'c, 'f, 'd> {
         query: &str,
         range: Range<usize>,
     ) -> MResult<(Vec<Document>, usize)> {
+        let facets_docids = match self.facets {
+            Some(facets) => {
+                let mut ands = Vec::with_capacity(facets.len());
+                let mut ors = Vec::new();
+                for f in facets.deref() {
+                    match f {
+                        Either::Left(keys) => {
+                            ors.reserve(keys.len());
+                            for key in keys {
+                                let docids = self.index.facets.facet_document_ids(reader, &key)?.unwrap_or_default();
+                                ors.push(docids);
+                            }
+                            let sets: Vec<_> = ors.iter().map(Cow::deref).collect();
+                            let or_result = sdset::multi::OpBuilder::from_vec(sets).union().into_set_buf();
+                            ands.push(Cow::Owned(or_result));
+                            ors.clear();
+                        }
+                        Either::Right(key) =>{
+                            match self.index.facets.facet_document_ids(reader, &key)? {
+                                Some(docids) => ands.push(docids),
+                                // no candidates for search, early return.
+                                None => return Ok((vec![], 0)),
+                            }
+                        }
+                    };
+                }
+                let ands: Vec<_> = ands.iter().map(Cow::deref).collect();
+                Some(sdset::multi::OpBuilder::from_vec(ands).intersection().into_set_buf())
+            }
+            None => None
+        };
+
         match self.distinct {
             Some((distinct, distinct_size)) => bucket_sort_with_distinct(
                 reader,
                 query,
                 range,
+                facets_docids,
                 self.filter,
                 distinct,
                 distinct_size,
                 self.criteria,
                 self.searchable_attrs,
-                self.main_store,
-                self.postings_lists_store,
-                self.documents_fields_counts_store,
-                self.synonyms_store,
-                self.prefix_documents_cache_store,
-                self.prefix_postings_lists_cache_store,
+                self.index.main,
+                self.index.postings_lists,
+                self.index.documents_fields_counts,
+                self.index.synonyms,
+                self.index.prefix_documents_cache,
+                self.index.prefix_postings_lists_cache,
             ),
             None => bucket_sort(
                 reader,
                 query,
                 range,
+                facets_docids,
                 self.filter,
                 self.criteria,
                 self.searchable_attrs,
-                self.main_store,
-                self.postings_lists_store,
-                self.documents_fields_counts_store,
-                self.synonyms_store,
-                self.prefix_documents_cache_store,
-                self.prefix_postings_lists_cache_store,
+                self.index.main,
+                self.index.postings_lists,
+                self.index.documents_fields_counts,
+                self.index.synonyms,
+                self.index.prefix_documents_cache,
+                self.index.prefix_postings_lists_cache,
             ),
         }
     }

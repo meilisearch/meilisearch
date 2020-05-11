@@ -8,7 +8,6 @@ mod common;
 async fn write_all_and_delete() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
-
     // 2 - Send the settings
 
     let body = json!({
@@ -48,8 +47,10 @@ async fn write_all_and_delete() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine"],
         },
+        "attributesForFaceting": ["title"],
         "acceptNewFields": false,
     });
+
 
     server.update_all_settings(body.clone()).await;
 
@@ -119,6 +120,7 @@ async fn write_all_and_delete() {
         ],
         "stopWords": [],
         "synonyms": {},
+        "attributesForFaceting": null,
         "acceptNewFields": true,
     });
 
@@ -169,6 +171,7 @@ async fn write_all_and_update() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine"],
         },
+        "attributesForFaceting": ["title"],
         "acceptNewFields": false,
     });
 
@@ -210,6 +213,7 @@ async fn write_all_and_update() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
         },
+        "attributesForFaceting": ["title"],
         "acceptNewFields": false,
     });
 
@@ -247,6 +251,7 @@ async fn write_all_and_update() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine", "xmen"],
         },
+        "attributesForFaceting": ["title"],
         "acceptNewFields": false
     });
 
@@ -277,6 +282,7 @@ async fn test_default_settings() {
         "displayedAttributes": [],
         "stopWords": [],
         "synonyms": {},
+        "attributesForFaceting": null,
         "acceptNewFields": true,
     });
 
@@ -314,6 +320,7 @@ async fn test_default_settings_2() {
         ],
         "stopWords": [],
         "synonyms": {},
+        "attributesForFaceting": null,
         "acceptNewFields": true,
     });
 
@@ -421,6 +428,7 @@ async fn write_setting_and_update_partial() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine"],
         },
+        "attributesForFaceting": null,
         "acceptNewFields": false,
     });
 

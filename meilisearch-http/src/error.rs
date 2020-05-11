@@ -23,6 +23,7 @@ pub enum ResponseError {
     FilterParsing(String),
     RetrieveDocument(u64, String),
     SearchDocuments(String),
+    FacetExpression(String),
 }
 
 impl ResponseError {
@@ -106,6 +107,7 @@ impl fmt::Display for ResponseError {
             Self::OpenIndex(err) => write!(f, "Impossible to open index; {}", err),
             Self::RetrieveDocument(id, err) => write!(f, "impossible to retrieve the document with id: {}; {}", id, err),
             Self::SearchDocuments(err) => write!(f, "impossible to search documents; {}", err),
+            Self::FacetExpression(e) => write!(f, "error parsing facet filter expression: {}", e),
         }
     }
 }
@@ -118,13 +120,14 @@ impl aweb::error::ResponseError for ResponseError {
     }
 
     fn status_code(&self) -> StatusCode {
-        match *self {
+       match *self {
             Self::BadParameter(_, _)
             | Self::BadRequest(_)
             | Self::CreateIndex(_)
             | Self::InvalidIndexUid
             | Self::OpenIndex(_)
             | Self::RetrieveDocument(_, _)
+            | Self::FacetExpression(_)
             | Self::SearchDocuments(_)
             | Self::FilterParsing(_) => StatusCode::BAD_REQUEST,
             Self::DocumentNotFound(_)
@@ -151,6 +154,12 @@ impl From<meilisearch_core::FstError> for ResponseError {
     }
 }
 
+impl From<meilisearch_core::FacetError> for ResponseError {
+    fn from(error: meilisearch_core::FacetError) -> ResponseError {
+        ResponseError::FacetExpression(error.to_string())
+    }
+}
+
 impl From<meilisearch_core::Error> for ResponseError {
     fn from(err: meilisearch_core::Error) -> ResponseError {
         use meilisearch_core::pest_error::LineColLocation::*;
@@ -164,6 +173,7 @@ impl From<meilisearch_core::Error> for ResponseError {
 
                 ResponseError::FilterParsing(message)
             },
+            meilisearch_core::Error::FacetError(e) => ResponseError::FacetExpression(e.to_string()),
             _ => ResponseError::Internal(err.to_string()),
         }
     }

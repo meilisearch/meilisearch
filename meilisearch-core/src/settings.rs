@@ -31,6 +31,8 @@ pub struct Settings {
     pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub accept_new_fields: Option<Option<bool>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub attributes_for_faceting: Option<Option<Vec<String>>>,
 }
 
 // Any value that is present is considered Some value, including null.
@@ -60,6 +62,7 @@ impl Settings {
             stop_words: settings.stop_words.into(),
             synonyms: settings.synonyms.into(),
             accept_new_fields: settings.accept_new_fields.into(),
+            attributes_for_faceting: settings.attributes_for_faceting.into(),
         })
     }
 }
@@ -166,6 +169,7 @@ pub struct SettingsUpdate {
     pub stop_words: UpdateState<BTreeSet<String>>,
     pub synonyms: UpdateState<BTreeMap<String, Vec<String>>>,
     pub accept_new_fields: UpdateState<bool>,
+    pub attributes_for_faceting: UpdateState<Vec<String>>,
 }
 
 impl Default for SettingsUpdate {
@@ -179,6 +183,7 @@ impl Default for SettingsUpdate {
             stop_words: UpdateState::Nothing,
             synonyms: UpdateState::Nothing,
             accept_new_fields: UpdateState::Nothing,
+            attributes_for_faceting: UpdateState::Nothing,
         }
     }
 }

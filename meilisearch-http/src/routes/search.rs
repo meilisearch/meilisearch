@@ -12,6 +12,8 @@ use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
 
+use meilisearch_core::facets::FacetFilter;
+
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(search_with_url_query);
 }
@@ -28,6 +30,7 @@ struct SearchQuery {
     attributes_to_highlight: Option<String>,
     filters: Option<String>,
     matches: Option<bool>,
+    facet_filters: Option<String>,
 }
 
 #[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
@@ -78,6 +81,13 @@ async fn search_with_url_query(
         },
         None => {
             restricted_attributes = available_attributes.clone();
+        }
+    }
+
+    if let Some(ref facet_filters) = params.facet_filters {
+        match index.main.attributes_for_faceting(&reader)? {
+            Some(ref attrs) => { search_builder.add_facet_filters(FacetFilter::from_str(facet_filters, &schema, attrs)?); },
+            None => return Err(ResponseError::FacetExpression("can't filter on facets, as no facet is set".to_string()))
         }
     }
 

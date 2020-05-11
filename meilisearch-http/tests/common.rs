@@ -39,6 +39,74 @@ impl Server {
         }
     }
 
+    pub async fn test_server() -> Self {
+
+        let mut server = Self::with_uid("test");
+
+        let body = json!({
+            "uid": "test",
+            "primaryKey": "id",
+        });
+
+        server.create_index(body).await;
+
+        let body = json!({
+            "rankingRules": [
+                "typo",
+                "words",
+                "proximity",
+                "attribute",
+                "wordsPosition",
+                "exactness",
+            ],
+            "searchableAttributes": [
+                "balance",
+                "picture",
+                "age",
+                "color",
+                "name",
+                "gender",
+                "email",
+                "phone",
+                "address",
+                "about",
+                "registered",
+                "latitude",
+                "longitude",
+                "tags",
+            ],
+            "displayedAttributes": [
+                "id",
+                "isActive",
+                "balance",
+                "picture",
+                "age",
+                "color",
+                "name",
+                "gender",
+                "email",
+                "phone",
+                "address",
+                "about",
+                "registered",
+                "latitude",
+                "longitude",
+                "tags",
+            ],
+            "acceptNewFields": false,
+        });
+
+        server.update_all_settings(body).await;
+
+        let dataset = include_bytes!("assets/test_set.json");
+
+        let body: Value = serde_json::from_slice(dataset).unwrap();
+
+        server.add_or_replace_multiple_documents(body).await;
+        server
+    }
+
+
     pub async fn wait_update_id(&mut self, update_id: u64) {
         loop {
             let (response, status_code) = self.get_update_status(update_id).await;
@@ -90,6 +158,7 @@ impl Server {
         eprintln!("post_request_async: {}", url);
 
         let (response, status_code) = self.post_request(url, body).await;
+        eprintln!("response: {}", response);
         assert_eq!(status_code, 202);
         assert!(response["updateId"].as_u64().is_some());
         self.wait_update_id(response["updateId"].as_u64().unwrap())
