@@ -16,7 +16,7 @@ use meilisearch_core::{Database, DatabaseOptions, Highlight, ProcessedUpdateResu
 use meilisearch_core::settings::Settings;
 use meilisearch_schema::FieldId;
 
-// #[cfg(target_os = "linux")]
+#[cfg(target_os = "linux")]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
