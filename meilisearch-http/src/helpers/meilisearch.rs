@@ -214,7 +214,7 @@ impl<'a> SearchBuilder<'a> {
             // Transform to readable matches
             if let Some(attributes_to_highlight) = &self.attributes_to_highlight {
                 let matches = calculate_matches(
-                    matches.clone(),
+                    &matches,
                     self.attributes_to_highlight.clone(),
                     &schema,
                 );
@@ -222,7 +222,7 @@ impl<'a> SearchBuilder<'a> {
             }
 
             let matches_info = if self.matches {
-                Some(calculate_matches(matches, self.attributes_to_retrieve.clone(), &schema))
+                Some(calculate_matches(&matches, self.attributes_to_retrieve.clone(), &schema))
             } else {
                 None
             };
@@ -417,7 +417,7 @@ fn crop_document(
 }
 
 fn calculate_matches(
-    matches: Vec<Highlight>,
+    matches: &[Highlight],
     attributes_to_retrieve: Option<HashSet<String>>,
     schema: &Schema,
 ) -> MatchesInfos {
@@ -544,7 +544,7 @@ mod tests {
 
         let schema = Schema::with_primary_key("title");
 
-        let matches_result = super::calculate_matches(matches, Some(attributes_to_retrieve), &schema);
+        let matches_result = super::calculate_matches(&matches, Some(attributes_to_retrieve), &schema);
 
         let mut matches_result_expected: HashMap<String, Vec<MatchPosition>> = HashMap::new();
 
