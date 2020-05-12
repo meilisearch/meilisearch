@@ -176,9 +176,13 @@ fn prepare_facet_list(facets: &str, schema: &Schema, facet_attrs: &[FieldId]) ->
         Value::Array(vals) => {
             let wildcard = Value::String("*".to_string());
             if vals.iter().any(|f| f == &wildcard) {
-                return Ok(Vec::from(facet_attrs));
+                let attrs = facet_attrs
+                    .iter()
+                    .filter_map(|&id| schema.name(id).map(|n| (id, n.to_string())))
+                    .collect();
+                return Ok(attrs);
             }
-            let mut field_ids = Vec::new();
+            let mut field_ids = Vec::with_capacity(facet_attrs.len());
             for facet in vals {
                 match facet {
                     Value::String(facet) => {
@@ -186,7 +190,7 @@ fn prepare_facet_list(facets: &str, schema: &Schema, facet_attrs: &[FieldId]) ->
                             if !facet_attrs.contains(&id) {
                                 return Err(ResponseError::FacetExpression("Only attributes set as facet can be counted".to_string())); // TODO make special error
                             }
-                            field_ids.push(id);
+                            field_ids.push((id, facet));
                         }
                     }
                     bad_val => return Err(ResponseError::FacetExpression(format!("expected String found {}", bad_val)))

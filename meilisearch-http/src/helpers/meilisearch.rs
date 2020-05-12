@@ -52,7 +52,7 @@ pub struct SearchBuilder<'a> {
     filters: Option<String>,
     matches: bool,
     facet_filters: Option<FacetFilter>,
-    facets: Option<Vec<FieldId>>
+    facets: Option<Vec<(FieldId, String)>>
 }
 
 impl<'a> SearchBuilder<'a> {
@@ -102,12 +102,12 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn add_facets(&mut self, facets: Vec<FieldId>) -> &SearchBuilder {
+    pub fn add_facets(&mut self, facets: Vec<(FieldId, String)>) -> &SearchBuilder {
         self.facets = Some(facets);
         self
     }
 
-    pub fn search(&self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, ResponseError> {
+    pub fn search(self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, ResponseError> {
         let schema = self
             .index
             .main
@@ -124,8 +124,8 @@ impl<'a> SearchBuilder<'a> {
 
         if let Some(filter_expression) = &self.filters {
             let filter = Filter::parse(filter_expression, &schema)?;
+            let index = &self.index;
             query_builder.with_filter(move |id| {
-                let index = &self.index;
                 let reader = &reader;
                 let filter = &filter;
                 match filter.test(reader, index, id) {
@@ -140,8 +140,9 @@ impl<'a> SearchBuilder<'a> {
 
         if let Some(field) = self.index.main.distinct_attribute(reader)? {
             if let Some(field_id) = schema.id(&field) {
+                let index = &self.index;
                 query_builder.with_distinct(1, move |id| {
-                    match self.index.document_attribute_bytes(reader, id, field_id) {
+                    match index.document_attribute_bytes(reader, id, field_id) {
                         Ok(Some(bytes)) => {
                             let mut s = SipHasher::new();
                             bytes.hash(&mut s);
@@ -153,11 +154,11 @@ impl<'a> SearchBuilder<'a> {
             }
         }
 
-        query_builder.set_facet_filters(self.facet_filters.as_ref());
-        query_builder.set_facets(self.facets.as_deref());
+        query_builder.set_facet_filters(self.facet_filters);
+        query_builder.set_facets(self.facets);
 
         let start = Instant::now();
-        let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit), &schema);
+        let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
         let search_result = result.map_err(ResponseError::search_documents)?;
         let time_ms = start.elapsed().as_millis() as usize;
 
