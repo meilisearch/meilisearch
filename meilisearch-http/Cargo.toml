@@ -14,7 +14,7 @@ name = "meilisearch"
 path = "src/main.rs"
 
 [features]
-#default = ["sentry"]
+default = ["sentry"]
 
 [dependencies]
 actix-cors = "0.2.0"

@@ -3,16 +3,16 @@ use std::collections::HashMap;
 use std::ops::{Range, Deref};
 use std::time::Duration;
 
+use either::Either;
+use sdset::SetOperation;
+
+use meilisearch_schema::FieldId;
+
 use crate::database::MainT;
 use crate::bucket_sort::{bucket_sort, bucket_sort_with_distinct, SortResult};
 use crate::{criterion::Criteria, DocumentId};
 use crate::{reordered_attrs::ReorderedAttrs, store, MResult};
 use crate::facets::FacetFilter;
-
-use either::Either;
-use sdset::SetOperation;
-
-use meilisearch_schema::FieldId;
 
 pub struct QueryBuilder<'c, 'f, 'd, 'i> {
     criteria: Criteria<'c>,
@@ -139,7 +139,6 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
             }
             None => None,
         };
-
 
         match self.distinct {
             Some((distinct, distinct_size)) => bucket_sort_with_distinct(

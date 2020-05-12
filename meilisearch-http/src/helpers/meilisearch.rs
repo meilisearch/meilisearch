@@ -245,7 +245,7 @@ impl<'a> SearchBuilder<'a> {
             offset: self.offset,
             limit: self.limit,
             nb_hits: search_result.nb_hits,
-            exhaustive_nb_hits: search_result.is_exhaustive,
+            exhaustive_nb_hits: search_result.exhaustive_nb_hit,
             processing_time_ms: time_ms,
             query: self.query.to_string(),
             facets: search_result.facets,

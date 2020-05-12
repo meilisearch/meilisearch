@@ -28,7 +28,7 @@ use crate::query_tree::Context as QTContext;
 pub struct SortResult {
     pub documents: Vec<Document>,
     pub nb_hits: usize,
-    pub is_exhaustive: bool,
+    pub exhaustive_nb_hit: bool,
     pub facets: Option<HashMap<String, HashMap<String, usize>>>,
     pub exhaustive_facet_count: Option<bool>,
 }
