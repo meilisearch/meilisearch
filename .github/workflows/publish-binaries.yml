@@ -20,8 +20,8 @@ jobs:
             artifact_name: meilisearch
             asset_name: meilisearch-macos-amd64
           - os: windows-latest
-            artifact_name: meilisearch
-            asset_name: meilisearch-windows-amd64
+            artifact_name: meilisearch.exe
+            asset_name: meilisearch-windows-amd64.exe
 
     steps:
     - uses: hecrj/setup-rust-action@master

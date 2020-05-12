@@ -1,8 +1,7 @@
 ---
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+  release:
+    types: [published]
 
 name: Publish latest image to Docker Hub
 
@@ -10,8 +9,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
+      - name: Check if current release is latest
+        run: echo "##[set-output name=is_latest;]$(sh .github/is-latest-release.sh)"
+        id: release
       - name: Publish to Registry
+        if: steps.release.outputs.is_latest == 'true'
         uses: elgohr/Publish-Docker-Github-Action@master
         with:
           name: getmeili/meilisearch

@@ -1,9 +1,8 @@
-name: Publish deb pkg to GitHub release & apt repository & Homebrew
+name: Publish deb pkg to GitHub release & APT repository & Homebrew
 
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+  release:
+    types: [published]
 
 jobs:
   debian:
@@ -32,7 +31,8 @@ jobs:
     name: Bump Homebrew formula
     runs-on: ubuntu-latest
     steps:
-      - uses: mislav/bump-homebrew-formula-action@v1
+      - name: Create PR to Homebrew
+        uses: mislav/bump-homebrew-formula-action@v1
         with:
           formula-name: meilisearch
         env:
