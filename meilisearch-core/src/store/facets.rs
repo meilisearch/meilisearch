@@ -24,7 +24,7 @@ impl Facets {
     }
 
     pub fn field_document_ids<'txn>(&self, reader: &'txn RoTxn<MainT>, field_id: FieldId) -> ZResult<RoRange<'txn, FacetKey, CowSet<DocumentId>>> {
-        self.facets.prefix_iter(reader, &FacetKey::new(field_id, "".to_string()))
+        self.facets.prefix_iter(reader, &FacetKey::new(field_id, String::new()))
     }
 
     pub fn facet_document_ids<'txn>(&self, reader: &'txn RoTxn<MainT>, facet_key: &FacetKey) -> ZResult<Option<Cow<'txn, Set<DocumentId>>>> {

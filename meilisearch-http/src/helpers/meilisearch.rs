@@ -157,7 +157,7 @@ impl<'a> SearchBuilder<'a> {
         query_builder.set_facets(self.facets.as_deref());
 
         let start = Instant::now();
-        let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit), &schema);
         let search_result = result.map_err(ResponseError::search_documents)?;
         let time_ms = start.elapsed().as_millis() as usize;
 
@@ -247,7 +247,7 @@ impl<'a> SearchBuilder<'a> {
             exhaustive_nb_hits: search_result.is_exhaustive,
             processing_time_ms: time_ms,
             query: self.query.to_string(),
-            facets: search_result.facets
+            facets: search_result.facets,
         };
 
         Ok(results)
@@ -332,6 +332,7 @@ pub struct SearchResult {
     pub exhaustive_nb_hits: bool,
     pub processing_time_ms: usize,
     pub query: String,
+    pub facets: Option<HashMap<String, HashMap<String, usize>>>,
 }
 
 /// returns the start index and the length on the crop.

@@ -33,7 +33,7 @@ struct SearchQuery {
     filters: Option<String>,
     matches: Option<bool>,
     facet_filters: Option<String>,
-    facets: Option<String>
+    facets: Option<String>,
 }
 
 #[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
@@ -94,9 +94,12 @@ async fn search_with_url_query(
         }
     }
 
-    if let Some(ref facets) = params.facets {
+    if let Some(facets) = &params.facets {
         match index.main.attributes_for_faceting(&reader)? {
-            Some(ref attrs) => { search_builder.add_facets(prepare_facet_list(facets, &schema, attrs)?); },
+            Some(ref attrs) => {
+                let field_ids = prepare_facet_list(&facets, &schema, attrs)?;
+                search_builder.add_facets(field_ids);
+            },
             None => return Err(ResponseError::FacetExpression("can't return facets count, as no facet is set".to_string()))
         }
 
@@ -162,26 +165,35 @@ async fn search_with_url_query(
     Ok(HttpResponse::Ok().json(search_builder.search(&reader)?))
 }
 
-fn prepare_facet_list<'fa>(facets: &str, schema: &Schema, facet_attrs: &'fa [FieldId]) -> Result<Vec<FieldId>, ResponseError> {
-    let facet_array = serde_json::from_str(facets).expect("do error handling"); // TODO
-    match facet_array {
-        Value::Array(facet_array) => {
-            let wild_card = Value::String("*".to_string());
-            if facet_array.iter().any(|it| it == &wild_card) {
-                return Ok(Vec::from(facet_attrs)); // TODO can make cow?
+/// Parses the incoming string into an array of attributes for which to return a count. It returns
+/// a Vec of attribute names ascociated with their id.
+///
+/// An error is returned if the array is malformed, or if it contains attributes that are
+/// unexisting, or not set as facets.
+fn prepare_facet_list(facets: &str, schema: &Schema, facet_attrs: &[FieldId]) -> Result<Vec<(FieldId, String)>, FacetCountError> {
+    let json_array = serde_json::from_str(facets)?;
+    match json_array {
+        Value::Array(vals) => {
+            let wildcard = Value::String("*".to_string());
+            if vals.iter().any(|f| f == &wildcard) {
+                return Ok(Vec::from(facet_attrs));
             }
-            let mut fields = Vec::with_capacity(facet_attrs.len());
-            for v in facet_array {
-                match v {
-                    Value::String(name) => {
-                        let id = schema.id(&name).expect("not found error"); // TODO
-                        fields.push(id);
+            let mut field_ids = Vec::new();
+            for facet in vals {
+                match facet {
+                    Value::String(facet) => {
+                        if let Some(id) = schema.id(&facet) {
+                            if !facet_attrs.contains(&id) {
+                                return Err(ResponseError::FacetExpression("Only attributes set as facet can be counted".to_string())); // TODO make special error
+                            }
+                            field_ids.push(id);
+                        }
                     }
-                    _ => todo!("expected string, found {}", v),
+                    bad_val => return Err(ResponseError::FacetExpression(format!("expected String found {}", bad_val)))
                 }
             }
-            return Ok(fields);
+            Ok(field_ids)
         }
-        _ => todo!("error, bad syntax, expected array")
+        bad_val => return Err(ResponseError::FacetExpression(format!("expected Array found {}", bad_val)))
     }
 }

@@ -17,7 +17,6 @@ use slice_group_by::{GroupBy, GroupByMut};
 use crate::error::Error;
 use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
-use crate::facets::FacetKey;
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
 use crate::{store, Document, DocumentId, MResult};
@@ -30,7 +29,8 @@ pub struct SortResult {
     pub documents: Vec<Document>,
     pub nb_hits: usize,
     pub is_exhaustive: bool,
-    pub facets: Option<HashMap<FacetKey, usize>>,
+    pub facets: Option<HashMap<String, HashMap<String, usize>>>,
+    pub exhaustive_facet_count: Option<bool>,
 }
 
 pub fn bucket_sort<'c, FI>(
@@ -38,7 +38,7 @@ pub fn bucket_sort<'c, FI>(
     query: &str,
     range: Range<usize>,
     facets_docids: Option<SetBuf<DocumentId>>,
-    facet_count_docids: Option<HashMap<FacetKey, Cow<Set<DocumentId>>>>,
+    facet_count_docids: Option<HashMap<String, HashMap<String, Cow<Set<DocumentId>>>>>,
     filter: Option<FI>,
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
@@ -120,15 +120,10 @@ where
         docids = Cow::Owned(intersection);
     }
 
-    if let Some(facet_count_docids) = facet_count_docids {
-        let mut facets = HashMap::new();
-        for (key, document_ids) in facet_count_docids {
-            let mut counter = Counter::new();
-            let op = OpBuilder::new(document_ids.as_ref(), document_ids.as_ref()).intersection();
-            SetOperation::<DocumentId>::extend_collection(op, &mut counter);
-            facets.insert(key, counter.0);
-        }
-        result.facets = Some(facets);
+    if let Some(f) = facet_count_docids {
+        // hardcoded value, until approximation optimization
+        result.exhaustive_facet_count = Some(true);
+        result.facets = Some(facet_count(f, &docids));
     }
 
     let before = Instant::now();
@@ -216,7 +211,7 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     query: &str,
     range: Range<usize>,
     facets_docids: Option<SetBuf<DocumentId>>,
-    facet_count_docids: Option<HashMap<FacetKey, Cow<Set<DocumentId>>>>,
+    facet_count_docids: Option<HashMap<String, HashMap<String, Cow<Set<DocumentId>>>>>,
     filter: Option<FI>,
     distinct: FD,
     distinct_size: usize,
@@ -276,15 +271,10 @@ where
         docids = Cow::Owned(intersection);
     }
 
-    if let Some(facet_count_docids) = facet_count_docids {
-        let mut facets = HashMap::new();
-        for (key, document_ids) in facet_count_docids {
-            let mut counter = Counter::new();
-            let op = OpBuilder::new(document_ids.as_ref(), document_ids.as_ref()).intersection();
-            SetOperation::<DocumentId>::extend_collection(op, &mut counter);
-            facets.insert(key, counter.0);
-        }
-        result.facets = Some(facets);
+    if let Some(f) = facet_count_docids {
+        // hardcoded value, until approximation optimization
+        result.exhaustive_facet_count = Some(true);
+        result.facets = Some(facet_count(f, &docids));
     }
 
     let before = Instant::now();
@@ -617,4 +607,23 @@ impl Deref for PostingsListView<'_> {
             PostingsListView::Rewritten { ref postings_list, .. } => postings_list,
         }
     }
+}
+
+/// For each entry in facet_docids, calculates the number of documents in the intersection with candidate_docids.
+fn facet_count(
+    facet_docids: HashMap<String, HashMap<String, Cow<Set<DocumentId>>>>,
+    candidate_docids: &Set<DocumentId>,
+) -> HashMap<String, HashMap<String, usize>> {
+    let mut facets_counts = HashMap::with_capacity(facet_docids.len());
+    for (key, doc_map) in facet_docids {
+        let mut count_map = HashMap::with_capacity(doc_map.len());
+        for (value, docids) in doc_map {
+            let mut counter = Counter::new();
+            let op = OpBuilder::new(docids.as_ref(), candidate_docids).intersection();
+            SetOperation::<DocumentId>::extend_collection(op, &mut counter);
+            count_map.insert(value, counter.0);
+        }
+        facets_counts.insert(key, count_map);
+    }
+    facets_counts
 }

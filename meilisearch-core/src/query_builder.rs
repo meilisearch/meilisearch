@@ -12,7 +12,7 @@ use crate::facets::FacetFilter;
 use either::Either;
 use sdset::SetOperation;
 
-use meilisearch_schema::FieldId;
+use meilisearch_schema::{Schema, FieldId};
 
 pub struct QueryBuilder<'c, 'f, 'd, 'i, 'q> {
     criteria: Criteria<'c>,
@@ -21,8 +21,8 @@ pub struct QueryBuilder<'c, 'f, 'd, 'i, 'q> {
     distinct: Option<(Box<dyn Fn(DocumentId) -> Option<u64> + 'd>, usize)>,
     timeout: Option<Duration>,
     index: &'i store::Index,
-    facet_fitlers: Option<&'q FacetFilter>,
-    facets: Option<&'q [FieldId]>,
+    facet_filter: Option<FacetFilter>,
+    facets: Option<Vec<(FieldId, String)>>,
 }
 
 impl<'c, 'f, 'd, 'i, 'q> QueryBuilder<'c, 'f, 'd, 'i, 'q> {
@@ -34,8 +34,8 @@ impl<'c, 'f, 'd, 'i, 'q> QueryBuilder<'c, 'f, 'd, 'i, 'q> {
     }
 
     /// sets facet attributes to filter on
-    pub fn set_facet_filters(&mut self, facets: Option<&'q FacetFilter>) {
-        self.facet_fitlers = facets;
+    pub fn set_facet_filter(&mut self, facets: Option<FacetFilter>) {
+        self.facet_filter = facets;
     }
 
     /// sets facet attributes for which to return the count
@@ -54,7 +54,7 @@ impl<'c, 'f, 'd, 'i, 'q> QueryBuilder<'c, 'f, 'd, 'i, 'q> {
             distinct: None,
             timeout: None,
             index,
-            facet_fitlers: None,
+            facet_filter: None,
             facets: None,
         }
     }
@@ -87,8 +87,9 @@ impl<'c, 'f, 'd, 'i, 'q> QueryBuilder<'c, 'f, 'd, 'i, 'q> {
         reader: &heed::RoTxn<MainT>,
         query: &str,
         range: Range<usize>,
+        schema: &Schema,
     ) -> MResult<SortResult> {
-        let facets_docids = match self.facet_fitlers {
+        let facets_docids = match self.facet_filter {
             Some(facets) => {
                 let mut ands = Vec::with_capacity(facets.len());
                 let mut ors = Vec::new();
@@ -120,14 +121,21 @@ impl<'c, 'f, 'd, 'i, 'q> QueryBuilder<'c, 'f, 'd, 'i, 'q> {
             None => None
         };
 
+        // for each field to retrieve the count for, create an HashMap associating the attribute
+        // value to a set of matching documents. The HashMaps are them collected in another
+        // HashMap, associating each HashMap to it's field.
         let facet_count_docids = match self.facets {
             Some(field_ids) => {
                 let mut facet_count_map = HashMap::new();
                 for field_id in field_ids {
-                    for pair in self.index.facets.field_document_ids(reader, *field_id)? {
-                        let (facet_key, document_ids) = pair?;
-                        let facet_key_string = facet_key.to_parts(schema)?;
-                        facet_count_map.insert(facet_key, document_ids);
+                    if let Some(field_name) = schema.name(*field_id) {
+                        let mut key_map = HashMap::new();
+                        for pair in self.index.facets.field_document_ids(reader, *field_id)? {
+                            let (facet_key, document_ids) = pair?;
+                            let value = facet_key.value();
+                            key_map.insert(value.to_string(), document_ids);
+                        }
+                        facet_count_map.insert(field_name.to_string(), key_map);
                     }
                 }
                 Some(facet_count_map)
