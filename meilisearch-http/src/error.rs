@@ -146,7 +146,7 @@ impl fmt::Display for ResponseError {
             Self::SearchDocuments(err) => write!(f, "impossible to search documents; {}", err),
             Self::FacetExpression(e) => write!(f, "error parsing facet filter expression: {}", e),
             Self::PayloadTooLarge => f.write_str("Payload to large"),
-            Self::UnsupportedMediaType => f.write_str("Unsupported media type")
+            Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
             Self::FacetCount(e) => write!(f, "error with facet count: {}", e),
         }
     }
