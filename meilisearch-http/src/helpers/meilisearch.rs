@@ -154,7 +154,7 @@ impl<'a> SearchBuilder<'a> {
             }
         }
 
-        query_builder.set_facet_filters(self.facet_filters);
+        query_builder.set_facet_filter(self.facet_filters);
         query_builder.set_facets(self.facets);
 
         let start = Instant::now();

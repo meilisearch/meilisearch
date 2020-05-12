@@ -371,6 +371,7 @@ impl Database {
 mod tests {
     use super::*;
 
+    use crate::bucket_sort::SortResult;
     use crate::criterion::{self, CriteriaBuilder};
     use crate::update::{ProcessedUpdateResult, UpdateStatus};
     use crate::settings::Settings;
@@ -675,8 +676,8 @@ mod tests {
 
         // even try to search for a document
         let reader = db.main_read_txn().unwrap();
-        let (results, _nb_hits) = index.query_builder().query(&reader, "21 ", 0..20).unwrap();
-        assert_matches!(results.len(), 1);
+        let SortResult {documents, .. } = index.query_builder().query(&reader, "21 ", 0..20).unwrap();
+        assert_matches!(documents.len(), 1);
 
         reader.abort();
 
@@ -1073,8 +1074,8 @@ mod tests {
 
         let builder = index.query_builder_with_criteria(criteria);
 
-        let (results, _nb_hits) = builder.query(&reader, "Kevin", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "Kevin", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(
             iter.next(),
