@@ -7,7 +7,7 @@ use actix_web_macros::get;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::error::ResponseError;
+use crate::error::{ResponseError, FacetCountError};
 use crate::helpers::meilisearch::IndexSearchExt;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
@@ -100,9 +100,8 @@ async fn search_with_url_query(
                 let field_ids = prepare_facet_list(&facets, &schema, attrs)?;
                 search_builder.add_facets(field_ids);
             },
-            None => return Err(ResponseError::FacetExpression("can't return facets count, as no facet is set".to_string()))
+            None => return Err(FacetCountError::NoFacetSet.into())
         }
-
     }
 
     if let Some(attributes_to_crop) = &params.attributes_to_crop {
@@ -188,16 +187,16 @@ fn prepare_facet_list(facets: &str, schema: &Schema, facet_attrs: &[FieldId]) ->
                     Value::String(facet) => {
                         if let Some(id) = schema.id(&facet) {
                             if !facet_attrs.contains(&id) {
-                                return Err(ResponseError::FacetExpression("Only attributes set as facet can be counted".to_string())); // TODO make special error
+                                return Err(FacetCountError::AttributeNotSet(facet));
                             }
                             field_ids.push((id, facet));
                         }
                     }
-                    bad_val => return Err(ResponseError::FacetExpression(format!("expected String found {}", bad_val)))
+                    bad_val => return Err(FacetCountError::unexpected_token(bad_val, &["String"])),
                 }
             }
             Ok(field_ids)
         }
-        bad_val => return Err(ResponseError::FacetExpression(format!("expected Array found {}", bad_val)))
+        bad_val => return Err(FacetCountError::unexpected_token(bad_val, &["[String]"]))
     }
 }
