@@ -4,6 +4,7 @@ use actix_http::ResponseBuilder;
 use actix_web as aweb;
 use actix_web::http::StatusCode;
 use serde_json::json;
+use actix_web::error::JsonPayloadError;
 
 #[derive(Debug)]
 pub enum ResponseError {
@@ -23,7 +24,43 @@ pub enum ResponseError {
     FilterParsing(String),
     RetrieveDocument(u64, String),
     SearchDocuments(String),
+    PayloadTooLarge,
+    UnsupportedMediaType,
     FacetExpression(String),
+    FacetCount(String),
+}
+
+pub enum FacetCountError {
+    AttributeNotSet(String),
+    SyntaxError(String),
+    UnexpectedToken { found: String, expected: &'static [&'static str] },
+    NoFacetSet,
+}
+
+impl FacetCountError {
+    pub fn unexpected_token(found: impl ToString, expected: &'static [&'static str]) -> FacetCountError {
+        let found = found.to_string();
+        FacetCountError::UnexpectedToken { expected, found }
+    }
+}
+
+impl From<serde_json::error::Error> for FacetCountError {
+    fn from(other: serde_json::error::Error) -> FacetCountError {
+        FacetCountError::SyntaxError(other.to_string())
+    }
+}
+
+impl fmt::Display for FacetCountError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use FacetCountError::*;
+
+        match self {
+            AttributeNotSet(attr) => write!(f, "attribute {} is not set as facet", attr),
+            SyntaxError(msg) => write!(f, "syntax error: {}", msg),
+            UnexpectedToken { expected, found } => write!(f, "unexpected {} found, expected {:?}", found, expected),
+            NoFacetSet => write!(f, "can't perform facet count, as no facet is set"),
+        }
+    }
 }
 
 impl ResponseError {
@@ -108,6 +145,9 @@ impl fmt::Display for ResponseError {
             Self::RetrieveDocument(id, err) => write!(f, "impossible to retrieve the document with id: {}; {}", id, err),
             Self::SearchDocuments(err) => write!(f, "impossible to search documents; {}", err),
             Self::FacetExpression(e) => write!(f, "error parsing facet filter expression: {}", e),
+            Self::PayloadTooLarge => f.write_str("Payload to large"),
+            Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
+            Self::FacetCount(e) => write!(f, "error with facet count: {}", e),
         }
     }
 }
@@ -129,6 +169,7 @@ impl aweb::error::ResponseError for ResponseError {
             | Self::RetrieveDocument(_, _)
             | Self::FacetExpression(_)
             | Self::SearchDocuments(_)
+            | Self::FacetCount(_)
             | Self::FilterParsing(_) => StatusCode::BAD_REQUEST,
             Self::DocumentNotFound(_)
             | Self::IndexNotFound(_)
@@ -138,6 +179,8 @@ impl aweb::error::ResponseError for ResponseError {
             Self::MissingAuthorizationHeader => StatusCode::FORBIDDEN,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::Maintenance => StatusCode::SERVICE_UNAVAILABLE,
+            Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
         }
     }
 }
@@ -189,4 +232,25 @@ impl From<actix_http::Error> for ResponseError {
     fn from(err: actix_http::Error) -> ResponseError {
         ResponseError::Internal(err.to_string())
     }
+}
+
+impl From<FacetCountError> for ResponseError {
+    fn from(other: FacetCountError) -> ResponseError {
+        ResponseError::FacetCount(other.to_string())
+    }
+}
+
+impl From<JsonPayloadError> for ResponseError {
+    fn from(err: JsonPayloadError) -> ResponseError {
+        match err {
+            JsonPayloadError::Deserialize(err) => ResponseError::BadRequest(format!("Invalid JSON: {}", err)),
+            JsonPayloadError::Overflow => ResponseError::PayloadTooLarge,
+            JsonPayloadError::ContentType => ResponseError::UnsupportedMediaType,
+            JsonPayloadError::Payload(err) => ResponseError::BadRequest(format!("Problem while decoding the request: {}", err)),
+        }
+    }
+}
+
+pub fn json_error_handler(err: JsonPayloadError) -> ResponseError {
+    err.into()
 }

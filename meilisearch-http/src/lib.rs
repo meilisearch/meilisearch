@@ -8,6 +8,7 @@ pub mod option;
 pub mod routes;
 
 pub use self::data::Data;
+use self::error::json_error_handler;
 use actix_http::Error;
 use actix_service::ServiceFactory;
 use actix_web::{dev, web, App};
@@ -28,7 +29,12 @@ pub fn create_app(
 > {
     App::new()
         .app_data(web::Data::new(data.clone()))
-        .app_data(web::JsonConfig::default().limit(1024 * 1024 * 10)) // Json Limit of 10Mb
+        .app_data(
+            web::JsonConfig::default()
+                .limit(1024 * 1024 * 10) // Json Limit of 10Mb
+                .content_type(|_mime| true) // Accept all mime types
+                .error_handler(|err, _req| json_error_handler(err).into()),
+        )
         .service(routes::load_html)
         .service(routes::load_css)
         .configure(routes::document::services)

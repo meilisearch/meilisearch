@@ -36,6 +36,7 @@ impl IndexSearchExt for Index {
             filters: None,
             matches: false,
             facet_filters: None,
+            facets: None,
         }
     }
 }
@@ -51,6 +52,7 @@ pub struct SearchBuilder<'a> {
     filters: Option<String>,
     matches: bool,
     facet_filters: Option<FacetFilter>,
+    facets: Option<Vec<(FieldId, String)>>
 }
 
 impl<'a> SearchBuilder<'a> {
@@ -100,7 +102,12 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn search(&self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, ResponseError> {
+    pub fn add_facets(&mut self, facets: Vec<(FieldId, String)>) -> &SearchBuilder {
+        self.facets = Some(facets);
+        self
+    }
+
+    pub fn search(self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, ResponseError> {
         let schema = self
             .index
             .main
@@ -117,8 +124,8 @@ impl<'a> SearchBuilder<'a> {
 
         if let Some(filter_expression) = &self.filters {
             let filter = Filter::parse(filter_expression, &schema)?;
+            let index = &self.index;
             query_builder.with_filter(move |id| {
-                let index = &self.index;
                 let reader = &reader;
                 let filter = &filter;
                 match filter.test(reader, index, id) {
@@ -133,8 +140,9 @@ impl<'a> SearchBuilder<'a> {
 
         if let Some(field) = self.index.main.distinct_attribute(reader)? {
             if let Some(field_id) = schema.id(&field) {
+                let index = &self.index;
                 query_builder.with_distinct(1, move |id| {
-                    match self.index.document_attribute_bytes(reader, id, field_id) {
+                    match index.document_attribute_bytes(reader, id, field_id) {
                         Ok(Some(bytes)) => {
                             let mut s = SipHasher::new();
                             bytes.hash(&mut s);
@@ -146,11 +154,12 @@ impl<'a> SearchBuilder<'a> {
             }
         }
 
-        query_builder.set_facets(self.facet_filters.as_ref());
+        query_builder.set_facet_filter(self.facet_filters);
+        query_builder.set_facets(self.facets);
 
         let start = Instant::now();
         let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
-        let (docs, nb_hits) = result.map_err(ResponseError::search_documents)?;
+        let search_result = result.map_err(ResponseError::search_documents)?;
         let time_ms = start.elapsed().as_millis() as usize;
 
         let mut all_attributes: HashSet<&str> = HashSet::new();
@@ -181,7 +190,7 @@ impl<'a> SearchBuilder<'a> {
         }
 
         let mut hits = Vec::with_capacity(self.limit);
-        for doc in docs {
+        for doc in search_result.documents {
             let mut document: IndexMap<String, Value> = self
                 .index
                 .document(reader, Some(&all_attributes), doc.id)
@@ -235,10 +244,11 @@ impl<'a> SearchBuilder<'a> {
             hits,
             offset: self.offset,
             limit: self.limit,
-            nb_hits,
-            exhaustive_nb_hits: false,
+            nb_hits: search_result.nb_hits,
+            exhaustive_nb_hits: search_result.exhaustive_nb_hit,
             processing_time_ms: time_ms,
             query: self.query.to_string(),
+            facets: search_result.facets,
         };
 
         Ok(results)
@@ -323,6 +333,7 @@ pub struct SearchResult {
     pub exhaustive_nb_hits: bool,
     pub processing_time_ms: usize,
     pub query: String,
+    pub facets: Option<HashMap<String, HashMap<String, usize>>>,
 }
 
 /// returns the start index and the length on the crop.

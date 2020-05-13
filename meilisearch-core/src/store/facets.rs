@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use heed::{RwTxn, RoTxn, Result as ZResult};
+use heed::{RwTxn, RoTxn, Result as ZResult, RoRange};
 use sdset::{SetBuf, Set, SetOperation};
 
 use meilisearch_types::DocumentId;
+use meilisearch_schema::FieldId;
 
 use crate::database::MainT;
 use crate::facets::FacetKey;
@@ -20,6 +21,10 @@ impl Facets {
     // we use sdset::SetBuf to ensure the docids are sorted.
     pub fn put_facet_document_ids(&self, writer: &mut RwTxn<MainT>, facet_key: FacetKey, doc_ids: &Set<DocumentId>) -> ZResult<()> {
         self.facets.put(writer, &facet_key, doc_ids)
+    }
+
+    pub fn field_document_ids<'txn>(&self, reader: &'txn RoTxn<MainT>, field_id: FieldId) -> ZResult<RoRange<'txn, FacetKey, CowSet<DocumentId>>> {
+        self.facets.prefix_iter(reader, &FacetKey::new(field_id, String::new()))
     }
 
     pub fn facet_document_ids<'txn>(&self, reader: &'txn RoTxn<MainT>, facet_key: &FacetKey) -> ZResult<Option<Cow<'txn, Set<DocumentId>>>> {

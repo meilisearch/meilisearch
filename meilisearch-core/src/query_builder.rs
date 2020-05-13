@@ -1,27 +1,31 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::{Range, Deref};
 use std::time::Duration;
-
-use crate::database::MainT;
-use crate::bucket_sort::{bucket_sort, bucket_sort_with_distinct};
-use crate::{criterion::Criteria, Document, DocumentId};
-use crate::{reordered_attrs::ReorderedAttrs, store, MResult};
-use crate::facets::FacetFilter;
 
 use either::Either;
 use sdset::SetOperation;
 
-pub struct QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
+use meilisearch_schema::FieldId;
+
+use crate::database::MainT;
+use crate::bucket_sort::{bucket_sort, bucket_sort_with_distinct, SortResult};
+use crate::{criterion::Criteria, DocumentId};
+use crate::{reordered_attrs::ReorderedAttrs, store, MResult};
+use crate::facets::FacetFilter;
+
+pub struct QueryBuilder<'c, 'f, 'd, 'i> {
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
     filter: Option<Box<dyn Fn(DocumentId) -> bool + 'f>>,
     distinct: Option<(Box<dyn Fn(DocumentId) -> Option<u64> + 'd>, usize)>,
     timeout: Option<Duration>,
     index: &'i store::Index,
-    facets: Option<&'fa FacetFilter>,
+    facet_filter: Option<FacetFilter>,
+    facets: Option<Vec<(FieldId, String)>>,
 }
 
-impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
+impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
     pub fn new(index: &'i store::Index) -> Self {
         QueryBuilder::with_criteria(
             index,
@@ -29,7 +33,13 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
         )
     }
 
-    pub fn set_facets(&mut self, facets: Option<&'fa FacetFilter>) {
+    /// sets facet attributes to filter on
+    pub fn set_facet_filter(&mut self, facets: Option<FacetFilter>) {
+        self.facet_filter = facets;
+    }
+
+    /// sets facet attributes for which to return the count
+    pub fn set_facets(&mut self, facets: Option<Vec<(FieldId, String)>>) {
         self.facets = facets;
     }
 
@@ -44,6 +54,7 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
             distinct: None,
             timeout: None,
             index,
+            facet_filter: None,
             facets: None,
         }
     }
@@ -76,8 +87,8 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
         reader: &heed::RoTxn<MainT>,
         query: &str,
         range: Range<usize>,
-    ) -> MResult<(Vec<Document>, usize)> {
-        let facets_docids = match self.facets {
+    ) -> MResult<SortResult> {
+        let facets_docids = match self.facet_filter {
             Some(facets) => {
                 let mut ands = Vec::with_capacity(facets.len());
                 let mut ors = Vec::new();
@@ -98,7 +109,7 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
                             match self.index.facets.facet_document_ids(reader, &key)? {
                                 Some(docids) => ands.push(docids),
                                 // no candidates for search, early return.
-                                None => return Ok((vec![], 0)),
+                                None => return Ok(SortResult::default()),
                             }
                         }
                     };
@@ -109,12 +120,33 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
             None => None
         };
 
+        // for each field to retrieve the count for, create an HashMap associating the attribute
+        // value to a set of matching documents. The HashMaps are them collected in another
+        // HashMap, associating each HashMap to it's field.
+        let facet_count_docids = match self.facets {
+            Some(field_ids) => {
+                let mut facet_count_map = HashMap::new();
+                for (field_id, field_name) in field_ids {
+                    let mut key_map = HashMap::new();
+                    for pair in self.index.facets.field_document_ids(reader, field_id)? {
+                        let (facet_key, document_ids) = pair?;
+                        let value = facet_key.value();
+                        key_map.insert(value.to_string(), document_ids);
+                    }
+                    facet_count_map.insert(field_name, key_map);
+                }
+                Some(facet_count_map)
+            }
+            None => None,
+        };
+
         match self.distinct {
             Some((distinct, distinct_size)) => bucket_sort_with_distinct(
                 reader,
                 query,
                 range,
                 facets_docids,
+                facet_count_docids,
                 self.filter,
                 distinct,
                 distinct_size,
@@ -132,6 +164,7 @@ impl<'c, 'f, 'd, 'fa, 'i> QueryBuilder<'c, 'f, 'd, 'fa, 'i> {
                 query,
                 range,
                 facets_docids,
+                facet_count_docids,
                 self.filter,
                 self.criteria,
                 self.searchable_attrs,
@@ -159,6 +192,7 @@ mod tests {
     use tempfile::TempDir;
 
     use crate::DocIndex;
+    use crate::Document;
     use crate::automaton::normalize_str;
     use crate::bucket_sort::SimpleMatch;
     use crate::database::{Database,DatabaseOptions};
@@ -349,8 +383,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "iphone from apple", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult { documents, .. } = builder.query(&reader, "iphone from apple", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -372,8 +406,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "hello", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult { documents, .. } = builder.query(&reader, "hello", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -383,8 +417,8 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "bonjour", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult { documents, .. } = builder.query(&reader, "bonjour", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -406,7 +440,7 @@ mod tests {
 
     //     let builder = store.query_builder();
     //     let results = builder.query(&reader, "sal", 0..20).unwrap();
-    //     let mut iter = results.into_iter();
+    //     let mut iter = documents.into_iter();
 
     //     assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
     //         let mut matches = matches.into_iter();
@@ -417,7 +451,7 @@ mod tests {
 
     //     let builder = store.query_builder();
     //     let results = builder.query(&reader, "bonj", 0..20).unwrap();
-    //     let mut iter = results.into_iter();
+    //     let mut iter = documents.into_iter();
 
     //     assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
     //         let mut matches = matches.into_iter();
@@ -428,13 +462,13 @@ mod tests {
 
     //     let builder = store.query_builder();
     //     let results = builder.query(&reader, "sal blabla", 0..20).unwrap();
-    //     let mut iter = results.into_iter();
+    //     let mut iter = documents.into_iter();
 
     //     assert_matches!(iter.next(), None);
 
     //     let builder = store.query_builder();
     //     let results = builder.query(&reader, "bonj blabla", 0..20).unwrap();
-    //     let mut iter = results.into_iter();
+    //     let mut iter = documents.into_iter();
 
     //     assert_matches!(iter.next(), None);
     // }
@@ -450,7 +484,7 @@ mod tests {
 
     //     let builder = store.query_builder();
     //     let results = builder.query(&reader, "salutution", 0..20).unwrap();
-    //     let mut iter = results.into_iter();
+    //     let mut iter = documents.into_iter();
 
     //     assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
     //         let mut matches = matches.into_iter();
@@ -461,7 +495,7 @@ mod tests {
 
     //     let builder = store.query_builder();
     //     let results = builder.query(&reader, "saluttion", 0..20).unwrap();
-    //     let mut iter = results.into_iter();
+    //     let mut iter = documents.into_iter();
 
     //     assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
     //         let mut matches = matches.into_iter();
@@ -487,8 +521,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "hello", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult { documents, .. } = builder.query(&reader, "hello", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -508,8 +542,8 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "bonjour", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult { documents, .. } = builder.query(&reader, "bonjour", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -529,8 +563,8 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "salut", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult { documents, .. } = builder.query(&reader, "salut", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -575,8 +609,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "NY subway", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult { documents, .. } = builder.query(&reader, "NY subway", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -597,8 +631,8 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "NYC subway", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult { documents, .. } = builder.query(&reader, "NYC subway", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -639,8 +673,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "NY", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "NY", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -663,8 +697,8 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "new york", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "new york", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -697,8 +731,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "NY subway", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "NY subway", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -714,8 +748,8 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "new york subway", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "new york subway", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -762,8 +796,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "NY subway", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "NY subway", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -784,8 +818,8 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "NYC subway", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "NYC subway", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -837,8 +871,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "NY subway broken", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "NY subway broken", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -853,8 +887,8 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "NYC subway", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "NYC subway", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -909,10 +943,10 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder
+        let SortResult {documents, .. } = builder
             .query(&reader, "new york underground train broken", 0..20)
             .unwrap();
-        let mut iter = results.into_iter();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -939,10 +973,10 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder
+        let SortResult {documents, .. } = builder
             .query(&reader, "new york city underground train broken", 0..20)
             .unwrap();
-        let mut iter = results.into_iter();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(2), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -983,8 +1017,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "new york big ", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "new york big ", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -1017,8 +1051,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "NY subway ", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "NY subway ", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -1067,10 +1101,10 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder
+        let SortResult {documents, .. } = builder
             .query(&reader, "new york city long subway cool ", 0..20)
             .unwrap();
-        let mut iter = results.into_iter();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut matches = matches.into_iter();
@@ -1100,8 +1134,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "telephone", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "telephone", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -1117,8 +1151,8 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "téléphone", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "téléphone", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -1134,8 +1168,8 @@ mod tests {
         assert_matches!(iter.next(), None);
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "télephone", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "télephone", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -1161,8 +1195,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "i phone case", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "i phone case", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -1190,8 +1224,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "searchengine", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "searchengine", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -1230,8 +1264,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "searchengine", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "searchengine", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut iter = matches.into_iter();
@@ -1262,8 +1296,8 @@ mod tests {
         let reader = db.main_read_txn().unwrap();
 
         let builder = store.query_builder();
-        let (results, _nb_hits) = builder.query(&reader, "searchengine", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, "searchengine", 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut iter = matches.into_iter();

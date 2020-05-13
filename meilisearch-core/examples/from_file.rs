@@ -371,12 +371,12 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     });
                 }
 
-                let (documents, _nb_hits) = builder.query(ref_reader, &query, 0..command.number_results)?;
+                let result = builder.query(ref_reader, &query, 0..command.number_results)?;
 
                 let mut retrieve_duration = Duration::default();
 
-                let number_of_documents = documents.len();
-                for mut doc in documents {
+                let number_of_documents = result.documents.len();
+                for mut doc in result.documents {
                     doc.highlights
                         .sort_unstable_by_key(|m| (m.char_index, m.char_length));
 

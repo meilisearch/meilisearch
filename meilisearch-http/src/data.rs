@@ -134,7 +134,7 @@ impl Data {
 
         let db_opt = DatabaseOptions {
             main_map_size: opt.main_map_size,
-            update_map_size: opt.update_map_size
+            update_map_size: opt.update_map_size,
         };
 
         let db = Arc::new(Database::open_or_create(opt.db_path, db_opt).unwrap());
