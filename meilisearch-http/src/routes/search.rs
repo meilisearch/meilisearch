@@ -5,14 +5,16 @@ use actix_web::web;
 use actix_web::HttpResponse;
 use actix_web_macros::get;
 use serde::Deserialize;
+use serde_json::Value;
 
-use crate::error::ResponseError;
+use crate::error::{ResponseError, FacetCountError};
 use crate::helpers::meilisearch::IndexSearchExt;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
 
 use meilisearch_core::facets::FacetFilter;
+use meilisearch_schema::{Schema, FieldId};
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(search_with_url_query);
@@ -31,6 +33,7 @@ struct SearchQuery {
     filters: Option<String>,
     matches: Option<bool>,
     facet_filters: Option<String>,
+    facets: Option<String>,
 }
 
 #[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
@@ -88,6 +91,16 @@ async fn search_with_url_query(
         match index.main.attributes_for_faceting(&reader)? {
             Some(ref attrs) => { search_builder.add_facet_filters(FacetFilter::from_str(facet_filters, &schema, attrs)?); },
             None => return Err(ResponseError::FacetExpression("can't filter on facets, as no facet is set".to_string()))
+        }
+    }
+
+    if let Some(facets) = &params.facets {
+        match index.main.attributes_for_faceting(&reader)? {
+            Some(ref attrs) => {
+                let field_ids = prepare_facet_list(&facets, &schema, attrs)?;
+                search_builder.add_facets(field_ids);
+            },
+            None => return Err(FacetCountError::NoFacetSet.into())
         }
     }
 
@@ -149,4 +162,41 @@ async fn search_with_url_query(
     }
 
     Ok(HttpResponse::Ok().json(search_builder.search(&reader)?))
+}
+
+/// Parses the incoming string into an array of attributes for which to return a count. It returns
+/// a Vec of attribute names ascociated with their id.
+///
+/// An error is returned if the array is malformed, or if it contains attributes that are
+/// unexisting, or not set as facets.
+fn prepare_facet_list(facets: &str, schema: &Schema, facet_attrs: &[FieldId]) -> Result<Vec<(FieldId, String)>, FacetCountError> {
+    let json_array = serde_json::from_str(facets)?;
+    match json_array {
+        Value::Array(vals) => {
+            let wildcard = Value::String("*".to_string());
+            if vals.iter().any(|f| f == &wildcard) {
+                let attrs = facet_attrs
+                    .iter()
+                    .filter_map(|&id| schema.name(id).map(|n| (id, n.to_string())))
+                    .collect();
+                return Ok(attrs);
+            }
+            let mut field_ids = Vec::with_capacity(facet_attrs.len());
+            for facet in vals {
+                match facet {
+                    Value::String(facet) => {
+                        if let Some(id) = schema.id(&facet) {
+                            if !facet_attrs.contains(&id) {
+                                return Err(FacetCountError::AttributeNotSet(facet));
+                            }
+                            field_ids.push((id, facet));
+                        }
+                    }
+                    bad_val => return Err(FacetCountError::unexpected_token(bad_val, &["String"])),
+                }
+            }
+            Ok(field_ids)
+        }
+        bad_val => return Err(FacetCountError::unexpected_token(bad_val, &["[String]"]))
+    }
 }

@@ -1292,3 +1292,54 @@ async fn test_faceted_search_invalid() {
     let (_response, status_code) = server.search(query).await;
     assert_ne!(status_code, 202);
 }
+
+#[actix_rt::test]
+async fn test_facet_count() {
+    let mut server = common::Server::test_server().await;
+
+    // test no facets set, search on color
+    let query = "q=a&facets=%5B%22color%22%5D";
+    let (_response, status_code) = server.search(query).await;
+    assert_eq!(status_code, 400);
+
+    let body = json!({
+        "attributesForFaceting": ["color", "tags"]
+    });
+    server.update_all_settings(body).await;
+    // same as before, but now facets are set:
+    let (response, _status_code) = server.search(query).await;
+    assert_eq!(response.get("facets").unwrap().as_object().unwrap().values().count(), 1);
+    // searching on color and tags
+    let query = "q=a&facets=%5B%22color%22,%20%22tags%22%5D";
+    let (response, _status_code) = server.search(query).await;
+    let facets = response.get("facets").unwrap().as_object().unwrap();
+    eprintln!("response: {:#?}", response);
+    assert_eq!(facets.values().count(), 2);
+    assert_ne!(!facets.get("color").unwrap().as_object().unwrap().values().count(), 0);
+    assert_ne!(!facets.get("tags").unwrap().as_object().unwrap().values().count(), 0);
+    // wildcard
+    let query = "q=a&facets=%5B%22*%22%5D";
+    let (response, _status_code) = server.search(query).await;
+    assert_eq!(response.get("facets").unwrap().as_object().unwrap().values().count(), 2);
+    // wildcard with other attributes:
+    let query = "q=a&facets=%5B%22color%22,%20%22*%22%5D";
+    let (response, _status_code) = server.search(query).await;
+    assert_eq!(response.get("facets").unwrap().as_object().unwrap().values().count(), 2);
+    // empty facet list
+    let query = "q=a&facets=%5B%5D";
+    let (response, _status_code) = server.search(query).await;
+    assert_eq!(response.get("facets").unwrap().as_object().unwrap().values().count(), 0);
+
+    // attr not set as facet passed:
+    let query = "q=a&facets=%5B%22gender%22%5D";
+    let (_response, status_code) = server.search(query).await;
+    assert_eq!(status_code, 400);
+    // string instead of array:
+    let query = "q=a&facets=%22gender%22";
+    let (_response, status_code) = server.search(query).await;
+    assert_eq!(status_code, 400);
+    // invalid value in array:
+    let query = "q=a&facets=%5B%22color%22,%20true%5D";
+    let (_response, status_code) = server.search(query).await;
+    assert_eq!(status_code, 400);
+}
