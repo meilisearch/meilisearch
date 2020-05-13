@@ -48,6 +48,10 @@ For more information about features go to [our documentation](https://docs.meili
 
 ### Deploy the Server
 
+#### Run it using Digital Ocean
+
+[![DigitalOcean Marketplace](assets/do-btn-blue.svg)](https://marketplace.digitalocean.com/apps/meilisearch?action=deploy&refcode=7c67bd97e101)
+
 #### Run it using Docker
 
 ```bash
