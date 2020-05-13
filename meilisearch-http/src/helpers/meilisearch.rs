@@ -352,10 +352,14 @@ fn aligned_crop(text: &str, match_index: usize, context: usize) -> (usize, usize
         return (match_index, 1 + text.chars().skip(match_index).take_while(is_word_component).count());
     }
     let start = match match_index.saturating_sub(context) {
-        n if n == 0 => n,
-        n => word_end_index(n)
+        0 => 0,
+        n => {
+            let word_end_index = word_end_index(n);
+            // skip whitespaces if any
+            word_end_index + text.chars().skip(word_end_index).take_while(char::is_ascii_whitespace).count()
+        }
     };
-    let end = word_end_index(start + 2 * context);
+    let end = word_end_index(match_index + context);
 
     (start, end - start)
 }
@@ -370,15 +374,21 @@ fn crop_text(
     let char_index = matches.peek().map(|m| m.char_index as usize).unwrap_or(0);
     let (start, count) = aligned_crop(text, char_index, context);
 
-    //TODO do something about the double allocation
-    let text = text.chars().skip(start).take(count).collect::<String>().trim().to_string();
+    // TODO do something about double allocation
+    let text = text
+        .chars()
+        .skip(start)
+        .take(count)
+        .collect::<String>()
+        .trim()
+        .to_string();
 
     // update matches index to match the new cropped text
     let matches = matches
-        .take_while(|m| (m.char_index as usize) + (m.char_length as usize) <= start + (context * 2))
-        .map(|match_| Highlight {
-            char_index: match_.char_index - start as u16,
-            ..match_
+        .take_while(|m| (m.char_index as usize) + (m.char_length as usize) <= start + count)
+        .map(|m| Highlight {
+            char_index: m.char_index - start as u16,
+            ..m
         })
         .collect();
 
@@ -424,7 +434,7 @@ fn calculate_matches(
     let mut matches_result: HashMap<String, Vec<MatchPosition>> = HashMap::new();
     for m in matches.iter() {
         if let Some(attribute) = schema.name(FieldId::new(m.attribute)) {
-            if let Some(attributes_to_retrieve) = attributes_to_retrieve.clone() {
+            if let Some(ref attributes_to_retrieve) = attributes_to_retrieve {
                 if !attributes_to_retrieve.contains(attribute) {
                     continue;
                 }
@@ -470,21 +480,20 @@ fn calculate_highlights(
 
                 let longest_matches = matches
                     .linear_group_by_key(|m| m.start)
-                    .map(|group| group.last().unwrap());
+                    .map(|group| group.last().unwrap())
+                    .filter(move |m| m.start >= index);
 
                 for m in longest_matches {
-                    if m.start >= index {
-                        let before = value.get(index..m.start);
-                        let highlighted = value.get(m.start..(m.start + m.length));
-                        if let (Some(before), Some(highlighted)) = (before, highlighted) {
-                            highlighted_value.extend(before);
-                            highlighted_value.push_str("<em>");
-                            highlighted_value.extend(highlighted);
-                            highlighted_value.push_str("</em>");
-                            index = m.start + m.length;
-                        } else {
-                            error!("value: {:?}; index: {:?}, match: {:?}", value, index, m);
-                        }
+                    let before = value.get(index..m.start);
+                    let highlighted = value.get(m.start..(m.start + m.length));
+                    if let (Some(before), Some(highlighted)) = (before, highlighted) {
+                        highlighted_value.extend(before);
+                        highlighted_value.push_str("<em>");
+                        highlighted_value.extend(highlighted);
+                        highlighted_value.push_str("</em>");
+                        index = m.start + m.length;
+                    } else {
+                        error!("value: {:?}; index: {:?}, match: {:?}", value, index, m);
                     }
                 }
                 highlighted_value.extend(value[index..].iter());
@@ -492,7 +501,6 @@ fn calculate_highlights(
             };
         }
     }
-
     highlight_result
 }
 
@@ -524,13 +532,12 @@ mod tests {
         // mixed charset
         let (start, length) = aligned_crop(&text, 5, 3);
         let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
-        assert_eq!("isのス", cropped);
+        assert_eq!("isの", cropped);
 
         // split regular word / CJK word, no space
         let (start, length) = aligned_crop(&text, 7, 1);
         let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
-        assert_eq!("のス", cropped);
-
+        assert_eq!("の", cropped);
     }
 
     #[test]
