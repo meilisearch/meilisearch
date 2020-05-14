@@ -2,6 +2,7 @@
 
   - Bump sentry version to 0.18.1 (#690)
   - Disable sentry in debug (#681)
+  - Better terminal greeting (#680)
   - Fix highlight misalignment (#679)
   - Add support for facet count (#676)
   - Add support for faceted search (#631)
