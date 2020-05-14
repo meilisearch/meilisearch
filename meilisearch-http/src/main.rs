@@ -2,7 +2,6 @@ use std::{env, thread};
 
 use actix_cors::Cors;
 use actix_web::{middleware, HttpServer};
-use log::info;
 use main_error::MainError;
 use meilisearch_http::data::Data;
 use meilisearch_http::helpers::NormalizeSlashes;
@@ -94,37 +93,41 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
 888       888  "Y8888  888 888 888  "Y8888P"   "Y8888  "Y888888 888     "Y8888P 888  888
 "#;
 
-    info!("{}", ascii_name);
+    eprintln!("{}", ascii_name);
 
-    info!("Database path: {:?}", opt.db_path);
-    info!("Start server on: {:?}", opt.http_addr);
-    info!("Environment: {:?}", opt.env);
-    info!("Commit SHA: {:?}", env!("VERGEN_SHA").to_string());
-    info!(
-        "Build date: {:?}",
+    eprintln!("Database path:\t\t{:?}", opt.db_path);
+    eprintln!("Server listening on:\t{:?}", opt.http_addr);
+    eprintln!("Environment:\t\t{:?}", opt.env);
+    eprintln!("Commit SHA:\t\t{:?}", env!("VERGEN_SHA").to_string());
+    eprintln!(
+        "Build date:\t\t{:?}",
         env!("VERGEN_BUILD_TIMESTAMP").to_string()
     );
-    info!(
-        "Package version: {:?}",
+    eprintln!(
+        "Package version:\t{:?}",
         env!("CARGO_PKG_VERSION").to_string()
     );
 
+    eprintln!();
+
     if let Some(master_key) = &data.api_keys.master {
-        info!("Master Key: {:?}", master_key);
+        eprintln!("Master Key:\t{:?}", master_key);
 
         if let Some(private_key) = &data.api_keys.private {
-            info!("Private Key: {:?}", private_key);
+            eprintln!("Private Key:\t{:?}", private_key);
         }
 
         if let Some(public_key) = &data.api_keys.public {
-            info!("Public Key: {:?}", public_key);
+            eprintln!("Public Key:\t{:?}", public_key);
         }
     } else {
-        info!("No master key found; The server will have no securities.\
-            If you need some protection in development mode, please export a key. export MEILI_MASTER_KEY=xxx");
+        eprintln!("No master key found; The server will accept unidentified requests. \
+            If you need some protection in development mode, please export a key: export MEILI_MASTER_KEY=xxx");
     }
 
-    info!("If you need extra information; Please refer to the documentation: http://docs.meilisearch.com");
-    info!("If you want to support us or help us; Please consult our Github repo: http://github.com/meilisearch/meilisearch");
-    info!("If you want to contact us; Please chat with us on http://meilisearch.com or by email to bonjour@meilisearch.com");
+    eprintln!();
+    eprintln!("Documentation:\t\thttp://docs.meilisearch.com");
+    eprintln!("Source code:\t\thttp://github.com/meilisearch/meilisearch");
+    eprintln!("Contact:\t\thttps://docs.meilisearch.com/resources/contact.html or bonjour@meilisearch.com");
+    eprintln!();
 }
