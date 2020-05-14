@@ -35,6 +35,7 @@ pub struct DataInner {
     pub db_path: String,
     pub api_keys: ApiKeys,
     pub server_pid: Pid,
+    pub http_payload_size_limit: usize,
 }
 
 #[derive(Clone)]
@@ -137,6 +138,8 @@ impl Data {
             update_map_size: opt.update_map_size,
         };
 
+        let http_payload_size_limit = opt.http_payload_size_limit;
+
         let db = Arc::new(Database::open_or_create(opt.db_path, db_opt).unwrap());
 
         let mut api_keys = ApiKeys {
@@ -152,6 +155,7 @@ impl Data {
             db_path,
             api_keys,
             server_pid,
+            http_payload_size_limit,
         };
 
         let data = Data {

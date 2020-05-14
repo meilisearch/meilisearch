@@ -34,4 +34,8 @@ pub struct Opt {
     /// The maximum size, in bytes, of the update lmdb database directory
     #[structopt(long, env = "MEILI_UPDATE_MAP_SIZE", default_value = "107374182400")] // 100GB
     pub update_map_size: usize,
+
+    /// The maximum size, in bytes, of accepted JSON payloads
+    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "10485760")] // 10MB
+    pub http_payload_size_limit: usize,
 }
