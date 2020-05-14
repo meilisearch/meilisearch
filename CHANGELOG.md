@@ -1,6 +1,7 @@
 ## v0.10.2
 
   - Disable sentry in debug (#681)
+  - Fix highlight misalignment (#679)
   - Add support for facet count (#676)
   - Add support for faceted search (#631)
   - Add support for configuring the lmdb map size (#646, #647)

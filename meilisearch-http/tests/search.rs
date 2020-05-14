@@ -1343,3 +1343,67 @@ async fn test_facet_count() {
     let (_response, status_code) = server.search(query).await;
     assert_eq!(status_code, 400);
 }
+
+#[actix_rt::test]
+async fn highlight_cropped_text() {
+    let mut server = common::Server::with_uid("test");
+
+    let body = json!({
+        "uid": "test",
+        "primaryKey": "id",
+    });
+    server.create_index(body).await;
+
+    let doc = json!([
+        {
+            "id": 1,
+            "body": r##"well, it may not work like that, try the following: 
+1. insert your trip
+2. google your `searchQuery`
+3. find a solution 
+> say hello"##
+        }
+    ]);
+    server.add_or_replace_multiple_documents(doc).await;
+
+    // tests from #680
+    let query = "q=insert&attributesToHighlight=*&attributesToCrop=body&cropLength=30";
+    let (response, _status_code) = server.search(query).await;
+    let expected_response = "that, try the following: \n1. <em>insert</em> your trip\n2. google your";
+    assert_eq!(response
+        .get("hits")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .get(0)
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .get("_formatted")
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .get("body")
+        .unwrap()
+        , &Value::String(expected_response.to_owned()));
+
+    let query = "q=insert&attributesToHighlight=*&attributesToCrop=body&cropLength=80";
+    let (response, _status_code) = server.search(query).await;
+    let expected_response = "well, it may not work like that, try the following: \n1. <em>insert</em> your trip\n2. google your `searchQuery`\n3. find a solution \n> say hello";
+    assert_eq!(response
+        .get("hits")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .get(0)
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .get("_formatted")
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .get("body")
+        .unwrap()
+        , &Value::String(expected_response.to_owned()));
+}
