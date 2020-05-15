@@ -158,7 +158,7 @@ latest="$(get_latest)"
 echo "Downloading MeiliSearch binary $latest for $os..."
 
 release_file="meilisearch-$os-amd64"
-link="https://github.com/meilisearch/MeiliSearch/releases/download/v$latest/$release_file"
+link="https://github.com/meilisearch/MeiliSearch/releases/download/$latest/$release_file"
 curl -OL "$link"
 mv "$release_file" "$BINARY_NAME"
 chmod 744 "$BINARY_NAME"
