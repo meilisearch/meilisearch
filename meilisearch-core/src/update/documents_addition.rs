@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use fst::{set::OpBuilder, SetBuilder};
 use indexmap::IndexMap;
+use meilisearch_schema::{Schema, FieldId};
+use meilisearch_types::DocumentId;
 use sdset::{duo::Union, SetOperation};
 use serde::Deserialize;
 use serde_json::Value;
@@ -11,6 +13,7 @@ use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::Deserializer;
+use crate::store::{DocumentsFields, DocumentsFieldsCounts};
 use crate::store;
 use crate::update::helpers::{index_value, value_to_number, extract_document_id};
 use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
@@ -106,6 +109,41 @@ pub fn push_documents_addition<D: serde::Serialize>(
     Ok(last_update_id)
 }
 
+fn index_document(
+    writer: &mut heed::RwTxn<MainT>,
+    documents_fields: DocumentsFields,
+    documents_fields_counts: DocumentsFieldsCounts,
+    ranked_map: &mut RankedMap,
+    indexer: &mut RawIndexer,
+    schema: &Schema,
+    field_id: FieldId,
+    document_id: DocumentId,
+    value: &Value,
+) -> MResult<()>
+{
+    let serialized = serde_json::to_vec(value)?;
+    documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
+
+    if let Some(indexed_pos) = schema.is_indexed(field_id) {
+        let number_of_words = index_value(indexer, document_id, *indexed_pos, value);
+        if let Some(number_of_words) = number_of_words {
+            documents_fields_counts.put_document_field_count(
+                writer,
+                document_id,
+                *indexed_pos,
+                number_of_words as u16,
+            )?;
+        }
+    }
+
+    if schema.is_ranked(field_id) {
+        let number = value_to_number(value).unwrap_or_default();
+        ranked_map.insert(document_id, field_id, number);
+    }
+
+    Ok(())
+}
+
 pub fn apply_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
@@ -171,30 +209,20 @@ pub fn apply_addition<'a, 'b>(
 
     // For each document in this update
     for (document_id, document) in documents_additions {
-
         // For each key-value pair in the document.
         for (attribute, value) in document {
-
             let field_id = schema.insert_and_index(&attribute)?;
-            let serialized = serde_json::to_vec(&value)?;
-            index.documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
-
-            if let Some(indexed_pos) = schema.is_indexed(field_id) {
-                let number_of_words = index_value(&mut indexer, document_id, *indexed_pos, &value);
-                if let Some(number_of_words) = number_of_words {
-                    index.documents_fields_counts.put_document_field_count(
-                        writer,
-                        document_id,
-                        *indexed_pos,
-                        number_of_words as u16,
-                    )?;
-                }
-            }
-
-            if schema.is_ranked(field_id) {
-                let number = value_to_number(&value).unwrap_or_default();
-                ranked_map.insert(document_id, field_id, number);
-            }
+            index_document(
+                writer,
+                index.documents_fields,
+                index.documents_fields_counts,
+                &mut ranked_map,
+                &mut indexer,
+                &schema,
+                field_id,
+                document_id,
+                &value,
+            )?;
         }
     }
 
@@ -273,25 +301,17 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
 
         // For each key-value pair in the document.
         for ((document_id, field_id), value) in ram_store.drain() {
-            let serialized = serde_json::to_vec(&value)?;
-            index.documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
-
-            if let Some(indexed_pos) = schema.is_indexed(field_id) {
-                let number_of_words = index_value(&mut indexer, document_id, *indexed_pos, &value);
-                if let Some(number_of_words) = number_of_words {
-                    index.documents_fields_counts.put_document_field_count(
-                        writer,
-                        document_id,
-                        *indexed_pos,
-                        number_of_words as u16,
-                    )?;
-                }
-            }
-
-            if schema.is_ranked(field_id) {
-                let number = value_to_number(&value).unwrap_or_default();
-                ranked_map.insert(document_id, field_id, number);
-            }
+            index_document(
+                writer,
+                index.documents_fields,
+                index.documents_fields_counts,
+                &mut ranked_map,
+                &mut indexer,
+                &schema,
+                field_id,
+                document_id,
+                &value,
+            )?;
         }
     }
 
