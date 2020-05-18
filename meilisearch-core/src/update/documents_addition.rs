@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
-use std::fmt;
 
 use fst::{set::OpBuilder, SetBuilder};
 use indexmap::IndexMap;
 use sdset::{duo::Union, SetOperation};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value;
 
 use meilisearch_types::DocumentId;
@@ -16,10 +15,9 @@ use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::{extract_document_id, Deserializer};
-use crate::serde::ConvertToNumber;
 use crate::store;
 use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
-use crate::{Error, MResult, RankedMap};
+use crate::{Error, Number, MResult, RankedMap};
 
 pub struct DocumentsAddition<D> {
     updates_store: store::Updates,
@@ -174,6 +172,20 @@ fn index_value(
     }
 }
 
+// TODO move this helper functions elsewhere
+fn value_to_number(value: &Value) -> Option<Number> {
+    use std::str::FromStr;
+
+    match value {
+        Value::Null => None,
+        Value::Bool(boolean) => Some(Number::Unsigned(*boolean as u64)),
+        Value::Number(number) => Number::from_str(&number.to_string()).ok(), // TODO improve that
+        Value::String(string) => Number::from_str(string).ok(),
+        Value::Array(_array) => None,
+        Value::Object(_object) => None,
+    }
+}
+
 pub fn apply_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
@@ -263,7 +275,7 @@ pub fn apply_addition<'a, 'b>(
             }
 
             if schema.is_ranked(field_id) {
-                let number = value.serialize(ConvertToNumber).unwrap_or_default();
+                let number = value_to_number(&value).unwrap_or_default();
                 ranked_map.insert(document_id, field_id, number);
             }
         }
@@ -360,7 +372,7 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
             }
 
             if schema.is_ranked(field_id) {
-                let number = value.serialize(ConvertToNumber).unwrap_or_default();
+                let number = value_to_number(&value).unwrap_or_default();
                 ranked_map.insert(document_id, field_id, number);
             }
         }
