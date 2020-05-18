@@ -88,17 +88,16 @@ pub fn value_to_number(value: &Value) -> Option<Number> {
     }
 }
 
-/// Compute the hash of the given type, this is the way we produce documents ids.
-pub fn compute_document_id<H: Hash>(t: H) -> DocumentId {
-    let mut s = SipHasher::new();
-    t.hash(&mut s);
-    let hash = s.finish();
-    DocumentId(hash)
-}
-
-/// Validates a string representation to be a correct document id.
-pub fn validate_document_id(string: &str) -> bool {
-    string.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+/// Validates a string representation to be a correct document id and
+/// returns the hash of the given type, this is the way we produce documents ids.
+pub fn compute_document_id(string: &str) -> Result<DocumentId, SerializerError> {
+    if string.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
+        let mut s = SipHasher::new();
+        string.hash(&mut s);
+        Ok(DocumentId(s.finish()))
+    } else {
+        Err(SerializerError::InvalidDocumentIdFormat)
+    }
 }
 
 /// Extracts and validates the document id of a document.
@@ -110,12 +109,7 @@ pub fn extract_document_id(primary_key: &str, document: &IndexMap<String, Value>
                 Value::String(string) => string.clone(),
                 _ => return Err(SerializerError::InvalidDocumentIdFormat),
             };
-
-            if validate_document_id(&string) {
-                Ok(compute_document_id(string))
-            } else {
-                Err(SerializerError::InvalidDocumentIdFormat)
-            }
+            compute_document_id(&string)
         }
         None => Err(SerializerError::DocumentIdNotFound),
     }
