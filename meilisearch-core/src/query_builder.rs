@@ -15,14 +15,14 @@ use crate::{reordered_attrs::ReorderedAttrs, store, MResult};
 use crate::facets::FacetFilter;
 
 pub struct QueryBuilder<'c, 'f, 'd, 'i, 'txn> {
-    criteria: Criteria<'c>,
-    searchable_attrs: Option<ReorderedAttrs>,
-    filter: Option<Box<dyn Fn(DocumentId) -> bool + 'f>>,
-    distinct: Option<(Box<dyn Fn(DocumentId) -> Option<u64> + 'd>, usize)>,
-    timeout: Option<Duration>,
-    index: &'i store::Index,
-    facet_filter: Option<SetBuf<DocumentId>>,
-    facets: Option<HashMap<String, HashMap<String, Cow<'txn, Set<DocumentId>>>>>,
+    pub criteria: Criteria<'c>,
+    pub searchable_attrs: Option<ReorderedAttrs>,
+    pub filter: Option<Box<dyn Fn(DocumentId) -> bool + 'f>>,
+    pub distinct: Option<(Box<dyn Fn(DocumentId) -> Option<u64> + 'd>, usize)>,
+    pub timeout: Option<Duration>,
+    pub index: &'i store::Index,
+    pub facet_filter: Option<SetBuf<DocumentId>>,
+    pub facets: Option<HashMap<String, HashMap<String, Cow<'txn, Set<DocumentId>>>>>,
 }
 
 impl<'c, 'f, 'd, 'i, 'txn> QueryBuilder<'c, 'f, 'd, 'i, 'txn> {
@@ -73,7 +73,7 @@ impl<'c, 'f, 'd, 'i, 'txn> QueryBuilder<'c, 'f, 'd, 'i, 'txn> {
     }
 
     /// Sets the facets for which to retrieve count. Internally, transforms the `Vec` of fields into
-    /// a mapping between field values and document ids.
+    /// a mapping between field values and documents.
     pub fn with_facets_count(
         &mut self,
         reader: &'txn heed::RoTxn<MainT>,
@@ -147,41 +147,10 @@ impl<'c, 'f, 'd, 'i, 'txn> QueryBuilder<'c, 'f, 'd, 'i, 'txn> {
             }
         }
 
-        match self.distinct {
-            Some((distinct, distinct_size)) => bucket_sort_with_distinct(
-                reader,
-                query,
-                range,
-                self.facet_filter,
-                self.facets,
-                self.filter,
-                distinct,
-                distinct_size,
-                self.criteria,
-                self.searchable_attrs,
-                self.index.main,
-                self.index.postings_lists,
-                self.index.documents_fields_counts,
-                self.index.synonyms,
-                self.index.prefix_documents_cache,
-                self.index.prefix_postings_lists_cache,
-            ),
-            None => bucket_sort(
-                reader,
-                query,
-                range,
-                self.facet_filter,
-                self.facets,
-                self.filter,
-                self.criteria,
-                self.searchable_attrs,
-                self.index.main,
-                self.index.postings_lists,
-                self.index.documents_fields_counts,
-                self.index.synonyms,
-                self.index.prefix_documents_cache,
-                self.index.prefix_postings_lists_cache,
-            ),
+        if self.distinct.is_some() {
+            bucket_sort_with_distinct(reader, query, range, self)
+        } else {
+            bucket_sort(reader, query, range, self)
         }
     }
 }

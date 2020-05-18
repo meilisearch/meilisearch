@@ -15,14 +15,15 @@ use sdset::{Set, SetBuf, exponential_search, SetOperation, Counter, duo::OpBuild
 use slice_group_by::{GroupBy, GroupByMut};
 
 use crate::error::Error;
-use crate::criterion::{Criteria, Context, ContextMut};
+use crate::criterion::{Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
-use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
-use crate::{store, Document, DocumentId, MResult};
+use crate::database::MainT;
+use crate::{Document, DocumentId, MResult};
 use crate::query_tree::{create_query_tree, traverse_query_tree};
 use crate::query_tree::{Operation, QueryResult, QueryKind, QueryId, PostingsKey};
 use crate::query_tree::Context as QTContext;
+use crate::query_builder::QueryBuilder;
 
 #[derive(Debug, Default)]
 pub struct SortResult {
@@ -33,65 +34,40 @@ pub struct SortResult {
     pub exhaustive_facet_count: Option<bool>,
 }
 
-pub fn bucket_sort<'c, FI>(
+pub fn bucket_sort(
     reader: &heed::RoTxn<MainT>,
     query: &str,
     range: Range<usize>,
-    facets_docids: Option<SetBuf<DocumentId>>,
-    facet_count_docids: Option<HashMap<String, HashMap<String, Cow<Set<DocumentId>>>>>,
-    filter: Option<FI>,
-    criteria: Criteria<'c>,
-    searchable_attrs: Option<ReorderedAttrs>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    synonyms_store: store::Synonyms,
-    prefix_documents_cache_store: store::PrefixDocumentsCache,
-    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
+    mut query_context: QueryBuilder,
 ) -> MResult<SortResult>
-where
-    FI: Fn(DocumentId) -> bool,
 {
     // We delegate the filter work to the distinct query builder,
     // specifying a distinct rule that has no effect.
-    if filter.is_some() {
-        let distinct = |_| None;
-        let distinct_size = 1;
+    if query_context.filter.is_some() {
+        query_context.distinct = Some((Box::new(|_| None ), 1));
         return bucket_sort_with_distinct(
             reader,
             query,
             range,
-            facets_docids,
-            facet_count_docids,
-            filter,
-            distinct,
-            distinct_size,
-            criteria,
-            searchable_attrs,
-            main_store,
-            postings_lists_store,
-            documents_fields_counts_store,
-            synonyms_store,
-            prefix_documents_cache_store,
-            prefix_postings_lists_cache_store,
+            query_context,
         );
     }
 
     let mut result = SortResult::default();
 
-    let words_set = match unsafe { main_store.static_words_fst(reader)? } {
+    let words_set = match unsafe { query_context.index.main.static_words_fst(reader)? } {
         Some(words) => words,
         None => return Ok(SortResult::default()),
     };
 
-    let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
+    let stop_words = query_context.index.main.stop_words_fst(reader)?.unwrap_or_default();
 
     let context = QTContext {
         words_set,
         stop_words,
-        synonyms: synonyms_store,
-        postings_lists: postings_lists_store,
-        prefix_postings_lists: prefix_postings_lists_cache_store,
+        synonyms: query_context.index.synonyms,
+        postings_lists: query_context.index.postings_lists,
+        prefix_postings_lists: query_context.index.prefix_postings_lists_cache,
     };
 
     let (operation, mapping) = create_query_tree(reader, &context, query)?;
@@ -113,14 +89,14 @@ where
     debug!("found {} documents", docids.len());
     debug!("number of postings {:?}", queries.len());
 
-    if let Some(facets_docids) = facets_docids {
+    if let Some(ref facets_docids) = query_context.facet_filter {
         let intersection = sdset::duo::OpBuilder::new(docids.as_ref(), facets_docids.as_set())
             .intersection()
             .into_set_buf();
         docids = Cow::Owned(intersection);
     }
 
-    if let Some(f) = facet_count_docids {
+    if let Some(f) = query_context.facets.take() {
         // hardcoded value, until approximation optimization
         result.exhaustive_facet_count = Some(true);
         result.facets = Some(facet_count(f, &docids));
@@ -136,7 +112,7 @@ where
     let before_raw_documents_building = Instant::now();
     let mut raw_documents = Vec::new();
     for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
-        let raw_document = RawDocument::new(bare_matches, &mut arena, searchable_attrs.as_ref());
+        let raw_document = RawDocument::new(bare_matches, &mut arena, query_context.searchable_attrs.as_ref());
         raw_documents.push(raw_document);
     }
     debug!("creating {} candidates documents took {:.02?}",
@@ -149,7 +125,7 @@ where
 
     let mut groups = vec![raw_documents.as_mut_slice()];
 
-    'criteria: for criterion in criteria.as_ref() {
+    'criteria: for criterion in query_context.criteria.as_ref() {
         let tmp_groups = mem::replace(&mut groups, Vec::new());
         let mut documents_seen = 0;
 
@@ -160,7 +136,7 @@ where
                 reader,
                 postings_lists: &mut arena,
                 query_mapping: &mapping,
-                documents_fields_counts_store,
+                documents_fields_counts_store: query_context.index.documents_fields_counts,
             };
 
             criterion.prepare(ctx, &mut group)?;
@@ -193,9 +169,9 @@ where
     debug!("criterion loop took {:.02?}", before_criterion_loop.elapsed());
     debug!("proximity evaluation called {} times", proximity_count.load(Ordering::Relaxed));
 
-    let schema = main_store.schema(reader)?.ok_or(Error::SchemaMissing)?;
+    let schema = query_context.index.main.schema(reader)?.ok_or(Error::SchemaMissing)?;
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
-    let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref(), &schema));
+    let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, query_context.searchable_attrs.as_ref(), &schema));
     let documents = iter.collect();
 
     debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
@@ -206,43 +182,30 @@ where
     Ok(result)
 }
 
-pub fn bucket_sort_with_distinct<'c, FI, FD>(
+pub fn bucket_sort_with_distinct(
     reader: &heed::RoTxn<MainT>,
     query: &str,
     range: Range<usize>,
-    facets_docids: Option<SetBuf<DocumentId>>,
-    facet_count_docids: Option<HashMap<String, HashMap<String, Cow<Set<DocumentId>>>>>,
-    filter: Option<FI>,
-    distinct: FD,
-    distinct_size: usize,
-    criteria: Criteria<'c>,
-    searchable_attrs: Option<ReorderedAttrs>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    synonyms_store: store::Synonyms,
-    _prefix_documents_cache_store: store::PrefixDocumentsCache,
-    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
+    query_context: QueryBuilder,
 ) -> MResult<SortResult>
-where
-    FI: Fn(DocumentId) -> bool,
-    FD: Fn(DocumentId) -> Option<u64>,
 {
     let mut result = SortResult::default();
 
-    let words_set = match unsafe { main_store.static_words_fst(reader)? } {
+    let (distinct, distinct_size) = query_context.distinct.expect("Bucket_sort_with_distinct need distinct");
+
+    let words_set = match unsafe { query_context.index.main.static_words_fst(reader)? } {
         Some(words) => words,
         None => return Ok(SortResult::default()),
     };
 
-    let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
+    let stop_words = query_context.index.main.stop_words_fst(reader)?.unwrap_or_default();
 
     let context = QTContext {
         words_set,
         stop_words,
-        synonyms: synonyms_store,
-        postings_lists: postings_lists_store,
-        prefix_postings_lists: prefix_postings_lists_cache_store,
+        synonyms: query_context.index.synonyms,
+        postings_lists: query_context.index.postings_lists,
+        prefix_postings_lists: query_context.index.prefix_postings_lists_cache,
     };
 
     let (operation, mapping) = create_query_tree(reader, &context, query)?;
@@ -264,14 +227,14 @@ where
     debug!("found {} documents", docids.len());
     debug!("number of postings {:?}", queries.len());
 
-    if let Some(facets_docids) = facets_docids {
+    if let Some(facets_docids) = query_context.facet_filter {
         let intersection = OpBuilder::new(docids.as_ref(), facets_docids.as_set())
             .intersection()
             .into_set_buf();
         docids = Cow::Owned(intersection);
     }
 
-    if let Some(f) = facet_count_docids {
+    if let Some(f) = query_context.facets {
         // hardcoded value, until approximation optimization
         result.exhaustive_facet_count = Some(true);
         result.facets = Some(facet_count(f, &docids));
@@ -285,7 +248,7 @@ where
     let before_raw_documents_building = Instant::now();
     let mut raw_documents = Vec::new();
     for bare_matches in bare_matches.linear_group_by_key_mut(|sm| sm.document_id) {
-        let raw_document = RawDocument::new(bare_matches, &mut arena, searchable_attrs.as_ref());
+        let raw_document = RawDocument::new(bare_matches, &mut arena, query_context.searchable_attrs.as_ref());
         raw_documents.push(raw_document);
     }
     debug!("creating {} candidates documents took {:.02?}",
@@ -303,7 +266,7 @@ where
     let mut distinct_map = DistinctMap::new(distinct_size);
     let mut distinct_raw_offset = 0;
 
-    'criteria: for criterion in criteria.as_ref() {
+    'criteria: for criterion in query_context.criteria.as_ref() {
         let tmp_groups = mem::replace(&mut groups, Vec::new());
         let mut buf_distinct = BufferedDistinctMap::new(&mut distinct_map);
         let mut documents_seen = 0;
@@ -321,7 +284,7 @@ where
                 reader,
                 postings_lists: &mut arena,
                 query_mapping: &mapping,
-                documents_fields_counts_store,
+                documents_fields_counts_store: query_context.index.documents_fields_counts,
             };
 
             let before_criterion_preparation = Instant::now();
@@ -340,7 +303,7 @@ where
             for group in group.binary_group_by_mut(|a, b| criterion.eq(&ctx, a, b)) {
                 // we must compute the real distinguished len of this sub-group
                 for document in group.iter() {
-                    let filter_accepted = match &filter {
+                    let filter_accepted = match &query_context.filter {
                         Some(filter) => {
                             let entry = filter_map.entry(document.id);
                             *entry.or_insert_with(|| (filter)(document.id))
@@ -386,11 +349,11 @@ where
     // once we classified the documents related to the current
     // automatons we save that as the next valid result
     let mut seen = BufferedDistinctMap::new(&mut distinct_map);
-    let schema = main_store.schema(reader)?.ok_or(Error::SchemaMissing)?;
+    let schema = query_context.index.main.schema(reader)?.ok_or(Error::SchemaMissing)?;
 
     let mut documents = Vec::with_capacity(range.len());
     for raw_document in raw_documents.into_iter().skip(distinct_raw_offset) {
-        let filter_accepted = match &filter {
+        let filter_accepted = match &query_context.filter {
             Some(_) => filter_map.remove(&raw_document.id).unwrap(),
             None => true,
         };
@@ -403,7 +366,7 @@ where
             };
 
             if distinct_accepted && seen.len() > range.start {
-                documents.push(Document::from_raw(raw_document, &queries_kinds, &arena, searchable_attrs.as_ref(), &schema));
+                documents.push(Document::from_raw(raw_document, &queries_kinds, &arena, query_context.searchable_attrs.as_ref(), &schema));
                 if documents.len() == range.len() {
                     break;
                 }
