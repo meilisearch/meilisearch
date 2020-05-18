@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::iter;
 
-use meilisearch_core::Database;
+use meilisearch_core::{Database, DatabaseOptions};
 use meilisearch_core::{ProcessedUpdateResult, UpdateStatus};
 use meilisearch_core::settings::{Settings, SettingsUpdate};
 use meilisearch_schema::Schema;
@@ -17,7 +17,7 @@ use serde_json::Value;
 use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 
 fn prepare_database(path: &Path) -> Database {
-    let database = Database::open_or_create(path).unwrap();
+    let database = Database::open_or_create(path, DatabaseOptions::default()).unwrap();
     let db = &database;
 
     let (sender, receiver) = mpsc::sync_channel(100);
@@ -27,7 +27,7 @@ fn prepare_database(path: &Path) -> Database {
     let index = database.create_index("bench").unwrap();
 
     database.set_update_callback(Box::new(update_fn));
-    
+
     let mut writer = db.main_write_txn().unwrap();
     index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
     writer.commit().unwrap();

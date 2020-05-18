@@ -4,12 +4,14 @@ use fst::{set::OpBuilder, SetBuilder};
 use indexmap::IndexMap;
 use sdset::{duo::Union, SetOperation};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::raw_indexer::RawIndexer;
-use crate::serde::{extract_document_id, serialize_value_with_id, Deserializer, Serializer};
+use crate::serde::{extract_document_id, Deserializer};
+use crate::serde::{ConvertToNumber, Indexer};
 use crate::store;
 use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
 use crate::{Error, MResult, RankedMap};
@@ -107,7 +109,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
 pub fn apply_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
-    addition: Vec<IndexMap<String, serde_json::Value>>,
+    addition: Vec<IndexMap<String, Value>>,
     partial: bool
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
@@ -137,7 +139,7 @@ pub fn apply_addition<'a, 'b>(
 
             // retrieve the old document and
             // update the new one with missing keys found in the old one
-            let result = Option::<HashMap<String, serde_json::Value>>::deserialize(&mut deserializer)?;
+            let result = Option::<HashMap<String, Value>>::deserialize(&mut deserializer)?;
             if let Some(old_document) = result {
                 for (key, value) in old_document {
                     document.entry(key).or_insert(value);
@@ -170,18 +172,33 @@ pub fn apply_addition<'a, 'b>(
 
     let mut indexer = RawIndexer::new(stop_words);
 
+    // For each document in this update
     for (document_id, document) in documents_additions {
-        let serializer = Serializer {
-            txn: writer,
-            schema: &mut schema,
-            document_store: index.documents_fields,
-            document_fields_counts: index.documents_fields_counts,
-            indexer: &mut indexer,
-            ranked_map: &mut ranked_map,
-            document_id,
-        };
 
-        document.serialize(serializer)?;
+        // For each key-value pair in the document.
+        for (attribute, value) in document {
+
+            let field_id = schema.insert_and_index(&attribute)?;
+            let serialized = serde_json::to_vec(&value)?;
+            index.documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
+
+            if let Some(indexed_pos) = schema.is_indexed(field_id) {
+                let indexer = Indexer { pos: *indexed_pos, indexer: &mut indexer, document_id };
+                if let Some(number_of_words) = value.serialize(indexer)? {
+                    index.documents_fields_counts.put_document_field_count(
+                        writer,
+                        document_id,
+                        *indexed_pos,
+                        number_of_words as u16,
+                    )?;
+                }
+            }
+
+            if schema.is_ranked(field_id) {
+                let number = value.serialize(ConvertToNumber).unwrap_or_default();
+                ranked_map.insert(document_id, field_id, number);
+            }
+        }
     }
 
     write_documents_addition_index(
@@ -200,7 +217,7 @@ pub fn apply_addition<'a, 'b>(
 pub fn apply_documents_partial_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
-    addition: Vec<IndexMap<String, serde_json::Value>>,
+    addition: Vec<IndexMap<String, Value>>,
 ) -> MResult<()> {
     apply_addition(writer, index, addition, true)
 }
@@ -208,7 +225,7 @@ pub fn apply_documents_partial_addition<'a, 'b>(
 pub fn apply_documents_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
-    addition: Vec<IndexMap<String, serde_json::Value>>,
+    addition: Vec<IndexMap<String, Value>>,
 ) -> MResult<()> {
     apply_addition(writer, index, addition, false)
 }
@@ -253,22 +270,31 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
     for document_id in documents_ids_to_reindex {
         for result in index.documents_fields.document_fields(writer, document_id)? {
             let (field_id, bytes) = result?;
-            let value: serde_json::Value = serde_json::from_slice(bytes)?;
+            let value: Value = serde_json::from_slice(bytes)?;
             ram_store.insert((document_id, field_id), value);
         }
 
-        for ((docid, field_id), value) in ram_store.drain() {
-            serialize_value_with_id(
-                writer,
-                field_id,
-                &schema,
-                docid,
-                index.documents_fields,
-                index.documents_fields_counts,
-                &mut indexer,
-                &mut ranked_map,
-                &value
-            )?;
+        // For each key-value pair in the document.
+        for ((document_id, field_id), value) in ram_store.drain() {
+            let serialized = serde_json::to_vec(&value)?;
+            index.documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
+
+            if let Some(indexed_pos) = schema.is_indexed(field_id) {
+                let indexer = Indexer { pos: *indexed_pos, indexer: &mut indexer, document_id };
+                if let Some(number_of_words) = value.serialize(indexer)? {
+                    index.documents_fields_counts.put_document_field_count(
+                        writer,
+                        document_id,
+                        *indexed_pos,
+                        number_of_words as u16,
+                    )?;
+                }
+            }
+
+            if schema.is_ranked(field_id) {
+                let number = value.serialize(ConvertToNumber).unwrap_or_default();
+                ranked_map.insert(document_id, field_id, number);
+            }
         }
     }
 
