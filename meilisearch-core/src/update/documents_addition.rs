@@ -118,29 +118,6 @@ fn index_value(
     value: &Value,
 ) -> Option<usize>
 {
-    fn value_to_string(string: &mut String, value: &Value) {
-        match value {
-            Value::Null => (),
-            Value::Bool(boolean) => { let _ = write!(string, "{}", &boolean); },
-            Value::Number(number) => { let _ = write!(string, "{}", &number); },
-            Value::String(text) => string.push_str(&text),
-            Value::Array(array) => {
-                for value in array {
-                    value_to_string(string, value);
-                    let _ = string.write_str(". ");
-                }
-            },
-            Value::Object(object) => {
-                for (key, value) in object {
-                    string.push_str(key);
-                    let _ = string.write_str(". ");
-                    value_to_string(string, value);
-                    let _ = string.write_str(". ");
-                }
-            },
-        }
-    }
-
     match value {
         Value::Null => None,
         Value::Bool(boolean) => {
@@ -158,18 +135,46 @@ fn index_value(
             Some(number_of_words)
         },
         Value::Array(_) => {
-            let mut text = String::new();
-            value_to_string(&mut text, value);
+            let text = value_to_string(value);
             let number_of_words = indexer.index_text(document_id, indexed_pos, &text);
             Some(number_of_words)
         },
         Value::Object(_) => {
-            let mut text = String::new();
-            value_to_string(&mut text, value);
+            let text = value_to_string(value);
             let number_of_words = indexer.index_text(document_id, indexed_pos, &text);
             Some(number_of_words)
         },
     }
+}
+
+// TODO move this helper functions elsewhere
+fn value_to_string(value: &Value) -> String {
+    fn internal_value_to_string(string: &mut String, value: &Value) {
+        match value {
+            Value::Null => (),
+            Value::Bool(boolean) => { let _ = write!(string, "{}", &boolean); },
+            Value::Number(number) => { let _ = write!(string, "{}", &number); },
+            Value::String(text) => string.push_str(&text),
+            Value::Array(array) => {
+                for value in array {
+                    internal_value_to_string(string, value);
+                    let _ = string.write_str(". ");
+                }
+            },
+            Value::Object(object) => {
+                for (key, value) in object {
+                    string.push_str(key);
+                    let _ = string.write_str(". ");
+                    internal_value_to_string(string, value);
+                    let _ = string.write_str(". ");
+                }
+            },
+        }
+    }
+
+    let mut string = String::new();
+    internal_value_to_string(&mut string, value);
+    string
 }
 
 // TODO move this helper functions elsewhere
