@@ -18,7 +18,7 @@ mod query_words_mapper;
 mod ranked_map;
 mod raw_document;
 mod reordered_attrs;
-mod update;
+pub mod update;
 pub mod criterion;
 pub mod facets;
 pub mod raw_indexer;
