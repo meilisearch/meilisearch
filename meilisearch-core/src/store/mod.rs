@@ -1,15 +1,16 @@
 mod cow_set;
 mod docs_words;
-mod prefix_documents_cache;
-mod prefix_postings_lists_cache;
+mod documents_ids;
 mod documents_fields;
 mod documents_fields_counts;
+mod facets;
 mod main;
 mod postings_lists;
+mod prefix_documents_cache;
+mod prefix_postings_lists_cache;
 mod synonyms;
 mod updates;
 mod updates_results;
-mod facets;
 
 pub use self::docs_words::DocsWords;
 pub use self::facets::Facets;
