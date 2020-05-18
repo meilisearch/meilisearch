@@ -4,7 +4,7 @@ use std::ops::{Range, Deref};
 use std::time::Duration;
 
 use either::Either;
-use sdset::SetOperation;
+use sdset::{SetOperation, Set, SetBuf};
 
 use meilisearch_schema::FieldId;
 
@@ -14,18 +14,18 @@ use crate::{criterion::Criteria, DocumentId};
 use crate::{reordered_attrs::ReorderedAttrs, store, MResult};
 use crate::facets::FacetFilter;
 
-pub struct QueryBuilder<'c, 'f, 'd, 'i> {
+pub struct QueryBuilder<'c, 'f, 'd, 'i, 'txn> {
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
     filter: Option<Box<dyn Fn(DocumentId) -> bool + 'f>>,
     distinct: Option<(Box<dyn Fn(DocumentId) -> Option<u64> + 'd>, usize)>,
     timeout: Option<Duration>,
     index: &'i store::Index,
-    facet_filter: Option<FacetFilter>,
-    facets: Option<Vec<(FieldId, String)>>,
+    facet_filter: Option<SetBuf<DocumentId>>,
+    facets: Option<HashMap<String, HashMap<String, Cow<'txn, Set<DocumentId>>>>>,
 }
 
-impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
+impl<'c, 'f, 'd, 'i, 'txn> QueryBuilder<'c, 'f, 'd, 'i, 'txn> {
     pub fn new(index: &'i store::Index) -> Self {
         QueryBuilder::with_criteria(
             index,
@@ -33,14 +33,64 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
         )
     }
 
-    /// sets facet attributes to filter on
-    pub fn set_facet_filter(&mut self, facets: Option<FacetFilter>) {
-        self.facet_filter = facets;
+    /// set the facet filter for the query. Internally, it transforms the `FacetFilter` in a Set of
+    /// `DocumentId` that correspond to the filter.
+    pub fn with_facet_filter(
+        &mut self,
+        reader: &heed::RoTxn<MainT>,
+        facets: FacetFilter
+    ) -> MResult<()> {
+        let mut ands = Vec::with_capacity(facets.len());
+        let mut ors = Vec::new();
+        for f in facets.deref() {
+            match f {
+                Either::Left(keys) => {
+                    ors.reserve(keys.len());
+                    for key in keys {
+                        let docids = self.index.facets.facet_document_ids(reader, &key)?.unwrap_or_default();
+                        ors.push(docids);
+                    }
+                    let sets: Vec<_> = ors.iter().map(Cow::deref).collect();
+                    let or_result = sdset::multi::OpBuilder::from_vec(sets).union().into_set_buf();
+                    ands.push(Cow::Owned(or_result));
+                    ors.clear();
+                }
+                Either::Right(key) =>{
+                    match self.index.facets.facet_document_ids(reader, &key)? {
+                        Some(docids) => ands.push(docids),
+                        // intersection with nothing is the empty set.
+                        None => {
+                            self.facet_filter = Some(SetBuf::new_unchecked(Vec::new()));
+                            return Ok(());
+                        },
+                    }
+                }
+            }
+        }
+        let ands: Vec<_> = ands.iter().map(Cow::deref).collect();
+        self.facet_filter = Some(sdset::multi::OpBuilder::from_vec(ands).intersection().into_set_buf());
+        Ok(())
     }
 
-    /// sets facet attributes for which to return the count
-    pub fn set_facets(&mut self, facets: Option<Vec<(FieldId, String)>>) {
-        self.facets = facets;
+    /// Sets the facets for which to retrieve count. Internally, transforms the `Vec` of fields into
+    /// a mapping between field values and document ids.
+    pub fn with_facets_count(
+        &mut self,
+        reader: &'txn heed::RoTxn<MainT>,
+        facets: Vec<(FieldId, String)>,
+    ) -> MResult<()> {
+        let mut facet_count_map = HashMap::new();
+        for (field_id, field_name) in facets {
+            let mut key_map = HashMap::new();
+            for pair in self.index.facets.field_document_ids(reader, field_id)? {
+                let (facet_key, document_ids) = pair?;
+                let value = facet_key.value();
+                key_map.insert(value.to_string(), document_ids);
+            }
+            facet_count_map.insert(field_name, key_map);
+        }
+        self.facets = Some(facet_count_map);
+        Ok(())
     }
 
     pub fn with_criteria(
@@ -88,65 +138,22 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
         query: &str,
         range: Range<usize>,
     ) -> MResult<SortResult> {
-        let facets_docids = match self.facet_filter {
-            Some(facets) => {
-                let mut ands = Vec::with_capacity(facets.len());
-                let mut ors = Vec::new();
-                for f in facets.deref() {
-                    match f {
-                        Either::Left(keys) => {
-                            ors.reserve(keys.len());
-                            for key in keys {
-                                let docids = self.index.facets.facet_document_ids(reader, &key)?.unwrap_or_default();
-                                ors.push(docids);
-                            }
-                            let sets: Vec<_> = ors.iter().map(Cow::deref).collect();
-                            let or_result = sdset::multi::OpBuilder::from_vec(sets).union().into_set_buf();
-                            ands.push(Cow::Owned(or_result));
-                            ors.clear();
-                        }
-                        Either::Right(key) =>{
-                            match self.index.facets.facet_document_ids(reader, &key)? {
-                                Some(docids) => ands.push(docids),
-                                // no candidates for search, early return.
-                                None => return Ok(SortResult::default()),
-                            }
-                        }
-                    };
-                }
-                let ands: Vec<_> = ands.iter().map(Cow::deref).collect();
-                Some(sdset::multi::OpBuilder::from_vec(ands).intersection().into_set_buf())
-            }
-            None => None
-        };
 
-        // for each field to retrieve the count for, create an HashMap associating the attribute
-        // value to a set of matching documents. The HashMaps are them collected in another
-        // HashMap, associating each HashMap to it's field.
-        let facet_count_docids = match self.facets {
-            Some(field_ids) => {
-                let mut facet_count_map = HashMap::new();
-                for (field_id, field_name) in field_ids {
-                    let mut key_map = HashMap::new();
-                    for pair in self.index.facets.field_document_ids(reader, field_id)? {
-                        let (facet_key, document_ids) = pair?;
-                        let value = facet_key.value();
-                        key_map.insert(value.to_string(), document_ids);
-                    }
-                    facet_count_map.insert(field_name, key_map);
-                }
-                Some(facet_count_map)
+        // When there is no candidate document in the facet filter, we don't perform the search,
+        // as the result will alway be empty.
+        if let Some(ref facet_filter) = self.facet_filter {
+            if facet_filter.is_empty() {
+                return Ok(SortResult::default())
             }
-            None => None,
-        };
+        }
 
         match self.distinct {
             Some((distinct, distinct_size)) => bucket_sort_with_distinct(
                 reader,
                 query,
                 range,
-                facets_docids,
-                facet_count_docids,
+                self.facet_filter,
+                self.facets,
                 self.filter,
                 distinct,
                 distinct_size,
@@ -163,8 +170,8 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
                 reader,
                 query,
                 range,
-                facets_docids,
-                facet_count_docids,
+                self.facet_filter,
+                self.facets,
                 self.filter,
                 self.criteria,
                 self.searchable_attrs,
@@ -178,6 +185,8 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
         }
     }
 }
+
+
 
 #[cfg(test)]
 mod tests {

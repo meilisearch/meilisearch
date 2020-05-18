@@ -363,10 +363,10 @@ impl Index {
         QueryBuilder::new(self)
     }
 
-    pub fn query_builder_with_criteria<'c, 'f, 'd, 'i>(
+    pub fn query_builder_with_criteria<'c, 'f, 'd, 'i, 'txn>(
         &'i self,
         criteria: Criteria<'c>,
-    ) -> QueryBuilder<'c, 'f, 'd, 'i> {
+    ) -> QueryBuilder<'c, 'f, 'd, 'i, 'txn> {
         QueryBuilder::with_criteria(self, criteria)
     }
 }

@@ -35,7 +35,7 @@ impl IndexSearchExt for Index {
             attributes_to_highlight: None,
             filters: None,
             matches: false,
-            facet_filters: None,
+            facet_filter: None,
             facets: None,
         }
     }
@@ -51,7 +51,7 @@ pub struct SearchBuilder<'a> {
     attributes_to_highlight: Option<HashSet<String>>,
     filters: Option<String>,
     matches: bool,
-    facet_filters: Option<FacetFilter>,
+    facet_filter: Option<FacetFilter>,
     facets: Option<Vec<(FieldId, String)>>
 }
 
@@ -87,8 +87,8 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn add_facet_filters(&mut self, filters: FacetFilter) -> &SearchBuilder {
-        self.facet_filters = Some(filters);
+    pub fn add_facet_filters(&mut self, filter: FacetFilter) -> &SearchBuilder {
+        self.facet_filter = Some(filter);
         self
     }
 
@@ -154,8 +154,13 @@ impl<'a> SearchBuilder<'a> {
             }
         }
 
-        query_builder.set_facet_filter(self.facet_filters);
-        query_builder.set_facets(self.facets);
+        if let Some(facet_filter) = self.facet_filter {
+            query_builder.with_facet_filter(reader, facet_filter)?;
+        }
+
+        if let Some(facets) = self.facets {
+            query_builder.with_facets_count(reader, facets)?;
+        }
 
         let start = Instant::now();
         let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
