@@ -8,12 +8,10 @@ macro_rules! forward_to_unserializable_type {
     }
 }
 
-mod convert_to_number;
 mod convert_to_string;
 mod deserializer;
 mod extract_document_id;
 
-pub use self::convert_to_number::ConvertToNumber;
 pub use self::convert_to_string::ConvertToString;
 pub use self::deserializer::{Deserializer, DeserializerError};
 pub use self::extract_document_id::{compute_document_id, extract_document_id, value_to_string};
