@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
+use std::hash::{Hash, Hasher};
 
 use fst::{set::OpBuilder, SetBuilder};
 use indexmap::IndexMap;
 use sdset::{duo::Union, SetOperation};
 use serde::Deserialize;
 use serde_json::Value;
+use siphasher::sip::SipHasher;
 
 use meilisearch_types::DocumentId;
 use meilisearch_schema::IndexedPos;
@@ -14,7 +16,7 @@ use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::raw_indexer::RawIndexer;
-use crate::serde::{extract_document_id, Deserializer};
+use crate::serde::{Deserializer, SerializerError};
 use crate::store;
 use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
 use crate::{Error, Number, MResult, RankedMap};
@@ -148,7 +150,7 @@ fn index_value(
 }
 
 // TODO move this helper functions elsewhere
-fn value_to_string(value: &Value) -> String {
+pub fn value_to_string(value: &Value) -> String {
     fn internal_value_to_string(string: &mut String, value: &Value) {
         match value {
             Value::Null => (),
@@ -191,6 +193,39 @@ fn value_to_number(value: &Value) -> Option<Number> {
     }
 }
 
+// TODO move this helper functions elsewhere
+pub fn compute_document_id<H: Hash>(t: H) -> DocumentId {
+    let mut s = SipHasher::new();
+    t.hash(&mut s);
+    let hash = s.finish();
+    DocumentId(hash)
+}
+
+// TODO move this helper functions elsewhere
+pub fn extract_document_id(primary_key: &str, document: &IndexMap<String, Value>) -> Result<DocumentId, SerializerError> {
+
+    fn validate_document_id(string: &str) -> bool {
+        string.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+    }
+
+    match document.get(primary_key) {
+        Some(value) => {
+            let string = match value {
+                Value::Number(number) => number.to_string(),
+                Value::String(string) => string.clone(),
+                _ => return Err(SerializerError::InvalidDocumentIdFormat),
+            };
+
+            if validate_document_id(&string) {
+                Ok(compute_document_id(string))
+            } else {
+                Err(SerializerError::InvalidDocumentIdFormat)
+            }
+        }
+        None => Err(SerializerError::DocumentIdNotFound),
+    }
+}
+
 pub fn apply_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
@@ -208,10 +243,7 @@ pub fn apply_addition<'a, 'b>(
 
     // 1. store documents ids for future deletion
     for mut document in addition {
-        let document_id = match extract_document_id(&primary_key, &document)? {
-            Some(id) => id,
-            None => return Err(Error::MissingDocumentId),
-        };
+        let document_id = extract_document_id(&primary_key, &document)?;
 
         if partial {
             let mut deserializer = Deserializer {

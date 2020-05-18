@@ -1,20 +1,6 @@
-macro_rules! forward_to_unserializable_type {
-    ($($ty:ident => $se_method:ident,)*) => {
-        $(
-            fn $se_method(self, _v: $ty) -> Result<Self::Ok, Self::Error> {
-                Err(SerializerError::UnserializableType { type_name: "$ty" })
-            }
-        )*
-    }
-}
-
-mod convert_to_string;
 mod deserializer;
-mod extract_document_id;
 
-pub use self::convert_to_string::ConvertToString;
 pub use self::deserializer::{Deserializer, DeserializerError};
-pub use self::extract_document_id::{compute_document_id, extract_document_id, value_to_string};
 
 use std::{error::Error, fmt};
 
@@ -27,7 +13,7 @@ use crate::ParseNumberError;
 #[derive(Debug)]
 pub enum SerializerError {
     DocumentIdNotFound,
-    InvalidDocumentIdType,
+    InvalidDocumentIdFormat,
     Zlmdb(heed::Error),
     SerdeJson(SerdeJsonError),
     ParseNumber(ParseNumberError),
@@ -50,7 +36,7 @@ impl fmt::Display for SerializerError {
             SerializerError::DocumentIdNotFound => {
                 f.write_str("serialized document does not have an id according to the schema")
             }
-            SerializerError::InvalidDocumentIdType => {
+            SerializerError::InvalidDocumentIdFormat => {
                 f.write_str("a document primary key can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).")
             }
             SerializerError::Zlmdb(e) => write!(f, "heed related error: {}", e),
