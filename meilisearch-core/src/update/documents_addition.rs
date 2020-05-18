@@ -1,25 +1,20 @@
 use std::collections::HashMap;
-use std::fmt::Write as _;
-use std::hash::{Hash, Hasher};
 
 use fst::{set::OpBuilder, SetBuilder};
 use indexmap::IndexMap;
 use sdset::{duo::Union, SetOperation};
 use serde::Deserialize;
 use serde_json::Value;
-use siphasher::sip::SipHasher;
-
-use meilisearch_types::DocumentId;
-use meilisearch_schema::IndexedPos;
 
 use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::raw_indexer::RawIndexer;
-use crate::serde::{Deserializer, SerializerError};
+use crate::serde::Deserializer;
 use crate::store;
+use crate::update::helpers::{index_value, value_to_number, extract_document_id};
 use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
-use crate::{Error, Number, MResult, RankedMap};
+use crate::{Error, MResult, RankedMap};
 
 pub struct DocumentsAddition<D> {
     updates_store: store::Updates,
@@ -109,121 +104,6 @@ pub fn push_documents_addition<D: serde::Serialize>(
     updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
-}
-
-// TODO move this helper functions elsewhere
-/// Returns the number of words indexed or `None` if the type
-fn index_value(
-    indexer: &mut RawIndexer,
-    document_id: DocumentId,
-    indexed_pos: IndexedPos,
-    value: &Value,
-) -> Option<usize>
-{
-    match value {
-        Value::Null => None,
-        Value::Bool(boolean) => {
-            let text = boolean.to_string();
-            let number_of_words = indexer.index_text(document_id, indexed_pos, &text);
-            Some(number_of_words)
-        },
-        Value::Number(number) => {
-            let text = number.to_string();
-            let number_of_words = indexer.index_text(document_id, indexed_pos, &text);
-            Some(number_of_words)
-        },
-        Value::String(string) => {
-            let number_of_words = indexer.index_text(document_id, indexed_pos, &string);
-            Some(number_of_words)
-        },
-        Value::Array(_) => {
-            let text = value_to_string(value);
-            let number_of_words = indexer.index_text(document_id, indexed_pos, &text);
-            Some(number_of_words)
-        },
-        Value::Object(_) => {
-            let text = value_to_string(value);
-            let number_of_words = indexer.index_text(document_id, indexed_pos, &text);
-            Some(number_of_words)
-        },
-    }
-}
-
-// TODO move this helper functions elsewhere
-pub fn value_to_string(value: &Value) -> String {
-    fn internal_value_to_string(string: &mut String, value: &Value) {
-        match value {
-            Value::Null => (),
-            Value::Bool(boolean) => { let _ = write!(string, "{}", &boolean); },
-            Value::Number(number) => { let _ = write!(string, "{}", &number); },
-            Value::String(text) => string.push_str(&text),
-            Value::Array(array) => {
-                for value in array {
-                    internal_value_to_string(string, value);
-                    let _ = string.write_str(". ");
-                }
-            },
-            Value::Object(object) => {
-                for (key, value) in object {
-                    string.push_str(key);
-                    let _ = string.write_str(". ");
-                    internal_value_to_string(string, value);
-                    let _ = string.write_str(". ");
-                }
-            },
-        }
-    }
-
-    let mut string = String::new();
-    internal_value_to_string(&mut string, value);
-    string
-}
-
-// TODO move this helper functions elsewhere
-fn value_to_number(value: &Value) -> Option<Number> {
-    use std::str::FromStr;
-
-    match value {
-        Value::Null => None,
-        Value::Bool(boolean) => Some(Number::Unsigned(*boolean as u64)),
-        Value::Number(number) => Number::from_str(&number.to_string()).ok(), // TODO improve that
-        Value::String(string) => Number::from_str(string).ok(),
-        Value::Array(_array) => None,
-        Value::Object(_object) => None,
-    }
-}
-
-// TODO move this helper functions elsewhere
-pub fn compute_document_id<H: Hash>(t: H) -> DocumentId {
-    let mut s = SipHasher::new();
-    t.hash(&mut s);
-    let hash = s.finish();
-    DocumentId(hash)
-}
-
-// TODO move this helper functions elsewhere
-pub fn extract_document_id(primary_key: &str, document: &IndexMap<String, Value>) -> Result<DocumentId, SerializerError> {
-
-    fn validate_document_id(string: &str) -> bool {
-        string.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
-    }
-
-    match document.get(primary_key) {
-        Some(value) => {
-            let string = match value {
-                Value::Number(number) => number.to_string(),
-                Value::String(string) => string.clone(),
-                _ => return Err(SerializerError::InvalidDocumentIdFormat),
-            };
-
-            if validate_document_id(&string) {
-                Ok(compute_document_id(string))
-            } else {
-                Err(SerializerError::InvalidDocumentIdFormat)
-            }
-        }
-        None => Err(SerializerError::DocumentIdNotFound),
-    }
 }
 
 pub fn apply_addition<'a, 'b>(
