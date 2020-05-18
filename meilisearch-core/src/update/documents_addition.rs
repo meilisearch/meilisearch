@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fmt::Write as _;
+use std::fmt;
 
 use fst::{set::OpBuilder, SetBuilder};
 use indexmap::IndexMap;
@@ -6,12 +8,15 @@ use sdset::{duo::Union, SetOperation};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use meilisearch_types::DocumentId;
+use meilisearch_schema::IndexedPos;
+
 use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::{extract_document_id, Deserializer};
-use crate::serde::{ConvertToNumber, Indexer};
+use crate::serde::ConvertToNumber;
 use crate::store;
 use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
 use crate::{Error, MResult, RankedMap};
@@ -106,6 +111,69 @@ pub fn push_documents_addition<D: serde::Serialize>(
     Ok(last_update_id)
 }
 
+// TODO move this helper functions elsewhere
+/// Returns the number of words indexed or `None` if the type
+fn index_value(
+    indexer: &mut RawIndexer,
+    document_id: DocumentId,
+    indexed_pos: IndexedPos,
+    value: &Value,
+) -> Option<usize>
+{
+    fn value_to_string(string: &mut String, value: &Value) {
+        match value {
+            Value::Null => (),
+            Value::Bool(boolean) => { let _ = write!(string, "{}", &boolean); },
+            Value::Number(number) => { let _ = write!(string, "{}", &number); },
+            Value::String(text) => string.push_str(&text),
+            Value::Array(array) => {
+                for value in array {
+                    value_to_string(string, value);
+                    let _ = string.write_str(". ");
+                }
+            },
+            Value::Object(object) => {
+                for (key, value) in object {
+                    string.push_str(key);
+                    let _ = string.write_str(". ");
+                    value_to_string(string, value);
+                    let _ = string.write_str(". ");
+                }
+            },
+        }
+    }
+
+    match value {
+        Value::Null => None,
+        Value::Bool(boolean) => {
+            let text = boolean.to_string();
+            let number_of_words = indexer.index_text(document_id, indexed_pos, &text);
+            Some(number_of_words)
+        },
+        Value::Number(number) => {
+            let text = number.to_string();
+            let number_of_words = indexer.index_text(document_id, indexed_pos, &text);
+            Some(number_of_words)
+        },
+        Value::String(string) => {
+            let number_of_words = indexer.index_text(document_id, indexed_pos, &string);
+            Some(number_of_words)
+        },
+        Value::Array(_) => {
+            let mut text = String::new();
+            value_to_string(&mut text, value);
+            let number_of_words = indexer.index_text(document_id, indexed_pos, &text);
+            Some(number_of_words)
+        },
+        Value::Object(_) => {
+            let mut text = String::new();
+            value_to_string(&mut text, value);
+            let number_of_words = indexer.index_text(document_id, indexed_pos, &text);
+            Some(number_of_words)
+        },
+    }
+}
+
 pub fn apply_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
@@ -183,8 +251,8 @@ pub fn apply_addition<'a, 'b>(
             index.documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
 
             if let Some(indexed_pos) = schema.is_indexed(field_id) {
-                let indexer = Indexer { pos: *indexed_pos, indexer: &mut indexer, document_id };
-                if let Some(number_of_words) = value.serialize(indexer)? {
+                let number_of_words = index_value(&mut indexer, document_id, *indexed_pos, &value);
+                if let Some(number_of_words) = number_of_words {
                     index.documents_fields_counts.put_document_field_count(
                         writer,
                         document_id,
@@ -280,8 +348,8 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
             index.documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
 
             if let Some(indexed_pos) = schema.is_indexed(field_id) {
-                let indexer = Indexer { pos: *indexed_pos, indexer: &mut indexer, document_id };
-                if let Some(number_of_words) = value.serialize(indexer)? {
+                let number_of_words = index_value(&mut indexer, document_id, *indexed_pos, &value);
+                if let Some(number_of_words) = number_of_words {
                     index.documents_fields_counts.put_document_field_count(
                         writer,
                         document_id,
