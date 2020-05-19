@@ -14,7 +14,7 @@ pub struct DocumentsDeletion {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     updates_notifier: UpdateEventsEmitter,
-    documents: Vec<DocumentId>,
+    documents: Vec<String>,
 }
 
 impl DocumentsDeletion {
@@ -31,7 +31,7 @@ impl DocumentsDeletion {
         }
     }
 
-    pub fn delete_document_by_id(&mut self, document_id: DocumentId) {
+    pub fn delete_document_by_user_id(&mut self, document_id: String) {
         self.documents.push(document_id);
     }
 
@@ -47,8 +47,8 @@ impl DocumentsDeletion {
     }
 }
 
-impl Extend<DocumentId> for DocumentsDeletion {
-    fn extend<T: IntoIterator<Item = DocumentId>>(&mut self, iter: T) {
+impl Extend<String> for DocumentsDeletion {
+    fn extend<T: IntoIterator<Item=String>>(&mut self, iter: T) {
         self.documents.extend(iter)
     }
 }
@@ -57,7 +57,7 @@ pub fn push_documents_deletion(
     writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-    deletion: Vec<DocumentId>,
+    deletion: Vec<String>,
 ) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
@@ -70,10 +70,23 @@ pub fn push_documents_deletion(
 pub fn apply_documents_deletion(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
-    deletion: Vec<DocumentId>,
+    deletion: Vec<String>,
 ) -> MResult<()>
 {
-    unimplemented!("When we delete documents we must ask for user ids instead of internal ones");
+    let (user_ids, internal_ids) = {
+        let new_user_ids = SetBuf::from_dirty(deletion);
+        let mut internal_ids = Vec::new();
+
+        let user_ids = index.main.user_ids(writer)?;
+        for userid in new_user_ids.as_slice() {
+            if let Some(id) = user_ids.get(userid) {
+                internal_ids.push(DocumentId(id));
+            }
+        }
+
+        let new_user_ids = fst::Map::from_iter(new_user_ids.into_iter().map(|k| (k, 0))).unwrap();
+        (new_user_ids, SetBuf::from_dirty(internal_ids))
+    };
 
     let schema = match index.main.schema(writer)? {
         Some(schema) => schema,
@@ -87,16 +100,15 @@ pub fn apply_documents_deletion(
 
     // facet filters deletion
     if let Some(attributes_for_facetting) = index.main.attributes_for_faceting(writer)? {
-        let facet_map = facets::facet_map_from_docids(writer, &index, &deletion, &attributes_for_facetting)?;
+        let facet_map = facets::facet_map_from_docids(writer, &index, &internal_ids, &attributes_for_facetting)?;
         index.facets.remove(writer, facet_map)?;
     }
 
     // collect the ranked attributes according to the schema
     let ranked_fields = schema.ranked();
 
-    let idset = SetBuf::from_dirty(deletion);
     let mut words_document_ids = HashMap::new();
-    for id in idset {
+    for id in internal_ids.iter().cloned() {
         // remove all the ranked attributes from the ranked_map
         for ranked_attr in ranked_fields {
             ranked_map.remove(id, *ranked_attr);
@@ -165,6 +177,10 @@ pub fn apply_documents_deletion(
     index.main.put_words_fst(writer, &words)?;
     index.main.put_ranked_map(writer, &ranked_map)?;
     index.main.put_number_of_documents(writer, |old| old - deleted_documents_len)?;
+
+    // We apply the changes to the user and internal ids
+    index.main.remove_user_ids(writer, &user_ids)?;
+    index.main.remove_internal_ids(writer, &internal_ids)?;
 
     compute_short_prefixes(writer, index)?;
 

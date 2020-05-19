@@ -190,9 +190,9 @@ pub fn apply_addition<'a, 'b>(
         documents_additions.insert(document_id, document);
     }
 
-    // 2. remove the documents posting lists
+    // 2. remove the documents postings lists
     let number_of_inserted_documents = documents_additions.len();
-    let documents_ids = documents_additions.iter().map(|(id, _)| *id).collect();
+    let documents_ids = new_user_ids.iter().map(|(userid, _)| userid.clone()).collect();
     apply_documents_deletion(writer, index, documents_ids)?;
 
     let mut ranked_map = match index.main.ranked_map(writer)? {

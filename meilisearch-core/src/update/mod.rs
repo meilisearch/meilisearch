@@ -24,7 +24,7 @@ use sdset::Set;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{store, DocumentId, MResult};
+use crate::{store, MResult};
 use crate::database::{MainT, UpdateT};
 use crate::settings::SettingsUpdate;
 
@@ -63,7 +63,7 @@ impl Update {
         }
     }
 
-    fn documents_deletion(data: Vec<DocumentId>) -> Update {
+    fn documents_deletion(data: Vec<String>) -> Update {
         Update {
             data: UpdateData::DocumentsDeletion(data),
             enqueued_at: Utc::now(),
@@ -84,7 +84,7 @@ pub enum UpdateData {
     Customs(Vec<u8>),
     DocumentsAddition(Vec<IndexMap<String, Value>>),
     DocumentsPartial(Vec<IndexMap<String, Value>>),
-    DocumentsDeletion(Vec<DocumentId>),
+    DocumentsDeletion(Vec<String>),
     Settings(SettingsUpdate)
 }
 

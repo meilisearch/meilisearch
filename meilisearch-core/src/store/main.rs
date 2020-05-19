@@ -90,7 +90,16 @@ impl Main {
 
         // We do an union of the old and new internal ids.
         let internal_ids = self.internal_ids(writer)?;
-        let internal_ids = sdset::duo::Union::new(&new_ids, &internal_ids).into_set_buf();
+        let internal_ids = sdset::duo::Union::new(&internal_ids, new_ids).into_set_buf();
+        self.put_internal_ids(writer, &internal_ids)
+    }
+
+    pub fn remove_internal_ids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> ZResult<()> {
+        use sdset::SetOperation;
+
+        // We do a difference of the old and new internal ids.
+        let internal_ids = self.internal_ids(writer)?;
+        let internal_ids = sdset::duo::Difference::new(&internal_ids, ids).into_set_buf();
         self.put_internal_ids(writer, &internal_ids)
     }
 
@@ -101,10 +110,25 @@ impl Main {
     pub fn merge_user_ids(self, writer: &mut heed::RwTxn<MainT>, new_ids: &fst::Map) -> ZResult<()> {
         use fst::{Streamer, IntoStreamer};
 
+        // Do an union of the old and the new set of user ids.
         let user_ids = self.user_ids(writer)?;
+        let mut op = user_ids.op().add(new_ids.into_stream()).r#union();
+        let mut build = fst::MapBuilder::memory();
+        while let Some((userid, values)) = op.next() {
+            build.insert(userid, values[0].value).unwrap();
+        }
+        let user_ids = build.into_inner().unwrap();
+
+        // TODO prefer using self.put_user_ids
+        self.main.put::<_, Str, ByteSlice>(writer, USER_IDS_KEY, user_ids.as_slice())
+    }
+
+    pub fn remove_user_ids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
+        use fst::{Streamer, IntoStreamer};
 
         // Do an union of the old and the new set of user ids.
-        let mut op = user_ids.op().add(new_ids.into_stream()).r#union();
+        let user_ids = self.user_ids(writer)?;
+        let mut op = user_ids.op().add(ids.into_stream()).difference();
         let mut build = fst::MapBuilder::memory();
         while let Some((userid, values)) = op.next() {
             build.insert(userid, values[0].value).unwrap();
@@ -125,6 +149,11 @@ impl Main {
             },
             None => Ok(fst::Map::default()),
         }
+    }
+
+    pub fn user_to_internal_id(self, reader: &heed::RoTxn<MainT>, userid: &str) -> ZResult<Option<DocumentId>> {
+        let user_ids = self.user_ids(reader)?;
+        Ok(user_ids.get(userid).map(DocumentId))
     }
 
     pub fn put_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
