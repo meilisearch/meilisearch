@@ -1,13 +1,11 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use fst::{SetBuilder, Streamer};
-use meilisearch_schema::Schema;
 use sdset::{duo::DifferenceByKey, SetBuf, SetOperation};
 
 use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
-use crate::serde::extract_document_id;
 use crate::store;
 use crate::update::{next_update_id, compute_short_prefixes, Update};
 use crate::{DocumentId, Error, MResult, RankedMap};
@@ -35,21 +33,6 @@ impl DocumentsDeletion {
 
     pub fn delete_document_by_id(&mut self, document_id: DocumentId) {
         self.documents.push(document_id);
-    }
-
-    pub fn delete_document<D>(&mut self, schema: &Schema, document: D) -> MResult<()>
-    where
-        D: serde::Serialize,
-    {
-        let primary_key = schema.primary_key().ok_or(Error::MissingPrimaryKey)?;
-        let document_id = match extract_document_id(&primary_key, &document)? {
-            Some(id) => id,
-            None => return Err(Error::MissingDocumentId),
-        };
-
-        self.delete_document_by_id(document_id);
-
-        Ok(())
     }
 
     pub fn finalize(self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {

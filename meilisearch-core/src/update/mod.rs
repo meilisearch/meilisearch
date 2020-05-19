@@ -3,13 +3,13 @@ mod customs_update;
 mod documents_addition;
 mod documents_deletion;
 mod settings_update;
+mod helpers;
 
 pub use self::clear_all::{apply_clear_all, push_clear_all};
 pub use self::customs_update::{apply_customs_update, push_customs_update};
-pub use self::documents_addition::{
-    apply_documents_addition, apply_documents_partial_addition, DocumentsAddition,
-};
+pub use self::documents_addition::{apply_documents_addition, apply_documents_partial_addition, DocumentsAddition};
 pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
+pub use self::helpers::{index_value, value_to_string, value_to_number, compute_document_id, extract_document_id};
 pub use self::settings_update::{apply_settings_update, push_settings_update};
 
 use std::cmp;
@@ -22,6 +22,7 @@ use indexmap::IndexMap;
 use log::debug;
 use sdset::Set;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{store, DocumentId, MResult};
 use crate::database::{MainT, UpdateT};
@@ -48,16 +49,16 @@ impl Update {
         }
     }
 
-    fn documents_addition(data: Vec<IndexMap<String, serde_json::Value>>) -> Update {
+    fn documents_addition(documents: Vec<IndexMap<String, Value>>) -> Update {
         Update {
-            data: UpdateData::DocumentsAddition(data),
+            data: UpdateData::DocumentsAddition(documents),
             enqueued_at: Utc::now(),
         }
     }
 
-    fn documents_partial(data: Vec<IndexMap<String, serde_json::Value>>) -> Update {
+    fn documents_partial(documents: Vec<IndexMap<String, Value>>) -> Update {
         Update {
-            data: UpdateData::DocumentsPartial(data),
+            data: UpdateData::DocumentsPartial(documents),
             enqueued_at: Utc::now(),
         }
     }
@@ -81,8 +82,8 @@ impl Update {
 pub enum UpdateData {
     ClearAll,
     Customs(Vec<u8>),
-    DocumentsAddition(Vec<IndexMap<String, serde_json::Value>>),
-    DocumentsPartial(Vec<IndexMap<String, serde_json::Value>>),
+    DocumentsAddition(Vec<IndexMap<String, Value>>),
+    DocumentsPartial(Vec<IndexMap<String, Value>>),
     DocumentsDeletion(Vec<DocumentId>),
     Settings(SettingsUpdate)
 }
