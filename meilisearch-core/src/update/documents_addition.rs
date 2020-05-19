@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 
 use fst::{set::OpBuilder, SetBuilder};
 use indexmap::IndexMap;
@@ -13,7 +13,7 @@ use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::Deserializer;
-use crate::store::{self, DocumentsFields, DocumentsFieldsCounts};
+use crate::store::{self, DocumentsFields, DocumentsFieldsCounts, DiscoverIds};
 use crate::update::helpers::{index_value, value_to_number, extract_document_id};
 use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
 use crate::{Error, MResult, RankedMap};
@@ -150,17 +150,26 @@ pub fn apply_addition<'a, 'b>(
     partial: bool
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
+    let mut new_user_ids = BTreeMap::new();
+    let mut new_internal_ids = Vec::with_capacity(new_documents.len());
 
     let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
 
+    // Retrieve the documents ids related structures
+    let user_ids = index.main.user_ids(writer)?;
+    let internal_ids = index.main.internal_ids(writer)?;
+    let mut available_ids = DiscoverIds::new(&internal_ids);
+
     let primary_key = schema.primary_key().ok_or(Error::MissingPrimaryKey)?;
 
     // 1. store documents ids for future deletion
     for mut document in new_documents {
-        let document_id = extract_document_id(&primary_key, &document)?;
+        let (document_id, userid) = extract_document_id(&primary_key, &document, &user_ids, &mut available_ids)?;
+        new_user_ids.insert(userid, document_id.0);
+        new_internal_ids.push(document_id);
 
         if partial {
             let mut deserializer = Deserializer {
@@ -232,6 +241,11 @@ pub fn apply_addition<'a, 'b>(
     )?;
 
     index.main.put_schema(writer, &schema)?;
+
+    let new_user_ids = fst::Map::from_iter(new_user_ids)?;
+    let new_internal_ids = sdset::SetBuf::from_dirty(new_internal_ids);
+    index.main.merge_user_ids(writer, &new_user_ids)?;
+    index.main.merge_internal_ids(writer, &new_internal_ids)?;
 
     Ok(())
 }

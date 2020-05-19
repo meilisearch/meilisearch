@@ -71,7 +71,10 @@ pub fn apply_documents_deletion(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     deletion: Vec<DocumentId>,
-) -> MResult<()> {
+) -> MResult<()>
+{
+    unimplemented!("When we delete documents we must ask for user ids instead of internal ones");
+
     let schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),

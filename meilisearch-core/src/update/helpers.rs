@@ -1,16 +1,15 @@
 use std::fmt::Write as _;
-use std::hash::{Hash, Hasher};
 
 use indexmap::IndexMap;
 use meilisearch_schema::IndexedPos;
 use meilisearch_types::DocumentId;
 use ordered_float::OrderedFloat;
 use serde_json::Value;
-use siphasher::sip::SipHasher;
 
+use crate::Number;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::SerializerError;
-use crate::Number;
+use crate::store::DiscoverIds;
 
 /// Returns the number of words indexed or `None` if the type is unindexable.
 pub fn index_value(
@@ -96,28 +95,43 @@ pub fn value_to_number(value: &Value) -> Option<Number> {
     }
 }
 
-/// Validates a string representation to be a correct document id and
-/// returns the hash of the given type, this is the way we produce documents ids.
-pub fn compute_document_id(string: &str) -> Result<DocumentId, SerializerError> {
-    if string.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
-        let mut s = SipHasher::new();
-        string.hash(&mut s);
-        Ok(DocumentId(s.finish()))
+/// Validates a string representation to be a correct document id and returns
+/// the corresponding id or generate a new one, this is the way we produce documents ids.
+pub fn discover_document_id(
+    userid: &str,
+    user_ids: &fst::Map,
+    available_ids: &mut DiscoverIds<'_>,
+) -> Result<DocumentId, SerializerError>
+{
+    if userid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
+        match user_ids.get(userid) {
+            Some(internal_id) => Ok(DocumentId(internal_id)),
+            None => {
+                let internal_id = available_ids.next().expect("no more ids available");
+                Ok(internal_id)
+            },
+        }
     } else {
         Err(SerializerError::InvalidDocumentIdFormat)
     }
 }
 
 /// Extracts and validates the document id of a document.
-pub fn extract_document_id(primary_key: &str, document: &IndexMap<String, Value>) -> Result<DocumentId, SerializerError> {
+pub fn extract_document_id(
+    primary_key: &str,
+    document: &IndexMap<String, Value>,
+    user_ids: &fst::Map,
+    available_ids: &mut DiscoverIds<'_>,
+) -> Result<(DocumentId, String), SerializerError>
+{
     match document.get(primary_key) {
         Some(value) => {
-            let string = match value {
+            let userid = match value {
                 Value::Number(number) => number.to_string(),
                 Value::String(string) => string.clone(),
                 _ => return Err(SerializerError::InvalidDocumentIdFormat),
             };
-            compute_document_id(&string)
+            discover_document_id(&userid, user_ids, available_ids).map(|id| (id, userid))
         }
         None => Err(SerializerError::DocumentIdNotFound),
     }

@@ -1624,7 +1624,6 @@ dependencies = [
  "sdset",
  "serde",
  "serde_json",
- "siphasher",
  "slice-group-by",
  "structopt",
  "tempfile",

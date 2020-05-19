@@ -9,7 +9,7 @@ pub use self::clear_all::{apply_clear_all, push_clear_all};
 pub use self::customs_update::{apply_customs_update, push_customs_update};
 pub use self::documents_addition::{apply_documents_addition, apply_documents_partial_addition, DocumentsAddition};
 pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
-pub use self::helpers::{index_value, value_to_string, value_to_number, compute_document_id, extract_document_id};
+pub use self::helpers::{index_value, value_to_string, value_to_number, discover_document_id, extract_document_id};
 pub use self::settings_update::{apply_settings_update, push_settings_update};
 
 use std::cmp;
