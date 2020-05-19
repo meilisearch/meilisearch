@@ -6,6 +6,9 @@ use indexmap::IndexMap;
 use serde::Deserialize;
 use serde_json::Value;
 
+use meilisearch_core::{Error, serde::SerializerError};
+use meilisearch_core::update;
+
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
@@ -42,8 +45,11 @@ async fn get_document(
         .open_index(&path.index_uid)
         .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let document_id = meilisearch_core::update::compute_document_id(&path.document_id);
+    if !update::validate_document_id(&path.document_id) {
+        return Err(Error::Serializer(SerializerError::InvalidDocumentIdFormat).into())
+    }
 
+    let document_id = update::compute_document_id(&path.document_id);
     let reader = data.db.main_read_txn()?;
 
     let response: Document = index
@@ -65,7 +71,12 @@ async fn delete_document(
         .db
         .open_index(&path.index_uid)
         .ok_or(ResponseError::index_not_found(&path.index_uid))?;
-    let document_id = meilisearch_core::update::compute_document_id(&path.document_id);
+
+    if !update::validate_document_id(&path.document_id) {
+        return Err(Error::Serializer(SerializerError::InvalidDocumentIdFormat).into())
+    }
+
+    let document_id = update::compute_document_id(&path.document_id);
 
     let mut update_writer = data.db.update_write_txn()?;
 
@@ -237,8 +248,11 @@ async fn delete_documents(
     let mut documents_deletion = index.documents_deletion();
 
     for document_id in body.into_inner() {
-        let document_id_string = meilisearch_core::update::value_to_string(&document_id);
-        let document_id = meilisearch_core::update::compute_document_id(document_id_string);
+        let document_id_string = update::value_to_string(&document_id);
+        if !update::validate_document_id(&document_id_string) {
+            return Err(Error::Serializer(SerializerError::InvalidDocumentIdFormat).into())
+        }
+        let document_id = update::compute_document_id(document_id_string);
         documents_deletion.delete_document_by_id(document_id);
     }
 
