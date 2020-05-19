@@ -7,7 +7,7 @@ use serde_json::json;
 use actix_web::error::JsonPayloadError;
 
 #[derive(Debug)]
-pub enum ResponseError {
+pub enum Error {
     BadParameter(String, String),
     BadRequest(String),
     CreateIndex(String),
@@ -63,69 +63,69 @@ impl fmt::Display for FacetCountError {
     }
 }
 
-impl ResponseError {
-    pub fn internal(err: impl fmt::Display) -> ResponseError {
-        ResponseError::Internal(err.to_string())
+impl Error {
+    pub fn internal(err: impl fmt::Display) -> Error {
+        Error::Internal(err.to_string())
     }
 
-    pub fn bad_request(err: impl fmt::Display) -> ResponseError {
-        ResponseError::BadRequest(err.to_string())
+    pub fn bad_request(err: impl fmt::Display) -> Error {
+        Error::BadRequest(err.to_string())
     }
 
-    pub fn missing_authorization_header() -> ResponseError {
-        ResponseError::MissingAuthorizationHeader
+    pub fn missing_authorization_header() -> Error {
+        Error::MissingAuthorizationHeader
     }
 
-    pub fn invalid_token(err: impl fmt::Display) -> ResponseError {
-        ResponseError::InvalidToken(err.to_string())
+    pub fn invalid_token(err: impl fmt::Display) -> Error {
+        Error::InvalidToken(err.to_string())
     }
 
-    pub fn not_found(err: impl fmt::Display) -> ResponseError {
-        ResponseError::NotFound(err.to_string())
+    pub fn not_found(err: impl fmt::Display) -> Error {
+        Error::NotFound(err.to_string())
     }
 
-    pub fn index_not_found(err: impl fmt::Display) -> ResponseError {
-        ResponseError::IndexNotFound(err.to_string())
+    pub fn index_not_found(err: impl fmt::Display) -> Error {
+        Error::IndexNotFound(err.to_string())
     }
 
-    pub fn document_not_found(err: impl fmt::Display) -> ResponseError {
-        ResponseError::DocumentNotFound(err.to_string())
+    pub fn document_not_found(err: impl fmt::Display) -> Error {
+        Error::DocumentNotFound(err.to_string())
     }
 
-    pub fn missing_header(err: impl fmt::Display) -> ResponseError {
-        ResponseError::MissingHeader(err.to_string())
+    pub fn missing_header(err: impl fmt::Display) -> Error {
+        Error::MissingHeader(err.to_string())
     }
 
-    pub fn bad_parameter(param: impl fmt::Display, err: impl fmt::Display) -> ResponseError {
-        ResponseError::BadParameter(param.to_string(), err.to_string())
+    pub fn bad_parameter(param: impl fmt::Display, err: impl fmt::Display) -> Error {
+        Error::BadParameter(param.to_string(), err.to_string())
     }
 
-    pub fn open_index(err: impl fmt::Display) -> ResponseError {
-        ResponseError::OpenIndex(err.to_string())
+    pub fn open_index(err: impl fmt::Display) -> Error {
+        Error::OpenIndex(err.to_string())
     }
 
-    pub fn create_index(err: impl fmt::Display) -> ResponseError {
-        ResponseError::CreateIndex(err.to_string())
+    pub fn create_index(err: impl fmt::Display) -> Error {
+        Error::CreateIndex(err.to_string())
     }
 
-    pub fn invalid_index_uid() -> ResponseError {
-        ResponseError::InvalidIndexUid
+    pub fn invalid_index_uid() -> Error {
+        Error::InvalidIndexUid
     }
 
-    pub fn maintenance() -> ResponseError {
-        ResponseError::Maintenance
+    pub fn maintenance() -> Error {
+        Error::Maintenance
     }
 
-    pub fn retrieve_document(doc_id: u32, err: impl fmt::Display) -> ResponseError {
-        ResponseError::RetrieveDocument(doc_id, err.to_string())
+    pub fn retrieve_document(doc_id: u64, err: impl fmt::Display) -> Error {
+        Error::RetrieveDocument(doc_id, err.to_string())
     }
 
-    pub fn search_documents(err: impl fmt::Display) -> ResponseError {
-        ResponseError::SearchDocuments(err.to_string())
+    pub fn search_documents(err: impl fmt::Display) -> Error {
+        Error::SearchDocuments(err.to_string())
     }
 }
 
-impl fmt::Display for ResponseError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BadParameter(param, err) => write!(f, "Url parameter {} error: {}", param, err),
@@ -152,7 +152,7 @@ impl fmt::Display for ResponseError {
     }
 }
 
-impl aweb::error::ResponseError for ResponseError {
+impl aweb::error::ResponseError for Error {
     fn error_response(&self) -> aweb::HttpResponse {
         ResponseBuilder::new(self.status_code()).json(json!({
             "message": self.to_string(),
@@ -185,26 +185,26 @@ impl aweb::error::ResponseError for ResponseError {
     }
 }
 
-impl From<meilisearch_core::HeedError> for ResponseError {
-    fn from(err: meilisearch_core::HeedError) -> ResponseError {
-        ResponseError::Internal(err.to_string())
+impl From<meilisearch_core::HeedError> for Error {
+    fn from(err: meilisearch_core::HeedError) -> Error {
+        Error::Internal(err.to_string())
     }
 }
 
-impl From<meilisearch_core::FstError> for ResponseError {
-    fn from(err: meilisearch_core::FstError) -> ResponseError {
-        ResponseError::Internal(err.to_string())
+impl From<meilisearch_core::FstError> for Error {
+    fn from(err: meilisearch_core::FstError) -> Error {
+        Error::Internal(err.to_string())
     }
 }
 
-impl From<meilisearch_core::FacetError> for ResponseError {
-    fn from(error: meilisearch_core::FacetError) -> ResponseError {
-        ResponseError::FacetExpression(error.to_string())
+impl From<meilisearch_core::FacetError> for Error {
+    fn from(error: meilisearch_core::FacetError) -> Error {
+        Error::FacetExpression(error.to_string())
     }
 }
 
-impl From<meilisearch_core::Error> for ResponseError {
-    fn from(err: meilisearch_core::Error) -> ResponseError {
+impl From<meilisearch_core::Error> for Error {
+    fn from(err: meilisearch_core::Error) -> Error {
         use meilisearch_core::pest_error::LineColLocation::*;
         match err {
             meilisearch_core::Error::FilterParseError(e) => {
@@ -214,43 +214,43 @@ impl From<meilisearch_core::Error> for ResponseError {
                 };
                 let message = format!("parsing error on line {} at column {}: {}", line, column, e.variant.message());
 
-                ResponseError::FilterParsing(message)
+                Error::FilterParsing(message)
             },
-            meilisearch_core::Error::FacetError(e) => ResponseError::FacetExpression(e.to_string()),
-            _ => ResponseError::Internal(err.to_string()),
+            meilisearch_core::Error::FacetError(e) => Error::FacetExpression(e.to_string()),
+            _ => Error::Internal(err.to_string()),
         }
     }
 }
 
-impl From<meilisearch_schema::Error> for ResponseError {
-    fn from(err: meilisearch_schema::Error) -> ResponseError {
-        ResponseError::Internal(err.to_string())
+impl From<meilisearch_schema::Error> for Error {
+    fn from(err: meilisearch_schema::Error) -> Error {
+        Error::Internal(err.to_string())
     }
 }
 
-impl From<actix_http::Error> for ResponseError {
-    fn from(err: actix_http::Error) -> ResponseError {
-        ResponseError::Internal(err.to_string())
+impl From<actix_http::Error> for Error {
+    fn from(err: actix_http::Error) -> Error {
+        Error::Internal(err.to_string())
     }
 }
 
-impl From<FacetCountError> for ResponseError {
-    fn from(other: FacetCountError) -> ResponseError {
-        ResponseError::FacetCount(other.to_string())
+impl From<FacetCountError> for Error {
+    fn from(other: FacetCountError) -> Error {
+        Error::FacetCount(other.to_string())
     }
 }
 
-impl From<JsonPayloadError> for ResponseError {
-    fn from(err: JsonPayloadError) -> ResponseError {
+impl From<JsonPayloadError> for Error {
+    fn from(err: JsonPayloadError) -> Error {
         match err {
-            JsonPayloadError::Deserialize(err) => ResponseError::BadRequest(format!("Invalid JSON: {}", err)),
-            JsonPayloadError::Overflow => ResponseError::PayloadTooLarge,
-            JsonPayloadError::ContentType => ResponseError::UnsupportedMediaType,
-            JsonPayloadError::Payload(err) => ResponseError::BadRequest(format!("Problem while decoding the request: {}", err)),
+            JsonPayloadError::Deserialize(err) => Error::BadRequest(format!("Invalid JSON: {}", err)),
+            JsonPayloadError::Overflow => Error::PayloadTooLarge,
+            JsonPayloadError::ContentType => Error::UnsupportedMediaType,
+            JsonPayloadError::Payload(err) => Error::BadRequest(format!("Problem while decoding the request: {}", err)),
         }
     }
 }
 
-pub fn json_error_handler(err: JsonPayloadError) -> ResponseError {
+pub fn json_error_handler(err: JsonPayloadError) -> Error {
     err.into()
 }

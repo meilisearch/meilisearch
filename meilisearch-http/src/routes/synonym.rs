@@ -5,7 +5,7 @@ use actix_web_macros::{delete, get, post};
 use indexmap::IndexMap;
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
 
-use crate::error::ResponseError;
+use crate::error::Error;
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
@@ -21,11 +21,11 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 async fn get(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
 
@@ -51,11 +51,11 @@ async fn update(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<BTreeMap<String, Vec<String>>>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         synonyms: UpdateState::Update(body.into_inner()),
@@ -76,11 +76,11 @@ async fn update(
 async fn delete(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         synonyms: UpdateState::Clear,

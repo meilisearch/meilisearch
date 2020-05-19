@@ -3,7 +3,7 @@ use actix_web_macros::{delete, get, post};
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
 use std::collections::BTreeSet;
 
-use crate::error::ResponseError;
+use crate::error::Error;
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
@@ -19,11 +19,11 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 async fn get(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
     let stop_words_fst = index.main.stop_words_fst(&reader)?;
     let stop_words = stop_words_fst.stream().into_strs()?;
@@ -39,11 +39,11 @@ async fn update(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<BTreeSet<String>>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Update(body.into_inner()),
@@ -64,11 +64,11 @@ async fn update(
 async fn delete(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Clear,

@@ -10,7 +10,7 @@ use serde::Serialize;
 use sysinfo::{NetworkExt, ProcessExt, ProcessorExt, System, SystemExt};
 use walkdir::WalkDir;
 
-use crate::error::ResponseError;
+use crate::error::Error;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
@@ -35,11 +35,11 @@ struct IndexStatsResponse {
 async fn index_stats(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
 
@@ -51,7 +51,7 @@ async fn index_stats(
 
     let is_indexing =
         data.is_indexing(&update_reader, &path.index_uid)?
-            .ok_or(ResponseError::internal(
+            .ok_or(Error::internal(
                 "Impossible to know if the database is indexing",
             ))?;
 
@@ -71,7 +71,7 @@ struct StatsResult {
 }
 
 #[get("/stats", wrap = "Authentication::Private")]
-async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
+async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, Error> {
     let mut index_list = HashMap::new();
 
     let reader = data.db.main_read_txn()?;
@@ -87,7 +87,7 @@ async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError>
                 let fields_distribution = index.main.fields_distribution(&reader)?.unwrap_or_default();
 
                 let is_indexing = data.is_indexing(&update_reader, &index_uid)?.ok_or(
-                    ResponseError::internal("Impossible to know if the database is indexing"),
+                    Error::internal("Impossible to know if the database is indexing"),
                 )?;
 
                 let response = IndexStatsResponse {

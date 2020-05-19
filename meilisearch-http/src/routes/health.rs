@@ -3,7 +3,7 @@ use actix_web_macros::{get, put};
 use heed::types::{Str, Unit};
 use serde::Deserialize;
 
-use crate::error::ResponseError;
+use crate::error::Error;
 use crate::helpers::Authentication;
 use crate::Data;
 
@@ -14,19 +14,19 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 }
 
 #[get("/health", wrap = "Authentication::Private")]
-async fn get_health(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
+async fn get_health(data: web::Data<Data>) -> Result<HttpResponse, Error> {
     let reader = data.db.main_read_txn()?;
 
     let common_store = data.db.common_store();
 
     if let Ok(Some(_)) = common_store.get::<_, Str, Unit>(&reader, UNHEALTHY_KEY) {
-        return Err(ResponseError::Maintenance);
+        return Err(Error::Maintenance);
     }
 
     Ok(HttpResponse::Ok().finish())
 }
 
-async fn set_healthy(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
+async fn set_healthy(data: web::Data<Data>) -> Result<HttpResponse, Error> {
     let mut writer = data.db.main_write_txn()?;
     let common_store = data.db.common_store();
     common_store.delete::<_, Str>(&mut writer, UNHEALTHY_KEY)?;
@@ -35,7 +35,7 @@ async fn set_healthy(data: web::Data<Data>) -> Result<HttpResponse, ResponseErro
     Ok(HttpResponse::Ok().finish())
 }
 
-async fn set_unhealthy(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
+async fn set_unhealthy(data: web::Data<Data>) -> Result<HttpResponse, Error> {
     let mut writer = data.db.main_write_txn()?;
     let common_store = data.db.common_store();
     common_store.put::<_, Str, Unit>(&mut writer, UNHEALTHY_KEY, &())?;
@@ -53,7 +53,7 @@ struct HealthBody {
 async fn change_healthyness(
     data: web::Data<Data>,
     body: web::Json<HealthBody>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     if body.health {
         set_healthy(data).await
     } else {

@@ -7,7 +7,7 @@ use meilisearch_core::update;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::error::ResponseError;
+use crate::error::Error;
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
@@ -37,11 +37,11 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 async fn get_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
     let internal_id = index.main
@@ -49,8 +49,8 @@ async fn get_document(
         .ok_or(ResponseError::document_not_found(&path.document_id))?;
 
     let response: Document = index
-        .document(&reader, None, internal_id)?
-        .ok_or(ResponseError::document_not_found(&path.document_id))?;
+        .document(&reader, None, document_id)?
+        .ok_or(Error::document_not_found(&path.document_id))?;
 
     Ok(HttpResponse::Ok().json(response))
 }
@@ -62,11 +62,13 @@ async fn get_document(
 async fn delete_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
+
+    let document_id = meilisearch_core::serde::compute_document_id(&path.document_id);
 
     let mut update_writer = data.db.update_write_txn()?;
 
@@ -93,11 +95,11 @@ async fn get_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let offset = params.offset.unwrap_or(0);
     let limit = params.limit.unwrap_or(20);
@@ -151,18 +153,18 @@ async fn update_multiple_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
     is_partial: bool,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
 
     let mut schema = index
         .main
         .schema(&reader)?
-        .ok_or(ResponseError::internal("Impossible to retrieve the schema"))?;
+        .ok_or(Error::internal("Impossible to retrieve the schema"))?;
 
     if schema.primary_key().is_none() {
         let id = match &params.primary_key {
@@ -170,14 +172,14 @@ async fn update_multiple_documents(
             None => body
                 .first()
                 .and_then(find_primary_key)
-                .ok_or(ResponseError::bad_request("Could not infer a primary key"))?,
+                .ok_or(Error::bad_request("Could not infer a primary key"))?,
         };
 
         let mut writer = data.db.main_write_txn()?;
 
         schema
             .set_primary_key(&id)
-            .map_err(ResponseError::bad_request)?;
+            .map_err(Error::bad_request)?;
         index.main.put_schema(&mut writer, &schema)?;
         writer.commit()?;
     }
@@ -205,7 +207,7 @@ async fn add_documents(
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     update_multiple_documents(data, path, params, body, false).await
 }
 
@@ -215,7 +217,7 @@ async fn update_documents(
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     update_multiple_documents(data, path, params, body, true).await
 }
 
@@ -227,11 +229,11 @@ async fn delete_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let mut writer = data.db.update_write_txn()?;
 
@@ -253,11 +255,11 @@ async fn delete_documents(
 async fn clear_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let mut writer = data.db.update_write_txn()?;
 

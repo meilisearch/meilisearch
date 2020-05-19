@@ -3,7 +3,7 @@ use actix_web_macros::{delete, get, post};
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use crate::error::ResponseError;
+use crate::error::Error;
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
@@ -33,17 +33,17 @@ async fn update_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Settings>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let mut writer = data.db.update_write_txn()?;
     let settings = body
         .into_inner()
         .into_update()
-        .map_err(ResponseError::bad_request)?;
+        .map_err(Error::bad_request)?;
     let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
@@ -54,11 +54,11 @@ async fn update_all(
 async fn get_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
 
@@ -134,11 +134,11 @@ async fn get_all(
 async fn delete_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let mut writer = data.db.update_write_txn()?;
 
     let settings = SettingsUpdate {
@@ -166,11 +166,11 @@ async fn delete_all(
 async fn get_rules(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
 
     let ranking_rules = index
@@ -192,11 +192,11 @@ async fn update_rules(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<Vec<String>>>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         ranking_rules: Some(body.into_inner()),
@@ -204,7 +204,7 @@ async fn update_rules(
     };
 
     let mut writer = data.db.update_write_txn()?;
-    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let settings = settings.into_update().map_err(Error::bad_request)?;
     let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
@@ -218,11 +218,11 @@ async fn update_rules(
 async fn delete_rules(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let mut writer = data.db.update_write_txn()?;
 
     let settings = SettingsUpdate {
@@ -244,11 +244,11 @@ async fn delete_rules(
 async fn get_distinct(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
     let distinct_attribute = index.main.distinct_attribute(&reader)?;
 
@@ -263,11 +263,11 @@ async fn update_distinct(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<String>>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         distinct_attribute: Some(body.into_inner()),
@@ -275,7 +275,7 @@ async fn update_distinct(
     };
 
     let mut writer = data.db.update_write_txn()?;
-    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let settings = settings.into_update().map_err(Error::bad_request)?;
     let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
@@ -289,11 +289,11 @@ async fn update_distinct(
 async fn delete_distinct(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let mut writer = data.db.update_write_txn()?;
 
     let settings = SettingsUpdate {
@@ -315,11 +315,11 @@ async fn delete_distinct(
 async fn get_searchable(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
     let schema = index.main.schema(&reader)?;
     let searchable_attributes: Option<Vec<String>> =
@@ -336,11 +336,11 @@ async fn update_searchable(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<Vec<String>>>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         searchable_attributes: Some(body.into_inner()),
@@ -348,7 +348,7 @@ async fn update_searchable(
     };
 
     let mut writer = data.db.update_write_txn()?;
-    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let settings = settings.into_update().map_err(Error::bad_request)?;
     let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
@@ -362,11 +362,11 @@ async fn update_searchable(
 async fn delete_searchable(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         searchable_attributes: UpdateState::Clear,
@@ -387,11 +387,11 @@ async fn delete_searchable(
 async fn get_displayed(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
 
     let schema = index.main.schema(&reader)?;
@@ -410,11 +410,11 @@ async fn update_displayed(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<HashSet<String>>>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         displayed_attributes: Some(body.into_inner()),
@@ -422,7 +422,7 @@ async fn update_displayed(
     };
 
     let mut writer = data.db.update_write_txn()?;
-    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let settings = settings.into_update().map_err(Error::bad_request)?;
     let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
@@ -436,11 +436,11 @@ async fn update_displayed(
 async fn delete_displayed(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         displayed_attributes: UpdateState::Clear,
@@ -461,11 +461,11 @@ async fn delete_displayed(
 async fn get_accept_new_fields(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
 
     let schema = index.main.schema(&reader)?;
@@ -483,11 +483,11 @@ async fn update_accept_new_fields(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Option<bool>>,
-) -> Result<HttpResponse, ResponseError> {
+) -> Result<HttpResponse, Error> {
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         accept_new_fields: Some(body.into_inner()),
@@ -495,7 +495,7 @@ async fn update_accept_new_fields(
     };
 
     let mut writer = data.db.update_write_txn()?;
-    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
+    let settings = settings.into_update().map_err(Error::bad_request)?;
     let update_id = index.settings_update(&mut writer, settings)?;
     writer.commit()?;
 
