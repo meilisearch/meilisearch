@@ -1,5 +1,6 @@
 ## v0.10.2
 
+  - Bump sentry version to 0.18.1 (#690)
   - Disable sentry in debug (#681)
   - Fix highlight misalignment (#679)
   - Add support for facet count (#676)
