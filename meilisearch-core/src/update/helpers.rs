@@ -4,6 +4,7 @@ use std::hash::{Hash, Hasher};
 use indexmap::IndexMap;
 use meilisearch_schema::IndexedPos;
 use meilisearch_types::DocumentId;
+use ordered_float::OrderedFloat;
 use serde_json::Value;
 use siphasher::sip::SipHasher;
 
@@ -81,7 +82,14 @@ pub fn value_to_number(value: &Value) -> Option<Number> {
     match value {
         Value::Null => None,
         Value::Bool(boolean) => Some(Number::Unsigned(*boolean as u64)),
-        Value::Number(number) => Number::from_str(&number.to_string()).ok(), // TODO improve that
+        Value::Number(number) => {
+            match (number.as_i64(), number.as_u64(), number.as_f64()) {
+                (Some(n), _, _) => Some(Number::Signed(n)),
+                (_, Some(n), _) => Some(Number::Unsigned(n)),
+                (_, _, Some(n)) => Some(Number::Float(OrderedFloat(n))),
+                (None, None, None) => None,
+            }
+        },
         Value::String(string) => Number::from_str(string).ok(),
         Value::Array(_array) => None,
         Value::Object(_object) => None,
