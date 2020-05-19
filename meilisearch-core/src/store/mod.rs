@@ -12,16 +12,16 @@ mod synonyms;
 mod updates;
 mod updates_results;
 
+pub use self::cow_set::CowSet;
 pub use self::docs_words::DocsWords;
-pub use self::facets::Facets;
-pub use self::prefix_documents_cache::PrefixDocumentsCache;
-pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
 pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
-pub use self::documents_fields_counts::{
-    DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter,
-};
+pub use self::documents_fields_counts::{DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter};
+pub use self::documents_ids::{DocumentsIds, DiscoverIds};
+pub use self::facets::Facets;
 pub use self::main::Main;
 pub use self::postings_lists::PostingsLists;
+pub use self::prefix_documents_cache::PrefixDocumentsCache;
+pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
 pub use self::synonyms::Synonyms;
 pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;

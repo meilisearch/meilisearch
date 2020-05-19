@@ -3,29 +3,32 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
 use heed::Result as ZResult;
+use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
 use meilisearch_schema::{FieldId, Schema};
+use meilisearch_types::DocumentId;
 use sdset::Set;
 
 use crate::database::MainT;
 use crate::RankedMap;
 use crate::settings::RankingRule;
-use super::cow_set::CowSet;
+use super::{CowSet, DocumentsIds};
 
-const CREATED_AT_KEY: &str = "created-at";
 const ATTRIBUTES_FOR_FACETING: &str = "attributes-for-faceting";
-const RANKING_RULES_KEY: &str = "ranking-rules";
-const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute";
-const STOP_WORDS_KEY: &str = "stop-words";
-const SYNONYMS_KEY: &str = "synonyms";
+const CREATED_AT_KEY: &str = "created-at";
 const CUSTOMS_KEY: &str = "customs";
+const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute";
 const FIELDS_FREQUENCY_KEY: &str = "fields-frequency";
+const INTERNAL_IDS_KEY: &str = "internal-ids";
 const NAME_KEY: &str = "name";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY: &str = "ranked-map";
+const RANKING_RULES_KEY: &str = "ranking-rules";
 const SCHEMA_KEY: &str = "schema";
+const STOP_WORDS_KEY: &str = "stop-words";
+const SYNONYMS_KEY: &str = "synonyms";
 const UPDATED_AT_KEY: &str = "updated-at";
+const USER_IDS_KEY: &str = "user-ids";
 const WORDS_KEY: &str = "words";
 
 pub type FreqsMap = HashMap<String, usize>;
@@ -71,9 +74,35 @@ impl Main {
         self.main.get::<_, Str, SerdeDatetime>(reader, UPDATED_AT_KEY)
     }
 
+    pub fn put_internal_ids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> ZResult<()> {
+        self.main.put::<_, Str, DocumentsIds>(writer, INTERNAL_IDS_KEY, ids)
+    }
+
+    pub fn internal_ids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Cow<'txn, sdset::Set<DocumentId>>> {
+        match self.main.get::<_, Str, DocumentsIds>(reader, INTERNAL_IDS_KEY)? {
+            Some(ids) => Ok(ids),
+            None => Ok(Cow::default()),
+        }
+    }
+
+    pub fn put_user_ids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
+        self.main.put::<_, Str, ByteSlice>(writer, USER_IDS_KEY, ids.as_fst().as_bytes())
+    }
+
+    pub fn user_ids(self, reader: &heed::RoTxn<MainT>) -> ZResult<fst::Map> {
+        match self.main.get::<_, Str, ByteSlice>(reader, USER_IDS_KEY)? {
+            Some(bytes) => {
+                let len = bytes.len();
+                let bytes = Arc::new(bytes.to_owned());
+                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
+                Ok(fst::Map::from(fst))
+            },
+            None => Ok(fst::Map::default()),
+        }
+    }
+
     pub fn put_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
-        let bytes = fst.as_fst().as_bytes();
-        self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, bytes)
+        self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, fst.as_fst().as_bytes())
     }
 
     pub unsafe fn static_words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
@@ -82,7 +111,7 @@ impl Main {
                 let bytes: &'static [u8] = std::mem::transmute(bytes);
                 let set = fst::Set::from_static_slice(bytes).unwrap();
                 Ok(Some(set))
-            }
+            },
             None => Ok(None),
         }
     }
@@ -94,7 +123,7 @@ impl Main {
                 let bytes = Arc::new(bytes.to_owned());
                 let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
                 Ok(Some(fst::Set::from(fst)))
-            }
+            },
             None => Ok(None),
         }
     }
