@@ -49,16 +49,16 @@ impl Update {
         }
     }
 
-    fn documents_addition(data: Vec<IndexMap<String, Value>>) -> Update {
+    fn documents_addition(documents: Vec<IndexMap<String, Value>>) -> Update {
         Update {
-            data: UpdateData::DocumentsAddition(data),
+            data: UpdateData::DocumentsAddition(documents),
             enqueued_at: Utc::now(),
         }
     }
 
-    fn documents_partial(data: Vec<IndexMap<String, Value>>) -> Update {
+    fn documents_partial(documents: Vec<IndexMap<String, Value>>) -> Update {
         Update {
-            data: UpdateData::DocumentsPartial(data),
+            data: UpdateData::DocumentsPartial(documents),
             enqueued_at: Utc::now(),
         }
     }

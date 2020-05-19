@@ -13,8 +13,7 @@ use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::Deserializer;
-use crate::store::{DocumentsFields, DocumentsFieldsCounts};
-use crate::store;
+use crate::store::{self, DocumentsFields, DocumentsFieldsCounts};
 use crate::update::helpers::{index_value, value_to_number, extract_document_id};
 use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
 use crate::{Error, MResult, RankedMap};
@@ -147,7 +146,7 @@ fn index_document(
 pub fn apply_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
-    addition: Vec<IndexMap<String, Value>>,
+    new_documents: Vec<IndexMap<String, Value>>,
     partial: bool
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
@@ -160,7 +159,7 @@ pub fn apply_addition<'a, 'b>(
     let primary_key = schema.primary_key().ok_or(Error::MissingPrimaryKey)?;
 
     // 1. store documents ids for future deletion
-    for mut document in addition {
+    for mut document in new_documents {
         let document_id = extract_document_id(&primary_key, &document)?;
 
         if partial {
@@ -172,10 +171,8 @@ pub fn apply_addition<'a, 'b>(
                 fields: None,
             };
 
-            // retrieve the old document and
-            // update the new one with missing keys found in the old one
-            let result = Option::<HashMap<String, Value>>::deserialize(&mut deserializer)?;
-            if let Some(old_document) = result {
+            let old_document = Option::<HashMap<String, Value>>::deserialize(&mut deserializer)?;
+            if let Some(old_document) = old_document {
                 for (key, value) in old_document {
                     document.entry(key).or_insert(value);
                 }
@@ -242,17 +239,17 @@ pub fn apply_addition<'a, 'b>(
 pub fn apply_documents_partial_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
-    addition: Vec<IndexMap<String, Value>>,
+    new_documents: Vec<IndexMap<String, Value>>,
 ) -> MResult<()> {
-    apply_addition(writer, index, addition, true)
+    apply_addition(writer, index, new_documents, true)
 }
 
 pub fn apply_documents_addition<'a, 'b>(
     writer: &'a mut heed::RwTxn<'b, MainT>,
     index: &store::Index,
-    addition: Vec<IndexMap<String, Value>>,
+    new_documents: Vec<IndexMap<String, Value>>,
 ) -> MResult<()> {
-    apply_addition(writer, index, addition, false)
+    apply_addition(writer, index, new_documents, false)
 }
 
 pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Index) -> MResult<()> {

@@ -18,13 +18,13 @@ mod query_words_mapper;
 mod ranked_map;
 mod raw_document;
 mod reordered_attrs;
-pub mod update;
 pub mod criterion;
 pub mod facets;
 pub mod raw_indexer;
-pub mod settings;
 pub mod serde;
+pub mod settings;
 pub mod store;
+pub mod update;
 
 pub use self::database::{BoxUpdateFn, Database, DatabaseOptions, MainT, UpdateT};
 pub use self::error::{Error, HeedError, FstError, MResult, pest_error, FacetError};
