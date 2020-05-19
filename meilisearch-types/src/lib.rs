@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "zerocopy", derive(AsBytes, FromBytes))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
-pub struct DocumentId(pub u64);
+pub struct DocumentId(pub u32);
 
 /// This structure represent the position of a word
 /// in a document and its attributes.

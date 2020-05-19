@@ -153,7 +153,7 @@ impl Main {
 
     pub fn user_to_internal_id(self, reader: &heed::RoTxn<MainT>, userid: &str) -> ZResult<Option<DocumentId>> {
         let user_ids = self.user_ids(reader)?;
-        Ok(user_ids.get(userid).map(DocumentId))
+        Ok(user_ids.get(userid).map(|id| DocumentId(id as u32)))
     }
 
     pub fn put_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {

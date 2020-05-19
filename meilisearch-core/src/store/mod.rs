@@ -45,20 +45,21 @@ use crate::serde::Deserializer;
 use crate::settings::SettingsUpdate;
 use crate::{query_builder::QueryBuilder, update, DocIndex, DocumentId, Error, MResult};
 
+type BEU32 = zerocopy::U32<byteorder::BigEndian>;
 type BEU64 = zerocopy::U64<byteorder::BigEndian>;
 pub type BEU16 = zerocopy::U16<byteorder::BigEndian>;
 
 #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]
 pub struct DocumentFieldIndexedKey {
-    docid: BEU64,
+    docid: BEU32,
     indexed_pos: BEU16,
 }
 
 impl DocumentFieldIndexedKey {
     fn new(docid: DocumentId, indexed_pos: IndexedPos) -> DocumentFieldIndexedKey {
         DocumentFieldIndexedKey {
-            docid: BEU64::new(docid.0),
+            docid: BEU32::new(docid.0),
             indexed_pos: BEU16::new(indexed_pos.0),
         }
     }
@@ -67,14 +68,14 @@ impl DocumentFieldIndexedKey {
 #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]
 pub struct DocumentFieldStoredKey {
-    docid: BEU64,
+    docid: BEU32,
     field_id: BEU16,
 }
 
 impl DocumentFieldStoredKey {
     fn new(docid: DocumentId, field_id: FieldId) -> DocumentFieldStoredKey {
         DocumentFieldStoredKey {
-            docid: BEU64::new(docid.0),
+            docid: BEU32::new(docid.0),
             field_id: BEU16::new(field_id.0),
         }
     }
@@ -98,7 +99,7 @@ impl<'a> BytesEncode<'a> for PostingsCodec {
 
         let mut buffer = Vec::with_capacity(u64_size + docids_size + matches_size);
 
-        let docids_len = item.docids.len();
+        let docids_len = item.docids.len() as u64;
         buffer.extend_from_slice(&docids_len.to_be_bytes());
         buffer.extend_from_slice(item.docids.as_bytes());
         buffer.extend_from_slice(item.matches.as_bytes());

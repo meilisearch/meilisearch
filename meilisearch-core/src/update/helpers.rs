@@ -105,7 +105,7 @@ pub fn discover_document_id(
 {
     if userid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
         match user_ids.get(userid) {
-            Some(internal_id) => Ok(DocumentId(internal_id)),
+            Some(id) => Ok(DocumentId(id as u32)),
             None => {
                 let internal_id = available_ids.next().expect("no more ids available");
                 Ok(internal_id)

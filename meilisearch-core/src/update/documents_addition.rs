@@ -242,7 +242,7 @@ pub fn apply_addition<'a, 'b>(
 
     index.main.put_schema(writer, &schema)?;
 
-    let new_user_ids = fst::Map::from_iter(new_user_ids)?;
+    let new_user_ids = fst::Map::from_iter(new_user_ids.iter().map(|(u, i)| (u, *i as u64)))?;
     let new_internal_ids = sdset::SetBuf::from_dirty(new_internal_ids);
     index.main.merge_user_ids(writer, &new_user_ids)?;
     index.main.merge_internal_ids(writer, &new_internal_ids)?;

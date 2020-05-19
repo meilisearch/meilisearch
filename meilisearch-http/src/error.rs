@@ -22,7 +22,7 @@ pub enum ResponseError {
     NotFound(String),
     OpenIndex(String),
     FilterParsing(String),
-    RetrieveDocument(u64, String),
+    RetrieveDocument(u32, String),
     SearchDocuments(String),
     PayloadTooLarge,
     UnsupportedMediaType,
@@ -116,7 +116,7 @@ impl ResponseError {
         ResponseError::Maintenance
     }
 
-    pub fn retrieve_document(doc_id: u64, err: impl fmt::Display) -> ResponseError {
+    pub fn retrieve_document(doc_id: u32, err: impl fmt::Display) -> ResponseError {
         ResponseError::RetrieveDocument(doc_id, err.to_string())
     }
 

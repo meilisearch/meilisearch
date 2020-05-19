@@ -80,7 +80,7 @@ pub fn apply_documents_deletion(
         let user_ids = index.main.user_ids(writer)?;
         for userid in new_user_ids.as_slice() {
             if let Some(id) = user_ids.get(userid) {
-                internal_ids.push(DocumentId(id));
+                internal_ids.push(DocumentId(id as u32));
             }
         }
 
