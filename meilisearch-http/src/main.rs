@@ -110,16 +110,8 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
 
     eprintln!();
 
-    if let Some(master_key) = &data.api_keys.master {
-        eprintln!("Master Key:\t{:?}", master_key);
-
-        if let Some(private_key) = &data.api_keys.private {
-            eprintln!("Private Key:\t{:?}", private_key);
-        }
-
-        if let Some(public_key) = &data.api_keys.public {
-            eprintln!("Public Key:\t{:?}", public_key);
-        }
+    if data.api_keys.master.is_some() {
+        eprintln!("A Master Key has been set. Requests to MeiliSearch won't be authorized unless you provide an authentication key.");
     } else {
         eprintln!("No master key found; The server will accept unidentified requests. \
             If you need some protection in development mode, please export a key: export MEILI_MASTER_KEY=xxx");
