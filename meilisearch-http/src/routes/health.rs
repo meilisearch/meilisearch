@@ -45,14 +45,14 @@ async fn set_unhealthy(data: web::Data<Data>) -> Result<HttpResponse, ResponseEr
 }
 
 #[derive(Deserialize, Clone)]
-struct HealtBody {
+struct HealthBody {
     health: bool,
 }
 
 #[put("/health", wrap = "Authentication::Private")]
 async fn change_healthyness(
     data: web::Data<Data>,
-    body: web::Json<HealtBody>,
+    body: web::Json<HealthBody>,
 ) -> Result<HttpResponse, ResponseError> {
     if body.health {
         set_healthy(data).await
