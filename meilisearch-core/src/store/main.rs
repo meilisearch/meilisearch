@@ -14,7 +14,7 @@ use crate::RankedMap;
 use crate::settings::RankingRule;
 use super::{CowSet, DocumentsIds};
 
-const ATTRIBUTES_FOR_FACETING: &str = "attributes-for-faceting";
+const ATTRIBUTES_FOR_FACETING_KEY: &str = "attributes-for-faceting";
 const CREATED_AT_KEY: &str = "created-at";
 const CUSTOMS_KEY: &str = "customs";
 const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute";
@@ -277,15 +277,15 @@ impl Main {
     }
 
     pub fn attributes_for_faceting<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<Cow<'txn, Set<FieldId>>>> {
-        self.main.get::<_, Str, CowSet<FieldId>>(reader, ATTRIBUTES_FOR_FACETING)
+        self.main.get::<_, Str, CowSet<FieldId>>(reader, ATTRIBUTES_FOR_FACETING_KEY)
     }
 
     pub fn put_attributes_for_faceting(self, writer: &mut heed::RwTxn<MainT>, attributes: &Set<FieldId>) -> ZResult<()> {
-        self.main.put::<_, Str, CowSet<FieldId>>(writer, ATTRIBUTES_FOR_FACETING, attributes)
+        self.main.put::<_, Str, CowSet<FieldId>>(writer, ATTRIBUTES_FOR_FACETING_KEY, attributes)
     }
 
     pub fn delete_attributes_for_faceting(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
-        self.main.delete::<_, Str>(writer, ATTRIBUTES_FOR_FACETING)
+        self.main.delete::<_, Str>(writer, ATTRIBUTES_FOR_FACETING_KEY)
     }
 
     pub fn ranking_rules(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<Vec<RankingRule>>> {
