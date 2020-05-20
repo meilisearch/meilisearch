@@ -98,16 +98,16 @@ pub fn value_to_number(value: &Value) -> Option<Number> {
 /// Validates a string representation to be a correct document id and returns
 /// the corresponding id or generate a new one, this is the way we produce documents ids.
 pub fn discover_document_id(
-    userid: &str,
-    user_ids: &fst::Map,
-    available_ids: &mut DiscoverIds<'_>,
+    docid: &str,
+    external_docids: &fst::Map,
+    available_docids: &mut DiscoverIds<'_>,
 ) -> Result<DocumentId, SerializerError>
 {
-    if userid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
-        match user_ids.get(userid) {
+    if docid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
+        match external_docids.get(docid) {
             Some(id) => Ok(DocumentId(id as u32)),
             None => {
-                let internal_id = available_ids.next().expect("no more ids available");
+                let internal_id = available_docids.next().expect("no more ids available");
                 Ok(internal_id)
             },
         }
@@ -120,18 +120,18 @@ pub fn discover_document_id(
 pub fn extract_document_id(
     primary_key: &str,
     document: &IndexMap<String, Value>,
-    user_ids: &fst::Map,
-    available_ids: &mut DiscoverIds<'_>,
+    external_docids: &fst::Map,
+    available_docids: &mut DiscoverIds<'_>,
 ) -> Result<(DocumentId, String), SerializerError>
 {
     match document.get(primary_key) {
         Some(value) => {
-            let userid = match value {
+            let docid = match value {
                 Value::Number(number) => number.to_string(),
                 Value::String(string) => string.clone(),
                 _ => return Err(SerializerError::InvalidDocumentIdFormat),
             };
-            discover_document_id(&userid, user_ids, available_ids).map(|id| (id, userid))
+            discover_document_id(&docid, external_docids, available_docids).map(|id| (id, docid))
         }
         None => Err(SerializerError::DocumentIdNotFound),
     }

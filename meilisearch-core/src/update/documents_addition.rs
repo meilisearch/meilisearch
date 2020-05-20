@@ -148,11 +148,8 @@ pub fn apply_addition<'a, 'b>(
     index: &store::Index,
     new_documents: Vec<IndexMap<String, Value>>,
     partial: bool
-) -> MResult<()> {
-    let mut documents_additions = HashMap::new();
-    let mut new_external_docids = BTreeMap::new();
-    let mut new_internal_docids = Vec::with_capacity(new_documents.len());
-
+) -> MResult<()>
+{
     let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
@@ -166,14 +163,25 @@ pub fn apply_addition<'a, 'b>(
     let primary_key = schema.primary_key().ok_or(Error::MissingPrimaryKey)?;
 
     // 1. store documents ids for future deletion
+    let mut documents_additions = HashMap::new();
+    let mut new_external_docids = BTreeMap::new();
+    let mut new_internal_docids = Vec::with_capacity(new_documents.len());
+
     for mut document in new_documents {
-        let (document_id, userid) = extract_document_id(&primary_key, &document, &external_docids, &mut available_ids)?;
-        new_external_docids.insert(userid, document_id.0);
-        new_internal_docids.push(document_id);
+        let (internal_docid, external_docid) =
+            extract_document_id(
+                &primary_key,
+                &document,
+                &external_docids,
+                &mut available_ids,
+            )?;
+
+        new_external_docids.insert(external_docid, internal_docid.0);
+        new_internal_docids.push(internal_docid);
 
         if partial {
             let mut deserializer = Deserializer {
-                document_id,
+                document_id: internal_docid,
                 reader: writer,
                 documents_fields: index.documents_fields,
                 schema: &schema,
@@ -187,7 +195,7 @@ pub fn apply_addition<'a, 'b>(
                 }
             }
         }
-        documents_additions.insert(document_id, document);
+        documents_additions.insert(internal_docid, document);
     }
 
     // 2. remove the documents postings lists
@@ -242,7 +250,7 @@ pub fn apply_addition<'a, 'b>(
 
     index.main.put_schema(writer, &schema)?;
 
-    let new_external_docids = fst::Map::from_iter(new_external_docids.iter().map(|(u, i)| (u, *i as u64)))?;
+    let new_external_docids = fst::Map::from_iter(new_external_docids.iter().map(|(ext, id)| (ext, *id as u64)))?;
     let new_internal_docids = sdset::SetBuf::from_dirty(new_internal_docids);
     index.main.merge_external_docids(writer, &new_external_docids)?;
     index.main.merge_internal_docids(writer, &new_internal_docids)?;

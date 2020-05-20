@@ -14,7 +14,7 @@ pub struct DocumentsDeletion {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     updates_notifier: UpdateEventsEmitter,
-    documents: Vec<String>,
+    external_docids: Vec<String>,
 }
 
 impl DocumentsDeletion {
@@ -27,12 +27,12 @@ impl DocumentsDeletion {
             updates_store,
             updates_results_store,
             updates_notifier,
-            documents: Vec::new(),
+            external_docids: Vec::new(),
         }
     }
 
     pub fn delete_document_by_external_docid(&mut self, document_id: String) {
-        self.documents.push(document_id);
+        self.external_docids.push(document_id);
     }
 
     pub fn finalize(self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {
@@ -41,7 +41,7 @@ impl DocumentsDeletion {
             writer,
             self.updates_store,
             self.updates_results_store,
-            self.documents,
+            self.external_docids,
         )?;
         Ok(update_id)
     }
@@ -49,7 +49,7 @@ impl DocumentsDeletion {
 
 impl Extend<String> for DocumentsDeletion {
     fn extend<T: IntoIterator<Item=String>>(&mut self, iter: T) {
-        self.documents.extend(iter)
+        self.external_docids.extend(iter)
     }
 }
 
@@ -57,11 +57,11 @@ pub fn push_documents_deletion(
     writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-    deletion: Vec<String>,
+    external_docids: Vec<String>,
 ) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
-    let update = Update::documents_deletion(deletion);
+    let update = Update::documents_deletion(external_docids);
     updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
@@ -70,16 +70,16 @@ pub fn push_documents_deletion(
 pub fn apply_documents_deletion(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
-    deletion: Vec<String>,
+    external_docids: Vec<String>,
 ) -> MResult<()>
 {
     let (external_docids, internal_docids) = {
-        let new_external_docids = SetBuf::from_dirty(deletion);
+        let new_external_docids = SetBuf::from_dirty(external_docids);
         let mut internal_docids = Vec::new();
 
-        let user_ids = index.main.external_docids(writer)?;
-        for userid in new_external_docids.as_slice() {
-            if let Some(id) = user_ids.get(userid) {
+        let old_external_docids = index.main.external_docids(writer)?;
+        for external_docid in new_external_docids.as_slice() {
+            if let Some(id) = old_external_docids.get(external_docid) {
                 internal_docids.push(DocumentId(id as u32));
             }
         }

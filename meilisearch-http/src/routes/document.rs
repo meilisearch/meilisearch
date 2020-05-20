@@ -44,12 +44,9 @@ async fn get_document(
         .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
-    let internal_id = index.main.external_to_internal_docid(&reader, &path.document_id)?;
-
-    let internal_id = match internal_id {
-        Some(internal_id) => internal_id,
-        None => return Err(ResponseError::document_not_found(&path.document_id)),
-    };
+    let internal_id = index.main
+        .external_to_internal_docid(&reader, &path.document_id)?
+        .ok_or(ResponseError::document_not_found(&path.document_id))?;
 
     let response: Document = index
         .document(&reader, None, internal_id)?

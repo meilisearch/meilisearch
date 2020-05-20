@@ -107,15 +107,15 @@ impl Main {
         self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, ids.as_fst().as_bytes())
     }
 
-    pub fn merge_external_docids(self, writer: &mut heed::RwTxn<MainT>, new_ids: &fst::Map) -> ZResult<()> {
+    pub fn merge_external_docids(self, writer: &mut heed::RwTxn<MainT>, new_docids: &fst::Map) -> ZResult<()> {
         use fst::{Streamer, IntoStreamer};
 
-        // Do an union of the old and the new set of user ids.
+        // Do an union of the old and the new set of external docids.
         let external_docids = self.external_docids(writer)?;
-        let mut op = external_docids.op().add(new_ids.into_stream()).r#union();
+        let mut op = external_docids.op().add(new_docids.into_stream()).r#union();
         let mut build = fst::MapBuilder::memory();
-        while let Some((userid, values)) = op.next() {
-            build.insert(userid, values[0].value).unwrap();
+        while let Some((docid, values)) = op.next() {
+            build.insert(docid, values[0].value).unwrap();
         }
         let external_docids = build.into_inner().unwrap();
 
@@ -126,12 +126,12 @@ impl Main {
     pub fn remove_external_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
         use fst::{Streamer, IntoStreamer};
 
-        // Do an union of the old and the new set of user ids.
+        // Do an union of the old and the new set of external docids.
         let external_docids = self.external_docids(writer)?;
         let mut op = external_docids.op().add(ids.into_stream()).difference();
         let mut build = fst::MapBuilder::memory();
-        while let Some((userid, values)) = op.next() {
-            build.insert(userid, values[0].value).unwrap();
+        while let Some((docid, values)) = op.next() {
+            build.insert(docid, values[0].value).unwrap();
         }
         let external_docids = build.into_inner().unwrap();
 
