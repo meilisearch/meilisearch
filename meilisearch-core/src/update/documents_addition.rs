@@ -150,8 +150,8 @@ pub fn apply_addition<'a, 'b>(
     partial: bool
 ) -> MResult<()> {
     let mut documents_additions = HashMap::new();
-    let mut new_user_ids = BTreeMap::new();
-    let mut new_internal_ids = Vec::with_capacity(new_documents.len());
+    let mut new_external_docids = BTreeMap::new();
+    let mut new_internal_docids = Vec::with_capacity(new_documents.len());
 
     let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
@@ -159,17 +159,17 @@ pub fn apply_addition<'a, 'b>(
     };
 
     // Retrieve the documents ids related structures
-    let user_ids = index.main.user_ids(writer)?;
-    let internal_ids = index.main.internal_ids(writer)?;
-    let mut available_ids = DiscoverIds::new(&internal_ids);
+    let external_docids = index.main.external_docids(writer)?;
+    let internal_docids = index.main.internal_docids(writer)?;
+    let mut available_ids = DiscoverIds::new(&internal_docids);
 
     let primary_key = schema.primary_key().ok_or(Error::MissingPrimaryKey)?;
 
     // 1. store documents ids for future deletion
     for mut document in new_documents {
-        let (document_id, userid) = extract_document_id(&primary_key, &document, &user_ids, &mut available_ids)?;
-        new_user_ids.insert(userid, document_id.0);
-        new_internal_ids.push(document_id);
+        let (document_id, userid) = extract_document_id(&primary_key, &document, &external_docids, &mut available_ids)?;
+        new_external_docids.insert(userid, document_id.0);
+        new_internal_docids.push(document_id);
 
         if partial {
             let mut deserializer = Deserializer {
@@ -192,7 +192,7 @@ pub fn apply_addition<'a, 'b>(
 
     // 2. remove the documents postings lists
     let number_of_inserted_documents = documents_additions.len();
-    let documents_ids = new_user_ids.iter().map(|(userid, _)| userid.clone()).collect();
+    let documents_ids = new_external_docids.iter().map(|(id, _)| id.clone()).collect();
     apply_documents_deletion(writer, index, documents_ids)?;
 
     let mut ranked_map = match index.main.ranked_map(writer)? {
@@ -242,10 +242,10 @@ pub fn apply_addition<'a, 'b>(
 
     index.main.put_schema(writer, &schema)?;
 
-    let new_user_ids = fst::Map::from_iter(new_user_ids.iter().map(|(u, i)| (u, *i as u64)))?;
-    let new_internal_ids = sdset::SetBuf::from_dirty(new_internal_ids);
-    index.main.merge_user_ids(writer, &new_user_ids)?;
-    index.main.merge_internal_ids(writer, &new_internal_ids)?;
+    let new_external_docids = fst::Map::from_iter(new_external_docids.iter().map(|(u, i)| (u, *i as u64)))?;
+    let new_internal_docids = sdset::SetBuf::from_dirty(new_internal_docids);
+    index.main.merge_external_docids(writer, &new_external_docids)?;
+    index.main.merge_internal_docids(writer, &new_internal_docids)?;
 
     Ok(())
 }

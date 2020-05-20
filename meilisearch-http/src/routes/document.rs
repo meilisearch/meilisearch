@@ -44,7 +44,7 @@ async fn get_document(
         .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
-    let internal_id = index.main.user_to_internal_id(&reader, &path.document_id)?;
+    let internal_id = index.main.external_to_internal_docid(&reader, &path.document_id)?;
 
     let internal_id = match internal_id {
         Some(internal_id) => internal_id,
@@ -74,7 +74,7 @@ async fn delete_document(
     let mut update_writer = data.db.update_write_txn()?;
 
     let mut documents_deletion = index.documents_deletion();
-    documents_deletion.delete_document_by_user_id(path.document_id.clone());
+    documents_deletion.delete_document_by_external_docid(path.document_id.clone());
 
     let update_id = documents_deletion.finalize(&mut update_writer)?;
 
@@ -242,7 +242,7 @@ async fn delete_documents(
 
     for document_id in body.into_inner() {
         let document_id = update::value_to_string(&document_id);
-        documents_deletion.delete_document_by_user_id(document_id);
+        documents_deletion.delete_document_by_external_docid(document_id);
     }
 
     let update_id = documents_deletion.finalize(&mut writer)?;

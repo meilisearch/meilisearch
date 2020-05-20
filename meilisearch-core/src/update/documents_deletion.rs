@@ -31,7 +31,7 @@ impl DocumentsDeletion {
         }
     }
 
-    pub fn delete_document_by_user_id(&mut self, document_id: String) {
+    pub fn delete_document_by_external_docid(&mut self, document_id: String) {
         self.documents.push(document_id);
     }
 
@@ -73,19 +73,19 @@ pub fn apply_documents_deletion(
     deletion: Vec<String>,
 ) -> MResult<()>
 {
-    let (user_ids, internal_ids) = {
-        let new_user_ids = SetBuf::from_dirty(deletion);
-        let mut internal_ids = Vec::new();
+    let (external_docids, internal_docids) = {
+        let new_external_docids = SetBuf::from_dirty(deletion);
+        let mut internal_docids = Vec::new();
 
-        let user_ids = index.main.user_ids(writer)?;
-        for userid in new_user_ids.as_slice() {
+        let user_ids = index.main.external_docids(writer)?;
+        for userid in new_external_docids.as_slice() {
             if let Some(id) = user_ids.get(userid) {
-                internal_ids.push(DocumentId(id as u32));
+                internal_docids.push(DocumentId(id as u32));
             }
         }
 
-        let new_user_ids = fst::Map::from_iter(new_user_ids.into_iter().map(|k| (k, 0))).unwrap();
-        (new_user_ids, SetBuf::from_dirty(internal_ids))
+        let new_external_docids = fst::Map::from_iter(new_external_docids.into_iter().map(|k| (k, 0))).unwrap();
+        (new_external_docids, SetBuf::from_dirty(internal_docids))
     };
 
     let schema = match index.main.schema(writer)? {
@@ -100,7 +100,7 @@ pub fn apply_documents_deletion(
 
     // facet filters deletion
     if let Some(attributes_for_facetting) = index.main.attributes_for_faceting(writer)? {
-        let facet_map = facets::facet_map_from_docids(writer, &index, &internal_ids, &attributes_for_facetting)?;
+        let facet_map = facets::facet_map_from_docids(writer, &index, &internal_docids, &attributes_for_facetting)?;
         index.facets.remove(writer, facet_map)?;
     }
 
@@ -108,7 +108,7 @@ pub fn apply_documents_deletion(
     let ranked_fields = schema.ranked();
 
     let mut words_document_ids = HashMap::new();
-    for id in internal_ids.iter().cloned() {
+    for id in internal_docids.iter().cloned() {
         // remove all the ranked attributes from the ranked_map
         for ranked_attr in ranked_fields {
             ranked_map.remove(id, *ranked_attr);
@@ -179,8 +179,8 @@ pub fn apply_documents_deletion(
     index.main.put_number_of_documents(writer, |old| old - deleted_documents_len)?;
 
     // We apply the changes to the user and internal ids
-    index.main.remove_user_ids(writer, &user_ids)?;
-    index.main.remove_internal_ids(writer, &internal_ids)?;
+    index.main.remove_external_docids(writer, &external_docids)?;
+    index.main.remove_internal_docids(writer, &internal_docids)?;
 
     compute_short_prefixes(writer, index)?;
 

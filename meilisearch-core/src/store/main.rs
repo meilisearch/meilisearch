@@ -18,8 +18,9 @@ const ATTRIBUTES_FOR_FACETING_KEY: &str = "attributes-for-faceting";
 const CREATED_AT_KEY: &str = "created-at";
 const CUSTOMS_KEY: &str = "customs";
 const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute";
+const EXTERNAL_DOCIDS_KEY: &str = "external-docids";
 const FIELDS_FREQUENCY_KEY: &str = "fields-frequency";
-const INTERNAL_IDS_KEY: &str = "internal-ids";
+const INTERNAL_DOCIDS_KEY: &str = "internal-docids";
 const NAME_KEY: &str = "name";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY: &str = "ranked-map";
@@ -28,7 +29,6 @@ const SCHEMA_KEY: &str = "schema";
 const STOP_WORDS_KEY: &str = "stop-words";
 const SYNONYMS_KEY: &str = "synonyms";
 const UPDATED_AT_KEY: &str = "updated-at";
-const USER_IDS_KEY: &str = "user-ids";
 const WORDS_KEY: &str = "words";
 
 pub type FreqsMap = HashMap<String, usize>;
@@ -74,73 +74,73 @@ impl Main {
         self.main.get::<_, Str, SerdeDatetime>(reader, UPDATED_AT_KEY)
     }
 
-    pub fn put_internal_ids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> ZResult<()> {
-        self.main.put::<_, Str, DocumentsIds>(writer, INTERNAL_IDS_KEY, ids)
+    pub fn put_internal_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> ZResult<()> {
+        self.main.put::<_, Str, DocumentsIds>(writer, INTERNAL_DOCIDS_KEY, ids)
     }
 
-    pub fn internal_ids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Cow<'txn, sdset::Set<DocumentId>>> {
-        match self.main.get::<_, Str, DocumentsIds>(reader, INTERNAL_IDS_KEY)? {
+    pub fn internal_docids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Cow<'txn, sdset::Set<DocumentId>>> {
+        match self.main.get::<_, Str, DocumentsIds>(reader, INTERNAL_DOCIDS_KEY)? {
             Some(ids) => Ok(ids),
             None => Ok(Cow::default()),
         }
     }
 
-    pub fn merge_internal_ids(self, writer: &mut heed::RwTxn<MainT>, new_ids: &sdset::Set<DocumentId>) -> ZResult<()> {
+    pub fn merge_internal_docids(self, writer: &mut heed::RwTxn<MainT>, new_ids: &sdset::Set<DocumentId>) -> ZResult<()> {
         use sdset::SetOperation;
 
         // We do an union of the old and new internal ids.
-        let internal_ids = self.internal_ids(writer)?;
-        let internal_ids = sdset::duo::Union::new(&internal_ids, new_ids).into_set_buf();
-        self.put_internal_ids(writer, &internal_ids)
+        let internal_docids = self.internal_docids(writer)?;
+        let internal_docids = sdset::duo::Union::new(&internal_docids, new_ids).into_set_buf();
+        self.put_internal_docids(writer, &internal_docids)
     }
 
-    pub fn remove_internal_ids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> ZResult<()> {
+    pub fn remove_internal_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> ZResult<()> {
         use sdset::SetOperation;
 
         // We do a difference of the old and new internal ids.
-        let internal_ids = self.internal_ids(writer)?;
-        let internal_ids = sdset::duo::Difference::new(&internal_ids, ids).into_set_buf();
-        self.put_internal_ids(writer, &internal_ids)
+        let internal_docids = self.internal_docids(writer)?;
+        let internal_docids = sdset::duo::Difference::new(&internal_docids, ids).into_set_buf();
+        self.put_internal_docids(writer, &internal_docids)
     }
 
-    pub fn put_user_ids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
-        self.main.put::<_, Str, ByteSlice>(writer, USER_IDS_KEY, ids.as_fst().as_bytes())
+    pub fn put_external_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
+        self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, ids.as_fst().as_bytes())
     }
 
-    pub fn merge_user_ids(self, writer: &mut heed::RwTxn<MainT>, new_ids: &fst::Map) -> ZResult<()> {
+    pub fn merge_external_docids(self, writer: &mut heed::RwTxn<MainT>, new_ids: &fst::Map) -> ZResult<()> {
         use fst::{Streamer, IntoStreamer};
 
         // Do an union of the old and the new set of user ids.
-        let user_ids = self.user_ids(writer)?;
-        let mut op = user_ids.op().add(new_ids.into_stream()).r#union();
+        let external_docids = self.external_docids(writer)?;
+        let mut op = external_docids.op().add(new_ids.into_stream()).r#union();
         let mut build = fst::MapBuilder::memory();
         while let Some((userid, values)) = op.next() {
             build.insert(userid, values[0].value).unwrap();
         }
-        let user_ids = build.into_inner().unwrap();
+        let external_docids = build.into_inner().unwrap();
 
         // TODO prefer using self.put_user_ids
-        self.main.put::<_, Str, ByteSlice>(writer, USER_IDS_KEY, user_ids.as_slice())
+        self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, external_docids.as_slice())
     }
 
-    pub fn remove_user_ids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
+    pub fn remove_external_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
         use fst::{Streamer, IntoStreamer};
 
         // Do an union of the old and the new set of user ids.
-        let user_ids = self.user_ids(writer)?;
-        let mut op = user_ids.op().add(ids.into_stream()).difference();
+        let external_docids = self.external_docids(writer)?;
+        let mut op = external_docids.op().add(ids.into_stream()).difference();
         let mut build = fst::MapBuilder::memory();
         while let Some((userid, values)) = op.next() {
             build.insert(userid, values[0].value).unwrap();
         }
-        let user_ids = build.into_inner().unwrap();
+        let external_docids = build.into_inner().unwrap();
 
-        // TODO prefer using self.put_user_ids
-        self.main.put::<_, Str, ByteSlice>(writer, USER_IDS_KEY, user_ids.as_slice())
+        // TODO prefer using self.put_external_docids
+        self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, external_docids.as_slice())
     }
 
-    pub fn user_ids(self, reader: &heed::RoTxn<MainT>) -> ZResult<fst::Map> {
-        match self.main.get::<_, Str, ByteSlice>(reader, USER_IDS_KEY)? {
+    pub fn external_docids(self, reader: &heed::RoTxn<MainT>) -> ZResult<fst::Map> {
+        match self.main.get::<_, Str, ByteSlice>(reader, EXTERNAL_DOCIDS_KEY)? {
             Some(bytes) => {
                 let len = bytes.len();
                 let bytes = Arc::new(bytes.to_owned());
@@ -151,9 +151,9 @@ impl Main {
         }
     }
 
-    pub fn user_to_internal_id(self, reader: &heed::RoTxn<MainT>, userid: &str) -> ZResult<Option<DocumentId>> {
-        let user_ids = self.user_ids(reader)?;
-        Ok(user_ids.get(userid).map(|id| DocumentId(id as u32)))
+    pub fn external_to_internal_docid(self, reader: &heed::RoTxn<MainT>, external_docid: &str) -> ZResult<Option<DocumentId>> {
+        let external_ids = self.external_docids(reader)?;
+        Ok(external_ids.get(external_docid).map(|id| DocumentId(id as u32)))
     }
 
     pub fn put_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
