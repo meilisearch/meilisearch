@@ -14,7 +14,7 @@ pub struct DocumentsDeletion {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     updates_notifier: UpdateEventsEmitter,
-    documents: Vec<DocumentId>,
+    external_docids: Vec<String>,
 }
 
 impl DocumentsDeletion {
@@ -27,12 +27,12 @@ impl DocumentsDeletion {
             updates_store,
             updates_results_store,
             updates_notifier,
-            documents: Vec::new(),
+            external_docids: Vec::new(),
         }
     }
 
-    pub fn delete_document_by_id(&mut self, document_id: DocumentId) {
-        self.documents.push(document_id);
+    pub fn delete_document_by_external_docid(&mut self, document_id: String) {
+        self.external_docids.push(document_id);
     }
 
     pub fn finalize(self, writer: &mut heed::RwTxn<UpdateT>) -> MResult<u64> {
@@ -41,15 +41,15 @@ impl DocumentsDeletion {
             writer,
             self.updates_store,
             self.updates_results_store,
-            self.documents,
+            self.external_docids,
         )?;
         Ok(update_id)
     }
 }
 
-impl Extend<DocumentId> for DocumentsDeletion {
-    fn extend<T: IntoIterator<Item = DocumentId>>(&mut self, iter: T) {
-        self.documents.extend(iter)
+impl Extend<String> for DocumentsDeletion {
+    fn extend<T: IntoIterator<Item=String>>(&mut self, iter: T) {
+        self.external_docids.extend(iter)
     }
 }
 
@@ -57,11 +57,11 @@ pub fn push_documents_deletion(
     writer: &mut heed::RwTxn<UpdateT>,
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
-    deletion: Vec<DocumentId>,
+    external_docids: Vec<String>,
 ) -> MResult<u64> {
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
-    let update = Update::documents_deletion(deletion);
+    let update = Update::documents_deletion(external_docids);
     updates_store.put_update(writer, last_update_id, &update)?;
 
     Ok(last_update_id)
@@ -70,8 +70,24 @@ pub fn push_documents_deletion(
 pub fn apply_documents_deletion(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
-    deletion: Vec<DocumentId>,
-) -> MResult<()> {
+    external_docids: Vec<String>,
+) -> MResult<()>
+{
+    let (external_docids, internal_docids) = {
+        let new_external_docids = SetBuf::from_dirty(external_docids);
+        let mut internal_docids = Vec::new();
+
+        let old_external_docids = index.main.external_docids(writer)?;
+        for external_docid in new_external_docids.as_slice() {
+            if let Some(id) = old_external_docids.get(external_docid) {
+                internal_docids.push(DocumentId(id as u32));
+            }
+        }
+
+        let new_external_docids = fst::Map::from_iter(new_external_docids.into_iter().map(|k| (k, 0))).unwrap();
+        (new_external_docids, SetBuf::from_dirty(internal_docids))
+    };
+
     let schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
@@ -84,16 +100,15 @@ pub fn apply_documents_deletion(
 
     // facet filters deletion
     if let Some(attributes_for_facetting) = index.main.attributes_for_faceting(writer)? {
-        let facet_map = facets::facet_map_from_docids(writer, &index, &deletion, &attributes_for_facetting)?;
+        let facet_map = facets::facet_map_from_docids(writer, &index, &internal_docids, &attributes_for_facetting)?;
         index.facets.remove(writer, facet_map)?;
     }
 
     // collect the ranked attributes according to the schema
     let ranked_fields = schema.ranked();
 
-    let idset = SetBuf::from_dirty(deletion);
     let mut words_document_ids = HashMap::new();
-    for id in idset {
+    for id in internal_docids.iter().cloned() {
         // remove all the ranked attributes from the ranked_map
         for ranked_attr in ranked_fields {
             ranked_map.remove(id, *ranked_attr);
@@ -162,6 +177,10 @@ pub fn apply_documents_deletion(
     index.main.put_words_fst(writer, &words)?;
     index.main.put_ranked_map(writer, &ranked_map)?;
     index.main.put_number_of_documents(writer, |old| old - deleted_documents_len)?;
+
+    // We apply the changes to the user and internal ids
+    index.main.remove_external_docids(writer, &external_docids)?;
+    index.main.remove_internal_docids(writer, &internal_docids)?;
 
     compute_short_prefixes(writer, index)?;
 

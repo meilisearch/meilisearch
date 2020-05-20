@@ -4,7 +4,7 @@ use heed::types::{OwnedType, CowSlice};
 use heed::Result as ZResult;
 use zerocopy::{AsBytes, FromBytes};
 
-use super::BEU64;
+use super::{BEU64, BEU32};
 use crate::{DocumentId, Highlight};
 use crate::database::MainT;
 
@@ -13,15 +13,15 @@ use crate::database::MainT;
 pub struct PrefixKey {
     prefix: [u8; 4],
     index: BEU64,
-    docid: BEU64,
+    docid: BEU32,
 }
 
 impl PrefixKey {
-    pub fn new(prefix: [u8; 4], index: u64, docid: u64) -> PrefixKey {
+    pub fn new(prefix: [u8; 4], index: u64, docid: u32) -> PrefixKey {
         PrefixKey {
             prefix,
             index: BEU64::new(index),
-            docid: BEU64::new(docid),
+            docid: BEU32::new(docid),
         }
     }
 }
@@ -54,7 +54,7 @@ impl PrefixDocumentsCache {
         prefix: [u8; 4],
     ) -> ZResult<PrefixDocumentsIter<'txn>> {
         let start = PrefixKey::new(prefix, 0, 0);
-        let end = PrefixKey::new(prefix, u64::max_value(), u64::max_value());
+        let end = PrefixKey::new(prefix, u64::max_value(), u32::max_value());
         let iter = self.prefix_documents_cache.range(reader, &(start..=end))?;
         Ok(PrefixDocumentsIter { iter })
     }

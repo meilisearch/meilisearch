@@ -1,26 +1,27 @@
 mod cow_set;
 mod docs_words;
-mod prefix_documents_cache;
-mod prefix_postings_lists_cache;
+mod documents_ids;
 mod documents_fields;
 mod documents_fields_counts;
+mod facets;
 mod main;
 mod postings_lists;
+mod prefix_documents_cache;
+mod prefix_postings_lists_cache;
 mod synonyms;
 mod updates;
 mod updates_results;
-mod facets;
 
+pub use self::cow_set::CowSet;
 pub use self::docs_words::DocsWords;
-pub use self::facets::Facets;
-pub use self::prefix_documents_cache::PrefixDocumentsCache;
-pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
 pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
-pub use self::documents_fields_counts::{
-    DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter,
-};
+pub use self::documents_fields_counts::{DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter};
+pub use self::documents_ids::{DocumentsIds, DiscoverIds};
+pub use self::facets::Facets;
 pub use self::main::Main;
 pub use self::postings_lists::PostingsLists;
+pub use self::prefix_documents_cache::PrefixDocumentsCache;
+pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
 pub use self::synonyms::Synonyms;
 pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;
@@ -44,20 +45,21 @@ use crate::serde::Deserializer;
 use crate::settings::SettingsUpdate;
 use crate::{query_builder::QueryBuilder, update, DocIndex, DocumentId, Error, MResult};
 
+type BEU32 = zerocopy::U32<byteorder::BigEndian>;
 type BEU64 = zerocopy::U64<byteorder::BigEndian>;
 pub type BEU16 = zerocopy::U16<byteorder::BigEndian>;
 
 #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]
 pub struct DocumentFieldIndexedKey {
-    docid: BEU64,
+    docid: BEU32,
     indexed_pos: BEU16,
 }
 
 impl DocumentFieldIndexedKey {
     fn new(docid: DocumentId, indexed_pos: IndexedPos) -> DocumentFieldIndexedKey {
         DocumentFieldIndexedKey {
-            docid: BEU64::new(docid.0),
+            docid: BEU32::new(docid.0),
             indexed_pos: BEU16::new(indexed_pos.0),
         }
     }
@@ -66,14 +68,14 @@ impl DocumentFieldIndexedKey {
 #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]
 pub struct DocumentFieldStoredKey {
-    docid: BEU64,
+    docid: BEU32,
     field_id: BEU16,
 }
 
 impl DocumentFieldStoredKey {
     fn new(docid: DocumentId, field_id: FieldId) -> DocumentFieldStoredKey {
         DocumentFieldStoredKey {
-            docid: BEU64::new(docid.0),
+            docid: BEU32::new(docid.0),
             field_id: BEU16::new(field_id.0),
         }
     }
@@ -97,7 +99,7 @@ impl<'a> BytesEncode<'a> for PostingsCodec {
 
         let mut buffer = Vec::with_capacity(u64_size + docids_size + matches_size);
 
-        let docids_len = item.docids.len();
+        let docids_len = item.docids.len() as u64;
         buffer.extend_from_slice(&docids_len.to_be_bytes());
         buffer.extend_from_slice(item.docids.as_bytes());
         buffer.extend_from_slice(item.matches.as_bytes());

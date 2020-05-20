@@ -228,7 +228,7 @@ mod tests {
         builder.into_inner().and_then(Set::from_bytes).unwrap()
     }
 
-    const fn doc_index(document_id: u64, word_index: u16) -> DocIndex {
+    const fn doc_index(document_id: u32, word_index: u16) -> DocIndex {
         DocIndex {
             document_id: DocumentId(document_id),
             attribute: 0,
@@ -238,7 +238,7 @@ mod tests {
         }
     }
 
-    const fn doc_char_index(document_id: u64, word_index: u16, char_index: u16) -> DocIndex {
+    const fn doc_char_index(document_id: u32, word_index: u16, char_index: u16) -> DocIndex {
         DocIndex {
             document_id: DocumentId(document_id),
             attribute: 0,

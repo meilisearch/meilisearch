@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 
 use fst::{set::OpBuilder, SetBuilder};
 use indexmap::IndexMap;
@@ -13,7 +13,7 @@ use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::Deserializer;
-use crate::store::{self, DocumentsFields, DocumentsFieldsCounts};
+use crate::store::{self, DocumentsFields, DocumentsFieldsCounts, DiscoverIds};
 use crate::update::helpers::{index_value, value_to_number, extract_document_id};
 use crate::update::{apply_documents_deletion, compute_short_prefixes, next_update_id, Update};
 use crate::{Error, MResult, RankedMap};
@@ -148,23 +148,40 @@ pub fn apply_addition<'a, 'b>(
     index: &store::Index,
     new_documents: Vec<IndexMap<String, Value>>,
     partial: bool
-) -> MResult<()> {
-    let mut documents_additions = HashMap::new();
-
+) -> MResult<()>
+{
     let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
         None => return Err(Error::SchemaMissing),
     };
 
+    // Retrieve the documents ids related structures
+    let external_docids = index.main.external_docids(writer)?;
+    let internal_docids = index.main.internal_docids(writer)?;
+    let mut available_ids = DiscoverIds::new(&internal_docids);
+
     let primary_key = schema.primary_key().ok_or(Error::MissingPrimaryKey)?;
 
     // 1. store documents ids for future deletion
+    let mut documents_additions = HashMap::new();
+    let mut new_external_docids = BTreeMap::new();
+    let mut new_internal_docids = Vec::with_capacity(new_documents.len());
+
     for mut document in new_documents {
-        let document_id = extract_document_id(&primary_key, &document)?;
+        let (internal_docid, external_docid) =
+            extract_document_id(
+                &primary_key,
+                &document,
+                &external_docids,
+                &mut available_ids,
+            )?;
+
+        new_external_docids.insert(external_docid, internal_docid.0);
+        new_internal_docids.push(internal_docid);
 
         if partial {
             let mut deserializer = Deserializer {
-                document_id,
+                document_id: internal_docid,
                 reader: writer,
                 documents_fields: index.documents_fields,
                 schema: &schema,
@@ -178,12 +195,12 @@ pub fn apply_addition<'a, 'b>(
                 }
             }
         }
-        documents_additions.insert(document_id, document);
+        documents_additions.insert(internal_docid, document);
     }
 
-    // 2. remove the documents posting lists
+    // 2. remove the documents postings lists
     let number_of_inserted_documents = documents_additions.len();
-    let documents_ids = documents_additions.iter().map(|(id, _)| *id).collect();
+    let documents_ids = new_external_docids.iter().map(|(id, _)| id.clone()).collect();
     apply_documents_deletion(writer, index, documents_ids)?;
 
     let mut ranked_map = match index.main.ranked_map(writer)? {
@@ -232,6 +249,11 @@ pub fn apply_addition<'a, 'b>(
     )?;
 
     index.main.put_schema(writer, &schema)?;
+
+    let new_external_docids = fst::Map::from_iter(new_external_docids.iter().map(|(ext, id)| (ext, *id as u64)))?;
+    let new_internal_docids = sdset::SetBuf::from_dirty(new_internal_docids);
+    index.main.merge_external_docids(writer, &new_external_docids)?;
+    index.main.merge_internal_docids(writer, &new_internal_docids)?;
 
     Ok(())
 }

@@ -1,4 +1,4 @@
-use super::BEU64;
+use super::BEU32;
 use crate::database::MainT;
 use crate::DocumentId;
 use heed::types::{ByteSlice, OwnedType};
@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 #[derive(Copy, Clone)]
 pub struct DocsWords {
-    pub(crate) docs_words: heed::Database<OwnedType<BEU64>, ByteSlice>,
+    pub(crate) docs_words: heed::Database<OwnedType<BEU32>, ByteSlice>,
 }
 
 impl DocsWords {
@@ -17,13 +17,13 @@ impl DocsWords {
         document_id: DocumentId,
         words: &fst::Set,
     ) -> ZResult<()> {
-        let document_id = BEU64::new(document_id.0);
+        let document_id = BEU32::new(document_id.0);
         let bytes = words.as_fst().as_bytes();
         self.docs_words.put(writer, &document_id, bytes)
     }
 
     pub fn del_doc_words(self, writer: &mut heed::RwTxn<MainT>, document_id: DocumentId) -> ZResult<bool> {
-        let document_id = BEU64::new(document_id.0);
+        let document_id = BEU32::new(document_id.0);
         self.docs_words.delete(writer, &document_id)
     }
 
@@ -36,7 +36,7 @@ impl DocsWords {
         reader: &heed::RoTxn<MainT>,
         document_id: DocumentId,
     ) -> ZResult<Option<fst::Set>> {
-        let document_id = BEU64::new(document_id.0);
+        let document_id = BEU32::new(document_id.0);
         match self.docs_words.get(reader, &document_id)? {
             Some(bytes) => {
                 let len = bytes.len();

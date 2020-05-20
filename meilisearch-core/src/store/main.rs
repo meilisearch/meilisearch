@@ -3,28 +3,31 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
 use heed::Result as ZResult;
+use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
 use meilisearch_schema::{FieldId, Schema};
+use meilisearch_types::DocumentId;
 use sdset::Set;
 
 use crate::database::MainT;
 use crate::RankedMap;
 use crate::settings::RankingRule;
-use super::cow_set::CowSet;
+use super::{CowSet, DocumentsIds};
 
+const ATTRIBUTES_FOR_FACETING_KEY: &str = "attributes-for-faceting";
 const CREATED_AT_KEY: &str = "created-at";
-const ATTRIBUTES_FOR_FACETING: &str = "attributes-for-faceting";
-const RANKING_RULES_KEY: &str = "ranking-rules";
-const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute";
-const STOP_WORDS_KEY: &str = "stop-words";
-const SYNONYMS_KEY: &str = "synonyms";
 const CUSTOMS_KEY: &str = "customs";
+const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute";
+const EXTERNAL_DOCIDS_KEY: &str = "external-docids";
 const FIELDS_FREQUENCY_KEY: &str = "fields-frequency";
+const INTERNAL_DOCIDS_KEY: &str = "internal-docids";
 const NAME_KEY: &str = "name";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY: &str = "ranked-map";
+const RANKING_RULES_KEY: &str = "ranking-rules";
 const SCHEMA_KEY: &str = "schema";
+const STOP_WORDS_KEY: &str = "stop-words";
+const SYNONYMS_KEY: &str = "synonyms";
 const UPDATED_AT_KEY: &str = "updated-at";
 const WORDS_KEY: &str = "words";
 
@@ -71,9 +74,90 @@ impl Main {
         self.main.get::<_, Str, SerdeDatetime>(reader, UPDATED_AT_KEY)
     }
 
+    pub fn put_internal_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> ZResult<()> {
+        self.main.put::<_, Str, DocumentsIds>(writer, INTERNAL_DOCIDS_KEY, ids)
+    }
+
+    pub fn internal_docids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Cow<'txn, sdset::Set<DocumentId>>> {
+        match self.main.get::<_, Str, DocumentsIds>(reader, INTERNAL_DOCIDS_KEY)? {
+            Some(ids) => Ok(ids),
+            None => Ok(Cow::default()),
+        }
+    }
+
+    pub fn merge_internal_docids(self, writer: &mut heed::RwTxn<MainT>, new_ids: &sdset::Set<DocumentId>) -> ZResult<()> {
+        use sdset::SetOperation;
+
+        // We do an union of the old and new internal ids.
+        let internal_docids = self.internal_docids(writer)?;
+        let internal_docids = sdset::duo::Union::new(&internal_docids, new_ids).into_set_buf();
+        self.put_internal_docids(writer, &internal_docids)
+    }
+
+    pub fn remove_internal_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> ZResult<()> {
+        use sdset::SetOperation;
+
+        // We do a difference of the old and new internal ids.
+        let internal_docids = self.internal_docids(writer)?;
+        let internal_docids = sdset::duo::Difference::new(&internal_docids, ids).into_set_buf();
+        self.put_internal_docids(writer, &internal_docids)
+    }
+
+    pub fn put_external_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
+        self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, ids.as_fst().as_bytes())
+    }
+
+    pub fn merge_external_docids(self, writer: &mut heed::RwTxn<MainT>, new_docids: &fst::Map) -> ZResult<()> {
+        use fst::{Streamer, IntoStreamer};
+
+        // Do an union of the old and the new set of external docids.
+        let external_docids = self.external_docids(writer)?;
+        let mut op = external_docids.op().add(new_docids.into_stream()).r#union();
+        let mut build = fst::MapBuilder::memory();
+        while let Some((docid, values)) = op.next() {
+            build.insert(docid, values[0].value).unwrap();
+        }
+        let external_docids = build.into_inner().unwrap();
+
+        // TODO prefer using self.put_user_ids
+        self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, external_docids.as_slice())
+    }
+
+    pub fn remove_external_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
+        use fst::{Streamer, IntoStreamer};
+
+        // Do an union of the old and the new set of external docids.
+        let external_docids = self.external_docids(writer)?;
+        let mut op = external_docids.op().add(ids.into_stream()).difference();
+        let mut build = fst::MapBuilder::memory();
+        while let Some((docid, values)) = op.next() {
+            build.insert(docid, values[0].value).unwrap();
+        }
+        let external_docids = build.into_inner().unwrap();
+
+        // TODO prefer using self.put_external_docids
+        self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, external_docids.as_slice())
+    }
+
+    pub fn external_docids(self, reader: &heed::RoTxn<MainT>) -> ZResult<fst::Map> {
+        match self.main.get::<_, Str, ByteSlice>(reader, EXTERNAL_DOCIDS_KEY)? {
+            Some(bytes) => {
+                let len = bytes.len();
+                let bytes = Arc::new(bytes.to_owned());
+                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
+                Ok(fst::Map::from(fst))
+            },
+            None => Ok(fst::Map::default()),
+        }
+    }
+
+    pub fn external_to_internal_docid(self, reader: &heed::RoTxn<MainT>, external_docid: &str) -> ZResult<Option<DocumentId>> {
+        let external_ids = self.external_docids(reader)?;
+        Ok(external_ids.get(external_docid).map(|id| DocumentId(id as u32)))
+    }
+
     pub fn put_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
-        let bytes = fst.as_fst().as_bytes();
-        self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, bytes)
+        self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, fst.as_fst().as_bytes())
     }
 
     pub unsafe fn static_words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
@@ -82,7 +166,7 @@ impl Main {
                 let bytes: &'static [u8] = std::mem::transmute(bytes);
                 let set = fst::Set::from_static_slice(bytes).unwrap();
                 Ok(Some(set))
-            }
+            },
             None => Ok(None),
         }
     }
@@ -94,7 +178,7 @@ impl Main {
                 let bytes = Arc::new(bytes.to_owned());
                 let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
                 Ok(Some(fst::Set::from(fst)))
-            }
+            },
             None => Ok(None),
         }
     }
@@ -193,15 +277,15 @@ impl Main {
     }
 
     pub fn attributes_for_faceting<'txn>(&self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Option<Cow<'txn, Set<FieldId>>>> {
-        self.main.get::<_, Str, CowSet<FieldId>>(reader, ATTRIBUTES_FOR_FACETING)
+        self.main.get::<_, Str, CowSet<FieldId>>(reader, ATTRIBUTES_FOR_FACETING_KEY)
     }
 
     pub fn put_attributes_for_faceting(self, writer: &mut heed::RwTxn<MainT>, attributes: &Set<FieldId>) -> ZResult<()> {
-        self.main.put::<_, Str, CowSet<FieldId>>(writer, ATTRIBUTES_FOR_FACETING, attributes)
+        self.main.put::<_, Str, CowSet<FieldId>>(writer, ATTRIBUTES_FOR_FACETING_KEY, attributes)
     }
 
     pub fn delete_attributes_for_faceting(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<bool> {
-        self.main.delete::<_, Str>(writer, ATTRIBUTES_FOR_FACETING)
+        self.main.delete::<_, Str>(writer, ATTRIBUTES_FOR_FACETING_KEY)
     }
 
     pub fn ranking_rules(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<Vec<RankingRule>>> {

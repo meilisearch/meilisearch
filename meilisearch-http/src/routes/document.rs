@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashSet};
 use actix_web::{web, HttpResponse};
 use actix_web_macros::{delete, get, post, put};
 use indexmap::IndexMap;
-use meilisearch_core::{update, Error};
+use meilisearch_core::update;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -43,11 +43,13 @@ async fn get_document(
         .open_index(&path.index_uid)
         .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let document_id = update::compute_document_id(&path.document_id).map_err(Error::Serializer)?;
     let reader = data.db.main_read_txn()?;
+    let internal_id = index.main
+        .external_to_internal_docid(&reader, &path.document_id)?
+        .ok_or(ResponseError::document_not_found(&path.document_id))?;
 
     let response: Document = index
-        .document(&reader, None, document_id)?
+        .document(&reader, None, internal_id)?
         .ok_or(ResponseError::document_not_found(&path.document_id))?;
 
     Ok(HttpResponse::Ok().json(response))
@@ -66,12 +68,10 @@ async fn delete_document(
         .open_index(&path.index_uid)
         .ok_or(ResponseError::index_not_found(&path.index_uid))?;
 
-    let document_id = update::compute_document_id(&path.document_id).map_err(Error::Serializer)?;
-
     let mut update_writer = data.db.update_write_txn()?;
 
     let mut documents_deletion = index.documents_deletion();
-    documents_deletion.delete_document_by_id(document_id);
+    documents_deletion.delete_document_by_external_docid(path.document_id.clone());
 
     let update_id = documents_deletion.finalize(&mut update_writer)?;
 
@@ -239,8 +239,7 @@ async fn delete_documents(
 
     for document_id in body.into_inner() {
         let document_id = update::value_to_string(&document_id);
-        let document_id = update::compute_document_id(&document_id).map_err(Error::Serializer)?;
-        documents_deletion.delete_document_by_id(document_id);
+        documents_deletion.delete_document_by_external_docid(document_id);
     }
 
     let update_id = documents_deletion.finalize(&mut writer)?;
