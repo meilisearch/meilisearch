@@ -1,5 +1,6 @@
 ## v0.10.2
 
+  - Change the HTTP framework, moving from tide to actix-web #601
   - Bump sentry version to 0.18.1 (#690)
   - Enable max payload size override (#684)
   - Disable sentry in debug (#681)
