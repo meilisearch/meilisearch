@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-use meilisearch_core::{Database, DatabaseOptions, Highlight, ProcessedUpdateResult};
+use meilisearch_core::{Database, DatabaseOptions, Highlight, ProcessedUpdateResult, Error as MError};
 use meilisearch_core::settings::Settings;
 use meilisearch_schema::FieldId;
 
@@ -126,9 +126,10 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
         settings.into_update().unwrap()
     };
 
-    let mut update_writer = db.update_write_txn().unwrap();
-    index.settings_update(&mut update_writer, settings)?;
-    update_writer.commit().unwrap();
+    db.update_write::<_, _, MError>(|writer| {
+        index.settings_update(writer, settings)?;
+        Ok(())
+    })?;
 
     let mut rdr = if command.csv_data_path.as_os_str() == "-" {
         csv::Reader::from_reader(Box::new(io::stdin()) as Box<dyn Read>)
@@ -175,10 +176,12 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
         println!();
 
-        let mut update_writer = db.update_write_txn().unwrap();
+        let update_id = db.update_write::<_, _, MError>(|writer| {
+            let update_id = additions.finalize(writer)?;
+            Ok(update_id)
+        })?;
+
         println!("committing update...");
-        let update_id = additions.finalize(&mut update_writer)?;
-        update_writer.commit().unwrap();
         max_update_id = max_update_id.max(update_id);
         println!("committed update {}", update_id);
     }

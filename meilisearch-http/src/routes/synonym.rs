@@ -34,10 +34,8 @@ async fn get(
     let mut synonyms = IndexMap::new();
     let index_synonyms = &index.synonyms;
     for synonym in synonyms_list {
-        let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
-        if let Some(list) = alternative_list {
-            synonyms.insert(synonym, list);
-        }
+        let list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
+        synonyms.insert(synonym, list);
     }
 
     Ok(HttpResponse::Ok().json(synonyms))
@@ -62,8 +60,8 @@ async fn update(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -88,8 +86,8 @@ async fn delete(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 

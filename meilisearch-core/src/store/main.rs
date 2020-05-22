@@ -71,43 +71,42 @@ impl Main {
         Ok(self.main.get::<_, Str, SerdeDatetime>(reader, UPDATED_AT_KEY)?)
     }
 
-<<<<<<< HEAD
-    pub fn put_internal_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> ZResult<()> {
-        self.main.put::<_, Str, DocumentsIds>(writer, INTERNAL_DOCIDS_KEY, ids)
+    pub fn put_internal_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> MResult<()> {
+        Ok(self.main.put::<_, Str, DocumentsIds>(writer, INTERNAL_DOCIDS_KEY, ids)?)
     }
 
-    pub fn internal_docids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<Cow<'txn, sdset::Set<DocumentId>>> {
+    pub fn internal_docids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> MResult<Cow<'txn, sdset::Set<DocumentId>>> {
         match self.main.get::<_, Str, DocumentsIds>(reader, INTERNAL_DOCIDS_KEY)? {
             Some(ids) => Ok(ids),
             None => Ok(Cow::default()),
         }
     }
 
-    pub fn merge_internal_docids(self, writer: &mut heed::RwTxn<MainT>, new_ids: &sdset::Set<DocumentId>) -> ZResult<()> {
+    pub fn merge_internal_docids(self, writer: &mut heed::RwTxn<MainT>, new_ids: &sdset::Set<DocumentId>) -> MResult<()> {
         use sdset::SetOperation;
 
         // We do an union of the old and new internal ids.
         let internal_docids = self.internal_docids(writer)?;
         let internal_docids = sdset::duo::Union::new(&internal_docids, new_ids).into_set_buf();
-        self.put_internal_docids(writer, &internal_docids)
+        Ok(self.put_internal_docids(writer, &internal_docids)?)
     }
 
-    pub fn remove_internal_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> ZResult<()> {
+    pub fn remove_internal_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &sdset::Set<DocumentId>) -> MResult<()> {
         use sdset::SetOperation;
 
         // We do a difference of the old and new internal ids.
         let internal_docids = self.internal_docids(writer)?;
         let internal_docids = sdset::duo::Difference::new(&internal_docids, ids).into_set_buf();
-        self.put_internal_docids(writer, &internal_docids)
+        Ok(self.put_internal_docids(writer, &internal_docids)?)
     }
 
-    pub fn put_external_docids<A>(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map<A>) -> ZResult<()>
+    pub fn put_external_docids<A>(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map<A>) -> MResult<()>
     where A: AsRef<[u8]>,
     {
-        self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, ids.as_fst().as_bytes())
+        Ok(self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, ids.as_fst().as_bytes())?)
     }
 
-    pub fn merge_external_docids<A>(self, writer: &mut heed::RwTxn<MainT>, new_docids: &fst::Map<A>) -> ZResult<()>
+    pub fn merge_external_docids<A>(self, writer: &mut heed::RwTxn<MainT>, new_docids: &fst::Map<A>) -> MResult<()>
     where A: AsRef<[u8]>,
     {
         use fst::{Streamer, IntoStreamer};
@@ -118,29 +117,14 @@ impl Main {
         let mut build = fst::MapBuilder::memory();
         while let Some((docid, values)) = op.next() {
             build.insert(docid, values[0].value).unwrap();
-=======
-    pub fn put_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> MResult<()> {
-        let bytes = fst.as_fst().as_bytes();
-        Ok(self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, bytes)?)
-    }
-
-    pub unsafe fn static_words_fst(self, reader: &heed::RoTxn<MainT>) -> MResult<Option<fst::Set>> {
-        match self.main.get::<_, Str, ByteSlice>(reader, WORDS_KEY)? {
-            Some(bytes) => {
-                let bytes: &'static [u8] = std::mem::transmute(bytes);
-                let set = fst::Set::from_static_slice(bytes).unwrap();
-                Ok(Some(set))
-            }
-            None => Ok(None),
->>>>>>> 5c760d3... refactor errors / isolate core/http errors
         }
         drop(op);
 
         let external_docids = build.into_map();
-        self.put_external_docids(writer, &external_docids)
+        Ok(self.put_external_docids(writer, &external_docids)?)
     }
 
-    pub fn remove_external_docids<A>(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map<A>) -> ZResult<()>
+    pub fn remove_external_docids<A>(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map<A>) -> MResult<()>
     where A: AsRef<[u8]>,
     {
         use fst::{Streamer, IntoStreamer};
@@ -158,27 +142,27 @@ impl Main {
         self.put_external_docids(writer, &external_docids)
     }
 
-    pub fn external_docids(self, reader: &heed::RoTxn<MainT>) -> ZResult<FstMapCow> {
+    pub fn external_docids(self, reader: &heed::RoTxn<MainT>) -> MResult<FstMapCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, EXTERNAL_DOCIDS_KEY)? {
             Some(bytes) => Ok(fst::Map::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
             None => Ok(fst::Map::default().map_data(Cow::Owned).unwrap()),
         }
     }
 
-    pub fn external_to_internal_docid(self, reader: &heed::RoTxn<MainT>, external_docid: &str) -> ZResult<Option<DocumentId>> {
+    pub fn external_to_internal_docid(self, reader: &heed::RoTxn<MainT>, external_docid: &str) -> MResult<Option<DocumentId>> {
         let external_ids = self.external_docids(reader)?;
         Ok(external_ids.get(external_docid).map(|id| DocumentId(id as u32)))
     }
 
-    pub fn put_words_fst<A: AsRef<[u8]>>(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set<A>) -> ZResult<()> {
-        self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, fst.as_fst().as_bytes())
-    }
-
-    pub fn words_fst(self, reader: &heed::RoTxn<MainT>) -> MResult<Option<fst::Set>> {
+    pub fn words_fst(self, reader: &heed::RoTxn<MainT>) -> MResult<FstSetCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, WORDS_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
             None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
         }
+    }
+
+    pub fn put_words_fst<A: AsRef<[u8]>>(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set<A>) -> MResult<()> {
+        Ok(self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, fst.as_fst().as_bytes())?)
     }
 
     pub fn put_schema(self, writer: &mut heed::RwTxn<MainT>, schema: &Schema) -> MResult<()> {
@@ -206,7 +190,7 @@ impl Main {
         Ok(self.main.put::<_, Str, ByteSlice>(writer, SYNONYMS_KEY, bytes)?)
     }
 
-    pub(crate) fn synonyms_fst(self, reader: &heed::RoTxn<MainT>) -> MResult<Option<fst::Set>> {
+    pub(crate) fn synonyms_fst(self, reader: &heed::RoTxn<MainT>) -> MResult<FstSetCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, SYNONYMS_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
             None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
@@ -216,7 +200,6 @@ impl Main {
     pub fn synonyms_list(self, reader: &heed::RoTxn<MainT>) -> MResult<Vec<String>> {
         let synonyms = self
             .synonyms_fst(&reader)?
-            .unwrap_or_default()
             .stream()
             .into_strs()?;
         Ok(synonyms)
@@ -237,7 +220,6 @@ impl Main {
     pub fn stop_words_list(self, reader: &heed::RoTxn<MainT>) -> MResult<Vec<String>> {
         let stop_word_list = self
             .stop_words_fst(reader)?
-            .unwrap_or_default()
             .stream()
             .into_strs()?;
         Ok(stop_word_list)

@@ -39,12 +39,12 @@ async fn update_all(
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
         let settings = body
             .into_inner()
             .into_update()
             .map_err(Error::bad_request)?;
-        let update_id = index.settings_update(&mut writer, settings)?;
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -74,10 +74,8 @@ async fn get_all(
     let mut synonyms = BTreeMap::new();
     let index_synonyms = &index.synonyms;
     for synonym in synonyms_list {
-        let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
-        if let Some(list) = alternative_list {
-            synonyms.insert(synonym, list);
-        }
+        let list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
+        synonyms.insert(synonym, list);
     }
 
     let ranking_rules = index
@@ -209,8 +207,8 @@ async fn update_rules(
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -235,8 +233,8 @@ async fn delete_rules(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -282,8 +280,8 @@ async fn update_distinct(
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -308,8 +306,8 @@ async fn delete_distinct(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -357,8 +355,8 @@ async fn update_searchable(
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -383,8 +381,8 @@ async fn delete_searchable(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -434,8 +432,8 @@ async fn update_displayed(
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -460,8 +458,8 @@ async fn delete_displayed(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -510,8 +508,8 @@ async fn update_accept_new_fields(
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 

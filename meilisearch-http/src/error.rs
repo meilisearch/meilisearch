@@ -41,7 +41,6 @@ pub enum Error {
     MissingHeader(String),
     NotFound(String),
     OpenIndex(String),
-    FilterParsing(String),
     RetrieveDocument(u32, String),
     SearchDocuments(String),
     PayloadTooLarge,
@@ -52,8 +51,26 @@ impl error::Error for Error {}
 
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
-        //TODO populate with right error codes
-        Code::Other
+        use Error::*;
+        match self {
+            BadParameter(_, _) => Code::BadParameter,
+            BadRequest(_) => Code::BadRequest,
+            CreateIndex(_) => Code::CreateIndex,
+            DocumentNotFound(_) => Code::DocumentNotFound,
+            IndexNotFound(_) => Code::IndexNotFound,
+            Internal(_) => Code::Internal,
+            InvalidIndexUid => Code::InvalidIndexUid,
+            InvalidToken(_) => Code::InvalidToken,
+            Maintenance => Code::Maintenance,
+            MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
+            MissingHeader(_) => Code::MissingHeader,
+            NotFound(_) => Code::NotFound,
+            OpenIndex(_) => Code::OpenIndex,
+            RetrieveDocument(_, _) => Code::RetrieveDocument,
+            SearchDocuments(_) => Code::SearchDocuments,
+            PayloadTooLarge => Code::PayloadTooLarge,
+            UnsupportedMediaType => Code::UnsupportedMediaType,
+        }
     }
 }
 
@@ -69,7 +86,7 @@ impl error::Error for FacetCountError {}
 
 impl ErrorCode for FacetCountError {
     fn error_code(&self) -> Code {
-        unimplemented!()
+        Code::BadRequest
     }
 }
 
@@ -152,7 +169,7 @@ impl Error {
         Error::Maintenance
     }
 
-    pub fn retrieve_document(doc_id: u64, err: impl fmt::Display) -> Error {
+    pub fn retrieve_document(doc_id: u32, err: impl fmt::Display) -> Error {
         Error::RetrieveDocument(doc_id, err.to_string())
     }
 

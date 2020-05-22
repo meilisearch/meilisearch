@@ -37,7 +37,7 @@ pub enum Error {
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
         //TODO populate codes
-        Code::Other
+        Code::Internal
     }
 }
 

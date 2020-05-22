@@ -44,8 +44,13 @@ async fn get_document(
         .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
+
     let internal_id = index.main
         .external_to_internal_docid(&reader, &path.document_id)?
+        .ok_or(Error::document_not_found(&path.document_id))?;
+
+    let document: Document = index
+        .document(&reader, None, internal_id)?
         .ok_or(Error::document_not_found(&path.document_id))?;
 
     Ok(HttpResponse::Ok().json(document))
@@ -64,12 +69,13 @@ async fn delete_document(
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
 
-    let document_id = meilisearch_core::serde::compute_document_id(&path.document_id);
-
     let mut documents_deletion = index.documents_deletion();
     documents_deletion.delete_document_by_external_docid(path.document_id.clone());
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| Ok(documents_deletion.finalize(writer)?))?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = documents_deletion.finalize(writer)?;
+        Ok(update_id)
+    })?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

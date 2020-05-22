@@ -26,6 +26,7 @@ impl error::Error for Error {}
 
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
-        unimplemented!()
+        // TODO populate with correct error codes
+        Code::Internal
     }
 }

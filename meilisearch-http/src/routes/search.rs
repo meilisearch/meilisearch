@@ -99,7 +99,7 @@ async fn search_with_url_query(
                 let field_ids = prepare_facet_list(&facets, &schema, attrs)?;
                 search_builder.add_facets(field_ids);
             },
-            None => todo!() /* return Err(FacetCountError::NoFacetSet.into()) */
+            None => return Err(FacetCountError::NoFacetSet.into()),
         }
     }
 

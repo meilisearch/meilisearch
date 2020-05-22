@@ -49,8 +49,8 @@ async fn update(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 
@@ -75,8 +75,8 @@ async fn delete(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
-        let update_id = index.settings_update(&mut writer, settings)?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
 

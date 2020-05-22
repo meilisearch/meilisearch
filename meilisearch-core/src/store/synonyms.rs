@@ -34,11 +34,11 @@ impl Synonyms {
         }
     }
 
-    pub fn synonyms(self, reader: &heed::RoTxn<MainT>, word: &[u8]) -> MResult<Option<Vec<String>>> {
+    pub fn synonyms(self, reader: &heed::RoTxn<MainT>, word: &[u8]) -> MResult<Vec<String>> {
         let synonyms = self
             .synonyms_fst(&reader, word)?
-            .map(|list| list.stream().into_strs())
-            .transpose()?;
+            .stream()
+            .into_strs()?;
         Ok(synonyms)
     }
 }

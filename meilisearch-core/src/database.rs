@@ -390,7 +390,7 @@ impl Database {
         f(&reader)
     }
 
-    pub fn update_write_txn(&self) -> MResult<heed::RwTxn<UpdateT>> {
+    pub(crate) fn update_write_txn(&self) -> MResult<heed::RwTxn<UpdateT>> {
         Ok(self.update_env.typed_write_txn::<UpdateT>()?)
     }
 
