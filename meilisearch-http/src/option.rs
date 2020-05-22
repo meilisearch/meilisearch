@@ -12,7 +12,7 @@ use structopt::StructOpt;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Default, Clone, StructOpt)]
 pub struct Opt {
     /// The destination where the database must be created.
     #[structopt(long, env = "MEILI_DB_PATH", default_value = "./data.ms")]

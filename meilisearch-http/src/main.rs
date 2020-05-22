@@ -7,7 +7,6 @@ use meilisearch_http::data::Data;
 use meilisearch_http::helpers::NormalizePath;
 use meilisearch_http::option::Opt;
 use meilisearch_http::{create_app, index_update_callback};
-
 use structopt::StructOpt;
 
 mod analytics;
