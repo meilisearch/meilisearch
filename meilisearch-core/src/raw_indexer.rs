@@ -1,34 +1,37 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 
-use crate::{DocIndex, DocumentId};
 use deunicode::deunicode_with_tofu;
 use meilisearch_schema::IndexedPos;
 use meilisearch_tokenizer::{is_cjk, SeqTokenizer, Token, Tokenizer};
 use sdset::SetBuf;
 
+use crate::{DocIndex, DocumentId};
+use crate::FstSetCow;
+
 const WORD_LENGTH_LIMIT: usize = 80;
 
 type Word = Vec<u8>; // TODO make it be a SmallVec
 
-pub struct RawIndexer {
+pub struct RawIndexer<A> {
     word_limit: usize, // the maximum number of indexed words
-    stop_words: fst::Set,
+    stop_words: fst::Set<A>,
     words_doc_indexes: BTreeMap<Word, Vec<DocIndex>>,
     docs_words: HashMap<DocumentId, Vec<Word>>,
 }
 
-pub struct Indexed {
+pub struct Indexed<'a> {
     pub words_doc_indexes: BTreeMap<Word, SetBuf<DocIndex>>,
-    pub docs_words: HashMap<DocumentId, fst::Set>,
+    pub docs_words: HashMap<DocumentId, FstSetCow<'a>>,
 }
 
-impl RawIndexer {
-    pub fn new(stop_words: fst::Set) -> RawIndexer {
+impl<A> RawIndexer<A> {
+    pub fn new(stop_words: fst::Set<A>) -> RawIndexer<A> {
         RawIndexer::with_word_limit(stop_words, 1000)
     }
 
-    pub fn with_word_limit(stop_words: fst::Set, limit: usize) -> RawIndexer {
+    pub fn with_word_limit(stop_words: fst::Set<A>, limit: usize) -> RawIndexer<A> {
         RawIndexer {
             word_limit: limit,
             stop_words,
@@ -36,7 +39,9 @@ impl RawIndexer {
             docs_words: HashMap::new(),
         }
     }
+}
 
+impl<A: AsRef<[u8]>> RawIndexer<A> {
     pub fn index_text(&mut self, id: DocumentId, indexed_pos: IndexedPos, text: &str) -> usize {
         let mut number_of_words = 0;
 
@@ -61,9 +66,9 @@ impl RawIndexer {
         number_of_words
     }
 
-    pub fn index_text_seq<'a, I>(&mut self, id: DocumentId, indexed_pos: IndexedPos, iter: I)
+    pub fn index_text_seq<'s, I>(&mut self, id: DocumentId, indexed_pos: IndexedPos, iter: I)
     where
-        I: IntoIterator<Item = &'a str>,
+        I: IntoIterator<Item = &'s str>,
     {
         let iter = iter.into_iter();
         for token in SeqTokenizer::new(iter) {
@@ -83,7 +88,7 @@ impl RawIndexer {
         }
     }
 
-    pub fn build(self) -> Indexed {
+    pub fn build(self) -> Indexed<'static> {
         let words_doc_indexes = self
             .words_doc_indexes
             .into_iter()
@@ -96,7 +101,8 @@ impl RawIndexer {
             .map(|(id, mut words)| {
                 words.sort_unstable();
                 words.dedup();
-                (id, fst::Set::from_iter(words).unwrap())
+                let fst = fst::Set::from_iter(words).unwrap().map_data(Cow::Owned).unwrap();
+                (id, fst)
             })
             .collect();
 
@@ -107,15 +113,17 @@ impl RawIndexer {
     }
 }
 
-fn index_token(
+fn index_token<A>(
     token: Token,
     id: DocumentId,
     indexed_pos: IndexedPos,
     word_limit: usize,
-    stop_words: &fst::Set,
+    stop_words: &fst::Set<A>,
     words_doc_indexes: &mut BTreeMap<Word, Vec<DocIndex>>,
     docs_words: &mut HashMap<DocumentId, Vec<Word>>,
-) -> bool {
+) -> bool
+where A: AsRef<[u8]>,
+{
     if token.word_index >= word_limit {
         return false;
     }

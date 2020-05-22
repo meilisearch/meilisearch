@@ -63,20 +63,18 @@ async fn get_all(
     let reader = data.db.main_read_txn()?;
 
     let stop_words_fst = index.main.stop_words_fst(&reader)?;
-    let stop_words = stop_words_fst.unwrap_or_default().stream().into_strs()?;
+    let stop_words = stop_words_fst.stream().into_strs()?;
     let stop_words: BTreeSet<String> = stop_words.into_iter().collect();
 
-    let synonyms_fst = index.main.synonyms_fst(&reader)?.unwrap_or_default();
+    let synonyms_fst = index.main.synonyms_fst(&reader)?;
     let synonyms_list = synonyms_fst.stream().into_strs()?;
 
     let mut synonyms = BTreeMap::new();
     let index_synonyms = &index.synonyms;
     for synonym in synonyms_list {
         let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
-        if let Some(list) = alternative_list {
-            let list = list.stream().into_strs()?;
-            synonyms.insert(synonym, list);
-        }
+        let list = alternative_list.stream().into_strs()?;
+        synonyms.insert(synonym, list);
     }
 
     let ranking_rules = index

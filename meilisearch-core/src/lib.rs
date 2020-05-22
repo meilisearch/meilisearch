@@ -38,15 +38,19 @@ pub use meilisearch_types::{DocIndex, DocumentId, Highlight};
 pub use meilisearch_schema::Schema;
 pub use query_words_mapper::QueryWordsMapper;
 
-use std::convert::TryFrom;
-use std::collections::HashMap;
 use compact_arena::SmallArena;
 use log::{error, trace};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::convert::TryFrom;
 
 use crate::bucket_sort::PostingsListView;
 use crate::levenshtein::prefix_damerau_levenshtein;
 use crate::query_tree::{QueryId, QueryKind};
 use crate::reordered_attrs::ReorderedAttrs;
+
+type FstSetCow<'a> = fst::Set<Cow<'a, [u8]>>;
+type FstMapCow<'a> = fst::Map<Cow<'a, [u8]>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Document {

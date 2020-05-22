@@ -186,7 +186,7 @@ mod tests {
     use std::collections::{BTreeSet, HashMap};
     use std::iter::FromIterator;
 
-    use fst::{IntoStreamer, Set};
+    use fst::IntoStreamer;
     use meilisearch_schema::IndexedPos;
     use sdset::SetBuf;
     use tempfile::TempDir;
@@ -199,21 +199,21 @@ mod tests {
     use crate::store::Index;
     use meilisearch_schema::Schema;
 
-    fn set_from_stream<'f, I, S>(stream: I) -> Set
+    fn set_from_stream<'f, I, S>(stream: I) -> fst::Set<Vec<u8>>
     where
         I: for<'a> fst::IntoStreamer<'a, Into = S, Item = &'a [u8]>,
         S: 'f + for<'a> fst::Streamer<'a, Item = &'a [u8]>,
     {
         let mut builder = fst::SetBuilder::memory();
         builder.extend_stream(stream).unwrap();
-        builder.into_inner().and_then(Set::from_bytes).unwrap()
+        builder.into_set()
     }
 
-    fn insert_key(set: &Set, key: &[u8]) -> Set {
+    fn insert_key<A: AsRef<[u8]>>(set: &fst::Set<A>, key: &[u8]) -> fst::Set<Vec<u8>> {
         let unique_key = {
             let mut builder = fst::SetBuilder::memory();
             builder.insert(key).unwrap();
-            builder.into_inner().and_then(Set::from_bytes).unwrap()
+            builder.into_set()
         };
 
         let union_ = set.op().add(unique_key.into_stream()).r#union();
@@ -221,11 +221,11 @@ mod tests {
         set_from_stream(union_)
     }
 
-    fn sdset_into_fstset(set: &sdset::Set<&str>) -> Set {
+    fn sdset_into_fstset(set: &sdset::Set<&str>) -> fst::Set<Vec<u8>> {
         let mut builder = fst::SetBuilder::memory();
         let set = SetBuf::from_dirty(set.into_iter().map(|s| normalize_str(s)).collect());
         builder.extend_iter(set.into_iter()).unwrap();
-        builder.into_inner().and_then(Set::from_bytes).unwrap()
+        builder.into_set()
     }
 
     const fn doc_index(document_id: u32, word_index: u16) -> DocIndex {
@@ -265,15 +265,11 @@ mod tests {
 
             let word = normalize_str(word);
 
-            let alternatives = match self
+            let alternatives = self
                 .index
                 .synonyms
                 .synonyms(&writer, word.as_bytes())
-                .unwrap()
-            {
-                Some(alternatives) => alternatives,
-                None => fst::Set::default(),
-            };
+                .unwrap();
 
             let new = sdset_into_fstset(&new);
             let new_alternatives =
@@ -283,10 +279,7 @@ mod tests {
                 .put_synonyms(&mut writer, word.as_bytes(), &new_alternatives)
                 .unwrap();
 
-            let synonyms = match self.index.main.synonyms_fst(&writer).unwrap() {
-                Some(synonyms) => synonyms,
-                None => fst::Set::default(),
-            };
+            let synonyms = self.index.main.synonyms_fst(&writer).unwrap();
 
             let synonyms_fst = insert_key(&synonyms, word.as_bytes());
             self.index
@@ -339,7 +332,7 @@ mod tests {
 
             index.main.put_schema(&mut writer, &schema).unwrap();
 
-            let words_fst = Set::from_iter(words_fst).unwrap();
+            let words_fst = fst::Set::from_iter(words_fst).unwrap();
 
             index.main.put_words_fst(&mut writer, &words_fst).unwrap();
 

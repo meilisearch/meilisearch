@@ -16,13 +16,13 @@ crossbeam-channel = "0.4.2"
 deunicode = "1.1.0"
 either = "1.5.3"
 env_logger = "0.7.1"
-fst = { version = "0.3.5", default-features = false }
+fst = "0.4.4"
 hashbrown = { version = "0.7.1", features = ["serde"] }
 heed = "0.7.0"
 indexmap = { version = "1.3.2", features = ["serde-1"] }
 intervaltree = "0.2.5"
 itertools = "0.9.0"
-levenshtein_automata = { version = "0.1.1", features = ["fst_automaton"] }
+levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
 log = "0.4.8"
 meilisearch-schema = { path = "../meilisearch-schema", version = "0.10.1" }
 meilisearch-tokenizer = { path = "../meilisearch-tokenizer", version = "0.10.1" }

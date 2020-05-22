@@ -12,7 +12,7 @@ use sdset::{Set, SetBuf, SetOperation};
 use log::debug;
 
 use crate::database::MainT;
-use crate::{store, DocumentId, DocIndex, MResult};
+use crate::{store, DocumentId, DocIndex, MResult, FstSetCow};
 use crate::automaton::{normalize_str, build_dfa, build_prefix_dfa, build_exact_dfa};
 use crate::QueryWordsMapper;
 
@@ -112,9 +112,9 @@ pub struct PostingsList {
     matches: SetBuf<DocIndex>,
 }
 
-pub struct Context {
-    pub words_set: fst::Set,
-    pub stop_words: fst::Set,
+pub struct Context<'a> {
+    pub words_set: FstSetCow<'a>,
+    pub stop_words: FstSetCow<'a>,
     pub synonyms: store::Synonyms,
     pub postings_lists: store::PostingsLists,
     pub prefix_postings_lists: store::PrefixPostingsListsCache,
@@ -147,7 +147,7 @@ fn split_best_frequency<'a>(reader: &heed::RoTxn<MainT>, ctx: &Context, word: &'
 
 fn fetch_synonyms(reader: &heed::RoTxn<MainT>, ctx: &Context, words: &[&str]) -> MResult<Vec<Vec<String>>> {
     let words = normalize_str(&words.join(" "));
-    let set = ctx.synonyms.synonyms(reader, words.as_bytes())?.unwrap_or_default();
+    let set = ctx.synonyms.synonyms(reader, words.as_bytes())?;
 
     let mut strings = Vec::new();
     let mut stream = set.stream();
