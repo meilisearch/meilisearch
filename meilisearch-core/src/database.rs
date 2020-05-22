@@ -8,10 +8,10 @@ use chrono::{DateTime, Utc};
 use crossbeam_channel::{Receiver, Sender};
 use heed::types::{Str, Unit, SerdeBincode};
 use heed::{CompactionOption, Result as ZResult};
-use log::debug;
+use log::{debug, error};
 use meilisearch_schema::Schema;
 
-use crate::{store, update, Index, MResult, Error};
+use crate::{store, update, Index, MResult, Error, UpdateReader, MainWriter};
 
 pub type BoxUpdateFn = Box<dyn Fn(&str, update::ProcessedUpdateResult) + Send + Sync + 'static>;
 type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
@@ -247,6 +247,13 @@ impl Database {
         }
     }
 
+    pub fn is_indexing(&self, reader: &UpdateReader, index: &str) -> MResult<Option<bool>> {
+        match self.open_index(&index) {
+            Some(index) => index.current_update_id(&reader).map(|u| Some(u.is_some())),
+            None => Ok(None),
+        }
+    }
+
     pub fn create_index(&self, name: impl AsRef<str>) -> MResult<Index> {
         let name = name.as_ref();
         let mut indexes_lock = self.indexes.write().unwrap();
@@ -448,6 +455,44 @@ impl Database {
     pub fn get_health(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<()>> {
         let common_store = self.common_store();
         Ok(common_store.get::<_, Str, Unit>(&reader, UNHEALTHY_KEY)?)
+    }
+
+    pub fn compute_stats(&self, writer: &mut MainWriter, index_uid: &str) -> MResult<()> {
+        let index = match self.open_index(&index_uid) {
+            Some(index) => index,
+            None => {
+                error!("Impossible to retrieve index {}", index_uid);
+                return Ok(());
+            }
+        };
+
+        let schema = match index.main.schema(&writer)? {
+            Some(schema) => schema,
+            None => return Ok(()),
+        };
+
+        let all_documents_fields = index
+            .documents_fields_counts
+            .all_documents_fields_counts(&writer)?;
+
+        // count fields frequencies
+        let mut fields_frequency = HashMap::<_, usize>::new();
+        for result in all_documents_fields {
+            let (_, attr, _) = result?;
+            if let Some(field_id) = schema.indexed_pos_to_field_id(attr) {
+                *fields_frequency.entry(field_id).or_default() += 1;
+            }
+        }
+
+        // convert attributes to their names
+        let frequency: HashMap<_, _> = fields_frequency
+            .into_iter()
+            .filter_map(|(a, c)| schema.name(a).map(|name| (name.to_string(), c)))
+            .collect();
+
+        index
+            .main
+            .put_fields_frequency(writer, &frequency)
     }
 }
 

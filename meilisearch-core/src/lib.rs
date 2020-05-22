@@ -52,6 +52,12 @@ use crate::reordered_attrs::ReorderedAttrs;
 type FstSetCow<'a> = fst::Set<Cow<'a, [u8]>>;
 type FstMapCow<'a> = fst::Map<Cow<'a, [u8]>>;
 
+pub type MainWriter<'a> = heed::RwTxn<'a, MainT>;
+pub type MainReader = heed::RoTxn<MainT>;
+
+pub type UpdateWriter<'a> = heed::RwTxn<'a, UpdateT>;
+pub type UpdateReader = heed::RoTxn<UpdateT>;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Document {
     pub id: DocumentId,

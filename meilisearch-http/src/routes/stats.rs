@@ -50,7 +50,7 @@ async fn index_stats(
     let update_reader = data.db.update_read_txn()?;
 
     let is_indexing =
-        data.is_indexing(&update_reader, &path.index_uid)?
+        data.db.is_indexing(&update_reader, &path.index_uid)?
             .ok_or(Error::internal(
                 "Impossible to know if the database is indexing",
             ))?;
@@ -86,7 +86,7 @@ async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError>
 
                 let fields_distribution = index.main.fields_distribution(&reader)?.unwrap_or_default();
 
-                let is_indexing = data.is_indexing(&update_reader, &index_uid)?.ok_or(
+                let is_indexing = data.db.is_indexing(&update_reader, &index_uid)?.ok_or(
                     Error::internal("Impossible to know if the database is indexing"),
                 )?;
 

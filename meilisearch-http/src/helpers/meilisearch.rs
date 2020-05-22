@@ -5,11 +5,11 @@ use std::time::Instant;
 
 use indexmap::IndexMap;
 use log::error;
-use meilisearch_core::Filter;
+use meilisearch_core::{Filter, MainReader};
 use meilisearch_core::facets::FacetFilter;
 use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
-use meilisearch_core::{Highlight, Index, MainT, RankedMap};
+use meilisearch_core::{Highlight, Index, RankedMap};
 use meilisearch_schema::{FieldId, Schema};
 use meilisearch_tokenizer::is_cjk;
 use serde::{Deserialize, Serialize};
@@ -107,7 +107,7 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn search(self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, ResponseError> {
+    pub fn search(self, reader: &MainReader) -> Result<SearchResult, ResponseError> {
         let schema = self
             .index
             .main
@@ -257,7 +257,7 @@ impl<'a> SearchBuilder<'a> {
 
     pub fn get_criteria(
         &self,
-        reader: &heed::RoTxn<MainT>,
+        reader: &MainReader,
         ranked_map: &'a RankedMap,
         schema: &Schema,
     ) -> Result<Option<Criteria<'a>>, ResponseError> {

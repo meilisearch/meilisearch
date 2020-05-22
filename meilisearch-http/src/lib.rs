@@ -59,7 +59,7 @@ pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpda
     if let Some(index) = data.db.open_index(&index_uid) {
         let db = &data.db;
         let res = db.main_write::<_, _, ResponseError>(|mut writer| {
-            if let Err(e) = data.compute_stats(&mut writer, &index_uid) {
+            if let Err(e) = data.db.compute_stats(&mut writer, &index_uid) {
                 error!("Impossible to compute stats; {}", e)
             }
 

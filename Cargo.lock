@@ -1698,7 +1698,6 @@ dependencies = [
  "crossbeam-channel",
  "env_logger",
  "futures",
- "heed",
  "http 0.1.21",
  "http-service",
  "http-service-mock",

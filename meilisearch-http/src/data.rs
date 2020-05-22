@@ -1,9 +1,7 @@
-use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use log::error;
-use meilisearch_core::{Database, DatabaseOptions, MResult, MainT, UpdateT};
+use meilisearch_core::{Database, DatabaseOptions};
 use sha2::Digest;
 use sysinfo::Pid;
 
@@ -53,53 +51,6 @@ impl ApiKeys {
                 self.public = Some(format!("{:x}", sha));
             }
         }
-    }
-}
-
-impl DataInner {
-    pub fn is_indexing(&self, reader: &heed::RoTxn<UpdateT>, index: &str) -> MResult<Option<bool>> {
-        match self.db.open_index(&index) {
-            Some(index) => index.current_update_id(&reader).map(|u| Some(u.is_some())),
-            None => Ok(None),
-        }
-    }
-
-    pub fn compute_stats(&self, writer: &mut heed::RwTxn<MainT>, index_uid: &str) -> MResult<()> {
-        let index = match self.db.open_index(&index_uid) {
-            Some(index) => index,
-            None => {
-                error!("Impossible to retrieve index {}", index_uid);
-                return Ok(());
-            }
-        };
-
-        let schema = match index.main.schema(&writer)? {
-            Some(schema) => schema,
-            None => return Ok(()),
-        };
-
-        let all_documents_fields = index
-            .documents_fields_counts
-            .all_documents_fields_counts(&writer)?;
-
-        // count fields frequencies
-        let mut fields_distribution = HashMap::<_, usize>::new();
-        for result in all_documents_fields {
-            let (_, attr, _) = result?;
-            if let Some(field_id) = schema.indexed_pos_to_field_id(attr) {
-                *fields_distribution.entry(field_id).or_default() += 1;
-            }
-        }
-
-        // convert attributes to their names
-        let distribution: HashMap<_, _> = fields_distribution
-            .into_iter()
-            .filter_map(|(a, c)| schema.name(a).map(|name| (name.to_string(), c)))
-            .collect();
-
-        index
-            .main
-            .put_fields_distribution(writer, &distribution)
     }
 }
 
