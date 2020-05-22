@@ -297,13 +297,13 @@ pub fn update_task<'a, 'b>(
     Ok(status)
 }
 
-fn compute_short_prefixes(writer: &mut heed::RwTxn<MainT>, index: &store::Index) -> MResult<()> {
-    // retrieve the words fst to compute all those prefixes
-    let words_fst = match index.main.words_fst(writer)? {
-        Some(fst) => fst,
-        None => return Ok(()),
-    };
-
+fn compute_short_prefixes<A>(
+    writer: &mut heed::RwTxn<MainT>,
+    words_fst: &fst::Set<A>,
+    index: &store::Index,
+) -> MResult<()>
+where A: AsRef<[u8]>,
+{
     // clear the prefixes
     let pplc_store = index.prefix_postings_lists_cache;
     pplc_store.clear(writer)?;

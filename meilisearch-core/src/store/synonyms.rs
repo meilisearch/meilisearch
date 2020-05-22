@@ -1,7 +1,10 @@
-use heed::types::ByteSlice;
-use crate::database::MainT;
+use std::borrow::Cow;
+
 use heed::Result as ZResult;
-use std::sync::Arc;
+use heed::types::ByteSlice;
+
+use crate::database::MainT;
+use crate::FstSetCow;
 
 #[derive(Copy, Clone)]
 pub struct Synonyms {
@@ -9,12 +12,9 @@ pub struct Synonyms {
 }
 
 impl Synonyms {
-    pub fn put_synonyms(
-        self,
-        writer: &mut heed::RwTxn<MainT>,
-        word: &[u8],
-        synonyms: &fst::Set,
-    ) -> ZResult<()> {
+    pub fn put_synonyms<A>(self, writer: &mut heed::RwTxn<MainT>, word: &[u8], synonyms: &fst::Set<A>) -> ZResult<()>
+    where A: AsRef<[u8]>,
+    {
         let bytes = synonyms.as_fst().as_bytes();
         self.synonyms.put(writer, word, bytes)
     }
@@ -27,15 +27,10 @@ impl Synonyms {
         self.synonyms.clear(writer)
     }
 
-    pub fn synonyms(self, reader: &heed::RoTxn<MainT>, word: &[u8]) -> ZResult<Option<fst::Set>> {
+    pub fn synonyms<'txn>(self, reader: &'txn heed::RoTxn<MainT>, word: &[u8]) -> ZResult<FstSetCow<'txn>> {
         match self.synonyms.get(reader, word)? {
-            Some(bytes) => {
-                let len = bytes.len();
-                let bytes = Arc::new(bytes.to_owned());
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
-                Ok(Some(fst::Set::from(fst)))
-            }
-            None => Ok(None),
+            Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
+            None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
         }
     }
 }

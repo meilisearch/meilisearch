@@ -114,7 +114,8 @@ pub fn apply_documents_deletion(
             ranked_map.remove(id, *ranked_attr);
         }
 
-        if let Some(words) = index.docs_words.doc_words(writer, id)? {
+        let words = index.docs_words.doc_words(writer, id)?;
+        if !words.is_empty() {
             let mut stream = words.stream();
             while let Some(word) = stream.next() {
                 let word = word.to_vec();
@@ -157,21 +158,16 @@ pub fn apply_documents_deletion(
     }
 
     let removed_words = fst::Set::from_iter(removed_words).unwrap();
-    let words = match index.main.words_fst(writer)? {
-        Some(words_set) => {
-            let op = fst::set::OpBuilder::new()
-                .add(words_set.stream())
-                .add(removed_words.stream())
-                .difference();
+    let words = {
+        let words_set = index.main.words_fst(writer)?;
+        let op = fst::set::OpBuilder::new()
+            .add(words_set.stream())
+            .add(removed_words.stream())
+            .difference();
 
-            let mut words_builder = SetBuilder::memory();
-            words_builder.extend_stream(op).unwrap();
-            words_builder
-                .into_inner()
-                .and_then(fst::Set::from_bytes)
-                .unwrap()
-        }
-        None => fst::Set::default(),
+        let mut words_builder = SetBuilder::memory();
+        words_builder.extend_stream(op).unwrap();
+        words_builder.into_set()
     };
 
     index.main.put_words_fst(writer, &words)?;
@@ -182,7 +178,7 @@ pub fn apply_documents_deletion(
     index.main.remove_external_docids(writer, &external_docids)?;
     index.main.remove_internal_docids(writer, &internal_docids)?;
 
-    compute_short_prefixes(writer, index)?;
+    compute_short_prefixes(writer, &words, index)?;
 
     Ok(())
 }

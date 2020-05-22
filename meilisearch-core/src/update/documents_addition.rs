@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, BTreeMap};
 
 use fst::{set::OpBuilder, SetBuilder};
@@ -108,17 +109,18 @@ pub fn push_documents_addition<D: serde::Serialize>(
     Ok(last_update_id)
 }
 
-fn index_document(
+fn index_document<A>(
     writer: &mut heed::RwTxn<MainT>,
     documents_fields: DocumentsFields,
     documents_fields_counts: DocumentsFieldsCounts,
     ranked_map: &mut RankedMap,
-    indexer: &mut RawIndexer,
+    indexer: &mut RawIndexer<A>,
     schema: &Schema,
     field_id: FieldId,
     document_id: DocumentId,
     value: &Value,
 ) -> MResult<()>
+where A: AsRef<[u8]>,
 {
     let serialized = serde_json::to_vec(value)?;
     documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
@@ -208,10 +210,7 @@ pub fn apply_addition<'a, 'b>(
         None => RankedMap::default(),
     };
 
-    let stop_words = match index.main.stop_words_fst(writer)? {
-        Some(stop_words) => stop_words,
-        None => fst::Set::default(),
-    };
+    let stop_words = index.main.stop_words_fst(writer)?.map_data(Cow::into_owned)?;
 
     // 3. index the documents fields in the stores
     if let Some(attributes_for_facetting) = index.main.attributes_for_faceting(writer)? {
@@ -297,10 +296,10 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
     index.postings_lists.clear(writer)?;
     index.docs_words.clear(writer)?;
 
-    let stop_words = match index.main.stop_words_fst(writer)? {
-        Some(stop_words) => stop_words,
-        None => fst::Set::default(),
-    };
+    let stop_words = index.main
+        .stop_words_fst(writer)?
+        .map_data(Cow::into_owned)
+        .unwrap();
 
     let number_of_inserted_documents = documents_ids_to_reindex.len();
     let mut indexer = RawIndexer::new(stop_words);
@@ -348,13 +347,15 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
     Ok(())
 }
 
-pub fn write_documents_addition_index(
+pub fn write_documents_addition_index<A>(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     ranked_map: &RankedMap,
     number_of_inserted_documents: usize,
-    indexer: RawIndexer,
-) -> MResult<()> {
+    indexer: RawIndexer<A>,
+) -> MResult<()>
+where A: AsRef<[u8]>,
+{
     let indexed = indexer.build();
     let mut delta_words_builder = SetBuilder::memory();
 
@@ -373,33 +374,27 @@ pub fn write_documents_addition_index(
         index.docs_words.put_doc_words(writer, id, &words)?;
     }
 
-    let delta_words = delta_words_builder
-        .into_inner()
-        .and_then(fst::Set::from_bytes)
-        .unwrap();
+    let delta_words = delta_words_builder.into_set();
 
-    let words = match index.main.words_fst(writer)? {
-        Some(words) => {
-            let op = OpBuilder::new()
-                .add(words.stream())
-                .add(delta_words.stream())
-                .r#union();
+    let words_fst = index.main.words_fst(writer)?;
+    let words = if !words_fst.is_empty() {
+        let op = OpBuilder::new()
+            .add(words_fst.stream())
+            .add(delta_words.stream())
+            .r#union();
 
-            let mut words_builder = SetBuilder::memory();
-            words_builder.extend_stream(op).unwrap();
-            words_builder
-                .into_inner()
-                .and_then(fst::Set::from_bytes)
-                .unwrap()
-        }
-        None => delta_words,
+        let mut words_builder = SetBuilder::memory();
+        words_builder.extend_stream(op).unwrap();
+        words_builder.into_set()
+    } else {
+        delta_words
     };
 
     index.main.put_words_fst(writer, &words)?;
     index.main.put_ranked_map(writer, ranked_map)?;
     index.main.put_number_of_documents(writer, |old| old + number_of_inserted_documents as u64)?;
 
-    compute_short_prefixes(writer, index)?;
+    compute_short_prefixes(writer, &words, index)?;
 
     Ok(())
 }

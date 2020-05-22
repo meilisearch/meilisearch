@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::Arc;
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
@@ -12,6 +11,7 @@ use sdset::Set;
 use crate::database::MainT;
 use crate::RankedMap;
 use crate::settings::RankingRule;
+use crate::{FstSetCow, FstMapCow};
 use super::{CowSet, DocumentsIds};
 
 const ATTRIBUTES_FOR_FACETING_KEY: &str = "attributes-for-faceting";
@@ -103,11 +103,15 @@ impl Main {
         self.put_internal_docids(writer, &internal_docids)
     }
 
-    pub fn put_external_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
+    pub fn put_external_docids<A>(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map<A>) -> ZResult<()>
+    where A: AsRef<[u8]>,
+    {
         self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, ids.as_fst().as_bytes())
     }
 
-    pub fn merge_external_docids(self, writer: &mut heed::RwTxn<MainT>, new_docids: &fst::Map) -> ZResult<()> {
+    pub fn merge_external_docids<A>(self, writer: &mut heed::RwTxn<MainT>, new_docids: &fst::Map<A>) -> ZResult<()>
+    where A: AsRef<[u8]>,
+    {
         use fst::{Streamer, IntoStreamer};
 
         // Do an union of the old and the new set of external docids.
@@ -117,13 +121,15 @@ impl Main {
         while let Some((docid, values)) = op.next() {
             build.insert(docid, values[0].value).unwrap();
         }
-        let external_docids = build.into_inner().unwrap();
+        drop(op);
 
-        // TODO prefer using self.put_user_ids
-        self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, external_docids.as_slice())
+        let external_docids = build.into_map();
+        self.put_external_docids(writer, &external_docids)
     }
 
-    pub fn remove_external_docids(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map) -> ZResult<()> {
+    pub fn remove_external_docids<A>(self, writer: &mut heed::RwTxn<MainT>, ids: &fst::Map<A>) -> ZResult<()>
+    where A: AsRef<[u8]>,
+    {
         use fst::{Streamer, IntoStreamer};
 
         // Do an union of the old and the new set of external docids.
@@ -133,21 +139,16 @@ impl Main {
         while let Some((docid, values)) = op.next() {
             build.insert(docid, values[0].value).unwrap();
         }
-        let external_docids = build.into_inner().unwrap();
+        drop(op);
 
-        // TODO prefer using self.put_external_docids
-        self.main.put::<_, Str, ByteSlice>(writer, EXTERNAL_DOCIDS_KEY, external_docids.as_slice())
+        let external_docids = build.into_map();
+        self.put_external_docids(writer, &external_docids)
     }
 
-    pub fn external_docids(self, reader: &heed::RoTxn<MainT>) -> ZResult<fst::Map> {
+    pub fn external_docids(self, reader: &heed::RoTxn<MainT>) -> ZResult<FstMapCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, EXTERNAL_DOCIDS_KEY)? {
-            Some(bytes) => {
-                let len = bytes.len();
-                let bytes = Arc::new(bytes.to_owned());
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
-                Ok(fst::Map::from(fst))
-            },
-            None => Ok(fst::Map::default()),
+            Some(bytes) => Ok(fst::Map::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
+            None => Ok(fst::Map::default().map_data(Cow::Owned).unwrap()),
         }
     }
 
@@ -156,30 +157,14 @@ impl Main {
         Ok(external_ids.get(external_docid).map(|id| DocumentId(id as u32)))
     }
 
-    pub fn put_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
+    pub fn put_words_fst<A: AsRef<[u8]>>(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set<A>) -> ZResult<()> {
         self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, fst.as_fst().as_bytes())
     }
 
-    pub unsafe fn static_words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
+    pub fn words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<FstSetCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, WORDS_KEY)? {
-            Some(bytes) => {
-                let bytes: &'static [u8] = std::mem::transmute(bytes);
-                let set = fst::Set::from_static_slice(bytes).unwrap();
-                Ok(Some(set))
-            },
-            None => Ok(None),
-        }
-    }
-
-    pub fn words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
-        match self.main.get::<_, Str, ByteSlice>(reader, WORDS_KEY)? {
-            Some(bytes) => {
-                let len = bytes.len();
-                let bytes = Arc::new(bytes.to_owned());
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
-                Ok(Some(fst::Set::from(fst)))
-            },
-            None => Ok(None),
+            Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
+            None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
         }
     }
 
@@ -203,37 +188,27 @@ impl Main {
         self.main.get::<_, Str, SerdeBincode<RankedMap>>(reader, RANKED_MAP_KEY)
     }
 
-    pub fn put_synonyms_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
+    pub fn put_synonyms_fst<A: AsRef<[u8]>>(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set<A>) -> ZResult<()> {
         let bytes = fst.as_fst().as_bytes();
         self.main.put::<_, Str, ByteSlice>(writer, SYNONYMS_KEY, bytes)
     }
 
-    pub fn synonyms_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
+    pub fn synonyms_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<FstSetCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, SYNONYMS_KEY)? {
-            Some(bytes) => {
-                let len = bytes.len();
-                let bytes = Arc::new(bytes.to_owned());
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
-                Ok(Some(fst::Set::from(fst)))
-            }
-            None => Ok(None),
+            Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
+            None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
         }
     }
 
-    pub fn put_stop_words_fst(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set) -> ZResult<()> {
+    pub fn put_stop_words_fst<A: AsRef<[u8]>>(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set<A>) -> ZResult<()> {
         let bytes = fst.as_fst().as_bytes();
         self.main.put::<_, Str, ByteSlice>(writer, STOP_WORDS_KEY, bytes)
     }
 
-    pub fn stop_words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<fst::Set>> {
+    pub fn stop_words_fst(self, reader: &heed::RoTxn<MainT>) -> ZResult<FstSetCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, STOP_WORDS_KEY)? {
-            Some(bytes) => {
-                let len = bytes.len();
-                let bytes = Arc::new(bytes.to_owned());
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
-                Ok(Some(fst::Set::from(fst)))
-            }
-            None => Ok(None),
+            Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
+            None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
         }
     }
 

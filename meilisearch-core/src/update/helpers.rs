@@ -6,18 +6,19 @@ use meilisearch_types::DocumentId;
 use ordered_float::OrderedFloat;
 use serde_json::Value;
 
-use crate::Number;
+use crate::{Number, FstMapCow};
 use crate::raw_indexer::RawIndexer;
 use crate::serde::SerializerError;
 use crate::store::DiscoverIds;
 
 /// Returns the number of words indexed or `None` if the type is unindexable.
-pub fn index_value(
-    indexer: &mut RawIndexer,
+pub fn index_value<A>(
+    indexer: &mut RawIndexer<A>,
     document_id: DocumentId,
     indexed_pos: IndexedPos,
     value: &Value,
 ) -> Option<usize>
+where A: AsRef<[u8]>,
 {
     match value {
         Value::Null => None,
@@ -99,7 +100,7 @@ pub fn value_to_number(value: &Value) -> Option<Number> {
 /// the corresponding id or generate a new one, this is the way we produce documents ids.
 pub fn discover_document_id(
     docid: &str,
-    external_docids: &fst::Map,
+    external_docids: &FstMapCow,
     available_docids: &mut DiscoverIds<'_>,
 ) -> Result<DocumentId, SerializerError>
 {
@@ -120,7 +121,7 @@ pub fn discover_document_id(
 pub fn extract_document_id(
     primary_key: &str,
     document: &IndexMap<String, Value>,
-    external_docids: &fst::Map,
+    external_docids: &FstMapCow,
     available_docids: &mut DiscoverIds<'_>,
 ) -> Result<(DocumentId, String), SerializerError>
 {

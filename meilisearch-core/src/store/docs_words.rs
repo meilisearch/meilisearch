@@ -1,9 +1,11 @@
-use super::BEU32;
-use crate::database::MainT;
-use crate::DocumentId;
-use heed::types::{ByteSlice, OwnedType};
+use std::borrow::Cow;
+
 use heed::Result as ZResult;
-use std::sync::Arc;
+use heed::types::{ByteSlice, OwnedType};
+
+use crate::database::MainT;
+use crate::{DocumentId, FstSetCow};
+use super::BEU32;
 
 #[derive(Copy, Clone)]
 pub struct DocsWords {
@@ -15,7 +17,7 @@ impl DocsWords {
         self,
         writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
-        words: &fst::Set,
+        words: &FstSetCow,
     ) -> ZResult<()> {
         let document_id = BEU32::new(document_id.0);
         let bytes = words.as_fst().as_bytes();
@@ -31,20 +33,11 @@ impl DocsWords {
         self.docs_words.clear(writer)
     }
 
-    pub fn doc_words(
-        self,
-        reader: &heed::RoTxn<MainT>,
-        document_id: DocumentId,
-    ) -> ZResult<Option<fst::Set>> {
+    pub fn doc_words(self, reader: &heed::RoTxn<MainT>, document_id: DocumentId) -> ZResult<FstSetCow> {
         let document_id = BEU32::new(document_id.0);
         match self.docs_words.get(reader, &document_id)? {
-            Some(bytes) => {
-                let len = bytes.len();
-                let bytes = Arc::new(bytes.to_owned());
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
-                Ok(Some(fst::Set::from(fst)))
-            }
-            None => Ok(None),
+            Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
+            None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
         }
     }
 }

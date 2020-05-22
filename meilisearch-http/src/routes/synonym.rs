@@ -29,18 +29,15 @@ async fn get(
 
     let reader = data.db.main_read_txn()?;
 
-    let synonyms_fst = index.main.synonyms_fst(&reader)?.unwrap_or_default();
+    let synonyms_fst = index.main.synonyms_fst(&reader)?;
     let synonyms_list = synonyms_fst.stream().into_strs()?;
 
     let mut synonyms = IndexMap::new();
     let index_synonyms = &index.synonyms;
     for synonym in synonyms_list {
         let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
-
-        if let Some(list) = alternative_list {
-            let list = list.stream().into_strs()?;
-            synonyms.insert(synonym, list);
-        }
+        let list = alternative_list.stream().into_strs()?;
+        synonyms.insert(synonym, list);
     }
 
     Ok(HttpResponse::Ok().json(synonyms))

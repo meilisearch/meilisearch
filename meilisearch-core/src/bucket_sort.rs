@@ -79,12 +79,8 @@ where
 
     let mut result = SortResult::default();
 
-    let words_set = match unsafe { main_store.static_words_fst(reader)? } {
-        Some(words) => words,
-        None => return Ok(SortResult::default()),
-    };
-
-    let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
+    let words_set = main_store.words_fst(reader)?;
+    let stop_words = main_store.stop_words_fst(reader)?;
 
     let context = QTContext {
         words_set,
@@ -230,12 +226,8 @@ where
 {
     let mut result = SortResult::default();
 
-    let words_set = match unsafe { main_store.static_words_fst(reader)? } {
-        Some(words) => words,
-        None => return Ok(SortResult::default()),
-    };
-
-    let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
+    let words_set = main_store.words_fst(reader)?;
+    let stop_words = main_store.stop_words_fst(reader)?;
 
     let context = QTContext {
         words_set,
