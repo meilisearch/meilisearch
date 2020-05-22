@@ -1,6 +1,7 @@
 ## v0.10.2
 
   - Bump sentry version to 0.18.1 (#690)
+  - Enable max payload size override (#684)
   - Disable sentry in debug (#681)
   - Better terminal greeting (#680)
   - Fix highlight misalignment (#679)
