@@ -7,7 +7,7 @@ use actix_service::{Service, Transform};
 use actix_web::{dev::ServiceRequest, dev::ServiceResponse};
 use futures::future::{err, ok, Future, Ready};
 
-use crate::error::Error;
+use crate::error::{Error, ResponseError};
 use crate::Data;
 
 #[derive(Clone)]
@@ -71,10 +71,10 @@ where
         let auth_header = match req.headers().get("X-Meili-API-Key") {
             Some(auth) => match auth.to_str() {
                 Ok(auth) => auth,
-                Err(_) => return Box::pin(err(Error::MissingAuthorizationHeader.into())),
+                Err(_) => return Box::pin(err(ResponseError::from(Error::MissingAuthorizationHeader).into())),
             },
             None => {
-                return Box::pin(err(Error::MissingAuthorizationHeader.into()));
+                return Box::pin(err(ResponseError::from(Error::MissingAuthorizationHeader).into()));
             }
         };
 
@@ -95,7 +95,7 @@ where
             Box::pin(svc.call(req))
         } else {
             Box::pin(err(
-                Error::InvalidToken(auth_header.to_string()).into()
+                ResponseError::from(Error::InvalidToken(auth_header.to_string())).into()
             ))
         }
     }

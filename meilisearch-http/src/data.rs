@@ -2,19 +2,13 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
-use heed::types::{SerdeBincode, Str};
 use log::error;
-use meilisearch_core::{Database, DatabaseOptions, Error as MError, MResult, MainT, UpdateT};
+use meilisearch_core::{Database, DatabaseOptions, MResult, MainT, UpdateT};
 use sha2::Digest;
 use sysinfo::Pid;
 
 use crate::index_update_callback;
 use crate::option::Opt;
-
-const LAST_UPDATE_KEY: &str = "last-update";
-
-type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
 
 #[derive(Clone)]
 pub struct Data {
@@ -70,24 +64,6 @@ impl DataInner {
         }
     }
 
-    pub fn last_update(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<DateTime<Utc>>> {
-        match self
-            .db
-            .common_store()
-            .get::<_, Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)?
-        {
-            Some(datetime) => Ok(Some(datetime)),
-            None => Ok(None),
-        }
-    }
-
-    pub fn set_last_update(&self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
-        self.db
-            .common_store()
-            .put::<_, Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, &Utc::now())
-            .map_err(Into::into)
-    }
-
     pub fn compute_stats(&self, writer: &mut heed::RwTxn<MainT>, index_uid: &str) -> MResult<()> {
         let index = match self.db.open_index(&index_uid) {
             Some(index) => index,
@@ -124,7 +100,6 @@ impl DataInner {
         index
             .main
             .put_fields_distribution(writer, &distribution)
-            .map_err(MError::Zlmdb)
     }
 }
 
@@ -170,3 +145,4 @@ impl Data {
         data
     }
 }
+

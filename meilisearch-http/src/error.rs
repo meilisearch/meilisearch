@@ -1,10 +1,30 @@
 use std::fmt;
+use std::error;
 
 use actix_http::ResponseBuilder;
 use actix_web as aweb;
 use actix_web::http::StatusCode;
 use serde_json::json;
 use actix_web::error::JsonPayloadError;
+
+use meilisearch_error::{ErrorCode, Code};
+
+#[derive(Debug)]
+pub struct ResponseError {
+    inner: Box<dyn ErrorCode>,
+}
+
+impl fmt::Display for ResponseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl From<Error> for ResponseError {
+    fn from(error: Error) -> ResponseError {
+        ResponseError { inner: Box::new(error) }
+    }
+}
 
 #[derive(Debug)]
 pub enum Error {
@@ -26,15 +46,31 @@ pub enum Error {
     SearchDocuments(String),
     PayloadTooLarge,
     UnsupportedMediaType,
-    FacetExpression(String),
-    FacetCount(String),
 }
 
+impl error::Error for Error {}
+
+impl ErrorCode for Error {
+    fn error_code(&self) -> Code {
+        //TODO populate with right error codes
+        Code::Other
+    }
+}
+
+#[derive(Debug)]
 pub enum FacetCountError {
     AttributeNotSet(String),
     SyntaxError(String),
     UnexpectedToken { found: String, expected: &'static [&'static str] },
     NoFacetSet,
+}
+
+impl error::Error for FacetCountError {}
+
+impl ErrorCode for FacetCountError {
+    fn error_code(&self) -> Code {
+        unimplemented!()
+    }
 }
 
 impl FacetCountError {
@@ -137,94 +173,42 @@ impl fmt::Display for Error {
             Self::InvalidIndexUid => f.write_str("Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_)."),
             Self::InvalidToken(err) => write!(f, "Invalid API key: {}", err),
             Self::Maintenance => f.write_str("Server is in maintenance, please try again later"),
-            Self::FilterParsing(err) => write!(f, "parsing error: {}", err),
             Self::MissingAuthorizationHeader => f.write_str("You must have an authorization token"),
             Self::MissingHeader(header) => write!(f, "Header {} is missing", header),
             Self::NotFound(err) => write!(f, "{} not found", err),
             Self::OpenIndex(err) => write!(f, "Impossible to open index; {}", err),
             Self::RetrieveDocument(id, err) => write!(f, "impossible to retrieve the document with id: {}; {}", id, err),
             Self::SearchDocuments(err) => write!(f, "impossible to search documents; {}", err),
-            Self::FacetExpression(e) => write!(f, "error parsing facet filter expression: {}", e),
             Self::PayloadTooLarge => f.write_str("Payload to large"),
             Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
-            Self::FacetCount(e) => write!(f, "error with facet count: {}", e),
         }
     }
 }
 
-impl aweb::error::ResponseError for Error {
+impl aweb::error::ResponseError for ResponseError {
     fn error_response(&self) -> aweb::HttpResponse {
+        let error_code = self.inner.error_code().internal();
         ResponseBuilder::new(self.status_code()).json(json!({
             "message": self.to_string(),
+            "errorCode": error_code,
+            "errorLink": format!("docs.meilisearch.come/error/{}", error_code),
         }))
     }
 
     fn status_code(&self) -> StatusCode {
-       match *self {
-            Self::BadParameter(_, _)
-            | Self::BadRequest(_)
-            | Self::CreateIndex(_)
-            | Self::InvalidIndexUid
-            | Self::OpenIndex(_)
-            | Self::RetrieveDocument(_, _)
-            | Self::FacetExpression(_)
-            | Self::SearchDocuments(_)
-            | Self::FacetCount(_)
-            | Self::FilterParsing(_) => StatusCode::BAD_REQUEST,
-            Self::DocumentNotFound(_)
-            | Self::IndexNotFound(_)
-            | Self::NotFound(_) => StatusCode::NOT_FOUND,
-            Self::InvalidToken(_)
-            | Self::MissingHeader(_) => StatusCode::UNAUTHORIZED,
-            Self::MissingAuthorizationHeader => StatusCode::FORBIDDEN,
-            Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::Maintenance => StatusCode::SERVICE_UNAVAILABLE,
-            Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-        }
+        self.inner.error_code().http()
     }
 }
 
-impl From<meilisearch_core::HeedError> for Error {
-    fn from(err: meilisearch_core::HeedError) -> Error {
-        Error::Internal(err.to_string())
+impl From<meilisearch_core::Error> for ResponseError {
+    fn from(err: meilisearch_core::Error) -> ResponseError {
+        ResponseError { inner: Box::new(err) }
     }
 }
 
-impl From<meilisearch_core::FstError> for Error {
-    fn from(err: meilisearch_core::FstError) -> Error {
-        Error::Internal(err.to_string())
-    }
-}
-
-impl From<meilisearch_core::FacetError> for Error {
-    fn from(error: meilisearch_core::FacetError) -> Error {
-        Error::FacetExpression(error.to_string())
-    }
-}
-
-impl From<meilisearch_core::Error> for Error {
-    fn from(err: meilisearch_core::Error) -> Error {
-        use meilisearch_core::pest_error::LineColLocation::*;
-        match err {
-            meilisearch_core::Error::FilterParseError(e) => {
-                let (line, column) = match e.line_col {
-                    Span((line, _), (column, _)) => (line, column),
-                    Pos((line, column)) => (line, column),
-                };
-                let message = format!("parsing error on line {} at column {}: {}", line, column, e.variant.message());
-
-                Error::FilterParsing(message)
-            },
-            meilisearch_core::Error::FacetError(e) => Error::FacetExpression(e.to_string()),
-            _ => Error::Internal(err.to_string()),
-        }
-    }
-}
-
-impl From<meilisearch_schema::Error> for Error {
-    fn from(err: meilisearch_schema::Error) -> Error {
-        Error::Internal(err.to_string())
+impl From<meilisearch_schema::Error> for ResponseError {
+    fn from(err: meilisearch_schema::Error) -> ResponseError {
+        ResponseError { inner: Box::new(err) }
     }
 }
 
@@ -234,9 +218,9 @@ impl From<actix_http::Error> for Error {
     }
 }
 
-impl From<FacetCountError> for Error {
-    fn from(other: FacetCountError) -> Error {
-        Error::FacetCount(other.to_string())
+impl From<FacetCountError> for ResponseError {
+    fn from(err: FacetCountError) -> ResponseError {
+        ResponseError { inner: Box::new(err) }
     }
 }
 
@@ -251,6 +235,7 @@ impl From<JsonPayloadError> for Error {
     }
 }
 
-pub fn json_error_handler(err: JsonPayloadError) -> Error {
-    err.into()
+pub fn json_error_handler(err: JsonPayloadError) -> ResponseError {
+    let error = Error::from(err);
+    error.into()
 }

@@ -9,6 +9,8 @@ pub use fst::Error as FstError;
 pub use heed::Error as HeedError;
 pub use pest::error as pest_error;
 
+use meilisearch_error::{ErrorCode, Code};
+
 pub type MResult<T> = Result<T, Error>;
 
 #[derive(Debug)]
@@ -21,7 +23,7 @@ pub enum Error {
     MissingDocumentId,
     MaxFieldsLimitExceeded,
     Schema(meilisearch_schema::Error),
-    Zlmdb(heed::Error),
+    Heed(heed::Error),
     Fst(fst::Error),
     SerdeJson(SerdeJsonError),
     Bincode(bincode::Error),
@@ -30,6 +32,13 @@ pub enum Error {
     UnsupportedOperation(UnsupportedOperation),
     FilterParseError(PestError<Rule>),
     FacetError(FacetError),
+}
+
+impl ErrorCode for Error {
+    fn error_code(&self) -> Code {
+        //TODO populate codes
+        Code::Other
+    }
 }
 
 impl From<io::Error> for Error {
@@ -74,7 +83,7 @@ impl From<meilisearch_schema::Error> for Error {
 
 impl From<HeedError> for Error {
     fn from(error: HeedError) -> Error {
-        Error::Zlmdb(error)
+        Error::Heed(error)
     }
 }
 
@@ -126,7 +135,7 @@ impl fmt::Display for Error {
             MissingDocumentId => write!(f, "document id is missing"),
             MaxFieldsLimitExceeded => write!(f, "maximum number of fields in a document exceeded"),
             Schema(e) => write!(f, "schema error; {}", e),
-            Zlmdb(e) => write!(f, "heed error; {}", e),
+            Heed(e) => write!(f, "heed error; {}", e),
             Fst(e) => write!(f, "fst error; {}", e),
             SerdeJson(e) => write!(f, "serde json error; {}", e),
             Bincode(e) => write!(f, "bincode error; {}", e),
@@ -174,6 +183,7 @@ pub enum FacetError {
     AttributeNotFound(String),
     AttributeNotSet { expected: Vec<String>, found: String },
     InvalidDocumentAttribute(String),
+    NoFacetAttributes,
 }
 
 impl FacetError {
@@ -198,6 +208,7 @@ impl fmt::Display for FacetError {
             AttributeNotFound(attr) => write!(f, "unknown {:?} attribute", attr),
             AttributeNotSet { found, expected } => write!(f, "`{}` is not set as a faceted attribute. available facet attributes: {}", found, expected.join(", ")),
             InvalidDocumentAttribute(attr) => write!(f, "invalid document attribute {}, accepted types: String and [String]", attr),
+            NoFacetAttributes => write!(f, "No attributes are set for faceting"),
         }
     }
 }

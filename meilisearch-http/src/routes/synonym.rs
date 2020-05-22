@@ -5,7 +5,7 @@ use actix_web_macros::{delete, get, post};
 use indexmap::IndexMap;
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
 
-use crate::error::Error;
+use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
@@ -21,7 +21,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 async fn get(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, Error> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
@@ -29,15 +29,15 @@ async fn get(
 
     let reader = data.db.main_read_txn()?;
 
-    let synonyms_fst = index.main.synonyms_fst(&reader)?;
-    let synonyms_list = synonyms_fst.stream().into_strs()?;
+    let synonyms_list = index.main.synonyms_list(&reader)?;
 
     let mut synonyms = IndexMap::new();
     let index_synonyms = &index.synonyms;
     for synonym in synonyms_list {
         let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
-        let list = alternative_list.stream().into_strs()?;
-        synonyms.insert(synonym, list);
+        if let Some(list) = alternative_list {
+            synonyms.insert(synonym, list);
+        }
     }
 
     Ok(HttpResponse::Ok().json(synonyms))
@@ -51,7 +51,7 @@ async fn update(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<BTreeMap<String, Vec<String>>>,
-) -> Result<HttpResponse, Error> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
@@ -62,9 +62,10 @@ async fn update(
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
+        let update_id = index.settings_update(&mut writer, settings)?;
+        Ok(update_id)
+    })?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -76,7 +77,7 @@ async fn update(
 async fn delete(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, Error> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
@@ -87,10 +88,10 @@ async fn delete(
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-
-    writer.commit()?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|mut writer| {
+        let update_id = index.settings_update(&mut writer, settings)?;
+        Ok(update_id)
+    })?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

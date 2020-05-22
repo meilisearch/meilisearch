@@ -17,7 +17,7 @@ use serde_json::Value;
 use siphasher::sip::SipHasher;
 use slice_group_by::GroupBy;
 
-use crate::error::Error;
+use crate::error::{Error, ResponseError};
 
 pub trait IndexSearchExt {
     fn new_search(&self, query: String) -> SearchBuilder;
@@ -107,7 +107,7 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn search(self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, Error> {
+    pub fn search(self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, ResponseError> {
         let schema = self
             .index
             .main
@@ -260,7 +260,7 @@ impl<'a> SearchBuilder<'a> {
         reader: &heed::RoTxn<MainT>,
         ranked_map: &'a RankedMap,
         schema: &Schema,
-    ) -> Result<Option<Criteria<'a>>, Error> {
+    ) -> Result<Option<Criteria<'a>>, ResponseError> {
         let ranking_rules = self.index.main.ranking_rules(reader)?;
 
         if let Some(ranking_rules) = ranking_rules {

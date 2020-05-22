@@ -21,6 +21,7 @@ async fn delete_batch() {
     server.populate_movies().await;
 
     let (_response, status_code) = server.get_document(419704).await;
+    println!("{:?}", _response);
     assert_eq!(status_code, 200);
 
     let body = serde_json::json!([419704, 512200, 181812]);

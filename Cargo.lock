@@ -1653,6 +1653,7 @@ dependencies = [
  "jemallocator",
  "levenshtein_automata",
  "log",
+ "meilisearch-error",
  "meilisearch-schema",
  "meilisearch-tokenizer",
  "meilisearch-types",
@@ -1671,6 +1672,13 @@ dependencies = [
  "termcolor",
  "unicase",
  "zerocopy",
+]
+
+[[package]]
+name = "meilisearch-error"
+version = "0.10.1"
+dependencies = [
+ "actix-http",
 ]
 
 [[package]]
@@ -1699,6 +1707,7 @@ dependencies = [
  "log",
  "main_error",
  "meilisearch-core",
+ "meilisearch-error",
  "meilisearch-schema",
  "meilisearch-tokenizer",
  "mime",
@@ -1729,6 +1738,7 @@ version = "0.10.1"
 dependencies = [
  "bincode",
  "indexmap",
+ "meilisearch-error",
  "serde",
  "serde_json",
  "toml",

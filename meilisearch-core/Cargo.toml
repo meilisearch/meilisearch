@@ -24,6 +24,7 @@ intervaltree = "0.2.5"
 itertools = "0.9.0"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
 log = "0.4.8"
+meilisearch-error = { path = "../meilisearch-error", version = "0.10.1" }
 meilisearch-schema = { path = "../meilisearch-schema", version = "0.10.1" }
 meilisearch-tokenizer = { path = "../meilisearch-tokenizer", version = "0.10.1" }
 meilisearch-types = { path = "../meilisearch-types", version = "0.10.1" }

@@ -10,7 +10,7 @@ use serde::Serialize;
 use sysinfo::{NetworkExt, ProcessExt, ProcessorExt, System, SystemExt};
 use walkdir::WalkDir;
 
-use crate::error::Error;
+use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
@@ -35,7 +35,7 @@ struct IndexStatsResponse {
 async fn index_stats(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-) -> Result<HttpResponse, Error> {
+) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
         .open_index(&path.index_uid)
@@ -71,7 +71,7 @@ struct StatsResult {
 }
 
 #[get("/stats", wrap = "Authentication::Private")]
-async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, Error> {
+async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let mut index_list = HashMap::new();
 
     let reader = data.db.main_read_txn()?;
@@ -111,7 +111,7 @@ async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, Error> {
         .filter(|metadata| metadata.is_file())
         .fold(0, |acc, m| acc + m.len());
 
-    let last_update = data.last_update(&reader)?;
+    let last_update = data.db.last_update(&reader)?;
 
     Ok(HttpResponse::Ok().json(StatsResult {
         database_size,

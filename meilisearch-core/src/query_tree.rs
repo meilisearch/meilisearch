@@ -147,7 +147,7 @@ fn split_best_frequency<'a>(reader: &heed::RoTxn<MainT>, ctx: &Context, word: &'
 
 fn fetch_synonyms(reader: &heed::RoTxn<MainT>, ctx: &Context, words: &[&str]) -> MResult<Vec<Vec<String>>> {
     let words = normalize_str(&words.join(" "));
-    let set = ctx.synonyms.synonyms(reader, words.as_bytes())?;
+    let set = ctx.synonyms.synonyms_fst(reader, words.as_bytes())?;
 
     let mut strings = Vec::new();
     let mut stream = set.stream();
