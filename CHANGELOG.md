@@ -13,6 +13,7 @@
   - Fix url trailing slash and double slash issues (#659)
   - Fix accept all Content-Type by default (#653)
   - Return the error message from Serde when a deserialization error is encountered (#661)
+  - Fix NormalizePath middleware to make the dashboard accessible (#695)
 
 ## v0.10.1
 

@@ -7,7 +7,7 @@ use actix_web::{http::StatusCode, test};
 use meilisearch_core::DatabaseOptions;
 use meilisearch_http::data::Data;
 use meilisearch_http::option::Opt;
-use meilisearch_http::helpers::NormalizeSlashes;
+use meilisearch_http::helpers::NormalizePath;
 use tempdir::TempDir;
 use tokio::time::delay_for;
 
@@ -128,7 +128,7 @@ impl Server {
     pub async fn get_request(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("get_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizeSlashes)).await;
+        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::get().uri(url).to_request();
         let res = test::call_service(&mut app, req).await;
@@ -142,7 +142,7 @@ impl Server {
     pub async fn post_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("post_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizeSlashes)).await;
+        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::post()
             .uri(url)
@@ -171,7 +171,7 @@ impl Server {
     pub async fn put_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("put_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizeSlashes)).await;
+        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::put()
             .uri(url)
@@ -199,7 +199,7 @@ impl Server {
     pub async fn delete_request(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("delete_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizeSlashes)).await;
+        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::delete().uri(url).to_request();
         let res = test::call_service(&mut app, req).await;
