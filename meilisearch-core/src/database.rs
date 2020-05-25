@@ -11,7 +11,7 @@ use heed::{CompactionOption, Result as ZResult};
 use log::{debug, error};
 use meilisearch_schema::Schema;
 
-use crate::{store, update, Index, MResult, Error, UpdateReader, MainWriter};
+use crate::{store, update, Index, MResult, Error, UpdateReader, UpdateWriter, MainReader, MainWriter};
 
 pub type BoxUpdateFn = Box<dyn Fn(&str, update::ProcessedUpdateResult) + Send + Sync + 'static>;
 type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
@@ -332,11 +332,11 @@ impl Database {
         self.update_fn.swap(None);
     }
 
-    pub fn main_read_txn(&self) -> MResult<heed::RoTxn<MainT>> {
+    pub fn main_read_txn(&self) -> MResult<MainReader> {
         Ok(self.env.typed_read_txn::<MainT>()?)
     }
 
-    pub(crate) fn main_write_txn(&self) -> MResult<heed::RwTxn<MainT>> {
+    pub(crate) fn main_write_txn(&self) -> MResult<MainWriter> {
         Ok(self.env.typed_write_txn::<MainT>()?)
     }
 
@@ -344,7 +344,7 @@ impl Database {
     /// transaction is commited. Returns whatever result f returns.
     pub fn main_write<F, R, E>(&self, f: F) -> Result<R, E>
     where
-        F: FnOnce(&mut heed::RwTxn<MainT>) -> Result<R, E>,
+        F: FnOnce(&mut MainWriter) -> Result<R, E>,
         E: From<Error>,
     {
         let mut writer = self.main_write_txn()?;
@@ -356,22 +356,26 @@ impl Database {
     /// provides a context with a reader to the main database. experimental.
     pub fn main_read<F, R, E>(&self, f: F) -> Result<R, E>
     where
-        F: Fn(&heed::RoTxn<MainT>) -> Result<R, E>,
+        F: Fn(&MainReader) -> Result<R, E>,
         E: From<Error>,
     {
         let reader = self.main_read_txn()?;
         f(&reader)
     }
 
-    pub fn update_read_txn(&self) -> MResult<heed::RoTxn<UpdateT>> {
+    pub fn update_read_txn(&self) -> MResult<UpdateReader> {
         Ok(self.update_env.typed_read_txn::<UpdateT>()?)
+    }
+
+    pub(crate) fn update_write_txn(&self) -> MResult<heed::RwTxn<UpdateT>> {
+        Ok(self.update_env.typed_write_txn::<UpdateT>()?)
     }
 
     /// Calls f providing it with a writer to the main database. After f is called, makes sure the
     /// transaction is commited. Returns whatever result f returns.
     pub fn update_write<F, R, E>(&self, f: F) -> Result<R, E>
     where
-        F: FnOnce(&mut heed::RwTxn<UpdateT>) -> Result<R, E>,
+        F: FnOnce(&mut UpdateWriter) -> Result<R, E>,
         E: From<Error>,
     {
         let mut writer = self.update_write_txn()?;
@@ -383,18 +387,14 @@ impl Database {
     /// provides a context with a reader to the update database. experimental.
     pub fn update_read<F, R, E>(&self, f: F) -> Result<R, E>
     where
-        F: Fn(&heed::RoTxn<UpdateT>) -> Result<R, E>,
+        F: Fn(&UpdateReader) -> Result<R, E>,
         E: From<Error>,
     {
         let reader = self.update_read_txn()?;
         f(&reader)
     }
 
-    pub(crate) fn update_write_txn(&self) -> MResult<heed::RwTxn<UpdateT>> {
-        Ok(self.update_env.typed_write_txn::<UpdateT>()?)
-    }
-
-    pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> ZResult<(File, File)> {
+    pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> MResult<(File, File)> {
         let path = path.as_ref();
 
         let env_path = path.join("main");
@@ -411,7 +411,7 @@ impl Database {
             Ok(update_env_file) => Ok((env_file, update_env_file)),
             Err(e) => {
                 fs::remove_file(env_path)?;
-                Err(e)
+                Err(e.into())
             },
         }
     }
