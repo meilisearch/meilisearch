@@ -14,6 +14,7 @@
   - Fix accept all Content-Type by default (#653)
   - Return the error message from Serde when a deserialization error is encountered (#661)
   - Fix NormalizePath middleware to make the dashboard accessible (#695)
+  - Update sentry features to remove openssl (#702)
 
 ## v0.10.1
 
