@@ -1,6 +1,6 @@
 use std::cmp::{self, Ordering};
 use slice_group_by::GroupBy;
-use crate::bucket_sort::{SimpleMatch};
+use crate::query_builder::{SimpleMatch};
 use crate::{RawDocument, MResult};
 use super::{Criterion, Context, ContextMut, prepare_bare_matches};
 

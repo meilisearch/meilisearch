@@ -371,7 +371,7 @@ impl Database {
 mod tests {
     use super::*;
 
-    use crate::bucket_sort::SortResult;
+    use crate::query_builder::SortResult;
     use crate::criterion::{self, CriteriaBuilder};
     use crate::update::{ProcessedUpdateResult, UpdateStatus};
     use crate::settings::Settings;

@@ -5,7 +5,7 @@ extern crate assert_matches;
 extern crate pest_derive;
 
 mod automaton;
-mod bucket_sort;
+//mod bucket_sort;
 mod database;
 mod distinct_map;
 mod error;
@@ -43,7 +43,7 @@ use std::collections::HashMap;
 use compact_arena::SmallArena;
 use log::{error, trace};
 
-use crate::bucket_sort::PostingsListView;
+use crate::query_builder::PostingsListView;
 use crate::levenshtein::prefix_damerau_levenshtein;
 use crate::query_tree::{QueryId, QueryKind};
 use crate::reordered_attrs::ReorderedAttrs;
@@ -54,7 +54,7 @@ pub struct Document {
     pub highlights: Vec<Highlight>,
 
     #[cfg(test)]
-    pub matches: Vec<crate::bucket_sort::SimpleMatch>,
+    pub matches: Vec<crate::query_builder::SimpleMatch>,
 }
 
 fn highlights_from_raw_document<'a, 'tag, 'txn>(
@@ -151,7 +151,7 @@ impl Document {
         schema: &Schema,
     ) -> Document
     {
-        use crate::bucket_sort::SimpleMatch;
+        use crate::query_builder::SimpleMatch;
 
         let highlights = highlights_from_raw_document(
             &raw_document,

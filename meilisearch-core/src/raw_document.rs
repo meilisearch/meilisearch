@@ -1,7 +1,7 @@
 use compact_arena::SmallArena;
 use sdset::SetBuf;
 use crate::DocIndex;
-use crate::bucket_sort::{SimpleMatch, BareMatch, PostingsListView};
+use crate::query_builder::{SimpleMatch, BareMatch, PostingsListView};
 use crate::reordered_attrs::ReorderedAttrs;
 
 pub struct RawDocument<'a, 'tag> {

@@ -3,7 +3,7 @@ use std::collections::hash_map::{HashMap, Entry};
 use meilisearch_schema::IndexedPos;
 use slice_group_by::GroupBy;
 use crate::{RawDocument, MResult};
-use crate::bucket_sort::BareMatch;
+use crate::query_builder::BareMatch;
 use super::{Criterion, Context, ContextMut};
 
 pub struct Exactness;

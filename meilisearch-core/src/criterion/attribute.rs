@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use slice_group_by::GroupBy;
 use crate::{RawDocument, MResult};
-use crate::bucket_sort::SimpleMatch;
+use crate::query_builder::SimpleMatch;
 use super::{Criterion, Context, ContextMut, prepare_bare_matches};
 
 pub struct Attribute;

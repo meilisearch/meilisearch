@@ -6,7 +6,7 @@ use compact_arena::SmallArena;
 use sdset::SetBuf;
 use slice_group_by::GroupBy;
 
-use crate::bucket_sort::{SimpleMatch, PostingsListView};
+use crate::query_builder::{SimpleMatch, PostingsListView};
 use crate::database::MainT;
 use crate::query_tree::QueryId;
 use crate::{store, RawDocument, MResult};
