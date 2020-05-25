@@ -23,3 +23,10 @@ jobs:
       with:
         command: test
         args: --locked --release
+  build-image:
+    name: Test the build of Docker image
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - run: docker build . --file Dockerfile -t meilisearch
+      name: Docker build
