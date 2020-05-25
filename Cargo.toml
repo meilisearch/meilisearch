@@ -1,0 +1,27 @@
+[package]
+name = "mega-mini-indexer"
+version = "0.1.0"
+authors = ["Kerollmops <clement@meilisearch.com>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.28"
+bitpacking = "0.8.2"
+byteorder = "1.3.4"
+csv = "1.1.3"
+fst = "0.4.3"
+fxhash = "0.2.1"
+jemallocator = "0.3.2"
+rayon = "1.3.0"
+sdset = "0.4.0"
+sled = { git = "https://github.com/spacejam/sled.git", rev = "2fe05c9"}
+slice-group-by = "0.2.6"
+smallstr = "0.2.0"
+structopt = { version = "0.3.14", default-features = false }
+zerocopy = "0.3.0"
+
+[dev-dependencies]
+quickcheck = "0.9.2"
+
+[profile.release]
+debug = true
