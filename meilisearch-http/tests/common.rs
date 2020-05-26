@@ -31,6 +31,7 @@ impl Server {
             main_map_size: default_db_options.main_map_size,
             update_map_size: default_db_options.update_map_size,
             http_payload_size_limit: 10000000,
+            ..Opt::default()
         };
 
         let data = Data::new(opt.clone());

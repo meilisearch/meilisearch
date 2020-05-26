@@ -16,6 +16,7 @@
   - Return the error message from Serde when a deserialization error is encountered (#661)
   - Fix NormalizePath middleware to make the dashboard accessible (#695)
   - Update sentry features to remove openssl (#702)
+  - Add SSL support (#669)
 
 ## v0.10.1
 
