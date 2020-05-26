@@ -18,11 +18,12 @@ RUN     $HOME/.cargo/bin/cargo build --release
 # Run
 FROM    alpine:3.10
 
-RUN     apk update --quiet
-RUN     apk add libgcc
+RUN     apk add -q --no-cache libgcc tini
 
 COPY    --from=compiler /meilisearch/target/release/meilisearch .
 
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
 EXPOSE  7700/tcp
+
+ENTRYPOINT ["tini", "--"]
 CMD     ./meilisearch
