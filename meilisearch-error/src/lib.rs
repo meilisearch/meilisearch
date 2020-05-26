@@ -26,19 +26,33 @@ impl fmt::Display for ErrorType {
 }
 
 pub enum Code {
+    // index related error
+    CreateIndex,
+    IndexAlreadyExists,
+    IndexNotFound,
+    InvalidIndexUid,
+    OpenIndex,
+
+    // invalid state error
+    InvalidState,
+    MissingPrimaryKey,
+
+    // invalid documents FIXME make one error code?
+    MissingDocumentId,
+    MaxFieldsLimitExceeded,
+
+    Filter,
+    Facet,
+
     BadParameter,
     BadRequest,
-    CreateIndex,
     DocumentNotFound,
-    IndexNotFound,
     Internal,
-    InvalidIndexUid,
     InvalidToken,
     Maintenance,
     MissingAuthorizationHeader,
     MissingHeader,
     NotFound,
-    OpenIndex,
     RetrieveDocument,
     SearchDocuments,
     PayloadTooLarge,
@@ -53,20 +67,35 @@ impl Code {
         use Code::*;
 
         match self {
+            // index related errors
+            CreateIndex => ErrCode::invalid("create_index", StatusCode::BAD_REQUEST),
+            IndexAlreadyExists => ErrCode::invalid("existing_index", StatusCode::BAD_REQUEST),
+            IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::BAD_REQUEST),
+            InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
+            OpenIndex => ErrCode::internal("open_index", StatusCode::INTERNAL_SERVER_ERROR),
+
+            // invalid state error
+            InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
+            // FIXME probably not an internal statuscode there
+            MissingPrimaryKey => ErrCode::internal("MissingPrimaryKey", StatusCode::INTERNAL_SERVER_ERROR),
+
+            // invalid document
+            MissingDocumentId => ErrCode::invalid("MissingDocumentId", StatusCode::BAD_REQUEST),
+            MaxFieldsLimitExceeded => ErrCode::invalid("max_field_limit_exceeded", StatusCode::BAD_REQUEST),
+
+            Filter => ErrCode::invalid("fitler", StatusCode::BAD_REQUEST),
+            Facet => ErrCode::invalid("fitler", StatusCode::BAD_REQUEST),
+
             BadParameter => ErrCode::invalid("bad_parameter", StatusCode::BAD_REQUEST),
             BadRequest => ErrCode::invalid("bad_request", StatusCode::BAD_REQUEST),
-            CreateIndex => ErrCode::invalid("create_index", StatusCode::BAD_REQUEST),
-            InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
-            OpenIndex => ErrCode::invalid("open_index", StatusCode::BAD_REQUEST),
             RetrieveDocument => ErrCode::invalid("retrieve_document", StatusCode::BAD_REQUEST),
             SearchDocuments => ErrCode::invalid("search_document", StatusCode::BAD_REQUEST),
             DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::BAD_REQUEST),
-            IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::BAD_REQUEST),
             NotFound => ErrCode::invalid("not_found", StatusCode::BAD_REQUEST),
             InvalidToken => ErrCode::invalid("invalid_token", StatusCode::BAD_REQUEST),
             MissingHeader => ErrCode::invalid("missing_header", StatusCode::BAD_REQUEST),
             MissingAuthorizationHeader => ErrCode::invalid("missing_authorization_header", StatusCode::BAD_REQUEST),
-            Internal => ErrCode::invalid("internal", StatusCode::BAD_REQUEST),
+            Internal => ErrCode::internal("internal", StatusCode::BAD_REQUEST),
             Maintenance =>  ErrCode::invalid("maintenance", StatusCode::BAD_REQUEST),
             PayloadTooLarge => ErrCode::invalid("payload_too_large", StatusCode::BAD_REQUEST),
             UnsupportedMediaType => ErrCode::invalid("unsupported_media_type", StatusCode::BAD_REQUEST),

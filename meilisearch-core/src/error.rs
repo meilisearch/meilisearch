@@ -36,8 +36,27 @@ pub enum Error {
 
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
-        //TODO populate codes
-        Code::Internal
+        use Error::*;
+
+        match self {
+            FacetError(_) => Code::Facet,
+            FilterParseError(_) => Code::Filter,
+            UnsupportedOperation(_) => Code::BadRequest,
+            IndexAlreadyExists => Code::IndexAlreadyExists,
+            MissingPrimaryKey => Code::InvalidState,
+            MissingDocumentId => Code::MissingDocumentId,
+            MaxFieldsLimitExceeded => Code::MaxFieldsLimitExceeded,
+            Schema(s) =>  s.error_code(),
+            WordIndexMissing
+            | SchemaMissing => Code::InvalidState,
+            Heed(_)
+            | Fst(_)
+            | SerdeJson(_)
+            | Bincode(_)
+            | Serializer(_)
+            | Deserializer(_)
+            | Io(_) => Code::Internal,
+        }
     }
 }
 
