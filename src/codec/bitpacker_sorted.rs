@@ -58,6 +58,12 @@ impl CodecBitPacker4xSorted {
         let mut initial_value = 0;
 
         while let Some(num_bits) = bytes.get(0) {
+            if *num_bits == 0 {
+                decompressed.resize(decompressed.len() + BitPacker4x::BLOCK_LEN, initial_value);
+                bytes = &bytes[1..];
+                continue;
+            }
+
             let block_size = BitPacker4x::compressed_block_size(*num_bits);
 
             let new_len = decompressed.len() + BitPacker4x::BLOCK_LEN;

@@ -37,8 +37,12 @@ impl BpVec {
         uncompressed
     }
 
-    pub fn capacity(&self) -> usize {
-        self.compressed.capacity() + self.uncompressed.capacity()
+    pub fn compressed_capacity(&self) -> usize {
+        self.compressed.capacity()
+    }
+
+    pub fn uncompressed_capacity(&self) -> usize {
+        self.uncompressed.capacity()
     }
 }
 
