@@ -17,6 +17,7 @@
   - Fix NormalizePath middleware to make the dashboard accessible (#695)
   - Update sentry features to remove openssl (#702)
   - Add SSL support (#669)
+  - Rename fieldsFrequency into fieldsDistribution in stats (#719)
 
 ## v0.10.1
 
