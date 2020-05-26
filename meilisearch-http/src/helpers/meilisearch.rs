@@ -333,6 +333,7 @@ pub struct SearchResult {
     pub exhaustive_nb_hits: bool,
     pub processing_time_ms: usize,
     pub query: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub facets: Option<HashMap<String, HashMap<String, usize>>>,
 }
 
