@@ -33,7 +33,7 @@ struct SearchQuery {
     filters: Option<String>,
     matches: Option<bool>,
     facet_filters: Option<String>,
-    facets: Option<String>,
+    facets_distribution: Option<String>,
 }
 
 #[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
@@ -94,7 +94,7 @@ async fn search_with_url_query(
         }
     }
 
-    if let Some(facets) = &params.facets {
+    if let Some(facets) = &params.facets_distribution {
         match index.main.attributes_for_faceting(&reader)? {
             Some(ref attrs) => {
                 let field_ids = prepare_facet_list(&facets, &schema, attrs)?;
