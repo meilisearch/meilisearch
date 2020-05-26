@@ -7,7 +7,7 @@ use std::{fs, thread};
 use chrono::{DateTime, Utc};
 use crossbeam_channel::{Receiver, Sender};
 use heed::types::{Str, Unit, SerdeBincode};
-use heed::{CompactionOption, Result as ZResult};
+use heed::CompactionOption;
 use log::{debug, error};
 use meilisearch_schema::Schema;
 
