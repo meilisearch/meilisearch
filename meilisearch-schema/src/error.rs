@@ -26,7 +26,12 @@ impl error::Error for Error {}
 
 impl ErrorCode for Error {
     fn error_code(&self) -> Code {
-        // TODO populate with correct error codes
-        Code::Internal
+        use Error::*;
+
+        match self {
+            FieldNameNotFound(_) => Code::Internal,
+            MaxFieldsLimitExceeded => Code::MaxFieldsLimitExceeded,
+            PrimaryKeyAlreadyPresent => Code::PrimaryKeyAlreadyPresent,
+        }
     }
 }

@@ -36,6 +36,7 @@ pub enum Code {
     // invalid state error
     InvalidState,
     MissingPrimaryKey,
+    PrimaryKeyAlreadyPresent,
 
     // invalid documents FIXME make one error code?
     MissingDocumentId,
@@ -77,7 +78,8 @@ impl Code {
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
             // FIXME probably not an internal statuscode there
-            MissingPrimaryKey => ErrCode::internal("MissingPrimaryKey", StatusCode::INTERNAL_SERVER_ERROR),
+            MissingPrimaryKey => ErrCode::internal("missing_primary_key", StatusCode::INTERNAL_SERVER_ERROR),
+            PrimaryKeyAlreadyPresent => ErrCode::internal("primary_key_already_present", StatusCode::INTERNAL_SERVER_ERROR),
 
             // invalid document
             MissingDocumentId => ErrCode::invalid("MissingDocumentId", StatusCode::BAD_REQUEST),
