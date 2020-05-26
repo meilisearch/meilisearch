@@ -6,6 +6,7 @@ pub mod helpers;
 pub mod models;
 pub mod option;
 pub mod routes;
+pub mod analytics;
 
 use actix_http::Error;
 use actix_service::ServiceFactory;
@@ -15,6 +16,7 @@ use log::error;
 
 use meilisearch_core::ProcessedUpdateResult;
 
+pub use option::Opt;
 pub use self::data::Data;
 use self::error::{json_error_handler, ResponseError};
 

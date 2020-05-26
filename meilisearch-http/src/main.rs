@@ -3,10 +3,8 @@ use std::{env, thread};
 use actix_cors::Cors;
 use actix_web::{middleware, HttpServer};
 use main_error::MainError;
-use meilisearch_http::data::Data;
 use meilisearch_http::helpers::NormalizePath;
-use meilisearch_http::option::Opt;
-use meilisearch_http::{create_app, index_update_callback};
+use meilisearch_http::{Data, Opt, create_app, index_update_callback};
 use structopt::StructOpt;
 
 mod analytics;
@@ -49,11 +47,15 @@ async fn main() -> Result<(), MainError> {
         _ => unreachable!(),
     }
 
-    if !opt.no_analytics {
-        thread::spawn(analytics::analytics_sender);
-    }
-
     let data = Data::new(opt.clone());
+
+    if !opt.no_analytics {
+        let analytics_data = data.clone();
+        let analytics_opt = opt.clone();
+        thread::spawn(move|| {
+            analytics::analytics_sender(analytics_data, analytics_opt)
+        });
+    }
 
     let data_cloned = data.clone();
     data.db.set_update_callback(Box::new(move |name, status| {
