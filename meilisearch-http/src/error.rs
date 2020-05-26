@@ -204,11 +204,12 @@ impl fmt::Display for Error {
 
 impl aweb::error::ResponseError for ResponseError {
     fn error_response(&self) -> aweb::HttpResponse {
-        let error_code = self.inner.error_code().internal();
+        let error_code = self.inner.error_code();
         ResponseBuilder::new(self.status_code()).json(json!({
             "message": self.to_string(),
-            "errorCode": error_code,
-            "errorLink": format!("docs.meilisearch.come/error/{}", error_code),
+            "errorCode": error_code.name(),
+            "errorType": error_code.r#type(),
+            "errorLink": error_code.url(),
         }))
     }
 
