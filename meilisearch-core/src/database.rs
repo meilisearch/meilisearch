@@ -104,7 +104,7 @@ fn update_awaiter(
             };
 
             // do not keep the reader for too long
-            update_reader.abort();
+            break_try!(update_reader.abort(), "aborting update transaction failed");
 
             // instantiate a transaction to touch to the main env
             let result = env.typed_write_txn::<MainT>();
@@ -118,7 +118,7 @@ fn update_awaiter(
             if status.error.is_none() {
                 break_try!(main_writer.commit(), "commit nested transaction failed");
             } else {
-                main_writer.abort()
+                break_try!(main_writer.abort(), "abborting nested transaction failed");
             }
 
             // now that the update has been processed we can instantiate
@@ -178,7 +178,7 @@ impl Database {
             must_open.push(index_uid.to_owned());
         }
 
-        reader.abort();
+        reader.abort()?;
 
         // open the previously aggregated indexes
         let mut indexes = HashMap::new();
