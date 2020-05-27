@@ -76,7 +76,6 @@ pub enum Code {
     RetrieveDocument,
     SearchDocuments,
     UnsupportedMediaType,
-    Other,
 }
 
 impl Code {
@@ -94,7 +93,6 @@ impl Code {
 
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
-            // FIXME probably not an internal statuscode there
             MissingPrimaryKey => ErrCode::internal("missing_primary_key", StatusCode::INTERNAL_SERVER_ERROR),
             PrimaryKeyAlreadyPresent => ErrCode::internal("primary_key_already_present", StatusCode::INTERNAL_SERVER_ERROR),
 
@@ -118,7 +116,6 @@ impl Code {
             RetrieveDocument => ErrCode::internal("retrieve_document", StatusCode::BAD_REQUEST),
             SearchDocuments => ErrCode::internal("search_error", StatusCode::BAD_REQUEST),
             UnsupportedMediaType => ErrCode::invalid("unsupported_media_type", StatusCode::UNSUPPORTED_MEDIA_TYPE),
-            _ => ErrCode::invalid("other", StatusCode::BAD_REQUEST),
         }
     }
 
@@ -139,7 +136,7 @@ impl Code {
 
     /// return the doc url ascociated with the error
     fn url(&self) -> String {
-        format!("docs.meilisearch.come/error/{}", self.name())
+        format!("docs.meilisearch.com/error/{}", self.name())
     }
 }
 
@@ -151,7 +148,6 @@ struct ErrCode {
 }
 
 impl ErrCode {
-
     fn authentication(err_name: &'static str, status_code: StatusCode) -> ErrCode {
         ErrCode {
             status_code,
