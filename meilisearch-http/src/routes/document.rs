@@ -7,10 +7,10 @@ use meilisearch_core::update;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::Data;
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
-use crate::Data;
 
 type Document = IndexMap<String, Value>;
 
@@ -192,7 +192,7 @@ async fn update_multiple_documents(
 
     let update_id = data
         .db
-        .update_write::<_, _, ResponseError>(move |writer| {
+        .update_write::<_, _, ResponseError>(|writer| {
             let update_id = document_addition.finalize(writer)?;
             Ok(update_id)
         })?;

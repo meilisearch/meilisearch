@@ -57,12 +57,11 @@ pub enum Code {
     MissingPrimaryKey,
     PrimaryKeyAlreadyPresent,
 
-    // invalid documents FIXME make one error code?
-    MissingDocumentId,
     MaxFieldsLimitExceeded,
+    MissingDocumentId,
 
-    Filter,
     Facet,
+    Filter,
 
     BadParameter,
     BadRequest,
@@ -73,9 +72,9 @@ pub enum Code {
     MissingAuthorizationHeader,
     MissingHeader,
     NotFound,
+    PayloadTooLarge,
     RetrieveDocument,
     SearchDocuments,
-    PayloadTooLarge,
     UnsupportedMediaType,
     Other,
 }
@@ -90,8 +89,7 @@ impl Code {
             // index related errors
             CreateIndex => ErrCode::invalid("create_index", StatusCode::BAD_REQUEST),
             IndexAlreadyExists => ErrCode::invalid("existing_index", StatusCode::BAD_REQUEST),
-            IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND),
-            InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
+            IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND), InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
             OpenIndex => ErrCode::internal("open_index", StatusCode::INTERNAL_SERVER_ERROR),
 
             // invalid state error
@@ -101,24 +99,24 @@ impl Code {
             PrimaryKeyAlreadyPresent => ErrCode::internal("primary_key_already_present", StatusCode::INTERNAL_SERVER_ERROR),
 
             // invalid document
-            MissingDocumentId => ErrCode::invalid("MissingDocumentId", StatusCode::BAD_REQUEST),
             MaxFieldsLimitExceeded => ErrCode::invalid("max_field_limit_exceeded", StatusCode::BAD_REQUEST),
+            MissingDocumentId => ErrCode::invalid("missing_document_id", StatusCode::BAD_REQUEST),
 
-            Filter => ErrCode::invalid("fitler", StatusCode::BAD_REQUEST),
-            Facet => ErrCode::invalid("facet", StatusCode::BAD_REQUEST),
+            Facet => ErrCode::invalid("invalid_facet", StatusCode::BAD_REQUEST),
+            Filter => ErrCode::invalid("invalid_filter", StatusCode::BAD_REQUEST),
 
             BadParameter => ErrCode::invalid("bad_parameter", StatusCode::BAD_REQUEST),
             BadRequest => ErrCode::invalid("bad_request", StatusCode::BAD_REQUEST),
-            RetrieveDocument => ErrCode::invalid("retrieve_document", StatusCode::BAD_REQUEST),
-            SearchDocuments => ErrCode::invalid("search_document", StatusCode::BAD_REQUEST),
-            DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::NOT_FOUND),
-            NotFound => ErrCode::invalid("not_found", StatusCode::NOT_FOUND),
-            InvalidToken => ErrCode::authentication("invalid_token", StatusCode::UNAUTHORIZED),
-            MissingHeader => ErrCode::authentication("missing_header", StatusCode::UNAUTHORIZED),
-            MissingAuthorizationHeader => ErrCode::authentication("missing_authorization_header", StatusCode::FORBIDDEN),
+            DocumentNotFound => ErrCode::internal("document_not_found", StatusCode::NOT_FOUND),
             Internal => ErrCode::internal("internal", StatusCode::INTERNAL_SERVER_ERROR),
-            Maintenance =>  ErrCode::invalid("maintenance", StatusCode::SERVICE_UNAVAILABLE),
+            InvalidToken => ErrCode::authentication("invalid_token", StatusCode::UNAUTHORIZED),
+            Maintenance =>  ErrCode::internal("maintenance", StatusCode::SERVICE_UNAVAILABLE),
+            MissingAuthorizationHeader => ErrCode::authentication("missing_authorization_header", StatusCode::FORBIDDEN),
+            MissingHeader => ErrCode::authentication("missing_header", StatusCode::UNAUTHORIZED),
+            NotFound => ErrCode::invalid("not_found", StatusCode::NOT_FOUND),
             PayloadTooLarge => ErrCode::invalid("payload_too_large", StatusCode::PAYLOAD_TOO_LARGE),
+            RetrieveDocument => ErrCode::internal("retrieve_document", StatusCode::BAD_REQUEST),
+            SearchDocuments => ErrCode::internal("search_error", StatusCode::BAD_REQUEST),
             UnsupportedMediaType => ErrCode::invalid("unsupported_media_type", StatusCode::UNSUPPORTED_MEDIA_TYPE),
             _ => ErrCode::invalid("other", StatusCode::BAD_REQUEST),
         }
@@ -131,12 +129,12 @@ impl Code {
 
     /// return error name, used as error code
     fn name(&self) -> String {
-        self.err_code().err_name.to_string()
+        self.err_code().error_name.to_string()
     }
 
     /// return the error type
     fn r#type(&self) -> String {
-        self.err_code().err_type.to_string()
+        self.err_code().error_type.to_string()
     }
 
     /// return the doc url ascociated with the error
@@ -148,8 +146,8 @@ impl Code {
 /// Internal structure providing a convenient way to create error codes
 struct ErrCode {
     status_code: StatusCode,
-    err_type: ErrorType,
-    err_name: &'static str,
+    error_type: ErrorType,
+    error_name: &'static str,
 }
 
 impl ErrCode {
@@ -157,24 +155,24 @@ impl ErrCode {
     fn authentication(err_name: &'static str, status_code: StatusCode) -> ErrCode {
         ErrCode {
             status_code,
-            err_name,
-            err_type: ErrorType::Authentication,
+            error_name: err_name,
+            error_type: ErrorType::Authentication,
         }
     }
 
     fn internal(err_name: &'static str, status_code: StatusCode) -> ErrCode {
         ErrCode {
             status_code,
-            err_name,
-            err_type: ErrorType::InternalError,
+            error_name: err_name,
+            error_type: ErrorType::InternalError,
         }
     }
 
     fn invalid(err_name: &'static str, status_code: StatusCode) -> ErrCode {
         ErrCode {
             status_code,
-            err_name,
-            err_type: ErrorType::InvalidRequest,
+            error_name: err_name,
+            error_type: ErrorType::InvalidRequest,
         }
     }
 }

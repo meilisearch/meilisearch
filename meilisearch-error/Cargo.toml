@@ -1,10 +1,8 @@
 [package]
 name = "meilisearch-error"
 version = "0.10.1"
-authors = ["mpostma <postma.marin@protonmail.com>"]
+authors = ["marin <postma.marin@protonmail.com>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 actix-http = "1.0.1"

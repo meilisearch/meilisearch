@@ -11,12 +11,19 @@ use heed::CompactionOption;
 use log::{debug, error};
 use meilisearch_schema::Schema;
 
-use crate::{store, update, Index, MResult, Error, UpdateReader, UpdateWriter, MainReader, MainWriter};
+use crate::{store, update, Index, MResult, Error};
 
 pub type BoxUpdateFn = Box<dyn Fn(&str, update::ProcessedUpdateResult) + Send + Sync + 'static>;
+
 type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
 
 type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
+
+pub type MainWriter<'a> = heed::RwTxn<'a, MainT>;
+pub type MainReader = heed::RoTxn<MainT>;
+
+pub type UpdateWriter<'a> = heed::RwTxn<'a, UpdateT>;
+pub type UpdateReader = heed::RoTxn<UpdateT>;
 
 const UNHEALTHY_KEY: &str = "_is_unhealthy";
 const LAST_UPDATE_KEY: &str = "last-update";
@@ -427,8 +434,7 @@ impl Database {
 
     pub fn last_update(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<DateTime<Utc>>> {
         match self.common_store()
-            .get::<_, Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)?
-            {
+            .get::<_, Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)? {
                 Some(datetime) => Ok(Some(datetime)),
                 None => Ok(None),
             }
@@ -492,7 +498,7 @@ impl Database {
 
         index
             .main
-            .put_fields_frequency(writer, &frequency)
+            .put_fields_distribution(writer, &frequency)
     }
 }
 
@@ -1223,4 +1229,3 @@ mod tests {
         assert_matches!(iter.next(), None);
     }
 }
-

@@ -1,11 +1,11 @@
-use std::fmt;
 use std::error;
+use std::fmt;
 
 use actix_http::ResponseBuilder;
 use actix_web as aweb;
+use actix_web::error::JsonPayloadError;
 use actix_web::http::StatusCode;
 use serde_json::json;
-use actix_web::error::JsonPayloadError;
 
 use meilisearch_error::{ErrorCode, Code};
 

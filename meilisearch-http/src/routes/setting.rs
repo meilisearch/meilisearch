@@ -65,11 +65,11 @@ async fn get_all(
 
     let stop_words: BTreeSet<String> = index
         .main
-        .stop_words_list(&reader)?
+        .stop_words(&reader)?
         .into_iter()
         .collect();
 
-    let synonyms_list = index.main.synonyms_list(&reader)?;
+    let synonyms_list = index.main.synonyms(&reader)?;
 
     let mut synonyms = BTreeMap::new();
     let index_synonyms = &index.synonyms;

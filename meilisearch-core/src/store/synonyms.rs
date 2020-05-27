@@ -27,7 +27,7 @@ impl Synonyms {
         self.synonyms.clear(writer)
     }
 
-    pub fn synonyms_fst<'txn>(self, reader: &'txn heed::RoTxn<MainT>, word: &[u8]) -> ZResult<FstSetCow<'txn>> {
+    pub(crate) fn synonyms_fst<'txn>(self, reader: &'txn heed::RoTxn<MainT>, word: &[u8]) -> ZResult<FstSetCow<'txn>> {
         match self.synonyms.get(reader, word)? {
             Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
             None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
@@ -42,4 +42,3 @@ impl Synonyms {
         Ok(synonyms)
     }
 }
-

@@ -96,4 +96,3 @@ impl Data {
         data
     }
 }
-

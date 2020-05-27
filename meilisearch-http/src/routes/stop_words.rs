@@ -25,7 +25,7 @@ async fn get(
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
-    let stop_words = index.main.stop_words_list(&reader)?;
+    let stop_words = index.main.stop_words(&reader)?;
 
     Ok(HttpResponse::Ok().json(stop_words))
 }

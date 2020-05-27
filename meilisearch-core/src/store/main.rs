@@ -197,7 +197,7 @@ impl Main {
         }
     }
 
-    pub fn synonyms_list(self, reader: &heed::RoTxn<MainT>) -> MResult<Vec<String>> {
+    pub fn synonyms(self, reader: &heed::RoTxn<MainT>) -> MResult<Vec<String>> {
         let synonyms = self
             .synonyms_fst(&reader)?
             .stream()
@@ -217,7 +217,7 @@ impl Main {
         }
     }
 
-    pub fn stop_words_list(self, reader: &heed::RoTxn<MainT>) -> MResult<Vec<String>> {
+    pub fn stop_words(self, reader: &heed::RoTxn<MainT>) -> MResult<Vec<String>> {
         let stop_word_list = self
             .stop_words_fst(reader)?
             .stream()
@@ -249,7 +249,7 @@ impl Main {
         writer: &mut heed::RwTxn<MainT>,
         fields_frequency: &FreqsMap,
     ) -> MResult<()> {
-        Ok(self.main.put::<_, Str, SerdeFreqsMap>(writer, FIELDS_FREQUENCY_KEY, fields_frequency)?)
+        Ok(self.main.put::<_, Str, SerdeFreqsMap>(writer, FIELDS_DISTRIBUTION_KEY, fields_frequency)?)
     }
 
     pub fn fields_distribution(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<FreqsMap>> {

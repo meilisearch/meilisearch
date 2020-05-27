@@ -24,6 +24,7 @@ async fn set_healthy(data: web::Data<Data>) -> Result<HttpResponse, ResponseErro
         data.db.set_healthy(writer)?;
         Ok(())
     })?;
+    
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -32,6 +33,7 @@ async fn set_unhealthy(data: web::Data<Data>) -> Result<HttpResponse, ResponseEr
         data.db.set_unhealthy(writer)?;
         Ok(())
     })?;
+    
     Ok(HttpResponse::Ok().finish())
 }
 

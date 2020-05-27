@@ -29,7 +29,7 @@ async fn get(
 
     let reader = data.db.main_read_txn()?;
 
-    let synonyms_list = index.main.synonyms_list(&reader)?;
+    let synonyms_list = index.main.synonyms(&reader)?;
 
     let mut synonyms = IndexMap::new();
     let index_synonyms = &index.synonyms;

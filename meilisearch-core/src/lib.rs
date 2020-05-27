@@ -26,7 +26,7 @@ pub mod settings;
 pub mod store;
 pub mod update;
 
-pub use self::database::{BoxUpdateFn, Database, DatabaseOptions, MainT, UpdateT};
+pub use self::database::{BoxUpdateFn, Database, DatabaseOptions, MainT, UpdateT, MainWriter, MainReader, UpdateWriter, UpdateReader};
 pub use self::error::{Error, HeedError, FstError, MResult, pest_error, FacetError};
 pub use self::filters::Filter;
 pub use self::number::{Number, ParseNumberError};
@@ -51,12 +51,6 @@ use crate::reordered_attrs::ReorderedAttrs;
 
 type FstSetCow<'a> = fst::Set<Cow<'a, [u8]>>;
 type FstMapCow<'a> = fst::Map<Cow<'a, [u8]>>;
-
-pub type MainWriter<'a> = heed::RwTxn<'a, MainT>;
-pub type MainReader = heed::RoTxn<MainT>;
-
-pub type UpdateWriter<'a> = heed::RwTxn<'a, UpdateT>;
-pub type UpdateReader = heed::RoTxn<UpdateT>;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Document {
