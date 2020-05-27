@@ -160,6 +160,20 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {}
 
+struct FilterParseError(PestError<Rule>);
+
+impl fmt::Display for FilterParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use crate::pest_error::LineColLocation::*;
+
+        let (line, column) = match self.0.line_col {
+            Span((line, _), (column, _)) => (line, column),
+            Pos((line, column)) => (line, column),
+        };
+        write!(f, "parsing error on line {} at column {}: {}", line, column, self.0.variant.message())
+    }
+}
+
 #[derive(Debug)]
 pub enum FacetError {
     EmptyArray,
