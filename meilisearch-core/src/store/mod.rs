@@ -3,6 +3,7 @@ mod documents_fields;
 mod documents_fields_counts;
 mod facets;
 mod main;
+mod postings_ids;
 mod postings_lists;
 mod prefix_documents_cache;
 mod prefix_postings_lists_cache;
@@ -15,6 +16,7 @@ pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
 pub use self::documents_fields_counts::{DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter};
 pub use self::facets::Facets;
 pub use self::main::Main;
+pub use self::postings_ids::PostingsIds;
 pub use self::postings_lists::PostingsLists;
 pub use self::prefix_documents_cache::PrefixDocumentsCache;
 pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
@@ -77,6 +79,10 @@ fn main_name(name: &str) -> String {
     format!("store-{}", name)
 }
 
+fn postings_ids_name(name: &str) -> String {
+    format!("store-{}-postings-ids", name)
+}
+
 fn postings_lists_name(name: &str) -> String {
     format!("store-{}-postings-lists", name)
 }
@@ -120,6 +126,7 @@ fn facets_name(name: &str) -> String {
 #[derive(Clone)]
 pub struct Index {
     pub main: Main,
+    pub postings_ids: PostingsIds,
     pub postings_lists: PostingsLists,
     pub documents_fields: DocumentsFields,
     pub documents_fields_counts: DocumentsFieldsCounts,
@@ -292,6 +299,7 @@ pub fn create(
 ) -> MResult<Index> {
     // create all the store names
     let main_name = main_name(name);
+    let postings_ids_name = postings_lists_name(name);
     let postings_lists_name = postings_lists_name(name);
     let documents_fields_name = documents_fields_name(name);
     let documents_fields_counts_name = documents_fields_counts_name(name);
@@ -305,6 +313,7 @@ pub fn create(
 
     // open all the stores
     let main = env.create_poly_database(Some(&main_name))?;
+    let postings_ids = env.create_database(Some(&postings_ids_name))?;
     let postings_lists = env.create_database(Some(&postings_lists_name))?;
     let documents_fields = env.create_database(Some(&documents_fields_name))?;
     let documents_fields_counts = env.create_database(Some(&documents_fields_counts_name))?;
@@ -318,6 +327,7 @@ pub fn create(
 
     Ok(Index {
         main: Main { main },
+        postings_ids: PostingsIds { postings_ids },
         postings_lists: PostingsLists { postings_lists },
         documents_fields: DocumentsFields { documents_fields },
         documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
@@ -341,6 +351,7 @@ pub fn open(
 ) -> MResult<Option<Index>> {
     // create all the store names
     let main_name = main_name(name);
+    let postings_ids_name = postings_ids_name(name);
     let postings_lists_name = postings_lists_name(name);
     let documents_fields_name = documents_fields_name(name);
     let documents_fields_counts_name = documents_fields_counts_name(name);
@@ -355,6 +366,10 @@ pub fn open(
     // open all the stores
     let main = match env.open_poly_database(Some(&main_name))? {
         Some(main) => main,
+        None => return Ok(None),
+    };
+    let postings_ids = match env.open_database(Some(&postings_ids_name))? {
+        Some(postings_ids) => postings_ids,
         None => return Ok(None),
     };
     let postings_lists = match env.open_database(Some(&postings_lists_name))? {
@@ -400,6 +415,7 @@ pub fn open(
 
     Ok(Some(Index {
         main: Main { main },
+        postings_ids: PostingsIds { postings_ids },
         postings_lists: PostingsLists { postings_lists },
         documents_fields: DocumentsFields { documents_fields },
         documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
@@ -421,6 +437,7 @@ pub fn clear(
 ) -> MResult<()> {
     // clear all the stores
     index.main.clear(writer)?;
+    index.postings_ids.clear(writer)?;
     index.postings_lists.clear(writer)?;
     index.documents_fields.clear(writer)?;
     index.documents_fields_counts.clear(writer)?;
