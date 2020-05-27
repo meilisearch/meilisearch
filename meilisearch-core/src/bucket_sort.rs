@@ -30,7 +30,7 @@ pub struct SortResult {
     pub nb_hits: usize,
     pub exhaustive_nb_hit: bool,
     pub facets: Option<HashMap<String, HashMap<String, usize>>>,
-    pub exhaustive_facet_count: Option<bool>,
+    pub exhaustive_facets_count: Option<bool>,
 }
 
 pub fn bucket_sort<'c, FI>(
@@ -118,7 +118,7 @@ where
 
     if let Some(f) = facet_count_docids {
         // hardcoded value, until approximation optimization
-        result.exhaustive_facet_count = Some(true);
+        result.exhaustive_facets_count = Some(true);
         result.facets = Some(facet_count(f, &docids));
     }
 
@@ -265,7 +265,7 @@ where
 
     if let Some(f) = facet_count_docids {
         // hardcoded value, until approximation optimization
-        result.exhaustive_facet_count = Some(true);
+        result.exhaustive_facets_count = Some(true);
         result.facets = Some(facet_count(f, &docids));
     }
 

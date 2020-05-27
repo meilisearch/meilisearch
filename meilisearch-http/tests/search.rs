@@ -1297,6 +1297,12 @@ async fn test_faceted_search_invalid() {
 async fn test_facet_count() {
     let mut server = common::Server::test_server().await;
 
+    // test without facet distribution
+    let query = "q=a";
+    let (response, _status_code) = server.search(query).await;
+    assert!(response.get("exhaustiveFacetsCount").is_none());
+    assert!(response.get("facetsDistribution").is_none());
+
     // test no facets set, search on color
     let query = "q=a&facetsDistribution=%5B%22color%22%5D";
     let (_response, status_code) = server.search(query).await;
@@ -1308,6 +1314,7 @@ async fn test_facet_count() {
     server.update_all_settings(body).await;
     // same as before, but now facets are set:
     let (response, _status_code) = server.search(query).await;
+    assert!(response.get("exhaustiveFacetsCount").is_some());
     assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 1);
     // searching on color and tags
     let query = "q=a&facetsDistribution=%5B%22color%22,%20%22tags%22%5D";
