@@ -14,6 +14,14 @@ pub struct ResponseError {
     inner: Box<dyn ErrorCode>,
 }
 
+impl error::Error for ResponseError {}
+
+impl ErrorCode for ResponseError {
+    fn error_code(&self) -> Code {
+        self.inner.error_code()
+    }
+}
+
 impl fmt::Display for ResponseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
@@ -204,17 +212,16 @@ impl fmt::Display for Error {
 
 impl aweb::error::ResponseError for ResponseError {
     fn error_response(&self) -> aweb::HttpResponse {
-        let error_code = self.inner.error_code();
         ResponseBuilder::new(self.status_code()).json(json!({
             "message": self.to_string(),
-            "errorCode": error_code.name(),
-            "errorType": error_code.r#type(),
-            "errorLink": error_code.url(),
+            "errorCode": self.error_name(),
+            "errorType": self.error_type(),
+            "errorLink": self.error_url(),
         }))
     }
 
     fn status_code(&self) -> StatusCode {
-        self.inner.error_code().http()
+        self.http_status()
     }
 }
 

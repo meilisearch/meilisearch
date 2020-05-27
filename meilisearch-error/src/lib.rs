@@ -1,10 +1,29 @@
-#![allow(dead_code)]
-
 use std::fmt;
+
 use actix_http::http::StatusCode;
 
 pub trait ErrorCode: std::error::Error {
     fn error_code(&self) -> Code;
+
+    /// returns the HTTP status code ascociated with the error
+    fn http_status(&self) -> StatusCode {
+        self.error_code().http()
+    }
+
+    /// returns the doc url ascociated with the error
+    fn error_url(&self) -> String {
+        self.error_code().url()
+    }
+
+    /// returns error name, used as error code
+    fn error_name(&self) -> String {
+        self.error_code().name()
+    }
+
+    /// return the error type
+    fn error_type(&self) -> String {
+        self.error_code().r#type()
+    }
 }
 
 enum ErrorType {
@@ -106,21 +125,22 @@ impl Code {
     }
 
     /// return the HTTP status code ascociated with the `Code`
-    pub fn http(&self) -> StatusCode {
+    fn http(&self) -> StatusCode {
         self.err_code().status_code
     }
 
     /// return error name, used as error code
-    pub fn name(&self) -> String {
+    fn name(&self) -> String {
         self.err_code().err_name.to_string()
     }
 
     /// return the error type
-    pub fn r#type(&self) -> String {
+    fn r#type(&self) -> String {
         self.err_code().err_type.to_string()
     }
 
-    pub fn url(&self) -> String {
+    /// return the doc url ascociated with the error
+    fn url(&self) -> String {
         format!("docs.meilisearch.come/error/{}", self.name())
     }
 }
