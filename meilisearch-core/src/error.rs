@@ -29,7 +29,6 @@ pub enum Error {
     Bincode(bincode::Error),
     Serializer(SerializerError),
     Deserializer(DeserializerError),
-    UnsupportedOperation(UnsupportedOperation),
     FilterParseError(PestError<Rule>),
     FacetError(FacetError),
 }
@@ -41,7 +40,6 @@ impl ErrorCode for Error {
         match self {
             FacetError(_) => Code::Facet,
             FilterParseError(_) => Code::Filter,
-            UnsupportedOperation(_) => Code::BadRequest,
             IndexAlreadyExists => Code::IndexAlreadyExists,
             MissingPrimaryKey => Code::InvalidState,
             MissingDocumentId => Code::MissingDocumentId,
@@ -136,12 +134,6 @@ impl From<DeserializerError> for Error {
     }
 }
 
-impl From<UnsupportedOperation> for Error {
-    fn from(op: UnsupportedOperation) -> Error {
-        Error::UnsupportedOperation(op)
-    }
-}
-
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Error::*;
@@ -160,7 +152,6 @@ impl fmt::Display for Error {
             Bincode(e) => write!(f, "bincode error; {}", e),
             Serializer(e) => write!(f, "serializer error; {}", e),
             Deserializer(e) => write!(f, "deserializer error; {}", e),
-            UnsupportedOperation(op) => write!(f, "unsupported operation; {}", op),
             FilterParseError(e) => write!(f, "error parsing filter; {}", e),
             FacetError(e) => write!(f, "error processing facet filter: {}", e),
         }
@@ -168,30 +159,6 @@ impl fmt::Display for Error {
 }
 
 impl error::Error for Error {}
-
-#[derive(Debug)]
-pub enum UnsupportedOperation {
-    SchemaAlreadyExists,
-    CannotUpdateSchemaPrimaryKey,
-    CannotReorderSchemaAttribute,
-    CanOnlyIntroduceNewSchemaAttributesAtEnd,
-    CannotRemoveSchemaAttribute,
-}
-
-impl fmt::Display for UnsupportedOperation {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use self::UnsupportedOperation::*;
-        match self {
-            SchemaAlreadyExists => write!(f, "Cannot update index which already have a schema"),
-            CannotUpdateSchemaPrimaryKey => write!(f, "Cannot update the primary key of a schema"),
-            CannotReorderSchemaAttribute => write!(f, "Cannot reorder the attributes of a schema"),
-            CanOnlyIntroduceNewSchemaAttributesAtEnd => {
-                write!(f, "Can only introduce new attributes at end of a schema")
-            }
-            CannotRemoveSchemaAttribute => write!(f, "Cannot remove attributes from a schema"),
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum FacetError {
@@ -202,7 +169,6 @@ pub enum FacetError {
     AttributeNotFound(String),
     AttributeNotSet { expected: Vec<String>, found: String },
     InvalidDocumentAttribute(String),
-    NoFacetAttributes,
 }
 
 impl FacetError {
@@ -227,7 +193,6 @@ impl fmt::Display for FacetError {
             AttributeNotFound(attr) => write!(f, "unknown {:?} attribute", attr),
             AttributeNotSet { found, expected } => write!(f, "`{}` is not set as a faceted attribute. available facet attributes: {}", found, expected.join(", ")),
             InvalidDocumentAttribute(attr) => write!(f, "invalid document attribute {}, accepted types: String and [String]", attr),
-            NoFacetAttributes => write!(f, "No attributes are set for faceting"),
         }
     }
 }
