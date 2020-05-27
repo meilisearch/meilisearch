@@ -19,7 +19,7 @@ const CREATED_AT_KEY: &str = "created-at";
 const CUSTOMS_KEY: &str = "customs";
 const DISTINCT_ATTRIBUTE_KEY: &str = "distinct-attribute";
 const EXTERNAL_DOCIDS_KEY: &str = "external-docids";
-const FIELDS_FREQUENCY_KEY: &str = "fields-frequency";
+const FIELDS_DISTRIBUTION_KEY: &str = "fields-distribution";
 const INTERNAL_DOCIDS_KEY: &str = "internal-docids";
 const NAME_KEY: &str = "name";
 const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
@@ -232,19 +232,19 @@ impl Main {
         }
     }
 
-    pub fn put_fields_frequency(
+    pub fn put_fields_distribution(
         self,
         writer: &mut heed::RwTxn<MainT>,
-        fields_frequency: &FreqsMap,
+        fields_distribution: &FreqsMap,
     ) -> ZResult<()> {
         self.main
-            .put::<_, Str, SerdeFreqsMap>(writer, FIELDS_FREQUENCY_KEY, fields_frequency)
+            .put::<_, Str, SerdeFreqsMap>(writer, FIELDS_DISTRIBUTION_KEY, fields_distribution)
     }
 
-    pub fn fields_frequency(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<FreqsMap>> {
+    pub fn fields_distribution(&self, reader: &heed::RoTxn<MainT>) -> ZResult<Option<FreqsMap>> {
         match self
             .main
-            .get::<_, Str, SerdeFreqsMap>(reader, FIELDS_FREQUENCY_KEY)?
+            .get::<_, Str, SerdeFreqsMap>(reader, FIELDS_DISTRIBUTION_KEY)?
         {
             Some(freqs) => Ok(Some(freqs)),
             None => Ok(None),

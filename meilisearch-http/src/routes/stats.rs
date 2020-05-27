@@ -28,7 +28,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 struct IndexStatsResponse {
     number_of_documents: u64,
     is_indexing: bool,
-    fields_frequency: HashMap<String, usize>,
+    fields_distribution: HashMap<String, usize>,
 }
 
 #[get("/indexes/{index_uid}/stats", wrap = "Authentication::Private")]
@@ -45,7 +45,7 @@ async fn index_stats(
 
     let number_of_documents = index.main.number_of_documents(&reader)?;
 
-    let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
+    let fields_distribution = index.main.fields_distribution(&reader)?.unwrap_or_default();
 
     let update_reader = data.db.update_read_txn()?;
 
@@ -58,7 +58,7 @@ async fn index_stats(
     Ok(HttpResponse::Ok().json(IndexStatsResponse {
         number_of_documents,
         is_indexing,
-        fields_frequency,
+        fields_distribution,
     }))
 }
 
@@ -84,7 +84,7 @@ async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError>
             Some(index) => {
                 let number_of_documents = index.main.number_of_documents(&reader)?;
 
-                let fields_frequency = index.main.fields_frequency(&reader)?.unwrap_or_default();
+                let fields_distribution = index.main.fields_distribution(&reader)?.unwrap_or_default();
 
                 let is_indexing = data.is_indexing(&update_reader, &index_uid)?.ok_or(
                     ResponseError::internal("Impossible to know if the database is indexing"),
@@ -93,7 +93,7 @@ async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError>
                 let response = IndexStatsResponse {
                     number_of_documents,
                     is_indexing,
-                    fields_frequency,
+                    fields_distribution,
                 };
                 index_list.insert(index_uid, response);
             }

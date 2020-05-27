@@ -107,23 +107,23 @@ impl DataInner {
             .all_documents_fields_counts(&writer)?;
 
         // count fields frequencies
-        let mut fields_frequency = HashMap::<_, usize>::new();
+        let mut fields_distribution = HashMap::<_, usize>::new();
         for result in all_documents_fields {
             let (_, attr, _) = result?;
             if let Some(field_id) = schema.indexed_pos_to_field_id(attr) {
-                *fields_frequency.entry(field_id).or_default() += 1;
+                *fields_distribution.entry(field_id).or_default() += 1;
             }
         }
 
         // convert attributes to their names
-        let frequency: HashMap<_, _> = fields_frequency
+        let distribution: HashMap<_, _> = fields_distribution
             .into_iter()
             .filter_map(|(a, c)| schema.name(a).map(|name| (name.to_string(), c)))
             .collect();
 
         index
             .main
-            .put_fields_frequency(writer, &frequency)
+            .put_fields_distribution(writer, &distribution)
             .map_err(MError::Zlmdb)
     }
 }
