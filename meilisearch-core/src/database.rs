@@ -638,7 +638,7 @@ mod tests {
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
         assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
-        update_reader.abort();
+        update_reader.abort().unwrap();
 
         let mut additions = index.documents_addition();
 
@@ -672,14 +672,14 @@ mod tests {
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
         assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
-        update_reader.abort();
+        update_reader.abort().unwrap();
 
         // even try to search for a document
         let reader = db.main_read_txn().unwrap();
         let SortResult {documents, .. } = index.query_builder().query(&reader, "21 ", 0..20).unwrap();
         assert_matches!(documents.len(), 1);
 
-        reader.abort();
+        reader.abort().unwrap();
 
         // try to introduce attributes in the middle of the schema
         let settings = {
@@ -768,7 +768,7 @@ mod tests {
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
         assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
-        update_reader.abort();
+        update_reader.abort().unwrap();
 
         let reader = db.main_read_txn().unwrap();
         let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
@@ -848,7 +848,7 @@ mod tests {
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
         assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
-        update_reader.abort();
+        update_reader.abort().unwrap();
 
         let reader = db.main_read_txn().unwrap();
         let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
@@ -864,7 +864,7 @@ mod tests {
             .unwrap();
         assert!(document.is_some());
 
-        reader.abort();
+        reader.abort().unwrap();
 
         let mut partial_additions = index.documents_partial_addition();
 
@@ -893,7 +893,7 @@ mod tests {
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
         assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
-        update_reader.abort();
+        update_reader.abort().unwrap();
 
         let reader = db.main_read_txn().unwrap();
         let document: Option<serde_json::Value> = index
