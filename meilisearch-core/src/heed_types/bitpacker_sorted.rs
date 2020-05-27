@@ -102,6 +102,19 @@ impl<'a> BytesDecode<'a> for BitPackerSorted {
 mod tests {
     use super::*;
 
+    quickcheck! {
+        fn qc_many_different_numbers(xs: Vec<u32>) -> bool {
+            let mut original: Vec<_> = xs.iter().cloned().cycle().take(1300).collect();
+
+            original.sort_unstable();
+
+            let encoded = BitPackerSorted::bytes_encode(&original).unwrap();
+            let decoded = BitPackerSorted::bytes_decode(&encoded).unwrap();
+
+            original == &decoded[..]
+        }
+    }
+
     #[test]
     fn empty() {
         let original = &[];

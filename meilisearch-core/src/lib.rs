@@ -1,8 +1,8 @@
 #[cfg(test)]
-#[macro_use]
-extern crate assert_matches;
-#[macro_use]
-extern crate pest_derive;
+#[macro_use] extern crate quickcheck;
+#[cfg(test)]
+#[macro_use] extern crate assert_matches;
+#[macro_use] extern crate pest_derive;
 
 mod automaton;
 mod bucket_sort;
