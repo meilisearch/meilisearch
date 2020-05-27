@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::{Number, FstMapCow};
 use crate::raw_indexer::RawIndexer;
 use crate::serde::SerializerError;
-use crate::store::DiscoverIds;
+use crate::heed_types::DiscoverIds;
 
 /// Returns the number of words indexed or `None` if the type is unindexable.
 pub fn index_value<A>(

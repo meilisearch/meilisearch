@@ -7,7 +7,7 @@ use slice_group_by::GroupBy;
 
 use crate::database::MainT;
 use crate::DocIndex;
-use crate::store::{Postings, PostingsCodec};
+use crate::heed_types::{Postings, PostingsCodec};
 
 #[derive(Copy, Clone)]
 pub struct PostingsLists {

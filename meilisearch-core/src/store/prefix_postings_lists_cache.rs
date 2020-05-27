@@ -7,7 +7,7 @@ use slice_group_by::GroupBy;
 
 use crate::database::MainT;
 use crate::DocIndex;
-use crate::store::{PostingsCodec, Postings};
+use crate::heed_types::{PostingsCodec, Postings};
 
 #[derive(Copy, Clone)]
 pub struct PrefixPostingsListsCache {

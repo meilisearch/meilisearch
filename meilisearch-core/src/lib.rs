@@ -10,6 +10,7 @@ mod database;
 mod distinct_map;
 mod error;
 mod filters;
+mod heed_types;
 mod levenshtein;
 mod number;
 mod query_builder;

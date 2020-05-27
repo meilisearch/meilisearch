@@ -9,7 +9,7 @@ use meilisearch_schema::FieldId;
 
 use crate::database::MainT;
 use crate::facets::FacetKey;
-use super::cow_set::CowSet;
+use crate::heed_types::CowSet;
 
 /// contains facet info
 #[derive(Clone, Copy)]
