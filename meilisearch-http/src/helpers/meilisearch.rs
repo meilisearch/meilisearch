@@ -248,7 +248,7 @@ impl<'a> SearchBuilder<'a> {
             exhaustive_nb_hits: search_result.exhaustive_nb_hit,
             processing_time_ms: time_ms,
             query: self.query.to_string(),
-            facets: search_result.facets,
+            facets_distribution: search_result.facets,
         };
 
         Ok(results)
@@ -334,7 +334,7 @@ pub struct SearchResult {
     pub processing_time_ms: usize,
     pub query: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub facets: Option<HashMap<String, HashMap<String, usize>>>,
+    pub facets_distribution: Option<HashMap<String, HashMap<String, usize>>>,
 }
 
 /// returns the start index and the length on the crop.
