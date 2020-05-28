@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-use meilisearch_core::{Database, DatabaseOptions, Highlight, ProcessedUpdateResult, Error as MError};
+use meilisearch_core::{Database, DatabaseOptions, Highlight, ProcessedUpdateResult};
 use meilisearch_core::settings::Settings;
 use meilisearch_schema::FieldId;
 
@@ -126,10 +126,7 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
         settings.into_update().unwrap()
     };
 
-    db.update_write::<_, _, MError>(|writer| {
-        index.settings_update(writer, settings)?;
-        Ok(())
-    })?;
+    db.update_write(|w| index.settings_update(w, settings))?;
 
     let mut rdr = if command.csv_data_path.as_os_str() == "-" {
         csv::Reader::from_reader(Box::new(io::stdin()) as Box<dyn Read>)
@@ -176,10 +173,7 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
         println!();
 
-        let update_id = db.update_write::<_, _, MError>(|writer| {
-            let update_id = additions.finalize(writer)?;
-            Ok(update_id)
-        })?;
+        let update_id = db.update_write(|w| additions.finalize(w))?;
 
         println!("committing update...");
         max_update_id = max_update_id.max(update_id);

@@ -363,11 +363,13 @@ impl Database {
     /// provides a context with a reader to the main database. experimental.
     pub fn main_read<F, R, E>(&self, f: F) -> Result<R, E>
     where
-        F: Fn(&MainReader) -> Result<R, E>,
+        F: FnOnce(&MainReader) -> Result<R, E>,
         E: From<Error>,
     {
         let reader = self.main_read_txn()?;
-        f(&reader)
+        let result = f(&reader)?;
+        reader.abort().map_err(Error::Heed)?;
+        Ok(result)
     }
 
     pub fn update_read_txn(&self) -> MResult<UpdateReader> {
@@ -394,11 +396,13 @@ impl Database {
     /// provides a context with a reader to the update database. experimental.
     pub fn update_read<F, R, E>(&self, f: F) -> Result<R, E>
     where
-        F: Fn(&UpdateReader) -> Result<R, E>,
+        F: FnOnce(&UpdateReader) -> Result<R, E>,
         E: From<Error>,
     {
         let reader = self.update_read_txn()?;
-        f(&reader)
+        let result = f(&reader)?;
+        reader.abort().map_err(Error::Heed)?;
+        Ok(result)
     }
 
     pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> MResult<(File, File)> {

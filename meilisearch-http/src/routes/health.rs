@@ -20,20 +20,12 @@ async fn get_health(data: web::Data<Data>) -> Result<HttpResponse, ResponseError
 }
 
 async fn set_healthy(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    data.db.main_write::<_, _, ResponseError>(|writer| {
-        data.db.set_healthy(writer)?;
-        Ok(())
-    })?;
-    
+    data.db.main_write(|w| data.db.set_healthy(w))?;
     Ok(HttpResponse::Ok().finish())
 }
 
 async fn set_unhealthy(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    data.db.main_write::<_, _, ResponseError>(|writer| {
-        data.db.set_unhealthy(writer)?;
-        Ok(())
-    })?;
-    
+    data.db.main_write(|w| data.db.set_unhealthy(w))?;
     Ok(HttpResponse::Ok().finish())
 }
 

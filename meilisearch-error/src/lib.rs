@@ -22,7 +22,7 @@ pub trait ErrorCode: std::error::Error {
 
     /// return the error type
     fn error_type(&self) -> String {
-        self.error_code().r#type()
+        self.error_code().type_()
     }
 }
 
@@ -130,13 +130,13 @@ impl Code {
     }
 
     /// return the error type
-    fn r#type(&self) -> String {
+    fn type_(&self) -> String {
         self.err_code().error_type.to_string()
     }
 
     /// return the doc url ascociated with the error
     fn url(&self) -> String {
-        format!("docs.meilisearch.com/error/{}", self.name())
+        format!("https://docs.meilisearch.com/error/{}", self.name())
     }
 }
 
@@ -148,26 +148,26 @@ struct ErrCode {
 }
 
 impl ErrCode {
-    fn authentication(err_name: &'static str, status_code: StatusCode) -> ErrCode {
+    fn authentication(error_name: &'static str, status_code: StatusCode) -> ErrCode {
         ErrCode {
             status_code,
-            error_name: err_name,
+            error_name,
             error_type: ErrorType::Authentication,
         }
     }
 
-    fn internal(err_name: &'static str, status_code: StatusCode) -> ErrCode {
+    fn internal(error_name: &'static str, status_code: StatusCode) -> ErrCode {
         ErrCode {
             status_code,
-            error_name: err_name,
+            error_name,
             error_type: ErrorType::InternalError,
         }
     }
 
-    fn invalid(err_name: &'static str, status_code: StatusCode) -> ErrCode {
+    fn invalid(error_name: &'static str, status_code: StatusCode) -> ErrCode {
         ErrCode {
             status_code,
-            error_name: err_name,
+            error_name,
             error_type: ErrorType::InvalidRequest,
         }
     }

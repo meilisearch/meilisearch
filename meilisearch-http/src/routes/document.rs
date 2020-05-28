@@ -72,10 +72,7 @@ async fn delete_document(
     let mut documents_deletion = index.documents_deletion();
     documents_deletion.delete_document_by_external_docid(path.document_id.clone());
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = documents_deletion.finalize(writer)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| documents_deletion.finalize(w))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -174,10 +171,7 @@ async fn update_multiple_documents(
             .set_primary_key(&id)
             .map_err(Error::bad_request)?;
 
-        data.db.main_write::<_, _, ResponseError>(|mut writer| {
-            index.main.put_schema(&mut writer, &schema)?;
-            Ok(())
-        })?;
+        data.db.main_write(|w| index.main.put_schema(w, &schema))?;
     }
 
     let mut document_addition = if is_partial {
@@ -190,12 +184,7 @@ async fn update_multiple_documents(
         document_addition.update_document(document);
     }
 
-    let update_id = data
-        .db
-        .update_write::<_, _, ResponseError>(|writer| {
-            let update_id = document_addition.finalize(writer)?;
-            Ok(update_id)
-        })?;
+    let update_id = data.db.update_write(|w| document_addition.finalize(w))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -242,7 +231,7 @@ async fn delete_documents(
         documents_deletion.delete_document_by_external_docid(document_id);
     }
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| Ok(documents_deletion.finalize(writer)?))?;
+    let update_id = data.db.update_write(|w| documents_deletion.finalize(w))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -257,7 +246,7 @@ async fn clear_all_documents(
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| Ok(index.clear_all(writer)?))?;
+    let update_id = data.db.update_write(|w| index.clear_all(w))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

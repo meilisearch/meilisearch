@@ -153,10 +153,7 @@ async fn delete_all(
         attributes_for_faceting: UpdateState::Clear,
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -206,11 +203,7 @@ async fn update_rules(
     };
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
-
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -233,10 +226,7 @@ async fn delete_rules(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -279,11 +269,7 @@ async fn update_distinct(
     };
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
-
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -306,10 +292,7 @@ async fn delete_distinct(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -355,10 +338,7 @@ async fn update_searchable(
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -381,10 +361,7 @@ async fn delete_searchable(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -431,11 +408,7 @@ async fn update_displayed(
     };
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
-
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -458,10 +431,7 @@ async fn delete_displayed(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -507,11 +477,7 @@ async fn update_accept_new_fields(
     };
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
-
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

@@ -243,13 +243,13 @@ async fn update_index(
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
 
-    data.db.main_write::<_, _, ResponseError>(|mut writer| {
+    data.db.main_write::<_, _, ResponseError>(|writer| {
         if let Some(name) = &body.name {
-            index.main.put_name(&mut writer, name)?;
+            index.main.put_name(writer, name)?;
         }
 
         if let Some(id) = body.primary_key.clone() {
-            if let Some(mut schema) = index.main.schema(&writer)? {
+            if let Some(mut schema) = index.main.schema(writer)? {
                 match schema.primary_key() {
                     Some(_) => {
                         return Err(Error::bad_request(
@@ -258,12 +258,12 @@ async fn update_index(
                     }
                     None => {
                         schema.set_primary_key(&id)?;
-                        index.main.put_schema(&mut writer, &schema)?;
+                        index.main.put_schema(writer, &schema)?;
                     }
                 }
             }
         }
-        index.main.put_updated_at(&mut writer)?;
+        index.main.put_updated_at(writer)?;
         Ok(())
     })?;
 
