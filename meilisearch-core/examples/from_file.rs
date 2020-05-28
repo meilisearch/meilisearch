@@ -325,7 +325,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
 
     let reader = db.main_read_txn().unwrap();
     let schema = index.main.schema(&reader)?;
-    reader.abort();
+    reader.abort().unwrap();
 
     let schema = schema.ok_or(meilisearch_core::Error::SchemaMissing)?;
 
@@ -454,7 +454,7 @@ fn show_updates_command(
     let reader = db.update_read_txn().unwrap();
     let updates = index.all_updates_status(&reader)?;
     println!("{:#?}", updates);
-    reader.abort();
+    reader.abort().unwrap();
 
     Ok(())
 }
