@@ -249,6 +249,7 @@ impl<'a> SearchBuilder<'a> {
             processing_time_ms: time_ms,
             query: self.query.to_string(),
             facets_distribution: search_result.facets,
+            exhaustive_facets_count: search_result.exhaustive_facets_count,
         };
 
         Ok(results)
@@ -335,6 +336,8 @@ pub struct SearchResult {
     pub query: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facets_distribution: Option<HashMap<String, HashMap<String, usize>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exhaustive_facets_count: Option<bool>,
 }
 
 /// returns the start index and the length on the crop.
