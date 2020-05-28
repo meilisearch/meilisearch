@@ -3,7 +3,7 @@ use std::collections::{HashSet, HashMap};
 use log::warn;
 use actix_web::web;
 use actix_web::HttpResponse;
-use actix_web_macros::get;
+use actix_web_macros::{get, post};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -34,6 +34,26 @@ struct SearchQuery {
     matches: Option<bool>,
     facet_filters: Option<String>,
     facets_distribution: Option<String>,
+}
+
+#[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
+async fn search_with_url_query(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    params: web::Query<SearchQuery>,
+) -> Result<HttpResponse, ResponseError> {
+    let search_result = params.search(&path.index_uid, data)?;
+    Ok(HttpResponse::Ok().json(search_result))
+}
+
+#[post("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
+async fn search_with_post(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    params: web::Query<SearchQuery>,
+) -> Result<HttpResponse, ResponseError> {
+    let search_result = params.search(&path.index_uid, data)?;
+    Ok(HttpResponse::Ok().json(search_result))
 }
 
 impl SearchQuery {
@@ -157,15 +177,6 @@ impl SearchQuery {
     }
 }
 
-#[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
-async fn search_with_url_query(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    params: web::Query<SearchQuery>,
-) -> Result<HttpResponse, ResponseError> {
-    let search_result = params.search(&path.index_uid, data)?;
-    Ok(HttpResponse::Ok().json(search_result))
-}
 
 /// Parses the incoming string into an array of attributes for which to return a count. It returns
 /// a Vec of attribute names ascociated with their id.
