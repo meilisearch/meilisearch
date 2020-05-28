@@ -814,7 +814,7 @@ mod tests {
 
         // even try to search for a document
         let reader = db.main_read_txn().unwrap();
-        let SortResult {documents, .. } = index.query_builder().query(&reader, "21 ", 0..20).unwrap();
+        let SortResult {documents, .. } = index.query_builder().query(&reader, Some("21 "), 0..20).unwrap();
         assert_matches!(documents.len(), 1);
 
         reader.abort().unwrap();
@@ -1212,7 +1212,7 @@ mod tests {
 
         let builder = index.query_builder_with_criteria(criteria);
 
-        let SortResult {documents, .. } = builder.query(&reader, "Kevin", 0..20).unwrap();
+        let SortResult {documents, .. } = builder.query(&reader, Some("Kevin"), 0..20).unwrap();
         let mut iter = documents.into_iter();
 
         assert_matches!(

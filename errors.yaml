@@ -1,0 +1,51 @@
+---
+errors:
+  - code: create_index
+    description: "Error relatice to index creation, check out our guide on [index creation](link.com)"
+  - code: existing_index
+    description: "An index with this name already exists, check out our guide on [index creation](link.com)"
+  - code: invalid_index_uid
+    description: "The provided index formatting is wrong, check out our guide on [index creation](link.com)"
+  - code: open_index
+    description: "An error occured while trying to open the requested index, ..."
+  - code: invalid_state
+    description: ""
+  - code: missing_primary_key
+    description: ""
+  - code: primary_key_already_present
+    description: ""
+  - code: max_field_limit_exceeded
+    description: ""
+  - code: missing_document_id
+    description: ""
+  - code: invalid_facet
+    description: ""
+  - code: invalid_filter
+    description: ""
+  - code: bad_parameter
+    description: ""
+  - code: bad_request
+    description: ""
+  - code: document_not_found
+    description: ""
+  - code: internal
+    description: ""
+  - code: invalid_token
+    description: ""
+  - code: maintenance
+    description: ""
+  - code: missing_authorization_header
+    description: ""
+  - code: missing_header
+    description: ""
+  - code: not_found
+    description: ""
+  - code: payload_too_large
+    description: ""
+  - code: retrieve_document
+    description: ""
+  - code: search_error
+    description: ""
+  - code: unsupported_media_type
+    description: ""
+...

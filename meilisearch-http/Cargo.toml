@@ -70,9 +70,9 @@ features = [
 optional = true
 
 [dev-dependencies]
+serde_url_params = "0.2.0"
 tempdir = "0.3.7"
 tokio = { version = "0.2.18", features = ["macros", "time"] }
-serde_url_params = "0.2.0"
 
 [dev-dependencies.assert-json-diff]
 git = "https://github.com/qdequele/assert-json-diff"

@@ -20,11 +20,11 @@ use slice_group_by::GroupBy;
 use crate::error::{Error, ResponseError};
 
 pub trait IndexSearchExt {
-    fn new_search(&self, query: String) -> SearchBuilder;
+    fn new_search(&self, query: Option<String>) -> SearchBuilder;
 }
 
 impl IndexSearchExt for Index {
-    fn new_search(&self, query: String) -> SearchBuilder {
+    fn new_search(&self, query: Option<String>) -> SearchBuilder {
         SearchBuilder {
             index: self,
             query,
@@ -43,7 +43,7 @@ impl IndexSearchExt for Index {
 
 pub struct SearchBuilder<'a> {
     index: &'a Index,
-    query: String,
+    query: Option<String>,
     offset: usize,
     limit: usize,
     attributes_to_crop: Option<HashMap<String, usize>>,
@@ -156,7 +156,7 @@ impl<'a> SearchBuilder<'a> {
         query_builder.set_facets(self.facets);
 
         let start = Instant::now();
-        let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
+        let result = query_builder.query(reader, self.query.as_deref(), self.offset..(self.offset + self.limit));
         let search_result = result.map_err(Error::search_documents)?;
         let time_ms = start.elapsed().as_millis() as usize;
 
@@ -245,7 +245,7 @@ impl<'a> SearchBuilder<'a> {
             nb_hits: search_result.nb_hits,
             exhaustive_nb_hits: search_result.exhaustive_nb_hit,
             processing_time_ms: time_ms,
-            query: self.query.to_string(),
+            query: self.query.unwrap_or_default(),
             facets_distribution: search_result.facets,
             exhaustive_facets_count: search_result.exhaustive_facets_count,
         };

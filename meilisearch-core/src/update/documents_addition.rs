@@ -217,7 +217,7 @@ pub fn apply_addition<'a, 'b>(
     let mut indexer = RawIndexer::new(stop_words);
 
     // For each document in this update
-    for (document_id, document) in documents_additions {
+    for (document_id, document) in &documents_additions {
         // For each key-value pair in the document.
         for (attribute, value) in document {
             let field_id = schema.insert_and_index(&attribute)?;
@@ -229,7 +229,7 @@ pub fn apply_addition<'a, 'b>(
                 &mut indexer,
                 &schema,
                 field_id,
-                document_id,
+                *document_id,
                 &value,
             )?;
         }
@@ -256,6 +256,10 @@ pub fn apply_addition<'a, 'b>(
         let facet_map = facets::facet_map_from_docids(writer, index, &docids, attributes_for_facetting.as_ref())?;
         index.facets.add(writer, facet_map)?;
     }
+
+    // update is finished; update sorted document id cache with new state
+    let mut document_ids = index.main.internal_docids(writer)?.to_vec();
+    super::cache_document_ids_sorted(writer, &ranked_map, index, &mut document_ids)?;
 
     Ok(())
 }
@@ -313,8 +317,8 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
         index.facets.add(writer, facet_map)?;
     }
     // ^-- https://github.com/meilisearch/MeiliSearch/pull/631#issuecomment-626624470 --v
-    for document_id in documents_ids_to_reindex {
-        for result in index.documents_fields.document_fields(writer, document_id)? {
+    for document_id in &documents_ids_to_reindex {
+        for result in index.documents_fields.document_fields(writer, *document_id)? {
             let (field_id, bytes) = result?;
             let value: Value = serde_json::from_slice(bytes)?;
             ram_store.insert((document_id, field_id), value);
@@ -330,7 +334,7 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
                 &mut indexer,
                 &schema,
                 field_id,
-                document_id,
+                *document_id,
                 &value,
             )?;
         }
@@ -353,6 +357,10 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
         let facet_map = facets::facet_map_from_docids(writer, index, &docids, attributes_for_facetting.as_ref())?;
         index.facets.add(writer, facet_map)?;
     }
+
+    // update is finished; update sorted document id cache with new state
+    let mut document_ids = index.main.internal_docids(writer)?.to_vec();
+    super::cache_document_ids_sorted(writer, &ranked_map, index, &mut document_ids)?;
 
     Ok(())
 }
