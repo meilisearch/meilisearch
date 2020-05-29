@@ -1,5 +1,6 @@
-
 use std::{error, fmt};
+
+use meilisearch_error::{ErrorCode, Code};
 
 pub type SResult<T> = Result<T, Error>;
 
@@ -22,3 +23,15 @@ impl fmt::Display for Error {
 }
 
 impl error::Error for Error {}
+
+impl ErrorCode for Error {
+    fn error_code(&self) -> Code {
+        use Error::*;
+
+        match self {
+            FieldNameNotFound(_) => Code::Internal,
+            MaxFieldsLimitExceeded => Code::MaxFieldsLimitExceeded,
+            PrimaryKeyAlreadyPresent => Code::PrimaryKeyAlreadyPresent,
+        }
+    }
+}

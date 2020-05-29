@@ -3,7 +3,7 @@ use actix_web_macros::{delete, get, post};
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
 use std::collections::BTreeSet;
 
-use crate::error::ResponseError;
+use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
@@ -23,10 +23,9 @@ async fn get(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
-    let stop_words_fst = index.main.stop_words_fst(&reader)?;
-    let stop_words = stop_words_fst.stream().into_strs()?;
+    let stop_words = index.main.stop_words(&reader)?;
 
     Ok(HttpResponse::Ok().json(stop_words))
 }
@@ -43,16 +42,14 @@ async fn update(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Update(body.into_inner()),
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -68,16 +65,14 @@ async fn delete(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

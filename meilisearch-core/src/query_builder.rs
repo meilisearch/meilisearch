@@ -268,7 +268,7 @@ mod tests {
             let alternatives = self
                 .index
                 .synonyms
-                .synonyms(&writer, word.as_bytes())
+                .synonyms_fst(&writer, word.as_bytes())
                 .unwrap();
 
             let new = sdset_into_fstset(&new);

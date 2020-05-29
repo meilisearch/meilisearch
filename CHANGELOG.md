@@ -1,6 +1,6 @@
 ## v0.10.2
 
-  - Change the HTTP framework, moving from tide to actix-web #601
+  - Change the HTTP framework, moving from tide to actix-web (#601)
   - Bump sentry version to 0.18.1 (#690)
   - Enable max payload size override (#684)
   - Disable sentry in debug (#681)
@@ -18,6 +18,7 @@
   - Update sentry features to remove openssl (#702)
   - Add SSL support (#669)
   - Rename fieldsFrequency into fieldsDistribution in stats (#719)
+  - Add support for error code reporting (#703)
 
 ## v0.10.1
 

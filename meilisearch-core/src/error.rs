@@ -9,6 +9,8 @@ pub use fst::Error as FstError;
 pub use heed::Error as HeedError;
 pub use pest::error as pest_error;
 
+use meilisearch_error::{ErrorCode, Code};
+
 pub type MResult<T> = Result<T, Error>;
 
 #[derive(Debug)]
@@ -21,15 +23,39 @@ pub enum Error {
     MissingDocumentId,
     MaxFieldsLimitExceeded,
     Schema(meilisearch_schema::Error),
-    Zlmdb(heed::Error),
+    Heed(heed::Error),
     Fst(fst::Error),
     SerdeJson(SerdeJsonError),
     Bincode(bincode::Error),
     Serializer(SerializerError),
     Deserializer(DeserializerError),
-    UnsupportedOperation(UnsupportedOperation),
     FilterParseError(PestError<Rule>),
     FacetError(FacetError),
+}
+
+impl ErrorCode for Error {
+    fn error_code(&self) -> Code {
+        use Error::*;
+
+        match self {
+            FacetError(_) => Code::Facet,
+            FilterParseError(_) => Code::Filter,
+            IndexAlreadyExists => Code::IndexAlreadyExists,
+            MissingPrimaryKey => Code::InvalidState,
+            MissingDocumentId => Code::MissingDocumentId,
+            MaxFieldsLimitExceeded => Code::MaxFieldsLimitExceeded,
+            Schema(s) =>  s.error_code(),
+            WordIndexMissing
+            | SchemaMissing => Code::InvalidState,
+            Heed(_)
+            | Fst(_)
+            | SerdeJson(_)
+            | Bincode(_)
+            | Serializer(_)
+            | Deserializer(_)
+            | Io(_) => Code::Internal,
+        }
+    }
 }
 
 impl From<io::Error> for Error {
@@ -74,7 +100,7 @@ impl From<meilisearch_schema::Error> for Error {
 
 impl From<HeedError> for Error {
     fn from(error: HeedError) -> Error {
-        Error::Zlmdb(error)
+        Error::Heed(error)
     }
 }
 
@@ -108,12 +134,6 @@ impl From<DeserializerError> for Error {
     }
 }
 
-impl From<UnsupportedOperation> for Error {
-    fn from(op: UnsupportedOperation) -> Error {
-        Error::UnsupportedOperation(op)
-    }
-}
-
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Error::*;
@@ -126,13 +146,12 @@ impl fmt::Display for Error {
             MissingDocumentId => write!(f, "document id is missing"),
             MaxFieldsLimitExceeded => write!(f, "maximum number of fields in a document exceeded"),
             Schema(e) => write!(f, "schema error; {}", e),
-            Zlmdb(e) => write!(f, "heed error; {}", e),
+            Heed(e) => write!(f, "heed error; {}", e),
             Fst(e) => write!(f, "fst error; {}", e),
             SerdeJson(e) => write!(f, "serde json error; {}", e),
             Bincode(e) => write!(f, "bincode error; {}", e),
             Serializer(e) => write!(f, "serializer error; {}", e),
             Deserializer(e) => write!(f, "deserializer error; {}", e),
-            UnsupportedOperation(op) => write!(f, "unsupported operation; {}", op),
             FilterParseError(e) => write!(f, "error parsing filter; {}", e),
             FacetError(e) => write!(f, "error processing facet filter: {}", e),
         }
@@ -141,27 +160,17 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {}
 
-#[derive(Debug)]
-pub enum UnsupportedOperation {
-    SchemaAlreadyExists,
-    CannotUpdateSchemaPrimaryKey,
-    CannotReorderSchemaAttribute,
-    CanOnlyIntroduceNewSchemaAttributesAtEnd,
-    CannotRemoveSchemaAttribute,
-}
+struct FilterParseError(PestError<Rule>);
 
-impl fmt::Display for UnsupportedOperation {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use self::UnsupportedOperation::*;
-        match self {
-            SchemaAlreadyExists => write!(f, "Cannot update index which already have a schema"),
-            CannotUpdateSchemaPrimaryKey => write!(f, "Cannot update the primary key of a schema"),
-            CannotReorderSchemaAttribute => write!(f, "Cannot reorder the attributes of a schema"),
-            CanOnlyIntroduceNewSchemaAttributesAtEnd => {
-                write!(f, "Can only introduce new attributes at end of a schema")
-            }
-            CannotRemoveSchemaAttribute => write!(f, "Cannot remove attributes from a schema"),
-        }
+impl fmt::Display for FilterParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use crate::pest_error::LineColLocation::*;
+
+        let (line, column) = match self.0.line_col {
+            Span((line, _), (column, _)) => (line, column),
+            Pos((line, column)) => (line, column),
+        };
+        write!(f, "parsing error on line {} at column {}: {}", line, column, self.0.variant.message())
     }
 }
 

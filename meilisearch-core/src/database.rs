@@ -4,16 +4,29 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
 
+use chrono::{DateTime, Utc};
 use crossbeam_channel::{Receiver, Sender};
-use heed::types::{Str, Unit};
-use heed::{CompactionOption, Result as ZResult};
-use log::debug;
+use heed::types::{Str, Unit, SerdeBincode};
+use heed::CompactionOption;
+use log::{debug, error};
 use meilisearch_schema::Schema;
 
-use crate::{store, update, Index, MResult};
+use crate::{store, update, Index, MResult, Error};
 
 pub type BoxUpdateFn = Box<dyn Fn(&str, update::ProcessedUpdateResult) + Send + Sync + 'static>;
+
 type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
+
+type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
+
+pub type MainWriter<'a> = heed::RwTxn<'a, MainT>;
+pub type MainReader = heed::RoTxn<MainT>;
+
+pub type UpdateWriter<'a> = heed::RwTxn<'a, UpdateT>;
+pub type UpdateReader = heed::RoTxn<UpdateT>;
+
+const UNHEALTHY_KEY: &str = "_is_unhealthy";
+const LAST_UPDATE_KEY: &str = "last-update";
 
 pub struct MainT;
 pub struct UpdateT;
@@ -241,6 +254,13 @@ impl Database {
         }
     }
 
+    pub fn is_indexing(&self, reader: &UpdateReader, index: &str) -> MResult<Option<bool>> {
+        match self.open_index(&index) {
+            Some(index) => index.current_update_id(&reader).map(|u| Some(u.is_some())),
+            None => Ok(None),
+        }
+    }
+
     pub fn create_index(&self, name: impl AsRef<str>) -> MResult<Index> {
         let name = name.as_ref();
         let mut indexes_lock = self.indexes.write().unwrap();
@@ -319,23 +339,73 @@ impl Database {
         self.update_fn.swap(None);
     }
 
-    pub fn main_read_txn(&self) -> heed::Result<heed::RoTxn<MainT>> {
-        self.env.typed_read_txn::<MainT>()
+    pub fn main_read_txn(&self) -> MResult<MainReader> {
+        Ok(self.env.typed_read_txn::<MainT>()?)
     }
 
-    pub fn main_write_txn(&self) -> heed::Result<heed::RwTxn<MainT>> {
-        self.env.typed_write_txn::<MainT>()
+    pub(crate) fn main_write_txn(&self) -> MResult<MainWriter> {
+        Ok(self.env.typed_write_txn::<MainT>()?)
     }
 
-    pub fn update_read_txn(&self) -> heed::Result<heed::RoTxn<UpdateT>> {
-        self.update_env.typed_read_txn::<UpdateT>()
+    /// Calls f providing it with a writer to the main database. After f is called, makes sure the
+    /// transaction is commited. Returns whatever result f returns.
+    pub fn main_write<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&mut MainWriter) -> Result<R, E>,
+        E: From<Error>,
+    {
+        let mut writer = self.main_write_txn()?;
+        let result = f(&mut writer)?;
+        writer.commit().map_err(Error::Heed)?;
+        Ok(result)
     }
 
-    pub fn update_write_txn(&self) -> heed::Result<heed::RwTxn<UpdateT>> {
-        self.update_env.typed_write_txn::<UpdateT>()
+    /// provides a context with a reader to the main database. experimental.
+    pub fn main_read<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&MainReader) -> Result<R, E>,
+        E: From<Error>,
+    {
+        let reader = self.main_read_txn()?;
+        let result = f(&reader)?;
+        reader.abort().map_err(Error::Heed)?;
+        Ok(result)
     }
 
-    pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> ZResult<(File, File)> {
+    pub fn update_read_txn(&self) -> MResult<UpdateReader> {
+        Ok(self.update_env.typed_read_txn::<UpdateT>()?)
+    }
+
+    pub(crate) fn update_write_txn(&self) -> MResult<heed::RwTxn<UpdateT>> {
+        Ok(self.update_env.typed_write_txn::<UpdateT>()?)
+    }
+
+    /// Calls f providing it with a writer to the main database. After f is called, makes sure the
+    /// transaction is commited. Returns whatever result f returns.
+    pub fn update_write<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&mut UpdateWriter) -> Result<R, E>,
+        E: From<Error>,
+    {
+        let mut writer = self.update_write_txn()?;
+        let result = f(&mut writer)?;
+        writer.commit().map_err(Error::Heed)?;
+        Ok(result)
+    }
+
+    /// provides a context with a reader to the update database. experimental.
+    pub fn update_read<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&UpdateReader) -> Result<R, E>,
+        E: From<Error>,
+    {
+        let reader = self.update_read_txn()?;
+        let result = f(&reader)?;
+        reader.abort().map_err(Error::Heed)?;
+        Ok(result)
+    }
+
+    pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> MResult<(File, File)> {
         let path = path.as_ref();
 
         let env_path = path.join("main");
@@ -352,7 +422,7 @@ impl Database {
             Ok(update_env_file) => Ok((env_file, update_env_file)),
             Err(e) => {
                 fs::remove_file(env_path)?;
-                Err(e)
+                Err(e.into())
             },
         }
     }
@@ -362,8 +432,77 @@ impl Database {
         indexes.keys().cloned().collect()
     }
 
-    pub fn common_store(&self) -> heed::PolyDatabase {
+    pub(crate) fn common_store(&self) -> heed::PolyDatabase {
         self.common_store
+    }
+
+    pub fn last_update(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<DateTime<Utc>>> {
+        match self.common_store()
+            .get::<_, Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)? {
+                Some(datetime) => Ok(Some(datetime)),
+                None => Ok(None),
+            }
+    }
+
+    pub fn set_last_update(&self, writer: &mut heed::RwTxn<MainT>, time: &DateTime<Utc>) -> MResult<()> {
+        self.common_store()
+            .put::<_, Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, time)?;
+        Ok(())
+    }
+
+    pub fn set_healthy(&self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
+        let common_store = self.common_store();
+        common_store.delete::<_, Str>(writer, UNHEALTHY_KEY)?;
+        Ok(())
+    }
+
+    pub fn set_unhealthy(&self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
+        let common_store = self.common_store();
+        common_store.put::<_, Str, Unit>(writer, UNHEALTHY_KEY, &())?;
+        Ok(())
+    }
+
+    pub fn get_health(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<()>> {
+        let common_store = self.common_store();
+        Ok(common_store.get::<_, Str, Unit>(&reader, UNHEALTHY_KEY)?)
+    }
+
+    pub fn compute_stats(&self, writer: &mut MainWriter, index_uid: &str) -> MResult<()> {
+        let index = match self.open_index(&index_uid) {
+            Some(index) => index,
+            None => {
+                error!("Impossible to retrieve index {}", index_uid);
+                return Ok(());
+            }
+        };
+
+        let schema = match index.main.schema(&writer)? {
+            Some(schema) => schema,
+            None => return Ok(()),
+        };
+
+        let all_documents_fields = index
+            .documents_fields_counts
+            .all_documents_fields_counts(&writer)?;
+
+        // count fields frequencies
+        let mut fields_frequency = HashMap::<_, usize>::new();
+        for result in all_documents_fields {
+            let (_, attr, _) = result?;
+            if let Some(field_id) = schema.indexed_pos_to_field_id(attr) {
+                *fields_frequency.entry(field_id).or_default() += 1;
+            }
+        }
+
+        // convert attributes to their names
+        let frequency: HashMap<_, _> = fields_frequency
+            .into_iter()
+            .filter_map(|(a, c)| schema.name(a).map(|name| (name.to_string(), c)))
+            .collect();
+
+        index
+            .main
+            .put_fields_distribution(writer, &frequency)
     }
 }
 

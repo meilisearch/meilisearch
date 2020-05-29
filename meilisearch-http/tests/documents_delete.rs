@@ -14,7 +14,7 @@ async fn delete() {
     assert_eq!(status_code, 404);
 }
 
-// Resolve teh issue https://github.com/meilisearch/MeiliSearch/issues/493
+// Resolve the issue https://github.com/meilisearch/MeiliSearch/issues/493
 #[actix_rt::test]
 async fn delete_batch() {
     let mut server = common::Server::with_uid("movies");

@@ -3,7 +3,7 @@ use actix_web_macros::{delete, get, post};
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
-use crate::error::ResponseError;
+use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
 use crate::Data;
@@ -37,15 +37,16 @@ async fn update_all(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
-    let mut writer = data.db.update_write_txn()?;
-    let settings = body
-        .into_inner()
-        .into_update()
-        .map_err(ResponseError::bad_request)?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+        let settings = body
+            .into_inner()
+            .into_update()
+            .map_err(Error::bad_request)?;
+        let update_id = index.settings_update(writer, settings)?;
+        Ok(update_id)
+    })?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -58,22 +59,22 @@ async fn get_all(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
 
-    let stop_words_fst = index.main.stop_words_fst(&reader)?;
-    let stop_words = stop_words_fst.stream().into_strs()?;
-    let stop_words: BTreeSet<String> = stop_words.into_iter().collect();
+    let stop_words: BTreeSet<String> = index
+        .main
+        .stop_words(&reader)?
+        .into_iter()
+        .collect();
 
-    let synonyms_fst = index.main.synonyms_fst(&reader)?;
-    let synonyms_list = synonyms_fst.stream().into_strs()?;
+    let synonyms_list = index.main.synonyms(&reader)?;
 
     let mut synonyms = BTreeMap::new();
     let index_synonyms = &index.synonyms;
     for synonym in synonyms_list {
-        let alternative_list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
-        let list = alternative_list.stream().into_strs()?;
+        let list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
         synonyms.insert(synonym, list);
     }
 
@@ -138,8 +139,7 @@ async fn delete_all(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
-    let mut writer = data.db.update_write_txn()?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
@@ -153,8 +153,7 @@ async fn delete_all(
         attributes_for_faceting: UpdateState::Clear,
     };
 
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -170,7 +169,7 @@ async fn get_rules(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
 
     let ranking_rules = index
@@ -196,17 +195,15 @@ async fn update_rules(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         ranking_rules: Some(body.into_inner()),
         ..Settings::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -222,17 +219,14 @@ async fn delete_rules(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
-    let mut writer = data.db.update_write_txn()?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let update_id = index.settings_update(&mut writer, settings)?;
-
-    writer.commit()?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -248,7 +242,7 @@ async fn get_distinct(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
     let distinct_attribute = index.main.distinct_attribute(&reader)?;
 
@@ -267,17 +261,15 @@ async fn update_distinct(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         distinct_attribute: Some(body.into_inner()),
         ..Settings::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -293,17 +285,14 @@ async fn delete_distinct(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
-    let mut writer = data.db.update_write_txn()?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         distinct_attribute: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let update_id = index.settings_update(&mut writer, settings)?;
-
-    writer.commit()?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -319,7 +308,7 @@ async fn get_searchable(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
     let schema = index.main.schema(&reader)?;
     let searchable_attributes: Option<Vec<String>> =
@@ -340,17 +329,16 @@ async fn update_searchable(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         searchable_attributes: Some(body.into_inner()),
         ..Settings::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let settings = settings.into_update().map_err(Error::bad_request)?;
+
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -366,16 +354,14 @@ async fn delete_searchable(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         searchable_attributes: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -391,7 +377,7 @@ async fn get_displayed(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
 
     let schema = index.main.schema(&reader)?;
@@ -414,17 +400,15 @@ async fn update_displayed(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         displayed_attributes: Some(body.into_inner()),
         ..Settings::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -440,16 +424,14 @@ async fn delete_displayed(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = SettingsUpdate {
         displayed_attributes: UpdateState::Clear,
         ..SettingsUpdate::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -465,7 +447,7 @@ async fn get_accept_new_fields(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
 
     let schema = index.main.schema(&reader)?;
@@ -487,17 +469,15 @@ async fn update_accept_new_fields(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let settings = Settings {
         accept_new_fields: Some(body.into_inner()),
         ..Settings::default()
     };
 
-    let mut writer = data.db.update_write_txn()?;
-    let settings = settings.into_update().map_err(ResponseError::bad_request)?;
-    let update_id = index.settings_update(&mut writer, settings)?;
-    writer.commit()?;
+    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

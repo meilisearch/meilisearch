@@ -31,7 +31,6 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 use std::{mem, ptr};
 
-use heed::Result as ZResult;
 use heed::{BytesEncode, BytesDecode};
 use meilisearch_schema::{IndexedPos, FieldId};
 use sdset::{Set, SetBuf};
@@ -279,14 +278,14 @@ impl Index {
         }
     }
 
-    pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> ZResult<u64> {
+    pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
-        update::push_customs_update(writer, self.updates, self.updates_results, customs)
+        Ok(update::push_customs_update(writer, self.updates, self.updates_results, customs)?)
     }
 
-    pub fn settings_update(&self, writer: &mut heed::RwTxn<UpdateT>, update: SettingsUpdate) -> ZResult<u64> {
+    pub fn settings_update(&self, writer: &mut heed::RwTxn<UpdateT>, update: SettingsUpdate) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
-        update::push_settings_update(writer, self.updates, self.updates_results, update)
+        Ok(update::push_settings_update(writer, self.updates, self.updates_results, update)?)
     }
 
     pub fn documents_addition<D>(&self) -> update::DocumentsAddition<D> {

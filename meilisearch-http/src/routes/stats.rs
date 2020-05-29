@@ -10,7 +10,7 @@ use serde::Serialize;
 use sysinfo::{NetworkExt, ProcessExt, ProcessorExt, System, SystemExt};
 use walkdir::WalkDir;
 
-use crate::error::ResponseError;
+use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
@@ -39,7 +39,7 @@ async fn index_stats(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
 
@@ -50,8 +50,8 @@ async fn index_stats(
     let update_reader = data.db.update_read_txn()?;
 
     let is_indexing =
-        data.is_indexing(&update_reader, &path.index_uid)?
-            .ok_or(ResponseError::internal(
+        data.db.is_indexing(&update_reader, &path.index_uid)?
+            .ok_or(Error::internal(
                 "Impossible to know if the database is indexing",
             ))?;
 
@@ -86,8 +86,8 @@ async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError>
 
                 let fields_distribution = index.main.fields_distribution(&reader)?.unwrap_or_default();
 
-                let is_indexing = data.is_indexing(&update_reader, &index_uid)?.ok_or(
-                    ResponseError::internal("Impossible to know if the database is indexing"),
+                let is_indexing = data.db.is_indexing(&update_reader, &index_uid)?.ok_or(
+                    Error::internal("Impossible to know if the database is indexing"),
                 )?;
 
                 let response = IndexStatsResponse {
@@ -111,7 +111,7 @@ async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError>
         .filter(|metadata| metadata.is_file())
         .fold(0, |acc, m| acc + m.len());
 
-    let last_update = data.last_update(&reader)?;
+    let last_update = data.db.last_update(&reader)?;
 
     Ok(HttpResponse::Ok().json(StatsResult {
         database_size,

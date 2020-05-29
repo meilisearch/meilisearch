@@ -5,7 +5,7 @@ use log::error;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
-use crate::error::ResponseError;
+use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
@@ -42,28 +42,27 @@ struct IndexResponse {
 #[get("/indexes", wrap = "Authentication::Private")]
 async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let reader = data.db.main_read_txn()?;
-
-    let mut response = Vec::new();
+    let mut indexes = Vec::new();
 
     for index_uid in data.db.indexes_uids() {
         let index = data.db.open_index(&index_uid);
 
         match index {
             Some(index) => {
-                let name = index.main.name(&reader)?.ok_or(ResponseError::internal(
-                    "Impossible to get the name of an index",
+                let name = index.main.name(&reader)?.ok_or(Error::internal(
+                        "Impossible to get the name of an index",
                 ))?;
                 let created_at = index
                     .main
                     .created_at(&reader)?
-                    .ok_or(ResponseError::internal(
-                        "Impossible to get the create date of an index",
+                    .ok_or(Error::internal(
+                            "Impossible to get the create date of an index",
                     ))?;
                 let updated_at = index
                     .main
                     .updated_at(&reader)?
-                    .ok_or(ResponseError::internal(
-                        "Impossible to get the last update date of an index",
+                    .ok_or(Error::internal(
+                            "Impossible to get the last update date of an index",
                     ))?;
 
                 let primary_key = match index.main.schema(&reader) {
@@ -81,7 +80,7 @@ async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseErr
                     updated_at,
                     primary_key,
                 };
-                response.push(index_response);
+                indexes.push(index_response);
             }
             None => error!(
                 "Index {} is referenced in the indexes list but cannot be found",
@@ -90,7 +89,7 @@ async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseErr
         }
     }
 
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(indexes))
 }
 
 #[get("/indexes/{index_uid}", wrap = "Authentication::Private")]
@@ -101,24 +100,23 @@ async fn get_index(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
-
-    let name = index.main.name(&reader)?.ok_or(ResponseError::internal(
-        "Impossible to get the name of an index",
+    let name = index.main.name(&reader)?.ok_or(Error::internal(
+            "Impossible to get the name of an index",
     ))?;
     let created_at = index
         .main
         .created_at(&reader)?
-        .ok_or(ResponseError::internal(
-            "Impossible to get the create date of an index",
+        .ok_or(Error::internal(
+                "Impossible to get the create date of an index",
         ))?;
     let updated_at = index
         .main
         .updated_at(&reader)?
-        .ok_or(ResponseError::internal(
-            "Impossible to get the last update date of an index",
+        .ok_or(Error::internal(
+                "Impossible to get the last update date of an index",
         ))?;
 
     let primary_key = match index.main.schema(&reader) {
@@ -128,14 +126,15 @@ async fn get_index(
         },
         _ => None,
     };
-
-    Ok(HttpResponse::Ok().json(IndexResponse {
+    let index_response = IndexResponse {
         name,
         uid: path.index_uid.clone(),
         created_at,
         updated_at,
         primary_key,
-    }))
+    };
+
+    Ok(HttpResponse::Ok().json(index_response))
 }
 
 #[derive(Debug, Deserialize)]
@@ -152,9 +151,9 @@ async fn create_index(
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
     if let (None, None) = (body.name.clone(), body.uid.clone()) {
-        return Err(ResponseError::bad_request(
+        return Err(Error::bad_request(
             "Index creation must have an uid",
-        ));
+        ).into());
     }
 
     let uid = match &body.uid {
@@ -165,7 +164,7 @@ async fn create_index(
             {
                 uid.to_owned()
             } else {
-                return Err(ResponseError::InvalidIndexUid);
+                return Err(Error::InvalidIndexUid.into());
             }
         }
         None => loop {
@@ -179,41 +178,41 @@ async fn create_index(
     let created_index = data
         .db
         .create_index(&uid)
-        .map_err(ResponseError::create_index)?;
+        .map_err(Error::create_index)?;
 
-    let mut writer = data.db.main_write_txn()?;
+    let index_response = data.db.main_write::<_, _, ResponseError>(|mut writer| {
+        let name = body.name.as_ref().unwrap_or(&uid);
+        created_index.main.put_name(&mut writer, name)?;
 
-    let name = body.name.as_ref().unwrap_or(&uid);
-    created_index.main.put_name(&mut writer, name)?;
+        let created_at = created_index
+            .main
+            .created_at(&writer)?
+            .ok_or(Error::internal("Impossible to read created at"))?;
 
-    let created_at = created_index
-        .main
-        .created_at(&writer)?
-        .ok_or(ResponseError::internal("Impossible to read created at"))?;
+        let updated_at = created_index
+            .main
+            .updated_at(&writer)?
+            .ok_or(Error::internal("Impossible to read updated at"))?;
 
-    let updated_at = created_index
-        .main
-        .updated_at(&writer)?
-        .ok_or(ResponseError::internal("Impossible to read updated at"))?;
-
-    if let Some(id) = body.primary_key.clone() {
-        if let Some(mut schema) = created_index.main.schema(&writer)? {
-            schema
-                .set_primary_key(&id)
-                .map_err(ResponseError::bad_request)?;
-            created_index.main.put_schema(&mut writer, &schema)?;
+        if let Some(id) = body.primary_key.clone() {
+            if let Some(mut schema) = created_index.main.schema(&writer)? {
+                schema
+                    .set_primary_key(&id)
+                    .map_err(Error::bad_request)?;
+                created_index.main.put_schema(&mut writer, &schema)?;
+            }
         }
-    }
+        let index_response = IndexResponse {
+            name: name.to_string(),
+            uid,
+            created_at,
+            updated_at,
+            primary_key: body.primary_key.clone(),
+        };
+        Ok(index_response)
+    })?;
 
-    writer.commit()?;
-
-    Ok(HttpResponse::Created().json(IndexResponse {
-        name: name.to_string(),
-        uid,
-        created_at,
-        updated_at,
-        primary_key: body.primary_key.clone(),
-    }))
+    Ok(HttpResponse::Created().json(index_response))
 }
 
 #[derive(Debug, Deserialize)]
@@ -242,49 +241,47 @@ async fn update_index(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
-    let mut writer = data.db.main_write_txn()?;
+    data.db.main_write::<_, _, ResponseError>(|writer| {
+        if let Some(name) = &body.name {
+            index.main.put_name(writer, name)?;
+        }
 
-    if let Some(name) = &body.name {
-        index.main.put_name(&mut writer, name)?;
-    }
-
-    if let Some(id) = body.primary_key.clone() {
-        if let Some(mut schema) = index.main.schema(&writer)? {
-            match schema.primary_key() {
-                Some(_) => {
-                    return Err(ResponseError::bad_request(
-                        "The primary key cannot be updated",
-                    ));
-                }
-                None => {
-                    schema.set_primary_key(&id)?;
-                    index.main.put_schema(&mut writer, &schema)?;
+        if let Some(id) = body.primary_key.clone() {
+            if let Some(mut schema) = index.main.schema(writer)? {
+                match schema.primary_key() {
+                    Some(_) => {
+                        return Err(Error::bad_request(
+                                "The primary key cannot be updated",
+                        ).into());
+                    }
+                    None => {
+                        schema.set_primary_key(&id)?;
+                        index.main.put_schema(writer, &schema)?;
+                    }
                 }
             }
         }
-    }
-
-    index.main.put_updated_at(&mut writer)?;
-    writer.commit()?;
+        index.main.put_updated_at(writer)?;
+        Ok(())
+    })?;
 
     let reader = data.db.main_read_txn()?;
-
-    let name = index.main.name(&reader)?.ok_or(ResponseError::internal(
-        "Impossible to get the name of an index",
+    let name = index.main.name(&reader)?.ok_or(Error::internal(
+            "Impossible to get the name of an index",
     ))?;
     let created_at = index
         .main
         .created_at(&reader)?
-        .ok_or(ResponseError::internal(
-            "Impossible to get the create date of an index",
+        .ok_or(Error::internal(
+                "Impossible to get the create date of an index",
         ))?;
     let updated_at = index
         .main
         .updated_at(&reader)?
-        .ok_or(ResponseError::internal(
-            "Impossible to get the last update date of an index",
+        .ok_or(Error::internal(
+                "Impossible to get the last update date of an index",
         ))?;
 
     let primary_key = match index.main.schema(&reader) {
@@ -295,13 +292,15 @@ async fn update_index(
         _ => None,
     };
 
-    Ok(HttpResponse::Ok().json(IndexResponse {
+    let index_response = IndexResponse {
         name,
         uid: path.index_uid.clone(),
         created_at,
         updated_at,
         primary_key,
-    }))
+    };
+
+    Ok(HttpResponse::Ok().json(index_response))
 }
 
 #[delete("/indexes/{index_uid}", wrap = "Authentication::Private")]
@@ -331,7 +330,7 @@ async fn get_update_status(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.update_read_txn()?;
 
@@ -339,10 +338,10 @@ async fn get_update_status(
 
     match status {
         Some(status) => Ok(HttpResponse::Ok().json(status)),
-        None => Err(ResponseError::NotFound(format!(
+        None => Err(Error::NotFound(format!(
             "Update {} not found",
             path.update_id
-        ))),
+        )).into()),
     }
 }
 
@@ -354,7 +353,7 @@ async fn get_all_updates_status(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.update_read_txn()?;
 

@@ -26,7 +26,7 @@ pub mod settings;
 pub mod store;
 pub mod update;
 
-pub use self::database::{BoxUpdateFn, Database, DatabaseOptions, MainT, UpdateT};
+pub use self::database::{BoxUpdateFn, Database, DatabaseOptions, MainT, UpdateT, MainWriter, MainReader, UpdateWriter, UpdateReader};
 pub use self::error::{Error, HeedError, FstError, MResult, pest_error, FacetError};
 pub use self::filters::Filter;
 pub use self::number::{Number, ParseNumberError};

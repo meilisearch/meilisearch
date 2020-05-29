@@ -4,7 +4,7 @@ use heed::Result as ZResult;
 use heed::types::ByteSlice;
 
 use crate::database::MainT;
-use crate::FstSetCow;
+use crate::{FstSetCow, MResult};
 
 #[derive(Copy, Clone)]
 pub struct Synonyms {
@@ -27,10 +27,18 @@ impl Synonyms {
         self.synonyms.clear(writer)
     }
 
-    pub fn synonyms<'txn>(self, reader: &'txn heed::RoTxn<MainT>, word: &[u8]) -> ZResult<FstSetCow<'txn>> {
+    pub(crate) fn synonyms_fst<'txn>(self, reader: &'txn heed::RoTxn<MainT>, word: &[u8]) -> ZResult<FstSetCow<'txn>> {
         match self.synonyms.get(reader, word)? {
             Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
             None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
         }
+    }
+
+    pub fn synonyms(self, reader: &heed::RoTxn<MainT>, word: &[u8]) -> MResult<Vec<String>> {
+        let synonyms = self
+            .synonyms_fst(&reader, word)?
+            .stream()
+            .into_strs()?;
+        Ok(synonyms)
     }
 }

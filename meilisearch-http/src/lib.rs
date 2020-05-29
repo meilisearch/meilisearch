@@ -7,13 +7,16 @@ pub mod models;
 pub mod option;
 pub mod routes;
 
-pub use self::data::Data;
-use self::error::json_error_handler;
 use actix_http::Error;
 use actix_service::ServiceFactory;
 use actix_web::{dev, web, App};
+use chrono::Utc;
 use log::error;
+
 use meilisearch_core::ProcessedUpdateResult;
+
+pub use self::data::Data;
+use self::error::{json_error_handler, ResponseError};
 
 pub fn create_app(
     data: &Data,
@@ -55,28 +58,23 @@ pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpda
 
     if let Some(index) = data.db.open_index(&index_uid) {
         let db = &data.db;
-        let mut writer = match db.main_write_txn() {
-            Ok(writer) => writer,
-            Err(e) => {
-                error!("Impossible to get write_txn; {}", e);
-                return;
+        let res = db.main_write::<_, _, ResponseError>(|mut writer| {
+            if let Err(e) = data.db.compute_stats(&mut writer, &index_uid) {
+                error!("Impossible to compute stats; {}", e)
             }
-        };
 
-        if let Err(e) = data.compute_stats(&mut writer, &index_uid) {
-            error!("Impossible to compute stats; {}", e)
-        }
+            if let Err(e) = data.db.set_last_update(&mut writer, &Utc::now()) {
+                error!("Impossible to update last_update; {}", e)
+            }
 
-        if let Err(e) = data.set_last_update(&mut writer) {
-            error!("Impossible to update last_update; {}", e)
-        }
-
-        if let Err(e) = index.main.put_updated_at(&mut writer) {
-            error!("Impossible to update updated_at; {}", e)
-        }
-
-        if let Err(e) = writer.commit() {
-            error!("Impossible to get write_txn; {}", e);
+            if let Err(e) = index.main.put_updated_at(&mut writer) {
+                error!("Impossible to update updated_at; {}", e)
+            }
+            Ok(())
+        });
+        match res {
+            Ok(_) => (),
+            Err(e) => error!("{}", e),
         }
     }
 }

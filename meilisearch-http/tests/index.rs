@@ -382,7 +382,7 @@ async fn create_index_failed() {
 
     assert_eq!(status_code, 400);
     let message = res_value["message"].as_str().unwrap();
-    assert_eq!(res_value.as_object().unwrap().len(), 1);
+    assert_eq!(res_value.as_object().unwrap().len(), 4);
     assert_eq!(message, "Index creation must have an uid");
 
     // 3 - Create a index with extra data
@@ -462,7 +462,7 @@ async fn create_index_with_invalid_uid() {
 
     assert_eq!(status_code, 400);
     let message = response["message"].as_str().unwrap();
-    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(response.as_object().unwrap().len(), 4);
     assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
 
     // 2 - Create the index with invalid uid
@@ -475,7 +475,7 @@ async fn create_index_with_invalid_uid() {
 
     assert_eq!(status_code, 400);
     let message = response["message"].as_str().unwrap();
-    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(response.as_object().unwrap().len(), 4);
     assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
 
     // 3 - Create the index with invalid uid
@@ -488,7 +488,7 @@ async fn create_index_with_invalid_uid() {
 
     assert_eq!(status_code, 400);
     let message = response["message"].as_str().unwrap();
-    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(response.as_object().unwrap().len(), 4);
     assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
 
     // 4 - Create the index with invalid uid
@@ -501,7 +501,7 @@ async fn create_index_with_invalid_uid() {
 
     assert_eq!(status_code, 400);
     let message = response["message"].as_str().unwrap();
-    assert_eq!(response.as_object().unwrap().len(), 1);
+    assert_eq!(response.as_object().unwrap().len(), 4);
     assert_eq!(message, "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).");
 }
 
@@ -645,12 +645,10 @@ async fn check_add_documents_without_primary_key() {
 
     let (response, status_code) = server.add_or_replace_multiple_documents_sync(body).await;
 
-    let expected = json!({
-        "message": "Could not infer a primary key"
-    });
-
+    let message = response["message"].as_str().unwrap();
+    assert_eq!(response.as_object().unwrap().len(), 4);
+    assert_eq!(message, "Could not infer a primary key");
     assert_eq!(status_code, 400);
-    assert_json_eq!(response, expected, ordered: false);
 }
 
 #[actix_rt::test]

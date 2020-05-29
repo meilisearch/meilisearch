@@ -7,7 +7,7 @@ use actix_web_macros::get;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::error::{ResponseError, FacetCountError};
+use crate::error::{Error, FacetCountError, ResponseError};
 use crate::helpers::meilisearch::IndexSearchExt;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
@@ -45,14 +45,13 @@ async fn search_with_url_query(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(ResponseError::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
-
     let schema = index
         .main
         .schema(&reader)?
-        .ok_or(ResponseError::internal("Impossible to retrieve the schema"))?;
+        .ok_or(Error::internal("Impossible to retrieve the schema"))?;
 
     let mut search_builder = index.new_search(params.q.clone());
 
@@ -88,9 +87,9 @@ async fn search_with_url_query(
     }
 
     if let Some(ref facet_filters) = params.facet_filters {
-        match index.main.attributes_for_faceting(&reader)? {
-            Some(ref attrs) => { search_builder.add_facet_filters(FacetFilter::from_str(facet_filters, &schema, attrs)?); },
-            None => return Err(ResponseError::FacetExpression("can't filter on facets, as no facet is set".to_string()))
+        let attrs = index.main.attributes_for_faceting(&reader)?;
+        if let Some(attrs) = attrs {
+            search_builder.add_facet_filters(FacetFilter::from_str(facet_filters, &schema, &attrs)?);
         }
     }
 
@@ -100,7 +99,7 @@ async fn search_with_url_query(
                 let field_ids = prepare_facet_list(&facets, &schema, attrs)?;
                 search_builder.add_facets(field_ids);
             },
-            None => return Err(FacetCountError::NoFacetSet.into())
+            None => return Err(FacetCountError::NoFacetSet.into()),
         }
     }
 
@@ -160,8 +159,9 @@ async fn search_with_url_query(
             search_builder.get_matches();
         }
     }
+    let search_result = search_builder.search(&reader)?;
 
-    Ok(HttpResponse::Ok().json(search_builder.search(&reader)?))
+    Ok(HttpResponse::Ok().json(search_result))
 }
 
 /// Parses the incoming string into an array of attributes for which to return a count. It returns

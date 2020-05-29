@@ -13,7 +13,7 @@ use meilisearch_schema::{FieldId, Schema};
 use meilisearch_types::DocumentId;
 
 use crate::database::MainT;
-use crate::error::{FacetError, Error};
+use crate::error::{FacetError, MResult};
 use crate::store::BEU16;
 
 /// Data structure used to represent a boolean expression in the form of nested arrays.
@@ -34,14 +34,13 @@ impl FacetFilter {
         s: &str,
         schema: &Schema,
         attributes_for_faceting: &[FieldId],
-    ) -> Result<Self, FacetError> {
-
+    ) -> MResult<FacetFilter> {
         let parsed = serde_json::from_str::<Value>(s).map_err(|e| FacetError::ParsingError(e.to_string()))?;
         let mut filter = Vec::new();
         match parsed {
             Value::Array(and_exprs) => {
                 if and_exprs.is_empty() {
-                    return Err(FacetError::EmptyArray);
+                    return Err(FacetError::EmptyArray.into());
                 }
                 for expr in and_exprs {
                     match expr {
@@ -51,7 +50,7 @@ impl FacetFilter {
                         }
                         Value::Array(or_exprs) => {
                             if or_exprs.is_empty() {
-                                return Err(FacetError::EmptyArray);
+                                return Err(FacetError::EmptyArray.into());
                             }
                             let mut inner = Vec::new();
                             for expr in or_exprs {
@@ -60,17 +59,17 @@ impl FacetFilter {
                                         let key = FacetKey::from_str( &s, schema, attributes_for_faceting)?;
                                         inner.push(key);
                                     }
-                                    bad_value => return Err(FacetError::unexpected_token(&["String"], bad_value)),
+                                    bad_value => return Err(FacetError::unexpected_token(&["String"], bad_value).into()),
                                 }
                             }
                             filter.push(Either::Left(inner));
                         }
-                        bad_value => return Err(FacetError::unexpected_token(&["Array", "String"], bad_value)),
+                        bad_value => return Err(FacetError::unexpected_token(&["Array", "String"], bad_value).into()),
                     }
                 }
                 return Ok(Self(filter));
             }
-            bad_value => Err(FacetError::unexpected_token(&["Array"], bad_value)),
+            bad_value => Err(FacetError::unexpected_token(&["Array"], bad_value).into()),
         }
     }
 }
@@ -183,7 +182,7 @@ pub fn facet_map_from_docids(
     index: &crate::Index,
     document_ids: &[DocumentId],
     attributes_for_facetting: &[FieldId],
-) -> Result<HashMap<FacetKey, Vec<DocumentId>>, Error> {
+) -> MResult<HashMap<FacetKey, Vec<DocumentId>>> {
     let mut facet_map = HashMap::new();
     for document_id in document_ids {
         for result in index
@@ -210,7 +209,7 @@ pub fn facet_map_from_docs(
     schema: &Schema,
     documents: &HashMap<DocumentId, IndexMap<String, Value>>,
     attributes_for_facetting: &[FieldId],
-) -> Result<HashMap<FacetKey, Vec<DocumentId>>, Error> {
+) -> MResult<HashMap<FacetKey, Vec<DocumentId>>> {
     let mut facet_map = HashMap::new();
     let attributes_for_facetting = attributes_for_facetting
         .iter()

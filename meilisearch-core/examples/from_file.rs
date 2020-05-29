@@ -126,9 +126,7 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
         settings.into_update().unwrap()
     };
 
-    let mut update_writer = db.update_write_txn().unwrap();
-    index.settings_update(&mut update_writer, settings)?;
-    update_writer.commit().unwrap();
+    db.update_write(|w| index.settings_update(w, settings))?;
 
     let mut rdr = if command.csv_data_path.as_os_str() == "-" {
         csv::Reader::from_reader(Box::new(io::stdin()) as Box<dyn Read>)
@@ -175,10 +173,9 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
         println!();
 
-        let mut update_writer = db.update_write_txn().unwrap();
+        let update_id = db.update_write(|w| additions.finalize(w))?;
+
         println!("committing update...");
-        let update_id = additions.finalize(&mut update_writer)?;
-        update_writer.commit().unwrap();
         max_update_id = max_update_id.max(update_id);
         println!("committed update {}", update_id);
     }

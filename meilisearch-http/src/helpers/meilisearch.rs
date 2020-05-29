@@ -5,11 +5,11 @@ use std::time::Instant;
 
 use indexmap::IndexMap;
 use log::error;
-use meilisearch_core::Filter;
+use meilisearch_core::{Filter, MainReader};
 use meilisearch_core::facets::FacetFilter;
 use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
-use meilisearch_core::{Highlight, Index, MainT, RankedMap};
+use meilisearch_core::{Highlight, Index, RankedMap};
 use meilisearch_schema::{FieldId, Schema};
 use meilisearch_tokenizer::is_cjk;
 use serde::{Deserialize, Serialize};
@@ -17,7 +17,7 @@ use serde_json::Value;
 use siphasher::sip::SipHasher;
 use slice_group_by::GroupBy;
 
-use crate::error::ResponseError;
+use crate::error::{Error, ResponseError};
 
 pub trait IndexSearchExt {
     fn new_search(&self, query: String) -> SearchBuilder;
@@ -107,12 +107,12 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn search(self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, ResponseError> {
+    pub fn search(self, reader: &MainReader) -> Result<SearchResult, ResponseError> {
         let schema = self
             .index
             .main
             .schema(reader)?
-            .ok_or(ResponseError::internal("missing schema"))?;
+            .ok_or(Error::internal("missing schema"))?;
 
         let ranked_map = self.index.main.ranked_map(reader)?.unwrap_or_default();
 
@@ -159,7 +159,7 @@ impl<'a> SearchBuilder<'a> {
 
         let start = Instant::now();
         let result = query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
-        let search_result = result.map_err(ResponseError::search_documents)?;
+        let search_result = result.map_err(Error::search_documents)?;
         let time_ms = start.elapsed().as_millis() as usize;
 
         let mut all_attributes: HashSet<&str> = HashSet::new();
@@ -194,8 +194,8 @@ impl<'a> SearchBuilder<'a> {
             let mut document: IndexMap<String, Value> = self
                 .index
                 .document(reader, Some(&all_attributes), doc.id)
-                .map_err(|e| ResponseError::retrieve_document(doc.id.0, e))?
-                .ok_or(ResponseError::internal(
+                .map_err(|e| Error::retrieve_document(doc.id.0, e))?
+                .ok_or(Error::internal(
                     "Impossible to retrieve the document; Corrupted data",
                 ))?;
 
@@ -257,7 +257,7 @@ impl<'a> SearchBuilder<'a> {
 
     pub fn get_criteria(
         &self,
-        reader: &heed::RoTxn<MainT>,
+        reader: &MainReader,
         ranked_map: &'a RankedMap,
         schema: &Schema,
     ) -> Result<Option<Criteria<'a>>, ResponseError> {

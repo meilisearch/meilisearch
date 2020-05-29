@@ -1,20 +1,12 @@
-use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
-use heed::types::{SerdeBincode, Str};
-use log::error;
-use meilisearch_core::{Database, DatabaseOptions, Error as MError, MResult, MainT, UpdateT};
+use meilisearch_core::{Database, DatabaseOptions};
 use sha2::Digest;
 use sysinfo::Pid;
 
 use crate::index_update_callback;
 use crate::option::Opt;
-
-const LAST_UPDATE_KEY: &str = "last-update";
-
-type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
 
 #[derive(Clone)]
 pub struct Data {
@@ -59,72 +51,6 @@ impl ApiKeys {
                 self.public = Some(format!("{:x}", sha));
             }
         }
-    }
-}
-
-impl DataInner {
-    pub fn is_indexing(&self, reader: &heed::RoTxn<UpdateT>, index: &str) -> MResult<Option<bool>> {
-        match self.db.open_index(&index) {
-            Some(index) => index.current_update_id(&reader).map(|u| Some(u.is_some())),
-            None => Ok(None),
-        }
-    }
-
-    pub fn last_update(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<DateTime<Utc>>> {
-        match self
-            .db
-            .common_store()
-            .get::<_, Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)?
-        {
-            Some(datetime) => Ok(Some(datetime)),
-            None => Ok(None),
-        }
-    }
-
-    pub fn set_last_update(&self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
-        self.db
-            .common_store()
-            .put::<_, Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, &Utc::now())
-            .map_err(Into::into)
-    }
-
-    pub fn compute_stats(&self, writer: &mut heed::RwTxn<MainT>, index_uid: &str) -> MResult<()> {
-        let index = match self.db.open_index(&index_uid) {
-            Some(index) => index,
-            None => {
-                error!("Impossible to retrieve index {}", index_uid);
-                return Ok(());
-            }
-        };
-
-        let schema = match index.main.schema(&writer)? {
-            Some(schema) => schema,
-            None => return Ok(()),
-        };
-
-        let all_documents_fields = index
-            .documents_fields_counts
-            .all_documents_fields_counts(&writer)?;
-
-        // count fields frequencies
-        let mut fields_distribution = HashMap::<_, usize>::new();
-        for result in all_documents_fields {
-            let (_, attr, _) = result?;
-            if let Some(field_id) = schema.indexed_pos_to_field_id(attr) {
-                *fields_distribution.entry(field_id).or_default() += 1;
-            }
-        }
-
-        // convert attributes to their names
-        let distribution: HashMap<_, _> = fields_distribution
-            .into_iter()
-            .filter_map(|(a, c)| schema.name(a).map(|name| (name.to_string(), c)))
-            .collect();
-
-        index
-            .main
-            .put_fields_distribution(writer, &distribution)
-            .map_err(MError::Zlmdb)
     }
 }
 
