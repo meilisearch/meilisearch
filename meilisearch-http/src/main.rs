@@ -69,8 +69,8 @@ async fn main() -> Result<(), MainError> {
             .wrap(
                 Cors::new()
                     .send_wildcard()
-                    .allowed_header("x-meili-api-key")
-                    //.max_age(86_400) // 24h
+                    .allowed_headers(vec!["content-type","x-meili-api-key"])
+                    .max_age(86_400) // 24h
                     .finish(),
             )
             .wrap(middleware::Logger::default())
