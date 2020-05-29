@@ -87,7 +87,7 @@ impl Code {
         match self {
             // index related errors
             CreateIndex => ErrCode::invalid("create_index", StatusCode::BAD_REQUEST),
-            IndexAlreadyExists => ErrCode::invalid("existing_index", StatusCode::BAD_REQUEST),
+            IndexAlreadyExists => ErrCode::invalid("index_already_exists", StatusCode::BAD_REQUEST),
             IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND), InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
             OpenIndex => ErrCode::internal("open_index", StatusCode::INTERNAL_SERVER_ERROR),
 
