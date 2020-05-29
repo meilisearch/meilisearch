@@ -19,6 +19,7 @@
   - Add SSL support (#669)
   - Rename fieldsFrequency into fieldsDistribution in stats (#719)
   - Add support for error code reporting (#703)
+  - Allow the dashboard to query private servers (#732)
 
 ## v0.10.1
 

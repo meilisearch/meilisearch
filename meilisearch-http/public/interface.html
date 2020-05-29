@@ -94,6 +94,17 @@
           <h2 class="subtitle">
             This dashboard will help you check the search results with ease.
           </h2>
+
+          <div class="field">
+            <!-- API Key -->
+            <div class="field">
+              <div class="control">
+                <input id="apiKey" class="input is-small" type="password" placeholder="API key (optional)">
+                <div class="help">At least a private API key is required for the dashboard to access the indexes list.</div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
@@ -158,11 +169,31 @@
         return str;
     }
 
-    function httpGet(theUrl) {
+    function httpGet(theUrl, apiKey) {
         var xmlHttp = new XMLHttpRequest();
         xmlHttp.open("GET", theUrl, false); // false for synchronous request
+        if (apiKey) {
+          xmlHttp.setRequestHeader("x-Meili-API-Key", apiKey);
+        }
         xmlHttp.send(null);
         return xmlHttp.responseText;
+    }
+
+    function refreshIndexList() {
+        // TODO we must not block here
+        let result = JSON.parse(httpGet(`${baseUrl}/indexes`, localStorage.getItem('apiKey')));
+
+        if (!Array.isArray(result)) { return }
+
+        let select = document.getElementById("index");
+        select.innerHTML = '';
+
+        for (index of result) {
+            const option = document.createElement('option');
+            option.value = index.uid;
+            option.innerHTML = index.name;
+            select.appendChild(option);
+        }
     }
 
     let lastRequest = undefined;
@@ -178,6 +209,11 @@
         lastRequest = new XMLHttpRequest();
 
         lastRequest.open("GET", theUrl, true);
+
+        if (localStorage.getItem('apiKey')) {
+          lastRequest.setRequestHeader("x-Meili-API-Key", localStorage.getItem('apiKey'));
+        }
+
         lastRequest.onload = function (e) {
             if (lastRequest.readyState === 4 && lastRequest.status === 200) {
                 let sanitizedResponseText = sanitizeHTMLEntities(lastRequest.responseText);
@@ -250,17 +286,17 @@
         lastRequest.send(null);
     }
 
-    let baseUrl = window.location.origin;
-    // TODO we must not block here
-    let result = JSON.parse(httpGet(`${baseUrl}/indexes`));
-
-    let select = document.getElementById("index");
-    for (index of result) {
-        const option = document.createElement('option');
-        option.value = index.uid;
-        option.innerHTML = index.name;
-        select.appendChild(option);
+    if (!apiKey.value) {
+        apiKey.value = localStorage.getItem('apiKey');
     }
+
+    apiKey.addEventListener('input', function(e) {
+        localStorage.setItem('apiKey', apiKey.value);
+        refreshIndexList();
+    }, false);
+
+    let baseUrl = window.location.origin;
+    refreshIndexList();
 
     search.oninput = triggerSearch;
     select.onchange = triggerSearch;
