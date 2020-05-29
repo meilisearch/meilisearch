@@ -3,7 +3,6 @@ mod documents_fields;
 mod documents_fields_counts;
 mod facets;
 mod main;
-mod postings_ids;
 mod postings_lists;
 mod prefix_documents_cache;
 mod prefix_postings_lists_cache;
@@ -16,7 +15,6 @@ pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
 pub use self::documents_fields_counts::{DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter};
 pub use self::facets::Facets;
 pub use self::main::Main;
-pub use self::postings_ids::PostingsIds;
 pub use self::postings_lists::PostingsLists;
 pub use self::prefix_documents_cache::PrefixDocumentsCache;
 pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
@@ -126,7 +124,6 @@ fn facets_name(name: &str) -> String {
 #[derive(Clone)]
 pub struct Index {
     pub main: Main,
-    pub postings_ids: PostingsIds,
     pub postings_lists: PostingsLists,
     pub documents_fields: DocumentsFields,
     pub documents_fields_counts: DocumentsFieldsCounts,
@@ -327,8 +324,7 @@ pub fn create(
 
     Ok(Index {
         main: Main { main },
-        postings_ids: PostingsIds { postings_ids },
-        postings_lists: PostingsLists { postings_lists },
+        postings_lists: PostingsLists { postings_ids, postings_lists },
         documents_fields: DocumentsFields { documents_fields },
         documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
         synonyms: Synonyms { synonyms },
@@ -415,8 +411,7 @@ pub fn open(
 
     Ok(Some(Index {
         main: Main { main },
-        postings_ids: PostingsIds { postings_ids },
-        postings_lists: PostingsLists { postings_lists },
+        postings_lists: PostingsLists { postings_ids, postings_lists },
         documents_fields: DocumentsFields { documents_fields },
         documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
         synonyms: Synonyms { synonyms },
@@ -437,7 +432,6 @@ pub fn clear(
 ) -> MResult<()> {
     // clear all the stores
     index.main.clear(writer)?;
-    index.postings_ids.clear(writer)?;
     index.postings_lists.clear(writer)?;
     index.documents_fields.clear(writer)?;
     index.documents_fields_counts.clear(writer)?;
