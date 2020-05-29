@@ -28,8 +28,8 @@ pub trait ErrorCode: std::error::Error {
 
 enum ErrorType {
     InternalError,
-    InvalidRequest,
-    Authentication,
+    InvalidRequestError,
+    AuthenticationError,
 }
 
 impl fmt::Display for ErrorType {
@@ -38,8 +38,8 @@ impl fmt::Display for ErrorType {
 
         match self {
             InternalError => write!(f, "internal_error"),
-            InvalidRequest => write!(f, "invalid_request"),
-            Authentication => write!(f, "authentication"),
+            InvalidRequestError => write!(f, "invalid_request_error"),
+            AuthenticationError => write!(f, "authentication_error"),
         }
     }
 }
@@ -152,7 +152,7 @@ impl ErrCode {
         ErrCode {
             status_code,
             error_name,
-            error_type: ErrorType::Authentication,
+            error_type: ErrorType::AuthenticationError,
         }
     }
 
@@ -168,7 +168,7 @@ impl ErrCode {
         ErrCode {
             status_code,
             error_name,
-            error_type: ErrorType::InvalidRequest,
+            error_type: ErrorType::InvalidRequestError,
         }
     }
 }
