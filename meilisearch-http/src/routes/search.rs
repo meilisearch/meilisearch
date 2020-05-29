@@ -17,7 +17,8 @@ use meilisearch_core::facets::FacetFilter;
 use meilisearch_schema::{Schema, FieldId};
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(search_with_url_query);
+    cfg.service(search_with_post)
+        .service(search_with_url_query);
 }
 
 #[derive(Deserialize)]
@@ -26,10 +27,7 @@ struct SearchQuery {
     q: String,
     offset: Option<usize>,
     limit: Option<usize>,
-    attributes_to_retrieve: Option<String>,
-    attributes_to_crop: Option<String>,
-    crop_length: Option<usize>,
-    attributes_to_highlight: Option<String>,
+    attributes_to_retrieve: Option<String>, attributes_to_crop: Option<String>, crop_length: Option<usize>, attributes_to_highlight: Option<String>,
     filters: Option<String>,
     matches: Option<bool>,
     facet_filters: Option<String>,
@@ -50,7 +48,7 @@ async fn search_with_url_query(
 async fn search_with_post(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-    params: web::Query<SearchQuery>,
+    params: web::Json<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {
     let search_result = params.search(&path.index_uid, data)?;
     Ok(HttpResponse::Ok().json(search_result))

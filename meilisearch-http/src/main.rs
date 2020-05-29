@@ -70,7 +70,7 @@ async fn main() -> Result<(), MainError> {
                 Cors::new()
                     .send_wildcard()
                     .allowed_header("x-meili-api-key")
-                    .max_age(86_400) // 24h
+                    //.max_age(86_400) // 24h
                     .finish(),
             )
             .wrap(middleware::Logger::default())
