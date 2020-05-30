@@ -5,8 +5,7 @@ mod common;
 
 #[actix_rt::test]
 async fn write_all_and_delete() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     // 2 - Send the settings
 
@@ -17,8 +16,8 @@ async fn write_all_and_delete() {
         "attribute",
         "wordsPosition",
         "exactness",
-        "desc(release_date)",
-        "desc(rank)",
+        "desc(registered)",
+        "desc(age)",
     ]);
 
     server.update_ranking_rules(body.clone()).await;
@@ -51,8 +50,7 @@ async fn write_all_and_delete() {
 
 #[actix_rt::test]
 async fn write_all_and_update() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     // 2 - Send the settings
 
@@ -63,8 +61,8 @@ async fn write_all_and_update() {
         "attribute",
         "wordsPosition",
         "exactness",
-        "desc(release_date)",
-        "desc(rank)",
+        "desc(registered)",
+        "desc(age)",
     ]);
 
     server.update_ranking_rules(body.clone()).await;
@@ -84,7 +82,7 @@ async fn write_all_and_update() {
         "attribute",
         "wordsPosition",
         "exactness",
-        "desc(release_date)",
+        "desc(registered)",
     ]);
 
     server.update_ranking_rules(body).await;
@@ -100,7 +98,7 @@ async fn write_all_and_update() {
         "attribute",
         "wordsPosition",
         "exactness",
-        "desc(release_date)",
+        "desc(registered)",
     ]);
 
     assert_json_eq!(expected, response, ordered: false);
@@ -108,9 +106,9 @@ async fn write_all_and_update() {
 
 #[actix_rt::test]
 async fn send_undefined_rule() {
-    let mut server = common::Server::with_uid("movies");
+    let mut server = common::Server::with_uid("test");
     let body = json!({
-        "uid": "movies",
+        "uid": "test",
         "primaryKey": "id",
     });
     server.create_index(body).await;
@@ -123,9 +121,9 @@ async fn send_undefined_rule() {
 
 #[actix_rt::test]
 async fn send_malformed_custom_rule() {
-    let mut server = common::Server::with_uid("movies");
+    let mut server = common::Server::with_uid("test");
     let body = json!({
-        "uid": "movies",
+        "uid": "test",
         "primaryKey": "id",
     });
     server.create_index(body).await;
@@ -139,16 +137,16 @@ async fn send_malformed_custom_rule() {
 // Test issue https://github.com/meilisearch/MeiliSearch/issues/521
 #[actix_rt::test]
 async fn write_custom_ranking_and_index_documents() {
-    let mut server = common::Server::with_uid("movies");
+    let mut server = common::Server::with_uid("test");
     let body = json!({
-        "uid": "movies",
+        "uid": "test",
         "primaryKey": "id",
     });
     server.create_index(body).await;
 
     // 1 - Add ranking rules with one custom ranking on a string
 
-    let body = json!(["asc(title)", "typo"]);
+    let body = json!(["asc(name)", "typo"]);
 
     server.update_ranking_rules(body).await;
 
@@ -157,13 +155,13 @@ async fn write_custom_ranking_and_index_documents() {
     let body = json!([
       {
         "id": 1,
-        "title": "Le Petit Prince",
-        "author": "Exupéry"
+        "name": "Cherry Orr",
+        "color": "green"
       },
       {
         "id": 2,
-        "title": "Pride and Prejudice",
-        "author": "Jane Austen"
+        "name": "Lucas Hess",
+        "color": "yellow"
       }
     ]);
 
@@ -173,7 +171,7 @@ async fn write_custom_ranking_and_index_documents() {
 
     let expected = json!({
         "id": 1,
-        "author": "Exupéry"
+        "color": "green"
     });
 
     let (response, status_code) = server.get_document(1).await;
