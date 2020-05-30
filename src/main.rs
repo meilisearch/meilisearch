@@ -1,37 +1,32 @@
-#[cfg(test)]
-#[macro_use] extern crate quickcheck;
-
-mod codec;
-mod bp_vec;
-
 use std::collections::{HashMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fs::File;
 use std::hash::BuildHasherDefault;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
 
 use anyhow::{ensure, Context};
+use roaring::RoaringBitmap;
+use crossbeam_channel::{select, Sender, Receiver};
 use fst::IntoStreamer;
 use fxhash::FxHasher32;
+use heed::{EnvOpenOptions, Database};
+use heed::types::*;
 use rayon::prelude::*;
-use sdset::{SetOperation, SetBuf};
 use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
-use zerocopy::{LayoutVerified, AsBytes};
-
-// use self::codec::CodecBitPacker4xSorted;
-use self::bp_vec::BpVec;
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
+pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
+pub type DocumentId = u32;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-static ID_GENERATOR: AtomicUsize = AtomicUsize::new(0);
+static ID_GENERATOR: AtomicUsize = AtomicUsize::new(0); // AtomicU32 ?
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "mm-indexer", about = "The server side of the daugt project.")]
@@ -45,72 +40,23 @@ struct Opt {
     files_to_index: Vec<PathBuf>,
 }
 
-fn bytes_to_u32s(bytes: &[u8]) -> Vec<u32> {
-    fn aligned_to(bytes: &[u8], align: usize) -> bool {
-        (bytes as *const _ as *const () as usize) % align == 0
-    }
-
-    match LayoutVerified::new_slice(bytes) {
-        Some(slice) => slice.to_vec(),
-        None => {
-            let len = bytes.len();
-
-            // ensure that it is the alignment that is wrong and the length is valid
-            assert!(len % 4 == 0, "length is {} and is not modulo 4", len);
-            assert!(!aligned_to(bytes, std::mem::align_of::<u32>()), "bytes are already aligned");
-
-            let elems = len / 4;
-            let mut vec = Vec::<u32>::with_capacity(elems);
-
-            unsafe {
-                let dst = vec.as_mut_ptr() as *mut u8;
-                std::ptr::copy_nonoverlapping(bytes.as_ptr(), dst, len);
-                vec.set_len(elems);
-            }
-
-            vec
+fn union_postings_ids(_key: &[u8], old_value: Option<&[u8]>, new_value: RoaringBitmap) -> Option<Vec<u8>> {
+    let result = match old_value {
+        Some(bytes) => {
+            let mut old_value = RoaringBitmap::deserialize_from(bytes).unwrap();
+            old_value.union_with(&new_value);
+            old_value
         },
-    }
+        None => new_value,
+    };
+
+    let mut vec = Vec::new();
+    result.serialize_into(&mut vec).unwrap();
+    Some(vec)
 }
 
-fn union_postings_ids(
-    _key: &[u8],
-    old_value: Option<&[u8]>,
-    operands: &mut rocksdb::MergeOperands,
-) -> Option<Vec<u8>>
-{
-    let mut sets_bufs = Vec::new();
-
-    if let Some(old_value) = old_value {
-        let old_value = bytes_to_u32s(old_value);
-        sets_bufs.push(SetBuf::new_unchecked(old_value.to_vec()));
-    }
-
-    for operand in operands {
-        let new_value = bytes_to_u32s(operand);
-        sets_bufs.push(SetBuf::new_unchecked(new_value.to_vec()));
-    }
-
-    let sets = sets_bufs.iter().map(|s| s.as_set()).collect();
-    let result: SetBuf<u32> = sdset::multi::Union::new(sets).into_set_buf();
-
-    assert!(result.as_bytes().len() % 4 == 0);
-
-    Some(result.as_bytes().to_vec())
-}
-
-fn union_words_fst(
-    key: &[u8],
-    old_value: Option<&[u8]>,
-    operands: &mut rocksdb::MergeOperands,
-) -> Option<Vec<u8>>
-{
+fn union_words_fst(key: &[u8], old_value: Option<&[u8]>, new_value: &fst::Set<Vec<u8>>) -> Option<Vec<u8>> {
     if key != b"words-fst" { unimplemented!() }
-
-    let mut fst_operands = Vec::new();
-    for operand in operands {
-        fst_operands.push(fst::Set::new(operand).unwrap());
-    }
 
     // Do an union of the old and the new set of words.
     let mut builder = fst::set::OpBuilder::new();
@@ -121,9 +67,7 @@ fn union_words_fst(
         builder.push(old_words);
     }
 
-    for new_words in &fst_operands {
-        builder.push(new_words.into_stream());
-    }
+    builder.push(new_value);
 
     let op = builder.r#union();
     let mut build = fst::SetBuilder::memory();
@@ -137,18 +81,93 @@ fn alphanumeric_tokens(string: &str) -> impl Iterator<Item = &str> {
     string.linear_group_by_key(|c| c.is_alphanumeric()).filter(is_alphanumeric)
 }
 
-fn index_csv(
-    tid: usize,
-    db: Arc<rocksdb::DB>,
-    mut rdr: csv::Reader<File>,
-) -> anyhow::Result<usize>
-{
+enum MainKey {
+    WordsFst(fst::Set<Vec<u8>>),
+    Headers(Vec<u8>),
+}
+
+#[derive(Clone)]
+struct DbSender {
+    main: Sender<MainKey>,
+    postings_ids: Sender<(SmallString32, RoaringBitmap)>,
+    documents: Sender<(DocumentId, Vec<u8>)>,
+}
+
+struct DbReceiver {
+    main: Receiver<MainKey>,
+    postings_ids: Receiver<(SmallString32, RoaringBitmap)>,
+    documents: Receiver<(DocumentId, Vec<u8>)>,
+}
+
+fn thread_channel() -> (DbSender, DbReceiver) {
+    let (sd_main, rc_main) = crossbeam_channel::bounded(4);
+    let (sd_postings, rc_postings) = crossbeam_channel::bounded(10);
+    let (sd_documents, rc_documents) = crossbeam_channel::bounded(10);
+
+    let sender = DbSender { main: sd_main, postings_ids: sd_postings, documents: sd_documents };
+    let receiver = DbReceiver { main: rc_main, postings_ids: rc_postings, documents: rc_documents };
+
+    (sender, receiver)
+}
+
+fn writer_thread(env: heed::Env, receiver: DbReceiver) -> anyhow::Result<()> {
+    let main = env.create_poly_database(None)?;
+    let postings_ids: Database<Str, ByteSlice> = env.create_database(Some("postings-ids"))?;
+    let documents: Database<OwnedType<BEU32>, ByteSlice> = env.create_database(Some("documents"))?;
+
+    let mut wtxn = env.write_txn()?;
+
+    loop {
+        select! {
+            recv(receiver.main) -> msg => {
+                let msg = match msg {
+                    Err(_) => break,
+                    Ok(msg) => msg,
+                };
+
+                match msg {
+                    MainKey::WordsFst(new_fst) => {
+                        let old_value = main.get::<_, Str, ByteSlice>(&wtxn, "words-fst")?;
+                        let new_value = union_words_fst(b"words-fst", old_value, &new_fst)
+                            .context("error while do a words-fst union")?;
+                        main.put::<_, Str, ByteSlice>(&mut wtxn, "words-fst", &new_value)?;
+                    },
+                    MainKey::Headers(headers) => {
+                        if let Some(old_headers) = main.get::<_, Str, ByteSlice>(&wtxn, "headers")? {
+                            ensure!(old_headers == &*headers, "headers differs from the previous ones");
+                        }
+                        main.put::<_, Str, ByteSlice>(&mut wtxn, "headers", &headers)?;
+                    },
+                }
+            },
+            recv(receiver.postings_ids) -> msg => {
+                let (word, postings) = match msg {
+                    Err(_) => break,
+                    Ok(msg) => msg,
+                };
+
+                let old_value = postings_ids.get(&wtxn, &word)?;
+                let new_value = union_postings_ids(word.as_bytes(), old_value, postings)
+                    .context("error while do a words-fst union")?;
+                postings_ids.put(&mut wtxn, &word, &new_value)?;
+            },
+            recv(receiver.documents) -> msg => {
+                let (id, content) = match msg {
+                    Err(_) => break,
+                    Ok(msg) => msg,
+                };
+                documents.put(&mut wtxn, &BEU32::new(id), &content)?;
+            },
+        }
+    }
+
+    wtxn.commit()?;
+    Ok(())
+}
+
+fn index_csv(tid: usize, db_sender: DbSender, mut rdr: csv::Reader<File>) -> anyhow::Result<usize> {
     const MAX_POSITION: usize = 1000;
     const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
-
-    let main = db.cf_handle("main").context("cf \"main\" not found")?;
-    let postings_ids = db.cf_handle("postings-ids").context("cf \"postings-ids\" not found")?;
-    let documents = db.cf_handle("documents").context("cf \"documents\" not found")?;
 
     let mut document = csv::StringRecord::new();
     let mut new_postings_ids = FastMap4::default();
@@ -160,19 +179,19 @@ fn index_csv(
     let mut writer = csv::WriterBuilder::new().has_headers(false).from_writer(Vec::new());
     writer.write_byte_record(headers.as_byte_record())?;
     let headers = writer.into_inner()?;
-
-    if let Some(old_headers) = db.get_cf(&main, "headers")? {
-        ensure!(old_headers == headers, "headers differs from the previous ones");
-    }
-    db.put_cf(&main, "headers", headers.as_slice())?;
+    db_sender.main.send(MainKey::Headers(headers))?;
 
     while rdr.read_record(&mut document)? {
         let document_id = ID_GENERATOR.fetch_add(1, Ordering::SeqCst);
-        let document_id = u32::try_from(document_id).context("Generated id is too big")?;
+        let document_id = DocumentId::try_from(document_id).context("Generated id is too big")?;
 
         for (_attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
             for (_pos, word) in alphanumeric_tokens(&content).enumerate().take(MAX_POSITION) {
-                new_postings_ids.entry(SmallString32::from(word)).or_insert_with(BpVec::new).push(document_id);
+                if !word.is_empty() && word.len() < 500 { // LMDB limits
+                    new_postings_ids.entry(SmallString32::from(word))
+                        .or_insert_with(RoaringBitmap::new)
+                        .insert(document_id);
+                }
             }
         }
 
@@ -180,15 +199,11 @@ fn index_csv(
         let mut writer = csv::WriterBuilder::new().has_headers(false).from_writer(Vec::new());
         writer.write_byte_record(document.as_byte_record())?;
         let document = writer.into_inner()?;
-        db.put_cf(&documents, document_id.to_be_bytes(), document)?;
+        db_sender.documents.send((document_id, document))?;
 
         number_of_documents += 1;
         if number_of_documents % 100000 == 0 {
-            let postings_ids_size = new_postings_ids.iter().map(|(_, v)| {
-                v.compressed_capacity() + v.uncompressed_capacity() * 4
-            }).sum::<usize>();
-            eprintln!("{}, documents seen {}, postings size {}",
-                tid, number_of_documents, postings_ids_size);
+            eprintln!("{}, documents seen {}", tid, number_of_documents);
         }
     }
 
@@ -196,8 +211,7 @@ fn index_csv(
 
     // We compute and store the postings list into the DB.
     for (word, new_ids) in new_postings_ids {
-        let new_ids = SetBuf::from_dirty(new_ids.to_vec());
-        db.merge_cf(&postings_ids, word.as_bytes(), new_ids.as_bytes())?;
+        db_sender.postings_ids.send((word.clone(), new_ids))?;
         new_words.insert(word);
     }
 
@@ -207,7 +221,7 @@ fn index_csv(
 
     let new_words_fst = fst::Set::from_iter(new_words.iter().map(|s| s.as_str()))?;
     drop(new_words);
-    db.merge_cf(&main, "words-fst", new_words_fst.as_fst().as_bytes())?;
+    db_sender.main.send(MainKey::WordsFst(new_words_fst))?;
 
     eprintln!("Finished merging the words-fst");
     eprintln!("Total number of documents seen is {}", ID_GENERATOR.load(Ordering::Relaxed));
@@ -218,31 +232,30 @@ fn index_csv(
 fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
 
-    let mut opts = rocksdb::Options::default();
-    opts.create_if_missing(true);
-    opts.create_missing_column_families(true);
-    // Setup the merge operators
-    opts.set_merge_operator("main", union_words_fst, None); // Some(union_words_fst));
-    opts.set_merge_operator("postings-ids", union_postings_ids, None); // Some(union_postings_ids));
+    std::fs::create_dir_all(&opt.database)?;
+    let env = EnvOpenOptions::new()
+        .map_size(100 * 1024 * 1024 * 1024) // 100 GB
+        .max_readers(10)
+        .max_dbs(5)
+        .open(opt.database)?;
 
-    let mut db = rocksdb::DB::open(&opts, &opt.database)?;
+    let (sender, receiver) = thread_channel();
+    let writing_child = thread::spawn(move || writer_thread(env, receiver));
 
-    let cfs = &["main", "postings-ids", "documents"];
-    for cf in cfs.into_iter() {
-        db.create_cf(cf, &opts).unwrap();
-    }
-
-    let db = Arc::new(db);
     let res = opt.files_to_index
         .into_par_iter()
         .enumerate()
         .map(|(tid, path)| {
             let rdr = csv::Reader::from_path(path)?;
-            index_csv(tid, db.clone(), rdr)
+            index_csv(tid, sender.clone(), rdr)
         })
         .try_reduce(|| 0, |a, b| Ok(a + b));
 
-    println!("{:?}", res);
+
+    eprintln!("witing the writing thread...");
+    writing_child.join().unwrap().unwrap();
+
+    println!("indexed {:?} documents", res);
 
     Ok(())
 }
