@@ -5,8 +5,7 @@ mod common;
 
 #[actix_rt::test]
 async fn update_stop_words() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     // 1 - Get stop words
 
@@ -15,7 +14,7 @@ async fn update_stop_words() {
 
     // 2 - Update stop words
 
-    let body = json!(["the", "a"]);
+    let body = json!(["ut", "ea"]);
     server.update_stop_words(body.clone()).await;
 
     // 3 - Get all stop words and compare to the previous one
@@ -35,22 +34,21 @@ async fn update_stop_words() {
 
 #[actix_rt::test]
 async fn add_documents_and_stop_words() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     // 2 - Update stop words
 
-    let body = json!(["the", "of"]);
+    let body = json!(["ad", "in"]);
     server.update_stop_words(body.clone()).await;
 
     // 3 - Search for a document with stop words
 
-    let (response, _status_code) = server.search_get("q=the%20mask").await;
+    let (response, _status_code) = server.search_get("q=in%20exercitation").await;
     assert!(!response["hits"].as_array().unwrap().is_empty());
 
     // 4 - Search for documents with *only* stop words
 
-    let (response, _status_code) = server.search_get("q=the%20of").await;
+    let (response, _status_code) = server.search_get("q=ad%20in").await;
     assert!(response["hits"].as_array().unwrap().is_empty());
 
     // 5 - Delete all stop words
