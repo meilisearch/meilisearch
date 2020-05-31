@@ -7,9 +7,14 @@ use fst::{IntoStreamer, Streamer};
 use fxhash::FxHasher32;
 use heed::types::*;
 use heed::{PolyDatabase, Database};
-use levenshtein_automata::LevenshteinAutomatonBuilder;
+use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
+use once_cell::sync::OnceCell;
 use roaring::RoaringBitmap;
 use slice_group_by::StrGroupBy;
+
+static LEVDIST0: OnceCell<LevBuilder> = OnceCell::new();
+static LEVDIST1: OnceCell<LevBuilder> = OnceCell::new();
+static LEVDIST2: OnceCell<LevBuilder> = OnceCell::new();
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
@@ -37,12 +42,7 @@ impl Index {
         let prefix_postings_ids = env.create_database(Some("prefix-postings-ids"))?;
         let documents = env.create_database(Some("documents"))?;
 
-        Ok(Index {
-            main,
-            postings_ids,
-            prefix_postings_ids,
-            documents,
-        })
+        Ok(Index { main, postings_ids, prefix_postings_ids, documents })
     }
 
     pub fn headers<'t>(&self, rtxn: &'t heed::RoTxn) -> heed::Result<Option<&'t [u8]>> {
@@ -56,9 +56,9 @@ impl Index {
         };
 
         // Building these factories is not free.
-        let lev0 = LevenshteinAutomatonBuilder::new(0, true);
-        let lev1 = LevenshteinAutomatonBuilder::new(1, true);
-        let lev2 = LevenshteinAutomatonBuilder::new(2, true);
+        let lev0 = LEVDIST0.get_or_init(|| LevBuilder::new(0, true));
+        let lev1 = LEVDIST1.get_or_init(|| LevBuilder::new(1, true));
+        let lev2 = LEVDIST2.get_or_init(|| LevBuilder::new(2, true));
 
         let words: Vec<_> = alphanumeric_tokens(query).collect();
         let number_of_words = words.len();
@@ -91,8 +91,8 @@ impl Index {
                         union_result.union_with(&right);
                     }
                 }
-                eprintln!("union for {:?} took {:.02?}", word, before.elapsed());
             }
+            eprintln!("union for {:?} took {:.02?}", word, before.elapsed());
 
             intersect_result = match intersect_result.take() {
                 Some(mut left) => {

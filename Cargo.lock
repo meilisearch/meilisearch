@@ -793,6 +793,7 @@ dependencies = [
  "jemallocator",
  "levenshtein_automata",
  "memmap",
+ "once_cell",
  "oxidized-mtbl",
  "rayon",
  "roaring",

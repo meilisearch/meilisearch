@@ -190,9 +190,11 @@ fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
                         .or_insert_with(RoaringBitmap::new)
                         .insert(document_id);
                     if let Some(prefix) = word.as_bytes().get(0..word.len().min(4)) {
-                        prefix_postings_ids.entry(SmallVec32::from(prefix))
-                            .or_insert_with(RoaringBitmap::new)
-                            .insert(document_id);
+                        for i in 0..prefix.len() {
+                            prefix_postings_ids.entry(SmallVec32::from(&prefix[..i]))
+                                .or_insert_with(RoaringBitmap::new)
+                                .insert(document_id);
+                        }
                     }
                 }
             }
