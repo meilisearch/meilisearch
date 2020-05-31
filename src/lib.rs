@@ -26,6 +26,7 @@ pub fn alphanumeric_tokens(string: &str) -> impl Iterator<Item = &str> {
 pub struct Index {
     pub main: PolyDatabase,
     pub postings_ids: Database<Str, ByteSlice>,
+    pub prefix_postings_ids: Database<Str, ByteSlice>,
     pub documents: Database<OwnedType<BEU32>, ByteSlice>,
 }
 
@@ -33,11 +34,13 @@ impl Index {
     pub fn new(env: &heed::Env) -> heed::Result<Index> {
         let main = env.create_poly_database(None)?;
         let postings_ids = env.create_database(Some("postings-ids"))?;
+        let prefix_postings_ids = env.create_database(Some("prefix-postings-ids"))?;
         let documents = env.create_database(Some("documents"))?;
 
         Ok(Index {
             main,
             postings_ids,
+            prefix_postings_ids,
             documents,
         })
     }
@@ -73,16 +76,23 @@ impl Index {
         let mut intersect_result: Option<RoaringBitmap> = None;
         for (word, dfa) in dfas {
             let before = Instant::now();
+
             let mut union_result = RoaringBitmap::default();
-            let mut stream = fst.search(dfa).into_stream();
-            while let Some(word) = stream.next() {
-                let word = std::str::from_utf8(word)?;
-                if let Some(ids) = self.postings_ids.get(rtxn, word)? {
-                    let right = RoaringBitmap::deserialize_from(ids)?;
-                    union_result.union_with(&right);
+            if word.len() <= 4 {
+                if let Some(ids) = self.prefix_postings_ids.get(rtxn, &word[..word.len().min(4)])? {
+                    union_result = RoaringBitmap::deserialize_from(ids)?;
                 }
+            } else {
+                let mut stream = fst.search(dfa).into_stream();
+                while let Some(word) = stream.next() {
+                    let word = std::str::from_utf8(word)?;
+                    if let Some(ids) = self.postings_ids.get(rtxn, word)? {
+                        let right = RoaringBitmap::deserialize_from(ids)?;
+                        union_result.union_with(&right);
+                    }
+                }
+                eprintln!("union for {:?} took {:.02?}", word, before.elapsed());
             }
-            eprintln!("union for {:?} took {:.02?}", word, before.elapsed());
 
             intersect_result = match intersect_result.take() {
                 Some(mut left) => {
