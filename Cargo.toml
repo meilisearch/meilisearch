@@ -3,11 +3,13 @@ name = "mega-mini-indexer"
 version = "0.1.0"
 authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
+default-run = "indexer"
 
 [dependencies]
 anyhow = "1.0.28"
 bitpacking = "0.8.2"
 byteorder = "1.3.4"
+cow-utils = "0.1.2"
 csv = "1.1.3"
 fst = "0.4.3"
 fxhash = "0.2.1"

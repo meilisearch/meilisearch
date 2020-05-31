@@ -1,27 +1,21 @@
-use std::collections::{HashMap, BTreeSet};
-use std::convert::TryFrom;
-use std::convert::TryInto;
+use std::collections::BTreeSet;
+use std::convert::{TryInto, TryFrom};
 use std::fs::File;
-use std::hash::BuildHasherDefault;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::Context;
+use cow_utils::CowUtils;
 use fst::{Streamer, IntoStreamer};
-use fxhash::FxHasher32;
 use heed::types::*;
 use heed::{EnvOpenOptions, PolyDatabase, Database};
 use oxidized_mtbl::{Reader, ReaderOptions, Writer, Merger, MergerOptions};
 use rayon::prelude::*;
 use roaring::RoaringBitmap;
-use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 
-pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
-pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
-pub type SmallVec32 = smallvec::SmallVec<[u8; 32]>;
-pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
-pub type DocumentId = u32;
+use mega_mini_indexer::alphanumeric_tokens;
+use mega_mini_indexer::{FastMap4, SmallVec32, BEU32, DocumentId};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -39,11 +33,6 @@ struct Opt {
 
     /// Files to index in parallel.
     files_to_index: Vec<PathBuf>,
-}
-
-fn alphanumeric_tokens(string: &str) -> impl Iterator<Item = &str> {
-    let is_alphanumeric = |s: &&str| s.chars().next().map_or(false, char::is_alphanumeric);
-    string.linear_group_by_key(|c| c.is_alphanumeric()).filter(is_alphanumeric)
 }
 
 struct Indexed {
@@ -181,6 +170,7 @@ fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
         for (_attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
             for (_pos, word) in alphanumeric_tokens(&content).enumerate().take(MAX_POSITION) {
                 if !word.is_empty() && word.len() < 500 { // LMDB limits
+                    let word = word.cow_to_lowercase();
                     postings_ids.entry(SmallVec32::from(word.as_bytes()))
                         .or_insert_with(RoaringBitmap::new)
                         .insert(document_id);
