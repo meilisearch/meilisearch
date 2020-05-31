@@ -50,23 +50,28 @@ fn main() -> anyhow::Result<()> {
         None => return Ok(()),
     };
 
-    // Building this factory is not free.
-    let lev_0_builder = LevenshteinAutomatonBuilder::new(0, true);
-    let lev_1_builder = LevenshteinAutomatonBuilder::new(1, true);
-    let lev_2_builder = LevenshteinAutomatonBuilder::new(2, true);
+    // Building these factories is not free.
+    let lev0 = LevenshteinAutomatonBuilder::new(0, true);
+    let lev1 = LevenshteinAutomatonBuilder::new(1, true);
+    let lev2 = LevenshteinAutomatonBuilder::new(2, true);
 
-    let dfas = alphanumeric_tokens(&opt.query).map(|word| {
+    let words: Vec<_> = alphanumeric_tokens(&opt.query).collect();
+    let number_of_words = words.len();
+    let dfas = words.into_iter().enumerate().map(|(i, word)| {
         let word = word.cow_to_lowercase();
-        match word.len() {
-            0..=4 => lev_0_builder.build_dfa(&word),
-            5..=8 => lev_1_builder.build_dfa(&word),
-            _     => lev_2_builder.build_dfa(&word),
-        }
+        let is_last = i + 1 == number_of_words;
+        let dfa = match word.len() {
+            0..=4 => if is_last { lev0.build_prefix_dfa(&word) } else { lev0.build_dfa(&word) },
+            5..=8 => if is_last { lev1.build_prefix_dfa(&word) } else { lev1.build_dfa(&word) },
+            _     => if is_last { lev2.build_prefix_dfa(&word) } else { lev2.build_dfa(&word) },
+        };
+        (word, dfa)
     });
 
     let before = Instant::now();
     let mut intersect_result: Option<RoaringBitmap> = None;
-    for dfa in dfas {
+    for (word, dfa) in dfas {
+        let before = Instant::now();
         let mut union_result = RoaringBitmap::default();
         let mut stream = fst.search(dfa).into_stream();
         while let Some(word) = stream.next() {
@@ -76,6 +81,7 @@ fn main() -> anyhow::Result<()> {
                 union_result.union_with(&right);
             }
         }
+        eprintln!("union for {:?} took {:.02?}", word, before.elapsed());
 
         intersect_result = match intersect_result.take() {
             Some(mut left) => {
