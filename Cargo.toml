@@ -26,5 +26,10 @@ smallvec = "1.4.0"
 structopt = { version = "0.3.14", default-features = false }
 tempfile = "3.1.0"
 
+# http server
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "0.2.15", features = ["full"] }
+warp = "0.2.2"
+
 [profile.release]
 debug = true
