@@ -116,7 +116,9 @@ impl Indexed {
         }
 
         // assert headers are valid
-        assert_eq!(self.headers, other.headers);
+        if !self.headers.is_empty() {
+            assert_eq!(self.headers, other.headers);
+        }
 
         // extend the documents
         self.documents.append(&mut other.documents);
@@ -130,18 +132,13 @@ impl Indexed {
     }
 }
 
-fn index_csv(
-    tid: usize,
-    mut rdr: csv::Reader<File>,
-) -> anyhow::Result<Indexed>
-{
+fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<Indexed> {
     const MAX_POSITION: usize = 1000;
     const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 
     let mut document = csv::StringRecord::new();
     let mut postings_ids = FastMap4::default();
     let mut documents = Vec::new();
-    let mut number_of_documents = 0;
 
     // Write the headers into a Vec of bytes.
     let headers = rdr.headers()?;
@@ -168,14 +165,7 @@ fn index_csv(
         writer.write_byte_record(document.as_byte_record())?;
         let document = writer.into_inner()?;
         documents.push((document_id, document));
-
-        number_of_documents += 1;
-        if number_of_documents % 100000 == 0 {
-            eprintln!("{}, documents seen {}", tid, number_of_documents);
-        }
     }
-
-    eprintln!("Start collecting the words into an FST");
 
     // We compute and store the postings list into the DB.
     let mut new_words = BTreeSet::default();
@@ -184,8 +174,6 @@ fn index_csv(
     }
 
     let new_words_fst = fst::Set::from_iter(new_words.iter().map(SmallString32::as_str))?;
-
-    eprintln!("Total number of documents seen so far is {}", ID_GENERATOR.load(Ordering::Relaxed));
 
     Ok(Indexed { fst: new_words_fst, headers, postings_ids, documents })
 }
@@ -244,20 +232,25 @@ fn main() -> anyhow::Result<()> {
 
     let res = opt.files_to_index
         .into_par_iter()
-        .enumerate()
-        .try_fold(|| Indexed::default(), |acc, (tid, path)| {
+        .try_fold(|| Indexed::default(), |acc, path| {
             let rdr = csv::Reader::from_path(path)?;
-            let indexed = index_csv(tid, rdr)?;
+            let indexed = index_csv(rdr)?;
             Ok(acc.merge_with(indexed)) as anyhow::Result<Indexed>
         })
         .map(|indexed| match indexed {
             Ok(indexed) => {
+                let tid = rayon::current_thread_index();
+                eprintln!("{:?}: A new step to write into LMDB", tid);
                 let mut wtxn = env.write_txn()?;
                 let count = writer(&mut wtxn, main, postings_ids, documents, indexed)?;
                 wtxn.commit()?;
+                eprintln!("{:?}: Wrote {} documents into LMDB", tid, count);
                 Ok(count)
             },
             Err(e) => Err(e),
+        })
+        .inspect(|_| {
+            eprintln!("Total number of documents seen so far is {}", ID_GENERATOR.load(Ordering::Relaxed))
         })
         .try_reduce(|| 0, |a, b| Ok(a + b));
 
