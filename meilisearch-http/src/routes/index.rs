@@ -178,7 +178,10 @@ async fn create_index(
     let created_index = data
         .db
         .create_index(&uid)
-        .map_err(Error::create_index)?;
+        .map_err(|e| match e {
+            meilisearch_core::Error::IndexAlreadyExists => e.into(),
+            _ => ResponseError::from(Error::create_index(e))
+        })?;
 
     let index_response = data.db.main_write::<_, _, ResponseError>(|mut writer| {
         let name = body.name.as_ref().unwrap_or(&uid);
