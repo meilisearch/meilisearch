@@ -48,6 +48,8 @@ struct MtblKvStore(Option<File>);
 
 impl MtblKvStore {
     fn from_indexed(mut indexed: Indexed) -> anyhow::Result<MtblKvStore> {
+        eprintln!("{:?}: Creating an MTBL store from an Indexed...", rayon::current_thread_index());
+
         let outfile = tempfile::tempfile()?;
         let mut out = Writer::new(outfile, None)?;
 
@@ -73,10 +75,10 @@ impl MtblKvStore {
         // We must write the prefix postings ids
         key[0] = 2;
         let mut stream = indexed.fst.stream();
-        while let Some(word) = stream.next() {
+        while let Some(prefix) = stream.next() {
             key.truncate(1);
-            key.extend_from_slice(word);
-            if let Some(ids) = indexed.prefix_postings_ids.remove(word) {
+            key.extend_from_slice(prefix);
+            if let Some(ids) = indexed.prefix_postings_ids.remove(prefix) {
                 buffer.clear();
                 ids.serialize_into(&mut buffer)?;
                 out.add(&key, &buffer).unwrap();
@@ -93,10 +95,14 @@ impl MtblKvStore {
         }
 
         let out = out.into_inner()?;
+
+        eprintln!("{:?}: MTBL store created!", rayon::current_thread_index());
         Ok(MtblKvStore(Some(out)))
     }
 
     fn merge_with(self, other: MtblKvStore) -> anyhow::Result<MtblKvStore> {
+        eprintln!("{:?}: Merging two MTBL stores...", rayon::current_thread_index());
+
         let (left, right) = match (self.0, other.0) {
             (Some(left), Some(right)) => (left, right),
             (Some(left), None) => return Ok(MtblKvStore(Some(left))),
@@ -159,11 +165,15 @@ impl MtblKvStore {
         }
 
         let out = out.into_inner()?;
+
+        eprintln!("{:?}: MTBL stores merged!", rayon::current_thread_index());
         Ok(MtblKvStore(Some(out)))
     }
 }
 
 fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
+    eprintln!("{:?}: Indexing into an Indexed...", rayon::current_thread_index());
+
     const MAX_POSITION: usize = 1000;
     const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 
@@ -189,8 +199,8 @@ fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
                     postings_ids.entry(SmallVec32::from(word.as_bytes()))
                         .or_insert_with(RoaringBitmap::new)
                         .insert(document_id);
-                    if let Some(prefix) = word.as_bytes().get(0..word.len().min(4)) {
-                        for i in 0..prefix.len() {
+                    if let Some(prefix) = word.as_bytes().get(0..word.len().min(5)) {
+                        for i in 0..=prefix.len() {
                             prefix_postings_ids.entry(SmallVec32::from(&prefix[..i]))
                                 .or_insert_with(RoaringBitmap::new)
                                 .insert(document_id);
@@ -216,6 +226,7 @@ fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
     let new_words_fst = fst::Set::from_iter(new_words.iter().map(SmallVec32::as_ref))?;
 
     let indexed = Indexed { fst: new_words_fst, headers, postings_ids, prefix_postings_ids, documents };
+    eprintln!("{:?}: Indexed created!", rayon::current_thread_index());
 
     MtblKvStore::from_indexed(indexed)
 }
@@ -274,19 +285,17 @@ fn main() -> anyhow::Result<()> {
         .open(opt.database)?;
 
     let index = Index::new(&env)?;
-    let res = opt.files_to_index
+    let mtbl_store = opt.files_to_index
         .into_par_iter()
         .try_fold(MtblKvStore::default, |acc, path| {
             let rdr = csv::Reader::from_path(path)?;
-            let mtbl_store = index_csv(rdr)?;
-            acc.merge_with(mtbl_store)
+            let store = index_csv(rdr)?;
+            acc.merge_with(store)
         })
         .inspect(|_| {
             eprintln!("Total number of documents seen so far is {}", ID_GENERATOR.load(Ordering::Relaxed))
         })
-        .try_reduce(MtblKvStore::default, MtblKvStore::merge_with);
-
-    let mtbl_store = res?;
+        .try_reduce(MtblKvStore::default, MtblKvStore::merge_with)?;
 
     eprintln!("We are writing into LMDB...");
     let mut wtxn = env.write_txn()?;
