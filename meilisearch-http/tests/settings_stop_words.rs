@@ -45,12 +45,12 @@ async fn add_documents_and_stop_words() {
 
     // 3 - Search for a document with stop words
 
-    let (response, _status_code) = server.search("q=the%20mask").await;
+    let (response, _status_code) = server.search_get("q=the%20mask").await;
     assert!(!response["hits"].as_array().unwrap().is_empty());
 
     // 4 - Search for documents with *only* stop words
 
-    let (response, _status_code) = server.search("q=the%20of").await;
+    let (response, _status_code) = server.search_get("q=the%20of").await;
     assert!(response["hits"].as_array().unwrap().is_empty());
 
     // 5 - Delete all stop words

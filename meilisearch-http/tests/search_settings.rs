@@ -106,7 +106,7 @@ async fn search_with_settings_basic() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
+    let (response, _status_code) = server.search_get(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
@@ -212,7 +212,7 @@ async fn search_with_settings_stop_words() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
+    let (response, _status_code) = server.search_get(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
@@ -323,7 +323,7 @@ async fn search_with_settings_synonyms() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
+    let (response, _status_code) = server.search_get(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
@@ -429,7 +429,7 @@ async fn search_with_settings_ranking_rules() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
+    let (response, _status_code) = server.search_get(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
@@ -534,7 +534,7 @@ async fn search_with_settings_searchable_attributes() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
+    let (response, _status_code) = server.search_get(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
@@ -604,7 +604,7 @@ async fn search_with_settings_displayed_attributes() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
+    let (response, _status_code) = server.search_get(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
 
@@ -674,6 +674,6 @@ async fn search_with_settings_searchable_attributes_2() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
+    let (response, _status_code) = server.search_get(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }

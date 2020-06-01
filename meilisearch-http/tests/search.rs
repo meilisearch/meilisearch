@@ -6,15 +6,27 @@ use serde_json::Value;
 
 mod common;
 
-// Search
-// q: Captain
-// limit: 3
+macro_rules! test_post_get_search {
+    ($server:expr, $query:expr, |$response:ident, $status_code:ident | $block:expr) => {
+        let get_query = ::serde_url_params::to_string(&$query).unwrap();
+        let ($response, $status_code) = $server.search_get(&get_query).await;
+        let _ =::std::panic::catch_unwind(|| $block)
+            .map_err(|e| panic!("panic in get route: {:?}", e.downcast_ref::<&str>().unwrap()));
+        let ($response, $status_code) = $server.search_post($query).await;
+        let _ =::std::panic::catch_unwind(|| $block)
+            .map_err(|e| panic!("panic in post route: {:?}", e.downcast_ref::<&str>().unwrap()));
+    };
+}
+
 #[actix_rt::test]
 async fn search_with_limit() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=3";
+    let query = json! ({
+        "q": "captain",
+        "limit": 3
+    });
 
     let expected = json!([
       {
@@ -59,8 +71,7 @@ async fn search_with_limit() {
         "tagline": "When patriots become heroes",
         "overview": "During World War II, Steve Rogers is a sickly man from Brooklyn who's transformed into super-soldier Captain America to aid in the war effort. Rogers must stop the Red Skull – Adolf Hitler's ruthless head of weaponry, and the leader of an organization that intends to use a mysterious device of untold powers for world domination.",
         "director": "Joe Johnston",
-        "producer": "Kevin Feige",
-        "genres": [
+        "producer": "Kevin Feige", "genres": [
           "Action",
           "Adventure",
           "Science Fiction"
@@ -70,20 +81,21 @@ async fn search_with_limit() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with offset
-// q: Captain
-// limit: 3
-// offset: 1
 #[actix_rt::test]
 async fn search_with_offset() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=3&offset=1";
+    let query = json!({
+        "q": "Captain",
+        "limit": 3,
+        "offset": 1
+    });
 
     let expected = json!([
       {
@@ -140,20 +152,21 @@ async fn search_with_offset() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with attribute to highlight all
-// q: Captain
-// limit: 1
-// attributeToHighlight: *
 #[actix_rt::test]
 async fn search_with_attribute_to_highlight_wildcard() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToHighlight=*";
+    let query = json!({
+        "q": "Captain",
+        "limit": 1,
+        "attributesToHighlight": "*"
+    });
 
     let expected = json!([
       {
@@ -192,20 +205,21 @@ async fn search_with_attribute_to_highlight_wildcard() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with attribute to highlight title
-// q: Captain
-// limit: 1
-// attributeToHighlight: title
 #[actix_rt::test]
 async fn search_with_attribute_to_highlight_1() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToHighlight=title";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToHighlight": "title"
+    });
 
     let expected = json!([
       {
@@ -244,8 +258,9 @@ async fn search_with_attribute_to_highlight_1() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
 // Search with attribute to highlight title and tagline
@@ -257,7 +272,11 @@ async fn search_with_attribute_to_highlight_title_tagline() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToHighlight=title,tagline";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToHighlight": "title,tagline"
+    });
 
     let expected = json!([
       {
@@ -296,20 +315,21 @@ async fn search_with_attribute_to_highlight_title_tagline() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with attribute to highlight title and overview
-// q: Captain
-// limit: 1
-// attributeToHighlight: title,overview
 #[actix_rt::test]
 async fn search_with_attribute_to_highlight_title_overview() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToHighlight=title,overview";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToHighlight": "title,overview"
+    });
 
     let expected = json!([
       {
@@ -348,20 +368,21 @@ async fn search_with_attribute_to_highlight_title_overview() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with matches
-// q: Captain
-// limit: 1
-// matches: true
 #[actix_rt::test]
 async fn search_with_matches() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&matches=true";
+    let query = json!({
+        "q": "Captain",
+        "limit": 1,
+        "matches": true 
+    });
 
     let expected = json!([
       {
@@ -397,21 +418,22 @@ async fn search_with_matches() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with crop
-// q: Captain
-// limit: 1
-// attributesToCrop: overview
-// cropLength: 20
 #[actix_rt::test]
 async fn search_witch_crop() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToCrop=overview&cropLength=20";
+    let query = json!({
+        "q": "Captain",
+        "limit": 1,
+        "attributesToCrop": "overview",
+        "cropLength": 20
+    });
 
     let expected = json!([
       {
@@ -450,20 +472,21 @@ async fn search_witch_crop() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with attributes to retrieve
-// q: Captain
-// limit: 1
-// attributesToRetrieve: [title,tagline,overview,poster_path]
 #[actix_rt::test]
 async fn search_with_attributes_to_retrieve() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToRetrieve=title,tagline,overview,poster_path";
+    let query = json!({
+        "q": "Captain",
+        "limit": 1,
+        "attributesToRetrieve": "title,tagline,overview,poster_path"
+    });
 
     let expected = json!([
       {
@@ -474,20 +497,21 @@ async fn search_with_attributes_to_retrieve() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with attributes to retrieve wildcard
-// q: Captain
-// limit: 1
-// attributesToRetrieve: *
 #[actix_rt::test]
 async fn search_with_attributes_to_retrieve_wildcard() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToRetrieve=*";
+    let query = json!({
+        "q": "Captain",
+        "limit": 1,
+        "attributesToRetrieve": "*"
+    });
 
     let expected = json!([
       {
@@ -509,8 +533,9 @@ async fn search_with_attributes_to_retrieve_wildcard() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
 // Search with filter
@@ -522,7 +547,12 @@ async fn search_with_filter() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&filters=director%20%3D%20%22Anthony%20Russo%22&limit=3";
+    let query = json!({
+        "q": "Captain",
+        "limit": 3,
+        "filters": "director='Anthony Russo'"
+    });
+
     let expected = json!([
       {
         "id": 271110,
@@ -576,8 +606,10 @@ async fn search_with_filter() {
         "vote_count": 10497
       }
     ]);
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 
     let expected = json!([
         {
@@ -598,10 +630,15 @@ async fn search_with_filter() {
         }
     ]);
 
-    // filters: title = "american pie 2"
-    let query = "q=american&filters=title%20%3D%20%22american%20pie%202%22";
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    let query = json!({
+        "q": "a",
+        "limit": 3,
+        "filters": "title='american pie 2'"
+    });
+
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 
     let expected = json!([
       {
@@ -639,10 +676,14 @@ async fn search_with_filter() {
         "vote_count": 11972
       }
     ]);
-    // limit: 3, director = "anthony russo" AND  (title = "captain america: civil war" OR title = "Captain America: The Winter Soldier")
-    let query = "q=a&limit=3&filters=director%20%3D%20%22anthony%20russo%22%20AND%20%20(title%20%3D%20%22captain%20america%3A%20civil%20war%22%20OR%20title%20%3D%20%22Captain%20America%3A%20The%20Winter%20Soldier%22)";
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    let query = json!({
+        "q": "a",
+        "limit": 3,
+        "filters": "director='Anthony Russo' AND (title='captain america: civil war' OR title='Captain America: The Winter Soldier')"
+    });
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 
     let expected = json!([
           {
@@ -698,9 +739,14 @@ async fn search_with_filter() {
           }
         ]);
     // director = "anthony russo" AND  (title = "captain america: civil war" OR vote_average > 8.0)
-    let query = "q=a&limit=3&filters=director%20%3D%20%22anthony%20russo%22%20AND%20%20(title%20%3D%20%22captain%20america%3A%20civil%20war%22%20OR%20vote_average%20%3E%208.0)";
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    let query = json!({
+        "q": "a",
+        "limit": 3,
+        "filters": "director='anthony russo' AND (title = 'captain america: civil war' OR vote_average > 8.0)"
+    });
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 
     let expected = json!([
           {
@@ -754,15 +800,26 @@ async fn search_with_filter() {
             "poster_path": "https://image.tmdb.org/t/p/w500/fXepRAYOx1qC3wju7XdDGx60775.jpg"
           }
         ]);
-        // NOT director = "anthony russo" AND vote_average > 7.5
-    let query = "q=a&limit=3&filters=NOT%20director%20%3D%20%22anthony%20russo%22%20AND%20vote_average%20%3E%207.5";
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+
+    let query = json!({
+        "q": "a",
+        "limit": 3,
+        "filters": "NOT director = 'anthony russo' AND vote_average > 7.5"
+    });
+
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 
     let expected = json!([]);
-    let query = "q=a&filters=NOT%20director%20%3D%20%22anthony%20russo%22%20AND%20title%20%20%3D%20%22Avengers%3A%20Endgame%22";
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    let query = json!({
+        "q": "a",
+        "filters": "NOT director = 'anthony russo' AND title='Avengers: Endgame'"
+    });
+
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
 // Search with attributes to highlight and matches
@@ -775,7 +832,12 @@ async fn search_with_attributes_to_highlight_and_matches() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToHighlight=title,overview&matches=true";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToHighlight": "title,overview",
+        "matches": true
+    });
 
     let expected = json!( [
       {
@@ -828,23 +890,24 @@ async fn search_with_attributes_to_highlight_and_matches() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with attributes to highlight and matches and crop
-// q: Captain
-// limit: 1
-// attributesToHighlight: [title,overview]
-// matches: true
-// cropLength: 20
-// attributesToCrop: overview
 #[actix_rt::test]
 async fn search_with_attributes_to_highlight_and_matches_and_crop() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToCrop=overview&cropLength=20&attributesToHighlight=title,overview&matches=true";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToCrop": "overview",
+        "cropLength": 20,
+        "attributesToHighlight": "title,overview",
+        "matches": true
+    });
 
     let expected = json!([
       {
@@ -897,21 +960,22 @@ async fn search_with_attributes_to_highlight_and_matches_and_crop() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with differents attributes
-// q: Captain
-// limit: 1
-// attributesToRetrieve: [title,producer,director]
-// attributesToHighlight: [title]
 #[actix_rt::test]
 async fn search_with_differents_attributes() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToHighlight=title";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToRetrieve": "title,producer,director",
+        "attributesToHighlight": "title",
+    });
 
     let expected = json!([
       {
@@ -924,22 +988,23 @@ async fn search_with_differents_attributes() {
       }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
-// Search with attributes to highlight and matches and crop
-// q: Captain
-// limit: 1
-// attributesToRetrieve: [title,producer,director]
-// attributesToCrop: [overview]
-// cropLength: 10
 #[actix_rt::test]
 async fn search_with_differents_attributes_2() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=overview&cropLength=10";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToRetrieve": "title,producer,director",
+        "attributesToCrop": "overview",
+        "cropLength": 10,
+    });
 
     let expected = json!([
       {
@@ -952,8 +1017,9 @@ async fn search_with_differents_attributes_2() {
     }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
 // Search with attributes to highlight and matches and crop
@@ -966,7 +1032,12 @@ async fn search_with_differents_attributes_3() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=overview:10";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToRetrieve": "title,producer,director",
+        "attributesToCrop": "overview:10",
+    });
 
     let expected = json!([
       {
@@ -979,8 +1050,9 @@ async fn search_with_differents_attributes_3() {
     }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
 // Search with attributes to highlight and matches and crop
@@ -993,7 +1065,12 @@ async fn search_with_differents_attributes_4() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=overview:10,title:0";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToRetrieve": "title,producer,director",
+        "attributesToCrop": "overview:10,title:0",
+    });
 
     let expected = json!([
     {
@@ -1007,8 +1084,9 @@ async fn search_with_differents_attributes_4() {
     }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
 // Search with attributes to highlight and matches and crop
@@ -1021,7 +1099,12 @@ async fn search_with_differents_attributes_5() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=*,overview:10";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToRetrieve": "title,producer,director",
+        "attributesToCrop": "*,overview:10",
+    });
 
     let expected = json!([
     {
@@ -1037,8 +1120,9 @@ async fn search_with_differents_attributes_5() {
     }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
 // Search with attributes to highlight and matches and crop
@@ -1052,7 +1136,13 @@ async fn search_with_differents_attributes_6() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=*,overview:10&attributesToHighlight=title";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToRetrieve": "title,producer,director",
+        "attributesToCrop": "*,overview:10",
+        "attributesToHighlight": "title"
+    });
 
     let expected = json!([
     {
@@ -1068,8 +1158,9 @@ async fn search_with_differents_attributes_6() {
     }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
 // Search with attributes to highlight and matches and crop
@@ -1083,7 +1174,13 @@ async fn search_with_differents_attributes_7() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=*,overview:10&attributesToHighlight=*";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToRetrieve": "title,producer,director",
+        "attributesToCrop": "*,overview:10",
+        "attributesToHighlight": "*"
+    });
 
     let expected = json!([
     {
@@ -1099,8 +1196,9 @@ async fn search_with_differents_attributes_7() {
     }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
 // Search with attributes to highlight and matches and crop
@@ -1114,7 +1212,13 @@ async fn search_with_differents_attributes_8() {
     let mut server = common::Server::with_uid("movies");
     server.populate_movies().await;
 
-    let query = "q=captain&limit=1&attributesToRetrieve=title,producer,director&attributesToCrop=*,overview:10&attributesToHighlight=*,tagline";
+    let query = json!({
+        "q": "captain",
+        "limit": 1,
+        "attributesToRetrieve": "title,producer,director",
+        "attributesToCrop": "*,overview:10",
+        "attributesToHighlight": "*,tagline"
+    });
 
     let expected = json!([
     {
@@ -1131,8 +1235,9 @@ async fn search_with_differents_attributes_8() {
     }
     ]);
 
-    let (response, _status_code) = server.search(query).await;
-    assert_json_eq!(expected, response["hits"].clone(), ordered: false);
+    test_post_get!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
 }
 
 #[actix_rt::test]
@@ -1143,112 +1248,147 @@ async fn test_faceted_search_valid() {
     let body = json!({
         "attributesForFaceting": ["color"]
     });
-    server.update_all_settings(body).await;
-    let query = "q=a&facetFilters=%5B%22color%3Agreen%22%5D";
-    let (response, _status_code) = server.search(query).await;
-    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
-    assert!(response
-        .get("hits")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|value| value.get("color").unwrap() == "green"));
-    let query = "q=a&facetFilters=%5B%22color%3Ablue%22%5D";
-    let (response, _status_code) = server.search(query).await;
-    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
-    assert!(response
-        .get("hits")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|value| value.get("color").unwrap() == "blue"));
 
-    // test case insensitive : ["color:Blue"]
-    let query = "q=a&facetFilters=%5B%22color%3ABlue%22%5D";
-    let (response, _status_code) = server.search(query).await;
-    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
-    assert!(response
-        .get("hits")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|value| value.get("color").unwrap() == "blue"));
+    server.update_all_settings(body).await;
+
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[\"color:green\"]"
+    });
+
+    test_post_get!(server, query, |response, _status_code| {
+        assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+        assert!(response
+            .get("hits")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|value| value.get("color").unwrap() == "green"));
+    });
+
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[[\"color:blue\"]]"
+    });
+
+    test_post_get!(server, query, |response, _status_code| {
+        assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+        assert!(response
+            .get("hits")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|value| value.get("color").unwrap() == "blue"));
+    });
+
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[\"color:Blue\"]"
+    });
+
+    test_post_get!(server, query, |response, _status_code| {
+        assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+        assert!(response
+            .get("hits")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|value| value.get("color").unwrap() == "blue"));
+    });
 
     // test on arrays: ["tags:bug"]
     let body = json!({
         "attributesForFaceting": ["color", "tags"]
     });
+
     server.update_all_settings(body).await;
 
-    let query = "q=a&facetFilters=%5B%22tags%3Abug%22%5D";
-    let (response, _status_code) = server.search(query).await;
-    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
-    assert!(response
-        .get("hits")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|value| value.get("tags").unwrap().as_array().unwrap().contains(&Value::String("bug".to_owned()))));
-
-    // test and: ["color:blue", "tags:bug"]
-    let query = "q=a&facetFilters=%5B%22color%3Ablue%22,%20%22tags%3Abug%22%20%5D";
-    let (response, _status_code) = server.search(query).await;
-    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
-    assert!(response
-        .get("hits")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|value| value
-            .get("color")
-            .unwrap() == "blue"
-            && value.get("tags").unwrap().as_array().unwrap().contains(&Value::String("bug".to_owned()))));
-
-    // test or: [["color:blue", "color:green"]]
-    let query = "q=a&facetFilters=%5B%5B%22color%3Ablue%22,%20%22color%3Agreen%22%5D%5D";
-    let (response, _status_code) = server.search(query).await;
-    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
-    assert!(response
-        .get("hits")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|value|
-            value
-            .get("color")
-            .unwrap() == "blue"
-            || value
-            .get("color")
-            .unwrap() == "green"));
-    // test and-or: ["tags:bug", ["color:blue", "color:green"]]
-    let query = "q=a&facetFilters=%5B%22color%3Ablue%22,%20%22tags%3Abug%22%20%5D";
-    let (response, _status_code) = server.search(query).await;
-    assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
-    assert!(response
-        .get("hits")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|value|
-            value
-            .get("tags")
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[\"tags:bug\"]"
+    });
+    test_post_get!(server, query, |response, _status_code| {
+        assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+        assert!(response
+            .get("hits")
             .unwrap()
             .as_array()
             .unwrap()
-            .contains(&Value::String("bug".to_owned()))
-            && (value
+            .iter()
+            .all(|value| value.get("tags").unwrap().as_array().unwrap().contains(&Value::String("bug".to_owned()))));
+    });
+
+    // test and: ["color:blue", "tags:bug"]
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[\"color:blue\", \"tags:bug\"]"
+    });
+    test_post_get!(server, query, |response, _status_code| {
+        assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+        assert!(response
+            .get("hits")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|value| value
+                .get("color")
+                .unwrap() == "blue"
+                && value.get("tags").unwrap().as_array().unwrap().contains(&Value::String("bug".to_owned()))));
+    });
+
+    // test or: [["color:blue", "color:green"]]
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[[\"color:blue\", \"color:green\"]]"
+    });
+    test_post_get!(server, query, |response, _status_code| {
+        assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+        assert!(response
+            .get("hits")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|value|
+                value
                 .get("color")
                 .unwrap() == "blue"
                 || value
                 .get("color")
-                .unwrap() == "green")));
+                .unwrap() == "green"));
+    });
+    // test and-or: ["tags:bug", ["color:blue", "color:green"]]
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[\"tags:bug\", [\"color:blue\", \"color:green\"]]"
+    });
+    test_post_get!(server, query, |response, _status_code| {
+        assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
+        assert!(response
+            .get("hits")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|value|
+                value
+                .get("tags")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .contains(&Value::String("bug".to_owned()))
+                && (value
+                    .get("color")
+                    .unwrap() == "blue"
+                    || value
+                    .get("color")
+                    .unwrap() == "green")));
+
+    });
 }
 
 #[actix_rt::test]
@@ -1256,10 +1396,15 @@ async fn test_faceted_search_invalid() {
     let mut server = common::Server::test_server().await;
 
     //no faceted attributes set
-    let query = "q=a&facetFilters=%5B%22color%3Ablue%22,%20%22tags%3Abug%22%20%5D";
-    let (response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
-    assert_eq!(response["errorCode"], "invalid_facet"); 
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[\"color:blue\"]"
+    });
+    test_post_get!(server, query, |response, status_code| {
+
+        assert_eq!(status_code, 400);
+        assert_eq!(response["errorCode"], "invalid_facet"); 
+    }); 
 
     let body = json!({
         "attributesForFaceting": ["color", "tags"]
@@ -1267,37 +1412,61 @@ async fn test_faceted_search_invalid() {
     server.update_all_settings(body).await;
     // empty arrays are error
     // []
-    let query = "q=a&facetFilters=%5B%5D";
-    let (_response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
-    assert_eq!(response["errorCode"], "invalid_facet"); 
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[]"
+    });
+    test_post_get!(server, query, |response, status_code| {
+        assert_eq!(status_code, 400);
+        assert_eq!(response["errorCode"], "invalid_facet"); 
+    });
     // [[]]
-    let query = "q=a&facetFilters=%5B%5B%5D";
-    let (_response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
-    assert_eq!(response["errorCode"], "invalid_facet"); 
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[[]]"
+    });
+    test_post_get!(server, query, |response, status_code| {
+        assert_eq!(status_code, 400);
+        assert_eq!(response["errorCode"], "invalid_facet"); 
+    });
     // ["color:green", []]
-    let query = "q=a&facetFilters=%5B%22color%3Agreen%22,%20%5B%5D";
-    let (_response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
-    assert_eq!(response["errorCode"], "invalid_facet"); 
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[\"color:green\", []]"
+    });
+    test_post_get!(server, query, |response, status_code| {
+        assert_eq!(status_code, 400);
+        assert_eq!(response["errorCode"], "invalid_facet"); 
+    });
 
     // too much depth
     // [[[]]]
-    let query = "q=a&facetFilters=%5B%5B%5B%5D%5D%5D";
-    let (_response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
-    assert_eq!(response["errorCode"], "invalid_facet"); 
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[[[]]]"
+    });
+    test_post_get!(server, query, |response, status_code| {
+        assert_eq!(status_code, 400);
+        assert_eq!(response["errorCode"], "invalid_facet"); 
+    });
     // [["color:green", ["color:blue"]]]
-    let query = "q=a&facetFilters=%5B%5B%22color%3Agreen%22,%20%5B%22color%3Ablue%22%5D%5D%5D";
-    let (_response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
-    assert_eq!(response["errorCode"], "invalid_facet"); 
+    let query = json!({
+        "q": "a",
+        "facetFilters": "[[\"color:green\", [\"color:blue\"]]]"
+    });
+    test_post_get!(server, query, |response, status_code| {
+        assert_eq!(status_code, 400);
+        assert_eq!(response["errorCode"], "invalid_facet"); 
+    });
     // "color:green"
-    let query = "q=a&facetFilters=%22color%3Agreen%22";
-    let (_response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
-    assert_eq!(response["errorCode"], "invalid_facet"); 
+    let query = json!({
+        "q": "a",
+        "facetFilters": "\"color:green\""
+    });
+    test_post_get!(server, query, |response, status_code| {
+        assert_eq!(status_code, 400);
+        assert_eq!(response["errorCode"], "invalid_facet"); 
+    });
 }
 
 #[actix_rt::test]
@@ -1305,57 +1474,94 @@ async fn test_facet_count() {
     let mut server = common::Server::test_server().await;
 
     // test without facet distribution
-    let query = "q=a";
-    let (response, _status_code) = server.search(query).await;
-    assert!(response.get("exhaustiveFacetsCount").is_none());
-    assert!(response.get("facetsDistribution").is_none());
+    let query = json!({
+        "q": "a",
+    });
+    test_post_get!(server, query, |response, _status_code|{
+        assert!(response.get("exhaustiveFacetsCount").is_none());
+        assert!(response.get("facetsDistribution").is_none());
+    });
 
     // test no facets set, search on color
-    let query = "q=a&facetsDistribution=%5B%22color%22%5D";
-    let (_response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
+    let query = json!({
+        "q": "a",
+        "facetsDistribution": "[\"color\"]"
+    });
+    test_post_get!(server, query.clone(), |_response, status_code|{
+        assert_eq!(status_code, 400);
+    });
 
     let body = json!({
         "attributesForFaceting": ["color", "tags"]
     });
     server.update_all_settings(body).await;
     // same as before, but now facets are set:
-    let (response, _status_code) = server.search(query).await;
-    assert!(response.get("exhaustiveFacetsCount").is_some());
-    assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 1);
+    test_post_get!(server, query, |response, _status_code|{
+        println!("{}", response);
+        assert!(response.get("exhaustiveFacetsCount").is_some());
+        assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 1);
+    });
     // searching on color and tags
-    let query = "q=a&facetsDistribution=%5B%22color%22,%20%22tags%22%5D";
-    let (response, _status_code) = server.search(query).await;
-    let facets = response.get("facetsDistribution").unwrap().as_object().unwrap();
-    eprintln!("response: {:#?}", response);
-    assert_eq!(facets.values().count(), 2);
-    assert_ne!(!facets.get("color").unwrap().as_object().unwrap().values().count(), 0);
-    assert_ne!(!facets.get("tags").unwrap().as_object().unwrap().values().count(), 0);
+    let query = json!({
+        "q": "a",
+        "facetsDistribution": "[\"color\", \"tags\"]"
+    });
+    test_post_get!(server, query, |response, _status_code|{
+        let facets = response.get("facetsDistribution").unwrap().as_object().unwrap();
+        assert_eq!(facets.values().count(), 2);
+        assert_ne!(!facets.get("color").unwrap().as_object().unwrap().values().count(), 0);
+        assert_ne!(!facets.get("tags").unwrap().as_object().unwrap().values().count(), 0);
+    });
     // wildcard
-    let query = "q=a&facetsDistribution=%5B%22*%22%5D";
-    let (response, _status_code) = server.search(query).await;
-    assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 2);
+    let query = json!({
+        "q": "a",
+        "facetsDistribution": "[\"*\"]"
+    });
+    test_post_get!(server, query, |response, _status_code|{
+        assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 2);
+    });
     // wildcard with other attributes:
-    let query = "q=a&facetsDistribution=%5B%22color%22,%20%22*%22%5D";
-    let (response, _status_code) = server.search(query).await;
-    assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 2);
+    let query = json!({
+        "q": "a",
+        "facetsDistribution": "[\"color\", \"*\"]"
+    });
+    test_post_get!(server, query, |response, _status_code|{
+        assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 2);
+    });
     // empty facet list
-    let query = "q=a&facetsDistribution=%5B%5D";
-    let (response, _status_code) = server.search(query).await;
-    assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 0);
+    let query = json!({
+        "q": "a",
+        "facetsDistribution": "[]"
+    });
+    test_post_get!(server, query, |response, _status_code|{
+        assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 0);
+    });
 
     // attr not set as facet passed:
-    let query = "q=a&facetsDistribution=%5B%22gender%22%5D";
-    let (_response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
+    let query = json!({
+        "q": "a",
+        "facetsDistribution": "[\"gender\"]"
+    });
+    test_post_get!(server, query, |_response, status_code|{
+        assert_eq!(status_code, 400);
+    });
     // string instead of array:
-    let query = "q=a&faceDistribution=%22gender%22";
-    let (_response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
+    let query = json!({
+        "q": "a",
+        "facetsDistribution": "\"color\""
+    });
+    test_post_get!(server, query, |_response, status_code|{
+        assert_eq!(status_code, 400);
+    });
     // invalid value in array:
-    let query = "q=a&facetsDistribution=%5B%22color%22,%20true%5D";
-    let (_response, status_code) = server.search(query).await;
-    assert_eq!(status_code, 400);
+    let query = json!({
+        "q": "a",
+        "facetsDistribution": "[\"color\", true]"
+            
+    });
+    test_post_get!(server, query, |_response, status_code|{
+        assert_eq!(status_code, 400);
+    });
 }
 
 #[actix_rt::test]
@@ -1381,52 +1587,66 @@ async fn highlight_cropped_text() {
     server.add_or_replace_multiple_documents(doc).await;
 
     // tests from #680
-    let query = "q=insert&attributesToHighlight=*&attributesToCrop=body&cropLength=30";
-    let (response, _status_code) = server.search(query).await;
+    //let query = "q=insert&attributesToHighlight=*&attributesToCrop=body&cropLength=30";
+    let query = json!({
+        "q": "insert",
+        "attributesToHighlight": "*",
+        "attributesToCrop": "body",
+        "cropLength": 30,
+    });
     let expected_response = "that, try the following: \n1. <em>insert</em> your trip\n2. google your";
-    assert_eq!(response
-        .get("hits")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .as_object()
-        .unwrap()
-        .get("_formatted")
-        .unwrap()
-        .as_object()
-        .unwrap()
-        .get("body")
-        .unwrap()
-        , &Value::String(expected_response.to_owned()));
+    test_post_get!(server, query, |response, _status_code|{
+        assert_eq!(response
+            .get("hits")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .get("_formatted")
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .get("body")
+            .unwrap()
+            , &Value::String(expected_response.to_owned()));
+    });
 
-    let query = "q=insert&attributesToHighlight=*&attributesToCrop=body&cropLength=80";
-    let (response, _status_code) = server.search(query).await;
+    //let query = "q=insert&attributesToHighlight=*&attributesToCrop=body&cropLength=80";
+    let query = json!({
+        "q": "insert",
+        "attributesToHighlight": "*",
+        "attributesToCrop": "body",
+        "cropLength": 80,
+    });
     let expected_response = "well, it may not work like that, try the following: \n1. <em>insert</em> your trip\n2. google your `searchQuery`\n3. find a solution \n> say hello";
-    assert_eq!(response
-        .get("hits")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .get(0)
-        .unwrap()
-        .as_object()
-        .unwrap()
-        .get("_formatted")
-        .unwrap()
-        .as_object()
-        .unwrap()
-        .get("body")
-        .unwrap()
-        , &Value::String(expected_response.to_owned()));
+    test_post_get!(server, query, |response, _status_code| {
+        assert_eq!(response
+            .get("hits")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .get("_formatted")
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .get("body")
+            .unwrap()
+            , &Value::String(expected_response.to_owned()));
+    });
 }
 
 #[actix_rt::test]
 async fn well_formated_error_with_bad_request_params() {
     let mut server = common::Server::with_uid("test");
     let query = "foo=bar";
-    let (response, _status_code) = server.search(query).await;
+    let (response, _status_code) = server.search_get(query).await;
     assert!(response.get("message").is_some());
     assert!(response.get("errorCode").is_some());
     assert!(response.get("errorType").is_some());
