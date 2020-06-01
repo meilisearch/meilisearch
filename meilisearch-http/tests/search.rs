@@ -1,5 +1,6 @@
 use std::convert::Into;
 
+use meilisearch_http::routes::search::{SearchQuery, SearchQueryPost};
 use assert_json_diff::assert_json_eq;
 use serde_json::json;
 use serde_json::Value;
@@ -8,7 +9,9 @@ mod common;
 
 macro_rules! test_post_get_search {
     ($server:expr, $query:expr, |$response:ident, $status_code:ident | $block:expr) => {
-        let get_query = ::serde_url_params::to_string(&$query).unwrap();
+        let post_query: SearchQueryPost = serde_json::from_str(&$query.clone().to_string()).unwrap();
+        let get_query: SearchQuery = post_query.into();
+        let get_query = ::serde_url_params::to_string(&get_query).unwrap();
         let ($response, $status_code) = $server.search_get(&get_query).await;
         let _ =::std::panic::catch_unwind(|| $block)
             .map_err(|e| panic!("panic in get route: {:?}", e.downcast_ref::<&str>().unwrap()));
@@ -81,7 +84,7 @@ async fn search_with_limit() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -152,7 +155,7 @@ async fn search_with_offset() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -165,7 +168,7 @@ async fn search_with_attribute_to_highlight_wildcard() {
     let query = json!({
         "q": "Captain",
         "limit": 1,
-        "attributesToHighlight": "*"
+        "attributesToHighlight": ["*"]
     });
 
     let expected = json!([
@@ -205,7 +208,7 @@ async fn search_with_attribute_to_highlight_wildcard() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -218,7 +221,7 @@ async fn search_with_attribute_to_highlight_1() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToHighlight": "title"
+        "attributesToHighlight": ["title"]
     });
 
     let expected = json!([
@@ -258,7 +261,7 @@ async fn search_with_attribute_to_highlight_1() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -275,7 +278,7 @@ async fn search_with_attribute_to_highlight_title_tagline() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToHighlight": "title,tagline"
+        "attributesToHighlight": ["title","tagline"]
     });
 
     let expected = json!([
@@ -315,7 +318,7 @@ async fn search_with_attribute_to_highlight_title_tagline() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -328,7 +331,7 @@ async fn search_with_attribute_to_highlight_title_overview() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToHighlight": "title,overview"
+        "attributesToHighlight": ["title","overview"]
     });
 
     let expected = json!([
@@ -368,7 +371,7 @@ async fn search_with_attribute_to_highlight_title_overview() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -418,7 +421,7 @@ async fn search_with_matches() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -431,7 +434,7 @@ async fn search_witch_crop() {
     let query = json!({
         "q": "Captain",
         "limit": 1,
-        "attributesToCrop": "overview",
+        "attributesToCrop": ["overview"],
         "cropLength": 20
     });
 
@@ -472,7 +475,7 @@ async fn search_witch_crop() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -485,7 +488,7 @@ async fn search_with_attributes_to_retrieve() {
     let query = json!({
         "q": "Captain",
         "limit": 1,
-        "attributesToRetrieve": "title,tagline,overview,poster_path"
+        "attributesToRetrieve": ["title","tagline","overview","poster_path"],
     });
 
     let expected = json!([
@@ -497,7 +500,7 @@ async fn search_with_attributes_to_retrieve() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -510,7 +513,7 @@ async fn search_with_attributes_to_retrieve_wildcard() {
     let query = json!({
         "q": "Captain",
         "limit": 1,
-        "attributesToRetrieve": "*"
+        "attributesToRetrieve": ["*"],
     });
 
     let expected = json!([
@@ -533,7 +536,7 @@ async fn search_with_attributes_to_retrieve_wildcard() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -607,7 +610,7 @@ async fn search_with_filter() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 
@@ -636,7 +639,7 @@ async fn search_with_filter() {
         "filters": "title='american pie 2'"
     });
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 
@@ -681,7 +684,7 @@ async fn search_with_filter() {
         "limit": 3,
         "filters": "director='Anthony Russo' AND (title='captain america: civil war' OR title='Captain America: The Winter Soldier')"
     });
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 
@@ -744,7 +747,7 @@ async fn search_with_filter() {
         "limit": 3,
         "filters": "director='anthony russo' AND (title = 'captain america: civil war' OR vote_average > 8.0)"
     });
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 
@@ -807,7 +810,7 @@ async fn search_with_filter() {
         "filters": "NOT director = 'anthony russo' AND vote_average > 7.5"
     });
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 
@@ -817,7 +820,7 @@ async fn search_with_filter() {
         "filters": "NOT director = 'anthony russo' AND title='Avengers: Endgame'"
     });
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -835,8 +838,8 @@ async fn search_with_attributes_to_highlight_and_matches() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToHighlight": "title,overview",
-        "matches": true
+        "attributesToHighlight": ["title","overview"],
+        "matches": true,
     });
 
     let expected = json!( [
@@ -890,7 +893,7 @@ async fn search_with_attributes_to_highlight_and_matches() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -903,9 +906,9 @@ async fn search_with_attributes_to_highlight_and_matches_and_crop() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToCrop": "overview",
+        "attributesToCrop": ["overview"],
         "cropLength": 20,
-        "attributesToHighlight": "title,overview",
+        "attributesToHighlight": ["title","overview"],
         "matches": true
     });
 
@@ -960,7 +963,7 @@ async fn search_with_attributes_to_highlight_and_matches_and_crop() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -973,8 +976,8 @@ async fn search_with_differents_attributes() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToRetrieve": "title,producer,director",
-        "attributesToHighlight": "title",
+        "attributesToRetrieve": ["title","producer","director"],
+        "attributesToHighlight": ["title"],
     });
 
     let expected = json!([
@@ -988,7 +991,7 @@ async fn search_with_differents_attributes() {
       }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -1001,8 +1004,8 @@ async fn search_with_differents_attributes_2() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToRetrieve": "title,producer,director",
-        "attributesToCrop": "overview",
+        "attributesToRetrieve": ["title","producer","director"],
+        "attributesToCrop": ["overview"],
         "cropLength": 10,
     });
 
@@ -1017,7 +1020,7 @@ async fn search_with_differents_attributes_2() {
     }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -1035,8 +1038,8 @@ async fn search_with_differents_attributes_3() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToRetrieve": "title,producer,director",
-        "attributesToCrop": "overview:10",
+        "attributesToRetrieve": ["title","producer","director"],
+        "attributesToCrop": ["overview:10"],
     });
 
     let expected = json!([
@@ -1050,7 +1053,7 @@ async fn search_with_differents_attributes_3() {
     }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -1068,8 +1071,8 @@ async fn search_with_differents_attributes_4() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToRetrieve": "title,producer,director",
-        "attributesToCrop": "overview:10,title:0",
+        "attributesToRetrieve": ["title","producer","director"],
+        "attributesToCrop": ["overview:10","title:0"],
     });
 
     let expected = json!([
@@ -1084,7 +1087,7 @@ async fn search_with_differents_attributes_4() {
     }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -1102,8 +1105,8 @@ async fn search_with_differents_attributes_5() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToRetrieve": "title,producer,director",
-        "attributesToCrop": "*,overview:10",
+        "attributesToRetrieve": ["title","producer","director"],
+        "attributesToCrop": ["*","overview:10"],
     });
 
     let expected = json!([
@@ -1120,7 +1123,7 @@ async fn search_with_differents_attributes_5() {
     }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -1139,9 +1142,9 @@ async fn search_with_differents_attributes_6() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToRetrieve": "title,producer,director",
-        "attributesToCrop": "*,overview:10",
-        "attributesToHighlight": "title"
+        "attributesToRetrieve": ["title","producer","director"],
+        "attributesToCrop": ["*","overview:10"],
+        "attributesToHighlight": ["title"],
     });
 
     let expected = json!([
@@ -1158,7 +1161,7 @@ async fn search_with_differents_attributes_6() {
     }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -1177,9 +1180,9 @@ async fn search_with_differents_attributes_7() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToRetrieve": "title,producer,director",
-        "attributesToCrop": "*,overview:10",
-        "attributesToHighlight": "*"
+        "attributesToRetrieve": ["title","producer","director"],
+        "attributesToCrop": ["*","overview:10"],
+        "attributesToHighlight": ["*"],
     });
 
     let expected = json!([
@@ -1196,7 +1199,7 @@ async fn search_with_differents_attributes_7() {
     }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -1215,9 +1218,9 @@ async fn search_with_differents_attributes_8() {
     let query = json!({
         "q": "captain",
         "limit": 1,
-        "attributesToRetrieve": "title,producer,director",
-        "attributesToCrop": "*,overview:10",
-        "attributesToHighlight": "*,tagline"
+        "attributesToRetrieve": ["title","producer","director"],
+        "attributesToCrop": ["*","overview:10"],
+        "attributesToHighlight": ["*","tagline"],
     });
 
     let expected = json!([
@@ -1235,7 +1238,7 @@ async fn search_with_differents_attributes_8() {
     }
     ]);
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 }
@@ -1253,10 +1256,10 @@ async fn test_faceted_search_valid() {
 
     let query = json!({
         "q": "a",
-        "facetFilters": "[\"color:green\"]"
+        "facetFilters": ["color:green"]
     });
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
         assert!(response
             .get("hits")
@@ -1269,10 +1272,10 @@ async fn test_faceted_search_valid() {
 
     let query = json!({
         "q": "a",
-        "facetFilters": "[[\"color:blue\"]]"
+        "facetFilters": [["color:blue"]]
     });
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
         assert!(response
             .get("hits")
@@ -1285,10 +1288,10 @@ async fn test_faceted_search_valid() {
 
     let query = json!({
         "q": "a",
-        "facetFilters": "[\"color:Blue\"]"
+        "facetFilters": ["color:Blue"]
     });
 
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
         assert!(response
             .get("hits")
@@ -1308,9 +1311,9 @@ async fn test_faceted_search_valid() {
 
     let query = json!({
         "q": "a",
-        "facetFilters": "[\"tags:bug\"]"
+        "facetFilters": ["tags:bug"]
     });
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
         assert!(response
             .get("hits")
@@ -1324,9 +1327,9 @@ async fn test_faceted_search_valid() {
     // test and: ["color:blue", "tags:bug"]
     let query = json!({
         "q": "a",
-        "facetFilters": "[\"color:blue\", \"tags:bug\"]"
+        "facetFilters": ["color:blue", "tags:bug"]
     });
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
         assert!(response
             .get("hits")
@@ -1343,9 +1346,9 @@ async fn test_faceted_search_valid() {
     // test or: [["color:blue", "color:green"]]
     let query = json!({
         "q": "a",
-        "facetFilters": "[[\"color:blue\", \"color:green\"]]"
+        "facetFilters": [["color:blue", "color:green"]]
     });
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
         assert!(response
             .get("hits")
@@ -1364,9 +1367,9 @@ async fn test_faceted_search_valid() {
     // test and-or: ["tags:bug", ["color:blue", "color:green"]]
     let query = json!({
         "q": "a",
-        "facetFilters": "[\"tags:bug\", [\"color:blue\", \"color:green\"]]"
+        "facetFilters": ["tags:bug", ["color:blue", "color:green"]]
     });
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert!(!response.get("hits").unwrap().as_array().unwrap().is_empty());
         assert!(response
             .get("hits")
@@ -1398,9 +1401,10 @@ async fn test_faceted_search_invalid() {
     //no faceted attributes set
     let query = json!({
         "q": "a",
-        "facetFilters": "[\"color:blue\"]"
+        "facetFilters": ["color:blue"]
     });
-    test_post_get!(server, query, |response, status_code| {
+
+    test_post_get_search!(server, query, |response, status_code| {
 
         assert_eq!(status_code, 400);
         assert_eq!(response["errorCode"], "invalid_facet"); 
@@ -1414,27 +1418,31 @@ async fn test_faceted_search_invalid() {
     // []
     let query = json!({
         "q": "a",
-        "facetFilters": "[]"
+        "facetFilters": []
     });
-    test_post_get!(server, query, |response, status_code| {
+
+    test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
         assert_eq!(response["errorCode"], "invalid_facet"); 
     });
     // [[]]
     let query = json!({
         "q": "a",
-        "facetFilters": "[[]]"
+        "facetFilters": [[]]
     });
-    test_post_get!(server, query, |response, status_code| {
+
+    test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
         assert_eq!(response["errorCode"], "invalid_facet"); 
     });
+
     // ["color:green", []]
     let query = json!({
         "q": "a",
-        "facetFilters": "[\"color:green\", []]"
+        "facetFilters": ["color:green", []]
     });
-    test_post_get!(server, query, |response, status_code| {
+
+    test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
         assert_eq!(response["errorCode"], "invalid_facet"); 
     });
@@ -1443,27 +1451,32 @@ async fn test_faceted_search_invalid() {
     // [[[]]]
     let query = json!({
         "q": "a",
-        "facetFilters": "[[[]]]"
+        "facetFilters": [[[]]]
     });
-    test_post_get!(server, query, |response, status_code| {
+
+    test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
         assert_eq!(response["errorCode"], "invalid_facet"); 
     });
+
     // [["color:green", ["color:blue"]]]
     let query = json!({
         "q": "a",
-        "facetFilters": "[[\"color:green\", [\"color:blue\"]]]"
+        "facetFilters": [["color:green", ["color:blue"]]]
     });
-    test_post_get!(server, query, |response, status_code| {
+
+    test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
         assert_eq!(response["errorCode"], "invalid_facet"); 
     });
+
     // "color:green"
     let query = json!({
         "q": "a",
-        "facetFilters": "\"color:green\""
+        "facetFilters": "color:green"
     });
-    test_post_get!(server, query, |response, status_code| {
+
+    test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
         assert_eq!(response["errorCode"], "invalid_facet"); 
     });
@@ -1477,7 +1490,7 @@ async fn test_facet_count() {
     let query = json!({
         "q": "a",
     });
-    test_post_get!(server, query, |response, _status_code|{
+    test_post_get_search!(server, query, |response, _status_code|{
         assert!(response.get("exhaustiveFacetsCount").is_none());
         assert!(response.get("facetsDistribution").is_none());
     });
@@ -1485,9 +1498,9 @@ async fn test_facet_count() {
     // test no facets set, search on color
     let query = json!({
         "q": "a",
-        "facetsDistribution": "[\"color\"]"
+        "facetsDistribution": ["color"]
     });
-    test_post_get!(server, query.clone(), |_response, status_code|{
+    test_post_get_search!(server, query.clone(), |_response, status_code|{
         assert_eq!(status_code, 400);
     });
 
@@ -1496,7 +1509,7 @@ async fn test_facet_count() {
     });
     server.update_all_settings(body).await;
     // same as before, but now facets are set:
-    test_post_get!(server, query, |response, _status_code|{
+    test_post_get_search!(server, query, |response, _status_code|{
         println!("{}", response);
         assert!(response.get("exhaustiveFacetsCount").is_some());
         assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 1);
@@ -1504,9 +1517,9 @@ async fn test_facet_count() {
     // searching on color and tags
     let query = json!({
         "q": "a",
-        "facetsDistribution": "[\"color\", \"tags\"]"
+        "facetsDistribution": ["color", "tags"]
     });
-    test_post_get!(server, query, |response, _status_code|{
+    test_post_get_search!(server, query, |response, _status_code|{
         let facets = response.get("facetsDistribution").unwrap().as_object().unwrap();
         assert_eq!(facets.values().count(), 2);
         assert_ne!(!facets.get("color").unwrap().as_object().unwrap().values().count(), 0);
@@ -1515,53 +1528,57 @@ async fn test_facet_count() {
     // wildcard
     let query = json!({
         "q": "a",
-        "facetsDistribution": "[\"*\"]"
+        "facetsDistribution": ["*"]
     });
-    test_post_get!(server, query, |response, _status_code|{
+    test_post_get_search!(server, query, |response, _status_code|{
         assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 2);
     });
     // wildcard with other attributes:
     let query = json!({
         "q": "a",
-        "facetsDistribution": "[\"color\", \"*\"]"
+        "facetsDistribution": ["color", "*"]
     });
-    test_post_get!(server, query, |response, _status_code|{
+    test_post_get_search!(server, query, |response, _status_code|{
         assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 2);
     });
+
     // empty facet list
     let query = json!({
         "q": "a",
-        "facetsDistribution": "[]"
+        "facetsDistribution": []
     });
-    test_post_get!(server, query, |response, _status_code|{
+    test_post_get_search!(server, query, |response, _status_code|{
         assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 0);
     });
 
     // attr not set as facet passed:
     let query = json!({
         "q": "a",
-        "facetsDistribution": "[\"gender\"]"
+        "facetsDistribution": ["gender"]
     });
-    test_post_get!(server, query, |_response, status_code|{
+    test_post_get_search!(server, query, |_response, status_code|{
         assert_eq!(status_code, 400);
     });
+
+}
+
+#[actix_rt::test]
+#[should_panic]
+async fn test_bad_facet_distribution() {
+    let mut server = common::Server::test_server().await;
     // string instead of array:
     let query = json!({
         "q": "a",
-        "facetsDistribution": "\"color\""
+        "facetsDistribution": "color"
     });
-    test_post_get!(server, query, |_response, status_code|{
-        assert_eq!(status_code, 400);
-    });
+    test_post_get_search!(server, query, |_response, _status_code| {});
+
     // invalid value in array:
     let query = json!({
         "q": "a",
-        "facetsDistribution": "[\"color\", true]"
-            
+        "facetsDistribution": ["color", true]
     });
-    test_post_get!(server, query, |_response, status_code|{
-        assert_eq!(status_code, 400);
-    });
+    test_post_get_search!(server, query, |_response, _status_code| {});
 }
 
 #[actix_rt::test]
@@ -1590,12 +1607,12 @@ async fn highlight_cropped_text() {
     //let query = "q=insert&attributesToHighlight=*&attributesToCrop=body&cropLength=30";
     let query = json!({
         "q": "insert",
-        "attributesToHighlight": "*",
-        "attributesToCrop": "body",
+        "attributesToHighlight": ["*"],
+        "attributesToCrop": ["body"],
         "cropLength": 30,
     });
     let expected_response = "that, try the following: \n1. <em>insert</em> your trip\n2. google your";
-    test_post_get!(server, query, |response, _status_code|{
+    test_post_get_search!(server, query, |response, _status_code|{
         assert_eq!(response
             .get("hits")
             .unwrap()
@@ -1617,12 +1634,12 @@ async fn highlight_cropped_text() {
     //let query = "q=insert&attributesToHighlight=*&attributesToCrop=body&cropLength=80";
     let query = json!({
         "q": "insert",
-        "attributesToHighlight": "*",
-        "attributesToCrop": "body",
+        "attributesToHighlight": ["*"],
+        "attributesToCrop": ["body"],
         "cropLength": 80,
     });
     let expected_response = "well, it may not work like that, try the following: \n1. <em>insert</em> your trip\n2. google your `searchQuery`\n3. find a solution \n> say hello";
-    test_post_get!(server, query, |response, _status_code| {
+    test_post_get_search!(server, query, |response, _status_code| {
         assert_eq!(response
             .get("hits")
             .unwrap()

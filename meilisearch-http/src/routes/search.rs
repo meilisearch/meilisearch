@@ -4,7 +4,7 @@ use log::warn;
 use actix_web::web;
 use actix_web::HttpResponse;
 use actix_web_macros::{get, post};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{Error, FacetCountError, ResponseError};
@@ -21,13 +21,16 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(search_with_url_query);
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SearchQuery {
+pub struct SearchQuery {
     q: String,
     offset: Option<usize>,
     limit: Option<usize>,
-    attributes_to_retrieve: Option<String>, attributes_to_crop: Option<String>, crop_length: Option<usize>, attributes_to_highlight: Option<String>,
+    attributes_to_retrieve: Option<String>,
+    attributes_to_crop: Option<String>,
+    crop_length: Option<usize>,
+    attributes_to_highlight: Option<String>,
     filters: Option<String>,
     matches: Option<bool>,
     facet_filters: Option<String>,
@@ -44,13 +47,48 @@ async fn search_with_url_query(
     Ok(HttpResponse::Ok().json(search_result))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchQueryPost {
+    q: String,
+    offset: Option<usize>,
+    limit: Option<usize>,
+    attributes_to_retrieve: Option<Vec<String>>,
+    attributes_to_crop: Option<Vec<String>>,
+    crop_length: Option<usize>,
+    attributes_to_highlight: Option<Vec<String>>,
+    filters: Option<String>,
+    matches: Option<bool>,
+    facet_filters: Option<Value>,
+    facets_distribution: Option<Vec<String>>,
+}
+
+impl From<SearchQueryPost> for SearchQuery {
+    fn from(other: SearchQueryPost) -> SearchQuery {
+        SearchQuery {
+            q: other.q,
+            offset: other.offset,
+            limit: other.limit,
+            attributes_to_retrieve: other.attributes_to_retrieve.map(|attrs| attrs.join(",")),
+            attributes_to_crop: other.attributes_to_crop.map(|attrs| attrs.join(",")),
+            crop_length: other.crop_length,
+            attributes_to_highlight: other.attributes_to_highlight.map(|attrs| attrs.join(",")),
+            filters: other.filters,
+            matches: other.matches,
+            facet_filters: other.facet_filters.map(|f| f.to_string()),
+            facets_distribution: other.facets_distribution.map(|f| format!("{:?}", f)),
+        }
+    }
+}
+
 #[post("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
 async fn search_with_post(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-    params: web::Json<SearchQuery>,
+    params: web::Json<SearchQueryPost>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_result = params.search(&path.index_uid, data)?;
+    let query: SearchQuery = params.0.into();
+    let search_result = query.search(&path.index_uid, data)?;
     Ok(HttpResponse::Ok().json(search_result))
 }
 
