@@ -175,7 +175,6 @@ impl SearchQuery {
     }
 }
 
-
 /// Parses the incoming string into an array of attributes for which to return a count. It returns
 /// a Vec of attribute names ascociated with their id.
 ///
