@@ -54,7 +54,7 @@ async fn create_index_with_uid() {
         "uid": "movies",
     });
 
-    let (res1_value, status_code) = server.create_index(body).await;
+    let (res1_value, status_code) = server.create_index(body.clone()).await;
 
     assert_eq!(status_code, 201);
     assert_eq!(res1_value.as_object().unwrap().len(), 5);
@@ -66,6 +66,13 @@ async fn create_index_with_uid() {
     assert_eq!(r1_uid, "movies");
     assert!(r1_created_at.len() > 1);
     assert!(r1_updated_at.len() > 1);
+
+    // 1.5 verify that error is thrown when trying to create the same index
+
+    let (response, status_code) = server.create_index(body).await;
+
+    assert_eq!(status_code, 400);
+    assert_eq!(response["errorCode"].as_str().unwrap(), "index_already_exists");
 
     // 2 - Check the list of indexes
 
