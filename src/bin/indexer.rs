@@ -280,7 +280,7 @@ fn main() -> anyhow::Result<()> {
 
     let index = Index::new(&env)?;
 
-    let stores: Vec<_> = opt.files_to_index
+    let mut stores: Vec<_> = opt.files_to_index
         .into_par_iter()
         .map(|path| {
             let rdr = csv::Reader::from_path(path)?;
@@ -291,7 +291,14 @@ fn main() -> anyhow::Result<()> {
         })
         .collect::<Result<_, _>>()?;
 
-    let mtbl_store = MtblKvStore::from_many(stores)?;
+    while stores.len() > 1 {
+        let s = std::mem::take(&mut stores);
+        stores = s.into_par_iter().chunks(3)
+            .map(MtblKvStore::from_many)
+            .collect::<Result<_, _>>()?;
+    }
+
+    let mtbl_store = stores.pop().unwrap_or_default();
 
     eprintln!("We are writing into LMDB...");
     let mut wtxn = env.write_txn()?;
