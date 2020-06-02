@@ -124,8 +124,8 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
     }
 
     eprintln!();
-    eprintln!("Documentation:\t\thttp://docs.meilisearch.com");
-    eprintln!("Source code:\t\thttp://github.com/meilisearch/meilisearch");
+    eprintln!("Documentation:\t\thttps://docs.meilisearch.com");
+    eprintln!("Source code:\t\thttps://github.com/meilisearch/meilisearch");
     eprintln!("Contact:\t\thttps://docs.meilisearch.com/resources/contact.html or bonjour@meilisearch.com");
     eprintln!();
 }
