@@ -20,6 +20,7 @@
   - Rename fieldsFrequency into fieldsDistribution in stats (#719)
   - Add support for error code reporting (#703)
   - Allow the dashboard to query private servers (#732)
+  - Add telemetry (#720)
 
 ## v0.10.1
 

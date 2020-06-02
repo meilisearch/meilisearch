@@ -6,11 +6,11 @@
 <h1 align="center">MeiliSearch</h1>
 
 <h4 align="center">
-  <a href="https://www.meilisearch.com">Website</a> | 
-  <a href="https://blog.meilisearch.com">Blog</a> | 
-  <a href="https://fr.linkedin.com/company/meilisearch">LinkedIn</a> | 
-  <a href="https://twitter.com/meilisearch">Twitter</a> | 
-  <a href="https://docs.meilisearch.com">Documentation</a> | 
+  <a href="https://www.meilisearch.com">Website</a> |
+  <a href="https://blog.meilisearch.com">Blog</a> |
+  <a href="https://fr.linkedin.com/company/meilisearch">LinkedIn</a> |
+  <a href="https://twitter.com/meilisearch">Twitter</a> |
+  <a href="https://docs.meilisearch.com">Documentation</a> |
   <a href="https://docs.meilisearch.com/faq/">FAQ</a>
 </h4>
 
@@ -122,7 +122,7 @@ curl -i -X POST 'http://127.0.0.1:7700/indexes/movies/documents' \
 
 #### In command line
 
-The search engine is now aware of your documents and can serve those via an HTTP server. 
+The search engine is now aware of your documents and can serve those via an HTTP server.
 
 The [`jq` command-line tool](https://stedolan.github.io/jq/) can greatly help you read the server responses.
 
@@ -167,7 +167,7 @@ You can access the web interface in your web browser at the root of the server. 
 
 ### Documentation
 
-Now that your MeiliSearch server is up and running, you can learn more about how to tune your search engine in [the documentation](https://docs.meilisearch.com). 
+Now that your MeiliSearch server is up and running, you can learn more about how to tune your search engine in [the documentation](https://docs.meilisearch.com).
 
 
 ## Contributing
@@ -176,8 +176,8 @@ Hey! We're glad you're thinking about contributing to MeiliSearch! If you think 
 
 ### Analytic Events
 
-Once a day, events are being sent to our Amplitude instance so we can know how many people are using MeiliSearch.<br/>
-Only information about the platform on which the server runs is stored. No other information is being sent.<br/>
+Every hour, events are being sent to our Amplitude instance so we can know how many people are using MeiliSearch.<br/>
+To see what information we're retrieving, please see the complete list [on the dedicated issue](https://github.com/meilisearch/MeiliSearch/issues/720).<br/>
 We also use Sentry to make us crash and error reports. If you want to know more about what Sentry collects, please visit their [privacy policy website](https://sentry.io/privacy/).<br/>
 If this doesn't suit you, you can disable these analytics by using the `MEILI_NO_ANALYTICS` env variable.
 
