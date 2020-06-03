@@ -3,7 +3,7 @@ use std::fmt;
 
 use actix_http::ResponseBuilder;
 use actix_web as aweb;
-use actix_web::error::JsonPayloadError;
+use actix_web::error::{JsonPayloadError, QueryPayloadError};
 use actix_web::http::StatusCode;
 use serde_json::json;
 
@@ -260,7 +260,15 @@ impl From<JsonPayloadError> for Error {
     }
 }
 
-pub fn json_error_handler(err: JsonPayloadError) -> ResponseError {
-    let error = Error::from(err);
+impl From<QueryPayloadError> for Error {
+    fn from(err: QueryPayloadError) -> Error {
+        match err {
+            QueryPayloadError::Deserialize(err) => Error::BadRequest(format!("Invalid query parameters: {}", err)),
+        }
+    }
+}
+
+pub fn payload_error_handler<E: Into<Error>>(err: E) -> ResponseError {
+    let error: Error = err.into();
     error.into()
 }
