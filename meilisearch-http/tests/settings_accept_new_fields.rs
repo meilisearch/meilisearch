@@ -341,7 +341,7 @@ async fn accept_new_fields_does_not_take_into_account_the_primary_key() {
         "displayedAttributes": ["title"],
         "stopWords": [],
         "synonyms": {},
-        "attributesForFaceting": null,
+        "attributesForFaceting": [],
         "acceptNewFields": false,
     });
 

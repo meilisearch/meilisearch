@@ -25,7 +25,10 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(update_displayed)
         .service(delete_displayed)
         .service(get_accept_new_fields)
-        .service(update_accept_new_fields);
+        .service(update_accept_new_fields)
+        .service(get_attributes_for_faceting)
+        .service(delete_attributes_for_faceting)
+        .service(update_attributes_for_faceting);
 }
 
 #[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
@@ -92,14 +95,16 @@ async fn get_all(
 
     let attributes_for_faceting = match (&schema, &index.main.attributes_for_faceting(&reader)?) {
         (Some(schema), Some(attrs)) => {
-            Some(attrs
+            attrs
                 .iter()
-                .filter_map(|&id| schema .name(id))
+                .filter_map(|&id| schema.name(id))
                 .map(str::to_string)
-                .collect())
+                .collect()
         }
-        _ => None,
+        _ => vec![],
     };
+
+    println!("{:?}", attributes_for_faceting);
 
     let searchable_attributes = schema.clone().map(|s| {
         s.indexed_name()
@@ -125,7 +130,7 @@ async fn get_all(
         stop_words: Some(Some(stop_words)),
         synonyms: Some(Some(synonyms)),
         accept_new_fields: Some(accept_new_fields),
-        attributes_for_faceting: Some(attributes_for_faceting),
+        attributes_for_faceting: Some(Some(attributes_for_faceting)),
     };
 
     Ok(HttpResponse::Ok().json(settings))
@@ -477,6 +482,88 @@ async fn update_accept_new_fields(
     };
 
     let settings = settings.into_update().map_err(Error::bad_request)?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
+
+#[get(
+    "/indexes/{index_uid}/settings/attributes-for-faceting",
+    wrap = "Authentication::Private"
+)]
+async fn get_attributes_for_faceting(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&path.index_uid)
+        .ok_or(Error::index_not_found(&path.index_uid))?;
+
+    let attributes_for_faceting = data
+        .db
+        .main_read::<_, _, ResponseError>(|reader| {
+        let schema = index.main.schema(reader)?;
+        let attrs = index.main.attributes_for_faceting(reader)?;
+        let attr_names = match (&schema, &attrs) {
+            (Some(schema), Some(attrs)) => {
+                attrs
+                    .iter()
+                    .filter_map(|&id| schema.name(id))
+                    .map(str::to_string)
+                    .collect()
+            }
+            _ => vec![]
+        };
+        Ok(attr_names)
+    })?;
+
+    Ok(HttpResponse::Ok().json(attributes_for_faceting))
+}
+
+#[post(
+    "/indexes/{index_uid}/settings/attributes-for-faceting",
+    wrap = "Authentication::Private"
+)]
+async fn update_attributes_for_faceting(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<Option<Vec<String>>>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&path.index_uid)
+        .ok_or(Error::index_not_found(&path.index_uid))?;
+
+    let settings = Settings {
+        attributes_for_faceting: Some(body.into_inner()),
+        ..Settings::default()
+    };
+
+    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
+
+#[delete(
+    "/indexes/{index_uid}/settings/attributes-for-faceting",
+    wrap = "Authentication::Private"
+)]
+async fn delete_attributes_for_faceting(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&path.index_uid)
+        .ok_or(Error::index_not_found(&path.index_uid))?;
+
+    let settings = SettingsUpdate {
+        attributes_for_faceting: UpdateState::Clear,
+        ..SettingsUpdate::default()
+    };
+
     let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
