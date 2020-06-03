@@ -95,14 +95,16 @@ async fn get_all(
 
     let attributes_for_faceting = match (&schema, &index.main.attributes_for_faceting(&reader)?) {
         (Some(schema), Some(attrs)) => {
-            Some(attrs
+            attrs
                 .iter()
                 .filter_map(|&id| schema.name(id))
                 .map(str::to_string)
-                .collect())
+                .collect()
         }
-        _ => None,
+        _ => vec![],
     };
+
+    println!("{:?}", attributes_for_faceting);
 
     let searchable_attributes = schema.clone().map(|s| {
         s.indexed_name()
@@ -128,7 +130,7 @@ async fn get_all(
         stop_words: Some(Some(stop_words)),
         synonyms: Some(Some(synonyms)),
         accept_new_fields: Some(accept_new_fields),
-        attributes_for_faceting: Some(attributes_for_faceting),
+        attributes_for_faceting: Some(Some(attributes_for_faceting)),
     };
 
     Ok(HttpResponse::Ok().json(settings))
@@ -500,18 +502,18 @@ async fn get_attributes_for_faceting(
 
     let attributes_for_faceting = data
         .db
-        .main_read::<_, Option<Vec<String>>, ResponseError>(|reader| {
+        .main_read::<_, _, ResponseError>(|reader| {
         let schema = index.main.schema(reader)?;
         let attrs = index.main.attributes_for_faceting(reader)?;
         let attr_names = match (&schema, &attrs) {
             (Some(schema), Some(attrs)) => {
-                Some(attrs
+                attrs
                     .iter()
                     .filter_map(|&id| schema.name(id))
                     .map(str::to_string)
-                    .collect())
+                    .collect()
             }
-            _ => None,
+            _ => vec![]
         };
         Ok(attr_names)
     })?;
