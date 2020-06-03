@@ -1414,3 +1414,14 @@ async fn highlight_cropped_text() {
         .unwrap()
         , &Value::String(expected_response.to_owned()));
 }
+
+#[actix_rt::test]
+async fn well_formated_error_with_bad_request_params() {
+    let mut server = common::Server::with_uid("test");
+    let query = "foo=bar";
+    let (response, _status_code) = server.search(query).await;
+    assert!(response.get("message").is_some());
+    assert!(response.get("errorCode").is_some());
+    assert!(response.get("errorType").is_some());
+    assert!(response.get("errorLink").is_some());
+}
