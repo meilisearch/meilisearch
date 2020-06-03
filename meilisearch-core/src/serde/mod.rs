@@ -34,7 +34,7 @@ impl fmt::Display for SerializerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             SerializerError::DocumentIdNotFound => {
-                f.write_str("serialized document does not have an id according to the schema")
+                f.write_str("Primary key is missing.")
             }
             SerializerError::InvalidDocumentIdFormat => {
                 f.write_str("a document primary key can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).")
