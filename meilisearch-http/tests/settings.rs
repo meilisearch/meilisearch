@@ -120,7 +120,7 @@ async fn write_all_and_delete() {
         ],
         "stopWords": [],
         "synonyms": {},
-        "attributesForFaceting": null,
+        "attributesForFaceting": [],
         "acceptNewFields": true,
     });
 
@@ -282,7 +282,7 @@ async fn test_default_settings() {
         "displayedAttributes": [],
         "stopWords": [],
         "synonyms": {},
-        "attributesForFaceting": null,
+        "attributesForFaceting": [],
         "acceptNewFields": true,
     });
 
@@ -320,7 +320,7 @@ async fn test_default_settings_2() {
         ],
         "stopWords": [],
         "synonyms": {},
-        "attributesForFaceting": null,
+        "attributesForFaceting": [],
         "acceptNewFields": true,
     });
 
@@ -428,11 +428,30 @@ async fn write_setting_and_update_partial() {
             "wolverine": ["xmen", "logan"],
             "logan": ["wolverine"],
         },
-        "attributesForFaceting": null,
+        "attributesForFaceting": [],
         "acceptNewFields": false,
     });
 
     let (response, _status_code) = server.get_all_settings().await;
 
     assert_json_eq!(expected, response, ordered: false);
+}
+
+#[actix_rt::test]
+async fn attributes_for_faceting_settings() {
+    let mut server = common::Server::test_server().await;
+    // initial attributes array should be empty
+    let (response, _status_code) = server.get_request("/indexes/test/settings/attributes-for-faceting").await;
+    assert_eq!(response, json!([]));
+    // add an attribute and test for its presence
+    let (_response, _status_code) = server.post_request_async(
+        "/indexes/test/settings/attributes-for-faceting",
+        json!(["foobar"])).await;
+    let (response, _status_code) = server.get_request("/indexes/test/settings/attributes-for-faceting").await;
+    assert_eq!(response, json!(["foobar"]));
+    // remove all attributes and test for emptiness
+    let (_response, _status_code) = server.delete_request_async(
+        "/indexes/test/settings/attributes-for-faceting").await;
+    let (response, _status_code) = server.get_request("/indexes/test/settings/attributes-for-faceting").await;
+    assert_eq!(response, json!([]));
 }
