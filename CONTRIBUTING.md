@@ -14,7 +14,6 @@ expanding into more specifics.
    1. [Git Commits](#git-commits)
       1. [Style](#style)
    1. [Github Pull Requests](#github-pull-requests)
-      1. [Title](#title)
       1. [Reviews & Approvals](#reviews--approvals)
       1. [Merge Style](#merge-style)
    1. [CI](#ci)
@@ -111,7 +110,7 @@ We do not yet do any benchmarking. If you'd like to make some, please get in tou
 
 ### Profiling
 
-WIP
+We have not yet formalized our profiling methods.
 
 ## Humans
 
@@ -127,6 +126,4 @@ alter user-facing behavior MUST include documentation changes. Please see
 
 ### Changelog
 
-Developers do not need to maintain the [`Changelog`](/CHANGELOG.md). This is
-automatically generated via the `make release` command. This is made possible
-by the use of [conventional commit](#title) titles.
+Until we have guidelines in place, updating the [`Changelog`](/CHANGELOG.md) is solely the responsibility of MeiliSearch team members.
