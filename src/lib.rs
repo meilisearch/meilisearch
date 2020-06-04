@@ -74,15 +74,15 @@ impl Index {
                 5..=8 => if is_prefix { lev1.build_prefix_dfa(&word) } else if quoted { lev0.build_dfa(&word) } else { lev1.build_dfa(&word) },
                 _     => if is_prefix { lev2.build_prefix_dfa(&word) } else if quoted { lev0.build_dfa(&word) } else { lev2.build_dfa(&word) },
             };
-            (word, dfa)
+            (word, is_prefix, dfa)
         });
 
         let mut intersect_result: Option<RoaringBitmap> = None;
-        for (word, dfa) in dfas {
+        for (word, is_prefix, dfa) in dfas {
             let before = Instant::now();
 
             let mut union_result = RoaringBitmap::default();
-            let count = if word.len() <= 4 {
+            let count = if word.len() <= 4 && is_prefix {
                 if let Some(ids) = self.prefix_postings_ids.get(rtxn, &word[..word.len().min(5)])? {
                     union_result = RoaringBitmap::deserialize_from(ids)?;
                 }
