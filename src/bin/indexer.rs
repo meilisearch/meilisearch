@@ -100,36 +100,38 @@ impl MtblKvStore {
         Ok(MtblKvStore(Some(out)))
     }
 
-    fn merge(key: &[u8], left: &[u8], right: &[u8]) -> Option<Vec<u8>> {
+    fn merge(key: &[u8], values: &[Vec<u8>]) -> Option<Vec<u8>> {
         if key == b"\0words-fst" {
-            let left_fst = fst::Set::new(left).unwrap();
-            let right_fst = fst::Set::new(right).unwrap();
+            let fsts: Vec<_> = values.iter().map(|v| fst::Set::new(v).unwrap()).collect();
 
             // Union of the two FSTs
-            let op = fst::set::OpBuilder::new()
-                .add(left_fst.into_stream())
-                .add(right_fst.into_stream())
-                .r#union();
+            let mut op = fst::set::OpBuilder::new();
+            fsts.iter().for_each(|fst| op.push(fst.into_stream()));
+            let op = op.r#union();
 
             let mut build = fst::SetBuilder::memory();
             build.extend_stream(op.into_stream()).unwrap();
             Some(build.into_inner().unwrap())
         }
         else if key == b"\0headers" {
-            assert_eq!(left, right);
-            Some(left.to_vec())
+            assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
+            Some(values[0].to_vec())
         }
         else if key.starts_with(&[1]) || key.starts_with(&[2]) {
-            let mut left = RoaringBitmap::deserialize_from(left).unwrap();
-            let right = RoaringBitmap::deserialize_from(right).unwrap();
-            left.union_with(&right);
+            let mut first = RoaringBitmap::deserialize_from(values[0].as_slice()).unwrap();
+
+            for value in &values[1..] {
+                let bitmap = RoaringBitmap::deserialize_from(value.as_slice()).unwrap();
+                first.union_with(&bitmap);
+            }
+
             let mut vec = Vec::new();
-            left.serialize_into(&mut vec).unwrap();
+            first.serialize_into(&mut vec).unwrap();
             Some(vec)
         }
         else if key.starts_with(&[3]) {
-            assert_eq!(left, right);
-            Some(left.to_vec())
+            assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
+            Some(values[0].to_vec())
         }
         else {
             panic!("wut? {:?}", key)
