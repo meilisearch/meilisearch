@@ -265,7 +265,7 @@ fn main() -> anyhow::Result<()> {
 
     let index = Index::new(&env)?;
 
-    let mut stores: Vec<_> = opt.files_to_index
+    let stores: Vec<_> = opt.files_to_index
         .into_par_iter()
         .map(|path| {
             let rdr = csv::Reader::from_path(path)?;
@@ -275,20 +275,6 @@ fn main() -> anyhow::Result<()> {
             eprintln!("Total number of documents seen so far is {}", ID_GENERATOR.load(Ordering::Relaxed))
         })
         .collect::<Result<_, _>>()?;
-
-    while stores.len() > 3 {
-        let chunk_size = (stores.len() / rayon::current_num_threads()).max(2);
-        let s = std::mem::take(&mut stores);
-        stores = s.into_par_iter().chunks(chunk_size)
-            .map(|v| {
-                let outfile = tempfile::tempfile()?;
-                let mut out = Writer::new(outfile, None)?;
-                MtblKvStore::from_many(v, |k, v| Ok(out.add(k, v).unwrap()))?;
-                let out = out.into_inner()?;
-                Ok(MtblKvStore(Some(out))) as anyhow::Result<_>
-            })
-            .collect::<Result<_, _>>()?;
-    }
 
     eprintln!("We are writing into LMDB...");
     let mut wtxn = env.write_txn()?;
