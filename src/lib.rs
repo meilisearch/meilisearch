@@ -1,3 +1,6 @@
+mod query;
+
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::time::Instant;
@@ -10,7 +13,8 @@ use heed::{PolyDatabase, Database};
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use once_cell::sync::OnceCell;
 use roaring::RoaringBitmap;
-use slice_group_by::StrGroupBy;
+
+use self::query::{QueryWord, alphanumeric_quoted_tokens};
 
 static LEVDIST0: OnceCell<LevBuilder> = OnceCell::new();
 static LEVDIST1: OnceCell<LevBuilder> = OnceCell::new();
@@ -21,11 +25,6 @@ pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
 pub type SmallVec32 = smallvec::SmallVec<[u8; 32]>;
 pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
 pub type DocumentId = u32;
-
-pub fn alphanumeric_tokens(string: &str) -> impl Iterator<Item = &str> {
-    let is_alphanumeric = |s: &&str| s.chars().next().map_or(false, char::is_alphanumeric);
-    string.linear_group_by_key(|c| c.is_alphanumeric()).filter(is_alphanumeric)
-}
 
 #[derive(Clone)]
 pub struct Index {
@@ -60,17 +59,20 @@ impl Index {
         let lev1 = LEVDIST1.get_or_init(|| LevBuilder::new(1, true));
         let lev2 = LEVDIST2.get_or_init(|| LevBuilder::new(2, true));
 
-        let words: Vec<_> = alphanumeric_tokens(query).collect();
+        let words: Vec<_> = alphanumeric_quoted_tokens(query).collect();
         let ends_with_whitespace = query.chars().last().map_or(false, char::is_whitespace);
         let number_of_words = words.len();
         let dfas = words.into_iter().enumerate().map(|(i, word)| {
-            let word = word.cow_to_lowercase();
+            let (word, quoted) = match word {
+                QueryWord::Free(word) => (word.cow_to_lowercase(), false),
+                QueryWord::Quoted(word) => (Cow::Borrowed(word), true),
+            };
             let is_last = i + 1 == number_of_words;
-            let is_prefix = is_last && !ends_with_whitespace;
+            let is_prefix = is_last && !ends_with_whitespace && !quoted;
             let dfa = match word.len() {
-                0..=4 => if is_prefix { lev0.build_prefix_dfa(&word) } else { lev0.build_dfa(&word) },
-                5..=8 => if is_prefix { lev1.build_prefix_dfa(&word) } else { lev1.build_dfa(&word) },
-                _     => if is_prefix { lev2.build_prefix_dfa(&word) } else { lev2.build_dfa(&word) },
+                0..=4 => if is_prefix { lev0.build_prefix_dfa(&word) } else if quoted { lev0.build_dfa(&word) } else { lev0.build_dfa(&word) },
+                5..=8 => if is_prefix { lev1.build_prefix_dfa(&word) } else if quoted { lev0.build_dfa(&word) } else { lev1.build_dfa(&word) },
+                _     => if is_prefix { lev2.build_prefix_dfa(&word) } else if quoted { lev0.build_dfa(&word) } else { lev2.build_dfa(&word) },
             };
             (word, dfa)
         });

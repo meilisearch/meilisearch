@@ -12,9 +12,9 @@ use heed::types::*;
 use oxidized_mtbl::{Reader, ReaderOptions, Writer, Merger, MergerOptions};
 use rayon::prelude::*;
 use roaring::RoaringBitmap;
+use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 
-use mega_mini_indexer::alphanumeric_tokens;
 use mega_mini_indexer::{FastMap4, SmallVec32, Index, DocumentId};
 
 #[cfg(target_os = "linux")]
@@ -22,6 +22,11 @@ use mega_mini_indexer::{FastMap4, SmallVec32, Index, DocumentId};
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 static ID_GENERATOR: AtomicUsize = AtomicUsize::new(0); // AtomicU32 ?
+
+pub fn simple_alphanumeric_tokens(string: &str) -> impl Iterator<Item = &str> {
+    let is_alphanumeric = |s: &&str| s.chars().next().map_or(false, char::is_alphanumeric);
+    string.linear_group_by_key(|c| c.is_alphanumeric()).filter(is_alphanumeric)
+}
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "mm-indexer", about = "The indexer side of the MMI project.")]
@@ -186,7 +191,7 @@ fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
         let document_id = DocumentId::try_from(document_id).context("Generated id is too big")?;
 
         for (_attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
-            for (_pos, word) in alphanumeric_tokens(&content).enumerate().take(MAX_POSITION) {
+            for (_pos, word) in simple_alphanumeric_tokens(&content).enumerate().take(MAX_POSITION) {
                 if !word.is_empty() && word.len() < 500 { // LMDB limits
                     let word = word.cow_to_lowercase();
                     postings_ids.entry(SmallVec32::from(word.as_bytes()))
