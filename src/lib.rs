@@ -61,14 +61,16 @@ impl Index {
         let lev2 = LEVDIST2.get_or_init(|| LevBuilder::new(2, true));
 
         let words: Vec<_> = alphanumeric_tokens(query).collect();
+        let ends_with_whitespace = query.chars().last().map_or(false, char::is_whitespace);
         let number_of_words = words.len();
         let dfas = words.into_iter().enumerate().map(|(i, word)| {
             let word = word.cow_to_lowercase();
             let is_last = i + 1 == number_of_words;
+            let is_prefix = is_last && !ends_with_whitespace;
             let dfa = match word.len() {
-                0..=4 => if is_last { lev0.build_prefix_dfa(&word) } else { lev0.build_dfa(&word) },
-                5..=8 => if is_last { lev1.build_prefix_dfa(&word) } else { lev1.build_dfa(&word) },
-                _     => if is_last { lev2.build_prefix_dfa(&word) } else { lev2.build_dfa(&word) },
+                0..=4 => if is_prefix { lev0.build_prefix_dfa(&word) } else { lev0.build_dfa(&word) },
+                5..=8 => if is_prefix { lev1.build_prefix_dfa(&word) } else { lev1.build_dfa(&word) },
+                _     => if is_prefix { lev2.build_prefix_dfa(&word) } else { lev2.build_dfa(&word) },
             };
             (word, dfa)
         });
