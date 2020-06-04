@@ -71,8 +71,6 @@ features = [
 optional = true
 
 [dev-dependencies]
-http-service = "0.4.0"
-http-service-mock = "0.4.0"
 tempdir = "0.3.7"
 tokio = { version = "0.2.18", features = ["macros", "time"] }
 
