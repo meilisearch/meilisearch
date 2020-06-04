@@ -24,7 +24,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 static ID_GENERATOR: AtomicUsize = AtomicUsize::new(0); // AtomicU32 ?
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "mm-indexer", about = "The server side of the daugt project.")]
+#[structopt(name = "mm-indexer", about = "The indexer side of the MMI project.")]
 struct Opt {
     /// The database path where the database is located.
     /// It is created if it doesn't already exist.
