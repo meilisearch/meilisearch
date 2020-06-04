@@ -18,7 +18,7 @@ use meilisearch_core::ProcessedUpdateResult;
 
 pub use option::Opt;
 pub use self::data::Data;
-use self::error::{json_error_handler, ResponseError};
+use self::error::{payload_error_handler, ResponseError};
 
 pub fn create_app(
     data: &Data,
@@ -38,7 +38,11 @@ pub fn create_app(
             web::JsonConfig::default()
                 .limit(data.http_payload_size_limit)
                 .content_type(|_mime| true) // Accept all mime types
-                .error_handler(|err, _req| json_error_handler(err).into()),
+                .error_handler(|err, _req| payload_error_handler(err).into()),
+        )
+        .app_data(
+            web::QueryConfig::default()
+            .error_handler(|err, _req| payload_error_handler(err).into())
         )
         .service(routes::load_html)
         .service(routes::load_css)
