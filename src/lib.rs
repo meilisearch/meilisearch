@@ -80,10 +80,11 @@ impl Index {
             let before = Instant::now();
 
             let mut union_result = RoaringBitmap::default();
-            if word.len() <= 4 {
+            let count = if word.len() <= 4 {
                 if let Some(ids) = self.prefix_postings_ids.get(rtxn, &word[..word.len().min(5)])? {
                     union_result = RoaringBitmap::deserialize_from(ids)?;
                 }
+                1
             } else {
                 let mut count = 0;
                 let mut stream = fst.search(dfa).into_stream();
@@ -95,21 +96,21 @@ impl Index {
                         union_result.union_with(&right);
                     }
                 }
-                eprint!("with {:?} words ", count);
-            }
-            eprintln!("union for {:?} took {:.02?}", word, before.elapsed());
+                count
+            };
+            eprintln!("with {:?} words union for {:?} gives {:?} took {:.02?}",
+                count, word, union_result.len(), before.elapsed());
 
-            intersect_result = match intersect_result.take() {
-                Some(mut left) => {
+            match &mut intersect_result {
+                Some(left) => {
                     let before = Instant::now();
                     let left_len = left.len();
                     left.intersect_with(&union_result);
                     eprintln!("intersect between {:?} and {:?} gives {:?} took {:.02?}",
                         left_len, union_result.len(), left.len(), before.elapsed());
-                    Some(left)
                 },
-                None => Some(union_result),
-            };
+                None => intersect_result = Some(union_result),
+            }
         }
 
         eprintln!("{} candidates", intersect_result.as_ref().map_or(0, |r| r.len()));
