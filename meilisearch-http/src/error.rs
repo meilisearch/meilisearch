@@ -46,7 +46,6 @@ pub enum Error {
     InvalidToken(String),
     Maintenance,
     MissingAuthorizationHeader,
-    MissingHeader(String),
     NotFound(String),
     OpenIndex(String),
     RetrieveDocument(u32, String),
@@ -71,7 +70,6 @@ impl ErrorCode for Error {
             InvalidToken(_) => Code::InvalidToken,
             Maintenance => Code::Maintenance,
             MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
-            MissingHeader(_) => Code::MissingHeader,
             NotFound(_) => Code::NotFound,
             OpenIndex(_) => Code::OpenIndex,
             RetrieveDocument(_, _) => Code::RetrieveDocument,
@@ -153,10 +151,6 @@ impl Error {
         Error::DocumentNotFound(err.to_string())
     }
 
-    pub fn missing_header(err: impl fmt::Display) -> Error {
-        Error::MissingHeader(err.to_string())
-    }
-
     pub fn bad_parameter(param: impl fmt::Display, err: impl fmt::Display) -> Error {
         Error::BadParameter(param.to_string(), err.to_string())
     }
@@ -199,7 +193,6 @@ impl fmt::Display for Error {
             Self::InvalidToken(err) => write!(f, "Invalid API key: {}", err),
             Self::Maintenance => f.write_str("Server is in maintenance, please try again later"),
             Self::MissingAuthorizationHeader => f.write_str("You must have an authorization token"),
-            Self::MissingHeader(header) => write!(f, "Header {} is missing", header),
             Self::NotFound(err) => write!(f, "{} not found", err),
             Self::OpenIndex(err) => write!(f, "Impossible to open index; {}", err),
             Self::RetrieveDocument(id, err) => write!(f, "impossible to retrieve the document with id: {}; {}", id, err),
