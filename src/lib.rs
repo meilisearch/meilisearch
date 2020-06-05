@@ -1,4 +1,4 @@
-mod query;
+mod query_tokens;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -14,7 +14,7 @@ use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use once_cell::sync::OnceCell;
 use roaring::RoaringBitmap;
 
-use self::query::{QueryWord, alphanumeric_quoted_tokens};
+use self::query_tokens::{QueryTokens, QueryToken};
 
 static LEVDIST0: OnceCell<LevBuilder> = OnceCell::new();
 static LEVDIST1: OnceCell<LevBuilder> = OnceCell::new();
@@ -59,13 +59,13 @@ impl Index {
         let lev1 = LEVDIST1.get_or_init(|| LevBuilder::new(1, true));
         let lev2 = LEVDIST2.get_or_init(|| LevBuilder::new(2, true));
 
-        let words: Vec<_> = alphanumeric_quoted_tokens(query).collect();
+        let words: Vec<_> = QueryTokens::new(query).collect();
         let ends_with_whitespace = query.chars().last().map_or(false, char::is_whitespace);
         let number_of_words = words.len();
         let dfas = words.into_iter().enumerate().map(|(i, word)| {
             let (word, quoted) = match word {
-                QueryWord::Free(word) => (word.cow_to_lowercase(), false),
-                QueryWord::Quoted(word) => (Cow::Borrowed(word), true),
+                QueryToken::Free(word) => (word.cow_to_lowercase(), false),
+                QueryToken::Quoted(word) => (Cow::Borrowed(word), true),
             };
             let is_last = i + 1 == number_of_words;
             let is_prefix = is_last && !ends_with_whitespace && !quoted;
