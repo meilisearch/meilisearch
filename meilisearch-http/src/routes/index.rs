@@ -311,9 +311,11 @@ async fn delete_index(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    data.db.delete_index(&path.index_uid)?;
-
-    Ok(HttpResponse::NoContent().finish())
+    if data.db.delete_index(&path.index_uid)? {
+        Ok(HttpResponse::NoContent().finish())
+    } else {
+        Err(Error::index_not_found(&path.index_uid).into())
+    }
 }
 
 #[derive(Deserialize)]
