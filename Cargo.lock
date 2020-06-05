@@ -790,6 +790,7 @@ dependencies = [
  "fst",
  "fxhash",
  "heed",
+ "itertools",
  "jemallocator",
  "levenshtein_automata",
  "memmap",

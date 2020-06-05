@@ -46,6 +46,7 @@ struct Opt {
 struct Indexed {
     fst: fst::Set<Vec<u8>>,
     postings_attrs: FastMap4<SmallVec32, RoaringBitmap>,
+    prefix_postings_attrs: FastMap4<SmallVec32, RoaringBitmap>,
     postings_ids: FastMap4<SmallVec32, FastMap4<AttributeId, RoaringBitmap>>,
     prefix_postings_ids: FastMap4<SmallVec32, FastMap4<AttributeId, RoaringBitmap>>,
     headers: Vec<u8>,
@@ -86,8 +87,28 @@ impl MtblKvStore {
             }
         }
 
-        // We must write the postings ids
+        // We must write the prefix postings attrs
         key[0] = 2;
+        // We must write the postings ids in order for mtbl therefore
+        // we iterate over the fst to read the words in order
+        let mut stream = indexed.fst.stream();
+        while let Some(word) = stream.next() {
+            for i in 1..=word.len() {
+                let prefix = &word[..i];
+                if let Some(attrs) = indexed.prefix_postings_attrs.remove(prefix) {
+                    key.truncate(1);
+                    key.extend_from_slice(prefix);
+                    // We serialize the attrs ids into a buffer
+                    buffer.clear();
+                    attrs.serialize_into(&mut buffer)?;
+                    // that we write under the generated key into MTBL
+                    out.add(&key, &buffer).unwrap();
+                }
+            }
+        }
+
+        // We must write the postings ids
+        key[0] = 3;
         // We must write the postings ids in order for mtbl therefore
         // we iterate over the fst to read the words in order
         let mut stream = indexed.fst.stream();
@@ -112,30 +133,33 @@ impl MtblKvStore {
         }
 
         // We must write the prefix postings ids
-        key[0] = 3;
+        key[0] = 4;
         let mut stream = indexed.fst.stream();
-        while let Some(prefix) = stream.next() {
-            key.truncate(1);
-            key.extend_from_slice(prefix);
-            if let Some(attrs) = indexed.prefix_postings_ids.remove(prefix) {
-                let attrs: BTreeMap<_, _> = attrs.into_iter().collect();
-                // We iterate over all the attributes containing the documents ids
-                for (attr, ids) in attrs {
-                    // we postfix the word by the attribute id
-                    key.extend_from_slice(&attr.to_be_bytes());
-                    // We serialize the document ids into a buffer
-                    buffer.clear();
-                    ids.serialize_into(&mut buffer)?;
-                    // that we write under the generated key into MTBL
-                    out.add(&key, &buffer).unwrap();
-                    // And cleanup the attribute id afterward (u32 = 4 * u8)
-                    key.truncate(key.len() - 4);
+        while let Some(word) = stream.next() {
+            for i in 1..=word.len() {
+                let prefix = &word[..i];
+                key.truncate(1);
+                key.extend_from_slice(prefix);
+                if let Some(attrs) = indexed.prefix_postings_ids.remove(prefix) {
+                    let attrs: BTreeMap<_, _> = attrs.into_iter().collect();
+                    // We iterate over all the attributes containing the documents ids
+                    for (attr, ids) in attrs {
+                        // we postfix the word by the attribute id
+                        key.extend_from_slice(&attr.to_be_bytes());
+                        // We serialize the document ids into a buffer
+                        buffer.clear();
+                        ids.serialize_into(&mut buffer)?;
+                        // that we write under the generated key into MTBL
+                        out.add(&key, &buffer).unwrap();
+                        // And cleanup the attribute id afterward (u32 = 4 * u8)
+                        key.truncate(key.len() - 4);
+                    }
                 }
             }
         }
 
         // postings ids keys are all prefixed by a '4'
-        key[0] = 4;
+        key[0] = 5;
         indexed.documents.sort_unstable();
         for (id, content) in indexed.documents {
             key.truncate(1);
@@ -167,7 +191,7 @@ impl MtblKvStore {
             Some(values[0].to_vec())
         }
         // We either merge postings attrs, prefix postings or postings ids.
-        else if key.starts_with(&[1]) || key.starts_with(&[2]) || key.starts_with(&[3]) {
+        else if key[0] == 1 || key[0] == 2 || key[0] == 3 || key[0] == 4 {
             let mut first = RoaringBitmap::deserialize_from(values[0].as_slice()).unwrap();
 
             for value in &values[1..] {
@@ -179,7 +203,7 @@ impl MtblKvStore {
             first.serialize_into(&mut vec).unwrap();
             Some(vec)
         }
-        else if key.starts_with(&[4]) {
+        else if key[0] == 5 {
             assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
             Some(values[0].to_vec())
         }
@@ -219,6 +243,7 @@ fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
 
     let mut document = csv::StringRecord::new();
     let mut postings_attrs = FastMap4::default();
+    let mut prefix_postings_attrs = FastMap4::default();
     let mut postings_ids = FastMap4::default();
     let mut prefix_postings_ids = FastMap4::default();
     let mut documents = Vec::new();
@@ -234,21 +259,28 @@ fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
         let document_id = DocumentId::try_from(document_id).context("Generated id is too big")?;
 
         for (attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
-            for (_pos, word) in simple_alphanumeric_tokens(&content).enumerate().take(MAX_POSITION) {
+            for (pos, word) in simple_alphanumeric_tokens(&content).enumerate().take(MAX_POSITION) {
                 if !word.is_empty() && word.len() < 500 { // LMDB limits
                     let word = word.cow_to_lowercase();
+                    let position = (attr * 1000 + pos) as u32;
 
+                    // We save the positions where this word has been seen.
                     postings_attrs.entry(SmallVec32::from(word.as_bytes()))
-                        .or_insert_with(RoaringBitmap::new).insert(attr as u32); // attributes ids
+                        .or_insert_with(RoaringBitmap::new).insert(position);
 
+                    // We save the documents ids under the position and word we have seen it.
                     postings_ids.entry(SmallVec32::from(word.as_bytes()))
-                        .or_insert_with(FastMap4::default).entry(attr as u32) // attributes
+                        .or_insert_with(FastMap4::default).entry(position) // positions
                         .or_insert_with(RoaringBitmap::new).insert(document_id); // document ids
 
+                    // We save the documents ids under the position and prefix of the word we have seen it.
                     if let Some(prefix) = word.as_bytes().get(0..word.len().min(5)) {
-                        for i in 0..=prefix.len() {
+                        for i in 1..=prefix.len() {
+                            prefix_postings_attrs.entry(SmallVec32::from(&prefix[..i]))
+                                .or_insert_with(RoaringBitmap::new).insert(position);
+
                             prefix_postings_ids.entry(SmallVec32::from(&prefix[..i]))
-                                .or_insert_with(FastMap4::default).entry(attr as u32) // attributes
+                                .or_insert_with(FastMap4::default).entry(position) // positions
                                 .or_insert_with(RoaringBitmap::new).insert(document_id); // document ids
                         }
                     }
@@ -271,7 +303,15 @@ fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
 
     let new_words_fst = fst::Set::from_iter(new_words.iter().map(SmallVec32::as_ref))?;
 
-    let indexed = Indexed { fst: new_words_fst, headers, postings_attrs, postings_ids, prefix_postings_ids, documents };
+    let indexed = Indexed {
+        fst: new_words_fst,
+        headers,
+        postings_attrs,
+        prefix_postings_attrs,
+        postings_ids,
+        prefix_postings_ids,
+        documents,
+    };
     eprintln!("{:?}: Indexed created!", rayon::current_thread_index());
 
     MtblKvStore::from_indexed(indexed)
@@ -293,16 +333,21 @@ fn writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) -> anyh
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
     else if key.starts_with(&[2]) {
+        // Write the prefix postings lists
+        index.prefix_postings_attrs.as_polymorph()
+            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
+    }
+    else if key.starts_with(&[3]) {
         // Write the postings lists
         index.postings_ids.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
-    else if key.starts_with(&[3]) {
+    else if key.starts_with(&[4]) {
         // Write the prefix postings lists
         index.prefix_postings_ids.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
-    else if key.starts_with(&[4]) {
+    else if key.starts_with(&[5]) {
         // Write the documents
         index.documents.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
