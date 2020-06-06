@@ -344,7 +344,7 @@ async fn get_update_status(
     match status {
         Some(status) => Ok(HttpResponse::Ok().json(status)),
         None => Err(Error::NotFound(format!(
-            "Update {} not found",
+            "Update {}",
             path.update_id
         )).into()),
     }
