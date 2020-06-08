@@ -1,9 +1,9 @@
+mod best_proximity;
 mod query_tokens;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
-use std::time::Instant;
 
 use cow_utils::CowUtils;
 use fst::{IntoStreamer, Streamer};
@@ -15,6 +15,7 @@ use once_cell::sync::Lazy;
 use roaring::RoaringBitmap;
 
 use self::query_tokens::{QueryTokens, QueryToken};
+use self::best_proximity::BestProximity;
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -88,10 +89,12 @@ impl Index {
         });
 
         let mut words_positions = Vec::new();
+        let mut positions = Vec::new();
+
         for (word, is_prefix, dfa) in dfas {
             let mut count = 0;
             let mut union_positions = RoaringBitmap::default();
-            if word.len() <= 4 && is_prefix {
+            if false && word.len() <= 4 && is_prefix {
                 if let Some(ids) = self.prefix_postings_attrs.get(rtxn, word.as_bytes())? {
                     let right = RoaringBitmap::deserialize_from(ids)?;
                     union_positions.union_with(&right);
@@ -110,23 +113,22 @@ impl Index {
             }
 
             eprintln!("{} words for {:?} we have found positions {:?}", count, word, union_positions);
-            words_positions.push((word, is_prefix, dfa, union_positions));
+            words_positions.push((word, is_prefix, dfa));
+            positions.push(union_positions.iter().collect());
         }
 
-        use itertools::EitherOrBoth;
-        let (a, b) = (&words_positions[0].3, &words_positions[1].3);
-        let positions: Vec<_> = itertools::merge_join_by(a, b, |a, b| (a + 1).cmp(b)).flat_map(EitherOrBoth::both).collect();
-
-        if positions.is_empty() { return Ok(Vec::new()); }
+        // let positions = BestProximity::new(positions).next().unwrap_or_default();
+        let _positions: Vec<Vec<u32>> = positions;
+        let positions = vec![0u32];
+        eprintln!("best proximity {:?}", positions);
 
         let mut intersect_docids: Option<RoaringBitmap> = None;
-        for (i, (word, is_prefix, dfa, _)) in words_positions.into_iter().take(2).enumerate() {
+        for ((word, is_prefix, dfa), pos) in words_positions.into_iter().zip(positions) {
             let mut count = 0;
             let mut union_docids = RoaringBitmap::default();
 
-            if word.len() <= 4 && is_prefix {
+            if false && word.len() <= 4 && is_prefix {
                 let mut key = word.as_bytes()[..word.len().min(5)].to_vec();
-                let pos = if i == 0 { positions[0].0 } else { positions[0].1 };
                 key.extend_from_slice(&pos.to_be_bytes());
                 if let Some(ids) = self.prefix_postings_ids.get(rtxn, &key)? {
                     let right = RoaringBitmap::deserialize_from(ids)?;
@@ -138,7 +140,6 @@ impl Index {
                 while let Some(word) = stream.next() {
                     let word = std::str::from_utf8(word)?;
                     let mut key = word.as_bytes().to_vec();
-                    let pos = if i == 0 { positions[0].0 } else { positions[0].1 };
                     key.extend_from_slice(&pos.to_be_bytes());
                     if let Some(attrs) = self.postings_ids.get(rtxn, &key)? {
                         let right = RoaringBitmap::deserialize_from(attrs)?;
