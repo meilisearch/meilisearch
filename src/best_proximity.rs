@@ -4,6 +4,21 @@ const ONE_ATTRIBUTE: u32 = 1000;
 const MAX_INDEX: u32 = ONE_ATTRIBUTE - 1;
 const MAX_DISTANCE: u32 = 8;
 
+fn index_proximity(lhs: u32, rhs: u32) -> u32 {
+    if lhs < rhs {
+        cmp::min(rhs - lhs, MAX_DISTANCE)
+    } else {
+        cmp::min(lhs - rhs, MAX_DISTANCE) + 1
+    }
+}
+
+fn positions_proximity(lhs: u32, rhs: u32) -> u32 {
+    let (lhs_attr, lhs_index) = extract_position(lhs);
+    let (rhs_attr, rhs_index) = extract_position(rhs);
+    if lhs_attr != rhs_attr { MAX_DISTANCE }
+    else { index_proximity(lhs_index, rhs_index) }
+}
+
 // Returns the attribute and index parts.
 fn extract_position(position: u32) -> (u32, u32) {
     (position / ONE_ATTRIBUTE, position % ONE_ATTRIBUTE)
@@ -15,6 +30,7 @@ fn construct_position(attr: u32, index: u32) -> u32 {
 }
 
 // TODO we should use an sdset::Set for `next_positions`.
+// TODO We must not recursively search for the best proximity but return None if proximity is not found.
 // Returns the positions to focus that will give the best possible proximity.
 fn best_proximity_for(current_position: u32, proximity: u32, next_positions: &[u32]) -> Option<(u32, Vec<u32>)> {
     let (current_attr, _) = extract_position(current_position);
@@ -108,42 +124,72 @@ fn best_proximity_for(current_position: u32, proximity: u32, next_positions: &[u
 
 pub struct BestProximity {
     positions: Vec<Vec<u32>>,
-    current_proximity: Option<(u32, Vec<(u32, usize)>)>, // where we are
+    best_proximities: Option<Vec<u32>>,
 }
 
 impl BestProximity {
     pub fn new(positions: Vec<Vec<u32>>) -> BestProximity {
-        BestProximity { positions, current_proximity: None }
+        BestProximity { positions, best_proximities: None }
     }
 }
 
 impl Iterator for BestProximity {
-    type Item = (u32, Vec<u32>);
+    type Item = (u32, Vec<Vec<u32>>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let output = Vec::new();
-        let best_proximity = 0;
+        match &mut self.best_proximities {
+            Some(best_proximities) => {
+                let expected_proximity = best_proximities.iter().sum::<u32>() + 1;
+                dbg!(expected_proximity);
 
-        for (i, positions) in self.positions.iter().enumerate() {
-            if let Some(next_positions) = self.positions.get(i + 1) {
-                for x in positions {
-                    let p = next_positions.binary_search(&x);
-                    let y = next_positions.get(p.unwrap_or_else(|p| p));
-                    eprintln!("{:?} gives {:?} ({:?})", x, p, y);
+                for (i, (win, proximity)) in self.positions.windows(2).zip(best_proximities.iter()).enumerate() {
+                    let (posa, posb) = (&win[0], &win[1]);
+                    dbg!(proximity, posa, posb);
+                    let expected_proximity = proximity + 1;
+                    let best_proximity = posa.iter().filter_map(|pa| {
+                        best_proximity_for(*pa, expected_proximity, posb).map(|res| (*pa, res))
+                    }).min();
+                    dbg!(best_proximity);
+                }
+
+                None
+            },
+            None => {
+                let expected_proximity = 0;
+                let mut best_results = Vec::new();
+
+                for win in self.positions.windows(2) {
+                    let (posa, posb) = (&win[0], &win[1]);
+                    match best_results.last() {
+                        Some((start, _)) => {
+                            // We know from where we must continue searching for the best path.
+                            let (best_proximity, positions) = dbg!(best_proximity_for(*start, expected_proximity, posb).unwrap());
+                            best_results.push((positions[0], best_proximity));
+                        },
+                        None => {
+                            // This is the first loop, we need to find the best start of the path.
+                            let best_proximity = posa.iter().filter_map(|pa| {
+                                best_proximity_for(*pa, expected_proximity, posb).map(|res| (*pa, res))
+                            }).min();
+                            let (pa, (best_proximity, positions)) = best_proximity.unwrap();
+                            // We must save the best start of path we found.
+                            best_results.push((pa, 0));
+                            // And the next associated position along with the proximity between those.
+                            best_results.push((positions[0], best_proximity));
+                        }
+                    }
+                }
+
+                if best_results.is_empty() {
+                    None
+                } else {
+                    let proximity = best_results.windows(2).map(|ps| positions_proximity(ps[0].0, ps[1].0)).sum::<u32>();
+                    self.best_proximities = Some(best_results.iter().skip(1).map(|(_, p)| *p).collect());
+                    let best_positions = best_results.into_iter().map(|(x, _)| vec![x]).collect();
+                    Some((proximity, best_positions))
                 }
             }
         }
-
-        // match &mut self.current_proximity {
-        //     Some((_prox, _pos)) => {
-        //         // ...
-        //     },
-        //     None => {
-        //         // ...
-        //     },
-        // }
-
-        Some((best_proximity, output))
     }
 }
 
@@ -160,15 +206,16 @@ mod tests {
         ];
         let mut iter = BestProximity::new(positions);
 
-        assert_eq!(iter.next(), Some((1+2, vec![0, 1, 3]))); // 3
-        assert_eq!(iter.next(), Some((2+2, vec![2, 1, 3]))); // 4
-        assert_eq!(iter.next(), Some((3+2, vec![3, 1, 3]))); // 5
-        assert_eq!(iter.next(), Some((1+5, vec![0, 1, 6]))); // 6
-        assert_eq!(iter.next(), Some((4+2, vec![4, 1, 3]))); // 6
-        assert_eq!(iter.next(), Some((2+5, vec![2, 1, 6]))); // 7
-        assert_eq!(iter.next(), Some((3+5, vec![3, 1, 6]))); // 8
-        assert_eq!(iter.next(), Some((4+5, vec![4, 1, 6]))); // 9
-        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), Some((1+2, vec![vec![0], vec![1], vec![3]]))); // 3
+        eprintln!("------------------");
+        assert_eq!(iter.next(), Some((2+2, vec![vec![2], vec![1], vec![3]]))); // 4
+        // assert_eq!(iter.next(), Some((3+2, vec![3, 1, 3]))); // 5
+        // assert_eq!(iter.next(), Some((1+5, vec![0, 1, 6]))); // 6
+        // assert_eq!(iter.next(), Some((4+2, vec![4, 1, 3]))); // 6
+        // assert_eq!(iter.next(), Some((2+5, vec![2, 1, 6]))); // 7
+        // assert_eq!(iter.next(), Some((3+5, vec![3, 1, 6]))); // 8
+        // assert_eq!(iter.next(), Some((4+5, vec![4, 1, 6]))); // 9
+        // assert_eq!(iter.next(), None);
     }
 
     #[test]
