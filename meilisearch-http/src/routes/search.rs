@@ -87,10 +87,8 @@ async fn search_with_url_query(
     }
 
     if let Some(ref facet_filters) = params.facet_filters {
-        let attrs = index.main.attributes_for_faceting(&reader)?;
-        if let Some(attrs) = attrs {
-            search_builder.add_facet_filters(FacetFilter::from_str(facet_filters, &schema, &attrs)?);
-        }
+        let attrs = index.main.attributes_for_faceting(&reader)?.unwrap_or_default();
+        search_builder.add_facet_filters(FacetFilter::from_str(facet_filters, &schema, &attrs)?);
     }
 
     if let Some(facets) = &params.facets_distribution {

@@ -35,6 +35,9 @@ impl FacetFilter {
         schema: &Schema,
         attributes_for_faceting: &[FieldId],
     ) -> MResult<FacetFilter> {
+        if attributes_for_faceting.is_empty() {
+            return Err(FacetError::NoAttributesForFaceting.into());
+        }
         let parsed = serde_json::from_str::<Value>(s).map_err(|e| FacetError::ParsingError(e.to_string()))?;
         let mut filter = Vec::new();
         match parsed {
