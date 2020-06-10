@@ -1257,8 +1257,9 @@ async fn test_faceted_search_invalid() {
 
     //no faceted attributes set
     let query = "q=a&facetFilters=%5B%22color%3Ablue%22,%20%22tags%3Abug%22%20%5D";
-    let (_response, status_code) = server.search(query).await;
-    assert_ne!(status_code, 202);
+    let (response, status_code) = server.search(query).await;
+    assert_eq!(status_code, 400);
+    assert_eq!(response["errorCode"], "invalid_facet"); 
 
     let body = json!({
         "attributesForFaceting": ["color", "tags"]
@@ -1268,29 +1269,35 @@ async fn test_faceted_search_invalid() {
     // []
     let query = "q=a&facetFilters=%5B%5D";
     let (_response, status_code) = server.search(query).await;
-    assert_ne!(status_code, 202);
+    assert_eq!(status_code, 400);
+    assert_eq!(response["errorCode"], "invalid_facet"); 
     // [[]]
     let query = "q=a&facetFilters=%5B%5B%5D";
     let (_response, status_code) = server.search(query).await;
-    assert_ne!(status_code, 202);
+    assert_eq!(status_code, 400);
+    assert_eq!(response["errorCode"], "invalid_facet"); 
     // ["color:green", []]
     let query = "q=a&facetFilters=%5B%22color%3Agreen%22,%20%5B%5D";
     let (_response, status_code) = server.search(query).await;
-    assert_ne!(status_code, 202);
+    assert_eq!(status_code, 400);
+    assert_eq!(response["errorCode"], "invalid_facet"); 
 
     // too much depth
     // [[[]]]
     let query = "q=a&facetFilters=%5B%5B%5B%5D%5D%5D";
     let (_response, status_code) = server.search(query).await;
-    assert_ne!(status_code, 202);
+    assert_eq!(status_code, 400);
+    assert_eq!(response["errorCode"], "invalid_facet"); 
     // [["color:green", ["color:blue"]]]
     let query = "q=a&facetFilters=%5B%5B%22color%3Agreen%22,%20%5B%22color%3Ablue%22%5D%5D%5D";
     let (_response, status_code) = server.search(query).await;
-    assert_ne!(status_code, 202);
+    assert_eq!(status_code, 400);
+    assert_eq!(response["errorCode"], "invalid_facet"); 
     // "color:green"
     let query = "q=a&facetFilters=%22color%3Agreen%22";
     let (_response, status_code) = server.search(query).await;
-    assert_ne!(status_code, 202);
+    assert_eq!(status_code, 400);
+    assert_eq!(response["errorCode"], "invalid_facet"); 
 }
 
 #[actix_rt::test]
