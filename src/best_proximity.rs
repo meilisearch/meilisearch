@@ -1,4 +1,6 @@
 use std::cmp;
+use std::time::Instant;
+
 use pathfinding::directed::dijkstra::dijkstra;
 
 const ONE_ATTRIBUTE: u32 = 1000;
@@ -95,6 +97,8 @@ impl Iterator for BestProximity {
     fn next(&mut self) -> Option<Self::Item> {
         let mut output: Option<(u32, Vec<Vec<u32>>)> = None;
 
+        let before = Instant::now();
+
         loop {
             let result = dijkstra(
                 &Path::new(&self.positions)?,
@@ -127,6 +131,8 @@ impl Iterator for BestProximity {
                 None => break,
             }
         }
+
+        eprintln!("BestProximity::next() took {:.02?}", before.elapsed());
 
         if let Some((proximity, _)) = output.as_ref() {
             self.best_proximity = proximity + 1;

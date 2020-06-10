@@ -4,6 +4,7 @@ mod query_tokens;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use std::time::Instant;
 
 use cow_utils::CowUtils;
 use fst::{IntoStreamer, Streamer};
@@ -90,6 +91,7 @@ impl Index {
 
         let mut words_positions = Vec::new();
         let mut positions = Vec::new();
+        let before = Instant::now();
 
         for (word, is_prefix, dfa) in dfas {
             let mut count = 0;
@@ -117,16 +119,23 @@ impl Index {
             positions.push(union_positions.iter().collect());
         }
 
+        eprintln!("Retrieving words positions took {:.02?}", before.elapsed());
+
         let mut documents = Vec::new();
 
-        for (_proximity, positions) in BestProximity::new(positions) {
+        'outer: for (proximity, positions) in BestProximity::new(positions) {
+            let same_prox_before = Instant::now();
             let mut same_proximity_union = RoaringBitmap::default();
 
             for positions in positions {
+                let before = Instant::now();
+
                 let mut intersect_docids: Option<RoaringBitmap> = None;
-                for ((word, is_prefix, dfa), pos) in words_positions.iter().zip(positions) {
+                for ((word, is_prefix, dfa), pos) in words_positions.iter().zip(positions.clone()) {
                     let mut count = 0;
                     let mut union_docids = RoaringBitmap::default();
+
+                    let before = Instant::now();
 
                     // TODO re-enable the prefixes system
                     if false && word.len() <= 4 && *is_prefix {
@@ -151,24 +160,33 @@ impl Index {
                         }
                     }
 
-                    let _ = count;
+                    let before_intersect = Instant::now();
 
                     match &mut intersect_docids {
                         Some(left) => left.intersect_with(&union_docids),
                         None => intersect_docids = Some(union_docids),
                     }
+
+                    eprintln!("retrieving {} word took {:.02?} and took {:.02?} to intersect",
+                        count, before.elapsed(), before_intersect.elapsed());
                 }
+
+                eprintln!("for proximity {:?} {:?} we took {:.02?} to find {} documents",
+                    proximity, positions, before.elapsed(),
+                    intersect_docids.as_ref().map_or(0, |rb| rb.len()));
 
                 if let Some(intersect_docids) = intersect_docids {
                     same_proximity_union.union_with(&intersect_docids);
                 }
             }
 
+            eprintln!("proximity {} took a total of {:.02?}", proximity, same_prox_before.elapsed());
+
             documents.push(same_proximity_union);
 
             // We found enough documents we can stop here
             if documents.iter().map(RoaringBitmap::len).sum::<u64>() >= 20 {
-                break
+                break 'outer;
             }
         }
 
