@@ -2,11 +2,10 @@ use std::cmp;
 use pathfinding::directed::dijkstra::dijkstra;
 
 const ONE_ATTRIBUTE: u32 = 1000;
-const MAX_INDEX: u32 = ONE_ATTRIBUTE - 1;
 const MAX_DISTANCE: u32 = 8;
 
 fn index_proximity(lhs: u32, rhs: u32) -> u32 {
-    if lhs < rhs {
+    if lhs <= rhs {
         cmp::min(rhs - lhs, MAX_DISTANCE)
     } else {
         cmp::min(lhs - rhs, MAX_DISTANCE) + 1
@@ -25,11 +24,6 @@ fn extract_position(position: u32) -> (u32, u32) {
     (position / ONE_ATTRIBUTE, position % ONE_ATTRIBUTE)
 }
 
-// Returns a position from the two parts of it.
-fn construct_position(attr: u32, index: u32) -> u32 {
-    attr * ONE_ATTRIBUTE + index
-}
-
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 struct Path(Vec<u32>);
 
@@ -45,11 +39,13 @@ impl Path {
 
         // If we can grow or shift the path
         if self.0.len() < positions.len() {
-            let mut grown_path = self.0.clone();
-            grown_path.push(positions[self.0.len()][0]);
-            let path = Path(grown_path);
-            let proximity = path.proximity();
-            successors.push((path, proximity));
+            for next_pos in &positions[self.0.len()] {
+                let mut grown_path = self.0.clone();
+                grown_path.push(*next_pos);
+                let path = Path(grown_path);
+                let proximity = path.proximity();
+                successors.push((path, proximity));
+            }
         }
 
         // We retrieve the tail of the current path and try to find
@@ -157,19 +153,37 @@ mod tests {
         let mut iter = BestProximity::new(positions);
 
         assert_eq!(iter.next(), Some((1+2, vec![vec![0, 1, 3]]))); // 3
-        eprintln!("------------------");
         assert_eq!(iter.next(), Some((2+2, vec![vec![2, 1, 3]]))); // 4
-        eprintln!("------------------");
         assert_eq!(iter.next(), Some((3+2, vec![vec![3, 1, 3]]))); // 5
-        eprintln!("------------------");
         assert_eq!(iter.next(), Some((1+5, vec![vec![0, 1, 6], vec![4, 1, 3]]))); // 6
-        eprintln!("------------------");
         assert_eq!(iter.next(), Some((2+5, vec![vec![2, 1, 6]]))); // 7
-        eprintln!("------------------");
         assert_eq!(iter.next(), Some((3+5, vec![vec![3, 1, 6]]))); // 8
-        eprintln!("------------------");
         assert_eq!(iter.next(), Some((4+5, vec![vec![4, 1, 6]]))); // 9
-        eprintln!("------------------");
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn different_attributes() {
+        let positions = vec![
+            vec![0,    2,       1000, 1001, 2000      ],
+            vec![   1,          1000,       2001      ],
+            vec![         3, 6,             2002, 3000],
+        ];
+        let mut iter = BestProximity::new(positions);
+
+        assert_eq!(iter.next(), Some((1+1, vec![vec![2000, 2001, 2002]]))); // 2
+        assert_eq!(iter.next(), Some((1+2, vec![vec![0, 1, 3]]))); // 3
+        assert_eq!(iter.next(), Some((2+2, vec![vec![2, 1, 3]]))); // 4
+        assert_eq!(iter.next(), Some((1+5, vec![vec![0, 1, 6]]))); // 6
+        // We ignore others here...
+    }
+
+    #[test]
+    fn easy_proximities() {
+        fn slice_proximity(positions: &[u32]) -> u32 {
+            positions.windows(2).map(|ps| positions_proximity(ps[0], ps[1])).sum::<u32>()
+        }
+
+        assert_eq!(slice_proximity(&[1000, 1000, 2002]), 8);
     }
 }
