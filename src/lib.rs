@@ -121,6 +121,17 @@ impl Index {
 
         eprintln!("Retrieving words positions took {:.02?}", before.elapsed());
 
+        // TODO re-enable the prefixes system
+        let mut words = Vec::new();
+        for (_word, _is_prefix, dfa) in words_positions {
+            let mut stream = fst.search(dfa).into_stream();
+            let mut derived_words = Vec::new();
+            while let Some(word) = stream.next() {
+                derived_words.push(word.to_vec());
+            }
+            words.push(derived_words);
+        }
+
         let mut documents = Vec::new();
 
         'outer: for (proximity, positions) in BestProximity::new(positions) {
@@ -131,32 +142,20 @@ impl Index {
                 let before = Instant::now();
 
                 let mut intersect_docids: Option<RoaringBitmap> = None;
-                for ((word, is_prefix, dfa), pos) in words_positions.iter().zip(positions.clone()) {
+                for (derived_words, pos) in words.iter().zip(positions.clone()) {
                     let mut count = 0;
                     let mut union_docids = RoaringBitmap::default();
 
                     let before = Instant::now();
 
                     // TODO re-enable the prefixes system
-                    if false && word.len() <= 4 && *is_prefix {
-                        let mut key = word.as_bytes()[..word.len().min(5)].to_vec();
+                    for word in derived_words.iter() {
+                        let mut key = word.clone();
                         key.extend_from_slice(&pos.to_be_bytes());
-                        if let Some(ids) = self.prefix_postings_ids.get(rtxn, &key)? {
-                            let right = RoaringBitmap::deserialize_from(ids)?;
+                        if let Some(attrs) = self.postings_ids.get(rtxn, &key)? {
+                            let right = RoaringBitmap::deserialize_from(attrs)?;
                             union_docids.union_with(&right);
-                            count = 1;
-                        }
-                    } else {
-                        let mut stream = fst.search(dfa).into_stream();
-                        while let Some(word) = stream.next() {
-                            let word = std::str::from_utf8(word)?;
-                            let mut key = word.as_bytes().to_vec();
-                            key.extend_from_slice(&pos.to_be_bytes());
-                            if let Some(attrs) = self.postings_ids.get(rtxn, &key)? {
-                                let right = RoaringBitmap::deserialize_from(attrs)?;
-                                union_docids.union_with(&right);
-                                count += 1;
-                            }
+                            count += 1;
                         }
                     }
 

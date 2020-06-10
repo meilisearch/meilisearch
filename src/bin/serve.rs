@@ -10,6 +10,10 @@ use warp::{Filter, http::Response};
 
 use mega_mini_indexer::{BEU32, Index};
 
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 #[derive(Debug, StructOpt)]
 #[structopt(name = "mmi", about = "The server side of the mmi project.")]
 struct Opt {

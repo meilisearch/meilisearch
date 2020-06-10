@@ -6,6 +6,10 @@ use heed::EnvOpenOptions;
 use structopt::StructOpt;
 use mega_mini_indexer::{Index, BEU32};
 
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
 #[derive(Debug, StructOpt)]
 #[structopt(name = "mm-search", about = "The server side of the MMI project.")]
 struct Opt {
