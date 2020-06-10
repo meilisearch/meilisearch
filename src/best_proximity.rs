@@ -39,8 +39,37 @@ impl Path {
         Some(Path(vec![*position]))
     }
 
-    fn successors(&self, _positions: &[Vec<u32>]) -> Vec<(Path, u32)> {
-        vec![]
+    // TODO we must skip the successors that have already been sent
+    fn successors(&self, positions: &[Vec<u32>]) -> Vec<(Path, u32)> {
+        let mut successors = Vec::new();
+
+        // If we can grow or shift the path
+        if self.0.len() < positions.len() {
+            let mut grown_path = self.0.clone();
+            grown_path.push(positions[self.0.len()][0]);
+            let path = Path(grown_path);
+            let proximity = path.proximity();
+            successors.push((path, proximity));
+        }
+
+        // We retrieve the tail of the current path and try to find
+        // the successor of this tail.
+        let next_path_tail = dbg!(self.0.last().unwrap() + 1);
+        // To do so we add 1 to the tail and check that something exists.
+        let path_tail_index = dbg!(positions[self.0.len() - 1].binary_search(&next_path_tail).unwrap_or_else(|p| p));
+        // If we found something it means that we can shift the path.
+        if let Some(pos) = positions[self.0.len() - 1].get(path_tail_index) {
+            let mut shifted_path = self.0.clone();
+            *shifted_path.last_mut().unwrap() = *pos;
+            let path = Path(shifted_path);
+            let proximity = path.proximity();
+            successors.push((path, proximity));
+        }
+
+        eprintln!("self: {:?}", self);
+        successors.iter().for_each(|s| eprintln!("successor: {:?}", s));
+
+        successors
     }
 
     fn proximity(&self) -> u32 {
@@ -73,22 +102,20 @@ impl Iterator for BestProximity {
     fn next(&mut self) -> Option<Self::Item> {
         let mut output: Option<(u32, Vec<Vec<u32>>)> = None;
 
-        unimplemented!("we must use and update self.best_proximity");
-
         loop {
-            let start = Path::new(&self.positions)?;
             let result = dijkstra(
-                &start,
+                &Path::new(&self.positions)?,
                 |p| p.successors(&self.positions),
                 |p| self.is_path_successful(p) && output.as_ref().map_or(true, |paths| !paths.1.contains(&p.0)),
             );
 
-            match result {
-                Some((mut paths, proximity)) => {
+            match dbg!(result) {
+                Some((mut paths, _)) => {
                     let positions = paths.pop().unwrap();
+                    let proximity = positions.proximity();
 
                     // If the current output is
-                    match &mut output {
+                    match dbg!(&mut output) {
                         Some((best_proximity, paths)) => {
                             // If the shortest path we found is bigger than the one requested
                             // it means that we found all the paths with the same proximity and can
@@ -108,6 +135,10 @@ impl Iterator for BestProximity {
             }
         }
 
+        if let Some((proximity, _)) = output.as_ref() {
+            self.best_proximity = proximity + 1;
+        }
+
         output
     }
 }
@@ -125,15 +156,20 @@ mod tests {
         ];
         let mut iter = BestProximity::new(positions);
 
-        assert_eq!(iter.next(), Some((1+2, vec![vec![0], vec![1], vec![3]]))); // 3
+        assert_eq!(iter.next(), Some((1+2, vec![vec![0, 1, 3]]))); // 3
         eprintln!("------------------");
-        assert_eq!(iter.next(), Some((2+2, vec![vec![2], vec![1], vec![3]]))); // 4
-        // assert_eq!(iter.next(), Some((3+2, vec![3, 1, 3]))); // 5
-        // assert_eq!(iter.next(), Some((1+5, vec![0, 1, 6]))); // 6
-        // assert_eq!(iter.next(), Some((4+2, vec![4, 1, 3]))); // 6
-        // assert_eq!(iter.next(), Some((2+5, vec![2, 1, 6]))); // 7
-        // assert_eq!(iter.next(), Some((3+5, vec![3, 1, 6]))); // 8
-        // assert_eq!(iter.next(), Some((4+5, vec![4, 1, 6]))); // 9
-        // assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), Some((2+2, vec![vec![2, 1, 3]]))); // 4
+        eprintln!("------------------");
+        assert_eq!(iter.next(), Some((3+2, vec![vec![3, 1, 3]]))); // 5
+        eprintln!("------------------");
+        assert_eq!(iter.next(), Some((1+5, vec![vec![0, 1, 6], vec![4, 1, 3]]))); // 6
+        eprintln!("------------------");
+        assert_eq!(iter.next(), Some((2+5, vec![vec![2, 1, 6]]))); // 7
+        eprintln!("------------------");
+        assert_eq!(iter.next(), Some((3+5, vec![vec![3, 1, 6]]))); // 8
+        eprintln!("------------------");
+        assert_eq!(iter.next(), Some((4+5, vec![vec![4, 1, 6]]))); // 9
+        eprintln!("------------------");
+        assert_eq!(iter.next(), None);
     }
 }
