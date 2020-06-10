@@ -50,9 +50,9 @@ impl Path {
 
         // We retrieve the tail of the current path and try to find
         // the successor of this tail.
-        let next_path_tail = dbg!(self.0.last().unwrap() + 1);
+        let next_path_tail = self.0.last().unwrap() + 1;
         // To do so we add 1 to the tail and check that something exists.
-        let path_tail_index = dbg!(positions[self.0.len() - 1].binary_search(&next_path_tail).unwrap_or_else(|p| p));
+        let path_tail_index = positions[self.0.len() - 1].binary_search(&next_path_tail).unwrap_or_else(|p| p);
         // If we found something it means that we can shift the path.
         if let Some(pos) = positions[self.0.len() - 1].get(path_tail_index) {
             let mut shifted_path = self.0.clone();
@@ -61,9 +61,6 @@ impl Path {
             let proximity = path.proximity();
             successors.push((path, proximity));
         }
-
-        eprintln!("self: {:?}", self);
-        successors.iter().for_each(|s| eprintln!("successor: {:?}", s));
 
         successors
     }
@@ -102,16 +99,16 @@ impl Iterator for BestProximity {
             let result = dijkstra(
                 &Path::new(&self.positions)?,
                 |p| p.successors(&self.positions),
-                |p| self.is_path_successful(p) && output.as_ref().map_or(true, |paths| !paths.1.contains(&p.0)),
+                |p| self.is_path_successful(p) && output.as_ref().map_or(true, |(_, paths)| !paths.contains(&p.0)),
             );
 
-            match dbg!(result) {
+            match result {
                 Some((mut paths, _)) => {
                     let positions = paths.pop().unwrap();
                     let proximity = positions.proximity();
 
                     // If the current output is
-                    match dbg!(&mut output) {
+                    match &mut output {
                         Some((best_proximity, paths)) => {
                             // If the shortest path we found is bigger than the one requested
                             // it means that we found all the paths with the same proximity and can
