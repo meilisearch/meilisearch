@@ -183,6 +183,7 @@ pub enum FacetError {
     AttributeNotFound(String),
     AttributeNotSet { expected: Vec<String>, found: String },
     InvalidDocumentAttribute(String),
+    NoAttributesForFaceting,
 }
 
 impl FacetError {
@@ -207,6 +208,7 @@ impl fmt::Display for FacetError {
             AttributeNotFound(attr) => write!(f, "unknown {:?} attribute", attr),
             AttributeNotSet { found, expected } => write!(f, "`{}` is not set as a faceted attribute. available facet attributes: {}", found, expected.join(", ")),
             InvalidDocumentAttribute(attr) => write!(f, "invalid document attribute {}, accepted types: String and [String]", attr),
+            NoAttributesForFaceting => write!(f, "impossible to perform faceted search, no attributes for faceting are set"),
         }
     }
 }
