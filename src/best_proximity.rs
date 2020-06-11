@@ -3,6 +3,9 @@ use std::time::Instant;
 
 use pathfinding::directed::dijkstra::dijkstra;
 
+use smallvec::smallvec; // the macro
+use crate::SmallVec16;
+
 const ONE_ATTRIBUTE: u32 = 1000;
 const MAX_DISTANCE: u32 = 8;
 
@@ -27,17 +30,17 @@ fn extract_position(position: u32) -> (u32, u32) {
 }
 
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-struct Path(Vec<u32>);
+struct Path(SmallVec16<u32>);
 
 impl Path {
     fn new(positions: &[Vec<u32>]) -> Option<Path> {
         let position = positions.first()?.first()?;
-        Some(Path(vec![*position]))
+        Some(Path(smallvec![*position]))
     }
 
     // TODO we must skip the successors that have already been sent
-    fn successors(&self, positions: &[Vec<u32>]) -> Vec<(Path, u32)> {
-        let mut successors = Vec::new();
+    fn successors(&self, positions: &[Vec<u32>]) -> SmallVec16<(Path, u32)> {
+        let mut successors = SmallVec16::new();
 
         // If we can grow or shift the path
         if self.0.len() < positions.len() {
@@ -103,7 +106,12 @@ impl Iterator for BestProximity {
             let result = dijkstra(
                 &Path::new(&self.positions)?,
                 |p| p.successors(&self.positions),
-                |p| self.is_path_successful(p) && output.as_ref().map_or(true, |(_, paths)| !paths.contains(&p.0)),
+                |p| {
+                    self.is_path_successful(p) &&
+                    output.as_ref().map_or(true, |(_, paths)| {
+                        !paths.iter().position(|q| q.as_slice() == p.0.as_slice()).is_some()
+                    })
+                },
             );
 
             match result {
@@ -123,9 +131,9 @@ impl Iterator for BestProximity {
 
                             // We add the new path to the output list as this path is known
                             // to be the requested distance.
-                            paths.push(positions.0);
+                            paths.push(positions.0.to_vec());
                         },
-                        None => output = Some((positions.proximity(), vec![positions.0])),
+                        None => output = Some((positions.proximity(), vec![positions.0.to_vec()])),
                     }
                 },
                 None => break,

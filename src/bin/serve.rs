@@ -93,9 +93,9 @@ async fn main() -> anyhow::Result<()> {
                 body.extend_from_slice(headers);
 
                 for id in documents_ids {
-                    if let Some(content) = index.documents.get(&rtxn, &BEU32::new(id)).unwrap() {
-                        body.extend_from_slice(&content);
-                    }
+                    let content = index.documents.get(&rtxn, &BEU32::new(id)).unwrap();
+                    let content = content.expect(&format!("could not find document {}", id));
+                    body.extend_from_slice(&content);
                 }
             }
 

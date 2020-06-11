@@ -45,10 +45,10 @@ struct Opt {
 
 struct Indexed {
     fst: fst::Set<Vec<u8>>,
-    postings_attrs: FastMap4<SmallVec32, RoaringBitmap>,
-    prefix_postings_attrs: FastMap4<SmallVec32, RoaringBitmap>,
-    postings_ids: FastMap4<SmallVec32, FastMap4<AttributeId, RoaringBitmap>>,
-    prefix_postings_ids: FastMap4<SmallVec32, FastMap4<AttributeId, RoaringBitmap>>,
+    postings_attrs: FastMap4<SmallVec32<u8>, RoaringBitmap>,
+    prefix_postings_attrs: FastMap4<SmallVec32<u8>, RoaringBitmap>,
+    postings_ids: FastMap4<SmallVec32<u8>, FastMap4<AttributeId, RoaringBitmap>>,
+    prefix_postings_ids: FastMap4<SmallVec32<u8>, FastMap4<AttributeId, RoaringBitmap>>,
     headers: Vec<u8>,
     documents: Vec<(DocumentId, Vec<u8>)>,
 }

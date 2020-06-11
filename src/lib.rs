@@ -25,7 +25,8 @@ static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
-pub type SmallVec32 = smallvec::SmallVec<[u8; 32]>;
+pub type SmallVec32<T> = smallvec::SmallVec<[T; 32]>;
+pub type SmallVec16<T> = smallvec::SmallVec<[T; 16]>;
 pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
 pub type DocumentId = u32;
 pub type AttributeId = u32;
@@ -89,52 +90,41 @@ impl Index {
             (word, is_prefix, dfa)
         });
 
-        let mut words_positions = Vec::new();
+        let mut words = Vec::new();
         let mut positions = Vec::new();
         let before = Instant::now();
 
-        for (word, is_prefix, dfa) in dfas {
+        for (word, _is_prefix, dfa) in dfas {
             let mut count = 0;
             let mut union_positions = RoaringBitmap::default();
-            if false && word.len() <= 4 && is_prefix {
-                if let Some(ids) = self.prefix_postings_attrs.get(rtxn, word.as_bytes())? {
-                    let right = RoaringBitmap::deserialize_from(ids)?;
+            let mut derived_words = Vec::new();
+            // TODO re-enable the prefixes system
+            let mut stream = fst.search(&dfa).into_stream();
+            while let Some(word) = stream.next() {
+                derived_words.push(word.to_vec());
+                let word = std::str::from_utf8(word)?;
+                if let Some(attrs) = self.postings_attrs.get(rtxn, word)? {
+                    let right = RoaringBitmap::deserialize_from(attrs)?;
                     union_positions.union_with(&right);
-                    count = 1;
-                }
-            } else {
-                let mut stream = fst.search(&dfa).into_stream();
-                while let Some(word) = stream.next() {
-                    let word = std::str::from_utf8(word)?;
-                    if let Some(attrs) = self.postings_attrs.get(rtxn, word)? {
-                        let right = RoaringBitmap::deserialize_from(attrs)?;
-                        union_positions.union_with(&right);
-                        count += 1;
-                    }
+                    count += 1;
                 }
             }
 
             eprintln!("{} words for {:?} we have found positions {:?}", count, word, union_positions);
-            words_positions.push((word, is_prefix, dfa));
+            words.push(derived_words);
             positions.push(union_positions.iter().collect());
         }
 
         eprintln!("Retrieving words positions took {:.02?}", before.elapsed());
 
-        // TODO re-enable the prefixes system
-        let mut words = Vec::new();
-        for (_word, _is_prefix, dfa) in words_positions {
-            let mut stream = fst.search(dfa).into_stream();
-            let mut derived_words = Vec::new();
-            while let Some(word) = stream.next() {
-                derived_words.push(word.to_vec());
-            }
-            words.push(derived_words);
-        }
-
         let mut documents = Vec::new();
 
-        'outer: for (proximity, positions) in BestProximity::new(positions) {
+        for (proximity, mut positions) in BestProximity::new(positions) {
+            // TODO we must ignore positions paths that gives nothing
+            if words.len() > 1 && proximity == 0 { continue }
+
+            positions.sort_unstable();
+
             let same_prox_before = Instant::now();
             let mut same_proximity_union = RoaringBitmap::default();
 
@@ -177,15 +167,30 @@ impl Index {
                 if let Some(intersect_docids) = intersect_docids {
                     same_proximity_union.union_with(&intersect_docids);
                 }
-            }
 
-            eprintln!("proximity {} took a total of {:.02?}", proximity, same_prox_before.elapsed());
+                // We found enough documents we can stop here
+                if documents.iter().map(RoaringBitmap::len).sum::<u64>() + same_proximity_union.len() >= 20 {
+                    eprintln!("proximity {} took a total of {:.02?}", proximity, same_prox_before.elapsed());
+                    break;
+                }
+            }
 
             documents.push(same_proximity_union);
 
-            // We found enough documents we can stop here
+            // We remove the double occurences of documents.
+            for i in 0..documents.len() {
+                if let Some((docs, others)) = documents[..=i].split_last_mut() {
+                    others.iter().for_each(|other| docs.difference_with(other));
+                }
+            }
+            documents.retain(|rb| !rb.is_empty());
+
+            eprintln!("documents: {:?}", documents);
+            eprintln!("proximity {} took a total of {:.02?}", proximity, same_prox_before.elapsed());
+
+            // We found enough documents we can stop here.
             if documents.iter().map(RoaringBitmap::len).sum::<u64>() >= 20 {
-                break 'outer;
+                break;
             }
         }
 
