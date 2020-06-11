@@ -1,9 +1,8 @@
 use std::cmp;
 use std::time::Instant;
 
-use pathfinding::directed::dijkstra::dijkstra;
+use pathfinding::directed::astar::astar_bag;
 
-use smallvec::smallvec; // the macro
 use crate::SmallVec16;
 
 const ONE_ATTRIBUTE: u32 = 1000;
@@ -29,53 +28,47 @@ fn extract_position(position: u32) -> (u32, u32) {
     (position / ONE_ATTRIBUTE, position % ONE_ATTRIBUTE)
 }
 
-#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
 struct Path(SmallVec16<u32>);
 
 impl Path {
-    fn new(positions: &[Vec<u32>]) -> Option<Path> {
-        let position = positions.first()?.first()?;
-        Some(Path(smallvec![*position]))
-    }
-
     // TODO we must skip the successors that have already been sent
-    fn successors(&self, positions: &[Vec<u32>]) -> SmallVec16<(Path, u32)> {
-        let mut successors = SmallVec16::new();
+    // TODO we must skip the successors that doesn't return any documents
+    //      this way we are able to skip entire paths
+    fn successors(&self, positions: &[Vec<u32>], best_proximity: u32) -> Vec<(Path, u32)> {
+        let next_positions = match positions.get(self.0.len()) {
+            Some(positions) => positions,
+            None => return vec![],
+        };
 
-        // If we can grow or shift the path
-        if self.0.len() < positions.len() {
-            for next_pos in &positions[self.0.len()] {
-                let mut grown_path = self.0.clone();
-                grown_path.push(*next_pos);
-                let path = Path(grown_path);
+        next_positions.iter()
+            .filter_map(|p| {
+                let mut path = self.clone();
+                path.0.push(*p);
                 let proximity = path.proximity();
-                successors.push((path, proximity));
-            }
-        }
-
-        // We retrieve the tail of the current path and try to find
-        // the successor of this tail.
-        let next_path_tail = self.0.last().unwrap() + 1;
-        // To do so we add 1 to the tail and check that something exists.
-        let path_tail_index = positions[self.0.len() - 1].binary_search(&next_path_tail).unwrap_or_else(|p| p);
-        // If we found something it means that we can shift the path.
-        if let Some(pos) = positions[self.0.len() - 1].get(path_tail_index) {
-            let mut shifted_path = self.0.clone();
-            *shifted_path.last_mut().unwrap() = *pos;
-            let path = Path(shifted_path);
-            let proximity = path.proximity();
-            successors.push((path, proximity));
-        }
-
-        successors
+                if path.is_complete(positions) && proximity < best_proximity {
+                    None
+                } else {
+                    Some((path, proximity))
+                }
+            })
+            .inspect(|p| eprintln!("{:?}", p))
+            .collect()
     }
 
     fn proximity(&self) -> u32 {
         self.0.windows(2).map(|ps| positions_proximity(ps[0], ps[1])).sum::<u32>()
     }
 
+    fn heuristic(&self, positions: &[Vec<u32>]) -> u32 {
+        let remaining = (positions.len() - self.0.len()) as u32;
+        self.proximity() + remaining * MAX_DISTANCE
+    }
+
     fn is_complete(&self, positions: &[Vec<u32>]) -> bool {
-        positions.len() == self.0.len()
+        let res = positions.len() == self.0.len();
+        eprintln!("is_complete: {:?} {}", self, res);
+        res
     }
 }
 
@@ -88,65 +81,45 @@ impl BestProximity {
     pub fn new(positions: Vec<Vec<u32>>) -> BestProximity {
         BestProximity { positions, best_proximity: 0 }
     }
-
-    fn is_path_successful(&self, path: &Path) -> bool {
-        path.is_complete(&self.positions) && path.proximity() >= self.best_proximity
-    }
 }
 
 impl Iterator for BestProximity {
     type Item = (u32, Vec<Vec<u32>>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut output: Option<(u32, Vec<Vec<u32>>)> = None;
-
         let before = Instant::now();
 
-        loop {
-            let result = dijkstra(
-                &Path::new(&self.positions)?,
-                |p| p.successors(&self.positions),
-                |p| {
-                    self.is_path_successful(p) &&
-                    output.as_ref().map_or(true, |(_, paths)| {
-                        !paths.iter().position(|q| q.as_slice() == p.0.as_slice()).is_some()
-                    })
-                },
-            );
-
-            match result {
-                Some((mut paths, _)) => {
-                    let positions = paths.pop().unwrap();
-                    let proximity = positions.proximity();
-
-                    // If the current output is
-                    match &mut output {
-                        Some((best_proximity, paths)) => {
-                            // If the shortest path we found is bigger than the one requested
-                            // it means that we found all the paths with the same proximity and can
-                            // return those to the user.
-                            if proximity > *best_proximity {
-                                break;
-                            }
-
-                            // We add the new path to the output list as this path is known
-                            // to be the requested distance.
-                            paths.push(positions.0.to_vec());
-                        },
-                        None => output = Some((positions.proximity(), vec![positions.0.to_vec()])),
-                    }
-                },
-                None => break,
-            }
+        if self.best_proximity == self.positions.len() as u32 * MAX_DISTANCE {
+            return None;
         }
+
+        // We start with nothing
+        let start = Path::default();
+        let result = astar_bag(
+            &start,
+            |p| p.successors(&self.positions, self.best_proximity),
+            |p| p.heuristic(&self.positions),
+            |p| p.is_complete(&self.positions), // success
+        );
 
         eprintln!("BestProximity::next() took {:.02?}", before.elapsed());
 
-        if let Some((proximity, _)) = output.as_ref() {
-            self.best_proximity = proximity + 1;
+        match result {
+            Some((paths, proximity)) => {
+                self.best_proximity = proximity + 1;
+                // We retrieve the last path that we convert into a Vec
+                let paths: Vec<_> = paths.map(|p| {
+                    p.last().unwrap().0.to_vec()
+                }).collect();
+                eprintln!("result: {} {:?}", proximity, paths);
+                Some((proximity, paths))
+            },
+            None => {
+                eprintln!("result: {:?}", None as Option<()>);
+                self.best_proximity += 1;
+                None
+            },
         }
-
-        output
     }
 }
 
