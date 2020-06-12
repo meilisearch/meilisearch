@@ -1,25 +1,10 @@
 use std::convert::Into;
 
-use meilisearch_http::routes::search::{SearchQuery, SearchQueryPost};
 use assert_json_diff::assert_json_eq;
 use serde_json::json;
 use serde_json::Value;
 
-mod common;
-
-macro_rules! test_post_get_search {
-    ($server:expr, $query:expr, |$response:ident, $status_code:ident | $block:expr) => {
-        let post_query: SearchQueryPost = serde_json::from_str(&$query.clone().to_string()).unwrap();
-        let get_query: SearchQuery = post_query.into();
-        let get_query = ::serde_url_params::to_string(&get_query).unwrap();
-        let ($response, $status_code) = $server.search_get(&get_query).await;
-        let _ =::std::panic::catch_unwind(|| $block)
-            .map_err(|e| panic!("panic in get route: {:?}", e.downcast_ref::<&str>().unwrap()));
-        let ($response, $status_code) = $server.search_post($query).await;
-        let _ =::std::panic::catch_unwind(|| $block)
-            .map_err(|e| panic!("panic in post route: {:?}", e.downcast_ref::<&str>().unwrap()));
-    };
-}
+#[macro_use] mod common;
 
 #[actix_rt::test]
 async fn search_with_limit() {
