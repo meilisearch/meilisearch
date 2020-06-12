@@ -3,8 +3,6 @@ use std::time::Instant;
 
 use pathfinding::directed::astar::astar_bag;
 
-use crate::SmallVec16;
-
 const ONE_ATTRIBUTE: u32 = 1000;
 const MAX_DISTANCE: u32 = 8;
 
@@ -28,47 +26,57 @@ fn extract_position(position: u32) -> (u32, u32) {
     (position / ONE_ATTRIBUTE, position % ONE_ATTRIBUTE)
 }
 
-#[derive(Debug, Default, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-struct Path(SmallVec16<u32>);
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Node {
+    // Is this node is the first node.
+    Uninit,
+    Init {
+        // The layer where this node located.
+        layer: usize,
+        // The position where this node is located.
+        position: u32,
+    },
+}
 
-impl Path {
-    // TODO we must skip the successors that have already been sent
+impl Node {
+    // TODO we must skip the successors that have already been seen
     // TODO we must skip the successors that doesn't return any documents
     //      this way we are able to skip entire paths
-    fn successors(&self, positions: &[Vec<u32>], best_proximity: u32) -> Vec<(Path, u32)> {
-        let next_positions = match positions.get(self.0.len()) {
-            Some(positions) => positions,
-            None => return vec![],
-        };
-
-        next_positions.iter()
-            .filter_map(|p| {
-                let mut path = self.clone();
-                path.0.push(*p);
-                let proximity = path.proximity();
-                if path.is_complete(positions) && proximity < best_proximity {
-                    None
-                } else {
-                    Some((path, proximity))
-                }
-            })
-            .inspect(|p| eprintln!("{:?}", p))
-            .collect()
-    }
-
-    fn proximity(&self) -> u32 {
-        self.0.windows(2).map(|ps| positions_proximity(ps[0], ps[1])).sum::<u32>()
-    }
-
-    fn heuristic(&self, positions: &[Vec<u32>]) -> u32 {
-        let remaining = (positions.len() - self.0.len()) as u32;
-        self.proximity() + remaining * MAX_DISTANCE
+    fn successors(&self, positions: &[Vec<u32>], best_proximity: u32) -> Vec<(Node, u32)> {
+        match self {
+            Node::Uninit => {
+                positions[0].iter().map(|p| (Node::Init { layer: 0, position: *p }, 0)).collect()
+            },
+            // We reached the highest layer
+            n @ Node::Init { .. } if n.is_complete(positions) => vec![],
+            Node::Init { layer, position } => {
+                let layer = layer + 1;
+                positions[layer].iter().filter_map(|p| {
+                    let proximity = positions_proximity(*position, *p);
+                    let node = Node::Init { layer, position: *p };
+                    // We do not produce the nodes we have already seen in previous iterations loops.
+                    if node.is_complete(positions) && proximity < best_proximity {
+                        None
+                    } else {
+                        Some((node, proximity))
+                    }
+                }).collect()
+            }
+        }
     }
 
     fn is_complete(&self, positions: &[Vec<u32>]) -> bool {
-        let res = positions.len() == self.0.len();
-        eprintln!("is_complete: {:?} {}", self, res);
-        res
+        match self {
+            Node::Uninit => false,
+            Node::Init { layer, .. } => *layer == positions.len() - 1,
+        }
+    }
+
+    fn position(&self) -> Option<u32> {
+        match self {
+            Node::Uninit => None,
+            Node::Init { position, .. } => Some(*position),
+        }
     }
 }
 
@@ -93,13 +101,11 @@ impl Iterator for BestProximity {
             return None;
         }
 
-        // We start with nothing
-        let start = Path::default();
         let result = astar_bag(
-            &start,
-            |p| p.successors(&self.positions, self.best_proximity),
-            |p| p.heuristic(&self.positions),
-            |p| p.is_complete(&self.positions), // success
+            &Node::Uninit, // start
+            |n| n.successors(&self.positions, self.best_proximity),
+            |_| 0, // heuristic
+            |n| n.is_complete(&self.positions), // success
         );
 
         eprintln!("BestProximity::next() took {:.02?}", before.elapsed());
@@ -108,9 +114,7 @@ impl Iterator for BestProximity {
             Some((paths, proximity)) => {
                 self.best_proximity = proximity + 1;
                 // We retrieve the last path that we convert into a Vec
-                let paths: Vec<_> = paths.map(|p| {
-                    p.last().unwrap().0.to_vec()
-                }).collect();
+                let paths: Vec<_> = paths.map(|p| p.iter().filter_map(Node::position).collect()).collect();
                 eprintln!("result: {} {:?}", proximity, paths);
                 Some((proximity, paths))
             },
