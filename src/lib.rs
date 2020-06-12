@@ -119,7 +119,7 @@ impl Index {
 
         let mut documents = Vec::new();
 
-        for (proximity, mut positions) in BestProximity::new(positions) {
+        for (proximity, mut positions) in BestProximity::new(positions, |_, _| true) {
             // TODO we must ignore positions paths that gives nothing
             if (proximity as usize) < words.len() - 1 {
                 eprintln!("Skipping too short proximities of {}.", proximity);

@@ -44,7 +44,14 @@ impl Node {
     // TODO we must skip the successors that have already been seen
     // TODO we must skip the successors that doesn't return any documents
     //      this way we are able to skip entire paths
-    fn successors(&self, positions: &[Vec<u32>], best_proximity: u32) -> Vec<(Node, u32)> {
+    fn successors<F>(
+        &self,
+        positions: &[Vec<u32>],
+        best_proximity: u32,
+        mut contains_documents: F,
+    ) -> Vec<(Node, u32)>
+    where F: FnMut((usize, u32), (usize, u32)) -> bool,
+    {
         match self {
             Node::Uninit => {
                 positions[0].iter().map(|p| {
@@ -54,15 +61,18 @@ impl Node {
             // We reached the highest layer
             n @ Node::Init { .. } if n.is_complete(positions) => vec![],
             Node::Init { layer, position, acc_proximity } => {
-                let layer = layer + 1;
-                positions[layer].iter().filter_map(|p| {
+                positions[layer + 1].iter().filter_map(|p| {
                     let proximity = positions_proximity(*position, *p);
-                    let node = Node::Init { layer, position: *p, acc_proximity: acc_proximity + proximity };
-                    // We do not produce the nodes we have already seen in previous iterations loops.
-                    if node.is_complete(positions) && acc_proximity + proximity < best_proximity {
-                        None
+                    let node = Node::Init { layer: layer + 1, position: *p, acc_proximity: acc_proximity + proximity };
+                    if (contains_documents)((*layer, *position), (layer + 1, *p)) {
+                        // We do not produce the nodes we have already seen in previous iterations loops.
+                        if node.is_complete(positions) && acc_proximity + proximity < best_proximity {
+                            None
+                        } else {
+                            Some((node, proximity))
+                        }
                     } else {
-                        Some((node, proximity))
+                        None
                     }
                 }).collect()
             }
@@ -84,18 +94,21 @@ impl Node {
     }
 }
 
-pub struct BestProximity {
+pub struct BestProximity<F> {
     positions: Vec<Vec<u32>>,
     best_proximity: u32,
+    contains_documents: F,
 }
 
-impl BestProximity {
-    pub fn new(positions: Vec<Vec<u32>>) -> BestProximity {
-        BestProximity { positions, best_proximity: 0 }
+impl<F> BestProximity<F> {
+    pub fn new(positions: Vec<Vec<u32>>, contains_documents: F) -> BestProximity<F> {
+        BestProximity { positions, best_proximity: 0, contains_documents }
     }
 }
 
-impl Iterator for BestProximity {
+impl<F> Iterator for BestProximity<F>
+where F: FnMut((usize, u32), (usize, u32)) -> bool + Copy,
+{
     type Item = (u32, Vec<Vec<u32>>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -107,7 +120,7 @@ impl Iterator for BestProximity {
 
         let result = astar_bag(
             &Node::Uninit, // start
-            |n| n.successors(&self.positions, self.best_proximity),
+            |n| n.successors(&self.positions, self.best_proximity, self.contains_documents),
             |_| 0, // heuristic
             |n| n.is_complete(&self.positions), // success
         );
@@ -142,7 +155,7 @@ mod tests {
             vec![   1,           ],
             vec![         3,    6],
         ];
-        let mut iter = BestProximity::new(positions);
+        let mut iter = BestProximity::new(positions, |_, _| true);
 
         assert_eq!(iter.next(), Some((1+2, vec![vec![0, 1, 3]]))); // 3
         assert_eq!(iter.next(), Some((2+2, vec![vec![2, 1, 3]]))); // 4
@@ -161,7 +174,7 @@ mod tests {
             vec![   1,          1000,       2001      ],
             vec![         3, 6,             2002, 3000],
         ];
-        let mut iter = BestProximity::new(positions);
+        let mut iter = BestProximity::new(positions, |_, _| true);
 
         assert_eq!(iter.next(), Some((1+1, vec![vec![2000, 2001, 2002]]))); // 2
         assert_eq!(iter.next(), Some((1+2, vec![vec![0, 1, 3]]))); // 3
