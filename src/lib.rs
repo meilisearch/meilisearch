@@ -121,7 +121,10 @@ impl Index {
 
         for (proximity, mut positions) in BestProximity::new(positions) {
             // TODO we must ignore positions paths that gives nothing
-            if words.len() > 1 && proximity == 0 { continue }
+            if (proximity as usize) < words.len() - 1 {
+                eprintln!("Skipping too short proximities of {}.", proximity);
+                continue
+            }
 
             positions.sort_unstable();
 

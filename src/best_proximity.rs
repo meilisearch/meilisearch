@@ -35,6 +35,8 @@ enum Node {
         layer: usize,
         // The position where this node is located.
         position: u32,
+        // The total accumulated proximity until this node, used for skipping nodes.
+        acc_proximity: u32,
     },
 }
 
@@ -45,17 +47,19 @@ impl Node {
     fn successors(&self, positions: &[Vec<u32>], best_proximity: u32) -> Vec<(Node, u32)> {
         match self {
             Node::Uninit => {
-                positions[0].iter().map(|p| (Node::Init { layer: 0, position: *p }, 0)).collect()
+                positions[0].iter().map(|p| {
+                    (Node::Init { layer: 0, position: *p, acc_proximity: 0 }, 0)
+                }).collect()
             },
             // We reached the highest layer
             n @ Node::Init { .. } if n.is_complete(positions) => vec![],
-            Node::Init { layer, position } => {
+            Node::Init { layer, position, acc_proximity } => {
                 let layer = layer + 1;
                 positions[layer].iter().filter_map(|p| {
                     let proximity = positions_proximity(*position, *p);
-                    let node = Node::Init { layer, position: *p };
+                    let node = Node::Init { layer, position: *p, acc_proximity: acc_proximity + proximity };
                     // We do not produce the nodes we have already seen in previous iterations loops.
-                    if node.is_complete(positions) && proximity < best_proximity {
+                    if node.is_complete(positions) && acc_proximity + proximity < best_proximity {
                         None
                     } else {
                         Some((node, proximity))
