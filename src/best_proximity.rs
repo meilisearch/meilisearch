@@ -102,7 +102,8 @@ pub struct BestProximity<F> {
 
 impl<F> BestProximity<F> {
     pub fn new(positions: Vec<Vec<u32>>, contains_documents: F) -> BestProximity<F> {
-        BestProximity { positions, best_proximity: 0, contains_documents }
+        let best_proximity = positions.len() as u32 - 1;
+        BestProximity { positions, best_proximity, contains_documents }
     }
 }
 
