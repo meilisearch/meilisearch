@@ -120,32 +120,35 @@ impl Index {
 
         let mut documents = Vec::new();
 
+        let mut intersect_cache = HashMap::new();
         let contains_documents = |(lword, lpos): (usize, u32), (rword, rpos)| {
-            use std::iter::once;
+            *intersect_cache.entry(((lword, lpos), (rword, rpos))).or_insert_with(|| {
+                use std::iter::once;
 
-            let left = (&words[lword], lpos);
-            let right = (&words[rword], rpos);
+                let left = (&words[lword], lpos);
+                let right = (&words[rword], rpos);
 
-            let mut intersect_docids: Option<RoaringBitmap> = None;
-            for (derived_words, pos) in once(left).chain(once(right)) {
-                let mut union_docids = RoaringBitmap::default();
-                // TODO re-enable the prefixes system
-                for word in derived_words.iter() {
-                    let mut key = word.clone();
-                    key.extend_from_slice(&pos.to_be_bytes());
-                    if let Some(attrs) = self.postings_ids.get(rtxn, &key).unwrap() {
-                        let right = RoaringBitmap::deserialize_from(attrs).unwrap();
-                        union_docids.union_with(&right);
+                let mut intersect_docids: Option<RoaringBitmap> = None;
+                for (derived_words, pos) in once(left).chain(once(right)) {
+                    let mut union_docids = RoaringBitmap::default();
+                    // TODO re-enable the prefixes system
+                    for word in derived_words.iter() {
+                        let mut key = word.clone();
+                        key.extend_from_slice(&pos.to_be_bytes());
+                        if let Some(attrs) = self.postings_ids.get(rtxn, &key).unwrap() {
+                            let right = RoaringBitmap::deserialize_from(attrs).unwrap();
+                            union_docids.union_with(&right);
+                        }
+                    }
+
+                    match &mut intersect_docids {
+                        Some(left) => left.intersect_with(&union_docids),
+                        None => intersect_docids = Some(union_docids),
                     }
                 }
 
-                match &mut intersect_docids {
-                    Some(left) => left.intersect_with(&union_docids),
-                    None => intersect_docids = Some(union_docids),
-                }
-            }
-
-            intersect_docids.map_or(false, |i| !i.is_empty())
+                intersect_docids.map_or(false, |i| !i.is_empty())
+            })
         };
 
         for (proximity, mut positions) in BestProximity::new(positions, contains_documents) {

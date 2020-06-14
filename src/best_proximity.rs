@@ -102,7 +102,7 @@ impl Node {
         }
     }
 
-    fn is_reachable<F>(&self, mut contains_documents: F) -> bool
+    fn is_reachable<F>(&self, contains_documents: &mut F) -> bool
     where F: FnMut((usize, u32), (usize, u32)) -> bool,
     {
         match self {
@@ -133,7 +133,7 @@ impl<F> BestProximity<F> {
 }
 
 impl<F> Iterator for BestProximity<F>
-where F: FnMut((usize, u32), (usize, u32)) -> bool + Copy,
+where F: FnMut((usize, u32), (usize, u32)) -> bool,
 {
     type Item = (u32, Vec<Vec<u32>>);
 
@@ -144,13 +144,15 @@ where F: FnMut((usize, u32), (usize, u32)) -> bool + Copy,
             return None;
         }
 
+        let BestProximity { positions, best_proximity, contains_documents } = self;
+
         let result = astar_bag(
             &Node::Uninit, // start
-            |n| n.successors(&self.positions, self.best_proximity),
+            |n| n.successors(&positions, *best_proximity),
             |_| 0, // heuristic
             |n| { // success
-                let c = n.is_complete(&self.positions) && n.proximity() >= self.best_proximity;
-                if n.is_reachable(self.contains_documents) { Some(c) } else { None }
+                let c = n.is_complete(&positions) && n.proximity() >= *best_proximity;
+                if n.is_reachable(contains_documents) { Some(c) } else { None }
             },
         );
 
