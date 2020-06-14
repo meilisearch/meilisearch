@@ -28,7 +28,7 @@ structopt = { version = "0.3.14", default-features = false }
 tempfile = "3.1.0"
 
 # best proximity
-pathfinding = "2.0.4"
+indexmap = "1.4.0"
 
 # to implement internally
 itertools = "0.9.0"

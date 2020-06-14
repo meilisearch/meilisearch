@@ -1,7 +1,7 @@
 use std::cmp;
 use std::time::Instant;
 
-use pathfinding::directed::astar::astar_bag;
+use crate::iter_shortest_paths::astar_bag;
 
 const ONE_ATTRIBUTE: u32 = 1000;
 const MAX_DISTANCE: u32 = 8;
@@ -37,6 +37,8 @@ enum Node {
         position: u32,
         // The total accumulated proximity until this node, used for skipping nodes.
         acc_proximity: u32,
+        // The parent position from the above layer.
+        parent_position: u32,
     },
 }
 
@@ -44,35 +46,29 @@ impl Node {
     // TODO we must skip the successors that have already been seen
     // TODO we must skip the successors that doesn't return any documents
     //      this way we are able to skip entire paths
-    fn successors<F>(
-        &self,
-        positions: &[Vec<u32>],
-        best_proximity: u32,
-        mut contains_documents: F,
-    ) -> Vec<(Node, u32)>
-    where F: FnMut((usize, u32), (usize, u32)) -> bool,
-    {
+    fn successors(&self, positions: &[Vec<u32>], best_proximity: u32) -> Vec<(Node, u32)> {
         match self {
             Node::Uninit => {
                 positions[0].iter().map(|p| {
-                    (Node::Init { layer: 0, position: *p, acc_proximity: 0 }, 0)
+                    (Node::Init { layer: 0, position: *p, acc_proximity: 0, parent_position: 0 }, 0)
                 }).collect()
             },
             // We reached the highest layer
             n @ Node::Init { .. } if n.is_complete(positions) => vec![],
-            Node::Init { layer, position, acc_proximity } => {
+            Node::Init { layer, position, acc_proximity, .. } => {
                 positions[layer + 1].iter().filter_map(|p| {
                     let proximity = positions_proximity(*position, *p);
-                    let node = Node::Init { layer: layer + 1, position: *p, acc_proximity: acc_proximity + proximity };
-                    if (contains_documents)((*layer, *position), (layer + 1, *p)) {
-                        // We do not produce the nodes we have already seen in previous iterations loops.
-                        if node.is_complete(positions) && acc_proximity + proximity < best_proximity {
-                            None
-                        } else {
-                            Some((node, proximity))
-                        }
-                    } else {
+                    let node = Node::Init {
+                        layer: layer + 1,
+                        position: *p,
+                        acc_proximity: acc_proximity + proximity,
+                        parent_position: *position,
+                    };
+                    // We do not produce the nodes we have already seen in previous iterations loops.
+                    if node.is_complete(positions) && acc_proximity + proximity < best_proximity {
                         None
+                    } else {
+                        Some((node, proximity))
                     }
                 }).collect()
             }
@@ -92,6 +88,35 @@ impl Node {
             Node::Init { position, .. } => Some(*position),
         }
     }
+
+    fn proximity(&self) -> u32 {
+        match self {
+            Node::Uninit => 0,
+            Node::Init { layer, position, acc_proximity, parent_position } => {
+                if layer.checked_sub(1).is_some() {
+                    acc_proximity + positions_proximity(*position, *parent_position)
+                } else {
+                    0
+                }
+            },
+        }
+    }
+
+    fn is_reachable<F>(&self, mut contains_documents: F) -> bool
+    where F: FnMut((usize, u32), (usize, u32)) -> bool,
+    {
+        match self {
+            Node::Uninit => true,
+            Node::Init { layer, position, parent_position, .. } => {
+                match layer.checked_sub(1) {
+                    Some(parent_layer) => {
+                        (contains_documents)((parent_layer, *parent_position), (*layer, *position))
+                    },
+                    None => true,
+                }
+            },
+        }
+    }
 }
 
 pub struct BestProximity<F> {
@@ -102,7 +127,7 @@ pub struct BestProximity<F> {
 
 impl<F> BestProximity<F> {
     pub fn new(positions: Vec<Vec<u32>>, contains_documents: F) -> BestProximity<F> {
-        let best_proximity = positions.len() as u32 - 1;
+        let best_proximity = (positions.len() as u32).saturating_sub(1);
         BestProximity { positions, best_proximity, contains_documents }
     }
 }
@@ -121,9 +146,12 @@ where F: FnMut((usize, u32), (usize, u32)) -> bool + Copy,
 
         let result = astar_bag(
             &Node::Uninit, // start
-            |n| n.successors(&self.positions, self.best_proximity, self.contains_documents),
+            |n| n.successors(&self.positions, self.best_proximity),
             |_| 0, // heuristic
-            |n| n.is_complete(&self.positions), // success
+            |n| { // success
+                let c = n.is_complete(&self.positions) && n.proximity() >= self.best_proximity;
+                if n.is_reachable(self.contains_documents) { Some(c) } else { None }
+            },
         );
 
         eprintln!("BestProximity::next() took {:.02?}", before.elapsed());

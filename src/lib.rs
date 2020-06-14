@@ -1,4 +1,5 @@
 mod best_proximity;
+mod iter_shortest_paths;
 mod query_tokens;
 
 use std::borrow::Cow;
