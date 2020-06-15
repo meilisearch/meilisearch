@@ -93,12 +93,12 @@ get_latest() {
             fi
             i=1
         elif [ $i -eq 1 ]; then # Checking draft boolean
-            if [ "$release_info" == "true" ]; then
+            if [ "$release_info" = "true" ]; then
                 current_tag=""
             fi
             i=2
         elif [ $i -eq 2 ]; then # Checking prerelease boolean
-            if [ "$release_info" == "true" ]; then
+            if [ "$release_info" = "true" ]; then
                 current_tag=""
             fi
             i=0
@@ -129,4 +129,4 @@ if [ "$current_tag" != "$latest" ]; then
 else
     # The current release tag is the latest
     echo "true"
-then
+fi
