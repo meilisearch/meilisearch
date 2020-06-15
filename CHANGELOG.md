@@ -1,4 +1,4 @@
-## v0.10.2
+## v0.11.0
 
   - Change the HTTP framework, moving from tide to actix-web (#601)
   - Bump sentry version to 0.18.1 (#690)
@@ -28,7 +28,7 @@
   - Add '@' character as tokenizer separator (#607)
   - Add support for filtering on arrays of strings (#611)
 
-## v0.10
+## v0.10.0
 
   - Refined filtering (#592)
   - Add the number of hits in search result (#541)
