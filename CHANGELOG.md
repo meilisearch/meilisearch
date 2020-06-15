@@ -21,6 +21,7 @@
   - Add support for error code reporting (#703)
   - Allow the dashboard to query private servers (#732)
   - Add telemetry (#720)
+  - Add post route for search (#735)
 
 ## v0.10.1
 

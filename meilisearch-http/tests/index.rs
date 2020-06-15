@@ -629,7 +629,7 @@ async fn create_index_without_primary_key_and_search() {
 
     let query = "q=captain&limit=3";
 
-    let (response, status_code) = server.search(&query).await;
+    let (response, status_code) = server.search_get(&query).await;
     assert_eq!(status_code, 200);
     assert_eq!(response["hits"].as_array().unwrap().len(), 0);
 }

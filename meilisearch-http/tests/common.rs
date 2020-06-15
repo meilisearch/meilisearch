@@ -252,9 +252,14 @@ impl Server {
         self.delete_request(&url).await
     }
 
-    pub async fn search(&mut self, query: &str) -> (Value, StatusCode) {
+    pub async fn search_get(&mut self, query: &str) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/search?{}", self.uid, query);
         self.get_request(&url).await
+    }
+
+    pub async fn search_post(&mut self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/search", self.uid);
+        self.post_request(&url, body).await
     }
 
     pub async fn get_all_updates_status(&mut self) -> (Value, StatusCode) {

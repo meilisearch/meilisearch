@@ -1604,6 +1604,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_qs",
+ "serde_url_params",
  "sha2",
  "siphasher",
  "slice-group-by",
@@ -2474,6 +2475,16 @@ dependencies = [
  "error-chain",
  "percent-encoding 1.0.1",
  "serde",
+]
+
+[[package]]
+name = "serde_url_params"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d24680ccd1ad7cdee9e8affa70f37d081b3d14d3800d33a28f474d0f7a55f305"
+dependencies = [
+ "serde",
+ "url",
 ]
 
 [[package]]
