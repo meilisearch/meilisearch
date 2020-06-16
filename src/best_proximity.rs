@@ -10,11 +10,11 @@ fn index_proximity(lhs: u32, rhs: u32) -> u32 {
     if lhs <= rhs {
         cmp::min(rhs - lhs, MAX_DISTANCE)
     } else {
-        cmp::min(lhs - rhs, MAX_DISTANCE) + 1
+        cmp::min((lhs - rhs) + 1, MAX_DISTANCE)
     }
 }
 
-fn positions_proximity(lhs: u32, rhs: u32) -> u32 {
+pub fn positions_proximity(lhs: u32, rhs: u32) -> u32 {
     let (lhs_attr, lhs_index) = extract_position(lhs);
     let (rhs_attr, rhs_index) = extract_position(rhs);
     if lhs_attr != rhs_attr { MAX_DISTANCE }

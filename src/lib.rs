@@ -120,22 +120,37 @@ impl Index {
 
         let mut documents = Vec::new();
 
+        let mut debug_intersects = HashMap::new();
         let mut intersect_cache = HashMap::new();
-        let contains_documents = |(lword, lpos): (usize, u32), (rword, rpos)| {
+        let contains_documents = |(lword, lpos): (usize, u32), (rword, rpos): (usize, u32)| {
+            let proximity = best_proximity::positions_proximity(lpos, rpos);
+
             *intersect_cache.entry(((lword, lpos), (rword, rpos))).or_insert_with(|| {
                 use std::iter::once;
+
+                let (nb_words, nb_docs_intersect, lnblookups, lnbbitmaps, rnblookups, rnbbitmaps) =
+                    debug_intersects.entry((lword, lpos, rword, rpos, proximity)).or_default();
 
                 let left = (&words[lword], lpos);
                 let right = (&words[rword], rpos);
 
+                *nb_words = left.0.len() + right.0.len();
+
+                let mut l_lookups = 0;
+                let mut l_bitmaps = 0;
+                let mut r_lookups = 0;
+                let mut r_bitmaps = 0;
+
                 let mut intersect_docids: Option<RoaringBitmap> = None;
-                for (derived_words, pos) in once(left).chain(once(right)) {
+                for (i, (derived_words, pos))in once(left).chain(once(right)).enumerate() {
                     let mut union_docids = RoaringBitmap::default();
                     // TODO re-enable the prefixes system
                     for word in derived_words.iter() {
+                        if i == 0 { l_lookups += 1 } else { r_lookups += 1 }
                         let mut key = word.clone();
                         key.extend_from_slice(&pos.to_be_bytes());
                         if let Some(attrs) = self.postings_ids.get(rtxn, &key).unwrap() {
+                            if i == 0 { l_bitmaps += 1 } else { r_bitmaps += 1 }
                             let right = RoaringBitmap::deserialize_from(attrs).unwrap();
                             union_docids.union_with(&right);
                         }
@@ -146,6 +161,12 @@ impl Index {
                         None => intersect_docids = Some(union_docids),
                     }
                 }
+
+                *lnblookups = l_lookups;
+                *lnbbitmaps = l_bitmaps;
+                *rnblookups = r_lookups;
+                *rnbbitmaps = r_bitmaps;
+                *nb_docs_intersect += intersect_docids.as_ref().map_or(0, |i| i.len());
 
                 intersect_docids.map_or(false, |i| !i.is_empty())
             })
@@ -223,7 +244,63 @@ impl Index {
             }
         }
 
+        debug_intersects_to_csv(debug_intersects);
+
         eprintln!("{} candidates", documents.iter().map(RoaringBitmap::len).sum::<u64>());
         Ok(documents.iter().flatten().take(20).collect())
+    }
+}
+
+fn debug_intersects_to_csv(intersects: HashMap<(usize, u32, usize, u32, u32), (usize, u64, usize, usize, usize, usize)>) {
+    let mut wrt = csv::Writer::from_path("intersects-stats.csv").unwrap();
+    wrt.write_record(&[
+        "proximity",
+        "lword",
+        "lpos",
+        "rword",
+        "rpos",
+        "nb_derived_words",
+        "nb_docs_intersect",
+        "lnblookups",
+        "lnbbitmaps",
+        "rnblookups",
+        "rnbbitmaps",
+    ]).unwrap();
+
+    for ((lword, lpos, rword, rpos, proximity), vals) in intersects {
+        let (
+            nb_derived_words,
+            nb_docs_intersect,
+            lnblookups,
+            lnbbitmaps,
+            rnblookups,
+            rnbbitmaps,
+        ) = vals;
+
+        let proximity = proximity.to_string();
+        let lword = lword.to_string();
+        let lpos = lpos.to_string();
+        let rword = rword.to_string();
+        let rpos = rpos.to_string();
+        let nb_derived_words = nb_derived_words.to_string();
+        let nb_docs_intersect = nb_docs_intersect.to_string();
+        let lnblookups = lnblookups.to_string();
+        let lnbbitmaps = lnbbitmaps.to_string();
+        let rnblookups = rnblookups.to_string();
+        let rnbbitmaps = rnbbitmaps.to_string();
+
+        wrt.write_record(&[
+            &proximity,
+            &lword,
+            &lpos,
+            &rword,
+            &rpos,
+            &nb_derived_words,
+            &nb_docs_intersect,
+            &lnblookups,
+            &lnbbitmaps,
+            &rnblookups,
+            &rnbbitmaps,
+        ]).unwrap();
     }
 }
