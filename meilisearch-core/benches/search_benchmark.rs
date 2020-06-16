@@ -2,11 +2,12 @@
 #[macro_use]
 extern crate assert_matches;
 
-use std::sync::mpsc;
-use std::path::Path;
+use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
 use std::iter;
+use std::path::Path;
+use std::sync::mpsc;
 
 use meilisearch_core::{Database, DatabaseOptions};
 use meilisearch_core::{ProcessedUpdateResult, UpdateStatus};
@@ -28,9 +29,10 @@ fn prepare_database(path: &Path) -> Database {
 
     database.set_update_callback(Box::new(update_fn));
 
-    let mut writer = db.main_write_txn().unwrap();
-    index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
-    writer.commit().unwrap();
+    db.main_write::<_, _, Box<dyn Error>>(|writer| {
+        index.main.put_schema(writer, &Schema::with_primary_key("id")).unwrap();
+        Ok(())
+    }).unwrap();
 
     let settings_update: SettingsUpdate = {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../datasets/movies/settings.json");
@@ -40,9 +42,10 @@ fn prepare_database(path: &Path) -> Database {
         settings.into_update().unwrap()
     };
 
-    let mut update_writer = db.update_write_txn().unwrap();
-    let _update_id = index.settings_update(&mut update_writer, settings_update).unwrap();
-    update_writer.commit().unwrap();
+    db.update_write::<_, _, Box<dyn Error>>(|writer| {
+        let _update_id = index.settings_update(writer, settings_update).unwrap();
+        Ok(())
+    }).unwrap();
 
     let mut additions = index.documents_addition();
 
@@ -58,9 +61,10 @@ fn prepare_database(path: &Path) -> Database {
         additions.update_document(document);
     }
 
-    let mut update_writer = db.update_write_txn().unwrap();
-    let update_id = additions.finalize(&mut update_writer).unwrap();
-    update_writer.commit().unwrap();
+    let update_id = db.update_write::<_, _, Box<dyn Error>>(|writer| {
+        let update_id = additions.finalize(writer).unwrap();
+        Ok(update_id)
+    }).unwrap();
 
     // block until the transaction is processed
     let _ = receiver.into_iter().find(|id| *id == update_id);
