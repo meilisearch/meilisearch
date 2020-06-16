@@ -18,7 +18,6 @@ default = ["sentry"]
 
 [dependencies]
 actix-cors = "0.2.0"
-actix-files = "0.2.1"
 actix-http = "1"
 actix-rt = "1"
 actix-service = "1.0.5"
