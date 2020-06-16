@@ -102,11 +102,11 @@ impl Index {
             // TODO re-enable the prefixes system
             let mut stream = fst.search(&dfa).into_stream();
             while let Some(word) = stream.next() {
-                derived_words.push(word.to_vec());
                 let word = std::str::from_utf8(word)?;
                 if let Some(attrs) = self.postings_attrs.get(rtxn, word)? {
                     let right = RoaringBitmap::deserialize_from(attrs)?;
                     union_positions.union_with(&right);
+                    derived_words.push((word.as_bytes().to_vec(), right));
                     count += 1;
                 }
             }
@@ -145,14 +145,16 @@ impl Index {
                 for (i, (derived_words, pos))in once(left).chain(once(right)).enumerate() {
                     let mut union_docids = RoaringBitmap::default();
                     // TODO re-enable the prefixes system
-                    for word in derived_words.iter() {
-                        if i == 0 { l_lookups += 1 } else { r_lookups += 1 }
-                        let mut key = word.clone();
-                        key.extend_from_slice(&pos.to_be_bytes());
-                        if let Some(attrs) = self.postings_ids.get(rtxn, &key).unwrap() {
-                            if i == 0 { l_bitmaps += 1 } else { r_bitmaps += 1 }
-                            let right = RoaringBitmap::deserialize_from(attrs).unwrap();
-                            union_docids.union_with(&right);
+                    for (word, attrs) in derived_words.iter() {
+                        if attrs.contains(pos) {
+                            if i == 0 { l_lookups += 1 } else { r_lookups += 1 }
+                            let mut key = word.clone();
+                            key.extend_from_slice(&pos.to_be_bytes());
+                            if let Some(attrs) = self.postings_ids.get(rtxn, &key).unwrap() {
+                                if i == 0 { l_bitmaps += 1 } else { r_bitmaps += 1 }
+                                let right = RoaringBitmap::deserialize_from(attrs).unwrap();
+                                union_docids.union_with(&right);
+                            }
                         }
                     }
 
@@ -189,13 +191,15 @@ impl Index {
                     let before = Instant::now();
 
                     // TODO re-enable the prefixes system
-                    for word in derived_words.iter() {
-                        let mut key = word.clone();
-                        key.extend_from_slice(&pos.to_be_bytes());
-                        if let Some(attrs) = self.postings_ids.get(rtxn, &key)? {
-                            let right = RoaringBitmap::deserialize_from(attrs)?;
-                            union_docids.union_with(&right);
-                            count += 1;
+                    for (word, attrs) in derived_words.iter() {
+                        if attrs.contains(pos) {
+                            let mut key = word.clone();
+                            key.extend_from_slice(&pos.to_be_bytes());
+                            if let Some(attrs) = self.postings_ids.get(rtxn, &key)? {
+                                let right = RoaringBitmap::deserialize_from(attrs)?;
+                                union_docids.union_with(&right);
+                                count += 1;
+                            }
                         }
                     }
 
