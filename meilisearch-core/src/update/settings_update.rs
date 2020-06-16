@@ -59,7 +59,8 @@ pub fn apply_settings_update(
 
     match settings.distinct_attribute {
         UpdateState::Update(v) => {
-            index.main.put_distinct_attribute(writer, &v)?;
+            let field_id = schema.insert(&v)?;
+            index.main.put_distinct_attribute(writer, field_id)?;
         },
         UpdateState::Clear => {
             index.main.delete_distinct_attribute(writer)?;

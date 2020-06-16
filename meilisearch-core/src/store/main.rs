@@ -286,15 +286,15 @@ impl Main {
         Ok(self.main.delete::<_, Str>(writer, RANKING_RULES_KEY)?)
     }
 
-    pub fn distinct_attribute(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<String>> {
-        if let Some(value) = self.main.get::<_, Str, Str>(reader, DISTINCT_ATTRIBUTE_KEY)? {
-            return Ok(Some(value.to_owned()))
+    pub fn distinct_attribute(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<FieldId>> {
+        if let Some(value) = self.main.get::<_, Str, OwnedType<u16>>(reader, DISTINCT_ATTRIBUTE_KEY)? {
+            return Ok(Some(FieldId(value.to_owned())))
         }
         return Ok(None)
     }
 
-    pub fn put_distinct_attribute(self, writer: &mut heed::RwTxn<MainT>, value: &str) -> MResult<()> {
-        Ok(self.main.put::<_, Str, Str>(writer, DISTINCT_ATTRIBUTE_KEY, value)?)
+    pub fn put_distinct_attribute(self, writer: &mut heed::RwTxn<MainT>, value: FieldId) -> MResult<()> {
+        Ok(self.main.put::<_, Str, OwnedType<u16>>(writer, DISTINCT_ATTRIBUTE_KEY, &value.0)?)
     }
 
     pub fn delete_distinct_attribute(self, writer: &mut heed::RwTxn<MainT>) -> MResult<bool> {

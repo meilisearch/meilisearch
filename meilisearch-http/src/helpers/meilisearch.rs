@@ -139,19 +139,17 @@ impl<'a> SearchBuilder<'a> {
         }
 
         if let Some(field) = self.index.main.distinct_attribute(reader)? {
-            if let Some(field_id) = schema.id(&field) {
-                let index = &self.index;
-                query_builder.with_distinct(1, move |id| {
-                    match index.document_attribute_bytes(reader, id, field_id) {
-                        Ok(Some(bytes)) => {
-                            let mut s = SipHasher::new();
-                            bytes.hash(&mut s);
-                            Some(s.finish())
-                        }
-                        _ => None,
+            let index = &self.index;
+            query_builder.with_distinct(1, move |id| {
+                match index.document_attribute_bytes(reader, id, field) {
+                    Ok(Some(bytes)) => {
+                        let mut s = SipHasher::new();
+                        bytes.hash(&mut s);
+                        Some(s.finish())
                     }
-                });
-            }
+                    _ => None,
+                }
+            });
         }
 
         query_builder.set_facet_filter(self.facet_filters);

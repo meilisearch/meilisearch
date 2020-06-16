@@ -89,9 +89,13 @@ async fn get_all(
         .map(|r| r.to_string())
         .collect();
 
-    let distinct_attribute = index.main.distinct_attribute(&reader)?;
 
     let schema = index.main.schema(&reader)?;
+
+    let distinct_attribute = match (index.main.distinct_attribute(&reader)?, &schema) {
+        (Some(id), Some(schema)) => schema.name(id).map(str::to_string),
+        _ => None,
+    };
 
     let attributes_for_faceting = match (&schema, &index.main.attributes_for_faceting(&reader)?) {
         (Some(schema), Some(attrs)) => {
