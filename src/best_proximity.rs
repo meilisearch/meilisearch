@@ -65,7 +65,7 @@ impl Node {
                         parent_position: *position,
                     };
                     // We do not produce the nodes we have already seen in previous iterations loops.
-                    if node.is_complete(positions) && acc_proximity + proximity < best_proximity {
+                    if proximity > 7 || (node.is_complete(positions) && acc_proximity + proximity < best_proximity) {
                         None
                     } else {
                         Some((node, proximity))
@@ -140,7 +140,7 @@ where F: FnMut((usize, u32), (usize, u32)) -> bool,
     fn next(&mut self) -> Option<Self::Item> {
         let before = Instant::now();
 
-        if self.best_proximity == self.positions.len() as u32 * MAX_DISTANCE {
+        if self.best_proximity == self.positions.len() as u32 * (MAX_DISTANCE - 1) {
             return None;
         }
 
