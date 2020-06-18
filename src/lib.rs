@@ -104,7 +104,7 @@ impl Index {
             while let Some(word) = stream.next() {
                 let word = std::str::from_utf8(word)?;
                 if let Some(attrs) = self.postings_attrs.get(rtxn, word)? {
-                    let right = RoaringBitmap::deserialize_from(attrs)?;
+                    let right = RoaringBitmap::deserialize_from_slice(attrs)?;
                     union_positions.union_with(&right);
                     derived_words.push((word.as_bytes().to_vec(), right));
                     count += 1;
@@ -120,57 +120,67 @@ impl Index {
 
         let mut documents = Vec::new();
 
-        let mut debug_intersects = HashMap::new();
+        // let mut debug_intersects = HashMap::new();
         let mut intersect_cache = HashMap::new();
+        let mut lunion_docids = RoaringBitmap::default();
+        let mut runion_docids = RoaringBitmap::default();
         let contains_documents = |(lword, lpos): (usize, u32), (rword, rpos): (usize, u32)| {
             let proximity = best_proximity::positions_proximity(lpos, rpos);
 
             *intersect_cache.entry(((lword, lpos), (rword, rpos))).or_insert_with(|| {
-                use std::iter::once;
-
-                let (nb_words, nb_docs_intersect, lnblookups, lnbbitmaps, rnblookups, rnbbitmaps) =
-                    debug_intersects.entry((lword, lpos, rword, rpos, proximity)).or_default();
+                // let (nb_words, nb_docs_intersect, lnblookups, lnbbitmaps, rnblookups, rnbbitmaps) =
+                //     debug_intersects.entry((lword, lpos, rword, rpos, proximity)).or_default();
 
                 let left = (&words[lword], lpos);
                 let right = (&words[rword], rpos);
 
-                *nb_words = left.0.len() + right.0.len();
+                // *nb_words = left.0.len() + right.0.len();
 
                 let mut l_lookups = 0;
                 let mut l_bitmaps = 0;
                 let mut r_lookups = 0;
                 let mut r_bitmaps = 0;
 
-                let mut intersect_docids: Option<RoaringBitmap> = None;
-                for (i, (derived_words, pos))in once(left).chain(once(right)).enumerate() {
-                    let mut union_docids = RoaringBitmap::default();
-                    // TODO re-enable the prefixes system
-                    for (word, attrs) in derived_words.iter() {
-                        if attrs.contains(pos) {
-                            if i == 0 { l_lookups += 1 } else { r_lookups += 1 }
-                            let mut key = word.clone();
-                            key.extend_from_slice(&pos.to_be_bytes());
-                            if let Some(attrs) = self.postings_ids.get(rtxn, &key).unwrap() {
-                                if i == 0 { l_bitmaps += 1 } else { r_bitmaps += 1 }
-                                let right = RoaringBitmap::deserialize_from(attrs).unwrap();
-                                union_docids.union_with(&right);
-                            }
+                // This for the left word
+                lunion_docids.clear();
+                for (word, attrs) in &words[lword] {
+                    if attrs.contains(lpos) {
+                        l_lookups += 1;
+                        let mut key = word.clone();
+                        key.extend_from_slice(&lpos.to_be_bytes());
+                        if let Some(attrs) = self.postings_ids.get(rtxn, &key).unwrap() {
+                            l_bitmaps += 1;
+                            let right = RoaringBitmap::deserialize_from_slice(attrs).unwrap();
+                            lunion_docids.union_with(&right);
                         }
-                    }
-
-                    match &mut intersect_docids {
-                        Some(left) => left.intersect_with(&union_docids),
-                        None => intersect_docids = Some(union_docids),
                     }
                 }
 
-                *lnblookups = l_lookups;
-                *lnbbitmaps = l_bitmaps;
-                *rnblookups = r_lookups;
-                *rnbbitmaps = r_bitmaps;
-                *nb_docs_intersect += intersect_docids.as_ref().map_or(0, |i| i.len());
+                // This for the right word
+                runion_docids.clear();
+                for (word, attrs) in &words[rword] {
+                    if attrs.contains(rpos) {
+                        r_lookups += 1;
+                        let mut key = word.clone();
+                        key.extend_from_slice(&rpos.to_be_bytes());
+                        if let Some(attrs) = self.postings_ids.get(rtxn, &key).unwrap() {
+                            r_bitmaps += 1;
+                            let right = RoaringBitmap::deserialize_from_slice(attrs).unwrap();
+                            runion_docids.union_with(&right);
+                        }
+                    }
+                }
 
-                intersect_docids.map_or(false, |i| !i.is_empty())
+                let intersect_docids = &mut lunion_docids;
+                intersect_docids.intersect_with(&runion_docids);
+
+                // *lnblookups = l_lookups;
+                // *lnbbitmaps = l_bitmaps;
+                // *rnblookups = r_lookups;
+                // *rnbbitmaps = r_bitmaps;
+                // *nb_docs_intersect += intersect_docids.len();
+
+                !intersect_docids.is_empty()
             })
         };
 
@@ -196,7 +206,7 @@ impl Index {
                             let mut key = word.clone();
                             key.extend_from_slice(&pos.to_be_bytes());
                             if let Some(attrs) = self.postings_ids.get(rtxn, &key)? {
-                                let right = RoaringBitmap::deserialize_from(attrs)?;
+                                let right = RoaringBitmap::deserialize_from_slice(attrs)?;
                                 union_docids.union_with(&right);
                                 count += 1;
                             }
@@ -248,7 +258,7 @@ impl Index {
             }
         }
 
-        debug_intersects_to_csv(debug_intersects);
+        // debug_intersects_to_csv(debug_intersects);
 
         eprintln!("{} candidates", documents.iter().map(RoaringBitmap::len).sum::<u64>());
         Ok(documents.iter().flatten().take(20).collect())

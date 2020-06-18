@@ -48,7 +48,7 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5753e2a71534719bf3f4e57006c3a4f0d2c672a4b676eec84161f763eca87dbf"
 dependencies = [
- "byteorder 1.3.4",
+ "byteorder",
  "serde",
 ]
 
@@ -75,7 +75,7 @@ checksum = "c0940dc441f31689269e10ac70eb1002a3a1d3ad1390e030043662eb7fe4688b"
 dependencies = [
  "block-padding",
  "byte-tools",
- "byteorder 1.3.4",
+ "byteorder",
  "generic-array",
 ]
 
@@ -115,12 +115,6 @@ name = "byte-tools"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3b5ca7a04898ad4bcd41c90c5285445ff5b791899bb1b0abdd2a2aa791211d7"
-
-[[package]]
-name = "byteorder"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fc10e8cc6b2580fda3f36eb6dc5316657f812a3df879a44a66fc9f0fdbc4855"
 
 [[package]]
 name = "byteorder"
@@ -445,7 +439,7 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
 dependencies = [
- "byteorder 1.3.4",
+ "byteorder",
 ]
 
 [[package]]
@@ -533,7 +527,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd7882b766b4be1b90d8ce5ce4c7aca2539b43176a708dbc8e79576dbbdbba93"
 dependencies = [
- "byteorder 1.3.4",
+ "byteorder",
  "heed-traits",
  "heed-types",
  "libc",
@@ -784,7 +778,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bitpacking",
- "byteorder 1.3.4",
+ "byteorder",
  "cow-utils",
  "csv",
  "fst",
@@ -1000,7 +994,7 @@ name = "oxidized-mtbl"
 version = "0.1.0"
 source = "git+https://github.com/Kerollmops/oxidized-mtbl.git?rev=9451be8#9451be8829562f7d1f8d34aa3ecb81c5106a0623"
 dependencies = [
- "byteorder 1.3.4",
+ "byteorder",
  "crc32c",
  "flate2",
  "snap",
@@ -1360,7 +1354,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae1ded71d66a4a97f5e961fd0cb25a5f366a42a41570d16a763a69c092c26ae4"
 dependencies = [
- "byteorder 1.3.4",
+ "byteorder",
 ]
 
 [[package]]
@@ -1374,11 +1368,10 @@ dependencies = [
 
 [[package]]
 name = "roaring"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4af20e5d3e44732a57489fa297768ca29361b54fbc3b20cdeb738fa6932cc22d"
+version = "0.6.0"
+source = "git+https://github.com/Kerollmops/roaring-rs.git?branch=deserialize-from-slice#24420bb9f980749476cec860ea8dd3c1683c0cd1"
 dependencies = [
- "byteorder 0.5.3",
+ "byteorder",
 ]
 
 [[package]]
@@ -1693,7 +1686,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfea31758bf674f990918962e8e5f07071a3161bd7c4138ed23e416e1ac4264e"
 dependencies = [
  "base64 0.11.0",
- "byteorder 1.3.4",
+ "byteorder",
  "bytes",
  "http",
  "httparse",
@@ -1901,7 +1894,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6580539ad917b7c026220c4b3f2c08d52ce54d6ce0dc491e66002e35388fab46"
 dependencies = [
- "byteorder 1.3.4",
+ "byteorder",
  "zerocopy-derive",
 ]
 
