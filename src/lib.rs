@@ -87,7 +87,7 @@ impl Index {
         let number_of_words = words.len();
         let dfas = words.into_iter().enumerate().map(|(i, word)| {
             let (word, quoted) = match word {
-                QueryToken::Free(word) => (word.cow_to_lowercase(), false),
+                QueryToken::Free(word) => (word.cow_to_lowercase(), word.len() <= 3),
                 QueryToken::Quoted(word) => (Cow::Borrowed(word), true),
             };
             let is_last = i + 1 == number_of_words;
