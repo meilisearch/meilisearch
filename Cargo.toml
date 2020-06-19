@@ -38,6 +38,13 @@ serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "0.2.15", features = ["full"] }
 warp = "0.2.2"
 
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "search"
+harness = false
+
 [profile.release]
 debug = true
 

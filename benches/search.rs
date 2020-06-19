@@ -1,13 +1,15 @@
-#![feature(test)]
-extern crate test;
+use std::time::Duration;
 
 use heed::EnvOpenOptions;
 use mega_mini_indexer::Index;
+use criterion::{criterion_group, criterion_main, BenchmarkId};
 
-#[bench]
-fn search_minogue_kylie_live(b: &mut test::Bencher) {
+fn bench_search(c: &mut criterion::Criterion) {
     let database = "books-4cpu.mmdb";
-    let query = "minogue kylie live";
+    let queries = [
+        "minogue kylie",
+        "minogue kylie live",
+    ];
 
     std::fs::create_dir_all(database).unwrap();
     let env = EnvOpenOptions::new()
@@ -18,8 +20,22 @@ fn search_minogue_kylie_live(b: &mut test::Bencher) {
 
     let index = Index::new(&env).unwrap();
 
-    b.iter(|| {
-        let rtxn = env.read_txn().unwrap();
-        let _documents_ids = index.search(&rtxn, query).unwrap();
-    })
+    let mut group = c.benchmark_group("search");
+    group.sample_size(10);
+    group.measurement_time(Duration::from_secs(12));
+
+    for query in &queries {
+        group.bench_with_input(BenchmarkId::from_parameter(query), &query, |b, &query| {
+            b.iter(|| {
+                let rtxn = env.read_txn().unwrap();
+                let _documents_ids = index.search(&rtxn, query).unwrap();
+            });
+        });
+    }
+
+
+    group.finish();
 }
+
+criterion_group!(benches, bench_search);
+criterion_main!(benches);
