@@ -126,6 +126,7 @@ impl Index {
         let mut runion_docids = RoaringBitmap::default();
         let contains_documents = |(lword, lpos): (usize, u32), (rword, rpos): (usize, u32)| {
             let proximity = best_proximity::positions_proximity(lpos, rpos);
+            if proximity == 0 { return false }
 
             *intersect_cache.entry(((lword, lpos), (rword, rpos))).or_insert_with(|| {
                 // let (nb_words, nb_docs_intersect, lnblookups, lnbbitmaps, rnblookups, rnbbitmaps) =
