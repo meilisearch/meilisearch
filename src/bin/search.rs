@@ -1,4 +1,5 @@
-use std::io::{self, Write};
+use std::io::{self, Write, BufRead};
+use std::iter::once;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -19,7 +20,7 @@ struct Opt {
     database: PathBuf,
 
     /// The query string to search for (doesn't support prefix search yet).
-    query: String,
+    query: Option<String>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -34,25 +35,35 @@ fn main() -> anyhow::Result<()> {
 
     let index = Index::new(&env)?;
 
-    let before = Instant::now();
     let rtxn = env.read_txn()?;
 
-    let documents_ids = index.search(&rtxn, &opt.query)?;
-    let headers = match index.headers(&rtxn)? {
-        Some(headers) => headers,
-        None => return Ok(()),
+    let stdin = io::stdin();
+    let lines = match opt.query {
+        Some(query) => Box::new(once(Ok(query.to_string()))),
+        None => Box::new(stdin.lock().lines()) as Box<dyn Iterator<Item = _>>,
     };
 
-    let mut stdout = io::stdout();
-    stdout.write_all(&headers)?;
+    for result in lines {
+        let before = Instant::now();
 
-    for id in &documents_ids {
-        if let Some(content) = index.documents.get(&rtxn, &BEU32::new(*id))? {
-            stdout.write_all(&content)?;
+        let query = result?;
+        let documents_ids = index.search(&rtxn, &query)?;
+        let headers = match index.headers(&rtxn)? {
+            Some(headers) => headers,
+            None => return Ok(()),
+        };
+
+        let mut stdout = io::stdout();
+        stdout.write_all(&headers)?;
+
+        for id in &documents_ids {
+            if let Some(content) = index.documents.get(&rtxn, &BEU32::new(*id))? {
+                stdout.write_all(&content)?;
+            }
         }
-    }
 
-    eprintln!("Took {:.02?} to find {} documents", before.elapsed(), documents_ids.len());
+        eprintln!("Took {:.02?} to find {} documents", before.elapsed(), documents_ids.len());
+    }
 
     Ok(())
 }
