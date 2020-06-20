@@ -96,6 +96,8 @@ impl Index {
         let before = Instant::now();
 
         for (word, _is_prefix, dfa) in dfas {
+            let before = Instant::now();
+
             let mut count = 0;
             let mut union_positions = RoaringBitmap::default();
             let mut derived_words = Vec::new();
@@ -111,7 +113,8 @@ impl Index {
                 }
             }
 
-            eprintln!("{} words for {:?} we have found positions {:?}", count, word, union_positions);
+            eprintln!("{} words for {:?} we have found positions {:?} in {:.02?}",
+                count, word, union_positions, before.elapsed());
             words.push(derived_words);
             positions.push(union_positions.iter().collect());
         }
@@ -120,7 +123,7 @@ impl Index {
 
         let mut documents = Vec::new();
 
-        // let mut debug_intersects = HashMap::new();
+        let mut debug_intersects = HashMap::new();
         let mut intersect_cache = HashMap::new();
         let mut lunion_docids = RoaringBitmap::default();
         let mut runion_docids = RoaringBitmap::default();
@@ -129,13 +132,13 @@ impl Index {
             if proximity == 0 { return false }
 
             *intersect_cache.entry(((lword, lpos), (rword, rpos))).or_insert_with(|| {
-                // let (nb_words, nb_docs_intersect, lnblookups, lnbbitmaps, rnblookups, rnbbitmaps) =
-                //     debug_intersects.entry((lword, lpos, rword, rpos, proximity)).or_default();
+                let (nb_words, nb_docs_intersect, lnblookups, lnbbitmaps, rnblookups, rnbbitmaps) =
+                    debug_intersects.entry((lword, lpos, rword, rpos, proximity)).or_default();
 
-                let left = (&words[lword], lpos);
-                let right = (&words[rword], rpos);
+                let left = &words[lword];
+                let right = &words[rword];
 
-                // *nb_words = left.0.len() + right.0.len();
+                *nb_words = left.len() + right.len();
 
                 let mut l_lookups = 0;
                 let mut l_bitmaps = 0;
@@ -144,7 +147,7 @@ impl Index {
 
                 // This for the left word
                 lunion_docids.clear();
-                for (word, attrs) in &words[lword] {
+                for (word, attrs) in left {
                     if attrs.contains(lpos) {
                         l_lookups += 1;
                         let mut key = word.clone();
@@ -159,7 +162,7 @@ impl Index {
 
                 // This for the right word
                 runion_docids.clear();
-                for (word, attrs) in &words[rword] {
+                for (word, attrs) in right {
                     if attrs.contains(rpos) {
                         r_lookups += 1;
                         let mut key = word.clone();
@@ -175,11 +178,11 @@ impl Index {
                 let intersect_docids = &mut lunion_docids;
                 intersect_docids.intersect_with(&runion_docids);
 
-                // *lnblookups = l_lookups;
-                // *lnbbitmaps = l_bitmaps;
-                // *rnblookups = r_lookups;
-                // *rnbbitmaps = r_bitmaps;
-                // *nb_docs_intersect += intersect_docids.len();
+                *lnblookups = l_lookups;
+                *lnbbitmaps = l_bitmaps;
+                *rnblookups = r_lookups;
+                *rnbbitmaps = r_bitmaps;
+                *nb_docs_intersect += intersect_docids.len();
 
                 !intersect_docids.is_empty()
             })
@@ -259,7 +262,9 @@ impl Index {
             }
         }
 
-        // debug_intersects_to_csv(debug_intersects);
+        if cfg!(feature = "intersect-to-csv") {
+            debug_intersects_to_csv(debug_intersects);
+        }
 
         eprintln!("{} candidates", documents.iter().map(RoaringBitmap::len).sum::<u64>());
         Ok(documents.iter().flatten().take(20).collect())

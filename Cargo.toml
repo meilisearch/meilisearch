@@ -41,6 +41,10 @@ warp = "0.2.2"
 [dev-dependencies]
 criterion = "0.3"
 
+[features]
+default = []
+intersect-to-csv = []
+
 [[bench]]
 name = "search"
 harness = false
