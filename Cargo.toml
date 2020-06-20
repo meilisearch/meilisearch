@@ -43,7 +43,6 @@ criterion = "0.3"
 
 [features]
 default = []
-intersect-to-csv = []
 
 [[bench]]
 name = "search"
