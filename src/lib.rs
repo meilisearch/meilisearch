@@ -143,7 +143,7 @@ impl Index {
         let mut union_cache = HashMap::new();
         let mut intersect_cache = HashMap::new();
         // Returns `true` if there is documents in common between the two words and positions given.
-        let contains_documents = |(lword, lpos): (usize, u32), (rword, rpos): (usize, u32)| {
+        let mut contains_documents = |(lword, lpos), (rword, rpos), union_cache: &mut HashMap<_, _>| {
             let proximity = best_proximity::positions_proximity(lpos, rpos);
 
             if proximity == 0 { return false }
@@ -162,7 +162,8 @@ impl Index {
             })
         };
 
-        for (proximity, mut positions) in BestProximity::new(positions, contains_documents) {
+        let mut iter = BestProximity::new(positions);
+        while let Some((proximity, mut positions)) = iter.next(|l, r| contains_documents(l, r, &mut union_cache)) {
             positions.sort_unstable();
 
             let same_prox_before = Instant::now();
@@ -172,34 +173,18 @@ impl Index {
                 let before = Instant::now();
 
                 let mut intersect_docids: Option<RoaringBitmap> = None;
-                for (derived_words, pos) in words.iter().zip(positions.clone()) {
-                    let mut count = 0;
-                    let mut union_docids = RoaringBitmap::default();
-
+                for (word, pos) in positions.iter().enumerate() {
                     let before = Instant::now();
-
-                    // TODO re-enable the prefixes system
-                    for (word, attrs) in derived_words.iter() {
-                        if attrs.contains(pos) {
-                            let mut key = word.clone();
-                            key.extend_from_slice(&pos.to_be_bytes());
-                            if let Some(attrs) = self.postings_ids.get(rtxn, &key)? {
-                                let right = RoaringBitmap::deserialize_from_slice(attrs)?;
-                                union_docids.union_with(&right);
-                                count += 1;
-                            }
-                        }
-                    }
+                    let union_docids = union_cache.entry((word, *pos)).or_insert_with(|| unions_word_pos(word, *pos));
 
                     let before_intersect = Instant::now();
-
                     match &mut intersect_docids {
                         Some(left) => left.intersect_with(&union_docids),
-                        None => intersect_docids = Some(union_docids),
+                        None => intersect_docids = Some(union_docids.clone()),
                     }
 
-                    eprintln!("retrieving {} word took {:.02?} and took {:.02?} to intersect",
-                        count, before.elapsed(), before_intersect.elapsed());
+                    eprintln!("retrieving words took {:.02?} and took {:.02?} to intersect",
+                        before.elapsed(), before_intersect.elapsed());
                 }
 
                 eprintln!("for proximity {:?} {:?} we took {:.02?} to find {} documents",

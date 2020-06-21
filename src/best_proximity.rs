@@ -119,32 +119,29 @@ impl Node {
     }
 }
 
-pub struct BestProximity<F> {
+pub struct BestProximity {
     positions: Vec<Vec<u32>>,
     best_proximity: u32,
-    contains_documents: F,
 }
 
-impl<F> BestProximity<F> {
-    pub fn new(positions: Vec<Vec<u32>>, contains_documents: F) -> BestProximity<F> {
+impl BestProximity {
+    pub fn new(positions: Vec<Vec<u32>>) -> BestProximity {
         let best_proximity = (positions.len() as u32).saturating_sub(1);
-        BestProximity { positions, best_proximity, contains_documents }
+        BestProximity { positions, best_proximity }
     }
 }
 
-impl<F> Iterator for BestProximity<F>
-where F: FnMut((usize, u32), (usize, u32)) -> bool,
-{
-    type Item = (u32, Vec<Vec<u32>>);
-
-    fn next(&mut self) -> Option<Self::Item> {
+impl BestProximity {
+    pub fn next<F>(&mut self, mut contains_documents: F) -> Option<(u32, Vec<Vec<u32>>)>
+    where F: FnMut((usize, u32), (usize, u32)) -> bool,
+    {
         let before = Instant::now();
 
         if self.best_proximity == self.positions.len() as u32 * (MAX_DISTANCE - 1) {
             return None;
         }
 
-        let BestProximity { positions, best_proximity, contains_documents } = self;
+        let BestProximity { positions, best_proximity } = self;
 
         let result = astar_bag(
             &Node::Uninit, // start
@@ -152,7 +149,7 @@ where F: FnMut((usize, u32), (usize, u32)) -> bool,
             |_| 0, // heuristic
             |n| { // success
                 let c = n.is_complete(&positions) && n.proximity() >= *best_proximity;
-                if n.is_reachable(contains_documents) { Some(c) } else { None }
+                if n.is_reachable(&mut contains_documents) { Some(c) } else { None }
             },
         );
 
@@ -186,16 +183,17 @@ mod tests {
             vec![   1,           ],
             vec![         3,    6],
         ];
-        let mut iter = BestProximity::new(positions, |_, _| true);
+        let mut iter = BestProximity::new(positions);
+        let f = |_, _| true;
 
-        assert_eq!(iter.next(), Some((1+2, vec![vec![0, 1, 3]]))); // 3
-        assert_eq!(iter.next(), Some((2+2, vec![vec![2, 1, 3]]))); // 4
-        assert_eq!(iter.next(), Some((3+2, vec![vec![3, 1, 3]]))); // 5
-        assert_eq!(iter.next(), Some((1+5, vec![vec![0, 1, 6], vec![4, 1, 3]]))); // 6
-        assert_eq!(iter.next(), Some((2+5, vec![vec![2, 1, 6]]))); // 7
-        assert_eq!(iter.next(), Some((3+5, vec![vec![3, 1, 6]]))); // 8
-        assert_eq!(iter.next(), Some((4+5, vec![vec![4, 1, 6]]))); // 9
-        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(f), Some((1+2, vec![vec![0, 1, 3]]))); // 3
+        assert_eq!(iter.next(f), Some((2+2, vec![vec![2, 1, 3]]))); // 4
+        assert_eq!(iter.next(f), Some((3+2, vec![vec![3, 1, 3]]))); // 5
+        assert_eq!(iter.next(f), Some((1+5, vec![vec![0, 1, 6], vec![4, 1, 3]]))); // 6
+        assert_eq!(iter.next(f), Some((2+5, vec![vec![2, 1, 6]]))); // 7
+        assert_eq!(iter.next(f), Some((3+5, vec![vec![3, 1, 6]]))); // 8
+        assert_eq!(iter.next(f), Some((4+5, vec![vec![4, 1, 6]]))); // 9
+        assert_eq!(iter.next(f), None);
     }
 
     #[test]
@@ -205,12 +203,13 @@ mod tests {
             vec![   1,          1000,       2001      ],
             vec![         3, 6,             2002, 3000],
         ];
-        let mut iter = BestProximity::new(positions, |_, _| true);
+        let mut iter = BestProximity::new(positions);
+        let f = |_, _| true;
 
-        assert_eq!(iter.next(), Some((1+1, vec![vec![2000, 2001, 2002]]))); // 2
-        assert_eq!(iter.next(), Some((1+2, vec![vec![0, 1, 3]]))); // 3
-        assert_eq!(iter.next(), Some((2+2, vec![vec![2, 1, 3]]))); // 4
-        assert_eq!(iter.next(), Some((1+5, vec![vec![0, 1, 6]]))); // 6
+        assert_eq!(iter.next(f), Some((1+1, vec![vec![2000, 2001, 2002]]))); // 2
+        assert_eq!(iter.next(f), Some((1+2, vec![vec![0, 1, 3]]))); // 3
+        assert_eq!(iter.next(f), Some((2+2, vec![vec![2, 1, 3]]))); // 4
+        assert_eq!(iter.next(f), Some((1+5, vec![vec![0, 1, 6]]))); // 6
         // We ignore others here...
     }
 
