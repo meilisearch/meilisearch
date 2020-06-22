@@ -1669,3 +1669,66 @@ async fn well_formated_error_with_bad_request_params() {
     assert!(response.get("errorType").is_some());
     assert!(response.get("errorLink").is_some());
 }
+
+
+#[actix_rt::test]
+async fn update_documents_with_facet_distribution() {
+    let mut server = common::Server::with_uid("test");
+    let body = json!({
+        "uid": "test",
+        "primaryKey": "id",
+    });
+
+    server.create_index(body).await;
+    let settings = json!({
+        "attributesForFaceting": ["genre"],
+        "displayedAttributes": ["genre"],
+        "searchableAttributes": ["genre"]
+    });
+    server.update_all_settings(settings).await;
+    let update1 = json!([
+        {
+            "id": "1",
+            "type": "album",
+            "title": "Nevermind",
+            "genre": ["grunge", "alternative"]
+        },
+        {
+            "id": "2",
+            "type": "album",
+            "title": "Mellon Collie and the Infinite Sadness",
+            "genre": ["alternative", "rock"]
+        },
+        {
+            "id": "3",
+            "type": "album",
+            "title": "The Queen Is Dead",
+            "genre": ["indie", "rock"]
+        }
+    ]);
+    server.add_or_update_multiple_documents(update1).await;
+    let search = json!({
+        "q": "album",
+        "facetsDistribution": ["genre"]
+    });
+    let (response1, _) = server.search_post(search.clone()).await;
+    let expected_facet_distribution = json!({
+        "genre": {
+            "grunge": 1,
+            "alternative": 2,
+            "rock": 2,
+            "indie": 1
+        }
+    });
+    assert_json_eq!(expected_facet_distribution.clone(), response1["facetsDistribution"].clone());
+
+    let update2 = json!([
+        {
+            "id": "3",
+            "title": "The Queen Is Very Dead"
+        }
+    ]);
+    server.add_or_update_multiple_documents(update2).await;
+    let (response2, _) = server.search_post(search).await;
+    assert_json_eq!(expected_facet_distribution, response2["facetsDistribution"].clone());
+}

@@ -212,11 +212,6 @@ pub fn apply_addition<'a, 'b>(
 
     let stop_words = index.main.stop_words_fst(writer)?.map_data(Cow::into_owned)?;
 
-    // 3. index the documents fields in the stores
-    if let Some(attributes_for_facetting) = index.main.attributes_for_faceting(writer)? {
-        let facet_map = facets::facet_map_from_docs(&schema, &documents_additions, attributes_for_facetting.as_ref())?;
-        index.facets.add(writer, facet_map)?;
-    }
 
     let mut indexer = RawIndexer::new(stop_words);
 
@@ -253,6 +248,13 @@ pub fn apply_addition<'a, 'b>(
     let new_internal_docids = sdset::SetBuf::from_dirty(new_internal_docids);
     index.main.merge_external_docids(writer, &new_external_docids)?;
     index.main.merge_internal_docids(writer, &new_internal_docids)?;
+
+    // recompute all facet attributes after document update.
+    if let Some(attributes_for_facetting) = index.main.attributes_for_faceting(writer)? {
+        let docids = index.main.internal_docids(writer)?;
+        let facet_map = facets::facet_map_from_docids(writer, index, &docids, attributes_for_facetting.as_ref())?;
+        index.facets.add(writer, facet_map)?;
+    }
 
     Ok(())
 }
@@ -343,6 +345,13 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
     )?;
 
     index.main.put_schema(writer, &schema)?;
+
+    // recompute all facet attributes after document update.
+    if let Some(attributes_for_facetting) = index.main.attributes_for_faceting(writer)? {
+        let docids = index.main.internal_docids(writer)?;
+        let facet_map = facets::facet_map_from_docids(writer, index, &docids, attributes_for_facetting.as_ref())?;
+        index.facets.add(writer, facet_map)?;
+    }
 
     Ok(())
 }
