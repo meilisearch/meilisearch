@@ -44,6 +44,8 @@ pub struct Index {
     /// Maps a word at a position (u32) and all the documents ids where it appears.
     pub word_position_docids: Database<ByteSlice, RoaringBitmapCodec>,
     pub prefix_word_position_docids: Database<ByteSlice, RoaringBitmapCodec>,
+    /// Maps a word and an attribute (u32) to all the documents ids that it appears in.
+    pub word_attribute_docids: Database<ByteSlice, RoaringBitmapCodec>,
     /// Maps an internal document to the content of the document in CSV.
     pub documents: Database<OwnedType<BEU32>, ByteSlice>,
 }
@@ -56,6 +58,7 @@ impl Index {
             prefix_word_positions: env.create_database(Some("prefix-word-positions"))?,
             word_position_docids: env.create_database(Some("word-position-docids"))?,
             prefix_word_position_docids: env.create_database(Some("prefix-word-position-docids"))?,
+            word_attribute_docids: env.create_database(Some("word-attribute-docids"))?,
             documents: env.create_database(Some("documents"))?,
         })
     }
@@ -64,10 +67,17 @@ impl Index {
         self.main.get::<_, Str, ByteSlice>(rtxn, "headers")
     }
 
+    pub fn fst<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<Option<fst::Set<&'t [u8]>>> {
+        match self.main.get::<_, Str, ByteSlice>(rtxn, "words-fst")? {
+            Some(bytes) => Ok(Some(fst::Set::new(bytes)?)),
+            None => Ok(None),
+        }
+    }
+
     pub fn search(&self, rtxn: &heed::RoTxn, query: &str) -> anyhow::Result<Vec<DocumentId>> {
-        let fst = match self.main.get::<_, Str, ByteSlice>(rtxn, "words-fst")? {
-            Some(bytes) => fst::Set::new(bytes)?,
-            None => return Ok(Vec::new()),
+        let fst = match self.fst(rtxn)? {
+            Some(fst) => fst,
+            None => return Ok(vec![]),
         };
 
         let (lev0, lev1, lev2) = (&LEVDIST0, &LEVDIST1, &LEVDIST2);

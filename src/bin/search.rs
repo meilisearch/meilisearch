@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
     let env = EnvOpenOptions::new()
         .map_size(100 * 1024 * 1024 * 1024) // 100 GB
         .max_readers(10)
-        .max_dbs(5)
+        .max_dbs(10)
         .open(opt.database)?;
 
     let index = Index::new(&env)?;

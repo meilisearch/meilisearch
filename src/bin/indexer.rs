@@ -1,5 +1,6 @@
-use std::collections::{BTreeSet, BTreeMap};
-use std::convert::TryFrom;
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, BTreeSet, BTreeMap};
+use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -344,6 +345,46 @@ fn writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) -> anyh
     Ok(())
 }
 
+fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> anyhow::Result<()> {
+    eprintln!("Computing the attributes documents ids...");
+
+    let fst = match index.fst(&wtxn)? {
+        Some(fst) => fst.map_data(|s| s.to_vec())?,
+        None => return Ok(()),
+    };
+
+    let mut word_attributes = HashMap::new();
+    let mut stream = fst.stream();
+    while let Some(word) = stream.next() {
+        word_attributes.clear();
+
+        // Loop on the word attributes and unions all the documents ids by attribute.
+        for result in index.word_position_docids.prefix_iter(wtxn, word)? {
+            let (key, docids) = result?;
+            let (_key_word, key_pos) = key.split_at(key.len() - 4);
+            let key_pos = key_pos.try_into().map(u32::from_be_bytes)?;
+            // If the key corresponds to the word (minus the attribute)
+            if key.len() == word.len() + 4 {
+                let attribute = key_pos / 1000;
+                match word_attributes.entry(attribute) {
+                    Entry::Vacant(entry) => { entry.insert(docids); },
+                    Entry::Occupied(mut entry) => entry.get_mut().union_with(&docids),
+                }
+            }
+        }
+
+        // Write this word attributes unions into LMDB.
+        let mut key = word.to_vec();
+        for (attribute, docids) in word_attributes.drain() {
+            key.truncate(word.len());
+            key.extend_from_slice(&attribute.to_be_bytes());
+            index.word_attribute_docids.put(wtxn, &key, &docids)?;
+        }
+    }
+
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
 
@@ -351,7 +392,7 @@ fn main() -> anyhow::Result<()> {
     let env = EnvOpenOptions::new()
         .map_size(100 * 1024 * 1024 * 1024) // 100 GB
         .max_readers(10)
-        .max_dbs(5)
+        .max_dbs(10)
         .open(opt.database)?;
 
     let index = Index::new(&env)?;
@@ -370,7 +411,7 @@ fn main() -> anyhow::Result<()> {
     eprintln!("We are writing into LMDB...");
     let mut wtxn = env.write_txn()?;
     MtblKvStore::from_many(stores, |k, v| writer(&mut wtxn, &index, k, v))?;
-    // FIXME Why is this count wrong? (indicates 99 when must return 100)
+    compute_words_attributes_docids(&mut wtxn, &index)?;
     let count = index.documents.len(&wtxn)?;
     wtxn.commit()?;
     eprintln!("Wrote {} documents into LMDB", count);
