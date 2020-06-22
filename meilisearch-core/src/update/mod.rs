@@ -24,6 +24,8 @@ use sdset::Set;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use meilisearch_error::ErrorCode;
+
 use crate::{store, MResult};
 use crate::database::{MainT, UpdateT};
 use crate::settings::SettingsUpdate;
@@ -128,6 +130,12 @@ pub struct ProcessedUpdateResult {
     pub update_type: UpdateType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_link: Option<String>,
     pub duration: f64, // in seconds
     pub enqueued_at: DateTime<Utc>,
     pub processed_at: DateTime<Utc>,
@@ -288,7 +296,10 @@ pub fn update_task<'a, 'b>(
     let status = ProcessedUpdateResult {
         update_id,
         update_type,
-        error: result.map_err(|e| e.to_string()).err(),
+        error: result.as_ref().map_err(|e| e.to_string()).err(),
+        error_code: result.as_ref().map_err(|e| e.error_name()).err(),
+        error_type: result.as_ref().map_err(|e| e.error_type()).err(),
+        error_link: result.as_ref().map_err(|e| e.error_url()).err(),
         duration: duration.as_secs_f64(),
         enqueued_at,
         processed_at: Utc::now(),
