@@ -253,17 +253,8 @@ async fn update_index(
 
         if let Some(id) = body.primary_key.clone() {
             if let Some(mut schema) = index.main.schema(writer)? {
-                match schema.primary_key() {
-                    Some(_) => {
-                        return Err(Error::bad_request(
-                                "The primary key cannot be updated",
-                        ).into());
-                    }
-                    None => {
-                        schema.set_primary_key(&id)?;
-                        index.main.put_schema(writer, &schema)?;
-                    }
-                }
+                schema.set_primary_key(&id)?;
+                index.main.put_schema(writer, &schema)?;
             }
         }
         index.main.put_updated_at(writer)?;
