@@ -86,26 +86,32 @@ impl Code {
 
         match self {
             // index related errors
+            // create index is thrown on internal error while creating an index.
             CreateIndex => ErrCode::invalid("index_creation_failed", StatusCode::BAD_REQUEST),
             IndexAlreadyExists => ErrCode::invalid("index_already_exists", StatusCode::BAD_REQUEST),
+            // thrown when requesting an unexisting index
             IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND), InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
             OpenIndex => ErrCode::internal("index_not_accessible", StatusCode::INTERNAL_SERVER_ERROR),
 
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
+            // thrown when no primary key has been set
             MissingPrimaryKey => ErrCode::internal("missing_primary_key", StatusCode::INTERNAL_SERVER_ERROR),
-            PrimaryKeyAlreadyPresent => ErrCode::internal("primary_key_already_present", StatusCode::INTERNAL_SERVER_ERROR),
+            // error thrown when trying to set an already existing primary key
+            PrimaryKeyAlreadyPresent => ErrCode::invalid("primary_key_already_present", StatusCode::BAD_REQUEST),
 
             // invalid document
             MaxFieldsLimitExceeded => ErrCode::invalid("max_field_limit_exceeded", StatusCode::BAD_REQUEST),
             MissingDocumentId => ErrCode::invalid("missing_document_id", StatusCode::BAD_REQUEST),
 
+            // error related to facets
             Facet => ErrCode::invalid("invalid_facet", StatusCode::BAD_REQUEST),
+            // error related to filters
             Filter => ErrCode::invalid("invalid_filter", StatusCode::BAD_REQUEST),
 
             BadParameter => ErrCode::invalid("bad_parameter", StatusCode::BAD_REQUEST),
             BadRequest => ErrCode::invalid("bad_request", StatusCode::BAD_REQUEST),
-            DocumentNotFound => ErrCode::internal("document_not_found", StatusCode::NOT_FOUND),
+            DocumentNotFound => ErrCode::invalid("document_not_found", StatusCode::NOT_FOUND),
             Internal => ErrCode::internal("internal", StatusCode::INTERNAL_SERVER_ERROR),
             InvalidToken => ErrCode::authentication("invalid_token", StatusCode::FORBIDDEN),
             Maintenance =>  ErrCode::internal("maintenance", StatusCode::SERVICE_UNAVAILABLE),
