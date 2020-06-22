@@ -87,10 +87,11 @@ impl Code {
         match self {
             // index related errors
             // create index is thrown on internal error while creating an index.
-            CreateIndex => ErrCode::invalid("index_creation_failed", StatusCode::BAD_REQUEST),
+            CreateIndex => ErrCode::internal("index_creation_failed", StatusCode::BAD_REQUEST),
             IndexAlreadyExists => ErrCode::invalid("index_already_exists", StatusCode::BAD_REQUEST),
             // thrown when requesting an unexisting index
-            IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND), InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
+            IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND),
+            InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
             OpenIndex => ErrCode::internal("index_not_accessible", StatusCode::INTERNAL_SERVER_ERROR),
 
             // invalid state error
