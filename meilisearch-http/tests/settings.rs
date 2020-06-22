@@ -455,3 +455,33 @@ async fn attributes_for_faceting_settings() {
     let (response, _status_code) = server.get_request("/indexes/test/settings/attributes-for-faceting").await;
     assert_eq!(response, json!([]));
 }
+
+#[actix_rt::test]
+async fn setting_ranking_rules_dont_mess_with_other_settings() {
+    let mut server = common::Server::test_server().await;
+    let body = json!({
+        "rankingRules": ["asc(foobar)"]
+    });
+    server.update_all_settings(body).await;
+    let (response, _) = server.get_all_settings().await;
+    assert_eq!(response["rankingRules"].as_array().unwrap().len(), 1);
+    assert_eq!(response["rankingRules"].as_array().unwrap().first().unwrap().as_str().unwrap(), "asc(foobar)");
+    assert!(!response["searchableAttributes"].as_array().unwrap().iter().any(|e| e.as_str().unwrap() == "foobar"));
+    assert!(!response["displayedAttributes"].as_array().unwrap().iter().any(|e| e.as_str().unwrap() == "foobar"));
+}
+
+#[actix_rt::test]
+async fn distinct_attribute_recorded_as_known_field() {
+   let mut server = common::Server::test_server().await;
+   let body = json!({
+       "distinctAttribute": "foobar",
+       "acceptNewFields": true
+   });
+   server.update_all_settings(body).await;
+   let document = json!([{"id": 9348127, "foobar": "hello", "foo": "bar"}]);
+   server.add_or_update_multiple_documents(document).await;
+   // foobar should not be added to the searchable attributes because it is already known, but "foo" should
+   let (response, _) = server.get_all_settings().await;
+   assert!(response["searchableAttributes"].as_array().unwrap().iter().any(|v| v.as_str().unwrap() == "foo"));
+   assert!(!response["searchableAttributes"].as_array().unwrap().iter().any(|v| v.as_str().unwrap() == "foobar"));
+}

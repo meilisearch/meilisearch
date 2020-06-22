@@ -46,12 +46,6 @@ pub fn apply_settings_update(
         UpdateState::Update(v) => {
             let ranked_field: Vec<&str> = v.iter().filter_map(RankingRule::field).collect();
             schema.update_ranked(&ranked_field)?;
-            for name in ranked_field {
-                if schema.accept_new_fields() {
-                    schema.set_indexed(name.as_ref())?;
-                    schema.set_displayed(name.as_ref())?;
-                }
-            }
             index.main.put_ranking_rules(writer, &v)?;
             must_reindex = true;
         },
@@ -65,7 +59,8 @@ pub fn apply_settings_update(
 
     match settings.distinct_attribute {
         UpdateState::Update(v) => {
-            index.main.put_distinct_attribute(writer, &v)?;
+            let field_id = schema.insert(&v)?;
+            index.main.put_distinct_attribute(writer, field_id)?;
         },
         UpdateState::Clear => {
             index.main.delete_distinct_attribute(writer)?;
