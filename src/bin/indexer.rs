@@ -243,9 +243,9 @@ fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
 
     let mut document = csv::StringRecord::new();
     let mut postings_attrs = FastMap4::default();
-    let mut prefix_postings_attrs = FastMap4::default();
+    let prefix_postings_attrs = FastMap4::default();
     let mut postings_ids = FastMap4::default();
-    let mut prefix_postings_ids = FastMap4::default();
+    let prefix_postings_ids = FastMap4::default();
     let mut documents = Vec::new();
 
     // Write the headers into a Vec of bytes.
@@ -272,18 +272,6 @@ fn index_csv(mut rdr: csv::Reader<File>) -> anyhow::Result<MtblKvStore> {
                     postings_ids.entry(SmallVec32::from(word.as_bytes()))
                         .or_insert_with(FastMap4::default).entry(position) // positions
                         .or_insert_with(RoaringBitmap::new).insert(document_id); // document ids
-
-                    // // We save the documents ids under the position and prefix of the word we have seen it.
-                    // if let Some(prefix) = word.as_bytes().get(0..word.len().min(5)) {
-                    //     for i in 1..=prefix.len() {
-                    //         prefix_postings_attrs.entry(SmallVec32::from(&prefix[..i]))
-                    //             .or_insert_with(RoaringBitmap::new).insert(position);
-
-                    //         prefix_postings_ids.entry(SmallVec32::from(&prefix[..i]))
-                    //             .or_insert_with(FastMap4::default).entry(position) // positions
-                    //             .or_insert_with(RoaringBitmap::new).insert(document_id); // document ids
-                    //     }
-                    // }
                 }
             }
         }
