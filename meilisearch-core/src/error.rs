@@ -124,7 +124,10 @@ impl From<BincodeError> for Error {
 
 impl From<SerializerError> for Error {
     fn from(error: SerializerError) -> Error {
-        Error::Serializer(error)
+        match error {
+            SerializerError::DocumentIdNotFound => Error::MissingDocumentId,
+            e => Error::Serializer(e),
+        }
     }
 }
 
