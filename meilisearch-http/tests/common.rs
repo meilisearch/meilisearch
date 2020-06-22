@@ -111,17 +111,19 @@ impl Server {
 
 
     pub async fn wait_update_id(&mut self, update_id: u64) {
-        loop {
+        // try 10 times to get status, or panic to not wait forever
+        for _ in 1..10 {
             let (response, status_code) = self.get_update_status(update_id).await;
             assert_eq!(status_code, 200);
 
-            if response["status"] == "processed" || response["status"] == "error" {
+            if response["status"] == "processed" || response["status"] == "failed" {
                 eprintln!("{:#?}", response);
                 return;
             }
 
             delay_for(Duration::from_secs(1)).await;
         }
+        panic!("Timeout waiting for update id");
     }
 
     // Global Http request GET/POST/DELETE async or sync
