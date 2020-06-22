@@ -1,4 +1,5 @@
 mod best_proximity;
+mod heed_codec;
 mod iter_shortest_paths;
 mod query_tokens;
 
@@ -16,8 +17,9 @@ use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use once_cell::sync::Lazy;
 use roaring::RoaringBitmap;
 
-use self::query_tokens::{QueryTokens, QueryToken};
 use self::best_proximity::BestProximity;
+use self::heed_codec::RoaringBitmapCodec;
+use self::query_tokens::{QueryTokens, QueryToken};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -35,10 +37,10 @@ pub type AttributeId = u32;
 #[derive(Clone)]
 pub struct Index {
     pub main: PolyDatabase,
-    pub postings_attrs: Database<Str, ByteSlice>,
-    pub prefix_postings_attrs: Database<ByteSlice, ByteSlice>,
-    pub postings_ids: Database<ByteSlice, ByteSlice>,
-    pub prefix_postings_ids: Database<ByteSlice, ByteSlice>,
+    pub postings_attrs: Database<Str, RoaringBitmapCodec>,
+    pub prefix_postings_attrs: Database<ByteSlice, RoaringBitmapCodec>,
+    pub postings_ids: Database<ByteSlice, RoaringBitmapCodec>,
+    pub prefix_postings_ids: Database<ByteSlice, RoaringBitmapCodec>,
     pub documents: Database<OwnedType<BEU32>, ByteSlice>,
 }
 
@@ -105,8 +107,7 @@ impl Index {
             let mut stream = fst.search(&dfa).into_stream();
             while let Some(word) = stream.next() {
                 let word = std::str::from_utf8(word)?;
-                if let Some(attrs) = self.postings_attrs.get(rtxn, word)? {
-                    let right = RoaringBitmap::deserialize_from_slice(attrs)?;
+                if let Some(right) = self.postings_attrs.get(rtxn, word)? {
                     union_positions.union_with(&right);
                     derived_words.push((word.as_bytes().to_vec(), right));
                     count += 1;
@@ -130,8 +131,7 @@ impl Index {
                 if attrs.contains(pos) {
                     let mut key = word.clone();
                     key.extend_from_slice(&pos.to_be_bytes());
-                    if let Some(attrs) = self.postings_ids.get(rtxn, &key).unwrap() {
-                        let right = RoaringBitmap::deserialize_from_slice(attrs).unwrap();
+                    if let Some(right) = self.postings_ids.get(rtxn, &key).unwrap() {
                         union_docids.union_with(&right);
                     }
                 }
