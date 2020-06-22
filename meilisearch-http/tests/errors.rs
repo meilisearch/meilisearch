@@ -1,7 +1,10 @@
 mod common;
 
-use serde_json::json;
+use std::thread;
+use std::time::Duration;
+
 use actix_http::http::StatusCode;
+use serde_json::{json, Map, Value};
 
 macro_rules! assert_error {
     ($code:literal, $type:literal, $status:path, $req:expr) => {
@@ -9,6 +12,25 @@ macro_rules! assert_error {
         assert_eq!(status_code, $status);
         assert_eq!(response["errorCode"].as_str().unwrap(), $code);
         assert_eq!(response["errorType"].as_str().unwrap(), $type);
+    };
+}
+
+macro_rules! assert_error_async {
+    ($code:literal, $type:literal, $server:expr, $req:expr) => {
+        let (response, _) = $req;
+        let update_id = response["updateId"].as_u64().unwrap();
+        for _ in 1..10 {
+            let (response, status_code) = $server.get_update_status(update_id).await;
+            assert_eq!(status_code, StatusCode::OK);
+            if response["status"] == "processed" || response["status"] == "failed" {
+                println!("response: {}", response);
+                assert_eq!(response["status"], "failed");
+                assert_eq!(response["errorCode"], $code);
+                assert_eq!(response["errorType"], $type);
+                return
+            }
+            thread::sleep(Duration::from_secs(1));
+        }
     };
 }
 
@@ -57,9 +79,43 @@ async fn primary_key_already_present_error() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn max_field_limit_exceeded_error() {
-    todo!("error reported in update")
+    let mut server = common::Server::test_server().await;
+    let body = json!({
+        "uid": "test",
+    });
+    server.create_index(body).await;
+    let mut doc = Map::with_capacity(70_000);
+    doc.insert("id".into(), Value::String("foo".into()));
+    for i in 0..69_999 {
+        doc.insert(format!("field{}", i), Value::String("foo".into()));
+    }
+    let docs = json!([doc]);
+    assert_error_async!(
+        "max_field_limit_exceeded",
+        "invalid_request_error",
+        server,
+        server.add_or_replace_multiple_documents_sync(docs).await);
+}
+
+#[actix_rt::test]
+async fn missing_document_id() {
+    let mut server = common::Server::test_server().await;
+    let body = json!({
+        "uid": "test",
+        "primaryKey": "test"
+    });
+    server.create_index(body).await;
+    let docs = json!([
+        {
+            "foo": "bar",
+        }
+    ]);
+    assert_error_async!(
+        "missing_document_id",
+        "invalid_request_error",
+        server,
+        server.add_or_replace_multiple_documents_sync(docs).await);
 }
 
 #[actix_rt::test]

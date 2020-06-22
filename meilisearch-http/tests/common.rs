@@ -112,7 +112,7 @@ impl Server {
 
     pub async fn wait_update_id(&mut self, update_id: u64) {
         // try 10 times to get status, or panic to not wait forever
-        for _ in 1..10 {
+        for _ in 0..10 {
             let (response, status_code) = self.get_update_status(update_id).await;
             assert_eq!(status_code, 200);
 
