@@ -329,22 +329,22 @@ fn writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) -> anyh
     }
     else if key.starts_with(&[1]) {
         // Write the postings lists
-        index.postings_attrs.as_polymorph()
+        index.word_positions.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
     else if key.starts_with(&[2]) {
         // Write the prefix postings lists
-        index.prefix_postings_attrs.as_polymorph()
+        index.prefix_word_positions.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
     else if key.starts_with(&[3]) {
         // Write the postings lists
-        index.postings_ids.as_polymorph()
+        index.word_position_docids.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
     else if key.starts_with(&[4]) {
         // Write the prefix postings lists
-        index.prefix_postings_ids.as_polymorph()
+        index.prefix_word_position_docids.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
     else if key.starts_with(&[5]) {

@@ -36,24 +36,28 @@ pub type AttributeId = u32;
 
 #[derive(Clone)]
 pub struct Index {
+    /// Contains many different types (e.g. the documents CSV headers).
     pub main: PolyDatabase,
-    pub postings_attrs: Database<Str, RoaringBitmapCodec>,
-    pub prefix_postings_attrs: Database<ByteSlice, RoaringBitmapCodec>,
-    pub postings_ids: Database<ByteSlice, RoaringBitmapCodec>,
-    pub prefix_postings_ids: Database<ByteSlice, RoaringBitmapCodec>,
+    /// A word and all the positions where it appears in the whole dataset.
+    pub word_positions: Database<Str, RoaringBitmapCodec>,
+    pub prefix_word_positions: Database<Str, RoaringBitmapCodec>,
+    /// Maps a word at a position (u32) and all the documents ids where it appears.
+    pub word_position_docids: Database<ByteSlice, RoaringBitmapCodec>,
+    pub prefix_word_position_docids: Database<ByteSlice, RoaringBitmapCodec>,
+    /// Maps an internal document to the content of the document in CSV.
     pub documents: Database<OwnedType<BEU32>, ByteSlice>,
 }
 
 impl Index {
     pub fn new(env: &heed::Env) -> heed::Result<Index> {
-        let main = env.create_poly_database(None)?;
-        let postings_attrs = env.create_database(Some("postings-attrs"))?;
-        let prefix_postings_attrs = env.create_database(Some("prefix-postings-attrs"))?;
-        let postings_ids = env.create_database(Some("postings-ids"))?;
-        let prefix_postings_ids = env.create_database(Some("prefix-postings-ids"))?;
-        let documents = env.create_database(Some("documents"))?;
-
-        Ok(Index { main, postings_attrs, prefix_postings_attrs, postings_ids, prefix_postings_ids, documents })
+        Ok(Index {
+            main: env.create_poly_database(None)?,
+            word_positions: env.create_database(Some("word-positions"))?,
+            prefix_word_positions: env.create_database(Some("prefix-word-positions"))?,
+            word_position_docids: env.create_database(Some("word-position-docids"))?,
+            prefix_word_position_docids: env.create_database(Some("prefix-word-position-docids"))?,
+            documents: env.create_database(Some("documents"))?,
+        })
     }
 
     pub fn headers<'t>(&self, rtxn: &'t heed::RoTxn) -> heed::Result<Option<&'t [u8]>> {
@@ -107,7 +111,7 @@ impl Index {
             let mut stream = fst.search(&dfa).into_stream();
             while let Some(word) = stream.next() {
                 let word = std::str::from_utf8(word)?;
-                if let Some(right) = self.postings_attrs.get(rtxn, word)? {
+                if let Some(right) = self.word_positions.get(rtxn, word)? {
                     union_positions.union_with(&right);
                     derived_words.push((word.as_bytes().to_vec(), right));
                     count += 1;
@@ -131,7 +135,7 @@ impl Index {
                 if attrs.contains(pos) {
                     let mut key = word.clone();
                     key.extend_from_slice(&pos.to_be_bytes());
-                    if let Some(right) = self.postings_ids.get(rtxn, &key).unwrap() {
+                    if let Some(right) = self.word_position_docids.get(rtxn, &key).unwrap() {
                         union_docids.union_with(&right);
                     }
                 }
