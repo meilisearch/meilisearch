@@ -202,10 +202,12 @@ async fn get_sys_info(data: web::Data<Data>) -> HttpResponse {
     let mut sys = System::new();
     let mut info = SysInfo::new();
 
-    info.memory_usage = sys.get_used_memory() as f64 / sys.get_total_memory() as f64 * 100.0;
+    // need to refresh twice for cpu usage
+    sys.refresh_all();
+    sys.refresh_all();
 
     for processor in sys.get_processors() {
-        info.processor_usage.push(processor.get_cpu_usage() * 100.0);
+        info.processor_usage.push(processor.get_cpu_usage());
     }
 
     info.global.total_memory = sys.get_total_memory();
@@ -223,12 +225,14 @@ async fn get_sys_info(data: web::Data<Data>) -> HttpResponse {
         .map(|(_, n)| n.get_transmitted())
         .sum::<u64>();
 
+    info.memory_usage = sys.get_used_memory() as f64 / sys.get_total_memory() as f64 * 100.0;
+
     if let Some(process) = sys.get_process(data.server_pid) {
         info.process.memory = process.memory();
-        info.process.cpu = process.cpu_usage() * 100.0;
+        println!("cpu usafe: {}",  process.cpu_usage());
+        info.process.cpu = process.cpu_usage();
     }
 
-    sys.refresh_all();
     HttpResponse::Ok().json(info)
 }
 
@@ -297,6 +301,8 @@ async fn get_sys_info_pretty(data: web::Data<Data>) -> HttpResponse {
     let mut sys = System::new();
     let mut info = SysInfoPretty::new();
 
+    sys.refresh_all();
+    sys.refresh_all();
     info.memory_usage = format!(
         "{:.1} %",
         sys.get_used_memory() as f64 / sys.get_total_memory() as f64 * 100.0
@@ -304,7 +310,7 @@ async fn get_sys_info_pretty(data: web::Data<Data>) -> HttpResponse {
 
     for processor in sys.get_processors() {
         info.processor_usage
-            .push(format!("{:.1} %", processor.get_cpu_usage() * 100.0));
+            .push(format!("{:.1} %", processor.get_cpu_usage()));
     }
 
     info.global.total_memory = convert(sys.get_total_memory() as f64 * 1024.0);
@@ -326,10 +332,8 @@ async fn get_sys_info_pretty(data: web::Data<Data>) -> HttpResponse {
 
     if let Some(process) = sys.get_process(data.server_pid) {
         info.process.memory = convert(process.memory() as f64 * 1024.0);
-        info.process.cpu = format!("{:.1} %", process.cpu_usage() * 100.0);
+        info.process.cpu = format!("{:.1} %", process.cpu_usage());
     }
-
-    sys.refresh_all();
 
     HttpResponse::Ok().json(info)
 }
