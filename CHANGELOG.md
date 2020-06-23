@@ -1,6 +1,7 @@
 ## v0.13.0 (unreleased)
 
-- placeholder search (#771)
+  - placeholder search (#771)
+  - Add database version mismatch check (#794)
 
 ## v0.12.0
 
