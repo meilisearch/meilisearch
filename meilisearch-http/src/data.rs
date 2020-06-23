@@ -4,6 +4,7 @@ use std::sync::Arc;
 use meilisearch_core::{Database, DatabaseOptions};
 use sha2::Digest;
 use sysinfo::Pid;
+use log::error;
 
 use crate::index_update_callback;
 use crate::option::Opt;
@@ -66,7 +67,13 @@ impl Data {
 
         let http_payload_size_limit = opt.http_payload_size_limit;
 
-        let db = Arc::new(Database::open_or_create(opt.db_path, db_opt).unwrap());
+        let db = match  Database::open_or_create(opt.db_path, db_opt) {
+            Ok(db) => Arc::new(db),
+            Err(e) => {
+                error!("{}", e);
+                std::process::exit(1);
+            }
+        };
 
         let mut api_keys = ApiKeys {
             master: opt.master_key,

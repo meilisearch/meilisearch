@@ -15,22 +15,23 @@ pub type MResult<T> = Result<T, Error>;
 
 #[derive(Debug)]
 pub enum Error {
-    Io(io::Error),
-    IndexAlreadyExists,
-    MissingPrimaryKey,
-    SchemaMissing,
-    WordIndexMissing,
-    MissingDocumentId,
-    MaxFieldsLimitExceeded,
-    Schema(meilisearch_schema::Error),
-    Heed(heed::Error),
-    Fst(fst::Error),
-    SerdeJson(SerdeJsonError),
     Bincode(bincode::Error),
-    Serializer(SerializerError),
     Deserializer(DeserializerError),
-    FilterParseError(PestError<Rule>),
     FacetError(FacetError),
+    FilterParseError(PestError<Rule>),
+    Fst(fst::Error),
+    Heed(heed::Error),
+    IndexAlreadyExists,
+    Io(io::Error),
+    MaxFieldsLimitExceeded,
+    MissingDocumentId,
+    MissingPrimaryKey,
+    Schema(meilisearch_schema::Error),
+    SchemaMissing,
+    SerdeJson(SerdeJsonError),
+    Serializer(SerializerError),
+    VersionMismatch(String),
+    WordIndexMissing,
 }
 
 impl ErrorCode for Error {
@@ -53,6 +54,7 @@ impl ErrorCode for Error {
             | Bincode(_)
             | Serializer(_)
             | Deserializer(_)
+            | VersionMismatch(_)
             | Io(_) => Code::Internal,
         }
     }
@@ -141,22 +143,23 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Error::*;
         match self {
-            Io(e) => write!(f, "{}", e),
-            IndexAlreadyExists => write!(f, "index already exists"),
-            MissingPrimaryKey => write!(f, "schema cannot be built without a primary key"),
-            SchemaMissing => write!(f, "this index does not have a schema"),
-            WordIndexMissing => write!(f, "this index does not have a word index"),
-            MissingDocumentId => write!(f, "document id is missing"),
-            MaxFieldsLimitExceeded => write!(f, "maximum number of fields in a document exceeded"),
-            Schema(e) => write!(f, "schema error; {}", e),
-            Heed(e) => write!(f, "heed error; {}", e),
-            Fst(e) => write!(f, "fst error; {}", e),
-            SerdeJson(e) => write!(f, "serde json error; {}", e),
             Bincode(e) => write!(f, "bincode error; {}", e),
-            Serializer(e) => write!(f, "serializer error; {}", e),
             Deserializer(e) => write!(f, "deserializer error; {}", e),
-            FilterParseError(e) => write!(f, "error parsing filter; {}", e),
             FacetError(e) => write!(f, "error processing facet filter: {}", e),
+            FilterParseError(e) => write!(f, "error parsing filter; {}", e),
+            Fst(e) => write!(f, "fst error; {}", e),
+            Heed(e) => write!(f, "heed error; {}", e),
+            IndexAlreadyExists => write!(f, "index already exists"),
+            Io(e) => write!(f, "{}", e),
+            MaxFieldsLimitExceeded => write!(f, "maximum number of fields in a document exceeded"),
+            MissingDocumentId => write!(f, "document id is missing"),
+            MissingPrimaryKey => write!(f, "schema cannot be built without a primary key"),
+            Schema(e) => write!(f, "schema error; {}", e),
+            SchemaMissing => write!(f, "this index does not have a schema"),
+            SerdeJson(e) => write!(f, "serde json error; {}", e),
+            Serializer(e) => write!(f, "serializer error; {}", e),
+            VersionMismatch(version) => write!(f, "Cannot open database, expected Meilisearch version: {}", version),
+            WordIndexMissing => write!(f, "this index does not have a word index"),
         }
     }
 }

@@ -3,6 +3,7 @@ use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
+use std::io::{Read, Write, ErrorKind};
 
 use chrono::{DateTime, Utc};
 use crossbeam_channel::{Receiver, Sender};
@@ -161,10 +162,61 @@ fn update_awaiter(
     Ok(())
 }
 
+/// Ensures Meilisearch version is compatible with the database, returns an error versions mismatch.
+/// If create is set to true, a VERSION file is created with the current version.
+fn version_guard(path: &Path, create: bool) -> MResult<()> {
+    let current_version_major = env!("CARGO_PKG_VERSION_MAJOR");
+    let current_version_minor = env!("CARGO_PKG_VERSION_MINOR");
+    let current_version_patch = env!("CARGO_PKG_VERSION_PATCH");
+    let version_path = path.join("VERSION");
+
+    match File::open(&version_path) {
+        Ok(mut file) => {
+            let mut version = String::new();
+            file.read_to_string(&mut version)?;
+            let mut version = version.split(".");
+
+            let version_major = version.next().ok_or(Error::VersionMismatch("bad VERSION file".to_string()))?;
+            let version_minor = version.next().ok_or(Error::VersionMismatch("bad VERSION file".to_string()))?;
+
+            if version_major != current_version_major || version_minor != current_version_minor {
+                return Err(Error::VersionMismatch(format!("{}.{}.XX", version_major, version_major)));
+            }
+        }
+        Err(error) => {
+            match error.kind() {
+                ErrorKind::NotFound => {
+                    if create {
+                    // when no version file is found, and we've beem told to create one,
+                    // create a new file wioth the current version in it.
+                        let mut version_file = File::create(&version_path)?;
+                        version_file.write_all(format!("{}.{}.{}",
+                                current_version_major,
+                                current_version_minor,
+                                current_version_patch).as_bytes())?;
+                    } else {
+                        // when no version file is found and we were not told to create one, this
+                        // means that the version is inferior to the one this feature was added.
+                        return Err(Error::VersionMismatch(format!("<0.12.0")));
+                    }
+                }
+                _ => return Err(error.into())
+            }
+        }
+    }
+    Ok(())
+}
+
 impl Database {
     pub fn open_or_create(path: impl AsRef<Path>, options: DatabaseOptions) -> MResult<Database> {
         let main_path = path.as_ref().join("main");
         let update_path = path.as_ref().join("update");
+
+        //create db directory
+        fs::create_dir_all(&path)?;
+
+        // create file only if main db wasn't created before (first run)
+        version_guard(path.as_ref(), !main_path.exists() && !update_path.exists())?;
 
         fs::create_dir_all(&main_path)?;
         let env = heed::EnvOpenOptions::new()
