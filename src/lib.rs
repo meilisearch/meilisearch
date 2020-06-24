@@ -134,9 +134,35 @@ impl Index {
             positions.push(union_positions.iter().collect());
         }
 
-        eprintln!("Retrieving words positions took {:.02?}", before.elapsed());
+        let mut words_attributes_docids = HashMap::new();
+        let number_attributes: u32 = 6;
 
-        let mut documents = Vec::new();
+        for i in 0..number_attributes {
+            let mut intersect_docids: Option<RoaringBitmap> = None;
+            for derived_words in &words {
+                let mut union_docids = RoaringBitmap::new();
+                for (word, _) in derived_words {
+                    // generate the key with the attribute number.
+                    let mut key = word.to_vec();
+                    key.extend_from_slice(&i.to_be_bytes());
+
+                    if let Some(right) = self.word_attribute_docids.get(rtxn, &key)? {
+                        union_docids.union_with(&right);
+                    }
+                }
+                match &mut intersect_docids {
+                    Some(left) => left.intersect_with(&union_docids),
+                    None => intersect_docids = Some(union_docids),
+                }
+            }
+            if let Some(docids) = intersect_docids {
+                words_attributes_docids.insert(i, docids);
+            }
+        }
+
+        eprintln!("The documents you must find for each attribute: {:?}", words_attributes_docids);
+
+        eprintln!("Retrieving words positions took {:.02?}", before.elapsed());
 
         // Returns the union of the same position for all the derived words.
         let unions_word_pos = |word: usize, pos: u32| {
@@ -150,7 +176,6 @@ impl Index {
                     }
                 }
             }
-
             union_docids
         };
 
@@ -176,6 +201,7 @@ impl Index {
             })
         };
 
+        let mut documents = Vec::new();
         let mut iter = BestProximity::new(positions);
         while let Some((proximity, mut positions)) = iter.next(|l, r| contains_documents(l, r, &mut union_cache)) {
             positions.sort_unstable();
