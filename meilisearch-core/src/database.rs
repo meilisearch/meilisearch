@@ -180,15 +180,15 @@ fn version_guard(path: &Path, create: bool) -> MResult<()> {
             let version_minor = version.next().ok_or(Error::VersionMismatch("bad VERSION file".to_string()))?;
 
             if version_major != current_version_major || version_minor != current_version_minor {
-                return Err(Error::VersionMismatch(format!("{}.{}.XX", version_major, version_major)));
+                return Err(Error::VersionMismatch(format!("{}.{}.XX", version_major, version_minor)));
             }
         }
         Err(error) => {
             match error.kind() {
                 ErrorKind::NotFound => {
                     if create {
-                    // when no version file is found, and we've beem told to create one,
-                    // create a new file wioth the current version in it.
+                        // when no version file is found, and we've been told to create one,
+                        // create a new file with the current version in it.
                         let mut version_file = File::create(&version_path)?;
                         version_file.write_all(format!("{}.{}.{}",
                                 current_version_major,
@@ -196,7 +196,7 @@ fn version_guard(path: &Path, create: bool) -> MResult<()> {
                                 current_version_patch).as_bytes())?;
                     } else {
                         // when no version file is found and we were not told to create one, this
-                        // means that the version is inferior to the one this feature was added.
+                        // means that the version is inferior to the one this feature was added in.
                         return Err(Error::VersionMismatch(format!("<0.12.0")));
                     }
                 }

@@ -50,7 +50,7 @@ impl Server {
             ..Opt::default()
         };
 
-        let data = Data::new(opt.clone());
+        let data = Data::new(opt.clone()).unwrap();
 
         Server {
             uid: uid.to_string(),
