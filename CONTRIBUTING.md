@@ -20,8 +20,7 @@ expanding into more specifics.
 1. [Development](#development)
    1. [Setup](#setup)
    1. [Testing](#testing)
-   1. [Benchmarking](#benchmarking)
-   1. [Profiling](#profiling)
+   1. [Benchmarking](#benchmarking--profiling)
 1. [Humans](#humans)
    1. [Documentation](#documentation)
    1. [Changelog](#changelog)
@@ -67,7 +66,7 @@ Please ensure your commits are small and focused; they should tell a story of
 your change. This helps reviewers to follow your changes, especially for more
 complex changes.
 
-Familiarise yourself with the [Git Style Guide](https://github.com/agis/git-style-guide) and [Commit Message Guidelines](https://gist.github.com/robertpainsi/b632364184e70900af4ab688decf6f53).
+Familiarise yourself with [How to Write a Git Commit Message](https://chris.beams.io/posts/git-commit/).
 
 ### Github Pull Requests
 
@@ -76,7 +75,7 @@ Once your changes are ready you must submit your branch as a pull request.
 #### Reviews & Approvals
 
 All pull requests must be reviewed and approved by at least one MeiliSearch team
-member. The review process is outlined in the [Review guide](REVIEWING.md).
+member.
 
 #### Merge Style
 
@@ -88,39 +87,23 @@ solution and discuss if a change that large is even needed! This overall
 will produce a quicker response to the change and likely produce code that
 aligns better with our process.
 
-### CI
-
-Our current CI process is as follows:
-
-WIP
-
 ## Development
 
 ### Setup
 
 See the [MeiliSearch Docs](https://docs.meilisearch.com/guides/advanced_guides/installation.html) for how to set up a development environment.
 
-### Testing
+### Benchmarking & Profiling
 
-You can run MeiliSearch tests by... WIP
-
-### Benchmarking
-
-We do not yet do any benchmarking. If you'd like to make some, please get in touch!
-
-### Profiling
-
-We have not yet formalized our profiling methods.
+We do not yet do any benchmarking, nor have we formalised our profiling. If you'd like to work on this please get in touch!
 
 ## Humans
 
-After making your change, you'll want to prepare it for MeiliSearch users
-(mostly humans). This usually entails updating documentation and announcing
-your feature.
+After making your change, you'll want to prepare it for MeiliSearch users (mostly humans). This usually entails updating documentation and announcing your feature.
 
 ### Documentation
 
-Documentation is very important to the Vector project. All contributions that
+Documentation is very important to MeiliSearch. All contributions that
 alter user-facing behavior MUST include documentation changes. Please see
 [GitHub.com/meilisearch/documentation](https://github.com/meilisearch/documentation) for more info.
 
