@@ -182,7 +182,7 @@ impl Index {
         let mut union_cache = HashMap::new();
         let mut intersect_cache = HashMap::new();
         // Returns `true` if there is documents in common between the two words and positions given.
-        let mut contains_documents = |(lword, lpos), (rword, rpos), union_cache: &mut HashMap<_, _>| {
+        let mut contains_documents = |(lword, lpos), (rword, rpos), union_cache: &mut HashMap<_, _>, words_attributes_docids: &HashMap<_, _>| {
             let proximity = best_proximity::positions_proximity(lpos, rpos);
 
             if proximity == 0 { return false }
@@ -197,13 +197,22 @@ impl Index {
                 let lunion_docids = union_cache.get(&(lword, lpos)).unwrap();
                 let runion_docids = union_cache.get(&(rword, rpos)).unwrap();
 
+                let lattr = lpos / 1000;
+                let rattr = rpos / 1000;
+                if lattr == rattr {
+                    if let Some(docids) = words_attributes_docids.get(&lattr) {
+                        if lunion_docids.is_disjoint(&docids) { return false }
+                        if runion_docids.is_disjoint(&docids) { return false }
+                    }
+                }
+
                 !lunion_docids.is_disjoint(&runion_docids)
             })
         };
 
         let mut documents = Vec::new();
         let mut iter = BestProximity::new(positions);
-        while let Some((proximity, mut positions)) = iter.next(|l, r| contains_documents(l, r, &mut union_cache)) {
+        while let Some((proximity, mut positions)) = iter.next(|l, r| contains_documents(l, r, &mut union_cache, &words_attributes_docids)) {
             positions.sort_unstable();
 
             let same_prox_before = Instant::now();
