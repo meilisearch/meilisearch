@@ -102,7 +102,7 @@ impl Code {
             PrimaryKeyAlreadyPresent => ErrCode::invalid("primary_key_already_present", StatusCode::BAD_REQUEST),
 
             // invalid document
-            MaxFieldsLimitExceeded => ErrCode::invalid("max_field_limit_exceeded", StatusCode::BAD_REQUEST),
+            MaxFieldsLimitExceeded => ErrCode::invalid("max_fields_limit_exceeded", StatusCode::BAD_REQUEST),
             MissingDocumentId => ErrCode::invalid("missing_document_id", StatusCode::BAD_REQUEST),
 
             // error related to facets
