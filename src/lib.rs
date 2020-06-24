@@ -242,6 +242,11 @@ impl Index {
                 }
             }
 
+            // We achieve to find valid documents ids so we remove them from the candidate list.
+            for (_, docids) in &mut words_attributes_docids {
+                docids.difference_with(&same_proximity_union);
+            }
+
             documents.push(same_proximity_union);
 
             // We remove the double occurences of documents.
