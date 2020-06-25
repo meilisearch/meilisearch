@@ -1,3 +1,8 @@
+## v0.11.1
+
+  - Fix facet cache on document update (#789) 
+  - Improvements on settings consistency (#778)
+
 ## v0.11.0
 
   - Change the HTTP framework, moving from tide to actix-web (#601)
