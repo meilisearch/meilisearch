@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-core"
-version = "0.11.0"
+version = "0.11.1"
 license = "MIT"
 authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
@@ -24,10 +24,10 @@ intervaltree = "0.2.5"
 itertools = "0.9.0"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
 log = "0.4.8"
-meilisearch-error = { path = "../meilisearch-error", version = "0.11.0" }
-meilisearch-schema = { path = "../meilisearch-schema", version = "0.11.0" }
-meilisearch-tokenizer = { path = "../meilisearch-tokenizer", version = "0.11.0" }
-meilisearch-types = { path = "../meilisearch-types", version = "0.11.0" }
+meilisearch-error = { path = "../meilisearch-error", version = "0.11.1" }
+meilisearch-schema = { path = "../meilisearch-schema", version = "0.11.1" }
+meilisearch-tokenizer = { path = "../meilisearch-tokenizer", version = "0.11.1" }
+meilisearch-types = { path = "../meilisearch-types", version = "0.11.1" }
 once_cell = "1.3.1"
 ordered-float = { version = "1.0.2", features = ["serde"] }
 pest = { git = "https://github.com/MarinPostma/pest.git", tag = "meilisearch-patch1" }
