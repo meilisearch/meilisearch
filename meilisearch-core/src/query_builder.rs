@@ -97,14 +97,14 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
                                     .unwrap_or_default();
                                 ors.push(docids);
                             }
-                            let sets: Vec<_> = ors.iter().map(|i| &i.1).map(Cow::deref).collect();
+                            let sets: Vec<_> = ors.iter().map(|(_, i)| i).map(Cow::deref).collect();
                             let or_result = sdset::multi::OpBuilder::from_vec(sets).union().into_set_buf();
                             ands.push(Cow::Owned(or_result));
                             ors.clear();
                         }
                         Either::Right(key) => {
                             match self.index.facets.facet_document_ids(reader, &key)? {
-                                Some(docids) => ands.push(docids.1),
+                                Some((_name, docids)) => ands.push(docids),
                                 // no candidates for search, early return.
                                 None => return Ok(Some(SetBuf::default())),
                             }
