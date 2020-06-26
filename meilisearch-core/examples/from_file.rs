@@ -123,7 +123,7 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     let settings = {
         let string = fs::read_to_string(&command.settings)?;
         let settings: Settings = serde_json::from_str(&string).unwrap();
-        settings.into_update().unwrap()
+        settings.to_update().unwrap()
     };
 
     db.update_write(|w| index.settings_update(w, settings))?;

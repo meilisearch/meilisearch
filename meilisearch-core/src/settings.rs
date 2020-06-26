@@ -10,8 +10,7 @@ use self::RankingRule::*;
 pub const DEFAULT_RANKING_RULES: [RankingRule; 6] = [Typo, Words, Proximity, Attribute, WordsPosition, Exactness];
 
 static RANKING_RULE_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
-    let regex = regex::Regex::new(r"(asc|desc)\(([a-zA-Z0-9-_]*)\)").unwrap();
-    regex
+    regex::Regex::new(r"(asc|desc)\(([a-zA-Z0-9-_]*)\)").unwrap()
 });
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -44,11 +43,11 @@ fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
 }
 
 impl Settings {
-    pub fn into_update(&self) -> Result<SettingsUpdate, RankingRuleConversionError> {
+    pub fn to_update(&self) -> Result<SettingsUpdate, RankingRuleConversionError> {
         let settings = self.clone();
 
         let ranking_rules = match settings.ranking_rules {
-            Some(Some(rules)) => UpdateState::Update(RankingRule::from_iter(rules.iter())?),
+            Some(Some(rules)) => UpdateState::Update(RankingRule::try_from_iter(rules.iter())?),
             Some(None) => UpdateState::Clear,
             None => UpdateState::Nothing,
         };
@@ -152,7 +151,7 @@ impl RankingRule {
         }
     }
 
-    pub fn from_iter(rules: impl IntoIterator<Item = impl AsRef<str>>) -> Result<Vec<RankingRule>, RankingRuleConversionError> {
+    pub fn try_from_iter(rules: impl IntoIterator<Item = impl AsRef<str>>) -> Result<Vec<RankingRule>, RankingRuleConversionError> {
         rules.into_iter()
             .map(|s| RankingRule::from_str(s.as_ref()))
             .collect()

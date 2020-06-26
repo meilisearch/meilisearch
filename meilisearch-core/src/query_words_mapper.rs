@@ -53,7 +53,7 @@ impl QueryWordsMapper {
         }
 
         {
-            let replacement = replacement[common_left..replacement.len() - common_right].iter().cloned().collect();
+            let replacement = replacement[common_left..replacement.len() - common_right].to_vec();
             self.mappings.insert(id + common_left, (range.clone(), replacement));
         }
 

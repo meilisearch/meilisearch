@@ -82,8 +82,7 @@ fn update_awaiter(
     update_fn: Arc<ArcSwapFn>,
     index: Index,
 ) -> MResult<()> {
-    let mut receiver = receiver.into_iter();
-    while let Some(event) = receiver.next() {
+    for event in receiver {
 
         // if we receive a *MustClear* event, clear the index and break the loop
         if let UpdateEvent::MustClear = event {
@@ -547,7 +546,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -610,7 +609,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -672,7 +671,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -727,7 +726,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -763,7 +762,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -829,7 +828,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -871,7 +870,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -951,7 +950,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -1090,7 +1089,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -1166,7 +1165,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();

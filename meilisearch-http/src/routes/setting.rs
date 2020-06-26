@@ -45,7 +45,7 @@ async fn update_all(
     let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
         let settings = body
             .into_inner()
-            .into_update()
+            .to_update()
             .map_err(Error::bad_request)?;
         let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
@@ -211,7 +211,7 @@ async fn update_rules(
         ..Settings::default()
     };
 
-    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let settings = settings.to_update().map_err(Error::bad_request)?;
     let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
@@ -282,7 +282,7 @@ async fn update_distinct(
         ..Settings::default()
     };
 
-    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let settings = settings.to_update().map_err(Error::bad_request)?;
     let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
@@ -350,7 +350,7 @@ async fn update_searchable(
         ..Settings::default()
     };
 
-    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let settings = settings.to_update().map_err(Error::bad_request)?;
 
     let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
@@ -421,7 +421,7 @@ async fn update_displayed(
         ..Settings::default()
     };
 
-    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let settings = settings.to_update().map_err(Error::bad_request)?;
     let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
@@ -490,7 +490,7 @@ async fn update_accept_new_fields(
         ..Settings::default()
     };
 
-    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let settings = settings.to_update().map_err(Error::bad_request)?;
     let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
@@ -549,7 +549,7 @@ async fn update_attributes_for_faceting(
         ..Settings::default()
     };
 
-    let settings = settings.into_update().map_err(Error::bad_request)?;
+    let settings = settings.to_update().map_err(Error::bad_request)?;
     let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))

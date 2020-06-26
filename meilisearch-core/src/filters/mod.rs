@@ -26,7 +26,7 @@ pub enum Filter<'a> {
 
 impl<'a> Filter<'a> {
     pub fn parse(expr: &'a str, schema: &'a Schema) -> FilterResult<'a> {
-        let mut lexed = FilterParser::parse(Rule::prgm, expr.as_ref())?;
+        let mut lexed = FilterParser::parse(Rule::prgm, expr)?;
         Self::build(lexed.next().unwrap().into_inner(), schema)
     }
 
