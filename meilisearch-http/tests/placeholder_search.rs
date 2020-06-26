@@ -156,7 +156,7 @@ async fn placeholder_search_with_filter() {
 
     test_post_get_search!(server, query, |response, _status_code| {
         let hits = response["hits"].as_array().unwrap();
-        assert!(hits.iter().all(|v| v["color"].as_str().unwrap() == "green"));
+        assert!(hits.iter().all(|v| v["color"].as_str().unwrap() == "Green"));
     });
 
     let query = json!({
@@ -177,7 +177,7 @@ async fn placeholder_search_with_filter() {
         let bug = Value::String(String::from("bug"));
         let wontfix = Value::String(String::from("wontfix"));
         assert!(hits.iter().all(|v|
-                v["color"].as_str().unwrap() == "green" &&
+                v["color"].as_str().unwrap() == "Green" &&
                 v["tags"].as_array().unwrap().contains(&bug) ||
                 v["tags"].as_array().unwrap().contains(&wontfix)));
     });
@@ -206,7 +206,7 @@ async fn placeholder_test_faceted_search_valid() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|value| value.get("color").unwrap() == "green"));
+            .all(|value| value.get("color").unwrap() == "Green"));
     });
 
     let query = json!({
@@ -296,7 +296,7 @@ async fn placeholder_test_faceted_search_valid() {
                 .unwrap() == "blue"
                 || value
                 .get("color")
-                .unwrap() == "green"));
+                .unwrap() == "Green"));
     });
     // test and-or: ["tags:bug", ["color:blue", "color:green"]]
     let query = json!({
@@ -322,7 +322,7 @@ async fn placeholder_test_faceted_search_valid() {
                     .unwrap() == "blue"
                     || value
                     .get("color")
-                    .unwrap() == "green")));
+                    .unwrap() == "Green")));
 
     });
 }

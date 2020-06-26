@@ -636,7 +636,7 @@ pub fn placeholder_document_sort(
 }
 
 /// For each entry in facet_docids, calculates the number of documents in the intersection with candidate_docids.
-fn facet_count(
+pub fn facet_count(
     facet_docids: HashMap<String, HashMap<String, (&str, Cow<Set<DocumentId>>)>>,
     candidate_docids: &Set<DocumentId>,
 ) -> HashMap<String, HashMap<String, usize>> {
