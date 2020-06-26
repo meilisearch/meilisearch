@@ -195,9 +195,8 @@ impl Index {
                 let lunion_docids = union_cache.get(&(lword, lpos)).unwrap();
                 let runion_docids = union_cache.get(&(rword, rpos)).unwrap();
 
-                let lattr = lpos / 1000;
-                let rattr = rpos / 1000;
-                if lattr == rattr {
+                if proximity <= 7 {
+                    let lattr = lpos / 1000;
                     if let Some(docids) = &words_attributes_docids[lattr as usize] {
                         if lunion_docids.is_disjoint(&docids) { return false }
                         if runion_docids.is_disjoint(&docids) { return false }
