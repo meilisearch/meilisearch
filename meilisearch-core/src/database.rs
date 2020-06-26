@@ -7,10 +7,11 @@ use std::io::{Read, Write, ErrorKind};
 
 use chrono::{DateTime, Utc};
 use crossbeam_channel::{Receiver, Sender};
-use heed::types::{Str, Unit, SerdeBincode};
 use heed::CompactionOption;
+use heed::types::{Str, Unit, SerdeBincode};
 use log::{debug, error};
 use meilisearch_schema::Schema;
+use regex::Regex;
 
 use crate::{store, update, Index, MResult, Error};
 
@@ -174,10 +175,17 @@ fn version_guard(path: &Path, create: bool) -> MResult<()> {
         Ok(mut file) => {
             let mut version = String::new();
             file.read_to_string(&mut version)?;
-            let mut version = version.split(".");
+            // Matches strings like XX.XX.XX
+            let re = Regex::new(r"(\d+).(\d+).(\d+)").unwrap();
 
-            let version_major = version.next().ok_or(Error::VersionMismatch("bad VERSION file".to_string()))?;
-            let version_minor = version.next().ok_or(Error::VersionMismatch("bad VERSION file".to_string()))?;
+            // Make sure there is a result
+            let version = re
+                .captures_iter(&version)
+                .next()
+                .ok_or(Error::VersionMismatch("bad VERSION file".to_string()))?;
+            // the first is always the complete match, safe to unwrap because we have a match
+            let version_major = version.get(1).unwrap().as_str();
+            let version_minor = version.get(2).unwrap().as_str();
 
             if version_major != current_version_major || version_minor != current_version_minor {
                 return Err(Error::VersionMismatch(format!("{}.{}.XX", version_major, version_minor)));
