@@ -204,7 +204,7 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
         }
     }
 
-    fn facet_count_docids<'a>(&self, reader: &'a MainReader) -> MResult<Option<HashMap<String, HashMap<String, Cow<'a, Set<DocumentId>>>>>> {
+    fn facet_count_docids<'a>(&self, reader: &'a MainReader) -> MResult<Option<HashMap<String, HashMap<String, (&'a str, Cow<'a, Set<DocumentId>>)>>>> {
         match self.facets {
             Some(ref field_ids) => {
                 let mut facet_count_map = HashMap::new();

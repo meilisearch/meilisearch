@@ -21,7 +21,7 @@ async fn search_with_limit() {
           "balance": "$1,706.13",
           "picture": "http://placehold.it/32x32",
           "age": 27,
-          "color": "green",
+          "color": "Green",
           "name": "Cherry Orr",
           "gender": "female",
           "email": "cherryorr@chorizon.com",
@@ -42,7 +42,7 @@ async fn search_with_limit() {
           "balance": "$1,921.58",
           "picture": "http://placehold.it/32x32",
           "age": 31,
-          "color": "green",
+          "color": "Green",
           "name": "Harper Carson",
           "gender": "male",
           "email": "harpercarson@chorizon.com",
@@ -101,7 +101,7 @@ async fn search_with_offset() {
           "balance": "$1,921.58",
           "picture": "http://placehold.it/32x32",
           "age": 31,
-          "color": "green",
+          "color": "Green",
           "name": "Harper Carson",
           "gender": "male",
           "email": "harpercarson@chorizon.com",
@@ -142,7 +142,7 @@ async fn search_with_offset() {
           "balance": "$2,668.55",
           "picture": "http://placehold.it/32x32",
           "age": 36,
-          "color": "green",
+          "color": "Green",
           "name": "Lucas Hess",
           "gender": "male",
           "email": "lucashess@chorizon.com",
@@ -181,7 +181,7 @@ async fn search_with_attribute_to_highlight_wildcard() {
           "balance": "$1,706.13",
           "picture": "http://placehold.it/32x32",
           "age": 27,
-          "color": "green",
+          "color": "Green",
           "name": "Cherry Orr",
           "gender": "female",
           "email": "cherryorr@chorizon.com",
@@ -201,7 +201,7 @@ async fn search_with_attribute_to_highlight_wildcard() {
             "balance": "$1,706.13",
             "picture": "http://placehold.it/32x32",
             "age": 27,
-            "color": "green",
+            "color": "Green",
             "name": "<em>Cherry</em> Orr",
             "gender": "female",
             "email": "<em>cherry</em>orr@chorizon.com",
@@ -241,7 +241,7 @@ async fn search_with_attribute_to_highlight_1() {
           "balance": "$1,706.13",
           "picture": "http://placehold.it/32x32",
           "age": 27,
-          "color": "green",
+          "color": "Green",
           "name": "Cherry Orr",
           "gender": "female",
           "email": "cherryorr@chorizon.com",
@@ -261,7 +261,7 @@ async fn search_with_attribute_to_highlight_1() {
             "balance": "$1,706.13",
             "picture": "http://placehold.it/32x32",
             "age": 27,
-            "color": "green",
+            "color": "Green",
             "name": "<em>Cherry</em> Orr",
             "gender": "female",
             "email": "cherryorr@chorizon.com",
@@ -301,7 +301,7 @@ async fn search_with_matches() {
           "balance": "$1,706.13",
           "picture": "http://placehold.it/32x32",
           "age": 27,
-          "color": "green",
+          "color": "Green",
           "name": "Cherry Orr",
           "gender": "female",
           "email": "cherryorr@chorizon.com",
@@ -355,7 +355,7 @@ async fn search_with_crop() {
             "balance": "$1,706.13",
             "picture": "http://placehold.it/32x32",
             "age": 27,
-            "color": "green",
+            "color": "Green",
             "name": "Cherry Orr",
             "gender": "female",
             "email": "cherryorr@chorizon.com",
@@ -375,7 +375,7 @@ async fn search_with_crop() {
               "balance": "$1,706.13",
               "picture": "http://placehold.it/32x32",
               "age": 27,
-              "color": "green",
+              "color": "Green",
               "name": "Cherry Orr",
               "gender": "female",
               "email": "cherryorr@chorizon.com",
@@ -413,7 +413,7 @@ async fn search_with_attributes_to_retrieve() {
       {
           "name": "Cherry Orr",
           "age": 27,
-          "color": "green",
+          "color": "Green",
           "gender": "female"
       }
     ]);
@@ -440,7 +440,7 @@ async fn search_with_attributes_to_retrieve_wildcard() {
             "balance": "$1,706.13",
             "picture": "http://placehold.it/32x32",
             "age": 27,
-            "color": "green",
+            "color": "Green",
             "name": "Cherry Orr",
             "gender": "female",
             "email": "cherryorr@chorizon.com",
@@ -478,7 +478,7 @@ async fn search_with_filter() {
             "balance": "$1,921.58",
             "picture": "http://placehold.it/32x32",
             "age": 31,
-            "color": "green",
+            "color": "Green",
             "name": "Harper Carson",
             "gender": "male",
             "email": "harpercarson@chorizon.com",
@@ -499,7 +499,7 @@ async fn search_with_filter() {
             "balance": "$2,668.55",
             "picture": "http://placehold.it/32x32",
             "age": 36,
-            "color": "green",
+            "color": "Green",
             "name": "Lucas Hess",
             "gender": "male",
             "email": "lucashess@chorizon.com",
@@ -547,7 +547,7 @@ async fn search_with_filter() {
             "balance": "$2,668.55",
             "picture": "http://placehold.it/32x32",
             "age": 36,
-            "color": "green",
+            "color": "Green",
             "name": "Lucas Hess",
             "gender": "male",
             "email": "lucashess@chorizon.com",
@@ -601,7 +601,7 @@ async fn search_with_filter() {
             "balance": "$1,913.42",
             "picture": "http://placehold.it/32x32",
             "age": 24,
-            "color": "green",
+            "color": "Green",
             "name": "Emma Jacobs",
             "gender": "female",
             "email": "emmajacobs@chorizon.com",
@@ -705,7 +705,7 @@ async fn search_with_filter() {
             "balance": "$1,921.58",
             "picture": "http://placehold.it/32x32",
             "age": 31,
-            "color": "green",
+            "color": "Green",
             "name": "Harper Carson",
             "gender": "male",
             "email": "harpercarson@chorizon.com",
@@ -726,7 +726,7 @@ async fn search_with_filter() {
             "balance": "$2,668.55",
             "picture": "http://placehold.it/32x32",
             "age": 36,
-            "color": "green",
+            "color": "Green",
             "name": "Lucas Hess",
             "gender": "male",
             "email": "lucashess@chorizon.com",
@@ -779,7 +779,7 @@ async fn search_with_filter() {
             "balance": "$1,351.43",
             "picture": "http://placehold.it/32x32",
             "age": 28,
-            "color": "green",
+            "color": "Green",
             "name": "Evans Wagner",
             "gender": "male",
             "email": "evanswagner@chorizon.com",
@@ -823,7 +823,7 @@ async fn search_with_attributes_to_highlight_and_matches() {
             "balance": "$1,706.13",
             "picture": "http://placehold.it/32x32",
             "age": 27,
-            "color": "green",
+            "color": "Green",
             "name": "Cherry Orr",
             "gender": "female",
             "email": "cherryorr@chorizon.com",
@@ -843,7 +843,7 @@ async fn search_with_attributes_to_highlight_and_matches() {
                 "balance": "$1,706.13",
                 "picture": "http://placehold.it/32x32",
                 "age": 27,
-                "color": "green",
+                "color": "Green",
                 "name": "<em>Cherry</em> Orr",
                 "gender": "female",
                 "email": "<em>cherry</em>orr@chorizon.com",
@@ -900,7 +900,7 @@ async fn search_with_attributes_to_highlight_and_matches_and_crop() {
             "balance": "$1,706.13",
             "picture": "http://placehold.it/32x32",
             "age": 27,
-            "color": "green",
+            "color": "Green",
             "name": "Cherry Orr",
             "gender": "female",
             "email": "cherryorr@chorizon.com",
@@ -920,7 +920,7 @@ async fn search_with_attributes_to_highlight_and_matches_and_crop() {
                 "balance": "$1,706.13",
                 "picture": "http://placehold.it/32x32",
                 "age": 27,
-                "color": "green",
+                "color": "Green",
                 "name": "Cherry Orr",
                 "gender": "female",
                 "email": "cherryorr@chorizon.com",
@@ -1223,7 +1223,7 @@ async fn test_faceted_search_valid() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|value| value.get("color").unwrap() == "green"));
+            .all(|value| value.get("color").unwrap() == "Green"));
     });
 
     let query = json!({
@@ -1318,7 +1318,7 @@ async fn test_faceted_search_valid() {
                 .unwrap() == "blue"
                 || value
                 .get("color")
-                .unwrap() == "green"));
+                .unwrap() == "Green"));
     });
     // test and-or: ["tags:bug", ["color:blue", "color:green"]]
     let query = json!({
@@ -1345,7 +1345,7 @@ async fn test_faceted_search_valid() {
                     .unwrap() == "blue"
                     || value
                     .get("color")
-                    .unwrap() == "green")));
+                    .unwrap() == "Green")));
 
     });
 }
@@ -1469,6 +1469,14 @@ async fn test_facet_count() {
         println!("{}", response);
         assert!(response.get("exhaustiveFacetsCount").is_some());
         assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 1);
+        // assert that case is preserved
+        assert!(response["facetsDistribution"]
+            .as_object()
+            .unwrap()["color"]
+            .as_object()
+            .unwrap()
+            .get("Green")
+            .is_some());
     });
     // searching on color and tags
     let query = json!({
