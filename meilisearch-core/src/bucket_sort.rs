@@ -39,7 +39,7 @@ pub fn bucket_sort<'c, FI>(
     query: &str,
     range: Range<usize>,
     facets_docids: Option<SetBuf<DocumentId>>,
-    facet_count_docids: Option<HashMap<String, HashMap<String, Cow<Set<DocumentId>>>>>,
+    facet_count_docids: Option<HashMap<String, HashMap<String, (&str, Cow<Set<DocumentId>>)>>>,
     filter: Option<FI>,
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
@@ -199,7 +199,7 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     query: &str,
     range: Range<usize>,
     facets_docids: Option<SetBuf<DocumentId>>,
-    facet_count_docids: Option<HashMap<String, HashMap<String, Cow<Set<DocumentId>>>>>,
+    facet_count_docids: Option<HashMap<String, HashMap<String, (&str, Cow<Set<DocumentId>>)>>>,
     filter: Option<FI>,
     distinct: FD,
     distinct_size: usize,
@@ -636,18 +636,18 @@ pub fn placeholder_document_sort(
 }
 
 /// For each entry in facet_docids, calculates the number of documents in the intersection with candidate_docids.
-pub fn facet_count(
-    facet_docids: HashMap<String, HashMap<String, Cow<Set<DocumentId>>>>,
+fn facet_count(
+    facet_docids: HashMap<String, HashMap<String, (&str, Cow<Set<DocumentId>>)>>,
     candidate_docids: &Set<DocumentId>,
 ) -> HashMap<String, HashMap<String, usize>> {
     let mut facets_counts = HashMap::with_capacity(facet_docids.len());
     for (key, doc_map) in facet_docids {
         let mut count_map = HashMap::with_capacity(doc_map.len());
-        for (value, docids) in doc_map {
+        for (_, (value, docids)) in doc_map {
             let mut counter = Counter::new();
             let op = OpBuilder::new(docids.as_ref(), candidate_docids).intersection();
             SetOperation::<DocumentId>::extend_collection(op, &mut counter);
-            count_map.insert(value, counter.0);
+            count_map.insert(value.to_string(), counter.0);
         }
         facets_counts.insert(key, count_map);
     }
