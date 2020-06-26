@@ -2,12 +2,13 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::mem;
 
-use heed::{RwTxn, RoTxn, Result as ZResult, RoRange, types::Str, BytesEncode, BytesDecode};
+use heed::{RwTxn, RoTxn, RoRange, types::Str, BytesEncode, BytesDecode};
 use sdset::{SetBuf, Set, SetOperation};
 
 use meilisearch_types::DocumentId;
 use meilisearch_schema::FieldId;
 
+use crate::MResult;
 use crate::database::MainT;
 use crate::facets::FacetKey;
 use super::cow_set::CowSet;
@@ -56,21 +57,21 @@ impl<'a> BytesDecode<'a> for FacetData {
 
 impl Facets {
     // we use sdset::SetBuf to ensure the docids are sorted.
-    pub fn put_facet_document_ids(&self, writer: &mut RwTxn<MainT>, facet_key: FacetKey, doc_ids: &Set<DocumentId>, facet_value: &str) -> ZResult<()> {
-        self.facets.put(writer, &facet_key, &(facet_value, doc_ids))
+    pub fn put_facet_document_ids(&self, writer: &mut RwTxn<MainT>, facet_key: FacetKey, doc_ids: &Set<DocumentId>, facet_value: &str) -> MResult<()> {
+        Ok(self.facets.put(writer, &facet_key, &(facet_value, doc_ids))?)
     }
 
-    pub fn field_document_ids<'txn>(&self, reader: &'txn RoTxn<MainT>, field_id: FieldId) -> ZResult<RoRange<'txn, FacetKey, FacetData>> {
-        self.facets.prefix_iter(reader, &FacetKey::new(field_id, String::new()))
+    pub fn field_document_ids<'txn>(&self, reader: &'txn RoTxn<MainT>, field_id: FieldId) -> MResult<RoRange<'txn, FacetKey, FacetData>> {
+        Ok(self.facets.prefix_iter(reader, &FacetKey::new(field_id, String::new()))?)
     }
 
-    pub fn facet_document_ids<'txn>(&self, reader: &'txn RoTxn<MainT>, facet_key: &FacetKey) -> ZResult<Option<(&'txn str,Cow<'txn, Set<DocumentId>>)>> {
-        self.facets.get(reader, &facet_key)
+    pub fn facet_document_ids<'txn>(&self, reader: &'txn RoTxn<MainT>, facet_key: &FacetKey) -> MResult<Option<(&'txn str,Cow<'txn, Set<DocumentId>>)>> {
+        Ok(self.facets.get(reader, &facet_key)?)
     }
 
     /// updates the facets  store, revmoving the documents from the facets provided in the
     /// `facet_map` argument
-    pub fn remove(&self, writer: &mut RwTxn<MainT>, facet_map: HashMap<FacetKey, (String, Vec<DocumentId>)>) -> ZResult<()> {
+    pub fn remove(&self, writer: &mut RwTxn<MainT>, facet_map: HashMap<FacetKey, (String, Vec<DocumentId>)>) -> MResult<()> {
         for (key, (name, document_ids)) in facet_map {
             if let Some((_, old)) = self.facets.get(writer, &key)? {
                 let to_remove = SetBuf::from_dirty(document_ids);
@@ -81,7 +82,7 @@ impl Facets {
         Ok(())
     }
 
-    pub fn add(&self, writer: &mut RwTxn<MainT>, facet_map: HashMap<FacetKey, (String, Vec<DocumentId>)>) -> ZResult<()> {
+    pub fn add(&self, writer: &mut RwTxn<MainT>, facet_map: HashMap<FacetKey, (String, Vec<DocumentId>)>) -> MResult<()> {
         for (key, (facet_name, document_ids)) in facet_map {
             let set = SetBuf::from_dirty(document_ids);
             self.put_facet_document_ids(writer, key, set.as_set(), &facet_name)?;
@@ -89,7 +90,7 @@ impl Facets {
         Ok(())
     }
 
-    pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
-        self.facets.clear(writer)
+    pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
+        Ok(self.facets.clear(writer)?)
     }
 }
