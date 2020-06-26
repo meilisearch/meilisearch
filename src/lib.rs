@@ -134,7 +134,7 @@ impl Index {
             positions.push(union_positions.iter().collect());
         }
 
-        let mut words_attributes_docids = HashMap::new();
+        let mut words_attributes_docids = Vec::new();
         let number_attributes: u32 = 6;
 
         for i in 0..number_attributes {
@@ -155,9 +155,7 @@ impl Index {
                     None => intersect_docids = Some(union_docids),
                 }
             }
-            if let Some(docids) = intersect_docids {
-                words_attributes_docids.insert(i, docids);
-            }
+            words_attributes_docids.push(intersect_docids);
         }
 
         eprintln!("The documents you must find for each attribute: {:?}", words_attributes_docids);
@@ -182,7 +180,7 @@ impl Index {
         let mut union_cache = HashMap::new();
         let mut intersect_cache = HashMap::new();
         // Returns `true` if there is documents in common between the two words and positions given.
-        let mut contains_documents = |(lword, lpos), (rword, rpos), union_cache: &mut HashMap<_, _>, words_attributes_docids: &HashMap<_, _>| {
+        let mut contains_documents = |(lword, lpos), (rword, rpos), union_cache: &mut HashMap<_, _>, words_attributes_docids: &[_]| {
             let proximity = best_proximity::positions_proximity(lpos, rpos);
 
             if proximity == 0 { return false }
@@ -200,7 +198,7 @@ impl Index {
                 let lattr = lpos / 1000;
                 let rattr = rpos / 1000;
                 if lattr == rattr {
-                    if let Some(docids) = words_attributes_docids.get(&lattr) {
+                    if let Some(docids) = &words_attributes_docids[lattr as usize] {
                         if lunion_docids.is_disjoint(&docids) { return false }
                         if runion_docids.is_disjoint(&docids) { return false }
                     }
@@ -252,8 +250,10 @@ impl Index {
             }
 
             // We achieve to find valid documents ids so we remove them from the candidate list.
-            for (_, docids) in &mut words_attributes_docids {
-                docids.difference_with(&same_proximity_union);
+            for docids in &mut words_attributes_docids {
+                if let Some(docids) = docids {
+                    docids.difference_with(&same_proximity_union);
+                }
             }
 
             documents.push(same_proximity_union);
