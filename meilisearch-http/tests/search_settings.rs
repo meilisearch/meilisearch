@@ -130,7 +130,7 @@ async fn search_with_settings_stop_words() {
       {
         "balance": "$1,921.58",
         "age": 31,
-        "color": "green",
+        "color": "Green",
         "name": "Harper Carson",
         "gender": "male",
         "email": "harpercarson@chorizon.com",
@@ -140,7 +140,7 @@ async fn search_with_settings_stop_words() {
       {
         "balance": "$1,706.13",
         "age": 27,
-        "color": "green",
+        "color": "Green",
         "name": "Cherry Orr",
         "gender": "female",
         "email": "cherryorr@chorizon.com",
@@ -213,7 +213,7 @@ async fn search_with_settings_synonyms() {
       {
         "balance": "$1,921.58",
         "age": 31,
-        "color": "green",
+        "color": "Green",
         "name": "Harper Carson",
         "gender": "male",
         "email": "harpercarson@chorizon.com",
@@ -223,7 +223,7 @@ async fn search_with_settings_synonyms() {
       {
         "balance": "$1,706.13",
         "age": 27,
-        "color": "green",
+        "color": "Green",
         "name": "Cherry Orr",
         "gender": "female",
         "email": "cherryorr@chorizon.com",
@@ -292,7 +292,7 @@ async fn search_with_settings_ranking_rules() {
       {
         "balance": "$1,921.58",
         "age": 31,
-        "color": "green",
+        "color": "Green",
         "name": "Harper Carson",
         "gender": "male",
         "email": "harpercarson@chorizon.com",
@@ -302,7 +302,7 @@ async fn search_with_settings_ranking_rules() {
       {
         "balance": "$1,706.13",
         "age": 27,
-        "color": "green",
+        "color": "Green",
         "name": "Cherry Orr",
         "gender": "female",
         "email": "cherryorr@chorizon.com",
@@ -438,7 +438,7 @@ async fn search_with_settings_displayed_attributes() {
     let expect = json!([
       {
         "age": 31,
-        "color": "green",
+        "color": "Green",
         "name": "Harper Carson",
         "gender": "male",
         "email": "harpercarson@chorizon.com",
@@ -446,7 +446,7 @@ async fn search_with_settings_displayed_attributes() {
       },
       {
         "age": 27,
-        "color": "green",
+        "color": "Green",
         "name": "Cherry Orr",
         "gender": "female",
         "email": "cherryorr@chorizon.com",
