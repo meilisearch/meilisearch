@@ -152,12 +152,7 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
                 distinct_size,
                 self.criteria,
                 self.searchable_attrs,
-                self.index.main,
-                self.index.postings_lists,
-                self.index.documents_fields_counts,
-                self.index.synonyms,
-                self.index.prefix_documents_cache,
-                self.index.prefix_postings_lists_cache,
+                self.index,
             ),
             None => bucket_sort(
                 reader,
@@ -168,12 +163,7 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
                 self.filter,
                 self.criteria,
                 self.searchable_attrs,
-                self.index.main,
-                self.index.postings_lists,
-                self.index.documents_fields_counts,
-                self.index.synonyms,
-                self.index.prefix_documents_cache,
-                self.index.prefix_postings_lists_cache,
+                self.index,
             ),
         }
     }
