@@ -27,6 +27,10 @@ jobs:
       with:
         command: test
         args: --locked --release
+    - name: Run cargo clippy
+      uses: actions-rs/cargo@v1
+      with:
+        command: clippy
   build-image:
     name: Test the build of Docker image
     runs-on: ubuntu-latest
