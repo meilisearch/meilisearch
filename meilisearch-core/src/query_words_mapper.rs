@@ -19,6 +19,7 @@ impl QueryWordsMapper {
         QueryWordsMapper { originals, mappings: HashMap::new() }
     }
 
+    #[allow(clippy::len_zero)]
     pub fn declare<I, A>(&mut self, range: Range<usize>, id: QueryId, replacement: I)
     where I: IntoIterator<Item = A>,
           A: ToString,

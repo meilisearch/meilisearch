@@ -188,12 +188,10 @@ impl SearchQuery {
                     for attr in &restricted_attributes {
                         final_attributes.insert(attr.to_string());
                     }
+                } else if available_attributes.contains(attribute) {
+                    final_attributes.insert(attribute.to_string());
                 } else {
-                    if available_attributes.contains(attribute) {
-                        final_attributes.insert(attribute.to_string());
-                    } else {
-                        warn!("The attributes {:?} present in attributesToHighlight parameter doesn't exist", attribute);
-                    }
+                    warn!("The attributes {:?} present in attributesToHighlight parameter doesn't exist", attribute);
                 }
             }
 
@@ -246,6 +244,6 @@ fn prepare_facet_list(facets: &str, schema: &Schema, facet_attrs: &[FieldId]) ->
             }
             Ok(field_ids)
         }
-        bad_val => return Err(FacetCountError::unexpected_token(bad_val, &["[String]"]))
+        bad_val => Err(FacetCountError::unexpected_token(bad_val, &["[String]"]))
     }
 }

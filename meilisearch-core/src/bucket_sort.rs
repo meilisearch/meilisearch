@@ -33,6 +33,7 @@ pub struct SortResult {
     pub exhaustive_facets_count: Option<bool>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
     query: &str,
@@ -192,6 +193,7 @@ where
     Ok(result)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn bucket_sort_with_distinct<'c, FI, FD>(
     reader: &heed::RoTxn<MainT>,
     query: &str,

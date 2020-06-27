@@ -92,6 +92,7 @@ impl<'a> CriteriaBuilder<'a> {
         self.inner.reserve(additional)
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn add<C: 'a>(mut self, criterion: C) -> CriteriaBuilder<'a>
     where
         C: Criterion,
