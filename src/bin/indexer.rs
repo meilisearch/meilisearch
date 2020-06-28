@@ -40,6 +40,10 @@ struct Opt {
     #[structopt(long = "db", parse(from_os_str))]
     database: PathBuf,
 
+    /// Number of parallel jobs, defaults to # of CPUs.
+    #[structopt(short, long)]
+    jobs: Option<usize>,
+
     /// Files to index in parallel.
     files_to_index: Vec<PathBuf>,
 }
@@ -387,6 +391,10 @@ fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> any
 
 fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
+
+    if let Some(jobs) = opt.jobs {
+        rayon::ThreadPoolBuilder::new().num_threads(jobs).build_global()?;
+    }
 
     std::fs::create_dir_all(&opt.database)?;
     let env = EnvOpenOptions::new()
