@@ -46,6 +46,10 @@ struct Opt {
     #[structopt(long, default_value = "100000")]
     arc_cache_size: usize,
 
+    /// Number of parallel jobs, defaults to # of CPUs.
+    #[structopt(short, long)]
+    jobs: Option<usize>,
+
     /// CSV file to index.
     csv_file: PathBuf,
 }
@@ -467,6 +471,10 @@ fn open_env_index(path: impl AsRef<Path>) -> anyhow::Result<(Env, Index)> {
 
 fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
+
+    if let Some(jobs) = opt.jobs {
+        rayon::ThreadPoolBuilder::new().num_threads(jobs).build_global()?;
+    }
 
     std::fs::create_dir_all(&opt.database)?;
     let (env, index) = open_env_index(&opt.database)?;
