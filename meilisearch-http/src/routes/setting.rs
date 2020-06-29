@@ -110,14 +110,14 @@ async fn get_all(
 
     println!("{:?}", attributes_for_faceting);
 
-    let searchable_attributes = schema.clone().map(|s| {
+    let searchable_attributes = schema.as_ref().map(|s| {
         s.indexed_name()
             .iter()
             .map(|s| s.to_string())
             .collect::<Vec<String>>()
     });
 
-    let displayed_attributes = schema.clone().map(|s| {
+    let displayed_attributes = schema.as_ref().map(|s| {
         s.displayed_name()
             .iter()
             .map(|s| s.to_string())
@@ -253,7 +253,12 @@ async fn get_distinct(
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
-    let distinct_attribute = index.main.distinct_attribute(&reader)?;
+    let distinct_attribute_id = index.main.distinct_attribute(&reader)?;
+    let schema = index.main.schema(&reader)?;
+    let distinct_attribute = match (schema, distinct_attribute_id) {
+        (Some(schema), Some(id)) => schema.name(id).map(str::to_string),
+        _ => None,
+    };
 
     Ok(HttpResponse::Ok().json(distinct_attribute))
 }

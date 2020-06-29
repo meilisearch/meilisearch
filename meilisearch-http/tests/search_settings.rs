@@ -677,3 +677,17 @@ async fn search_with_settings_searchable_attributes_2() {
     let (response, _status_code) = server.search_get(query).await;
     assert_json_eq!(expect, response["hits"].clone(), ordered: false);
 }
+
+// issue #798
+#[actix_rt::test]
+async fn distinct_attributes_returns_name_not_id() {
+    let mut server = common::Server::test_server().await;
+    let settings = json!({
+        "distinctAttribute": "color",
+    });
+    server.update_all_settings(settings).await;
+    let (response, _) = server.get_all_settings().await;
+    assert_eq!(response["distinctAttribute"], "color");
+    let (response, _) = server.get_distinct_attribute().await;
+    assert_eq!(response, "color");
+}
