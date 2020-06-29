@@ -63,8 +63,16 @@ impl Index {
         })
     }
 
+    pub fn put_headers(&self, wtxn: &mut heed::RwTxn, headers: &[u8]) -> anyhow::Result<()> {
+        Ok(self.main.put::<_, Str, ByteSlice>(wtxn, "headers", headers)?)
+    }
+
     pub fn headers<'t>(&self, rtxn: &'t heed::RoTxn) -> heed::Result<Option<&'t [u8]>> {
         self.main.get::<_, Str, ByteSlice>(rtxn, "headers")
+    }
+
+    pub fn put_fst<A: AsRef<[u8]>>(&self, wtxn: &mut heed::RwTxn, fst: &fst::Set<A>) -> anyhow::Result<()> {
+        Ok(self.main.put::<_, Str, ByteSlice>(wtxn, "words-fst", fst.as_fst().as_bytes())?)
     }
 
     pub fn fst<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<Option<fst::Set<&'t [u8]>>> {
