@@ -47,7 +47,7 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
     eprintln!("Indexing into LMDB...");
 
     let mut word_positions = ArcCache::<_, RoaringBitmap>::new(100_000);
-    let mut word_position_docids = ArcCache::<_, RoaringBitmap>::new(100_000);
+    let mut word_position_docids = ArcCache::<_, RoaringBitmap>::new(3_000_000);
 
     // Write the headers into a Vec of bytes.
     let headers = rdr.headers()?;
@@ -108,14 +108,14 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
         index.documents.put(wtxn, &BEU32::new(document_id), &document)?;
     }
 
-    for (word, ids) in word_positions {
-        index.word_positions.put(wtxn, &word, &ids)?;
+    for (word, ids) in &word_positions {
+        index.word_positions.put(wtxn, word, ids)?;
     }
 
-    for ((word, position), ids) in word_position_docids {
+    for ((word, position), ids) in &word_position_docids {
         let mut key = word.as_bytes().to_vec();
         key.extend_from_slice(&position.to_be_bytes());
-        index.word_position_docids.put(wtxn, &key, &ids)?;
+        index.word_position_docids.put(wtxn, &key, ids)?;
     }
 
     // We store the words from the postings.

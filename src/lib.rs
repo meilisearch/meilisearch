@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use cow_utils::CowUtils;
 use fst::{IntoStreamer, Streamer};
-use fxhash::FxHasher32;
+use fxhash::{FxHasher32, FxHasher64};
 use heed::types::*;
 use heed::{PolyDatabase, Database};
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
@@ -28,6 +28,7 @@ static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
 static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
+pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
 pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
 pub type SmallVec32<T> = smallvec::SmallVec<[T; 32]>;
 pub type SmallVec16<T> = smallvec::SmallVec<[T; 16]>;
