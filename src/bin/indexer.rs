@@ -2,7 +2,6 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
 use std::io;
-use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -11,7 +10,7 @@ use cow_utils::CowUtils;
 use fst::Streamer;
 use heed::EnvOpenOptions;
 use heed::types::*;
-use roaring::RoaringBitmap;
+use lru::LruCache;
 use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 
@@ -46,6 +45,10 @@ struct Opt {
 fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index: &Index) -> anyhow::Result<()> {
     eprintln!("Indexing into LMDB...");
 
+    let cache_size = 3_000_000;
+    let mut word_positions = LruCache::new(cache_size + 1);
+    let mut word_position_docids = LruCache::new(cache_size + 1);
+
     // Write the headers into a Vec of bytes.
     let headers = rdr.headers()?;
     let mut writer = csv::WriterBuilder::new().has_headers(false).from_writer(Vec::new());
@@ -61,29 +64,47 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
         for (attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
             for (pos, word) in simple_alphanumeric_tokens(&content).enumerate().take(MAX_POSITION) {
                 if !word.is_empty() && word.len() < 500 { // LMDB limits
-                    let word = word.cow_to_lowercase();
+                    let word = word.to_lowercase(); // TODO cow_to_lowercase
                     let position = (attr * 1000 + pos) as u32;
 
                     // ------ merge word positions --------
 
-                    let ids = match index.word_positions.get(wtxn, &word)? {
-                        Some(mut ids) => { ids.insert(position); ids },
-                        None => RoaringBitmap::from_iter(Some(position)),
+                    let ids = match word_positions.get_mut(&word) {
+                        Some(ids) => ids,
+                        None => {
+                            let ids = index.word_positions.get(wtxn, &word)?.unwrap_or_default();
+                            word_positions.put(word.clone(), ids);
+                            if word_positions.len() > cache_size {
+                                let (word, ids) = word_positions.pop_lru().unwrap();
+                                index.word_positions.put(wtxn, &word, &ids)?;
+                            }
+                            word_positions.get_mut(&word).unwrap()
+                        }
                     };
 
-                    index.word_positions.put(wtxn, &word, &ids)?;
+                    ids.insert(position);
 
                     // ------ merge word position documents ids --------
 
                     let mut key = word.as_bytes().to_vec();
                     key.extend_from_slice(&position.to_be_bytes());
 
-                    let ids = match index.word_position_docids.get(wtxn, &key)? {
-                        Some(mut ids) => { ids.insert(document_id); ids },
-                        None => RoaringBitmap::from_iter(Some(document_id)),
+                    let ids = match word_position_docids.get_mut(&(word.clone(), position)) {
+                        Some(ids) => ids,
+                        None => {
+                            let ids = index.word_position_docids.get(wtxn, &key)?.unwrap_or_default();
+                            word_position_docids.put((word.clone(), position), ids);
+                            if word_position_docids.len() > cache_size {
+                                let ((word, position), ids) = word_position_docids.pop_lru().unwrap();
+                                let mut key = word.as_bytes().to_vec();
+                                key.extend_from_slice(&position.to_be_bytes());
+                                index.word_position_docids.put(wtxn, &key, &ids)?;
+                            }
+                            word_position_docids.get_mut(&(word, position)).unwrap()
+                        }
                     };
 
-                    index.word_position_docids.put(wtxn, &key, &ids)?;
+                    ids.insert(position);
                 }
             }
         }
@@ -93,6 +114,16 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
         writer.write_byte_record(document.as_byte_record())?;
         let document = writer.into_inner()?;
         index.documents.put(wtxn, &BEU32::new(document_id), &document)?;
+    }
+
+    for (word, ids) in &word_positions {
+        index.word_positions.put(wtxn, word, ids)?;
+    }
+
+    for ((word, position), ids) in &word_position_docids {
+        let mut key = word.as_bytes().to_vec();
+        key.extend_from_slice(&position.to_be_bytes());
+        index.word_position_docids.put(wtxn, &key, ids)?;
     }
 
     // We store the words from the postings.
