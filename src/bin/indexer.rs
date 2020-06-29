@@ -10,10 +10,11 @@ use cow_utils::CowUtils;
 use fst::Streamer;
 use heed::EnvOpenOptions;
 use heed::types::*;
-use lru::LruCache;
+use roaring::RoaringBitmap;
 use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 
+use mega_mini_indexer::cache::ArcCache;
 use mega_mini_indexer::{BEU32, Index, DocumentId};
 
 const MAX_POSITION: usize = 1000;
@@ -45,9 +46,8 @@ struct Opt {
 fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index: &Index) -> anyhow::Result<()> {
     eprintln!("Indexing into LMDB...");
 
-    let cache_size = 3_000_000;
-    let mut word_positions = LruCache::new(cache_size + 1);
-    let mut word_position_docids = LruCache::new(cache_size + 1);
+    let mut word_positions = ArcCache::<_, RoaringBitmap>::new(100_000);
+    let mut word_position_docids = ArcCache::<_, RoaringBitmap>::new(100_000);
 
     // Write the headers into a Vec of bytes.
     let headers = rdr.headers()?;
@@ -69,42 +69,34 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
 
                     // ------ merge word positions --------
 
-                    let ids = match word_positions.get_mut(&word) {
-                        Some(ids) => ids,
+                    match word_positions.get_mut(&word) {
+                        Some(ids) => { ids.insert(position); },
                         None => {
-                            let ids = index.word_positions.get(wtxn, &word)?.unwrap_or_default();
-                            word_positions.put(word.clone(), ids);
-                            if word_positions.len() > cache_size {
-                                let (word, ids) = word_positions.pop_lru().unwrap();
+                            let mut ids = index.word_positions.get(wtxn, &word)?.unwrap_or_default();
+                            ids.insert(position);
+                            for (word, ids) in word_positions.insert(word.clone(), ids) {
                                 index.word_positions.put(wtxn, &word, &ids)?;
                             }
-                            word_positions.get_mut(&word).unwrap()
                         }
-                    };
-
-                    ids.insert(position);
+                    }
 
                     // ------ merge word position documents ids --------
 
                     let mut key = word.as_bytes().to_vec();
                     key.extend_from_slice(&position.to_be_bytes());
 
-                    let ids = match word_position_docids.get_mut(&(word.clone(), position)) {
-                        Some(ids) => ids,
+                    match word_position_docids.get_mut(&(word.clone(), position)) {
+                        Some(ids) => { ids.insert(position); },
                         None => {
-                            let ids = index.word_position_docids.get(wtxn, &key)?.unwrap_or_default();
-                            word_position_docids.put((word.clone(), position), ids);
-                            if word_position_docids.len() > cache_size {
-                                let ((word, position), ids) = word_position_docids.pop_lru().unwrap();
+                            let mut ids = index.word_position_docids.get(wtxn, &key)?.unwrap_or_default();
+                            ids.insert(position);
+                            for ((word, position), ids) in word_position_docids.insert((word.clone(), position), ids) {
                                 let mut key = word.as_bytes().to_vec();
                                 key.extend_from_slice(&position.to_be_bytes());
                                 index.word_position_docids.put(wtxn, &key, &ids)?;
                             }
-                            word_position_docids.get_mut(&(word, position)).unwrap()
                         }
-                    };
-
-                    ids.insert(position);
+                    }
                 }
             }
         }
@@ -116,14 +108,14 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
         index.documents.put(wtxn, &BEU32::new(document_id), &document)?;
     }
 
-    for (word, ids) in &word_positions {
-        index.word_positions.put(wtxn, word, ids)?;
+    for (word, ids) in word_positions {
+        index.word_positions.put(wtxn, &word, &ids)?;
     }
 
-    for ((word, position), ids) in &word_position_docids {
+    for ((word, position), ids) in word_position_docids {
         let mut key = word.as_bytes().to_vec();
         key.extend_from_slice(&position.to_be_bytes());
-        index.word_position_docids.put(wtxn, &key, ids)?;
+        index.word_position_docids.put(wtxn, &key, &ids)?;
     }
 
     // We store the words from the postings.
