@@ -196,11 +196,11 @@ async fn delete_index_and_recreate_it() {
     let mut server = common::Server::with_uid("movies");
 
     // 0 - delete unexisting index is error
-    
+
     let (response, status_code) = server.delete_request("/indexes/test").await;
     assert_eq!(status_code, 404);
     assert_eq!(&response["errorCode"], "index_not_found");
-    
+
     // 1 - Create a new index
 
     let body = json!({
