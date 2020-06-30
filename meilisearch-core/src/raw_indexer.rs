@@ -291,4 +291,22 @@ mod tests {
         } = indexer.build();
         assert!(words_doc_indexes.get(&"buffering".to_owned().into_bytes()).is_some());
     }
+
+    #[test]
+    fn words_over_index_1000_not_indexed() {
+        let mut indexer = RawIndexer::new(fst::Set::default());
+        let indexed_pos = IndexedPos(0);
+        let docid = DocumentId(0);
+        let mut text = String::with_capacity(5000);
+        for _ in 0..1000 {
+            text.push_str("less ");
+        }
+        text.push_str("more");
+        indexer.index_text(docid, indexed_pos, &text);
+        let Indexed {
+            words_doc_indexes, ..
+        } = indexer.build();
+        assert!(words_doc_indexes.get(&"less".to_owned().into_bytes()).is_some());
+        assert!(words_doc_indexes.get(&"more".to_owned().into_bytes()).is_none());
+    }
 }
