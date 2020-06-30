@@ -1,3 +1,9 @@
+## v0.12.0
+
+  - Fix long documents not being indexed completely bug (#816) 
+  - Fix distinct attribute returning id instead of name (#800)
+  - error code rename (#805)
+
 ## v0.11.1
 
   - Fix facet cache on document update (#789) 
