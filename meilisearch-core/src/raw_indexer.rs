@@ -124,7 +124,7 @@ fn index_token<A>(
 ) -> bool
 where A: AsRef<[u8]>,
 {
-    if token.word_index >= word_limit {
+    if token.index >= word_limit {
         return false;
     }
 
