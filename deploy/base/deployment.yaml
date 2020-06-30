@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meilisearch
+spec:
+  selector:
+    matchLabels:
+      app: meilisearch
+  template:
+    metadata:
+      labels:
+        app: meilisearch
+    spec:
+      serviceAccountName: meilisearch
+      containers:
+      - name: meilisearch
+        image: getmeili/meilisearch:v0.11.1
+        envFrom:
+          - configMapRef:
+              name: meilisearch
+              optional: true
+        env:
+          - name: MEILI_MASTER_KEY
+            valueFrom:
+              secretKeyRef:
+                name: meilisearch
+                key: MEILI_MASTER_KEY
+                optional: true
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          initialDelaySeconds: 5
+          httpGet:
+            path: /health
+            port: http
+        securityContext:
+          readOnlyRootFilesystem: true
+          runAsNonRoot: false
+          runAsUser: 1000
+          runAsGroup: 1000
+        ports:
+        - name: http
+          containerPort: 7700
+        volumeMounts:
+          - name: data
+            mountPath: /data.ms
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: meilisearch

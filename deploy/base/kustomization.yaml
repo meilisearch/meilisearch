@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+commonLabels:
+  app.kubernetes.io/name: meilisearch
+  app.kubernetes.io/component: search-engine
+
+resources:
+  - deployment.yaml
+  - persistentvolumeclaim.yaml
+  - service.yaml
+  - serviceaccount.yaml
+
+configMapGenerator:
+  - name: meilisearch
+    literals:
+      # Default to development mode. This will not require a secret.
+      # Note that if running in production mode, the current manifests
+      # expect a secret to be available called meilisearch with a field
+      # called masterKey that contains the master key for the server.
+      - MEILI_ENV=development
+      # Default to a directory called data.ms in the root of the container.
+      # This is subtly different from the application default of ./data.ms
+      # as during runtime the current working directory can be changed and
+      # the volume is mounted on /data.ms in the container.
+      - MEILI_DB_PATH=/data.ms
+
+      # TODO: add more environment variables if needed but usually the defaults
+      # should be enough.

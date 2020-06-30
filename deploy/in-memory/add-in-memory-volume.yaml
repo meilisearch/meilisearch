@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meilisearch
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+          emptyDir:
+            medium: Memory
+          persistentVolumeClaim: null # setting this to null will remove it from the volume entry
