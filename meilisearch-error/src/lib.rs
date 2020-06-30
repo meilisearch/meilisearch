@@ -85,10 +85,10 @@ impl Code {
 
         match self {
             // index related errors
-            CreateIndex => ErrCode::invalid("create_index", StatusCode::BAD_REQUEST),
+            CreateIndex => ErrCode::invalid("index_creation_failed", StatusCode::BAD_REQUEST),
             IndexAlreadyExists => ErrCode::invalid("index_already_exists", StatusCode::BAD_REQUEST),
             IndexNotFound => ErrCode::invalid("index_not_found", StatusCode::NOT_FOUND), InvalidIndexUid => ErrCode::invalid("invalid_index_uid", StatusCode::BAD_REQUEST),
-            OpenIndex => ErrCode::internal("open_index", StatusCode::INTERNAL_SERVER_ERROR),
+            OpenIndex => ErrCode::internal("index_not_accessible", StatusCode::INTERNAL_SERVER_ERROR),
 
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
@@ -111,7 +111,7 @@ impl Code {
             MissingAuthorizationHeader => ErrCode::authentication("missing_authorization_header", StatusCode::UNAUTHORIZED),
             NotFound => ErrCode::invalid("not_found", StatusCode::NOT_FOUND),
             PayloadTooLarge => ErrCode::invalid("payload_too_large", StatusCode::PAYLOAD_TOO_LARGE),
-            RetrieveDocument => ErrCode::internal("retrieve_document", StatusCode::BAD_REQUEST),
+            RetrieveDocument => ErrCode::internal("unretrievable_document", StatusCode::BAD_REQUEST),
             SearchDocuments => ErrCode::internal("search_error", StatusCode::BAD_REQUEST),
             UnsupportedMediaType => ErrCode::invalid("unsupported_media_type", StatusCode::UNSUPPORTED_MEDIA_TYPE),
         }
