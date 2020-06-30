@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use meilisearch_core::{Database, DatabaseOptions};
 use sha2::Digest;
-use sysinfo::Pid;
 
 use crate::index_update_callback;
 use crate::option::Opt;
@@ -27,7 +26,7 @@ pub struct DataInner {
     pub db: Arc<Database>,
     pub db_path: String,
     pub api_keys: ApiKeys,
-    pub server_pid: Pid,
+    pub server_pid: u32,
     pub http_payload_size_limit: usize,
 }
 
@@ -58,7 +57,7 @@ impl ApiKeys {
 impl Data {
     pub fn new(opt: Opt) -> Result<Data, Box<dyn Error>> {
         let db_path = opt.db_path.clone();
-        let server_pid = sysinfo::get_current_pid().unwrap();
+        let server_pid = std::process::id();
 
         let db_opt = DatabaseOptions {
             main_map_size: opt.main_map_size,
