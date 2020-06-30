@@ -109,6 +109,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
     Ok(last_update_id)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn index_document<A>(
     writer: &mut heed::RwTxn<MainT>,
     documents_fields: DocumentsFields,

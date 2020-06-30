@@ -43,6 +43,7 @@ pub struct LoggingMiddleware<S> {
     service: Rc<RefCell<S>>,
 }
 
+#[allow(clippy::type_complexity)]
 impl<S, B> Service for LoggingMiddleware<S>
 where
     S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,

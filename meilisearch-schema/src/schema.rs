@@ -2,7 +2,7 @@ use crate::{FieldsMap, FieldId, SResult, Error, IndexedPos};
 use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct Schema {
     fields_map: FieldsMap,
 
@@ -19,13 +19,8 @@ pub struct Schema {
 impl Schema {
     pub fn new() -> Schema {
         Schema {
-            fields_map: FieldsMap::default(),
-            primary_key: None,
-            ranked: HashSet::new(),
-            displayed: HashSet::new(),
-            indexed: Vec::new(),
-            indexed_map: HashMap::new(),
             accept_new_fields: true,
+            ..Default::default()
         }
     }
 

@@ -161,7 +161,7 @@ fn load_private_key(filename: PathBuf) -> Result<rustls::PrivateKey, Box<dyn err
 fn load_ocsp(filename: &Option<PathBuf>) -> Result<Vec<u8>, Box<dyn error::Error>> {
     let mut ret = Vec::new();
 
-    if let &Some(ref name) = filename {
+    if let Some(ref name) = filename {
         fs::File::open(name)
             .map_err(|_| "cannot open ocsp file")?
             .read_to_end(&mut ret)

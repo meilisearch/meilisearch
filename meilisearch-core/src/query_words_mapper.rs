@@ -19,6 +19,7 @@ impl QueryWordsMapper {
         QueryWordsMapper { originals, mappings: HashMap::new() }
     }
 
+    #[allow(clippy::len_zero)]
     pub fn declare<I, A>(&mut self, range: Range<usize>, id: QueryId, replacement: I)
     where I: IntoIterator<Item = A>,
           A: ToString,
@@ -53,7 +54,7 @@ impl QueryWordsMapper {
         }
 
         {
-            let replacement = replacement[common_left..replacement.len() - common_right].iter().cloned().collect();
+            let replacement = replacement[common_left..replacement.len() - common_right].to_vec();
             self.mappings.insert(id + common_left, (range.clone(), replacement));
         }
 

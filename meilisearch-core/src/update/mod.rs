@@ -72,7 +72,7 @@ impl Update {
 
     fn settings(data: SettingsUpdate) -> Update {
         Update {
-            data: UpdateData::Settings(data),
+            data: UpdateData::Settings(Box::new(data)),
             enqueued_at: Utc::now(),
         }
     }
@@ -85,7 +85,7 @@ pub enum UpdateData {
     DocumentsAddition(Vec<IndexMap<String, Value>>),
     DocumentsPartial(Vec<IndexMap<String, Value>>),
     DocumentsDeletion(Vec<String>),
-    Settings(SettingsUpdate)
+    Settings(Box<SettingsUpdate>)
 }
 
 impl UpdateData {
@@ -117,7 +117,7 @@ pub enum UpdateType {
     DocumentsAddition { number: usize },
     DocumentsPartial { number: usize },
     DocumentsDeletion { number: usize },
-    Settings { settings: SettingsUpdate },
+    Settings { settings: Box<SettingsUpdate> },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -273,7 +273,7 @@ pub fn update_task<'a, 'b>(
             let result = apply_settings_update(
                 writer,
                 index,
-                settings,
+                *settings,
             );
 
             (update_type, result, start.elapsed())

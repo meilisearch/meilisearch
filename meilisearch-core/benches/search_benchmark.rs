@@ -39,7 +39,7 @@ fn prepare_database(path: &Path) -> Database {
         let file = File::open(path).unwrap();
         let reader = BufReader::new(file);
         let settings: Settings = serde_json::from_reader(reader).unwrap();
-        settings.into_update().unwrap()
+        settings.to_update().unwrap()
     };
 
     db.update_write::<_, _, Box<dyn Error>>(|writer| {

@@ -19,7 +19,7 @@ use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
-use crate::{store, Document, DocumentId, MResult};
+use crate::{Document, DocumentId, MResult, Index};
 use crate::query_tree::{create_query_tree, traverse_query_tree};
 use crate::query_tree::{Operation, QueryResult, QueryKind, QueryId, PostingsKey};
 use crate::query_tree::Context as QTContext;
@@ -33,6 +33,7 @@ pub struct SortResult {
     pub exhaustive_facets_count: Option<bool>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
     query: &str,
@@ -42,12 +43,7 @@ pub fn bucket_sort<'c, FI>(
     filter: Option<FI>,
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    synonyms_store: store::Synonyms,
-    prefix_documents_cache_store: store::PrefixDocumentsCache,
-    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
+    index: &Index,
 ) -> MResult<SortResult>
 where
     FI: Fn(DocumentId) -> bool,
@@ -68,26 +64,21 @@ where
             distinct_size,
             criteria,
             searchable_attrs,
-            main_store,
-            postings_lists_store,
-            documents_fields_counts_store,
-            synonyms_store,
-            prefix_documents_cache_store,
-            prefix_postings_lists_cache_store,
+            index,
         );
     }
 
     let mut result = SortResult::default();
 
-    let words_set = main_store.words_fst(reader)?;
-    let stop_words = main_store.stop_words_fst(reader)?;
+    let words_set = index.main.words_fst(reader)?;
+    let stop_words = index.main.stop_words_fst(reader)?;
 
     let context = QTContext {
         words_set,
         stop_words,
-        synonyms: synonyms_store,
-        postings_lists: postings_lists_store,
-        prefix_postings_lists: prefix_postings_lists_cache_store,
+        synonyms: index.synonyms,
+        postings_lists: index.postings_lists,
+        prefix_postings_lists: index.prefix_postings_lists_cache,
     };
 
     let (operation, mapping) = create_query_tree(reader, &context, query)?;
@@ -156,7 +147,7 @@ where
                 reader,
                 postings_lists: &mut arena,
                 query_mapping: &mapping,
-                documents_fields_counts_store,
+                documents_fields_counts_store: index.documents_fields_counts,
             };
 
             criterion.prepare(ctx, &mut group)?;
@@ -189,7 +180,7 @@ where
     debug!("criterion loop took {:.02?}", before_criterion_loop.elapsed());
     debug!("proximity evaluation called {} times", proximity_count.load(Ordering::Relaxed));
 
-    let schema = main_store.schema(reader)?.ok_or(Error::SchemaMissing)?;
+    let schema = index.main.schema(reader)?.ok_or(Error::SchemaMissing)?;
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
     let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref(), &schema));
     let documents = iter.collect();
@@ -202,6 +193,7 @@ where
     Ok(result)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn bucket_sort_with_distinct<'c, FI, FD>(
     reader: &heed::RoTxn<MainT>,
     query: &str,
@@ -213,12 +205,7 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     distinct_size: usize,
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    synonyms_store: store::Synonyms,
-    _prefix_documents_cache_store: store::PrefixDocumentsCache,
-    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
+    index: &Index,
 ) -> MResult<SortResult>
 where
     FI: Fn(DocumentId) -> bool,
@@ -226,15 +213,15 @@ where
 {
     let mut result = SortResult::default();
 
-    let words_set = main_store.words_fst(reader)?;
-    let stop_words = main_store.stop_words_fst(reader)?;
+    let words_set = index.main.words_fst(reader)?;
+    let stop_words = index.main.stop_words_fst(reader)?;
 
     let context = QTContext {
         words_set,
         stop_words,
-        synonyms: synonyms_store,
-        postings_lists: postings_lists_store,
-        prefix_postings_lists: prefix_postings_lists_cache_store,
+        synonyms: index.synonyms,
+        postings_lists: index.postings_lists,
+        prefix_postings_lists: index.prefix_postings_lists_cache,
     };
 
     let (operation, mapping) = create_query_tree(reader, &context, query)?;
@@ -313,7 +300,7 @@ where
                 reader,
                 postings_lists: &mut arena,
                 query_mapping: &mapping,
-                documents_fields_counts_store,
+                documents_fields_counts_store: index.documents_fields_counts,
             };
 
             let before_criterion_preparation = Instant::now();
@@ -378,7 +365,7 @@ where
     // once we classified the documents related to the current
     // automatons we save that as the next valid result
     let mut seen = BufferedDistinctMap::new(&mut distinct_map);
-    let schema = main_store.schema(reader)?.ok_or(Error::SchemaMissing)?;
+    let schema = index.main.schema(reader)?.ok_or(Error::SchemaMissing)?;
 
     let mut documents = Vec::with_capacity(range.len());
     for raw_document in raw_documents.into_iter().skip(distinct_raw_offset) {

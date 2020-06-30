@@ -26,6 +26,7 @@ pub trait ErrorCode: std::error::Error {
     }
 }
 
+#[allow(clippy::enum_variant_names)]
 enum ErrorType {
     InternalError,
     InvalidRequestError,

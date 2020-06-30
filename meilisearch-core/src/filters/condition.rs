@@ -31,7 +31,7 @@ struct ConditionValue<'a> {
 
 impl<'a> ConditionValue<'a> {
     pub fn new(value: &Pair<'a, Rule>) -> Self {
-        let value = match value.as_rule() {
+        match value.as_rule() {
             Rule::string | Rule::word => {
                 let string =  value.as_str();
                 let boolean = match value.as_str() {
@@ -43,12 +43,11 @@ impl<'a> ConditionValue<'a> {
                 ConditionValue { string, boolean, number }
             },
             _ => unreachable!(),
-        };
-        value
+        }
     }
 
     pub fn as_str(&self) -> &str {
-        self.string.as_ref()
+        self.string
     }
 
     pub fn as_number(&self) -> Option<&Number> {
@@ -73,7 +72,7 @@ fn get_field_value<'a>(schema: &Schema, pair: Pair<'a, Rule>) -> Result<(FieldId
     let key = items.next().unwrap();
     let field = schema
         .id(key.as_str())
-        .ok_or::<PestError<Rule>>(PestError::new_from_span(
+        .ok_or_else(|| PestError::new_from_span(
                 ErrorVariant::CustomError {
                     message: format!(
                                  "attribute `{}` not found, available attributes are: {}",

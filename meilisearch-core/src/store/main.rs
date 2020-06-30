@@ -287,10 +287,10 @@ impl Main {
     }
 
     pub fn distinct_attribute(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<FieldId>> {
-        if let Some(value) = self.main.get::<_, Str, OwnedType<u16>>(reader, DISTINCT_ATTRIBUTE_KEY)? {
-            return Ok(Some(FieldId(value.to_owned())))
+        match self.main.get::<_, Str, OwnedType<u16>>(reader, DISTINCT_ATTRIBUTE_KEY)? {
+            Some(value) => Ok(Some(FieldId(value.to_owned()))),
+            None => Ok(None),
         }
-        return Ok(None)
     }
 
     pub fn put_distinct_attribute(self, writer: &mut heed::RwTxn<MainT>, value: FieldId) -> MResult<()> {
