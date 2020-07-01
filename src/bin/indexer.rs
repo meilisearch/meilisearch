@@ -2,7 +2,6 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
 use std::io;
-use std::ops::BitOr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -16,7 +15,7 @@ use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 
 use mega_mini_indexer::cache::ArcCache;
-use mega_mini_indexer::{BEU32, Index, DocumentId};
+use mega_mini_indexer::{BEU32, Index, DocumentId, FastMap4};
 
 const MAX_POSITION: usize = 1000;
 const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
@@ -47,8 +46,7 @@ struct Opt {
 fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index: &Index) -> anyhow::Result<()> {
     eprintln!("Indexing into LMDB...");
 
-    let mut word_positions = ArcCache::<_, RoaringBitmap>::new(100_000);
-    let mut word_position_docids = ArcCache::<_, RoaringBitmap>::new(3_000_000);
+    let mut words_cache = ArcCache::<_, (RoaringBitmap, FastMap4<_, RoaringBitmap>)>::new(100_000);
 
     // Write the headers into a Vec of bytes.
     let headers = rdr.headers()?;
@@ -68,33 +66,46 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
                     let word = word.to_lowercase(); // TODO cow_to_lowercase
                     let position = (attr * 1000 + pos) as u32;
 
-                    // ------ merge word positions --------
-
-                    match word_positions.get_mut(&word) {
-                        Some(ids) => { ids.insert(position); },
-                        None => {
-                            let mut ids = index.word_positions.get(wtxn, &word)?.unwrap_or_default();
+                    match words_cache.get_mut(&word) {
+                        Some((ids, positions)) => {
                             ids.insert(position);
-                            for (word, ids) in word_positions.insert(word.clone(), ids, RoaringBitmap::bitor) {
-                                index.word_positions.put(wtxn, &word, &ids)?;
-                            }
-                        }
-                    }
-
-                    // ------ merge word position documents ids --------
-
-                    let mut key = word.as_bytes().to_vec();
-                    key.extend_from_slice(&position.to_be_bytes());
-
-                    match word_position_docids.get_mut(&(word.clone(), position)) {
-                        Some(ids) => { ids.insert(position); },
+                            positions.entry(position).or_default().insert(document_id);
+                        },
                         None => {
-                            let mut ids = index.word_position_docids.get(wtxn, &key)?.unwrap_or_default();
-                            ids.insert(position);
-                            for ((word, position), ids) in word_position_docids.insert((word.clone(), position), ids, RoaringBitmap::bitor) {
-                                let mut key = word.as_bytes().to_vec();
-                                key.extend_from_slice(&position.to_be_bytes());
-                                index.word_position_docids.put(wtxn, &key, &ids)?;
+                            let mut key = word.as_bytes().to_vec();
+                            key.extend_from_slice(&position.to_be_bytes());
+
+                            let mut words_positions = index.word_positions.get(wtxn, &word)?.unwrap_or_default();
+                            let mut words_position_docids = index.word_position_docids.get(wtxn, &key)?.unwrap_or_default();
+
+                            words_positions.insert(position);
+                            words_position_docids.insert(document_id);
+
+                            let mut map = FastMap4::default();
+                            map.insert(position, words_position_docids);
+                            let value = (words_positions, map);
+
+                            // TODO clean this up
+                            let merge = |(pa, mut pda): (_, FastMap4<_, RoaringBitmap>), (pb, mut pdb): (_, FastMap4<_, RoaringBitmap>)| {
+                                for (pos, dia) in &mut pda {
+                                    if let Some(dib) = pdb.remove(pos) {
+                                        dia.union_with(&dib);
+                                    }
+                                }
+
+                                pdb.into_iter().for_each(|(pos, map)| drop(pda.insert(pos, map)));
+
+                                (pa | pb, pda)
+                            };
+
+                            for (word, (positions, positions_docids)) in words_cache.insert(word.clone(), value, merge) {
+                                index.word_positions.put(wtxn, &word, &positions)?;
+
+                                for (position, docids) in positions_docids {
+                                    let mut key = word.as_bytes().to_vec();
+                                    key.extend_from_slice(&position.to_be_bytes());
+                                    index.word_position_docids.put(wtxn, &key, &docids)?;
+                                }
                             }
                         }
                     }
@@ -109,14 +120,14 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
         index.documents.put(wtxn, &BEU32::new(document_id), &document)?;
     }
 
-    for (word, ids) in &word_positions {
-        index.word_positions.put(wtxn, word, ids)?;
-    }
+    for (word, (positions, positions_docids)) in &words_cache {
+        index.word_positions.put(wtxn, &word, &positions)?;
 
-    for ((word, position), ids) in &word_position_docids {
-        let mut key = word.as_bytes().to_vec();
-        key.extend_from_slice(&position.to_be_bytes());
-        index.word_position_docids.put(wtxn, &key, ids)?;
+        for (position, docids) in positions_docids {
+            let mut key = word.as_bytes().to_vec();
+            key.extend_from_slice(&position.to_be_bytes());
+            index.word_position_docids.put(wtxn, &key, &docids)?;
+        }
     }
 
     // We store the words from the postings.
