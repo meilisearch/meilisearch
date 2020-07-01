@@ -10,7 +10,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(get_health).service(change_healthyness);
 }
 
-#[get("/health", wrap = "Authentication::Private")]
+#[get("/health")]
 async fn get_health(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let reader = data.db.main_read_txn()?;
     if let Ok(Some(_)) = data.db.get_health(&reader) {
