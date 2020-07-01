@@ -4,8 +4,6 @@
 use std::borrow::Borrow;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::iter::FusedIterator;
-use std::marker::PhantomData;
 use std::mem;
 use std::ptr;
 use std::usize;
@@ -137,7 +135,7 @@ impl<K: Hash + Eq, V> LruCache<K, V> {
                     };
                     let mut old_node = self.map.remove(&old_key).unwrap();
 
-                    // drop the node's current key and val so we can overwrite them
+                    // extract the node's current key and val so we can overwrite them
                     let old_entry = unsafe { (old_node.key.assume_init(), old_node.val.assume_init()) };
 
                     old_node.key = mem::MaybeUninit::new(k);
@@ -260,15 +258,6 @@ impl<K: Hash + Eq, V> LruCache<K, V> {
         }
     }
 
-    /// An iterator visiting all entries in order. The iterator element type is `(&'a K, &'a V)`.
-    pub fn iter<'a>(&'a self) -> Iter<'a, K, V> {
-        Iter {
-            len: self.len(),
-            ptr: unsafe { (*self.head).next },
-            phantom: PhantomData,
-        }
-    }
-
     fn remove_last(&mut self) -> Option<Box<LruEntry<K, V>>> {
         let prev;
         unsafe { prev = (*self.tail).prev }
@@ -317,12 +306,13 @@ impl<K, V> Drop for LruCache<K, V> {
     }
 }
 
-impl<'a, K: Hash + Eq, V> IntoIterator for &'a LruCache<K, V> {
-    type Item = (&'a K, &'a V);
-    type IntoIter = Iter<'a, K, V>;
+impl<K, V> IntoIterator for LruCache<K, V> {
+    type Item = (K, V);
+    type IntoIter = IntoIter<K, V>;
 
-    fn into_iter(self) -> Iter<'a, K, V> {
-        self.iter()
+    fn into_iter(mut self) -> IntoIter<K, V> {
+        let map = mem::replace(&mut self.map, FastMap8::default());
+        IntoIter { iter: map.into_iter() }
     }
 }
 
@@ -342,45 +332,23 @@ impl<K: Hash + Eq, V> fmt::Debug for LruCache<K, V> {
 }
 
 /// An iterator over the entries of a `LruCache`.
-pub struct Iter<'a, K: 'a, V: 'a> {
-    len: usize,
-    ptr: *const LruEntry<K, V>,
-    phantom: PhantomData<&'a K>,
+pub struct IntoIter<K, V> {
+    iter: std::collections::hash_map::IntoIter<KeyRef<K>, Box<LruEntry<K, V>>>,
 }
 
-impl<'a, K, V> Iterator for Iter<'a, K, V> {
-    type Item = (&'a K, &'a V);
+impl<K, V> Iterator for IntoIter<K, V> {
+    type Item = (K, V);
 
-    fn next(&mut self) -> Option<(&'a K, &'a V)> {
-        if self.len == 0 {
-            return None;
+    fn next(&mut self) -> Option<(K, V)> {
+        match self.iter.next() {
+            Some((_, node)) => {
+                let LruEntry { key, val, .. } = *node;
+                unsafe { Some((key.assume_init(), val.assume_init())) }
+            },
+            None => None,
         }
-
-        let key = unsafe { &(*(*self.ptr).key.as_ptr()) as &K };
-        let val = unsafe { &(*(*self.ptr).val.as_ptr()) as &V };
-
-        self.len -= 1;
-        self.ptr = unsafe { (*self.ptr).next };
-
-        Some((key, val))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.len, Some(self.len))
-    }
-
-    fn count(self) -> usize {
-        self.len
     }
 }
-
-impl<'a, K, V> ExactSizeIterator for Iter<'a, K, V> {}
-impl<'a, K, V> FusedIterator for Iter<'a, K, V> {}
-
-// The compiler does not automatically derive Send and Sync for Iter because it contains
-// raw pointers.
-unsafe impl<'a, K: Send, V: Send> Send for Iter<'a, K, V> {}
-unsafe impl<'a, K: Sync, V: Sync> Sync for Iter<'a, K, V> {}
 
 pub struct ArcCache<K, V>
 where
@@ -477,14 +445,15 @@ where
         evicted
     }
 
-    pub fn get_mut(&mut self, key: &K) -> Option<&mut V>
+    pub fn get_mut(&mut self, key: &K) -> (Option<&mut V>, Option<(K, V)>)
     where
         K: Clone + Hash + Eq,
     {
-        if let Some(value) = self.recent_set.remove(key) {
-            self.frequent_set.insert((*key).clone(), value);
-        }
-        self.frequent_set.get_mut(key)
+        let evicted = match self.recent_set.remove(key) {
+            Some(value) => self.frequent_set.insert(key.clone(), value),
+            None => None,
+        };
+        (self.frequent_set.get_mut(key), evicted)
     }
 
     fn replace(&mut self, frequent_evicted_contains_key: bool) -> Option<(K, V)> {
@@ -507,11 +476,11 @@ where
     }
 }
 
-impl<'a, K: 'a + Eq + Hash, V: 'a> IntoIterator for &'a ArcCache<K, V>{
-    type Item = (&'a K, &'a V);
-    type IntoIter = std::iter::Chain<Iter<'a, K, V>, Iter<'a, K, V>>;
+impl<K: Eq + Hash, V> IntoIterator for ArcCache<K, V>{
+    type Item = (K, V);
+    type IntoIter = std::iter::Chain<IntoIter<K, V>, IntoIter<K, V>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.recent_set.iter().chain(&self.frequent_set)
+        self.recent_set.into_iter().chain(self.frequent_set)
     }
 }
