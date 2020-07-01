@@ -1,4 +1,5 @@
 use assert_json_diff::assert_json_eq;
+use actix_web::http::StatusCode;
 use serde_json::json;
 
 mod common;
@@ -662,3 +663,108 @@ async fn check_add_documents_without_primary_key() {
     assert_eq!(status_code, 400);
 }
 
+#[actix_rt::test]
+async fn check_first_update_should_bring_up_processed_status_after_first_docs_addition() {
+    let mut server = common::Server::with_uid("movies");
+
+    let body = json!({
+        "uid": "movies",
+    });
+
+    // 1. Create Index
+    let (response, status_code) = server.create_index(body).await;
+    assert_eq!(status_code, 201);
+    assert_eq!(response["primaryKey"], json!(null));
+
+    let dataset = include_bytes!("assets/movies.json");
+
+    let body: Value = serde_json::from_slice(dataset).unwrap();
+
+    // 2. Index the documents from movies.json, present inside of assets directory
+    server.add_or_replace_multiple_documents(body).await;
+
+    // 3. Fetch the status of the indexing done above.
+    let (response, status_code) = server.get_all_updates_status().await;
+
+    // 4. Verify the fetch is successful and indexing status is 'processed'
+    assert_eq!(status_code, 200);
+    assert_eq!(response[0]["status"], "processed");
+}
+
+#[actix_rt::test]
+async fn get_empty_index() {
+    let mut server = common::Server::with_uid("test");
+    let (response, _status) = server.list_indexes().await;
+    assert!(response.as_array().unwrap().is_empty());
+}
+
+#[actix_rt::test]
+async fn create_and_list_multiple_indices() {
+    let mut server = common::Server::with_uid("test");
+    for i in 0..10 {
+        server.create_index(json!({ "uid": format!("test{}", i) })).await;
+    }
+    let (response, _status) = server.list_indexes().await;
+    assert_eq!(response.as_array().unwrap().len(), 10);
+}
+
+#[actix_rt::test]
+async fn get_unexisting_index_is_error() {
+    let mut server = common::Server::with_uid("test");
+    let (response, status) = server.get_index().await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(response["errorCode"], "index_not_found");
+    assert_eq!(response["errorType"], "invalid_request_error");
+}
+
+#[actix_rt::test]
+async fn create_index_twice_is_error() {
+    let mut server = common::Server::with_uid("test");
+    server.create_index(json!({ "uid": "test" })).await;
+    let (response, status) = server.create_index(json!({ "uid": "test" })).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(response["errorCode"], "index_already_exists");
+    assert_eq!(response["errorType"], "invalid_request_error");
+}
+
+#[actix_rt::test]
+async fn badly_formatted_index_name_is_error() {
+    let mut server = common::Server::with_uid("$__test");
+    let (response, status) = server.create_index(json!({ "uid": "$__test" })).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(response["errorCode"], "invalid_index_uid");
+    assert_eq!(response["errorType"], "invalid_request_error");
+}
+
+#[actix_rt::test]
+async fn correct_response_no_primary_key_index() {
+    let mut server = common::Server::with_uid("test");
+    let (response, _status) = server.create_index(json!({ "uid": "test" })).await;
+    assert_eq!(response["primaryKey"], Value::Null);
+}
+
+#[actix_rt::test]
+async fn correct_response_with_primary_key_index() {
+    let mut server = common::Server::with_uid("test");
+    let (response, _status) = server.create_index(json!({ "uid": "test", "primaryKey": "test" })).await;
+    assert_eq!(response["primaryKey"], "test");
+}
+
+#[actix_rt::test]
+async fn udpate_unexisting_index_is_error() {
+    let mut server = common::Server::with_uid("test");
+    let (response, status) = server.update_index(json!({ "primaryKey": "foobar" })).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(response["errorCode"], "index_not_found");
+    assert_eq!(response["errorType"], "invalid_request_error");
+}
+
+#[actix_rt::test]
+async fn upate_existing_primary_key_is_error() {
+    let mut server = common::Server::with_uid("test");
+    server.create_index(json!({ "uid": "test", "primaryKey": "key" })).await;
+    let (response, status) = server.update_index(json!({ "primaryKey": "test2" })).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(response["errorCode"], "bad_request");
+    assert_eq!(response["errorType"], "invalid_request_error");
+}
