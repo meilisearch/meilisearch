@@ -1,6 +1,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
+use std::hash::{Hash, BuildHasher};
 use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -43,6 +44,39 @@ struct Opt {
     csv_file: Option<PathBuf>,
 }
 
+fn put_evicted_into_heed<I>(wtxn: &mut heed::RwTxn, index: &Index, iter: I) -> anyhow::Result<()>
+where
+    I: IntoIterator<Item = (String, (RoaringBitmap, FastMap4<u32, RoaringBitmap>))>
+{
+    for (word, (positions, positions_docids)) in iter {
+        index.word_positions.put(wtxn, &word, &positions)?;
+
+        for (position, docids) in positions_docids {
+            let mut key = word.as_bytes().to_vec();
+            key.extend_from_slice(&position.to_be_bytes());
+            index.word_position_docids.put(wtxn, &key, &docids)?;
+        }
+    }
+    Ok(())
+}
+
+fn merge_hashmaps<K, V, S, F>(mut a: HashMap<K, V, S>, mut b: HashMap<K, V, S>, mut merge: F) -> HashMap<K, V, S>
+where
+    K: Hash + Eq,
+    S: BuildHasher,
+    F: FnMut(&K, &mut V, V)
+{
+    for (k, v) in a.iter_mut() {
+        if let Some(vb) = b.remove(k) {
+            (merge)(k, v, vb)
+        }
+    }
+
+    a.extend(b);
+
+    a
+}
+
 fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index: &Index) -> anyhow::Result<()> {
     eprintln!("Indexing into LMDB...");
 
@@ -67,11 +101,13 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
                     let position = (attr * 1000 + pos) as u32;
 
                     match words_cache.get_mut(&word) {
-                        Some((ids, positions)) => {
+                        (Some(entry), evicted) => {
+                            let (ids, positions) = entry;
                             ids.insert(position);
                             positions.entry(position).or_default().insert(document_id);
+                            put_evicted_into_heed(wtxn, index, evicted)?;
                         },
-                        None => {
+                        (None, _evicted) => {
                             let mut key = word.as_bytes().to_vec();
                             key.extend_from_slice(&position.to_be_bytes());
 
@@ -85,28 +121,11 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
                             map.insert(position, words_position_docids);
                             let value = (words_positions, map);
 
-                            // TODO clean this up
-                            let merge = |(pa, mut pda): (_, FastMap4<_, RoaringBitmap>), (pb, mut pdb): (_, FastMap4<_, RoaringBitmap>)| {
-                                for (pos, dia) in &mut pda {
-                                    if let Some(dib) = pdb.remove(pos) {
-                                        dia.union_with(&dib);
-                                    }
-                                }
+                            let evicted = words_cache.insert(word.clone(), value, |(pa, pda), (pb, pdb)| {
+                                (pa | pb, merge_hashmaps(pda, pdb, |_, a, b| RoaringBitmap::union_with(a, &b)))
+                            });
 
-                                pdb.into_iter().for_each(|(pos, map)| drop(pda.insert(pos, map)));
-
-                                (pa | pb, pda)
-                            };
-
-                            for (word, (positions, positions_docids)) in words_cache.insert(word.clone(), value, merge) {
-                                index.word_positions.put(wtxn, &word, &positions)?;
-
-                                for (position, docids) in positions_docids {
-                                    let mut key = word.as_bytes().to_vec();
-                                    key.extend_from_slice(&position.to_be_bytes());
-                                    index.word_position_docids.put(wtxn, &key, &docids)?;
-                                }
-                            }
+                            put_evicted_into_heed(wtxn, index, evicted)?;
                         }
                     }
                 }
@@ -120,15 +139,7 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
         index.documents.put(wtxn, &BEU32::new(document_id), &document)?;
     }
 
-    for (word, (positions, positions_docids)) in &words_cache {
-        index.word_positions.put(wtxn, &word, &positions)?;
-
-        for (position, docids) in positions_docids {
-            let mut key = word.as_bytes().to_vec();
-            key.extend_from_slice(&position.to_be_bytes());
-            index.word_position_docids.put(wtxn, &key, &docids)?;
-        }
-    }
+    put_evicted_into_heed(wtxn, index, words_cache)?;
 
     // We store the words from the postings.
     let mut new_words = BTreeSet::default();
