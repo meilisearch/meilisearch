@@ -2,6 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
 use std::io;
+use std::ops::BitOr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -74,7 +75,7 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
                         None => {
                             let mut ids = index.word_positions.get(wtxn, &word)?.unwrap_or_default();
                             ids.insert(position);
-                            for (word, ids) in word_positions.insert(word.clone(), ids) {
+                            for (word, ids) in word_positions.insert(word.clone(), ids, RoaringBitmap::bitor) {
                                 index.word_positions.put(wtxn, &word, &ids)?;
                             }
                         }
@@ -90,7 +91,7 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
                         None => {
                             let mut ids = index.word_position_docids.get(wtxn, &key)?.unwrap_or_default();
                             ids.insert(position);
-                            for ((word, position), ids) in word_position_docids.insert((word.clone(), position), ids) {
+                            for ((word, position), ids) in word_position_docids.insert((word.clone(), position), ids, RoaringBitmap::bitor) {
                                 let mut key = word.as_bytes().to_vec();
                                 key.extend_from_slice(&position.to_be_bytes());
                                 index.word_position_docids.put(wtxn, &key, &ids)?;
@@ -123,7 +124,7 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
     let iter = index.word_positions.as_polymorph().iter::<_, Str, DecodeIgnore>(wtxn)?;
     for result in iter {
         let (word, ()) = result?;
-        new_words.insert(word.clone());
+        new_words.insert(word);
     }
 
     let new_words_fst = fst::Set::from_iter(new_words)?;

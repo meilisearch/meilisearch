@@ -34,25 +34,6 @@ impl<K: PartialEq> PartialEq for KeyRef<K> {
 
 impl<K: Eq> Eq for KeyRef<K> {}
 
-#[cfg(feature = "nightly")]
-#[doc(hidden)]
-pub auto trait NotKeyRef {}
-
-#[cfg(feature = "nightly")]
-impl<K> !NotKeyRef for KeyRef<K> {}
-
-#[cfg(feature = "nightly")]
-impl<K, D> Borrow<D> for KeyRef<K>
-where
-    K: Borrow<D>,
-    D: NotKeyRef + ?Sized,
-{
-    fn borrow(&self) -> &D {
-        unsafe { &*self.k }.borrow()
-    }
-}
-
-#[cfg(not(feature = "nightly"))]
 impl<K> Borrow<K> for KeyRef<K> {
     fn borrow(&self) -> &K {
         unsafe { &*self.k }
@@ -88,7 +69,7 @@ impl<K, V> LruEntry<K, V> {
     }
 }
 
-/// An LRU Cache
+/// An LRU Cache.
 pub struct LruCache<K, V> {
     map: FastMap8<KeyRef<K>, Box<LruEntry<K, V>>>,
     cap: usize,
@@ -100,13 +81,6 @@ pub struct LruCache<K, V> {
 
 impl<K: Hash + Eq, V> LruCache<K, V> {
     /// Creates a new LRU Cache that holds at most `cap` items.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use lru::LruCache;
-    /// let mut cache: LruCache<isize, &str> = LruCache::new(10);
-    /// ```
     pub fn new(cap: usize) -> LruCache<K, V> {
         let mut map = FastMap8::default();
         map.reserve(cap);
@@ -114,13 +88,6 @@ impl<K: Hash + Eq, V> LruCache<K, V> {
     }
 
     /// Creates a new LRU Cache that never automatically evicts items.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use lru::LruCache;
-    /// let mut cache: LruCache<isize, &str> = LruCache::unbounded();
-    /// ```
     pub fn unbounded() -> LruCache<K, V> {
         LruCache::construct(usize::MAX, HashMap::default())
     }
@@ -443,13 +410,16 @@ where
         }
     }
 
-    pub fn insert(&mut self, key: K, value: V) -> Vec<(K, V)> {
+    pub fn insert<F>(&mut self, key: K, value: V, mut merge: F) -> Vec<(K, V)>
+    where F: FnMut(V, V) -> V
+    {
         let mut evicted = Vec::new();
         if self.frequent_set.contains_key(&key) {
             evicted.extend(self.frequent_set.insert(key, value));
             return evicted;
         }
-        if self.recent_set.remove(&key).is_some() {
+        if let Some(prev_value) = self.recent_set.remove(&key) {
+            let value = (merge)(prev_value, value);
             evicted.extend(self.frequent_set.insert(key, value));
             return evicted;
         }
