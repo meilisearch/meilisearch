@@ -43,6 +43,7 @@ For more information about features go to [our documentation](https://docs.meili
 * Whole documents are returned
 * Highly customizable
 * RESTful API
+* Faceted search and filtering
 
 ## Get started
 
@@ -92,6 +93,8 @@ cd MeiliSearch
 In the cloned repository, compile MeiliSearch.
 
 ```bash
+rustup override set stable
+rustup update stable
 cargo run --release
 ```
 
