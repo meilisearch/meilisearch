@@ -77,7 +77,14 @@ where
     a
 }
 
-fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index: &Index) -> anyhow::Result<()> {
+fn index_csv<R: io::Read>(
+    wtxn: &mut heed::RwTxn,
+    mut rdr: csv::Reader<R>,
+    index: &Index,
+    num_threads: usize,
+    thread_index: usize,
+) -> anyhow::Result<()>
+{
     eprintln!("Indexing into LMDB...");
 
     let mut words_cache = ArcCache::<_, (RoaringBitmap, FastMap4<_, RoaringBitmap>)>::new(100_000);
@@ -99,6 +106,9 @@ fn index_csv<R: io::Read>(wtxn: &mut heed::RwTxn, mut rdr: csv::Reader<R>, index
                 if !word.is_empty() && word.len() < 500 { // LMDB limits
                     let word = word.to_lowercase(); // TODO cow_to_lowercase
                     let position = (attr * 1000 + pos) as u32;
+
+                    // If this indexing process is not concerned by this word, then ignore it.
+                    if fxhash::hash32(&word) as usize % num_threads != thread_index { continue; }
 
                     match words_cache.get_mut(&word) {
                         (Some(entry), evicted) => {
@@ -214,11 +224,11 @@ fn main() -> anyhow::Result<()> {
     match opt.csv_file {
         Some(path) => {
             let rdr = csv::Reader::from_path(path)?;
-            index_csv(&mut wtxn, rdr, &index)?;
+            index_csv(&mut wtxn, rdr, &index, 1, 0)?;
         },
         None => {
             let rdr = csv::Reader::from_reader(io::stdin());
-            index_csv(&mut wtxn, rdr, &index)?;
+            index_csv(&mut wtxn, rdr, &index, 1, 0)?;
         }
     };
 
