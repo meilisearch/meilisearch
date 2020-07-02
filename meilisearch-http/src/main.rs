@@ -4,7 +4,7 @@ use actix_cors::Cors;
 use actix_web::{middleware, HttpServer};
 use main_error::MainError;
 use meilisearch_http::helpers::NormalizePath;
-use meilisearch_http::{Data, Opt, create_app, index_update_callback};
+use meilisearch_http::{create_app, index_update_callback, Data, Opt};
 use structopt::StructOpt;
 
 mod analytics;
@@ -19,7 +19,11 @@ async fn main() -> Result<(), MainError> {
 
     #[cfg(all(not(debug_assertions), feature = "sentry"))]
     let _sentry = sentry::init((
-        "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337",
+        if !opt.no_sentry {
+            Some(opt.sentry_dsn.clone())
+        } else {
+            None
+        },
         sentry::ClientOptions {
             release: sentry::release_name!(),
             ..Default::default()
@@ -36,8 +40,8 @@ async fn main() -> Result<(), MainError> {
             }
 
             #[cfg(all(not(debug_assertions), feature = "sentry"))]
-            if !opt.no_analytics {
-                sentry::integrations::panic::register_panic_handler();
+            if !opt.no_sentry && _sentry.is_enabled() {
+                sentry::integrations::panic::register_panic_handler(); // TODO: This shouldn't be needed when upgrading to sentry 0.19.0. These integrations are turned on by default when using `sentry::init`.
                 sentry::integrations::env_logger::init(None, Default::default());
             }
         }
@@ -52,9 +56,7 @@ async fn main() -> Result<(), MainError> {
     if !opt.no_analytics {
         let analytics_data = data.clone();
         let analytics_opt = opt.clone();
-        thread::spawn(move|| {
-            analytics::analytics_sender(analytics_data, analytics_opt)
-        });
+        thread::spawn(move || analytics::analytics_sender(analytics_data, analytics_opt));
     }
 
     let data_cloned = data.clone();
@@ -69,7 +71,7 @@ async fn main() -> Result<(), MainError> {
             .wrap(
                 Cors::new()
                     .send_wildcard()
-                    .allowed_headers(vec!["content-type","x-meili-api-key"])
+                    .allowed_headers(vec!["content-type", "x-meili-api-key"])
                     .max_age(86_400) // 24h
                     .finish(),
             )
@@ -115,6 +117,16 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
     eprintln!(
         "Package version:\t{:?}",
         env!("CARGO_PKG_VERSION").to_string()
+    );
+
+    #[cfg(all(not(debug_assertions), feature = "sentry"))]
+    eprintln!(
+        "Sentry DSN:\t\t{:?}",
+        if !opt.no_sentry {
+            &opt.sentry_dsn
+        } else {
+            "Disabled"
+        }
     );
 
     eprintln!();
