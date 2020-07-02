@@ -37,7 +37,7 @@ pub struct Opt {
     #[structopt(long, env = "MEILI_NO_SENTRY")]
     pub no_sentry: bool,
 
-    /// This environment variable must be set to `production` if your are running in production.
+    /// This environment variable must be set to `production` if you are running in production.
     /// If the server is running in development mode more logs will be displayed,
     /// and the master key can be avoided which implies that there is no security on the updates routes.
     /// This is useful to debug when integrating the engine with another service.
