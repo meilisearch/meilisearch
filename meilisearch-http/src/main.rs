@@ -129,6 +129,15 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
         }
     );
 
+    eprintln!(
+        "Amplitude Analytics:\t{:?}",
+        if !opt.no_analytics {
+            "Enabled"
+        } else {
+            "Disabled"
+        }
+    );
+
     eprintln!();
 
     if data.api_keys.master.is_some() {
