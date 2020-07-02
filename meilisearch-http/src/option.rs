@@ -1,7 +1,7 @@
+use std::{error, fs};
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::{error, fs};
 
 use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use rustls::{
@@ -93,6 +93,28 @@ pub struct Opt {
     /// SSL support tickets.
     #[structopt(long, env = "MEILI_SSL_TICKETS")]
     pub ssl_tickets: bool,
+
+    /// Defines the path of the snapshot file to import.
+    /// This option will, by default, stop the process if a database already exist or if no snapshot exists at
+    /// the given path. If this option is not specified no snapshot is imported.
+    #[structopt(long, env = "MEILI_LOAD_FROM_SNAPSHOT")]
+    pub load_from_snapshot: Option<PathBuf>,
+
+    /// The engine will ignore a missing snapshot and not return an error in such case.
+    #[structopt(long, requires = "load-from-snapshot", env = "MEILI_IGNORE_MISSING_SNAPSHOT")]
+    pub ignore_missing_snapshot: bool,
+
+    /// The engine will skip snapshot importation and not return an error in such case.
+    #[structopt(long, requires = "load-from-snapshot", env = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS")]
+    pub ignore_snapshot_if_db_exists: bool,
+
+    /// Defines the directory path where meilisearch will create snapshot each snapshot_time_gap.
+    #[structopt(long, env = "MEILI_SNAPSHOT_PATH")]
+    pub snapshot_path: Option<PathBuf>,
+
+    /// Defines time interval, in seconds, between each snapshot creation.
+    #[structopt(long, requires = "snapshot-path", default_value = "86400", env = "MEILI_SNAPSHOT_INTERVAL_SEC")]
+    pub snapshot_interval_sec: u64,
 }
 
 impl Opt {

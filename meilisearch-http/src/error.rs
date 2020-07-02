@@ -236,6 +236,18 @@ impl From<actix_http::Error> for Error {
     }
 }
 
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::Internal(err.to_string())
+    }
+}
+
+impl From<meilisearch_core::Error> for Error {
+    fn from(err: meilisearch_core::Error) -> Error {
+        Error::Internal(err.to_string())
+    }
+}
+
 impl From<FacetCountError> for ResponseError {
     fn from(err: FacetCountError) -> ResponseError {
         ResponseError { inner: Box::new(err) }

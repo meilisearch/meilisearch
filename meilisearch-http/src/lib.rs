@@ -7,6 +7,7 @@ pub mod models;
 pub mod option;
 pub mod routes;
 pub mod analytics;
+pub mod snapshot;
 
 use actix_http::Error;
 use actix_service::ServiceFactory;
