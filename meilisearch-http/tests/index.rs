@@ -666,10 +666,10 @@ async fn check_add_documents_without_primary_key() {
 
 #[actix_rt::test]
 async fn check_first_update_should_bring_up_processed_status_after_first_docs_addition() {
-    let mut server = common::Server::with_uid("movies");
+    let mut server = common::Server::with_uid("test");
 
     let body = json!({
-        "uid": "movies",
+        "uid": "test",
     });
 
     // 1. Create Index
@@ -677,7 +677,7 @@ async fn check_first_update_should_bring_up_processed_status_after_first_docs_ad
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
-    let dataset = include_bytes!("assets/movies.json");
+    let dataset = include_bytes!("assets/test_set.json");
 
     let body: Value = serde_json::from_slice(dataset).unwrap();
 

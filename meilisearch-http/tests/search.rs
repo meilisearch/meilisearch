@@ -23,65 +23,76 @@ macro_rules! test_post_get_search {
 
 #[actix_rt::test]
 async fn search_with_limit() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json! ({
-        "q": "captain",
+        "q": "exercitation",
         "limit": 3
     });
 
     let expected = json!([
-      {
-        "id": 299537,
-        "popularity": 44.726,
-        "vote_average": 7.0,
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-        "vote_count": 7858
-      },
-      {
-        "id": 271110,
-        "popularity": 37.431,
-        "vote_average": 7.4,
-        "title": "Captain America: Civil War",
-        "tagline": "Divided We Fall",
-        "overview": "Following the events of Age of Ultron, the collective governments of the world pass an act designed to regulate all superhuman activity. This polarizes opinion amongst the Avengers, causing two factions to side with Iron Man or Captain America, which causes an epic battle between former allies.",
-        "director": "Anthony Russo",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Adventure",
-          "Action",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/kSBXou5Ac7vEqKd97wotJumyJvU.jpg",
-        "vote_count": 15079
-      },
-      {
-        "id": 1771,
-        "popularity": 19.657,
-        "vote_average": 6.9,
-        "title": "Captain America: The First Avenger",
-        "tagline": "When patriots become heroes",
-        "overview": "During World War II, Steve Rogers is a sickly man from Brooklyn who's transformed into super-soldier Captain America to aid in the war effort. Rogers must stop the Red Skull – Adolf Hitler's ruthless head of weaponry, and the leader of an organization that intends to use a mysterious device of untold powers for world domination.",
-        "director": "Joe Johnston",
-        "producer": "Kevin Feige", "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/vSNxAJTlD0r02V9sPYpOjqDZXUK.jpg",
-        "vote_count": 13853
-      }
+        {
+          "id": 1,
+          "balance": "$1,706.13",
+          "picture": "http://placehold.it/32x32",
+          "age": 27,
+          "color": "green",
+          "name": "Cherry Orr",
+          "gender": "female",
+          "email": "cherryorr@chorizon.com",
+          "phone": "+1 (995) 479-3174",
+          "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+          "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+          "registered": "2020-03-18T11:12:21 -01:00",
+          "latitude": -24.356932,
+          "longitude": 27.184808,
+          "tags": [
+            "new issue",
+            "bug"
+          ],
+          "isActive": true
+        },
+        {
+          "id": 59,
+          "balance": "$1,921.58",
+          "picture": "http://placehold.it/32x32",
+          "age": 31,
+          "color": "green",
+          "name": "Harper Carson",
+          "gender": "male",
+          "email": "harpercarson@chorizon.com",
+          "phone": "+1 (912) 430-3243",
+          "address": "883 Dennett Place, Knowlton, New Mexico, 9219",
+          "about": "Exercitation minim esse proident cillum velit et deserunt incididunt adipisicing minim. Cillum Lorem consectetur laborum id consequat exercitation velit. Magna dolor excepteur sunt deserunt dolor ullamco non sint proident ipsum. Reprehenderit voluptate sit veniam consectetur ea sunt duis labore deserunt ipsum aute. Eiusmod aliqua anim voluptate id duis tempor aliqua commodo sunt. Do officia ea consectetur nostrud eiusmod laborum.\r\n",
+          "registered": "2019-12-07T07:33:15 -01:00",
+          "latitude": -60.812605,
+          "longitude": -27.129016,
+          "tags": [
+            "bug",
+            "new issue"
+          ],
+          "isActive": true
+        },
+        {
+          "id": 49,
+          "balance": "$1,476.39",
+          "picture": "http://placehold.it/32x32",
+          "age": 28,
+          "color": "brown",
+          "name": "Maureen Dale",
+          "gender": "female",
+          "email": "maureendale@chorizon.com",
+          "phone": "+1 (984) 538-3684",
+          "address": "817 Newton Street, Bannock, Wyoming, 1468",
+          "about": "Tempor mollit exercitation excepteur cupidatat reprehenderit ad ex. Nulla laborum proident incididunt quis. Esse laborum deserunt qui anim. Sunt incididunt pariatur cillum anim proident eu ullamco dolor excepteur. Ullamco amet culpa nostrud adipisicing duis aliqua consequat duis non eu id mollit velit. Deserunt ullamco amet in occaecat.\r\n",
+          "registered": "2018-04-26T06:04:40 -02:00",
+          "latitude": -64.196802,
+          "longitude": -117.396238,
+          "tags": [
+            "wontfix"
+          ],
+          "isActive": true
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -91,68 +102,77 @@ async fn search_with_limit() {
 
 #[actix_rt::test]
 async fn search_with_offset() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "Captain",
+        "q": "exercitation",
         "limit": 3,
         "offset": 1
     });
 
     let expected = json!([
-      {
-        "id": 271110,
-        "popularity": 37.431,
-        "vote_average": 7.4,
-        "title": "Captain America: Civil War",
-        "tagline": "Divided We Fall",
-        "overview": "Following the events of Age of Ultron, the collective governments of the world pass an act designed to regulate all superhuman activity. This polarizes opinion amongst the Avengers, causing two factions to side with Iron Man or Captain America, which causes an epic battle between former allies.",
-        "director": "Anthony Russo",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Adventure",
-          "Action",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/kSBXou5Ac7vEqKd97wotJumyJvU.jpg",
-        "vote_count": 15079
-      },
-      {
-        "id": 1771,
-        "popularity": 19.657,
-        "vote_average": 6.9,
-        "title": "Captain America: The First Avenger",
-        "tagline": "When patriots become heroes",
-        "overview": "During World War II, Steve Rogers is a sickly man from Brooklyn who's transformed into super-soldier Captain America to aid in the war effort. Rogers must stop the Red Skull – Adolf Hitler's ruthless head of weaponry, and the leader of an organization that intends to use a mysterious device of untold powers for world domination.",
-        "director": "Joe Johnston",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/vSNxAJTlD0r02V9sPYpOjqDZXUK.jpg",
-        "vote_count": 13853
-      },
-      {
-        "id": 268531,
-        "popularity": 16.859,
-        "vote_average": 6.0,
-        "title": "Captain Underpants: The First Epic Movie",
-        "tagline": "",
-        "overview": "Two mischievous kids hypnotize their mean elementary school principal and turn him into their comic book creation, the kind-hearted and elastic-banded Captain Underpants.",
-        "director": "David Soren",
-        "producer": "Chris Finnegan",
-        "genres": [
-          "Action",
-          "Animation",
-          "Comedy",
-          "Family"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AjHZIkzhPXrRNE4VSLVWx6dirK9.jpg",
-        "vote_count": 653
-      }
+        {
+          "id": 59,
+          "balance": "$1,921.58",
+          "picture": "http://placehold.it/32x32",
+          "age": 31,
+          "color": "green",
+          "name": "Harper Carson",
+          "gender": "male",
+          "email": "harpercarson@chorizon.com",
+          "phone": "+1 (912) 430-3243",
+          "address": "883 Dennett Place, Knowlton, New Mexico, 9219",
+          "about": "Exercitation minim esse proident cillum velit et deserunt incididunt adipisicing minim. Cillum Lorem consectetur laborum id consequat exercitation velit. Magna dolor excepteur sunt deserunt dolor ullamco non sint proident ipsum. Reprehenderit voluptate sit veniam consectetur ea sunt duis labore deserunt ipsum aute. Eiusmod aliqua anim voluptate id duis tempor aliqua commodo sunt. Do officia ea consectetur nostrud eiusmod laborum.\r\n",
+          "registered": "2019-12-07T07:33:15 -01:00",
+          "latitude": -60.812605,
+          "longitude": -27.129016,
+          "tags": [
+            "bug",
+            "new issue"
+          ],
+          "isActive": true
+        },
+        {
+          "id": 49,
+          "balance": "$1,476.39",
+          "picture": "http://placehold.it/32x32",
+          "age": 28,
+          "color": "brown",
+          "name": "Maureen Dale",
+          "gender": "female",
+          "email": "maureendale@chorizon.com",
+          "phone": "+1 (984) 538-3684",
+          "address": "817 Newton Street, Bannock, Wyoming, 1468",
+          "about": "Tempor mollit exercitation excepteur cupidatat reprehenderit ad ex. Nulla laborum proident incididunt quis. Esse laborum deserunt qui anim. Sunt incididunt pariatur cillum anim proident eu ullamco dolor excepteur. Ullamco amet culpa nostrud adipisicing duis aliqua consequat duis non eu id mollit velit. Deserunt ullamco amet in occaecat.\r\n",
+          "registered": "2018-04-26T06:04:40 -02:00",
+          "latitude": -64.196802,
+          "longitude": -117.396238,
+          "tags": [
+            "wontfix"
+          ],
+          "isActive": true
+        },
+        {
+          "id": 0,
+          "balance": "$2,668.55",
+          "picture": "http://placehold.it/32x32",
+          "age": 36,
+          "color": "green",
+          "name": "Lucas Hess",
+          "gender": "male",
+          "email": "lucashess@chorizon.com",
+          "phone": "+1 (998) 478-2597",
+          "address": "412 Losee Terrace, Blairstown, Georgia, 2825",
+          "about": "Mollit ad in exercitation quis. Anim est ut consequat fugiat duis magna aliquip velit nisi. Commodo eiusmod est consequat proident consectetur aliqua enim fugiat. Aliqua adipisicing laboris elit proident enim veniam laboris mollit. Incididunt fugiat minim ad nostrud deserunt tempor in. Id irure officia labore qui est labore nulla nisi. Magna sit quis tempor esse consectetur amet labore duis aliqua consequat.\r\n",
+          "registered": "2016-06-21T09:30:25 -02:00",
+          "latitude": -44.174957,
+          "longitude": -145.725388,
+          "tags": [
+            "bug",
+            "bug"
+          ],
+          "isActive": false
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -162,50 +182,57 @@ async fn search_with_offset() {
 
 #[actix_rt::test]
 async fn search_with_attribute_to_highlight_wildcard() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "Captain",
+        "q": "cherry",
         "limit": 1,
         "attributesToHighlight": ["*"]
     });
 
     let expected = json!([
-      {
-        "id": 299537,
-        "popularity": 44.726,
-        "vote_average": 7.0,
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-        "vote_count": 7858,
-        "_formatted": {
-          "id": 299537,
-          "popularity": 44.726,
-          "vote_average": 7.0,
-          "title": "<em>Captain</em> Marvel",
-          "tagline": "Higher. Further. Faster.",
-          "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, <em>Captain</em> Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-          "director": "Ryan Fleck",
-          "producer": "Kevin Feige",
-          "genres": [
-            "Action",
-            "Adventure",
-            "Science Fiction"
+        {
+          "id": 1,
+          "balance": "$1,706.13",
+          "picture": "http://placehold.it/32x32",
+          "age": 27,
+          "color": "green",
+          "name": "Cherry Orr",
+          "gender": "female",
+          "email": "cherryorr@chorizon.com",
+          "phone": "+1 (995) 479-3174",
+          "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+          "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+          "registered": "2020-03-18T11:12:21 -01:00",
+          "latitude": -24.356932,
+          "longitude": 27.184808,
+          "tags": [
+            "new issue",
+            "bug"
           ],
-          "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-          "vote_count": 7858
+          "isActive": true,
+          "_formatted": {
+            "id": 1,
+            "balance": "$1,706.13",
+            "picture": "http://placehold.it/32x32",
+            "age": 27,
+            "color": "green",
+            "name": "<em>Cherry</em> Orr",
+            "gender": "female",
+            "email": "<em>cherry</em>orr@chorizon.com",
+            "phone": "+1 (995) 479-3174",
+            "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+            "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+            "registered": "2020-03-18T11:12:21 -01:00",
+            "latitude": -24.356932,
+            "longitude": 27.184808,
+            "tags": [
+              "new issue",
+              "bug"
+            ],
+            "isActive": true
+          }
         }
-      }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -215,160 +242,57 @@ async fn search_with_attribute_to_highlight_wildcard() {
 
 #[actix_rt::test]
 async fn search_with_attribute_to_highlight_1() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "cherry",
         "limit": 1,
-        "attributesToHighlight": ["title"]
+        "attributesToHighlight": ["name"]
     });
 
     let expected = json!([
-      {
-        "id": 299537,
-        "popularity": 44.726,
-        "vote_average": 7.0,
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-        "vote_count": 7858,
-        "_formatted": {
-          "id": 299537,
-          "popularity": 44.726,
-          "vote_average": 7.0,
-          "title": "<em>Captain</em> Marvel",
-          "tagline": "Higher. Further. Faster.",
-          "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-          "director": "Ryan Fleck",
-          "producer": "Kevin Feige",
-          "genres": [
-            "Action",
-            "Adventure",
-            "Science Fiction"
+        {
+          "id": 1,
+          "balance": "$1,706.13",
+          "picture": "http://placehold.it/32x32",
+          "age": 27,
+          "color": "green",
+          "name": "Cherry Orr",
+          "gender": "female",
+          "email": "cherryorr@chorizon.com",
+          "phone": "+1 (995) 479-3174",
+          "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+          "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+          "registered": "2020-03-18T11:12:21 -01:00",
+          "latitude": -24.356932,
+          "longitude": 27.184808,
+          "tags": [
+            "new issue",
+            "bug"
           ],
-          "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-          "vote_count": 7858
+          "isActive": true,
+          "_formatted": {
+            "id": 1,
+            "balance": "$1,706.13",
+            "picture": "http://placehold.it/32x32",
+            "age": 27,
+            "color": "green",
+            "name": "<em>Cherry</em> Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "phone": "+1 (995) 479-3174",
+            "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+            "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+            "registered": "2020-03-18T11:12:21 -01:00",
+            "latitude": -24.356932,
+            "longitude": 27.184808,
+            "tags": [
+              "new issue",
+              "bug"
+            ],
+            "isActive": true
+          }
         }
-      }
-    ]);
-
-    test_post_get_search!(server, query, |response, _status_code| {
-        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
-    });
-}
-
-// Search with attribute to highlight title and tagline
-// q: Captain
-// limit: 1
-// attributeToHighlight: title,tagline
-#[actix_rt::test]
-async fn search_with_attribute_to_highlight_title_tagline() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
-
-    let query = json!({
-        "q": "captain",
-        "limit": 1,
-        "attributesToHighlight": ["title","tagline"]
-    });
-
-    let expected = json!([
-      {
-        "id": 299537,
-        "popularity": 44.726,
-        "vote_average": 7.0,
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-        "vote_count": 7858,
-        "_formatted": {
-          "id": 299537,
-          "popularity": 44.726,
-          "vote_average": 7.0,
-          "title": "<em>Captain</em> Marvel",
-          "tagline": "Higher. Further. Faster.",
-          "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-          "director": "Ryan Fleck",
-          "producer": "Kevin Feige",
-          "genres": [
-            "Action",
-            "Adventure",
-            "Science Fiction"
-          ],
-          "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-          "vote_count": 7858
-        }
-      }
-    ]);
-
-    test_post_get_search!(server, query, |response, _status_code| {
-        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
-    });
-}
-
-#[actix_rt::test]
-async fn search_with_attribute_to_highlight_title_overview() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
-
-    let query = json!({
-        "q": "captain",
-        "limit": 1,
-        "attributesToHighlight": ["title","overview"]
-    });
-
-    let expected = json!([
-      {
-        "id": 299537,
-        "popularity": 44.726,
-        "vote_average": 7.0,
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-        "vote_count": 7858,
-        "_formatted": {
-          "id": 299537,
-          "popularity": 44.726,
-          "vote_average": 7.0,
-          "title": "<em>Captain</em> Marvel",
-          "tagline": "Higher. Further. Faster.",
-          "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, <em>Captain</em> Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-          "director": "Ryan Fleck",
-          "producer": "Kevin Feige",
-          "genres": [
-            "Action",
-            "Adventure",
-            "Science Fiction"
-          ],
-          "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-          "vote_count": 7858
-        }
-      }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -378,47 +302,50 @@ async fn search_with_attribute_to_highlight_title_overview() {
 
 #[actix_rt::test]
 async fn search_with_matches() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "Captain",
+        "q": "cherry",
         "limit": 1,
-        "matches": true 
+        "matches": true
     });
 
     let expected = json!([
-      {
-        "id": 299537,
-        "popularity": 44.726,
-        "vote_average": 7.0,
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-        "vote_count": 7858,
-        "_matchesInfo": {
-          "title": [
-            {
-              "start": 0,
-              "length": 7
-            }
+        {
+          "id": 1,
+          "balance": "$1,706.13",
+          "picture": "http://placehold.it/32x32",
+          "age": 27,
+          "color": "green",
+          "name": "Cherry Orr",
+          "gender": "female",
+          "email": "cherryorr@chorizon.com",
+          "phone": "+1 (995) 479-3174",
+          "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+          "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+          "registered": "2020-03-18T11:12:21 -01:00",
+          "latitude": -24.356932,
+          "longitude": 27.184808,
+          "tags": [
+            "new issue",
+            "bug"
           ],
-          "overview": [
-            {
-              "start": 186,
-              "length": 7
-            }
-          ]
+          "isActive": true,
+          "_matchesInfo": {
+            "name": [
+              {
+                "start": 0,
+                "length": 6
+              }
+            ],
+            "email": [
+              {
+                "start": 0,
+                "length": 6
+              }
+            ]
+          }
         }
-      }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -427,52 +354,59 @@ async fn search_with_matches() {
 }
 
 #[actix_rt::test]
-async fn search_witch_crop() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+async fn search_with_crop() {
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "Captain",
+        "q": "exercitation",
         "limit": 1,
-        "attributesToCrop": ["overview"],
+        "attributesToCrop": ["about"],
         "cropLength": 20
     });
 
     let expected = json!([
-      {
-        "id": 299537,
-        "popularity": 44.726,
-        "vote_average": 7.0,
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-        "vote_count": 7858,
-        "_formatted": {
-          "id": 299537,
-          "popularity": 44.726,
-          "vote_average": 7.0,
-          "title": "Captain Marvel",
-          "tagline": "Higher. Further. Faster.",
-          "overview": ". Set in the 1990s, Captain Marvel is an",
-          "director": "Ryan Fleck",
-          "producer": "Kevin Feige",
-          "genres": [
-            "Action",
-            "Adventure",
-            "Science Fiction"
-          ],
-          "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-          "vote_count": 7858
+        {
+            "id": 1,
+            "balance": "$1,706.13",
+            "picture": "http://placehold.it/32x32",
+            "age": 27,
+            "color": "green",
+            "name": "Cherry Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "phone": "+1 (995) 479-3174",
+            "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+            "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+            "registered": "2020-03-18T11:12:21 -01:00",
+            "latitude": -24.356932,
+            "longitude": 27.184808,
+            "tags": [
+              "new issue",
+              "bug"
+            ],
+            "isActive": true,
+            "_formatted": {
+              "id": 1,
+              "balance": "$1,706.13",
+              "picture": "http://placehold.it/32x32",
+              "age": 27,
+              "color": "green",
+              "name": "Cherry Orr",
+              "gender": "female",
+              "email": "cherryorr@chorizon.com",
+              "phone": "+1 (995) 479-3174",
+              "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+              "about": "Exercitation officia",
+              "registered": "2020-03-18T11:12:21 -01:00",
+              "latitude": -24.356932,
+              "longitude": 27.184808,
+              "tags": [
+                "new issue",
+                "bug"
+              ],
+              "isActive": true
+            }
         }
-      }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -482,21 +416,20 @@ async fn search_witch_crop() {
 
 #[actix_rt::test]
 async fn search_with_attributes_to_retrieve() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "Captain",
+        "q": "cherry",
         "limit": 1,
-        "attributesToRetrieve": ["title","tagline","overview","poster_path"],
+        "attributesToRetrieve": ["name","age","color","gender"],
     });
 
     let expected = json!([
       {
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg"
+          "name": "Cherry Orr",
+          "age": 27,
+          "color": "green",
+          "gender": "female"
       }
     ]);
 
@@ -507,33 +440,36 @@ async fn search_with_attributes_to_retrieve() {
 
 #[actix_rt::test]
 async fn search_with_attributes_to_retrieve_wildcard() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "Captain",
+        "q": "cherry",
         "limit": 1,
         "attributesToRetrieve": ["*"],
     });
 
     let expected = json!([
-      {
-        "id": 299537,
-        "popularity": 44.726,
-        "vote_average": 7.0,
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-        "vote_count": 7858
-      }
+        {
+            "id": 1,
+            "isActive": true,
+            "balance": "$1,706.13",
+            "picture": "http://placehold.it/32x32",
+            "age": 27,
+            "color": "green",
+            "name": "Cherry Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "phone": "+1 (995) 479-3174",
+            "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+            "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+            "registered": "2020-03-18T11:12:21 -01:00",
+            "latitude": -24.356932,
+            "longitude": 27.184808,
+            "tags": [
+                "new issue",
+                "bug"
+            ]
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -541,73 +477,79 @@ async fn search_with_attributes_to_retrieve_wildcard() {
     });
 }
 
-// Search with filter
-// q: Captain
-// limit: 3
-// filters: director:Anthony%20Russo
 #[actix_rt::test]
 async fn search_with_filter() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "Captain",
+        "q": "exercitation",
         "limit": 3,
-        "filters": "director='Anthony Russo'"
+        "filters": "gender='male'"
     });
 
     let expected = json!([
-      {
-        "id": 271110,
-        "popularity": 37.431,
-        "vote_average": 7.4,
-        "title": "Captain America: Civil War",
-        "tagline": "Divided We Fall",
-        "overview": "Following the events of Age of Ultron, the collective governments of the world pass an act designed to regulate all superhuman activity. This polarizes opinion amongst the Avengers, causing two factions to side with Iron Man or Captain America, which causes an epic battle between former allies.",
-        "director": "Anthony Russo",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Adventure",
-          "Action",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/kSBXou5Ac7vEqKd97wotJumyJvU.jpg",
-        "vote_count": 15079
-      },
-      {
-        "id": 100402,
-        "popularity": 16.418,
-        "vote_average": 7.7,
-        "title": "Captain America: The Winter Soldier",
-        "tagline": "In heroes we trust.",
-        "overview": "After the cataclysmic events in New York with The Avengers, Steve Rogers, aka Captain America is living quietly in Washington, D.C. and trying to adjust to the modern world. But when a S.H.I.E.L.D. colleague comes under attack, Steve becomes embroiled in a web of intrigue that threatens to put the world at risk. Joining forces with the Black Widow, Captain America struggles to expose the ever-widening conspiracy while fighting off professional assassins sent to silence him at every turn. When the full scope of the villainous plot is revealed, Captain America and the Black Widow enlist the help of a new ally, the Falcon. However, they soon find themselves up against an unexpected and formidable enemy—the Winter Soldier.",
-        "director": "Anthony Russo",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/5TQ6YDmymBpnF005OyoB7ohZps9.jpg",
-        "vote_count": 11972
-      },
-      {
-        "id": 299534,
-        "popularity": 38.659,
-        "vote_average": 8.3,
-        "title": "Avengers: Endgame",
-        "tagline": "Part of the journey is the end.",
-        "overview": "After the devastating events of Avengers: Infinity War, the universe is in ruins due to the efforts of the Mad Titan, Thanos. With the help of remaining allies, the Avengers must assemble once more in order to undo Thanos' actions and restore order to the universe once and for all, no matter what consequences may be in store.",
-        "director": "Anthony Russo",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Adventure",
-          "Science Fiction",
-          "Action"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/or06FN3Dka5tukK1e9sl16pB3iy.jpg",
-        "vote_count": 10497
-      }
+        {
+            "id": 59,
+            "balance": "$1,921.58",
+            "picture": "http://placehold.it/32x32",
+            "age": 31,
+            "color": "green",
+            "name": "Harper Carson",
+            "gender": "male",
+            "email": "harpercarson@chorizon.com",
+            "phone": "+1 (912) 430-3243",
+            "address": "883 Dennett Place, Knowlton, New Mexico, 9219",
+            "about": "Exercitation minim esse proident cillum velit et deserunt incididunt adipisicing minim. Cillum Lorem consectetur laborum id consequat exercitation velit. Magna dolor excepteur sunt deserunt dolor ullamco non sint proident ipsum. Reprehenderit voluptate sit veniam consectetur ea sunt duis labore deserunt ipsum aute. Eiusmod aliqua anim voluptate id duis tempor aliqua commodo sunt. Do officia ea consectetur nostrud eiusmod laborum.\r\n",
+            "registered": "2019-12-07T07:33:15 -01:00",
+            "latitude": -60.812605,
+            "longitude": -27.129016,
+            "tags": [
+                "bug",
+                "new issue"
+            ],
+            "isActive": true
+        },
+        {
+            "id": 0,
+            "balance": "$2,668.55",
+            "picture": "http://placehold.it/32x32",
+            "age": 36,
+            "color": "green",
+            "name": "Lucas Hess",
+            "gender": "male",
+            "email": "lucashess@chorizon.com",
+            "phone": "+1 (998) 478-2597",
+            "address": "412 Losee Terrace, Blairstown, Georgia, 2825",
+            "about": "Mollit ad in exercitation quis. Anim est ut consequat fugiat duis magna aliquip velit nisi. Commodo eiusmod est consequat proident consectetur aliqua enim fugiat. Aliqua adipisicing laboris elit proident enim veniam laboris mollit. Incididunt fugiat minim ad nostrud deserunt tempor in. Id irure officia labore qui est labore nulla nisi. Magna sit quis tempor esse consectetur amet labore duis aliqua consequat.\r\n",
+            "registered": "2016-06-21T09:30:25 -02:00",
+            "latitude": -44.174957,
+            "longitude": -145.725388,
+            "tags": [
+                "bug",
+                "bug"
+            ],
+            "isActive": false
+        },
+        {
+            "id": 66,
+            "balance": "$1,061.49",
+            "picture": "http://placehold.it/32x32",
+            "age": 35,
+            "color": "brown",
+            "name": "Higgins Aguilar",
+            "gender": "male",
+            "email": "higginsaguilar@chorizon.com",
+            "phone": "+1 (911) 540-3791",
+            "address": "132 Sackman Street, Layhill, Guam, 8729",
+            "about": "Anim ea dolore exercitation minim. Proident cillum non deserunt cupidatat veniam non occaecat aute ullamco irure velit laboris ex aliquip. Voluptate incididunt non ex nulla est ipsum. Amet anim do velit sunt irure sint minim nisi occaecat proident tempor elit exercitation nostrud.\r\n",
+            "registered": "2015-04-05T02:10:07 -02:00",
+            "latitude": 74.702813,
+            "longitude": 151.314972,
+            "tags": [
+                "bug"
+            ],
+            "isActive": true
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -616,27 +558,32 @@ async fn search_with_filter() {
 
     let expected = json!([
         {
-            "id":2770,
-            "popularity":17.02,
-            "vote_average":6.1,
-            "title":"American Pie 2",
-            "tagline":"This Summer It's All About Sticking Together.",
-            "overview":"The whole gang are back and as close as ever. They decide to get even closer by spending the summer together at a beach house. They decide to hold the biggest party ever to be seen, even if the preparation doesn't always go to plan. Especially when Stifler, Finch and Jim become more close to each other than they ever want to be and when Jim mistakes super glue for lubricant...",
-            "director":"J.B. Rogers",
-            "producer":"Chris Moore",
-            "genres":[
-                "Comedy",
-                "Romance"
+            "id": 0,
+            "balance": "$2,668.55",
+            "picture": "http://placehold.it/32x32",
+            "age": 36,
+            "color": "green",
+            "name": "Lucas Hess",
+            "gender": "male",
+            "email": "lucashess@chorizon.com",
+            "phone": "+1 (998) 478-2597",
+            "address": "412 Losee Terrace, Blairstown, Georgia, 2825",
+            "about": "Mollit ad in exercitation quis. Anim est ut consequat fugiat duis magna aliquip velit nisi. Commodo eiusmod est consequat proident consectetur aliqua enim fugiat. Aliqua adipisicing laboris elit proident enim veniam laboris mollit. Incididunt fugiat minim ad nostrud deserunt tempor in. Id irure officia labore qui est labore nulla nisi. Magna sit quis tempor esse consectetur amet labore duis aliqua consequat.\r\n",
+            "registered": "2016-06-21T09:30:25 -02:00",
+            "latitude": -44.174957,
+            "longitude": -145.725388,
+            "tags": [
+                "bug",
+                "bug"
             ],
-            "poster_path":"https://image.tmdb.org/t/p/w500/q4LNgUnRfltxzp3gf1MAGiK5LhV.jpg",
-            "vote_count":2888
+            "isActive": false
         }
     ]);
 
     let query = json!({
-        "q": "a",
+        "q": "exercitation",
         "limit": 3,
-        "filters": "title='american pie 2'"
+        "filters": "name='Lucas Hess'"
     });
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -644,180 +591,229 @@ async fn search_with_filter() {
     });
 
     let expected = json!([
-      {
-        "id": 271110,
-        "popularity": 37.431,
-        "vote_average": 7.4,
-        "title": "Captain America: Civil War",
-        "tagline": "Divided We Fall",
-        "overview": "Following the events of Age of Ultron, the collective governments of the world pass an act designed to regulate all superhuman activity. This polarizes opinion amongst the Avengers, causing two factions to side with Iron Man or Captain America, which causes an epic battle between former allies.",
-        "director": "Anthony Russo",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Adventure",
-          "Action",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/kSBXou5Ac7vEqKd97wotJumyJvU.jpg",
-        "vote_count": 15079
-      },
-      {
-        "id": 100402,
-        "popularity": 16.418,
-        "vote_average": 7.7,
-        "title": "Captain America: The Winter Soldier",
-        "tagline": "In heroes we trust.",
-        "overview": "After the cataclysmic events in New York with The Avengers, Steve Rogers, aka Captain America is living quietly in Washington, D.C. and trying to adjust to the modern world. But when a S.H.I.E.L.D. colleague comes under attack, Steve becomes embroiled in a web of intrigue that threatens to put the world at risk. Joining forces with the Black Widow, Captain America struggles to expose the ever-widening conspiracy while fighting off professional assassins sent to silence him at every turn. When the full scope of the villainous plot is revealed, Captain America and the Black Widow enlist the help of a new ally, the Falcon. However, they soon find themselves up against an unexpected and formidable enemy—the Winter Soldier.",
-        "director": "Anthony Russo",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/5TQ6YDmymBpnF005OyoB7ohZps9.jpg",
-        "vote_count": 11972
-      }
+        {
+            "id": 2,
+            "balance": "$2,467.47",
+            "picture": "http://placehold.it/32x32",
+            "age": 34,
+            "color": "blue",
+            "name": "Patricia Goff",
+            "gender": "female",
+            "email": "patriciagoff@chorizon.com",
+            "phone": "+1 (864) 463-2277",
+            "address": "866 Hornell Loop, Cresaptown, Ohio, 1700",
+            "about": "Non culpa duis dolore Lorem aliqua. Labore veniam laborum cupidatat nostrud ea exercitation. Esse nostrud sit veniam laborum minim ullamco nulla aliqua est cillum magna. Duis non esse excepteur veniam voluptate sunt cupidatat nostrud consequat sint adipisicing ut excepteur. Incididunt sit aliquip non id magna amet deserunt esse quis dolor.\r\n",
+            "registered": "2014-10-28T12:59:30 -01:00",
+            "latitude": -64.008555,
+            "longitude": 11.867098,
+            "tags": [
+                "good first issue"
+            ],
+            "isActive": true
+        },
+        {
+            "id": 75,
+            "balance": "$1,913.42",
+            "picture": "http://placehold.it/32x32",
+            "age": 24,
+            "color": "green",
+            "name": "Emma Jacobs",
+            "gender": "female",
+            "email": "emmajacobs@chorizon.com",
+            "phone": "+1 (899) 554-3847",
+            "address": "173 Tapscott Street, Esmont, Maine, 7450",
+            "about": "Laboris consequat consectetur tempor labore ullamco ullamco voluptate quis quis duis ut ad. In est irure quis amet sunt nulla ad ut sit labore ut eu quis duis. Nostrud cupidatat aliqua sunt occaecat minim id consequat officia deserunt laborum. Ea dolor reprehenderit laborum veniam exercitation est nostrud excepteur laborum minim id qui et.\r\n",
+            "registered": "2019-03-29T06:24:13 -01:00",
+            "latitude": -35.53722,
+            "longitude": 155.703874,
+            "tags": [],
+            "isActive": false
+        }
     ]);
     let query = json!({
-        "q": "a",
+        "q": "exercitation",
         "limit": 3,
-        "filters": "director='Anthony Russo' AND (title='captain america: civil war' OR title='Captain America: The Winter Soldier')"
+        "filters": "gender='female' AND (name='Patricia Goff' OR name='Emma Jacobs')"
     });
     test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 
     let expected = json!([
-          {
-            "id": 299536,
-            "popularity": 65.013,
-            "vote_average": 8.3,
-            "title": "Avengers: Infinity War",
-            "tagline": "An entire universe. Once and for all.",
-            "overview": "As the Avengers and their allies have continued to protect the world from threats too large for any one hero to handle, a new danger has emerged from the cosmic shadows: Thanos. A despot of intergalactic infamy, his goal is to collect all six Infinity Stones, artifacts of unimaginable power, and use them to inflict his twisted will on all of reality. Everything the Avengers have fought for has led up to this moment - the fate of Earth and existence itself has never been more uncertain.",
-            "director": "Anthony Russo",
-            "producer": "Kevin Feige",
-            "genres": [
-              "Adventure",
-              "Action",
-              "Science Fiction"
+        {
+            "id": 30,
+            "balance": "$2,021.11",
+            "picture": "http://placehold.it/32x32",
+            "age": 32,
+            "color": "blue",
+            "name": "Stacy Espinoza",
+            "gender": "female",
+            "email": "stacyespinoza@chorizon.com",
+            "phone": "+1 (999) 487-3253",
+            "address": "931 Alabama Avenue, Bangor, Alaska, 8215",
+            "about": "Id reprehenderit cupidatat exercitation anim ad nisi irure. Minim est proident mollit laborum. Duis ad duis eiusmod quis.\r\n",
+            "registered": "2014-07-16T06:15:53 -02:00",
+            "latitude": 41.560197,
+            "longitude": 177.697,
+            "tags": [
+                "new issue",
+                "new issue",
+                "bug"
             ],
-            "poster_path": "https://image.tmdb.org/t/p/w500/7WsyChQLEftFiDOVTGkv3hFpyyt.jpg",
-            "vote_count": 16056
-          },
-          {
-            "id": 299534,
-            "popularity": 38.659,
-            "vote_average": 8.3,
-            "title": "Avengers: Endgame",
-            "tagline": "Part of the journey is the end.",
-            "overview": "After the devastating events of Avengers: Infinity War, the universe is in ruins due to the efforts of the Mad Titan, Thanos. With the help of remaining allies, the Avengers must assemble once more in order to undo Thanos' actions and restore order to the universe once and for all, no matter what consequences may be in store.",
-            "director": "Anthony Russo",
-            "producer": "Kevin Feige",
-            "genres": [
-              "Adventure",
-              "Science Fiction",
-              "Action"
+            "isActive": true
+        },
+        {
+            "id": 31,
+            "balance": "$3,609.82",
+            "picture": "http://placehold.it/32x32",
+            "age": 32,
+            "color": "blue",
+            "name": "Vilma Garza",
+            "gender": "female",
+            "email": "vilmagarza@chorizon.com",
+            "phone": "+1 (944) 585-2021",
+            "address": "565 Tech Place, Sedley, Puerto Rico, 858",
+            "about": "Excepteur et fugiat mollit incididunt cupidatat. Mollit nisi veniam sint eu exercitation amet labore. Voluptate est magna est amet qui minim excepteur cupidatat dolor quis id excepteur aliqua reprehenderit. Proident nostrud ex veniam officia nisi enim occaecat ex magna officia id consectetur ad eu. In et est reprehenderit cupidatat ad minim veniam proident nulla elit nisi veniam proident ex. Eu in irure sit veniam amet incididunt fugiat proident quis ullamco laboris.\r\n",
+            "registered": "2017-06-30T07:43:52 -02:00",
+            "latitude": -12.574889,
+            "longitude": -54.771186,
+            "tags": [
+                "new issue",
+                "wontfix",
+                "wontfix"
             ],
-            "poster_path": "https://image.tmdb.org/t/p/w500/or06FN3Dka5tukK1e9sl16pB3iy.jpg",
-            "vote_count": 10497
-          },
-          {
-            "id": 271110,
-            "popularity": 37.431,
-            "vote_average": 7.4,
-            "title": "Captain America: Civil War",
-            "tagline": "Divided We Fall",
-            "overview": "Following the events of Age of Ultron, the collective governments of the world pass an act designed to regulate all superhuman activity. This polarizes opinion amongst the Avengers, causing two factions to side with Iron Man or Captain America, which causes an epic battle between former allies.",
-            "director": "Anthony Russo",
-            "producer": "Kevin Feige",
-            "genres": [
-              "Adventure",
-              "Action",
-              "Science Fiction"
+            "isActive": false
+        },
+        {
+            "id": 2,
+            "balance": "$2,467.47",
+            "picture": "http://placehold.it/32x32",
+            "age": 34,
+            "color": "blue",
+            "name": "Patricia Goff",
+            "gender": "female",
+            "email": "patriciagoff@chorizon.com",
+            "phone": "+1 (864) 463-2277",
+            "address": "866 Hornell Loop, Cresaptown, Ohio, 1700",
+            "about": "Non culpa duis dolore Lorem aliqua. Labore veniam laborum cupidatat nostrud ea exercitation. Esse nostrud sit veniam laborum minim ullamco nulla aliqua est cillum magna. Duis non esse excepteur veniam voluptate sunt cupidatat nostrud consequat sint adipisicing ut excepteur. Incididunt sit aliquip non id magna amet deserunt esse quis dolor.\r\n",
+            "registered": "2014-10-28T12:59:30 -01:00",
+            "latitude": -64.008555,
+            "longitude": 11.867098,
+            "tags": [
+                "good first issue"
             ],
-            "poster_path": "https://image.tmdb.org/t/p/w500/kSBXou5Ac7vEqKd97wotJumyJvU.jpg",
-            "vote_count": 15079
-          }
-        ]);
-    // director = "anthony russo" AND  (title = "captain america: civil war" OR vote_average > 8.0)
+            "isActive": true
+        }
+    ]);
     let query = json!({
-        "q": "a",
+        "q": "exerciatation",
         "limit": 3,
-        "filters": "director='anthony russo' AND (title = 'captain america: civil war' OR vote_average > 8.0)"
+        "filters": "gender='female' AND (name='Patricia Goff' OR age > 30)"
     });
     test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 
     let expected = json!([
-          {
-            "id": 812,
-            "popularity": 36.854,
-            "vote_average": 7.6,
-            "title": "Aladdin",
-            "tagline": "Wish granted!",
-            "overview": "Princess Jasmine grows tired of being forced to remain in the palace, so she sneaks out into the marketplace, in disguise, where she meets street-urchin Aladdin.  The couple falls in love, although Jasmine may only marry a prince.  After being thrown in jail, Aladdin becomes embroiled in a plot to find a mysterious lamp, with which the evil Jafar hopes to rule the land.",
-            "director": "Ron Clements",
-            "producer": "Ron Clements",
-            "genres": [
-              "Animation",
-              "Family",
-              "Adventure",
-              "Fantasy",
-              "Romance"
+        {
+            "id": 59,
+            "balance": "$1,921.58",
+            "picture": "http://placehold.it/32x32",
+            "age": 31,
+            "color": "green",
+            "name": "Harper Carson",
+            "gender": "male",
+            "email": "harpercarson@chorizon.com",
+            "phone": "+1 (912) 430-3243",
+            "address": "883 Dennett Place, Knowlton, New Mexico, 9219",
+            "about": "Exercitation minim esse proident cillum velit et deserunt incididunt adipisicing minim. Cillum Lorem consectetur laborum id consequat exercitation velit. Magna dolor excepteur sunt deserunt dolor ullamco non sint proident ipsum. Reprehenderit voluptate sit veniam consectetur ea sunt duis labore deserunt ipsum aute. Eiusmod aliqua anim voluptate id duis tempor aliqua commodo sunt. Do officia ea consectetur nostrud eiusmod laborum.\r\n",
+            "registered": "2019-12-07T07:33:15 -01:00",
+            "latitude": -60.812605,
+            "longitude": -27.129016,
+            "tags": [
+                "bug",
+                "new issue"
             ],
-            "vote_count": 7156,
-            "poster_path": "https://image.tmdb.org/t/p/w500/mjKozYRuHc9j7SmiXmbVmCiAM0A.jpg"
-          },
-          {
-            "id": 348,
-            "popularity": 26.175,
-            "vote_average": 8.1,
-            "title": "Alien",
-            "tagline": "In space no one can hear you scream.",
-            "overview": "During its return to the earth, commercial spaceship Nostromo intercepts a distress signal from a distant planet. When a three-member team of the crew discovers a chamber containing thousands of eggs on the planet, a creature inside one of the eggs attacks an explorer. The entire crew is unaware of the impending nightmare set to descend upon them when the alien parasite planted inside its unfortunate host is birthed.",
-            "director": "Ridley Scott",
-            "producer": "David Giler",
-            "genres": [
-              "Horror",
-              "Science Fiction"
+            "isActive": true
+        },
+        {
+            "id": 0,
+            "balance": "$2,668.55",
+            "picture": "http://placehold.it/32x32",
+            "age": 36,
+            "color": "green",
+            "name": "Lucas Hess",
+            "gender": "male",
+            "email": "lucashess@chorizon.com",
+            "phone": "+1 (998) 478-2597",
+            "address": "412 Losee Terrace, Blairstown, Georgia, 2825",
+            "about": "Mollit ad in exercitation quis. Anim est ut consequat fugiat duis magna aliquip velit nisi. Commodo eiusmod est consequat proident consectetur aliqua enim fugiat. Aliqua adipisicing laboris elit proident enim veniam laboris mollit. Incididunt fugiat minim ad nostrud deserunt tempor in. Id irure officia labore qui est labore nulla nisi. Magna sit quis tempor esse consectetur amet labore duis aliqua consequat.\r\n",
+            "registered": "2016-06-21T09:30:25 -02:00",
+            "latitude": -44.174957,
+            "longitude": -145.725388,
+            "tags": [
+                "bug",
+                "bug"
             ],
-            "vote_count": 8237,
-            "poster_path": "https://image.tmdb.org/t/p/w500/2h00HrZs89SL3tXB4nbkiM7BKHs.jpg"
-          },
-          {
-            "id": 73,
-            "popularity": 22.887,
-            "vote_average": 8.4,
-            "title": "American History X",
-            "tagline": "Some Legacies Must End.",
-            "overview": "Derek Vineyard is paroled after serving 3 years in prison for killing two thugs who tried to break into/steal his truck. Through his brother, Danny Vineyard's narration, we learn that before going to prison, Derek was a skinhead and the leader of a violent white supremacist gang that committed acts of racial crime throughout L.A. and his actions greatly influenced Danny. Reformed and fresh out of prison, Derek severs contact with the gang and becomes determined to keep Danny from going down the same violent path as he did.",
-            "director": "Tony Kaye",
-            "producer": "John Morrissey",
-            "genres": [
-              "Drama"
+            "isActive": false
+        },
+        {
+            "id": 66,
+            "balance": "$1,061.49",
+            "picture": "http://placehold.it/32x32",
+            "age": 35,
+            "color": "brown",
+            "name": "Higgins Aguilar",
+            "gender": "male",
+            "email": "higginsaguilar@chorizon.com",
+            "phone": "+1 (911) 540-3791",
+            "address": "132 Sackman Street, Layhill, Guam, 8729",
+            "about": "Anim ea dolore exercitation minim. Proident cillum non deserunt cupidatat veniam non occaecat aute ullamco irure velit laboris ex aliquip. Voluptate incididunt non ex nulla est ipsum. Amet anim do velit sunt irure sint minim nisi occaecat proident tempor elit exercitation nostrud.\r\n",
+            "registered": "2015-04-05T02:10:07 -02:00",
+            "latitude": 74.702813,
+            "longitude": 151.314972,
+            "tags": [
+                "bug"
             ],
-            "vote_count": 6570,
-            "poster_path": "https://image.tmdb.org/t/p/w500/fXepRAYOx1qC3wju7XdDGx60775.jpg"
-          }
-        ]);
-
+            "isActive": true
+        }
+    ]);
     let query = json!({
-        "q": "a",
+        "q": "exerciatation",
         "limit": 3,
-        "filters": "NOT director = 'anthony russo' AND vote_average > 7.5"
+        "filters": "NOT gender = 'female' AND age > 30"
     });
 
     test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
 
-    let expected = json!([]);
+    let expected = json!([
+        {
+            "id": 11,
+            "balance": "$1,351.43",
+            "picture": "http://placehold.it/32x32",
+            "age": 28,
+            "color": "green",
+            "name": "Evans Wagner",
+            "gender": "male",
+            "email": "evanswagner@chorizon.com",
+            "phone": "+1 (889) 496-2332",
+            "address": "118 Monaco Place, Lutsen, Delaware, 6209",
+            "about": "Sunt consectetur enim ipsum consectetur occaecat reprehenderit nulla pariatur. Cupidatat do exercitation tempor voluptate duis nostrud dolor consectetur. Excepteur aliquip Lorem voluptate cillum est. Nisi velit nulla nostrud ea id officia laboris et.\r\n",
+            "registered": "2016-10-27T01:26:31 -02:00",
+            "latitude": -77.673222,
+            "longitude": -142.657214,
+            "tags": [
+                "good first issue",
+                "good first issue"
+            ],
+            "isActive": true
+        }
+    ]);
     let query = json!({
-        "q": "a",
-        "filters": "NOT director = 'anthony russo' AND title='Avengers: Endgame'"
+        "q": "exerciatation",
+        "filters": "NOT gender = 'female' AND name='Evans Wagner'"
     });
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -825,72 +821,74 @@ async fn search_with_filter() {
     });
 }
 
-// Search with attributes to highlight and matches
-// q: Captain
-// limit: 1
-// attributesToHighlight: [title,overview]
-// matches: true
 #[actix_rt::test]
 async fn search_with_attributes_to_highlight_and_matches() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "cherry",
         "limit": 1,
-        "attributesToHighlight": ["title","overview"],
+        "attributesToHighlight": ["name","email"],
         "matches": true,
     });
 
-    let expected = json!( [
-      {
-        "id": 299537,
-        "popularity": 44.726,
-        "vote_average": 7.0,
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-        "vote_count": 7858,
-        "_formatted": {
-          "id": 299537,
-          "popularity": 44.726,
-          "vote_average": 7.0,
-          "title": "<em>Captain</em> Marvel",
-          "tagline": "Higher. Further. Faster.",
-          "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, <em>Captain</em> Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-          "director": "Ryan Fleck",
-          "producer": "Kevin Feige",
-          "genres": [
-            "Action",
-            "Adventure",
-            "Science Fiction"
-          ],
-          "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-          "vote_count": 7858
-        },
-        "_matchesInfo": {
-          "overview": [
-            {
-              "start": 186,
-              "length": 7
+    let expected = json!([
+        {
+            "id": 1,
+            "balance": "$1,706.13",
+            "picture": "http://placehold.it/32x32",
+            "age": 27,
+            "color": "green",
+            "name": "Cherry Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "phone": "+1 (995) 479-3174",
+            "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+            "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+            "registered": "2020-03-18T11:12:21 -01:00",
+            "latitude": -24.356932,
+            "longitude": 27.184808,
+            "tags": [
+                "new issue",
+                "bug"
+            ],
+            "isActive": true,
+            "_formatted": {
+                "id": 1,
+                "balance": "$1,706.13",
+                "picture": "http://placehold.it/32x32",
+                "age": 27,
+                "color": "green",
+                "name": "<em>Cherry</em> Orr",
+                "gender": "female",
+                "email": "<em>cherry</em>orr@chorizon.com",
+                "phone": "+1 (995) 479-3174",
+                "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+                "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+                "registered": "2020-03-18T11:12:21 -01:00",
+                "latitude": -24.356932,
+                "longitude": 27.184808,
+                "tags": [
+                    "new issue",
+                    "bug"
+                ],
+                "isActive": true
+            },
+            "_matchesInfo": {
+                "email": [
+                    {
+                        "start": 0,
+                        "length": 6
+                    }
+                ],
+                "name": [
+                    {
+                        "start": 0,
+                        "length": 6
+                    }
+                ]
             }
-          ],
-          "title": [
-            {
-              "start": 0,
-              "length": 7
-            }
-          ]
         }
-      }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -900,67 +898,68 @@ async fn search_with_attributes_to_highlight_and_matches() {
 
 #[actix_rt::test]
 async fn search_with_attributes_to_highlight_and_matches_and_crop() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "exerciatation",
         "limit": 1,
-        "attributesToCrop": ["overview"],
+        "attributesToCrop": ["about"],
         "cropLength": 20,
-        "attributesToHighlight": ["title","overview"],
-        "matches": true
+        "attributesToHighlight": ["about"],
+        "matches": true,
     });
 
     let expected = json!([
-      {
-        "id": 299537,
-        "popularity": 44.726,
-        "vote_average": 7.0,
-        "title": "Captain Marvel",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "The story follows Carol Danvers as she becomes one of the universe’s most powerful heroes when Earth is caught in the middle of a galactic war between two alien races. Set in the 1990s, Captain Marvel is an all-new adventure from a previously unseen period in the history of the Marvel Cinematic Universe.",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "genres": [
-          "Action",
-          "Adventure",
-          "Science Fiction"
-        ],
-        "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-        "vote_count": 7858,
-        "_formatted": {
-          "id": 299537,
-          "popularity": 44.726,
-          "vote_average": 7.0,
-          "title": "<em>Captain</em> Marvel",
-          "tagline": "Higher. Further. Faster.",
-          "overview": ". Set in the 1990s, <em>Captain</em> Marvel is an",
-          "director": "Ryan Fleck",
-          "producer": "Kevin Feige",
-          "genres": [
-            "Action",
-            "Adventure",
-            "Science Fiction"
-          ],
-          "poster_path": "https://image.tmdb.org/t/p/w500/AtsgWhDnHTq68L0lLsUrCnM7TjG.jpg",
-          "vote_count": 7858
-        },
-        "_matchesInfo": {
-          "overview": [
-            {
-              "start": 20,
-              "length": 7
+        {
+            "id": 1,
+            "balance": "$1,706.13",
+            "picture": "http://placehold.it/32x32",
+            "age": 27,
+            "color": "green",
+            "name": "Cherry Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "phone": "+1 (995) 479-3174",
+            "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+            "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+            "registered": "2020-03-18T11:12:21 -01:00",
+            "latitude": -24.356932,
+            "longitude": 27.184808,
+            "tags": [
+                "new issue",
+                "bug"
+            ],
+            "isActive": true,
+            "_formatted": {
+                "id": 1,
+                "balance": "$1,706.13",
+                "picture": "http://placehold.it/32x32",
+                "age": 27,
+                "color": "green",
+                "name": "Cherry Orr",
+                "gender": "female",
+                "email": "cherryorr@chorizon.com",
+                "phone": "+1 (995) 479-3174",
+                "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+                "about": "<em>Exercitation</em> officia",
+                "registered": "2020-03-18T11:12:21 -01:00",
+                "latitude": -24.356932,
+                "longitude": 27.184808,
+                "tags": [
+                    "new issue",
+                    "bug"
+                ],
+                "isActive": true
+            },
+            "_matchesInfo": {
+                "about": [
+                    {
+                        "start": 0,
+                        "length": 12
+                    }
+                ]
             }
-          ],
-          "title": [
-            {
-              "start": 0,
-              "length": 7
-            }
-          ]
         }
-      }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -970,25 +969,25 @@ async fn search_with_attributes_to_highlight_and_matches_and_crop() {
 
 #[actix_rt::test]
 async fn search_with_differents_attributes() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "cherry",
         "limit": 1,
-        "attributesToRetrieve": ["title","producer","director"],
-        "attributesToHighlight": ["title"],
+        "attributesToRetrieve": ["name","age","gender","email"],
+        "attributesToHighlight": ["name"],
     });
 
     let expected = json!([
-      {
-        "title": "Captain Marvel",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "_formatted": {
-          "title": "<em>Captain</em> Marvel"
+        {
+            "age": 27,
+            "name": "Cherry Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "_formatted": {
+                "name": "<em>Cherry</em> Orr"
+            }
         }
-      }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -998,26 +997,25 @@ async fn search_with_differents_attributes() {
 
 #[actix_rt::test]
 async fn search_with_differents_attributes_2() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "exercitation",
         "limit": 1,
-        "attributesToRetrieve": ["title","producer","director"],
-        "attributesToCrop": ["overview"],
-        "cropLength": 10,
+        "attributesToRetrieve": ["name","age","gender"],
+        "attributesToCrop": ["about"],
+        "cropLength": 20,
     });
 
     let expected = json!([
-      {
-      "title": "Captain Marvel",
-      "director": "Ryan Fleck",
-      "producer": "Kevin Feige",
-      "_formatted": {
-        "overview": "1990s, Captain Marvel"
-      }
-    }
+        {
+            "age": 27,
+            "name": "Cherry Orr",
+            "gender": "female",
+            "_formatted": {
+                "about": "Exercitation officia"
+            }
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -1025,32 +1023,26 @@ async fn search_with_differents_attributes_2() {
     });
 }
 
-// Search with attributes to highlight and matches and crop
-// q: Captain
-// limit: 1
-// attributesToRetrieve: [title,producer,director]
-// attributesToCrop: [overview:10]
 #[actix_rt::test]
 async fn search_with_differents_attributes_3() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "exercitation",
         "limit": 1,
-        "attributesToRetrieve": ["title","producer","director"],
-        "attributesToCrop": ["overview:10"],
+        "attributesToRetrieve": ["name","age","gender"],
+        "attributesToCrop": ["about:20"],
     });
 
-    let expected = json!([
-      {
-      "title": "Captain Marvel",
-      "director": "Ryan Fleck",
-      "producer": "Kevin Feige",
-      "_formatted": {
-        "overview": "1990s, Captain Marvel"
-      }
-    }
+    let expected = json!( [
+        {
+            "age": 27,
+            "name": "Cherry Orr",
+            "gender": "female",
+            "_formatted": {
+                "about": "Exercitation officia"
+            }
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -1058,33 +1050,28 @@ async fn search_with_differents_attributes_3() {
     });
 }
 
-// Search with attributes to highlight and matches and crop
-// q: Captain
-// limit: 1
-// attributesToRetrieve: [title,producer,director]
-// attributesToCrop: [overview:10,title:0]
 #[actix_rt::test]
 async fn search_with_differents_attributes_4() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "cherry",
         "limit": 1,
-        "attributesToRetrieve": ["title","producer","director"],
-        "attributesToCrop": ["overview:10","title:0"],
+        "attributesToRetrieve": ["name","age","email","gender"],
+        "attributesToCrop": ["name:0","email:6"],
     });
 
     let expected = json!([
-    {
-      "title": "Captain Marvel",
-      "director": "Ryan Fleck",
-      "producer": "Kevin Feige",
-      "_formatted": {
-        "title": "Captain",
-        "overview": "1990s, Captain Marvel"
-      }
-    }
+        {
+            "age": 27,
+            "name": "Cherry Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "_formatted": {
+                "name": "Cherry",
+                "email": "cherryorr"
+            }
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -1092,35 +1079,30 @@ async fn search_with_differents_attributes_4() {
     });
 }
 
-// Search with attributes to highlight and matches and crop
-// q: Captain
-// limit: 1
-// attributesToRetrieve: [title,producer,director]
-// attributesToCrop: [*,overview:10]
 #[actix_rt::test]
 async fn search_with_differents_attributes_5() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "cherry",
         "limit": 1,
-        "attributesToRetrieve": ["title","producer","director"],
-        "attributesToCrop": ["*","overview:10"],
+        "attributesToRetrieve": ["name","age","email","gender"],
+        "attributesToCrop": ["*","email:6"],
     });
 
     let expected = json!([
-    {
-      "title": "Captain Marvel",
-      "director": "Ryan Fleck",
-      "producer": "Kevin Feige",
-      "_formatted": {
-        "title": "Captain Marvel",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "overview": "1990s, Captain Marvel"
-      }
-    }
+        {
+            "age": 27,
+            "name": "Cherry Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "_formatted": {
+                "name": "Cherry Orr",
+                "email": "cherryorr",
+                "age": 27,
+                "gender": "female"
+            }
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -1128,37 +1110,31 @@ async fn search_with_differents_attributes_5() {
     });
 }
 
-// Search with attributes to highlight and matches and crop
-// q: Captain
-// limit: 1
-// attributesToRetrieve: [title,producer,director]
-// attributesToCrop: [*,overview:10]
-// attributesToHighlight: [title]
 #[actix_rt::test]
 async fn search_with_differents_attributes_6() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "cherry",
         "limit": 1,
-        "attributesToRetrieve": ["title","producer","director"],
-        "attributesToCrop": ["*","overview:10"],
-        "attributesToHighlight": ["title"],
+        "attributesToRetrieve": ["name","age","email","gender"],
+        "attributesToCrop": ["*","email:10"],
+        "attributesToHighlight": ["name"],
     });
 
     let expected = json!([
-    {
-      "title": "Captain Marvel",
-      "director": "Ryan Fleck",
-      "producer": "Kevin Feige",
-      "_formatted": {
-        "title": "<em>Captain</em> Marvel",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "overview": "1990s, Captain Marvel"
-      }
-    }
+        {
+            "age": 27,
+            "name": "Cherry Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "_formatted": {
+                "age": 27,
+                "name": "<em>Cherry</em> Orr",
+                "gender": "female",
+                "email": "cherryorr@"
+            }
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -1166,37 +1142,31 @@ async fn search_with_differents_attributes_6() {
     });
 }
 
-// Search with attributes to highlight and matches and crop
-// q: Captain
-// limit: 1
-// attributesToRetrieve: [title,producer,director]
-// attributesToCrop: [*,overview:10]
-// attributesToHighlight: [*]
 #[actix_rt::test]
 async fn search_with_differents_attributes_7() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "cherry",
         "limit": 1,
-        "attributesToRetrieve": ["title","producer","director"],
-        "attributesToCrop": ["*","overview:10"],
+        "attributesToRetrieve": ["name","age","gender","email"],
+        "attributesToCrop": ["*","email:6"],
         "attributesToHighlight": ["*"],
     });
 
     let expected = json!([
-    {
-      "title": "Captain Marvel",
-      "director": "Ryan Fleck",
-      "producer": "Kevin Feige",
-      "_formatted": {
-        "title": "<em>Captain</em> Marvel",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "overview": "1990s, Captain Marvel"
-      }
-    }
+        {
+            "age": 27,
+            "name": "Cherry Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "_formatted": {
+                "age": 27,
+                "name": "<em>Cherry</em> Orr",
+                "gender": "female",
+                "email": "<em>cherry</em>orr"
+            }
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {
@@ -1204,38 +1174,33 @@ async fn search_with_differents_attributes_7() {
     });
 }
 
-// Search with attributes to highlight and matches and crop
-// q: Captain
-// limit: 1
-// attributesToRetrieve: [title,producer,director]
-// attributesToCrop: [*,overview:10]
-// attributesToHighlight: [*,tagline]
 #[actix_rt::test]
 async fn search_with_differents_attributes_8() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     let query = json!({
-        "q": "captain",
+        "q": "cherry",
         "limit": 1,
-        "attributesToRetrieve": ["title","producer","director"],
-        "attributesToCrop": ["*","overview:10"],
-        "attributesToHighlight": ["*","tagline"],
+        "attributesToRetrieve": ["name","age","email","gender","address"],
+        "attributesToCrop": ["*","email:6"],
+        "attributesToHighlight": ["*","address"],
     });
 
     let expected = json!([
-    {
-      "title": "Captain Marvel",
-      "director": "Ryan Fleck",
-      "producer": "Kevin Feige",
-      "_formatted": {
-        "title": "<em>Captain</em> Marvel",
-        "director": "Ryan Fleck",
-        "producer": "Kevin Feige",
-        "tagline": "Higher. Further. Faster.",
-        "overview": "1990s, Captain Marvel"
-      }
-    }
+        {
+            "age": 27,
+            "name": "Cherry Orr",
+            "gender": "female",
+            "email": "cherryorr@chorizon.com",
+            "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+            "_formatted": {
+                "age": 27,
+                "name": "<em>Cherry</em> Orr",
+                "gender": "female",
+                "email": "<em>cherry</em>orr",
+                "address": "442 Beverly Road, Ventress, New Mexico, 3361"
+            }
+        }
     ]);
 
     test_post_get_search!(server, query, |response, _status_code| {

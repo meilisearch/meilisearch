@@ -1,13 +1,11 @@
 use assert_json_diff::assert_json_eq;
 use serde_json::json;
 use std::convert::Into;
-
 mod common;
 
 #[actix_rt::test]
 async fn write_all_and_delete() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
     // 2 - Send the settings
 
     let body = json!({
@@ -18,39 +16,40 @@ async fn write_all_and_delete() {
             "attribute",
             "wordsPosition",
             "exactness",
-            "desc(release_date)",
-            "desc(rank)",
+            "desc(registered)",
+            "desc(age)",
         ],
-        "distinctAttribute": "movie_id",
+        "distinctAttribute": "id",
         "searchableAttributes": [
             "id",
-            "movie_id",
-            "title",
-            "description",
-            "poster",
-            "release_date",
-            "rank",
+            "name",
+            "color",
+            "gender",
+            "email",
+            "phone",
+            "address",
+            "registered",
+            "about"
         ],
         "displayedAttributes": [
-            "title",
-            "description",
-            "poster",
-            "release_date",
-            "rank",
+            "name",
+            "gender",
+            "email",
+            "registered",
+            "age",
         ],
         "stopWords": [
-            "the",
-            "a",
-            "an",
+            "ad",
+            "in",
+            "ut",
         ],
         "synonyms": {
-            "wolverine": ["xmen", "logan"],
-            "logan": ["wolverine"],
+            "road": ["street", "avenue"],
+            "street": ["avenue"],
         },
-        "attributesForFaceting": ["title"],
+        "attributesForFaceting": ["name"],
         "acceptNewFields": false,
     });
-
 
     server.update_all_settings(body.clone()).await;
 
@@ -79,44 +78,40 @@ async fn write_all_and_delete() {
         ],
         "distinctAttribute": null,
         "searchableAttributes": [
-          "poster_path",
-          "director",
+          "address",
           "id",
-          "production_companies",
-          "producer",
-          "poster",
-          "movie_id",
-          "vote_count",
-          "cast",
-          "release_date",
-          "vote_average",
-          "rank",
-          "genres",
-          "overview",
-          "description",
-          "tagline",
-          "popularity",
-          "title"
+          "longitude",
+          "phone",
+          "age",
+          "gender",
+          "latitude",
+          "email",
+          "about",
+          "registered",
+          "picture",
+          "isActive",
+          "tags",
+          "name",
+          "color",
+          "balance"
         ],
         "displayedAttributes": [
-          "poster_path",
-          "poster",
-          "vote_count",
+          "address",
           "id",
-          "movie_id",
-          "title",
-          "rank",
-          "tagline",
-          "cast",
-          "producer",
-          "production_companies",
-          "description",
-          "director",
-          "genres",
-          "release_date",
-          "overview",
-          "vote_average",
-          "popularity"
+          "longitude",
+          "phone",
+          "age",
+          "gender",
+          "latitude",
+          "email",
+          "about",
+          "registered",
+          "picture",
+          "isActive",
+          "tags",
+          "name",
+          "color",
+          "balance"
         ],
         "stopWords": [],
         "synonyms": {},
@@ -129,8 +124,7 @@ async fn write_all_and_delete() {
 
 #[actix_rt::test]
 async fn write_all_and_update() {
-    let mut server = common::Server::with_uid("movies");
-    server.populate_movies().await;
+    let mut server = common::Server::test_server().await;
 
     // 2 - Send the settings
 
@@ -142,36 +136,38 @@ async fn write_all_and_update() {
             "attribute",
             "wordsPosition",
             "exactness",
-            "desc(release_date)",
-            "desc(rank)",
+            "desc(registered)",
+            "desc(age)",
         ],
-        "distinctAttribute": "movie_id",
+        "distinctAttribute": "id",
         "searchableAttributes": [
-            "uid",
-            "movie_id",
-            "title",
-            "description",
-            "poster",
-            "release_date",
-            "rank",
+            "id",
+            "name",
+            "color",
+            "gender",
+            "email",
+            "phone",
+            "address",
+            "registered",
+            "about"
         ],
         "displayedAttributes": [
-            "title",
-            "description",
-            "poster",
-            "release_date",
-            "rank",
+            "name",
+            "gender",
+            "email",
+            "registered",
+            "age",
         ],
         "stopWords": [
-            "the",
-            "a",
-            "an",
+            "ad",
+            "in",
+            "ut",
         ],
         "synonyms": {
-            "wolverine": ["xmen", "logan"],
-            "logan": ["wolverine"],
+            "road": ["street", "avenue"],
+            "street": ["avenue"],
         },
-        "attributesForFaceting": ["title"],
+        "attributesForFaceting": ["name"],
         "acceptNewFields": false,
     });
 
@@ -193,25 +189,25 @@ async fn write_all_and_update() {
             "attribute",
             "wordsPosition",
             "exactness",
-            "desc(release_date)",
+            "desc(age)",
         ],
         "distinctAttribute": null,
         "searchableAttributes": [
-            "title",
-            "description",
-            "uid",
+            "name",
+            "color",
+            "age",
         ],
         "displayedAttributes": [
-            "title",
-            "description",
-            "release_date",
-            "rank",
-            "poster",
+            "name",
+            "color",
+            "age",
+            "registered",
+            "picture",
         ],
         "stopWords": [],
         "synonyms": {
-            "wolverine": ["xmen", "logan"],
-            "logan": ["wolverine", "xmen"],
+            "road": ["street", "avenue"],
+            "street": ["avenue"],
         },
         "attributesForFaceting": ["title"],
         "acceptNewFields": false,
@@ -231,28 +227,28 @@ async fn write_all_and_update() {
             "attribute",
             "wordsPosition",
             "exactness",
-            "desc(release_date)",
+            "desc(age)",
         ],
         "distinctAttribute": null,
         "searchableAttributes": [
-            "title",
-            "description",
-            "uid",
+            "name",
+            "color",
+            "age",
         ],
         "displayedAttributes": [
-            "title",
-            "description",
-            "release_date",
-            "rank",
-            "poster",
+            "name",
+            "color",
+            "age",
+            "registered",
+            "picture",
         ],
         "stopWords": [],
         "synonyms": {
-            "wolverine": ["xmen", "logan"],
-            "logan": ["wolverine", "xmen"],
+            "road": ["street", "avenue"],
+            "street": ["avenue"],
         },
         "attributesForFaceting": ["title"],
-        "acceptNewFields": false
+        "acceptNewFields": false,
     });
 
     assert_json_eq!(expected, response, ordered: false);
@@ -260,9 +256,9 @@ async fn write_all_and_update() {
 
 #[actix_rt::test]
 async fn test_default_settings() {
-    let mut server = common::Server::with_uid("movies");
+    let mut server = common::Server::with_uid("test");
     let body = json!({
-        "uid": "movies",
+        "uid": "test",
     });
     server.create_index(body).await;
 
@@ -293,9 +289,9 @@ async fn test_default_settings() {
 
 #[actix_rt::test]
 async fn test_default_settings_2() {
-    let mut server = common::Server::with_uid("movies");
+    let mut server = common::Server::with_uid("test");
     let body = json!({
-        "uid": "movies",
+        "uid": "test",
         "primaryKey": "id",
     });
     server.create_index(body).await;
@@ -332,9 +328,9 @@ async fn test_default_settings_2() {
 // Test issue https://github.com/meilisearch/MeiliSearch/issues/516
 #[actix_rt::test]
 async fn write_setting_and_update_partial() {
-    let mut server = common::Server::with_uid("movies");
+    let mut server = common::Server::with_uid("test");
     let body = json!({
-        "uid": "movies",
+        "uid": "test",
     });
     server.create_index(body).await;
 
@@ -342,20 +338,21 @@ async fn write_setting_and_update_partial() {
 
     let body = json!({
         "searchableAttributes": [
-            "uid",
-            "movie_id",
-            "title",
-            "description",
-            "poster",
-            "release_date",
-            "rank",
+            "id",
+            "name",
+            "color",
+            "gender",
+            "email",
+            "phone",
+            "address",
+            "about"
         ],
         "displayedAttributes": [
-            "title",
-            "description",
-            "poster",
-            "release_date",
-            "rank",
+            "name",
+            "gender",
+            "email",
+            "registered",
+            "age",
         ]
     });
 
@@ -371,18 +368,18 @@ async fn write_setting_and_update_partial() {
             "attribute",
             "wordsPosition",
             "exactness",
-            "desc(release_date)",
-            "desc(rank)",
+            "desc(age)",
+            "desc(registered)",
         ],
-        "distinctAttribute": "movie_id",
+        "distinctAttribute": "id",
         "stopWords": [
-            "the",
-            "a",
-            "an",
+            "ad",
+            "in",
+            "ut",
         ],
         "synonyms": {
-            "wolverine": ["xmen", "logan"],
-            "logan": ["wolverine"],
+            "road": ["street", "avenue"],
+            "street": ["avenue"],
         },
         "acceptNewFields": false,
     });
@@ -399,34 +396,35 @@ async fn write_setting_and_update_partial() {
             "attribute",
             "wordsPosition",
             "exactness",
-            "desc(release_date)",
-            "desc(rank)",
+            "desc(age)",
+            "desc(registered)",
         ],
-        "distinctAttribute": "movie_id",
+        "distinctAttribute": "id",
         "searchableAttributes": [
-            "uid",
-            "movie_id",
-            "title",
-            "description",
-            "poster",
-            "release_date",
-            "rank",
+            "id",
+            "name",
+            "color",
+            "gender",
+            "email",
+            "phone",
+            "address",
+            "about"
         ],
         "displayedAttributes": [
-            "title",
-            "description",
-            "poster",
-            "release_date",
-            "rank",
+            "name",
+            "gender",
+            "email",
+            "registered",
+            "age",
         ],
         "stopWords": [
-            "the",
-            "a",
-            "an",
+            "ad",
+            "in",
+            "ut",
         ],
         "synonyms": {
-            "wolverine": ["xmen", "logan"],
-            "logan": ["wolverine"],
+            "road": ["street", "avenue"],
+            "street": ["avenue"],
         },
         "attributesForFaceting": [],
         "acceptNewFields": false,
