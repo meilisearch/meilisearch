@@ -1,6 +1,10 @@
+## v0.13.0 (unreleased)
+
+- placeholder search (#771)
+
 ## v0.12.0
 
-  - Fix long documents not being indexed completely bug (#816) 
+  - Fix long documents not being indexed completely bug (#816)
   - Fix distinct attribute returning id instead of name (#800)
   - error code rename (#805)
 

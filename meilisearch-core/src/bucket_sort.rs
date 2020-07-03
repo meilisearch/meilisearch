@@ -10,16 +10,16 @@ use std::fmt;
 
 use compact_arena::{SmallArena, Idx32, mk_arena};
 use log::debug;
-use meilisearch_types::DocIndex;
 use sdset::{Set, SetBuf, exponential_search, SetOperation, Counter, duo::OpBuilder};
 use slice_group_by::{GroupBy, GroupByMut};
 
-use crate::error::Error;
+use meilisearch_types::DocIndex;
+
 use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
-use crate::{Document, DocumentId, MResult, Index};
+use crate::{store, Document, DocumentId, MResult, Index, RankedMap, MainReader, Error};
 use crate::query_tree::{create_query_tree, traverse_query_tree};
 use crate::query_tree::{Operation, QueryResult, QueryKind, QueryId, PostingsKey};
 use crate::query_tree::Context as QTContext;
@@ -588,8 +588,55 @@ impl Deref for PostingsListView<'_> {
     }
 }
 
+/// sorts documents ids according to user defined ranking rules.
+pub fn placeholder_document_sort(
+    document_ids: &mut [DocumentId],
+    index: &store::Index,
+    reader: &MainReader,
+    ranked_map: &RankedMap
+) -> MResult<()> {
+    use crate::settings::RankingRule;
+    use std::cmp::Ordering;
+
+    enum SortOrder {
+        Asc,
+        Desc,
+    }
+
+    if let Some(ranking_rules) = index.main.ranking_rules(reader)? {
+        let schema = index.main.schema(reader)?
+            .ok_or(Error::SchemaMissing)?;
+
+        // Select custom rules from ranking rules, and map them to custom rules
+        // containing a field_id
+        let ranking_rules = ranking_rules.iter().filter_map(|r|
+            match r {
+                RankingRule::Asc(name) => schema.id(name).map(|f| (f, SortOrder::Asc)),
+                RankingRule::Desc(name) => schema.id(name).map(|f| (f, SortOrder::Desc)),
+                _ => None,
+            }).collect::<Vec<_>>();
+
+        document_ids.sort_unstable_by(|a, b| {
+            for (field_id, order) in &ranking_rules {
+                let a_value = ranked_map.get(*a, *field_id);
+                let b_value = ranked_map.get(*b, *field_id);
+                let (a, b) = match order {
+                    SortOrder::Asc => (a_value, b_value),
+                    SortOrder::Desc => (b_value, a_value),
+                };
+                match a.cmp(&b) {
+                    Ordering::Equal => continue,
+                    ordering => return ordering,
+                }
+            }
+            Ordering::Equal
+        });
+    }
+    Ok(())
+}
+
 /// For each entry in facet_docids, calculates the number of documents in the intersection with candidate_docids.
-fn facet_count(
+pub fn facet_count(
     facet_docids: HashMap<String, HashMap<String, Cow<Set<DocumentId>>>>,
     candidate_docids: &Set<DocumentId>,
 ) -> HashMap<String, HashMap<String, usize>> {

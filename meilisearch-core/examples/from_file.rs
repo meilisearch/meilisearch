@@ -368,7 +368,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     });
                 }
 
-                let result = builder.query(ref_reader, &query, 0..command.number_results)?;
+                let result = builder.query(ref_reader, Some(&query), 0..command.number_results)?;
 
                 let mut retrieve_duration = Duration::default();
 

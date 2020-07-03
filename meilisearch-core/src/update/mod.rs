@@ -25,8 +25,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use meilisearch_error::ErrorCode;
+use meilisearch_types::DocumentId;
 
-use crate::{store, MResult};
+use crate::{store, MResult, RankedMap};
 use crate::database::{MainT, UpdateT};
 use crate::settings::SettingsUpdate;
 
@@ -370,4 +371,14 @@ where A: AsRef<[u8]>,
     }
 
     Ok(())
+}
+
+fn cache_document_ids_sorted(
+    writer: &mut heed::RwTxn<MainT>,
+    ranked_map: &RankedMap,
+    index: &store::Index,
+    document_ids: &mut [DocumentId],
+) -> MResult<()> {
+    crate::bucket_sort::placeholder_document_sort(document_ids, index, writer, ranked_map)?;
+    index.main.put_sorted_document_ids_cache(writer, &document_ids)
 }

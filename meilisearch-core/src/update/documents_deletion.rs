@@ -8,7 +8,7 @@ use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::store;
 use crate::update::{next_update_id, compute_short_prefixes, Update};
-use crate::{DocumentId, Error, MResult, RankedMap};
+use crate::{DocumentId, Error, MResult, RankedMap, MainWriter, Index};
 
 pub struct DocumentsDeletion {
     updates_store: store::Updates,
@@ -153,8 +153,8 @@ pub fn apply_documents_deletion(
     }
 
     let deleted_documents_len = deleted_documents.len() as u64;
-    for id in deleted_documents {
-        index.docs_words.del_doc_words(writer, id)?;
+    for id in &deleted_documents {
+        index.docs_words.del_doc_words(writer, *id)?;
     }
 
     let removed_words = fst::Set::from_iter(removed_words).unwrap();
@@ -180,5 +180,28 @@ pub fn apply_documents_deletion(
 
     compute_short_prefixes(writer, &words, index)?;
 
+    // update is finished; update sorted document id cache with new state
+    document_cache_remove_deleted(writer, index, &ranked_map, &deleted_documents)?;
+
+    Ok(())
+}
+
+/// rebuilds the document id cache by either removing deleted documents from the existing cache,
+/// and generating a new one from docs in store
+fn document_cache_remove_deleted(writer: &mut MainWriter, index: &Index, ranked_map: &RankedMap, documents_to_delete: &HashSet<DocumentId>) -> MResult<()> {
+    let new_cache = match index.main.sorted_document_ids_cache(writer)? {
+        // only keep documents that are not in the list of deleted documents. Order is preserved,
+        // no need to resort
+        Some(old_cache) => {
+            old_cache.iter().filter(|docid| !documents_to_delete.contains(docid)).cloned().collect::<Vec<_>>()
+        }
+        // couldn't find cached documents, try building a new cache from documents in store
+        None => {
+            let mut document_ids = index.main.internal_docids(writer)?.to_vec();
+            super::cache_document_ids_sorted(writer, ranked_map, index, &mut document_ids)?;
+            document_ids
+        }
+    };
+    index.main.put_sorted_document_ids_cache(writer, &new_cache)?;
     Ok(())
 }

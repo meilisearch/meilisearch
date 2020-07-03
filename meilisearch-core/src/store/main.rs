@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str};
+use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str, CowSlice};
 use meilisearch_schema::{FieldId, Schema};
 use meilisearch_types::DocumentId;
 use sdset::Set;
@@ -25,6 +25,7 @@ const NUMBER_OF_DOCUMENTS_KEY: &str = "number-of-documents";
 const RANKED_MAP_KEY: &str = "ranked-map";
 const RANKING_RULES_KEY: &str = "ranking-rules";
 const SCHEMA_KEY: &str = "schema";
+const SORTED_DOCUMENT_IDS_CACHE_KEY: &str = "sorted-document-ids-cache";
 const STOP_WORDS_KEY: &str = "stop-words";
 const SYNONYMS_KEY: &str = "synonyms";
 const UPDATED_AT_KEY: &str = "updated-at";
@@ -163,6 +164,14 @@ impl Main {
 
     pub fn put_words_fst<A: AsRef<[u8]>>(self, writer: &mut heed::RwTxn<MainT>, fst: &fst::Set<A>) -> MResult<()> {
         Ok(self.main.put::<_, Str, ByteSlice>(writer, WORDS_KEY, fst.as_fst().as_bytes())?)
+    }
+
+    pub fn put_sorted_document_ids_cache(self, writer: &mut heed::RwTxn<MainT>, documents_ids: &[DocumentId]) -> MResult<()> {
+        Ok(self.main.put::<_, Str, CowSlice<DocumentId>>(writer, SORTED_DOCUMENT_IDS_CACHE_KEY, documents_ids)?)
+    }
+
+    pub fn sorted_document_ids_cache(self, reader: &heed::RoTxn<MainT>) -> MResult<Option<Cow<[DocumentId]>>> {
+        Ok(self.main.get::<_, Str, CowSlice<DocumentId>>(reader, SORTED_DOCUMENT_IDS_CACHE_KEY)?)
     }
 
     pub fn put_schema(self, writer: &mut heed::RwTxn<MainT>, schema: &Schema) -> MResult<()> {

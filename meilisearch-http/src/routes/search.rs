@@ -24,7 +24,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchQuery {
-    q: String,
+    q: Option<String>,
     offset: Option<usize>,
     limit: Option<usize>,
     attributes_to_retrieve: Option<String>,
@@ -50,7 +50,7 @@ async fn search_with_url_query(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchQueryPost {
-    q: String,
+    q: Option<String>,
     offset: Option<usize>,
     limit: Option<usize>,
     attributes_to_retrieve: Option<Vec<String>>,
@@ -177,7 +177,6 @@ impl SearchQuery {
                     None => (),
                 }
             }
-
             search_builder.attributes_to_crop(final_attributes);
         }
 
