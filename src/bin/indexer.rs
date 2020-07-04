@@ -174,14 +174,14 @@ fn index_csv<R: io::Read>(
     index.put_fst(wtxn, &new_words_fst)?;
     index.put_headers(wtxn, &headers)?;
 
+    let before = Instant::now();
+    compute_words_attributes_docids(wtxn, index)?;
+    eprintln!("Computing the attributes documents ids took {:.02?}.", before.elapsed());
+
     Ok(())
 }
 
 fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> anyhow::Result<()> {
-    eprintln!("Computing the attributes documents ids...");
-
-    let before = Instant::now();
-
     let fst = match index.fst(&wtxn)? {
         Some(fst) => fst.map_data(|s| s.to_vec())?,
         None => return Ok(()),
@@ -215,8 +215,6 @@ fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> any
             index.word_attribute_docids.put(wtxn, &key, &docids)?;
         }
     }
-
-    eprintln!("Computing the attributes documents ids took {:.02?}.", before.elapsed());
 
     Ok(())
 }
@@ -373,6 +371,32 @@ fn merge_databases(
     eprintln!("Merging the word_position_docids database took {:.02?}.", before.elapsed());
     drop(dest);
 
+    // merge the word attribute documents ids
+    let sources: Result<Vec<_>, _> = others.iter().zip(&rtxns).map(|((.., i), t)| i.word_attribute_docids.iter(t)).collect();
+    let sources = sources?;
+    let mut dest = index.word_attribute_docids.iter_mut(wtxn)?;
+
+    let before = Instant::now();
+    let mut current = None as Option<(&[u8], RoaringBitmap)>;
+    for result in MergeIter::new(sources) {
+        let (k, v) = result?;
+        match current.as_mut() {
+            Some((ck, cv)) if ck == &k => cv.union_with(&v),
+            Some((ck, cv)) => {
+                dest.append(&ck, &cv)?;
+                current = Some((k, v));
+            },
+            None => current = Some((k, v)),
+        };
+    }
+
+    if let Some((ck, cv)) = current.take() {
+        dest.append(&ck, &cv)?;
+    }
+
+    eprintln!("Merging the word_attribute_docids database took {:.02?}.", before.elapsed());
+    drop(dest);
+
     // merge the documents
     let sources: Result<Vec<_>, _> = others.iter().zip(&rtxns).map(|((.., i), t)| {
         i.documents.as_polymorph().iter::<_, ByteSlice, ByteSlice>(t)
@@ -461,7 +485,6 @@ fn main() -> anyhow::Result<()> {
     let mut wtxn = env.write_txn()?;
     let parts = result?;
     merge_databases(parts, &mut wtxn, &index)?;
-    compute_words_attributes_docids(&mut wtxn, &index)?;
     let count = index.documents.len(&wtxn)?;
 
     wtxn.commit()?;
