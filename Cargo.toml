@@ -13,7 +13,8 @@ cow-utils = "0.1.2"
 csv = "1.1.3"
 fst = "0.4.3"
 fxhash = "0.2.1"
-heed = { version = "0.8.0", default-features = false, features = ["lmdb"] }
+# heed = { version = "0.8.0", default-features = false, features = ["lmdb"] }
+heed = { git = "https://github.com/Kerollmops/heed", branch = "iter-append", default-features = false, features = ["lmdb"] }
 jemallocator = "0.3.2"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
 linked-hash-map = "0.5.3"

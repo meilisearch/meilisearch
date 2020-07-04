@@ -543,8 +543,7 @@ dependencies = [
 [[package]]
 name = "heed"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd7882b766b4be1b90d8ce5ce4c7aca2539b43176a708dbc8e79576dbbdbba93"
+source = "git+https://github.com/Kerollmops/heed?branch=iter-append#e2d49e06d14771c955847fce8898d8fb1cc16c0b"
 dependencies = [
  "byteorder",
  "heed-traits",
@@ -560,14 +559,12 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b328f6260a7e51bdb0ca6b68e6ea27ee3d11fba5dee930896ee7ff6ad5fc072c"
+source = "git+https://github.com/Kerollmops/heed?branch=iter-append#e2d49e06d14771c955847fce8898d8fb1cc16c0b"
 
 [[package]]
 name = "heed-types"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e100387815256b00dbb4f48db990f7fa03e9b88b4a89c2a1661b7d9d77b77c46"
+source = "git+https://github.com/Kerollmops/heed?branch=iter-append#e2d49e06d14771c955847fce8898d8fb1cc16c0b"
 dependencies = [
  "bincode",
  "heed-traits",
