@@ -41,6 +41,11 @@ struct Opt {
     #[structopt(long = "db", parse(from_os_str))]
     database: PathBuf,
 
+    /// The number of words that can fit in cache, the bigger this number is the less
+    /// the indexer will touch the databases on disk but the more it uses memory.
+    #[structopt(long, default_value = "100000")]
+    arc_cache_size: usize,
+
     /// CSV file to index.
     csv_file: PathBuf,
 }
@@ -82,13 +87,14 @@ fn index_csv<R: io::Read>(
     wtxn: &mut heed::RwTxn,
     mut rdr: csv::Reader<R>,
     index: &Index,
+    arc_cache_size: usize,
     num_threads: usize,
     thread_index: usize,
 ) -> anyhow::Result<()>
 {
     eprintln!("Indexing into LMDB...");
 
-    let mut words_cache = ArcCache::<_, (RoaringBitmap, FastMap4<_, RoaringBitmap>)>::new(100_000);
+    let mut words_cache = ArcCache::<_, (RoaringBitmap, FastMap4<_, RoaringBitmap>)>::new(arc_cache_size);
 
     // Write the headers into a Vec of bytes.
     let headers = rdr.headers()?;
@@ -474,7 +480,7 @@ fn main() -> anyhow::Result<()> {
 
             let mut wtxn = env.write_txn()?;
             let rdr = csv::Reader::from_path(&opt.csv_file)?;
-            index_csv(&mut wtxn, rdr, &index, num_threads, i)?;
+            index_csv(&mut wtxn, rdr, &index, opt.arc_cache_size, num_threads, i)?;
 
             wtxn.commit()?;
 
