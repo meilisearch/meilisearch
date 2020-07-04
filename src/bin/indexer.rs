@@ -180,6 +180,8 @@ fn index_csv<R: io::Read>(
 fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> anyhow::Result<()> {
     eprintln!("Computing the attributes documents ids...");
 
+    let before = Instant::now();
+
     let fst = match index.fst(&wtxn)? {
         Some(fst) => fst.map_data(|s| s.to_vec())?,
         None => return Ok(()),
@@ -213,6 +215,8 @@ fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> any
             index.word_attribute_docids.put(wtxn, &key, &docids)?;
         }
     }
+
+    eprintln!("Computing the attributes documents ids took {:.02?}.", before.elapsed());
 
     Ok(())
 }
