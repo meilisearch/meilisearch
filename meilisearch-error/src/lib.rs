@@ -97,7 +97,7 @@ impl Code {
             // invalid state error
             InvalidState => ErrCode::internal("invalid_state", StatusCode::INTERNAL_SERVER_ERROR),
             // thrown when no primary key has been set
-            MissingPrimaryKey => ErrCode::internal("missing_primary_key", StatusCode::INTERNAL_SERVER_ERROR),
+            MissingPrimaryKey => ErrCode::invalid("missing_primary_key", StatusCode::BAD_REQUEST),
             // error thrown when trying to set an already existing primary key
             PrimaryKeyAlreadyPresent => ErrCode::invalid("primary_key_already_present", StatusCode::BAD_REQUEST),
 

@@ -156,7 +156,7 @@ async fn update_multiple_documents(
     let mut schema = index
         .main
         .schema(&reader)?
-        .ok_or(Error::internal("Impossible to retrieve the schema"))?;
+        .ok_or(meilisearch_core::Error::SchemaMissing)?;
 
     if schema.primary_key().is_none() {
         let id = match &params.primary_key {
@@ -164,7 +164,7 @@ async fn update_multiple_documents(
             None => body
                 .first()
                 .and_then(find_primary_key)
-                .ok_or(Error::bad_request("Could not infer a primary key"))?,
+                .ok_or(meilisearch_core::Error::MissingPrimaryKey)?
         };
 
         schema

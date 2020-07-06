@@ -658,9 +658,8 @@ async fn check_add_documents_without_primary_key() {
 
     let (response, status_code) = server.add_or_replace_multiple_documents_sync(body).await;
 
-    let message = response["message"].as_str().unwrap();
     assert_eq!(response.as_object().unwrap().len(), 4);
-    assert_eq!(message, "Could not infer a primary key");
+    assert_eq!(response["errorCode"], "missing_primary_key");
     assert_eq!(status_code, 400);
 }
 

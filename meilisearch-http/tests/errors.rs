@@ -92,7 +92,7 @@ async fn max_field_limit_exceeded_error() {
     }
     let docs = json!([doc]);
     assert_error_async!(
-        "max_field_limit_exceeded",
+        "max_fields_limit_exceeded",
         "invalid_request_error",
         server,
         server.add_or_replace_multiple_documents_sync(docs).await);
@@ -179,4 +179,18 @@ async fn payload_too_large_error() {
         "invalid_request_error",
         StatusCode::PAYLOAD_TOO_LARGE,
         server.create_index(json!(bigvec)).await);
+}
+
+#[actix_rt::test]
+async fn missing_primary_key_error() {
+    let mut server = common::Server::with_uid("test");
+    server.create_index(json!({"uid": "test"})).await;
+    let document = json!([{
+        "content": "test"
+    }]);
+    assert_error!(
+        "missing_primary_key",
+        "invalid_request_error",
+        StatusCode::BAD_REQUEST,
+        server.add_or_replace_multiple_documents_sync(document).await);
 }
