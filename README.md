@@ -23,19 +23,10 @@ All of that on a 39$/month machine with 4cores.
 
 ### Index your documents
 
-You first need to split your csv yourself, the engine is currently not able to split it itself.
-The bigger the split size is the faster the engine will index your documents but the higher the RAM usage will be too.
-
-Here we use [the awesome xsv tool](https://github.com/BurntSushi/xsv) to split our big dataset.
+You can feed the engine with your CSV data:
 
 ```bash
-cat my-data.csv | xsv split -s 2000000 my-data-split/
-```
-
-Once your data is ready you can feed the engine with it, it will spawn one thread by CSV part up to one by number of core.
-
-```bash
-./target/release/indexer --db my-data.mmdb ../my-data-split/*
+./target/release/indexer --db my-data.mmdb ../my-data.csv
 ```
 
 ## Querying
