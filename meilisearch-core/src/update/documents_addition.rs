@@ -171,15 +171,23 @@ pub fn apply_addition<'a, 'b>(
     let mut new_internal_docids = Vec::with_capacity(new_documents.len());
 
     for mut document in new_documents {
+        let external_docids_get = |docid: &str| {
+            match (external_docids.get(docid), new_external_docids.get(docid)) {
+                (_, Some(&id))
+                | (Some(id), _) => Some(id as u32),
+                (None, None) => None,
+            }
+        };
+
         let (internal_docid, external_docid) =
             extract_document_id(
                 &primary_key,
                 &document,
-                &external_docids,
+                &external_docids_get,
                 &mut available_ids,
             )?;
 
-        new_external_docids.insert(external_docid, internal_docid.0);
+        new_external_docids.insert(external_docid, internal_docid.0 as u64);
         new_internal_docids.push(internal_docid);
 
         if partial {
