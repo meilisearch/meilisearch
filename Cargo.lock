@@ -1483,7 +1483,7 @@ dependencies = [
 [[package]]
 name = "roaring"
 version = "0.6.0"
-source = "git+https://github.com/Kerollmops/roaring-rs.git?branch=deserialize-from-slice#24420bb9f980749476cec860ea8dd3c1683c0cd1"
+source = "git+https://github.com/Kerollmops/roaring-rs.git?branch=mem-usage#a71692552902019751ef5b0e57336f030045a76a"
 dependencies = [
  "byteorder",
 ]
