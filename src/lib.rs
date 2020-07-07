@@ -34,6 +34,7 @@ pub type SmallVec16<T> = smallvec::SmallVec<[T; 16]>;
 pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
 pub type DocumentId = u32;
 pub type AttributeId = u32;
+pub type Position = u32;
 
 #[derive(Clone)]
 pub struct Index {
