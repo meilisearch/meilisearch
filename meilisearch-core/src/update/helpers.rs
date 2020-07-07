@@ -6,7 +6,7 @@ use meilisearch_types::DocumentId;
 use ordered_float::OrderedFloat;
 use serde_json::Value;
 
-use crate::{Number, FstMapCow};
+use crate::Number;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::SerializerError;
 use crate::store::DiscoverIds;
