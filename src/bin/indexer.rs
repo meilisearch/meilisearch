@@ -1,26 +1,25 @@
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, BTreeSet};
+use std::collections::{HashMap, BTreeSet, BTreeMap};
 use std::convert::{TryFrom, TryInto};
-use std::hash::{Hash, BuildHasher};
-use std::io;
-use std::iter::FromIterator;
-use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::path::PathBuf;
 use std::time::Instant;
 
-use anyhow::{ensure, Context};
-use fst::{Streamer, set::OpBuilder};
+use anyhow::Context;
+use cow_utils::CowUtils;
+use fst::{Streamer, IntoStreamer};
+use heed::EnvOpenOptions;
 use heed::types::*;
-use heed::{Env, EnvOpenOptions};
-use rayon::prelude::*;
+use oxidized_mtbl::{Reader, ReaderOptions, Writer, Merger, MergerOptions};
 use roaring::RoaringBitmap;
 use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
-use tempfile::TempDir;
 
-use mega_mini_indexer::cache::ArcCache;
-use mega_mini_indexer::{BEU32, Index, DocumentId, FastMap4};
+use mega_mini_indexer::{FastMap4, SmallVec32, Index, DocumentId, AttributeId};
 
-const ONE_MILLION: u32 = 1_000_000;
+const LMDB_MAX_KEY_LENGTH: usize = 512;
+const ONE_MILLION: usize = 1_000_000;
+
 const MAX_POSITION: usize = 1000;
 const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 
@@ -41,64 +40,173 @@ struct Opt {
     #[structopt(long = "db", parse(from_os_str))]
     database: PathBuf,
 
-    /// The number of words that can fit in cache, the bigger this number is the less
-    /// the indexer will touch the databases on disk but the more it uses memory.
-    #[structopt(long, default_value = "100000")]
-    arc_cache_size: usize,
-
     /// Number of parallel jobs, defaults to # of CPUs.
     #[structopt(short, long)]
     jobs: Option<usize>,
 
-    /// CSV file to index.
-    csv_file: PathBuf,
+    /// CSV file to index, if unspecified the CSV is read from standard input.
+    csv_file: Option<PathBuf>,
 }
 
-fn put_evicted_into_heed<I>(wtxn: &mut heed::RwTxn, index: &Index, iter: I) -> anyhow::Result<()>
-where
-    I: IntoIterator<Item = (String, (RoaringBitmap, FastMap4<u32, RoaringBitmap>))>
-{
-    for (word, (positions, positions_docids)) in iter {
-        index.word_positions.put(wtxn, &word, &positions)?;
+struct Indexed {
+    fst: fst::Set<Vec<u8>>,
+    postings_attrs: FastMap4<SmallVec32<u8>, RoaringBitmap>,
+    postings_ids: FastMap4<SmallVec32<u8>, FastMap4<AttributeId, RoaringBitmap>>,
+    headers: Vec<u8>,
+    documents: Vec<(DocumentId, Vec<u8>)>,
+}
 
-        for (position, docids) in positions_docids {
-            let mut key = word.as_bytes().to_vec();
-            key.extend_from_slice(&position.to_be_bytes());
-            index.word_position_docids.put(wtxn, &key, &docids)?;
+#[derive(Default)]
+struct MtblKvStore(Option<File>);
+
+impl MtblKvStore {
+    fn from_indexed(mut indexed: Indexed) -> anyhow::Result<MtblKvStore> {
+        eprintln!("Creating an MTBL store from an Indexed...");
+
+        let outfile = tempfile::tempfile()?;
+        let mut out = Writer::new(outfile, None)?;
+
+        out.add(b"\0headers", indexed.headers)?;
+        out.add(b"\0words-fst", indexed.fst.as_fst().as_bytes())?;
+
+        // postings ids keys are all prefixed by a '1'
+        let mut key = vec![0];
+        let mut buffer = Vec::new();
+
+        // We must write the postings attrs
+        key[0] = 1;
+        // We must write the postings ids in order for mtbl therefore
+        // we iterate over the fst to read the words in order
+        let mut stream = indexed.fst.stream();
+        while let Some(word) = stream.next() {
+            if let Some(attrs) = indexed.postings_attrs.remove(word) {
+                key.truncate(1);
+                key.extend_from_slice(word);
+                // We serialize the attrs ids into a buffer
+                buffer.clear();
+                attrs.serialize_into(&mut buffer)?;
+                // that we write under the generated key into MTBL
+                out.add(&key, &buffer).unwrap();
+            }
+        }
+
+        // We must write the postings ids
+        key[0] = 3;
+        // We must write the postings ids in order for mtbl therefore
+        // we iterate over the fst to read the words in order
+        let mut stream = indexed.fst.stream();
+        while let Some(word) = stream.next() {
+            key.truncate(1);
+            key.extend_from_slice(word);
+            if let Some(attrs) = indexed.postings_ids.remove(word) {
+                let attrs: BTreeMap<_, _> = attrs.into_iter().collect();
+                // We iterate over all the attributes containing the documents ids
+                for (attr, ids) in attrs {
+                    // we postfix the word by the attribute id
+                    key.extend_from_slice(&attr.to_be_bytes());
+                    // We serialize the document ids into a buffer
+                    buffer.clear();
+                    ids.serialize_into(&mut buffer)?;
+                    // that we write under the generated key into MTBL
+                    out.add(&key, &buffer).unwrap();
+                    // And cleanup the attribute id afterward (u32 = 4 * u8)
+                    key.truncate(key.len() - 4);
+                }
+            }
+        }
+
+        // postings ids keys are all prefixed by a '4'
+        key[0] = 5;
+        indexed.documents.sort_unstable();
+        for (id, content) in indexed.documents {
+            key.truncate(1);
+            key.extend_from_slice(&id.to_be_bytes());
+            out.add(&key, content).unwrap();
+        }
+
+        let out = out.into_inner()?;
+
+        eprintln!("MTBL store created!");
+        Ok(MtblKvStore(Some(out)))
+    }
+
+    fn merge(key: &[u8], values: &[Vec<u8>]) -> Option<Vec<u8>> {
+        if key == b"\0words-fst" {
+            let fsts: Vec<_> = values.iter().map(|v| fst::Set::new(v).unwrap()).collect();
+
+            // Union of the two FSTs
+            let mut op = fst::set::OpBuilder::new();
+            fsts.iter().for_each(|fst| op.push(fst.into_stream()));
+            let op = op.r#union();
+
+            let mut build = fst::SetBuilder::memory();
+            build.extend_stream(op.into_stream()).unwrap();
+            Some(build.into_inner().unwrap())
+        }
+        else if key == b"\0headers" {
+            assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
+            Some(values[0].to_vec())
+        }
+        // We either merge postings attrs, prefix postings or postings ids.
+        else if key[0] == 1 || key[0] == 2 || key[0] == 3 || key[0] == 4 {
+            let mut first = RoaringBitmap::deserialize_from(values[0].as_slice()).unwrap();
+
+            for value in &values[1..] {
+                let bitmap = RoaringBitmap::deserialize_from(value.as_slice()).unwrap();
+                first.union_with(&bitmap);
+            }
+
+            let mut vec = Vec::new();
+            first.serialize_into(&mut vec).unwrap();
+            Some(vec)
+        }
+        else if key[0] == 5 {
+            assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
+            Some(values[0].to_vec())
+        }
+        else {
+            panic!("wut? {:?}", key)
         }
     }
-    Ok(())
-}
 
-fn merge_hashmaps<K, V, S, F>(mut a: HashMap<K, V, S>, mut b: HashMap<K, V, S>, mut merge: F) -> HashMap<K, V, S>
-where
-    K: Hash + Eq,
-    S: BuildHasher,
-    F: FnMut(&K, &mut V, V)
-{
-    for (k, v) in a.iter_mut() {
-        if let Some(vb) = b.remove(k) {
-            (merge)(k, v, vb)
+    fn from_many<F>(stores: Vec<MtblKvStore>, mut f: F) -> anyhow::Result<()>
+    where F: FnMut(&[u8], &[u8]) -> anyhow::Result<()>
+    {
+        eprintln!("Merging {} MTBL stores...", stores.len());
+
+        let mmaps: Vec<_> = stores.iter().flat_map(|m| {
+            m.0.as_ref().map(|f| unsafe { memmap::Mmap::map(f).unwrap() })
+        }).collect();
+
+        let sources = mmaps.iter().map(|mmap| {
+            Reader::new(&mmap, ReaderOptions::default()).unwrap()
+        }).collect();
+
+        let opt = MergerOptions { merge: MtblKvStore::merge };
+        let mut merger = Merger::new(sources, opt);
+
+        let mut iter = merger.iter();
+        while let Some((k, v)) = iter.next() {
+            (f)(k, v)?;
         }
+
+        eprintln!("MTBL stores merged!");
+        Ok(())
     }
-
-    a.extend(b);
-
-    a
 }
 
-fn index_csv<R: io::Read>(
-    wtxn: &mut heed::RwTxn,
-    mut rdr: csv::Reader<R>,
-    index: &Index,
-    arc_cache_size: usize,
-    num_threads: usize,
+fn index_csv(
+    mut rdr: csv::Reader<File>,
     thread_index: usize,
-) -> anyhow::Result<()>
+    num_threads: usize,
+) -> anyhow::Result<Vec<MtblKvStore>>
 {
-    eprintln!("Indexing into LMDB...");
+    eprintln!("{:?}: Indexing into an Indexed...", thread_index);
 
-    let mut words_cache = ArcCache::<_, (RoaringBitmap, FastMap4<_, RoaringBitmap>)>::new(arc_cache_size);
+    let mut document = csv::StringRecord::new();
+    let mut postings_attrs = FastMap4::default();
+    let mut postings_ids = FastMap4::default();
+    let mut documents = Vec::new();
 
     // Write the headers into a Vec of bytes.
     let headers = rdr.headers()?;
@@ -106,92 +214,102 @@ fn index_csv<R: io::Read>(
     writer.write_byte_record(headers.as_byte_record())?;
     let headers = writer.into_inner()?;
 
-    let mut document_id = 0usize;
-    let mut before = Instant::now();
-    let mut document = csv::StringRecord::new();
-
+    let mut document_id: usize = 0;
     while rdr.read_record(&mut document)? {
         document_id = document_id + 1;
-        let document_id = DocumentId::try_from(document_id).context("Generated id is too big")?;
 
-        if thread_index == 0 && document_id % ONE_MILLION == 0 {
-            eprintln!("Document {}m just processed ({:.02?} elapsed).", document_id / ONE_MILLION, before.elapsed());
-            before = Instant::now();
+        // We skip documents that must not be indexed by this thread
+        if document_id % num_threads != thread_index { continue }
+
+        let document_id = DocumentId::try_from(document_id).context("generated id is too big")?;
+
+        if document_id % (ONE_MILLION as u32) == 0 {
+            eprintln!("We have seen {}m documents so far.", document_id / ONE_MILLION as u32);
         }
 
         for (attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
             for (pos, word) in simple_alphanumeric_tokens(&content).enumerate().take(MAX_POSITION) {
-                if !word.is_empty() && word.len() < 500 { // LMDB limits
-                    let word = word.to_lowercase(); // TODO cow_to_lowercase
-                    let position = (attr * 1000 + pos) as u32;
+                if !word.is_empty() && word.len() < LMDB_MAX_KEY_LENGTH {
+                    let word = word.cow_to_lowercase();
+                    let position = (attr * MAX_POSITION + pos) as u32;
 
-                    // If this indexing process is not concerned by this word, then ignore it.
-                    if fxhash::hash32(&word) as usize % num_threads != thread_index { continue; }
+                    // We save the positions where this word has been seen.
+                    postings_attrs.entry(SmallVec32::from(word.as_bytes()))
+                        .or_insert_with(RoaringBitmap::new).insert(position);
 
-                    match words_cache.get_mut(&word) {
-                        (Some(entry), evicted) => {
-                            let (ids, positions) = entry;
-                            ids.insert(position);
-                            positions.entry(position).or_default().insert(document_id);
-                            put_evicted_into_heed(wtxn, index, evicted)?;
-                        },
-                        (None, _evicted) => {
-                            let mut key = word.as_bytes().to_vec();
-                            key.extend_from_slice(&position.to_be_bytes());
-
-                            let mut words_positions = index.word_positions.get(wtxn, &word)?.unwrap_or_default();
-                            let mut words_position_docids = index.word_position_docids.get(wtxn, &key)?.unwrap_or_default();
-
-                            words_positions.insert(position);
-                            words_position_docids.insert(document_id);
-
-                            let mut map = FastMap4::default();
-                            map.insert(position, words_position_docids);
-                            let value = (words_positions, map);
-
-                            let evicted = words_cache.insert(word.clone(), value, |(pa, pda), (pb, pdb)| {
-                                (pa | pb, merge_hashmaps(pda, pdb, |_, a, b| RoaringBitmap::union_with(a, &b)))
-                            });
-
-                            put_evicted_into_heed(wtxn, index, evicted)?;
-                        }
-                    }
+                    // We save the documents ids under the position and word we have seen it.
+                    postings_ids.entry(SmallVec32::from(word.as_bytes()))
+                        .or_insert_with(FastMap4::default).entry(position) // positions
+                        .or_insert_with(RoaringBitmap::new).insert(document_id); // document ids
                 }
             }
         }
 
-        if document_id as usize % num_threads == thread_index {
-            // We write the document in the database.
-            let mut writer = csv::WriterBuilder::new().has_headers(false).from_writer(Vec::new());
-            writer.write_byte_record(document.as_byte_record())?;
-            let document = writer.into_inner()?;
-            index.documents.put(wtxn, &BEU32::new(document_id), &document)?;
-        }
+        // We write the document in the database.
+        let mut writer = csv::WriterBuilder::new().has_headers(false).from_writer(Vec::new());
+        writer.write_byte_record(document.as_byte_record())?;
+        let document = writer.into_inner()?;
+        documents.push((document_id, document));
     }
-
-    put_evicted_into_heed(wtxn, index, words_cache)?;
 
     // We store the words from the postings.
     let mut new_words = BTreeSet::default();
-    let iter = index.word_positions.as_polymorph().iter::<_, Str, DecodeIgnore>(wtxn)?;
-    for result in iter {
-        let (word, ()) = result?;
-        new_words.insert(word);
+    for (word, _new_ids) in &postings_ids {
+        new_words.insert(word.clone());
     }
 
-    let new_words_fst = fst::Set::from_iter(new_words)?;
+    let new_words_fst = fst::Set::from_iter(new_words.iter().map(SmallVec32::as_ref))?;
 
-    index.put_fst(wtxn, &new_words_fst)?;
-    index.put_headers(wtxn, &headers)?;
+    let indexed = Indexed { fst: new_words_fst, headers, postings_attrs, postings_ids, documents };
+    eprintln!("{:?}: Indexed created!", thread_index);
 
-    let before = Instant::now();
-    compute_words_attributes_docids(wtxn, index)?;
-    eprintln!("Computing the attributes documents ids took {:.02?}.", before.elapsed());
+    MtblKvStore::from_indexed(indexed).map(|x| vec![x])
+}
+
+// TODO merge with the previous values
+fn writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) -> anyhow::Result<()> {
+    if key == b"\0words-fst" {
+        // Write the words fst
+        index.main.put::<_, Str, ByteSlice>(wtxn, "words-fst", val)?;
+    }
+    else if key == b"\0headers" {
+        // Write the headers
+        index.main.put::<_, Str, ByteSlice>(wtxn, "headers", val)?;
+    }
+    else if key.starts_with(&[1]) {
+        // Write the postings lists
+        index.word_positions.as_polymorph()
+            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
+    }
+    else if key.starts_with(&[2]) {
+        // Write the prefix postings lists
+        index.prefix_word_positions.as_polymorph()
+            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
+    }
+    else if key.starts_with(&[3]) {
+        // Write the postings lists
+        index.word_position_docids.as_polymorph()
+            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
+    }
+    else if key.starts_with(&[4]) {
+        // Write the prefix postings lists
+        index.prefix_word_position_docids.as_polymorph()
+            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
+    }
+    else if key.starts_with(&[5]) {
+        // Write the documents
+        index.documents.as_polymorph()
+            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
+    }
 
     Ok(())
 }
 
 fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> anyhow::Result<()> {
+    let before = Instant::now();
+
+    eprintln!("Computing the attributes documents ids...");
+
     let fst = match index.fst(&wtxn)? {
         Some(fst) => fst.map_data(|s| s.to_vec())?,
         None => return Ok(()),
@@ -209,7 +327,7 @@ fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> any
             let key_pos = key_pos.try_into().map(u32::from_be_bytes)?;
             // If the key corresponds to the word (minus the attribute)
             if key.len() == word.len() + 4 {
-                let attribute = key_pos / 1000;
+                let attribute = key_pos / MAX_POSITION as u32;
                 match word_attributes.entry(attribute) {
                     Entry::Vacant(entry) => { entry.insert(docids); },
                     Entry::Occupied(mut entry) => entry.get_mut().union_with(&docids),
@@ -226,247 +344,9 @@ fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> any
         }
     }
 
-    Ok(())
-}
-
-use std::collections::binary_heap::{BinaryHeap, PeekMut};
-use std::cmp::{Ordering, Reverse};
-
-// ------------ Value
-
-struct Value<'t, KC, DC>
-where
-    KC: heed::BytesDecode<'t>,
-    DC: heed::BytesDecode<'t>,
-{
-    iter: heed::RoIter<'t, KC, DC>,
-    value: Option<heed::Result<(KC::DItem, DC::DItem)>>,
-}
-
-impl<'t, KC, DC> Value<'t, KC, DC>
-where
-    KC: heed::BytesDecode<'t>,
-    DC: heed::BytesDecode<'t>,
-{
-    fn new(mut iter: heed::RoIter<'t, KC, DC>) -> Option<Value<'t, KC, DC>> {
-        iter.next().map(|value| Value { iter, value: Some(value) })
-    }
-
-    fn peek_value(&mut self) -> Option<heed::Result<(KC::DItem, DC::DItem)>> {
-        std::mem::replace(&mut self.value, self.iter.next())
-    }
-}
-
-impl<'t, KC, DC> Ord for Value<'t, KC, DC>
-where
-    KC: heed::BytesDecode<'t>,
-    DC: heed::BytesDecode<'t>,
-    KC::DItem: Ord,
-{
-    fn cmp(&self, other: &Self) -> Ordering {
-        let a = self.value.as_ref().unwrap();
-        let b = other.value.as_ref().unwrap();
-        match (a, b) {
-            (Ok((a, _)), Ok((b, _))) => a.cmp(&b),
-            (Err(_), Err(_)) => Ordering::Equal,
-            (Err(_), _) => Ordering::Less,
-            (_, Err(_)) => Ordering::Greater,
-        }
-    }
-}
-
-impl<'t, KC, DC> Eq for Value<'t, KC, DC>
-where
-    KC: heed::BytesDecode<'t>,
-    DC: heed::BytesDecode<'t>,
-    KC::DItem: Ord,
-{ }
-
-impl<'t, KC, DC> PartialEq for Value<'t, KC, DC>
-where
-    KC: heed::BytesDecode<'t>,
-    DC: heed::BytesDecode<'t>,
-    KC::DItem: Ord,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == Ordering::Equal
-    }
-}
-
-impl<'t, KC, DC> PartialOrd for Value<'t, KC, DC>
-where
-    KC: heed::BytesDecode<'t>,
-    DC: heed::BytesDecode<'t>,
-    KC::DItem: Ord,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-// ------------
-
-struct MergeIter<'t, KC, DC>
-where
-    KC: heed::BytesDecode<'t>,
-    DC: heed::BytesDecode<'t>,
-{
-    iters: BinaryHeap<Reverse<Value<'t, KC, DC>>>,
-}
-
-impl<'t, KC, DC> MergeIter<'t, KC, DC>
-where
-    KC: heed::BytesDecode<'t>,
-    DC: heed::BytesDecode<'t>,
-    KC::DItem: Ord,
-{
-    fn new(iters: Vec<heed::RoIter<'t, KC, DC>>) -> MergeIter<'t, KC, DC> {
-        let iters = iters.into_iter().filter_map(Value::new).map(Reverse).collect();
-        MergeIter { iters }
-    }
-}
-
-impl<'t, KC, DC> Iterator for MergeIter<'t, KC, DC>
-where
-    KC: heed::BytesDecode<'t>,
-    DC: heed::BytesDecode<'t>,
-    KC::DItem: Ord,
-{
-    type Item = heed::Result<(KC::DItem, DC::DItem)>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut peek = self.iters.peek_mut()?;
-        let result = peek.0.peek_value().unwrap();
-
-        if peek.0.value.is_none() {
-            PeekMut::pop(peek);
-        }
-
-        Some(result)
-    }
-}
-
-fn merge_databases(
-    others: Vec<(TempDir, Env, Index)>,
-    wtxn: &mut heed::RwTxn,
-    index: &Index,
-) -> anyhow::Result<()>
-{
-    eprintln!("Merging the temporary databases...");
-
-    let rtxns: Result<Vec<_>, _> = others.iter().map(|(_, env, _)| env.read_txn()).collect();
-    let rtxns = rtxns?;
-
-    // merge the word positions
-    let sources: Result<Vec<_>, _> = others.iter().zip(&rtxns).map(|((.., i), t)| i.word_positions.iter(t)).collect();
-    let sources = sources?;
-    let mut dest = index.word_positions.iter_mut(wtxn)?;
-    let before = Instant::now();
-    for result in MergeIter::new(sources) {
-        let (k, v) = result?;
-        dest.append(&k, &v)?;
-    }
-    eprintln!("Merging the word_positions database took {:.02?}.", before.elapsed());
-    drop(dest);
-
-    // merge the word position documents ids
-    let sources: Result<Vec<_>, _> = others.iter().zip(&rtxns).map(|((.., i), t)| i.word_position_docids.iter(t)).collect();
-    let sources = sources?;
-    let mut dest = index.word_position_docids.iter_mut(wtxn)?;
-    let before = Instant::now();
-    for result in MergeIter::new(sources) {
-        let (k, v) = result?;
-        dest.append(&k, &v)?;
-    }
-    eprintln!("Merging the word_position_docids database took {:.02?}.", before.elapsed());
-    drop(dest);
-
-    // merge the word attribute documents ids
-    let sources: Result<Vec<_>, _> = others.iter().zip(&rtxns).map(|((.., i), t)| i.word_attribute_docids.iter(t)).collect();
-    let sources = sources?;
-    let mut dest = index.word_attribute_docids.iter_mut(wtxn)?;
-
-    let before = Instant::now();
-    let mut current = None as Option<(&[u8], RoaringBitmap)>;
-    for result in MergeIter::new(sources) {
-        let (k, v) = result?;
-        match current.as_mut() {
-            Some((ck, cv)) if ck == &k => cv.union_with(&v),
-            Some((ck, cv)) => {
-                dest.append(&ck, &cv)?;
-                current = Some((k, v));
-            },
-            None => current = Some((k, v)),
-        };
-    }
-
-    if let Some((ck, cv)) = current.take() {
-        dest.append(&ck, &cv)?;
-    }
-
-    eprintln!("Merging the word_attribute_docids database took {:.02?}.", before.elapsed());
-    drop(dest);
-
-    // merge the documents
-    let sources: Result<Vec<_>, _> = others.iter().zip(&rtxns).map(|((.., i), t)| {
-        i.documents.as_polymorph().iter::<_, ByteSlice, ByteSlice>(t)
-    }).collect();
-    let sources = sources?;
-    let mut dest = index.documents.as_polymorph().iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-    let before = Instant::now();
-    for result in MergeIter::new(sources) {
-        let (k, v) = result?;
-        dest.append(&k, &v)?;
-    }
-    eprintln!("Merging the documents database took {:.02?}.", before.elapsed());
-    drop(dest);
-
-    let mut fsts = Vec::new();
-    for ((_dir, _env, oindex), rtxn) in others.into_iter().zip(&rtxns) {
-        // merge and check the headers are equal
-        let headers = oindex.headers(&rtxn)?.context("A database is missing the headers")?;
-        match index.headers(wtxn)? {
-            Some(h) => ensure!(h == headers, "headers are not equal"),
-            None => index.put_headers(wtxn, &headers)?,
-        };
-
-        // retrieve the FSTs to merge them together in one run.
-        let fst = oindex.fst(&rtxn)?.context("A database is missing its FST")?;
-        let fst = fst.map_data(|s| s.to_vec())?;
-        fsts.push(fst);
-    }
-
-    let before = Instant::now();
-
-    // Merge all the FSTs to create a final one and write it in the final database.
-    if let Some(fst) = index.fst(wtxn)? {
-        let fst = fst.map_data(|s| s.to_vec())?;
-        fsts.push(fst);
-    }
-
-    let builder = OpBuilder::from_iter(&fsts);
-    let op = builder.r#union();
-    let mut builder = fst::set::SetBuilder::memory();
-    builder.extend_stream(op)?;
-    let fst = builder.into_set();
-
-    index.put_fst(wtxn, &fst)?;
-
-    eprintln!("Merging the FSTs took {:.02?}.", before.elapsed());
+    eprintln!("Computing the attributes documents ids took {:.02?}.", before.elapsed());
 
     Ok(())
-}
-
-fn open_env_index(path: impl AsRef<Path>) -> anyhow::Result<(Env, Index)> {
-    let env = EnvOpenOptions::new()
-        .map_size(100 * 1024 * 1024 * 1024) // 100 GB
-        .max_readers(10)
-        .max_dbs(10)
-        .open(path)?;
-
-    let index = Index::new(&env)?;
-
-    Ok((env, index))
 }
 
 fn main() -> anyhow::Result<()> {
@@ -477,32 +357,35 @@ fn main() -> anyhow::Result<()> {
     }
 
     std::fs::create_dir_all(&opt.database)?;
-    let (env, index) = open_env_index(&opt.database)?;
+    let env = EnvOpenOptions::new()
+        .map_size(100 * 1024 * 1024 * 1024) // 100 GB
+        .max_readers(10)
+        .max_dbs(10)
+        .open(opt.database)?;
 
+    let index = Index::new(&env)?;
+
+    // We duplicate the file # CPU times
     let num_threads = rayon::current_num_threads();
+    let file = opt.csv_file.unwrap();
+    let csv_readers: Vec<_> = (0..num_threads).map(|_| csv::Reader::from_path(&file)).collect::<Result<_, _>>()?;
 
-    let result: anyhow::Result<_> =
-        (0..num_threads).into_par_iter().map(|i| {
-            let dir = tempfile::tempdir()?;
-            let (env, index) = open_env_index(&dir)?;
+    let stores: Vec<_> = csv_readers
+        .into_iter()
+        .enumerate()
+        .map(|(i, rdr)| index_csv(rdr, i, num_threads))
+        .collect::<Result<_, _>>()?;
 
-            let mut wtxn = env.write_txn()?;
-            let rdr = csv::Reader::from_path(&opt.csv_file)?;
-            index_csv(&mut wtxn, rdr, &index, opt.arc_cache_size, num_threads, i)?;
+    let stores: Vec<_> = stores.into_iter().flatten().collect();
 
-            wtxn.commit()?;
-
-            Ok((dir, env, index))
-        })
-        .collect();
-
+    eprintln!("We are writing into LMDB...");
     let mut wtxn = env.write_txn()?;
-    let parts = result?;
-    merge_databases(parts, &mut wtxn, &index)?;
+
+    MtblKvStore::from_many(stores, |k, v| writer(&mut wtxn, &index, k, v))?;
+    compute_words_attributes_docids(&mut wtxn, &index)?;
     let count = index.documents.len(&wtxn)?;
 
     wtxn.commit()?;
-
     eprintln!("Wrote {} documents into LMDB", count);
 
     Ok(())

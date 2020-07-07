@@ -2,7 +2,6 @@ mod best_proximity;
 mod heed_codec;
 mod iter_shortest_paths;
 mod query_tokens;
-pub mod cache;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
