@@ -1,1 +1,3 @@
 status = ["Test binaries with cargo test"]
+# 4 hours timeout
+timeout-sec = 14400
