@@ -1,6 +1,27 @@
 use crate::{FieldsMap, FieldId, SResult, Error, IndexedPos};
 use serde::{Serialize, Deserialize};
 use std::collections::{HashMap, HashSet};
+use std::borrow::Cow;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+enum OptionAll<T> {
+    All,
+    Some(T),
+    None,
+}
+
+impl<T> OptionAll<T> {
+    // replace the value with None and return the previous value
+    fn take(&mut self) -> OptionAll<T> {
+        std::mem::replace(self, OptionAll::None)
+    }
+}
+
+impl<T> Default for OptionAll<T> {
+    fn default() -> OptionAll<T> {
+        OptionAll::All
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct Schema {
@@ -8,7 +29,7 @@ pub struct Schema {
 
     primary_key: Option<FieldId>,
     ranked: HashSet<FieldId>,
-    displayed: HashSet<FieldId>,
+    displayed: OptionAll<HashSet<FieldId>>,
 
     indexed: Vec<FieldId>,
     indexed_map: HashMap<FieldId, IndexedPos>,
@@ -40,7 +61,7 @@ impl Schema {
             fields_map,
             primary_key: Some(field_id),
             ranked: HashSet::new(),
-            displayed,
+            displayed: OptionAll::All,
             indexed,
             indexed_map,
             accept_new_fields: true,
@@ -110,12 +131,42 @@ impl Schema {
         self.ranked.iter().filter_map(|a| self.name(*a)).collect()
     }
 
-    pub fn displayed(&self) -> &HashSet<FieldId> {
-        &self.displayed
+    pub fn displayed(&self) -> Cow<HashSet<FieldId>> {
+        match self.displayed {
+            OptionAll::Some(ref v) => Cow::Borrowed(v),
+            OptionAll::All => {
+                let fields = self
+                    .fields_map
+                    .iter()
+                    .map(|(_, &v)| v)
+                    .collect::<HashSet<_>>();
+                Cow::Owned(fields)
+            }
+            OptionAll::None => Cow::Owned(HashSet::new())
+        }
+    }
+
+    pub fn is_displayed_all(&self) -> bool {
+        match self.displayed {
+            OptionAll::All => true,
+            _ => false,
+        }
     }
 
     pub fn displayed_name(&self) -> HashSet<&str> {
-        self.displayed.iter().filter_map(|a| self.name(*a)).collect()
+        match self.displayed {
+            OptionAll::Some(ref v) => {
+                v.iter().filter_map(|a| self.name(*a)).collect()
+            }
+            OptionAll::All => {
+                self
+                    .fields_map
+                    .iter()
+                    .filter_map(|(_, &v)| self.name(v))
+                    .collect::<HashSet<_>>()
+            }
+            OptionAll::None => HashSet::new()
+        }
     }
 
     pub fn indexed(&self) -> &Vec<FieldId> {
@@ -134,7 +185,17 @@ impl Schema {
 
     pub fn set_displayed(&mut self, name: &str) -> SResult<FieldId> {
         let id = self.fields_map.insert(name)?;
-        self.displayed.insert(id);
+        self.displayed = match self.displayed.take() {
+            OptionAll::All | OptionAll::None => {
+                let mut displayed = HashSet::new();
+                displayed.insert(id);
+                OptionAll::Some(displayed)
+            },
+            OptionAll::Some(mut v) => {
+                v.insert(id);
+                OptionAll::Some(v)
+            }
+        };
         Ok(id)
     }
 
@@ -159,9 +220,31 @@ impl Schema {
         }
     }
 
+    /// remove field from displayed attributes. If diplayed attributes is OptionAll::All,
+    /// dipslayed attributes is turned into OptionAll::Some(v) where v is all displayed attributes
+    /// except name.
     pub fn remove_displayed(&mut self, name: &str) {
         if let Some(id) = self.fields_map.id(name) {
-            self.displayed.remove(&id);
+            self.displayed = match self.displayed.take() {
+                OptionAll::Some(mut v) => {
+                    v.remove(&id);
+                    OptionAll::Some(v)
+                }
+                OptionAll::All => {
+                    let displayed = self.fields_map
+                        .iter()
+                        .filter_map(|(key, &value)| {
+                            if key != name {
+                                Some(value)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<HashSet<_>>();
+                    OptionAll::Some(displayed)
+                }
+                OptionAll::None => OptionAll::None,
+            };
         }
     }
 
@@ -177,7 +260,13 @@ impl Schema {
     }
 
     pub fn is_displayed(&self, id: FieldId) -> bool {
-        self.displayed.get(&id).is_some()
+        match self.displayed {
+            OptionAll::Some(ref v) => {
+                v.get(&id).is_some()
+            }
+            OptionAll::All => true,
+            OptionAll::None => false,
+        }
     }
 
     pub fn is_indexed(&self, id: FieldId) -> Option<&IndexedPos> {
@@ -202,7 +291,9 @@ impl Schema {
     }
 
     pub fn update_displayed<S: AsRef<str>>(&mut self, data: impl IntoIterator<Item = S>) -> SResult<()> {
-        self.displayed.clear();
+        if let OptionAll::Some(ref mut v) = self.displayed {
+            v.clear()
+        }
         for name in data {
             self.set_displayed(name.as_ref())?;
         }
@@ -230,11 +321,7 @@ impl Schema {
     }
 
     pub fn set_all_fields_as_displayed(&mut self) {
-        self.displayed.clear();
-
-        for (_name, id) in self.fields_map.iter() {
-            self.displayed.insert(*id);
-        }
+        self.displayed = OptionAll::All
     }
 
     pub fn accept_new_fields(&self) -> bool {
