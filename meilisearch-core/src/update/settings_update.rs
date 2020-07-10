@@ -68,16 +68,6 @@ pub fn apply_settings_update(
         UpdateState::Nothing => (),
     }
 
-    match settings.accept_new_fields {
-        UpdateState::Update(v) => {
-            schema.set_accept_new_fields(v);
-        },
-        UpdateState::Clear => {
-            schema.set_accept_new_fields(true);
-        },
-        UpdateState::Nothing => (),
-    }
-
     match settings.searchable_attributes.clone() {
         UpdateState::Update(v) => {
             if v.len() == 1 && v[0] == "*" {
