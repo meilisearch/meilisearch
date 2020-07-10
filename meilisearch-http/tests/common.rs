@@ -112,7 +112,6 @@ impl Server {
                 "longitude",
                 "tags",
             ],
-            "acceptNewFields": false,
         });
 
         server.update_all_settings(body).await;
@@ -424,16 +423,6 @@ impl Server {
     pub async fn delete_displayed_attributes(&mut self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings/displayed-attributes", self.uid);
         self.delete_request_async(&url).await
-    }
-
-    pub async fn get_accept_new_fields(&mut self) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/settings/accept-new-fields", self.uid);
-        self.get_request(&url).await
-    }
-
-    pub async fn update_accept_new_fields(&mut self, body: Value) {
-        let url = format!("/indexes/{}/settings/accept-new-fields", self.uid);
-        self.post_request_async(&url, body).await;
     }
 
     pub async fn get_synonyms(&mut self) -> (Value, StatusCode) {

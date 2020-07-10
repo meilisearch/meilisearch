@@ -41,7 +41,6 @@ async fn search_with_settings_basic() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "acceptNewFields": false,
     });
 
     server.update_all_settings(config).await;
@@ -122,7 +121,6 @@ async fn search_with_settings_stop_words() {
       ],
       "stopWords": ["ea"],
       "synonyms": null,
-      "acceptNewFields": false,
     });
 
     server.update_all_settings(config).await;
@@ -206,7 +204,6 @@ async fn search_with_settings_synonyms() {
               "exercitation"
           ]
       },
-      "acceptNewFields": false,
     });
 
     server.update_all_settings(config).await;
@@ -286,7 +283,6 @@ async fn search_with_settings_ranking_rules() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "acceptNewFields": false,
     });
 
     server.update_all_settings(config).await;
@@ -369,7 +365,6 @@ async fn search_with_settings_searchable_attributes() {
               "exercitation"
           ]
       },
-      "acceptNewFields": false,
     });
 
     server.update_all_settings(config).await;
@@ -435,7 +430,6 @@ async fn search_with_settings_displayed_attributes() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "acceptNewFields": false,
     });
 
     server.update_all_settings(config).await;
@@ -502,7 +496,6 @@ async fn search_with_settings_searchable_attributes_2() {
       ],
       "stopWords": null,
       "synonyms": null,
-      "acceptNewFields": false,
     });
 
     server.update_all_settings(config).await;
