@@ -1,0 +1,3 @@
+status = ["Test on macos-latest", "Test on ubuntu-latest"]
+# 4 hours timeout
+timeout-sec = 14400

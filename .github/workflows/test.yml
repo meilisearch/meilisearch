@@ -1,5 +1,9 @@
 ---
-on: [pull_request]
+on:
+  push:
+    branches:
+      - staging
+      - trying
 
 name: Test binaries with cargo test
 
