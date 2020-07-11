@@ -1,5 +1,5 @@
 [package]
-name = "mega-mini-indexer"
+name = "milli"
 version = "0.1.0"
 authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"

@@ -1,4 +1,4 @@
-# mega-mini-indexer
+# milli
 A prototype of concurrent indexing, only contains postings ids
 
 ## Introduction

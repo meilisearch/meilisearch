@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use heed::EnvOpenOptions;
-use mega_mini_indexer::Index;
+use milli::Index;
 use criterion::{criterion_group, criterion_main, BenchmarkId};
 
 fn bench_search(c: &mut criterion::Criterion) {

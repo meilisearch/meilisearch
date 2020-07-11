@@ -10,7 +10,7 @@ use serde::Deserialize;
 use structopt::StructOpt;
 use warp::{Filter, http::Response};
 
-use mega_mini_indexer::{BEU32, Index};
+use milli::{BEU32, Index};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]

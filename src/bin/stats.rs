@@ -6,7 +6,7 @@ use cow_utils::CowUtils;
 use roaring::RoaringBitmap;
 use slice_group_by::StrGroupBy;
 
-use mega_mini_indexer::{FastMap4, DocumentId, SmallString32};
+use milli::{FastMap4, DocumentId, SmallString32};
 
 const MAX_POSITION: usize = 1000;
 const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;

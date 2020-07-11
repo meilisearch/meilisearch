@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use heed::EnvOpenOptions;
 use structopt::StructOpt;
-use mega_mini_indexer::{Index, BEU32};
+use milli::{Index, BEU32};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]

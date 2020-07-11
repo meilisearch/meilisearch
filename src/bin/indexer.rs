@@ -17,7 +17,7 @@ use roaring::RoaringBitmap;
 use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 
-use mega_mini_indexer::{FastMap4, SmallVec32, Index, DocumentId, Position};
+use milli::{FastMap4, SmallVec32, Index, DocumentId, Position};
 
 const LMDB_MAX_KEY_LENGTH: usize = 512;
 const ONE_MILLION: usize = 1_000_000;
