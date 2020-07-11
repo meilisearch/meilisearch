@@ -7,7 +7,8 @@
   <link rel="stylesheet" href="/style.css">
   <script type="text/javascript" src="/jquery-3.4.1.min.js"></script>
   <script type="text/javascript" src="/papaparse.min.js"></script>
-  <title>The milli engine</title>
+  <script type="text/javascript" src="/filesize.min.js"></script>
+  <title>{{ db_name }} | The milli engine</title>
 </head>
 <body>
 
@@ -20,20 +21,20 @@
         <nav class="level">
           <div class="level-item has-text-centered">
             <div>
-              <p class="heading">Database Name</p>
-              <p class="title">songs-2.mmdb</p>
+              <p class="heading">Database Path</p>
+              <p class="title">{{ db_name }}</p>
             </div>
           </div>
           <div class="level-item has-text-centered">
             <div>
               <p class="heading">Database Size</p>
-              <p class="title">123 MB</p>
+              <p class="title" id="db-size">{{ db_size }}</p>
             </div>
           </div>
           <div class="level-item has-text-centered">
             <div>
               <p class="heading">Number of Documents</p>
-              <p class="title">456 K</p>
+              <p class="title" id="docs-count">{{ docs_count }}</p>
             </div>
           </div>
         </nav>

@@ -53,3 +53,13 @@ $('#search').on('input', function () {
     },
   });
 });
+
+// Make the number of document a little bit prettier
+$('#docs-count').text(function(index, text) {
+  return parseInt(text).toLocaleString()
+});
+
+// Make the database a little bit easier to read
+$('#db-size').text(function(index, text) {
+  return filesize(parseInt(text))
+});

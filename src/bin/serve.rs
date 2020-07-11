@@ -1,8 +1,10 @@
+use std::fs::File;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Instant;
 
+use askama_warp::Template;
 use heed::EnvOpenOptions;
 use serde::Deserialize;
 use structopt::StructOpt;
@@ -32,6 +34,14 @@ struct Opt {
     http_listen_addr: String,
 }
 
+#[derive(Template)]
+#[template(path = "index.html")]
+struct IndexTemplate {
+    db_name: String,
+    db_size: usize,
+    docs_count: usize,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
@@ -44,12 +54,29 @@ async fn main() -> anyhow::Result<()> {
 
     let index = Index::new(&env)?;
 
+    // Retrieve the database the file stem (w/o the extension)
+    let db_name = opt.database.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+
+    // Retrieve the disk file size
+    let db_size = File::open(opt.database.join("data.mdb"))?.metadata()?.len() as usize;
+
+    // Precompute the number of documents in the database.
+    let rtxn = env.read_txn().unwrap();
+    let docs_count = index.documents.len(&rtxn)?;
+    drop(rtxn);
+
     // We run and wait on the HTTP server
 
     // Expose an HTML page to debug the search in a browser
     let dash_html_route = warp::filters::method::get()
         .and(warp::filters::path::end())
-        .map(|| warp::reply::html(include_str!("../../public/index.html")));
+        .map(move || {
+            IndexTemplate {
+                db_name: db_name.clone(),
+                db_size,
+                docs_count,
+            }
+        });
 
     let dash_bulma_route = warp::filters::method::get()
         .and(warp::path!("bulma.min.css"))
@@ -77,6 +104,13 @@ async fn main() -> anyhow::Result<()> {
         .map(|| Response::builder()
             .header("content-type", "application/javascript; charset=utf-8")
             .body(include_str!("../../public/papaparse.min.js"))
+        );
+
+    let dash_filesize_route = warp::filters::method::get()
+        .and(warp::path!("filesize.min.js"))
+        .map(|| Response::builder()
+            .header("content-type", "application/javascript; charset=utf-8")
+            .body(include_str!("../../public/filesize.min.js"))
         );
 
     let dash_script_route = warp::filters::method::get()
@@ -124,6 +158,7 @@ async fn main() -> anyhow::Result<()> {
         .or(dash_style_route)
         .or(dash_jquery_route)
         .or(dash_papaparse_route)
+        .or(dash_filesize_route)
         .or(dash_script_route)
         .or(query_route);
 

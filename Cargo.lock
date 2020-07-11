@@ -19,6 +19,65 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b585a98a234c46fc563103e9278c9391fde1f4e6850334da895d27edb9580f62"
 
 [[package]]
+name = "askama"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "afb6c2f00d120a43d67345bbd3e9e21d1ee090c1fc7db7787c05bd969b83bccf"
+dependencies = [
+ "askama_derive",
+ "askama_escape",
+ "askama_shared",
+ "mime 0.3.16",
+ "mime_guess 2.0.3",
+]
+
+[[package]]
+name = "askama_derive"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d97b96db4caba8842ec48a537cab1e6d7e809d7a408c97ae99f129e1c982750"
+dependencies = [
+ "askama_shared",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "askama_escape"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90c108c1a94380c89d2215d0ac54ce09796823cca0fd91b299cfff3b33e346fb"
+
+[[package]]
+name = "askama_shared"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3342887c2f85a336bc8bc4fc79603434539cdae37565e20ccf54599dea8e42ee"
+dependencies = [
+ "askama_escape",
+ "humansize",
+ "nom",
+ "num-traits",
+ "percent-encoding",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "syn",
+ "toml",
+]
+
+[[package]]
+name = "askama_warp"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c96f410ab17fa08f70b5fda07ce1112418642c914864961630808979343ea226"
+dependencies = [
+ "askama",
+ "warp",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -655,6 +714,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd179ae861f0c2e53da70d892f5f3029f9594be0c41dc5269cd371691b1dc2f9"
 
 [[package]]
+name = "humansize"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6cab2627acfc432780848602f3f558f7e9dd427352224b0d9324025796d2a5e"
+
+[[package]]
 name = "hyper"
 version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -847,6 +912,8 @@ name = "mega-mini-indexer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "askama",
+ "askama_warp",
  "bitpacking",
  "byteorder",
  "cow-utils",
@@ -1036,6 +1103,16 @@ dependencies = [
  "cfg-if",
  "libc",
  "winapi 0.3.8",
+]
+
+[[package]]
+name = "nom"
+version = "5.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffb4262d26ed83a1c0a33a38fe2bb15797329c85770da05e6b828ddb782627af"
+dependencies = [
+ "memchr",
+ "version_check 0.9.2",
 ]
 
 [[package]]
@@ -1822,6 +1899,15 @@ dependencies = [
  "log 0.4.8",
  "pin-project-lite",
  "tokio",
+]
+
+[[package]]
+name = "toml"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffc92d160b1eef40665be3a05630d003936a3bc7da7421277846c2613e92c71a"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
