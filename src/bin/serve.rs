@@ -54,16 +54,11 @@ async fn main() -> anyhow::Result<()> {
 
     let index = Index::new(&env)?;
 
-    // Retrieve the database the file stem (w/o the extension)
+    // Retrieve the database the file stem (w/o the extension),
+    // the disk file size and the number of documents in the database.
     let db_name = opt.database.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-
-    // Retrieve the disk file size
     let db_size = File::open(opt.database.join("data.mdb"))?.metadata()?.len() as usize;
-
-    // Precompute the number of documents in the database.
-    let rtxn = env.read_txn().unwrap();
-    let docs_count = index.documents.len(&rtxn)?;
-    drop(rtxn);
+    let docs_count = env.read_txn().and_then(|r| index.documents.len(&r))?;
 
     // We run and wait on the HTTP server
 
