@@ -228,15 +228,22 @@ impl Index {
             for positions in positions {
                 let before = Instant::now();
 
+                // Precompute the potentially missing unions
+                positions.iter().enumerate().for_each(|(word, pos)| {
+                    union_cache.entry((word, *pos)).or_insert_with(|| unions_word_pos(word, *pos));
+                });
+
+                // Retrieve the unions along with the popularity of it.
                 let mut to_intersect: Vec<_> = positions.iter()
                     .enumerate()
                     .map(|(word, pos)| {
-                        let docids = union_cache.entry((word, *pos)).or_insert_with(|| unions_word_pos(word, *pos));
-                        // FIXME don't clone here
-                        (docids.len(), docids.clone())
+                        let docids = union_cache.get(&(word, *pos)).unwrap();
+                        (docids.len(), docids)
                     })
                     .collect();
 
+                // Sort the unions by popuarity to help reduce
+                // the number of documents as soon as possible.
                 to_intersect.sort_unstable_by_key(|(l, _)| *l);
                 let elapsed_retrieving = before.elapsed();
 
