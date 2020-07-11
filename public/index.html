@@ -1,200 +1,86 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="/bulma.min.css">
-    <script type="text/javascript" src="/jquery-3.4.1.min.js"></script>
-    <script type="text/javascript" src="/papaparse.min.js"></script>
-    <title>The mega-mini-indexer</title>
-    <style>
-      em {
-        color: hsl(204, 86%, 25%);
-        font-style: inherit;
-        background-color: hsl(204, 86%, 88%);
-      }
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/bulma.min.css">
+  <link rel="stylesheet" href="/style.css">
+  <script type="text/javascript" src="/jquery-3.4.1.min.js"></script>
+  <script type="text/javascript" src="/papaparse.min.js"></script>
+  <title>The milli engine</title>
+</head>
+<body>
 
-      #results {
-        max-width: 900px;
-        margin: 20px auto 0 auto;
-        padding: 0;
-      }
-
-      .notification {
-        display: flex;
-        justify-content: center;
-      }
-
-      .level-left {
-        margin-right: 50px;
-      }
-
-      .document {
-        padding: 20px 20px;
-        background-color: #f5f5f5;
-        border-radius: 4px;
-        margin-bottom: 20px;
-        display: flex;
-      }
-
-      .document ol {
-        flex: 0 0 75%;
-        max-width: 75%;
-        padding: 0;
-        margin: 0;
-      }
-
-      .document .image {
-        max-width: 25%;
-        flex: 0 0 25%;
-        padding-left: 30px;
-        box-sizing: border-box;
-      }
-
-      .document .image img {
-        width: 100%;
-      }
-
-      .field {
-        list-style-type: none;
-        display: flex;
-        flex-wrap: wrap;
-      }
-
-      .field:not(:last-child) {
-        margin-bottom: 7px;
-      }
-
-      .attribute {
-        flex: 0 0 35%;
-        max-width: 35%;
-        text-align: right;
-        padding-right: 10px;
-        box-sizing: border-box;
-        text-transform: uppercase;
-        color: rgba(0,0,0,.7);
-      }
-
-      .content {
-        max-width: 65%;
-        flex: 0 0 65%;
-        box-sizing: border-box;
-        padding-left: 10px;
-        color: rgba(0,0,0,.9);
-      }
-    </style>
-  </head>
-  <body>
-
-    <section class="hero is-light">
-      <div class="hero-body">
-        <div class="container">
-          <h1 class="title">
-            Welcome to the mega-mini-indexer also known as the MMI
-          </h1>
-          <h2 class="subtitle">
-            This dashboard will help you check the search results with ease.
-          </h2>
-          <p>Quoted query strings are available and forces the engine to search without typo tolerance or prefixes (e.g. <code>big "black" boat</code>).</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="hero container">
-        <div class="notification" style="border-radius: 0 0 4px 4px;">
-
-          <nav class="level">
-            <!-- Left side -->
-            <div class="level-left">
-              <div class="level-item">
-                <div class="field has-addons has-addons-right">
-                  <input id="search" class="input" type="text" autofocus placeholder="e.g. George Clooney">
-                </div>
-              </div>
+  <section class="hero is-light">
+    <div class="hero-body">
+      <div class="container">
+        <h1 class="title has-text-centered">
+          Welcome to milli
+        </h1>
+        <nav class="level">
+          <div class="level-item has-text-centered">
+            <div>
+              <p class="heading">Database Name</p>
+              <p class="title">songs-2.mmdb</p>
             </div>
+          </div>
+          <div class="level-item has-text-centered">
+            <div>
+              <p class="heading">Database Size</p>
+              <p class="title">123 MB</p>
+            </div>
+          </div>
+          <div class="level-item has-text-centered">
+            <div>
+              <p class="heading">Number of Documents</p>
+              <p class="title">456 K</p>
+            </div>
+          </div>
+        </nav>
+      </div>
+    </div>
+  </section>
 
-            <!-- Right side -->
-            <nav class="level-right">
-              <div class="level-item has-text-centered">
-                <div>
-                  <p class="heading">Documents</p>
-                  <p id="count" class="title">20</p>
-                </div>
-              </div>
-              <div class="level-item has-text-centered">
-                <div>
-                  <p class="heading">Time Spent</p>
-                  <p id="time" class="title">4ms</p>
-                </div>
-              </div>
-            </nav>
-          </nav>
+  <section class="hero container">
+    <div class="notification" style="border-radius: 0 0 4px 4px;">
 
+      <nav class="level">
+        <!-- Left side -->
+        <div class="level-left">
+          <div class="level-item">
+            <div class="field has-addons has-addons-right">
+              <input id="search" class="input" type="text" autofocus placeholder="e.g. George Clooney">
+            </div>
+          </div>
         </div>
-    </section>
 
-    <section>
-      <ol id="results" class="content">
-        <!-- documents matching requests -->
-      </ol>
-    </section>
-  </body>
+        <!-- Right side -->
+        <nav class="level-right">
+          <div class="level-item has-text-centered">
+            <div>
+              <p class="heading">Documents</p>
+              <p id="count" class="title">0</p>
+            </div>
+          </div>
+          <div class="level-item has-text-centered">
+            <div>
+              <p class="heading">Time Spent</p>
+              <p id="time" class="title">0ms</p>
+            </div>
+          </div>
+        </nav>
+      </nav>
 
-  <script>
-    var request = null;
+    </div>
+  </section>
 
-    $('#search').on('input', function () {
-        var query = $(this).val();
-        request = $.ajax({
-            type: "POST",
-            url: "query",
-            contentType: 'application/json',
-            data: JSON.stringify({ 'query': query }),
-            contentType: 'application/json',
-            success: function (data, textStatus, request) {
-                let httpResults = Papa.parse(data, { header: true, skipEmptyLines: true });
-                results.innerHTML = '';
+  <section>
+    <ol id="results" class="content">
+      <!-- documents matching requests -->
+    </ol>
+  </section>
+</body>
 
-                let timeSpent = request.getResponseHeader('Time-Ms');
-                let numberOfDocuments = httpResults.data.length;
-                count.innerHTML = `${numberOfDocuments}`;
-                time.innerHTML = `${timeSpent}ms`;
+<script type="text/javascript" src="/script.js"></script>
 
-                for (element of httpResults.data) {
-                    const elem = document.createElement('li');
-                    elem.classList.add("document");
-
-                    const ol = document.createElement('ol');
-
-                    for (const prop in element) {
-                        const field = document.createElement('li');
-                        field.classList.add("field");
-
-                        const attribute = document.createElement('div');
-                        attribute.classList.add("attribute");
-                        attribute.innerHTML = prop;
-
-                        const content = document.createElement('div');
-                        content.classList.add("content");
-                        content.innerHTML = element[prop];
-
-                        field.appendChild(attribute);
-                        field.appendChild(content);
-
-                        ol.appendChild(field);
-                    }
-
-                    elem.appendChild(ol);
-                    results.appendChild(elem)
-                }
-
-            },
-            beforeSend: function () {
-                if (request !== null) {
-                    request.abort();
-                }
-            },
-        });
-    });
-  </script>
 </html>

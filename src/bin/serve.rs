@@ -58,6 +58,13 @@ async fn main() -> anyhow::Result<()> {
             .body(include_str!("../../public/bulma.min.css"))
         );
 
+    let dash_style_route = warp::filters::method::get()
+        .and(warp::path!("style.css"))
+        .map(|| Response::builder()
+            .header("content-type", "text/css; charset=utf-8")
+            .body(include_str!("../../public/style.css"))
+        );
+
     let dash_jquery_route = warp::filters::method::get()
         .and(warp::path!("jquery-3.4.1.min.js"))
         .map(|| Response::builder()
@@ -70,6 +77,13 @@ async fn main() -> anyhow::Result<()> {
         .map(|| Response::builder()
             .header("content-type", "application/javascript; charset=utf-8")
             .body(include_str!("../../public/papaparse.min.js"))
+        );
+
+    let dash_script_route = warp::filters::method::get()
+        .and(warp::path!("script.js"))
+        .map(|| Response::builder()
+            .header("content-type", "application/javascript; charset=utf-8")
+            .body(include_str!("../../public/script.js"))
         );
 
     #[derive(Deserialize)]
@@ -107,8 +121,10 @@ async fn main() -> anyhow::Result<()> {
 
     let routes = dash_html_route
         .or(dash_bulma_route)
+        .or(dash_style_route)
         .or(dash_jquery_route)
         .or(dash_papaparse_route)
+        .or(dash_script_route)
         .or(query_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr).unwrap();
