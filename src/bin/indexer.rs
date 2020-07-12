@@ -55,6 +55,10 @@ struct Opt {
     #[structopt(long, default_value = "4294967296")]
     max_memory_usage: usize,
 
+    /// Verbose mode (-v, -vv, -vvv, etc.)
+    #[structopt(short, long, parse(from_occurrences))]
+    verbose: usize,
+
     /// CSV file to index, if unspecified the CSV is read from standard input.
     csv_file: Option<PathBuf>,
 }
@@ -416,6 +420,12 @@ fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> any
 
 fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
+
+    stderrlog::new()
+        .verbosity(opt.verbose)
+        .show_level(false)
+        .timestamp(stderrlog::Timestamp::Off)
+        .init()?;
 
     if let Some(jobs) = opt.jobs {
         rayon::ThreadPoolBuilder::new().num_threads(jobs).build_global()?;

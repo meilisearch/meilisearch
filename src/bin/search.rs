@@ -20,12 +20,22 @@ struct Opt {
     #[structopt(long = "db", parse(from_os_str))]
     database: PathBuf,
 
+    /// Verbose mode (-v, -vv, -vvv, etc.)
+    #[structopt(short, long, parse(from_occurrences))]
+    verbose: usize,
+
     /// The query string to search for (doesn't support prefix search yet).
     query: Option<String>,
 }
 
 fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
+
+    stderrlog::new()
+        .verbosity(opt.verbose)
+        .show_level(false)
+        .timestamp(stderrlog::Timestamp::Off)
+        .init()?;
 
     std::fs::create_dir_all(&opt.database)?;
     let env = EnvOpenOptions::new()

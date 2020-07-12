@@ -29,6 +29,10 @@ struct Opt {
     #[structopt(long = "db-size", default_value = "107374182400")] // 100 GB
     database_size: usize,
 
+    /// Verbose mode (-v, -vv, -vvv, etc.)
+    #[structopt(short, long, parse(from_occurrences))]
+    verbose: usize,
+
     /// The ip and port on which the database will listen for HTTP requests.
     #[structopt(short = "l", long, default_value = "127.0.0.1:9700")]
     http_listen_addr: String,
@@ -45,6 +49,12 @@ struct IndexTemplate {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
+
+    stderrlog::new()
+        .verbosity(opt.verbose)
+        .show_level(false)
+        .timestamp(stderrlog::Timestamp::Off)
+        .init()?;
 
     std::fs::create_dir_all(&opt.database)?;
     let env = EnvOpenOptions::new()
@@ -158,7 +168,6 @@ async fn main() -> anyhow::Result<()> {
         .or(query_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr).unwrap();
-    println!("listening on http://{}", addr);
     warp::serve(routes).run(addr).await;
 
     Ok(())
