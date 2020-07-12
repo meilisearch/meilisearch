@@ -36,7 +36,7 @@ pub fn simple_alphanumeric_tokens(string: &str) -> impl Iterator<Item = &str> {
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "mm-indexer", about = "The indexer side of the MMI project.")]
+#[structopt(name = "milli-indexer", about = "The indexer binary of the milli project.")]
 struct Opt {
     /// The database path where the database is located.
     /// It is created if it doesn't already exist.

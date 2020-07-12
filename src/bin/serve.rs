@@ -17,7 +17,7 @@ use milli::{BEU32, Index};
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "mmi", about = "The server side of the mmi project.")]
+#[structopt(name = "milli", about = "The server binary of the milli project.")]
 struct Opt {
     /// The database path where the LMDB database is located.
     /// It is created if it doesn't already exist.
