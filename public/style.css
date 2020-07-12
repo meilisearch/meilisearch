@@ -68,3 +68,13 @@ em {
   padding-left: 10px;
   color: rgba(0,0,0,.9);
 }
+
+@keyframes fadeInOut {
+  0% { opacity: 1; }
+  30% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+
+.fade-in-out {
+  animation: fadeInOut ease 1s infinite;
+}

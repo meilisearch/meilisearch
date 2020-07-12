@@ -16,6 +16,7 @@ $('#search').on('input', function () {
       let numberOfDocuments = httpResults.data.length;
       count.innerHTML = `${numberOfDocuments}`;
       time.innerHTML = `${timeSpent}ms`;
+      time.classList.remove('fade-in-out');
 
       for (element of httpResults.data) {
         const elem = document.createElement('li');
@@ -49,6 +50,7 @@ $('#search').on('input', function () {
     beforeSend: function () {
       if (request !== null) {
         request.abort();
+        time.classList.add('fade-in-out');
       }
     },
   });
