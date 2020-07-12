@@ -1,6 +1,7 @@
 use std::cmp;
 use std::time::Instant;
 
+use log::debug;
 use crate::iter_shortest_paths::astar_bag;
 
 const ONE_ATTRIBUTE: u32 = 1000;
@@ -153,18 +154,18 @@ impl BestProximity {
             },
         );
 
-        eprintln!("BestProximity::next() took {:.02?}", before.elapsed());
+        debug!("BestProximity::next() took {:.02?}", before.elapsed());
 
         match result {
             Some((paths, proximity)) => {
                 self.best_proximity = proximity + 1;
                 // We retrieve the last path that we convert into a Vec
                 let paths: Vec<_> = paths.map(|p| p.iter().filter_map(Node::position).collect()).collect();
-                eprintln!("result: {} {:?}", proximity, paths);
+                debug!("result: {} {:?}", proximity, paths);
                 Some((proximity, paths))
             },
             None => {
-                eprintln!("result: {:?}", None as Option<()>);
+                debug!("result: {:?}", None as Option<()>);
                 self.best_proximity += 1;
                 None
             },

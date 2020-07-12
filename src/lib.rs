@@ -14,6 +14,7 @@ use fxhash::{FxHasher32, FxHasher64};
 use heed::types::*;
 use heed::{PolyDatabase, Database};
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
+use log::debug;
 use once_cell::sync::Lazy;
 use roaring::RoaringBitmap;
 
@@ -138,7 +139,7 @@ impl Index {
                 }
             }
 
-            eprintln!("{} words for {:?} we have found positions {:?} in {:.02?}",
+            debug!("{} words for {:?} we have found positions {:?} in {:.02?}",
                 count, word, union_positions, before.elapsed());
             words.push(derived_words);
             positions.push(union_positions.iter().collect());
@@ -168,9 +169,9 @@ impl Index {
             words_attributes_docids.push(intersect_docids);
         }
 
-        eprintln!("The documents you must find for each attribute: {:?}", words_attributes_docids);
+        debug!("The documents you must find for each attribute: {:?}", words_attributes_docids);
 
-        eprintln!("Retrieving words positions took {:.02?}", before.elapsed());
+        debug!("Retrieving words positions took {:.02?}", before.elapsed());
 
         // Returns the union of the same position for all the derived words.
         let unions_word_pos = |word: usize, pos: u32| {
@@ -259,10 +260,10 @@ impl Index {
                         }
                     });
 
-                eprintln!("retrieving words took {:.02?} and took {:.02?} to intersect",
+                debug!("retrieving words took {:.02?} and took {:.02?} to intersect",
                     elapsed_retrieving, before_intersect.elapsed());
 
-                eprintln!("for proximity {:?} {:?} we took {:.02?} to find {} documents",
+                debug!("for proximity {:?} {:?} we took {:.02?} to find {} documents",
                     proximity, positions, before.elapsed(),
                     intersect_docids.as_ref().map_or(0, |rb| rb.len()));
 
@@ -272,7 +273,7 @@ impl Index {
 
                 // We found enough documents we can stop here
                 if documents.iter().map(RoaringBitmap::len).sum::<u64>() + same_proximity_union.len() >= 20 {
-                    eprintln!("proximity {} took a total of {:.02?}", proximity, same_prox_before.elapsed());
+                    debug!("proximity {} took a total of {:.02?}", proximity, same_prox_before.elapsed());
                     break;
                 }
             }
@@ -294,8 +295,8 @@ impl Index {
             }
             documents.retain(|rb| !rb.is_empty());
 
-            eprintln!("documents: {:?}", documents);
-            eprintln!("proximity {} took a total of {:.02?}", proximity, same_prox_before.elapsed());
+            debug!("documents: {:?}", documents);
+            debug!("proximity {} took a total of {:.02?}", proximity, same_prox_before.elapsed());
 
             // We found enough documents we can stop here.
             if documents.iter().map(RoaringBitmap::len).sum::<u64>() >= 20 {
@@ -303,7 +304,7 @@ impl Index {
             }
         }
 
-        eprintln!("{} candidates", documents.iter().map(RoaringBitmap::len).sum::<u64>());
+        debug!("{} candidates", documents.iter().map(RoaringBitmap::len).sum::<u64>());
         Ok(documents.iter().flatten().take(20).collect())
     }
 }

@@ -11,6 +11,7 @@ use cow_utils::CowUtils;
 use fst::{Streamer, IntoStreamer};
 use heed::EnvOpenOptions;
 use heed::types::*;
+use log::debug;
 use oxidized_mtbl::{Reader, ReaderOptions, Writer, Merger, MergerOptions};
 use rayon::prelude::*;
 use roaring::RoaringBitmap;
@@ -86,7 +87,7 @@ struct MtblKvStore(Option<File>);
 
 impl MtblKvStore {
     fn from_indexed(mut indexed: Indexed) -> anyhow::Result<MtblKvStore> {
-        eprintln!("Creating an MTBL store from an Indexed...");
+        debug!("Creating an MTBL store from an Indexed...");
 
         let outfile = tempfile::tempfile()?;
         let mut out = Writer::new(outfile, None)?;
@@ -152,7 +153,7 @@ impl MtblKvStore {
 
         let out = out.into_inner()?;
 
-        eprintln!("MTBL store created!");
+        debug!("MTBL store created!");
         Ok(MtblKvStore(Some(out)))
     }
 
@@ -198,7 +199,7 @@ impl MtblKvStore {
     fn from_many<F>(stores: Vec<MtblKvStore>, mut f: F) -> anyhow::Result<()>
     where F: FnMut(&[u8], &[u8]) -> anyhow::Result<()>
     {
-        eprintln!("Merging {} MTBL stores...", stores.len());
+        debug!("Merging {} MTBL stores...", stores.len());
         let before = Instant::now();
 
         let mmaps: Vec<_> = stores.iter().flat_map(|m| {
@@ -217,7 +218,7 @@ impl MtblKvStore {
             (f)(k, v)?;
         }
 
-        eprintln!("MTBL stores merged in {:.02?}!", before.elapsed());
+        debug!("MTBL stores merged in {:.02?}!", before.elapsed());
         Ok(())
     }
 }
@@ -256,7 +257,7 @@ fn index_csv(
     max_mem_usage: usize,
 ) -> anyhow::Result<Vec<MtblKvStore>>
 {
-    eprintln!("{:?}: Indexing into an Indexed...", thread_index);
+    debug!("{:?}: Indexing into an Indexed...", thread_index);
 
     let mut stores = Vec::new();
 
@@ -281,7 +282,7 @@ fn index_csv(
         let document_id = DocumentId::try_from(document_id).context("generated id is too big")?;
 
         if document_id % (ONE_MILLION as u32) == 0 {
-            eprintln!("We have seen {}m documents so far.", document_id / ONE_MILLION as u32);
+            debug!("We have seen {}m documents so far.", document_id / ONE_MILLION as u32);
         }
 
         for (attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
@@ -310,21 +311,21 @@ fn index_csv(
         if documents.len() % 100_000 == 0 {
             let usage = mem_usage(&word_positions, &word_position_docids, &documents);
             if usage > max_mem_usage {
-                eprintln!("Whoops too much memory used ({}B).", usage);
+                debug!("Whoops too much memory used ({}B).", usage);
 
                 let word_positions = mem::take(&mut word_positions);
                 let word_position_docids = mem::take(&mut word_position_docids);
                 let documents = mem::take(&mut documents);
 
                 let indexed = Indexed::new(word_positions, word_position_docids, headers.clone(), documents)?;
-                eprintln!("{:?}: Indexed created!", thread_index);
+                debug!("{:?}: Indexed created!", thread_index);
                 stores.push(MtblKvStore::from_indexed(indexed)?);
             }
         }
     }
 
     let indexed = Indexed::new(word_positions, word_position_docids, headers, documents)?;
-    eprintln!("{:?}: Indexed created!", thread_index);
+    debug!("{:?}: Indexed created!", thread_index);
     stores.push(MtblKvStore::from_indexed(indexed)?);
 
     Ok(stores)
@@ -372,7 +373,7 @@ fn writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) -> anyh
 fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> anyhow::Result<()> {
     let before = Instant::now();
 
-    eprintln!("Computing the attributes documents ids...");
+    debug!("Computing the attributes documents ids...");
 
     let fst = match index.fst(&wtxn)? {
         Some(fst) => fst.map_data(|s| s.to_vec())?,
@@ -408,7 +409,7 @@ fn compute_words_attributes_docids(wtxn: &mut heed::RwTxn, index: &Index) -> any
         }
     }
 
-    eprintln!("Computing the attributes documents ids took {:.02?}.", before.elapsed());
+    debug!("Computing the attributes documents ids took {:.02?}.", before.elapsed());
 
     Ok(())
 }
@@ -444,7 +445,7 @@ fn main() -> anyhow::Result<()> {
 
     let stores: Vec<_> = stores.into_iter().flatten().collect();
 
-    eprintln!("We are writing into LMDB...");
+    debug!("We are writing into LMDB...");
     let mut wtxn = env.write_txn()?;
 
     MtblKvStore::from_many(stores, |k, v| writer(&mut wtxn, &index, k, v))?;
@@ -452,7 +453,7 @@ fn main() -> anyhow::Result<()> {
     let count = index.documents.len(&wtxn)?;
 
     wtxn.commit()?;
-    eprintln!("Wrote {} documents into LMDB", count);
+    debug!("Wrote {} documents into LMDB", count);
 
     Ok(())
 }

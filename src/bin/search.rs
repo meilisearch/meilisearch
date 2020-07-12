@@ -4,8 +4,9 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use heed::EnvOpenOptions;
-use structopt::StructOpt;
+use log::debug;
 use milli::{Index, BEU32};
+use structopt::StructOpt;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -62,7 +63,7 @@ fn main() -> anyhow::Result<()> {
             }
         }
 
-        eprintln!("Took {:.02?} to find {} documents", before.elapsed(), documents_ids.len());
+        debug!("Took {:.02?} to find {} documents", before.elapsed(), documents_ids.len());
     }
 
     Ok(())

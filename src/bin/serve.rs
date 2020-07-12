@@ -158,7 +158,7 @@ async fn main() -> anyhow::Result<()> {
         .or(query_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr).unwrap();
-    eprintln!("listening on http://{}", addr);
+    println!("listening on http://{}", addr);
     warp::serve(routes).run(addr).await;
 
     Ok(())
