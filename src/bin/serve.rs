@@ -90,6 +90,13 @@ async fn main() -> anyhow::Result<()> {
             .body(include_str!("../../public/bulma.min.css"))
         );
 
+    let dash_bulma_dark_route = warp::filters::method::get()
+        .and(warp::path!("bulma-prefers-dark.min.css"))
+        .map(|| Response::builder()
+            .header("content-type", "text/css; charset=utf-8")
+            .body(include_str!("../../public/bulma-prefers-dark.min.css"))
+        );
+
     let dash_style_route = warp::filters::method::get()
         .and(warp::path!("style.css"))
         .map(|| Response::builder()
@@ -160,6 +167,7 @@ async fn main() -> anyhow::Result<()> {
 
     let routes = dash_html_route
         .or(dash_bulma_route)
+        .or(dash_bulma_dark_route)
         .or(dash_style_route)
         .or(dash_jquery_route)
         .or(dash_papaparse_route)

@@ -58,7 +58,7 @@ em {
   padding-right: 10px;
   box-sizing: border-box;
   text-transform: uppercase;
-  color: rgba(0,0,0,.7);
+  opacity: 0.7;
 }
 
 .content {
@@ -77,4 +77,23 @@ em {
 
 .fade-in-out {
   animation: fadeInOut ease 1s infinite;
+}
+
+@media (prefers-color-scheme:dark) {
+  .hero.is-light {
+    background-color: #242424;
+    color: inherit;
+  }
+
+  .hero.is-light .title {
+    color: inherit;
+  }
+
+  .document {
+    background-color: #242424;
+  }
+
+  .content {
+    color: #dbdbdb;
+  }
 }
