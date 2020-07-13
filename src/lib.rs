@@ -74,6 +74,17 @@ impl Index {
         self.main.get::<_, Str, ByteSlice>(rtxn, "headers")
     }
 
+    pub fn number_of_attributes<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<Option<usize>> {
+        match self.headers(rtxn)? {
+            Some(headers) => {
+                let mut rdr = csv::Reader::from_reader(headers);
+                let headers = rdr.headers()?;
+                Ok(Some(headers.len()))
+            }
+            None => Ok(None),
+        }
+    }
+
     pub fn put_fst<A: AsRef<[u8]>>(&self, wtxn: &mut heed::RwTxn, fst: &fst::Set<A>) -> anyhow::Result<()> {
         Ok(self.main.put::<_, Str, ByteSlice>(wtxn, "words-fst", fst.as_fst().as_bytes())?)
     }
@@ -146,9 +157,9 @@ impl Index {
         }
 
         let mut words_attributes_docids = Vec::new();
-        let number_attributes: u32 = 6;
+        let number_of_attributes = self.number_of_attributes(rtxn)?.map_or(0, |n| n as u32);
 
-        for i in 0..number_attributes {
+        for i in 0..number_of_attributes {
             let mut intersect_docids: Option<RoaringBitmap> = None;
             for derived_words in &words {
                 let mut union_docids = RoaringBitmap::new();
