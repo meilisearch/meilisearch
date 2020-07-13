@@ -23,7 +23,7 @@ pub fn positions_proximity(lhs: u32, rhs: u32) -> u32 {
 }
 
 // Returns the attribute and index parts.
-fn extract_position(position: u32) -> (u32, u32) {
+pub fn extract_position(position: u32) -> (u32, u32) {
     (position / ONE_ATTRIBUTE, position % ONE_ATTRIBUTE)
 }
 
@@ -66,7 +66,7 @@ impl Node {
                         parent_position: *position,
                     };
                     // We do not produce the nodes we have already seen in previous iterations loops.
-                    if proximity > 7 || (node.is_complete(positions) && acc_proximity + proximity < best_proximity) {
+                    if node.is_complete(positions) && acc_proximity + proximity < best_proximity {
                         None
                     } else {
                         Some((node, proximity))
@@ -138,7 +138,7 @@ impl BestProximity {
     {
         let before = Instant::now();
 
-        if self.best_proximity == self.positions.len() as u32 * (MAX_DISTANCE - 1) {
+        if self.best_proximity == self.positions.len() as u32 * MAX_DISTANCE {
             return None;
         }
 
@@ -177,6 +177,11 @@ impl BestProximity {
 mod tests {
     use super::*;
 
+    fn sort<T: Ord>(mut val: (u32, Vec<T>)) -> (u32, Vec<T>) {
+        val.1.sort_unstable();
+        val
+    }
+
     #[test]
     fn same_attribute() {
         let positions = vec![
@@ -190,7 +195,7 @@ mod tests {
         assert_eq!(iter.next(f), Some((1+2, vec![vec![0, 1, 3]]))); // 3
         assert_eq!(iter.next(f), Some((2+2, vec![vec![2, 1, 3]]))); // 4
         assert_eq!(iter.next(f), Some((3+2, vec![vec![3, 1, 3]]))); // 5
-        assert_eq!(iter.next(f), Some((1+5, vec![vec![0, 1, 6], vec![4, 1, 3]]))); // 6
+        assert_eq!(iter.next(f).map(sort), Some((1+5, vec![vec![0, 1, 6], vec![4, 1, 3]]))); // 6
         assert_eq!(iter.next(f), Some((2+5, vec![vec![2, 1, 6]]))); // 7
         assert_eq!(iter.next(f), Some((3+5, vec![vec![3, 1, 6]]))); // 8
         assert_eq!(iter.next(f), Some((4+5, vec![vec![4, 1, 6]]))); // 9

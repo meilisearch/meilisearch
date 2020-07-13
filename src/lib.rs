@@ -198,30 +198,66 @@ impl Index {
             union_docids
         };
 
+        // Returns the union of the same attribute for all the derived words.
+        let unions_word_attr = |word: usize, attr: u32| {
+            let mut union_docids = RoaringBitmap::new();
+            for (word, _) in &words[word] {
+                let mut key = word.clone();
+                key.extend_from_slice(&attr.to_be_bytes());
+                if let Some(right) = self.word_attribute_docids.get(rtxn, &key).unwrap() {
+                    union_docids.union_with(&right);
+                }
+            }
+            union_docids
+        };
+
         let mut union_cache = HashMap::new();
         let mut intersect_cache = HashMap::new();
+
+        let mut attribute_union_cache = HashMap::new();
+        let mut attribute_intersect_cache = HashMap::new();
+
         // Returns `true` if there is documents in common between the two words and positions given.
         let mut contains_documents = |(lword, lpos), (rword, rpos), union_cache: &mut HashMap<_, _>, candidates: &RoaringBitmap| {
-            let proximity = best_proximity::positions_proximity(lpos, rpos);
+            if lpos == rpos { return false }
 
-            if proximity == 0 { return false }
+            let (lattr, _) = best_proximity::extract_position(lpos);
+            let (rattr, _) = best_proximity::extract_position(rpos);
 
-            // We retrieve or compute the intersection between the two given words and positions.
-            *intersect_cache.entry(((lword, lpos), (rword, rpos))).or_insert_with(|| {
-                // We retrieve or compute the unions for the two words and positions.
-                union_cache.entry((lword, lpos)).or_insert_with(|| unions_word_pos(lword, lpos));
-                union_cache.entry((rword, rpos)).or_insert_with(|| unions_word_pos(rword, rpos));
+            if lattr == rattr {
+                // We retrieve or compute the intersection between the two given words and positions.
+                *intersect_cache.entry(((lword, lpos), (rword, rpos))).or_insert_with(|| {
+                    // We retrieve or compute the unions for the two words and positions.
+                    union_cache.entry((lword, lpos)).or_insert_with(|| unions_word_pos(lword, lpos));
+                    union_cache.entry((rword, rpos)).or_insert_with(|| unions_word_pos(rword, rpos));
 
-                // TODO is there a way to avoid this double gets?
-                let lunion_docids = union_cache.get(&(lword, lpos)).unwrap();
-                let runion_docids = union_cache.get(&(rword, rpos)).unwrap();
+                    // TODO is there a way to avoid this double gets?
+                    let lunion_docids = union_cache.get(&(lword, lpos)).unwrap();
+                    let runion_docids = union_cache.get(&(rword, rpos)).unwrap();
 
-                // We first check that the docids of these unions are part of the candidates.
-                if lunion_docids.is_disjoint(candidates) { return false }
-                if runion_docids.is_disjoint(candidates) { return false }
+                    // We first check that the docids of these unions are part of the candidates.
+                    if lunion_docids.is_disjoint(candidates) { return false }
+                    if runion_docids.is_disjoint(candidates) { return false }
 
-                !lunion_docids.is_disjoint(&runion_docids)
-            })
+                    !lunion_docids.is_disjoint(&runion_docids)
+                })
+            } else {
+                *attribute_intersect_cache.entry(((lword, lattr), (rword, rattr))).or_insert_with(|| {
+                    // We retrieve or compute the unions for the two words and positions.
+                    attribute_union_cache.entry((lword, lattr)).or_insert_with(|| unions_word_attr(lword, lattr));
+                    attribute_union_cache.entry((rword, rattr)).or_insert_with(|| unions_word_attr(rword, rattr));
+
+                    // TODO is there a way to avoid this double gets?
+                    let lunion_docids = attribute_union_cache.get(&(lword, lattr)).unwrap();
+                    let runion_docids = attribute_union_cache.get(&(rword, rattr)).unwrap();
+
+                    // We first check that the docids of these unions are part of the candidates.
+                    if lunion_docids.is_disjoint(candidates) { return false }
+                    if runion_docids.is_disjoint(candidates) { return false }
+
+                    !lunion_docids.is_disjoint(&runion_docids)
+                })
+            }
         };
 
         let mut documents = Vec::new();
