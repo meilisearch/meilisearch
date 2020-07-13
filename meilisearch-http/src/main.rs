@@ -70,7 +70,7 @@ async fn main() -> Result<(), MainError> {
     }));
 
     if let Some(path) = &opt.snapshot_path {
-        snapshot::schedule_snapshot(data.clone(), &path, opt.snapshot_interval_sec)?;
+        snapshot::schedule_snapshot(data.clone(), &path, opt.snapshot_interval_sec.unwrap_or(86400))?;
     }
 
     print_launch_resume(&opt, &data);

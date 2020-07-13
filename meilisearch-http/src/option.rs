@@ -113,8 +113,8 @@ pub struct Opt {
     pub snapshot_path: Option<PathBuf>,
 
     /// Defines time interval, in seconds, between each snapshot creation.
-    #[structopt(long, requires = "snapshot-path", default_value = "86400", env = "MEILI_SNAPSHOT_INTERVAL_SEC")]
-    pub snapshot_interval_sec: u64,
+    #[structopt(long, requires = "snapshot-path", env = "MEILI_SNAPSHOT_INTERVAL_SEC")]
+    pub snapshot_interval_sec: Option<u64>,
 }
 
 impl Opt {

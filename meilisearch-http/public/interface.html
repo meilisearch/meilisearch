@@ -299,6 +299,8 @@
     refreshIndexList();
 
     search.oninput = triggerSearch;
+    
+    let select = document.getElementById("index");
     select.onchange = triggerSearch;
 
     triggerSearch();
