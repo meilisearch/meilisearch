@@ -51,7 +51,7 @@ async fn main() -> Result<(), MainError> {
         _ => unreachable!(),
     }
 
-    let data = Data::new(opt.clone());
+    let data = Data::new(opt.clone())?;
 
     if !opt.no_analytics {
         let analytics_data = data.clone();

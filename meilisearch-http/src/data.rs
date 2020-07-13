@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -55,7 +56,7 @@ impl ApiKeys {
 }
 
 impl Data {
-    pub fn new(opt: Opt) -> Data {
+    pub fn new(opt: Opt) -> Result<Data, Box<dyn Error>> {
         let db_path = opt.db_path.clone();
         let server_pid = sysinfo::get_current_pid().unwrap();
 
@@ -66,7 +67,7 @@ impl Data {
 
         let http_payload_size_limit = opt.http_payload_size_limit;
 
-        let db = Arc::new(Database::open_or_create(opt.db_path, db_opt).unwrap());
+        let db = Arc::new(Database::open_or_create(opt.db_path, db_opt)?);
 
         let mut api_keys = ApiKeys {
             master: opt.master_key,
@@ -93,6 +94,6 @@ impl Data {
             index_update_callback(&index_uid, &callback_context, status);
         }));
 
-        data
+        Ok(data)
     }
 }
