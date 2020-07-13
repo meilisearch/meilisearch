@@ -41,7 +41,7 @@ impl ErrorCode for Error {
             FacetError(_) => Code::Facet,
             FilterParseError(_) => Code::Filter,
             IndexAlreadyExists => Code::IndexAlreadyExists,
-            MissingPrimaryKey => Code::InvalidState,
+            MissingPrimaryKey => Code::MissingPrimaryKey,
             MissingDocumentId => Code::MissingDocumentId,
             MaxFieldsLimitExceeded => Code::MaxFieldsLimitExceeded,
             Schema(s) =>  s.error_code(),
