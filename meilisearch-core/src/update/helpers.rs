@@ -6,7 +6,7 @@ use meilisearch_types::DocumentId;
 use ordered_float::OrderedFloat;
 use serde_json::Value;
 
-use crate::{Number, FstMapCow};
+use crate::Number;
 use crate::raw_indexer::RawIndexer;
 use crate::serde::SerializerError;
 use crate::store::DiscoverIds;
@@ -98,15 +98,17 @@ pub fn value_to_number(value: &Value) -> Option<Number> {
 
 /// Validates a string representation to be a correct document id and returns
 /// the corresponding id or generate a new one, this is the way we produce documents ids.
-pub fn discover_document_id(
+pub fn discover_document_id<F>(
     docid: &str,
-    external_docids: &FstMapCow,
+    external_docids_get: F,
     available_docids: &mut DiscoverIds<'_>,
 ) -> Result<DocumentId, SerializerError>
+where
+    F: FnOnce(&str) -> Option<u32>
 {
     if docid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_') {
-        match external_docids.get(docid) {
-            Some(id) => Ok(DocumentId(id as u32)),
+        match external_docids_get(docid) {
+            Some(id) => Ok(DocumentId(id)),
             None => {
                 let internal_id = available_docids.next().expect("no more ids available");
                 Ok(internal_id)
@@ -118,12 +120,14 @@ pub fn discover_document_id(
 }
 
 /// Extracts and validates the document id of a document.
-pub fn extract_document_id(
+pub fn extract_document_id<F>(
     primary_key: &str,
     document: &IndexMap<String, Value>,
-    external_docids: &FstMapCow,
+    external_docids_get: F,
     available_docids: &mut DiscoverIds<'_>,
 ) -> Result<(DocumentId, String), SerializerError>
+where
+    F: FnOnce(&str) -> Option<u32>
 {
     match document.get(primary_key) {
         Some(value) => {
@@ -132,7 +136,7 @@ pub fn extract_document_id(
                 Value::String(string) => string.clone(),
                 _ => return Err(SerializerError::InvalidDocumentIdFormat),
             };
-            discover_document_id(&docid, external_docids, available_docids).map(|id| (id, docid))
+            discover_document_id(&docid, external_docids_get, available_docids).map(|id| (id, docid))
         }
         None => Err(SerializerError::DocumentIdNotFound),
     }

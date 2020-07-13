@@ -195,3 +195,23 @@ async fn add_document_with_long_field() {
     let (response, _status) = server.search_post(json!({ "q": "request_buffering" })).await;
     assert!(!response["hits"].as_array().unwrap().is_empty());
 }
+
+#[actix_rt::test]
+async fn documents_with_same_id_are_overwritten() {
+    let mut server = common::Server::with_uid("test");
+    server.create_index(json!({ "uid": "test"})).await;
+    let documents = json!([
+        {
+            "id": 1,
+            "content": "test1"
+        },
+        {
+            "id": 1,
+            "content": "test2"
+        },
+    ]);
+    server.add_or_replace_multiple_documents(documents).await;
+    let (response, _status) = server.get_all_documents().await;
+    assert_eq!(response.as_array().unwrap().len(), 1);
+    assert_eq!(response.as_array().unwrap()[0].as_object().unwrap()["content"], "test2");
+}
