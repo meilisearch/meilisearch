@@ -22,6 +22,7 @@ jobs:
         profile: minimal
         toolchain: stable
         override: true
+        components: clippy
     - name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
