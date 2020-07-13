@@ -156,32 +156,31 @@ impl Index {
             positions.push(union_positions.iter().collect());
         }
 
-        let mut words_attributes_docids = Vec::new();
+        // We compute the docids candiate for these words (and derived words).
+        // We do a union between all the docids of each of the words and derived words,
+        // we got N unions (where N is the number of query words), we then intersect them.
+        // TODO we must store the words documents ids to avoid these unions.
+        let mut candidates = RoaringBitmap::new();
         let number_of_attributes = self.number_of_attributes(rtxn)?.map_or(0, |n| n as u32);
-
-        for i in 0..number_of_attributes {
-            let mut intersect_docids: Option<RoaringBitmap> = None;
-            for derived_words in &words {
-                let mut union_docids = RoaringBitmap::new();
-                for (word, _) in derived_words {
-                    // generate the key with the attribute number.
+        for (i, derived_words) in words.iter().enumerate() {
+            let mut union_docids = RoaringBitmap::new();
+            for (word, _) in derived_words {
+                for attr in 0..number_of_attributes {
                     let mut key = word.to_vec();
-                    key.extend_from_slice(&i.to_be_bytes());
-
+                    key.extend_from_slice(&attr.to_be_bytes());
                     if let Some(right) = self.word_attribute_docids.get(rtxn, &key)? {
                         union_docids.union_with(&right);
                     }
                 }
-                match &mut intersect_docids {
-                    Some(left) => left.intersect_with(&union_docids),
-                    None => intersect_docids = Some(union_docids),
-                }
             }
-            words_attributes_docids.push(intersect_docids);
+            if i == 0 {
+                candidates = union_docids;
+            } else {
+                candidates.intersect_with(&union_docids);
+            }
         }
 
-        debug!("The documents you must find for each attribute: {:?}", words_attributes_docids);
-
+        debug!("The candidates are {:?}", candidates);
         debug!("Retrieving words positions took {:.02?}", before.elapsed());
 
         // Returns the union of the same position for all the derived words.
@@ -202,7 +201,7 @@ impl Index {
         let mut union_cache = HashMap::new();
         let mut intersect_cache = HashMap::new();
         // Returns `true` if there is documents in common between the two words and positions given.
-        let mut contains_documents = |(lword, lpos), (rword, rpos), union_cache: &mut HashMap<_, _>, words_attributes_docids: &[_]| {
+        let mut contains_documents = |(lword, lpos), (rword, rpos), union_cache: &mut HashMap<_, _>, candidates: &RoaringBitmap| {
             let proximity = best_proximity::positions_proximity(lpos, rpos);
 
             if proximity == 0 { return false }
@@ -217,13 +216,9 @@ impl Index {
                 let lunion_docids = union_cache.get(&(lword, lpos)).unwrap();
                 let runion_docids = union_cache.get(&(rword, rpos)).unwrap();
 
-                if proximity <= 7 {
-                    let lattr = lpos / 1000;
-                    if let Some(docids) = &words_attributes_docids[lattr as usize] {
-                        if lunion_docids.is_disjoint(&docids) { return false }
-                        if runion_docids.is_disjoint(&docids) { return false }
-                    }
-                }
+                // We first check that the docids of these unions are part of the candidates.
+                if lunion_docids.is_disjoint(candidates) { return false }
+                if runion_docids.is_disjoint(candidates) { return false }
 
                 !lunion_docids.is_disjoint(&runion_docids)
             })
@@ -231,7 +226,7 @@ impl Index {
 
         let mut documents = Vec::new();
         let mut iter = BestProximity::new(positions);
-        while let Some((proximity, mut positions)) = iter.next(|l, r| contains_documents(l, r, &mut union_cache, &words_attributes_docids)) {
+        while let Some((proximity, mut positions)) = iter.next(|l, r| contains_documents(l, r, &mut union_cache, &candidates)) {
             positions.sort_unstable();
 
             let same_prox_before = Instant::now();
@@ -289,12 +284,8 @@ impl Index {
                 }
             }
 
-            // We achieve to find valid documents ids so we remove them from the candidate list.
-            for docids in &mut words_attributes_docids {
-                if let Some(docids) = docids {
-                    docids.difference_with(&same_proximity_union);
-                }
-            }
+            // We achieve to find valid documents ids so we remove them from the candidates list.
+            candidates.difference_with(&same_proximity_union);
 
             documents.push(same_proximity_union);
 
