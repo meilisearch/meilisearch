@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -6,6 +7,7 @@ use std::time::Instant;
 
 use askama_warp::Template;
 use heed::EnvOpenOptions;
+use regex::Regex;
 use serde::Deserialize;
 use structopt::StructOpt;
 use warp::{Filter, http::Response};
@@ -28,6 +30,10 @@ struct Opt {
     /// the whole disk space (value must be a multiple of a page size).
     #[structopt(long = "db-size", default_value = "107374182400")] // 100 GB
     database_size: usize,
+
+    /// Disable document highlighting on the dashboard.
+    #[structopt(long)]
+    disable_highlighting: bool,
 
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
@@ -138,6 +144,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let env_cloned = env.clone();
+    let disable_highlighting = opt.disable_highlighting;
     let query_route = warp::filters::method::post()
         .and(warp::path!("query"))
         .and(warp::body::json())
@@ -152,10 +159,20 @@ async fn main() -> anyhow::Result<()> {
                 // We write the headers
                 body.extend_from_slice(headers);
 
+                let re = Regex::new(r"(?i)(hello)").unwrap();
+
                 for id in documents_ids {
                     let content = index.documents.get(&rtxn, &BEU32::new(id)).unwrap();
                     let content = content.expect(&format!("could not find document {}", id));
-                    body.extend_from_slice(&content);
+                    let content = std::str::from_utf8(content).unwrap();
+
+                    let content = if disable_highlighting {
+                        Cow::from(content)
+                    } else {
+                        re.replace_all(content, "<mark>$1</mark>")
+                    };
+
+                    body.extend_from_slice(content.as_bytes());
                 }
             }
 
