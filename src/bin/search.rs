@@ -58,7 +58,7 @@ fn main() -> anyhow::Result<()> {
         let before = Instant::now();
 
         let query = result?;
-        let documents_ids = index.search(&rtxn, &query)?;
+        let (_, documents_ids) = index.search(&rtxn, &query)?;
         let headers = match index.headers(&rtxn)? {
             Some(headers) => headers,
             None => return Ok(()),

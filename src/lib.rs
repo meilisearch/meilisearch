@@ -4,7 +4,7 @@ mod iter_shortest_paths;
 mod query_tokens;
 
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 use std::hash::BuildHasherDefault;
 use std::time::Instant;
 
@@ -96,10 +96,10 @@ impl Index {
         }
     }
 
-    pub fn search(&self, rtxn: &heed::RoTxn, query: &str) -> anyhow::Result<Vec<DocumentId>> {
+    pub fn search(&self, rtxn: &heed::RoTxn, query: &str) -> anyhow::Result<(HashSet<String>, Vec<DocumentId>)> {
         let fst = match self.fst(rtxn)? {
             Some(fst) => fst,
-            None => return Ok(vec![]),
+            None => return Ok(Default::default()),
         };
 
         let (lev0, lev1, lev2) = (&LEVDIST0, &LEVDIST1, &LEVDIST2);
@@ -342,7 +342,10 @@ impl Index {
             }
         }
 
-        debug!("{} candidates", documents.iter().map(RoaringBitmap::len).sum::<u64>());
-        Ok(documents.iter().flatten().take(20).collect())
+        debug!("{} final candidates", documents.iter().map(RoaringBitmap::len).sum::<u64>());
+        let words = words.into_iter().flatten().map(|(w, _)| String::from_utf8(w).unwrap()).collect();
+        let documents = documents.iter().flatten().take(20).collect();
+
+        Ok((words, documents))
     }
 }

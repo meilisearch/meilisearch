@@ -152,14 +152,21 @@ async fn main() -> anyhow::Result<()> {
             let before_search = Instant::now();
             let rtxn = env_cloned.read_txn().unwrap();
 
-            let documents_ids = index.search(&rtxn, &query.query).unwrap();
+            let (words, documents_ids) = index.search(&rtxn, &query.query).unwrap();
 
             let mut body = Vec::new();
             if let Some(headers) = index.headers(&rtxn).unwrap() {
                 // We write the headers
                 body.extend_from_slice(headers);
 
-                let re = Regex::new(r"(?i)(hello)").unwrap();
+                let mut regex = format!(r"(?i)\b(");
+                let number_of_words = words.len();
+                words.into_iter().enumerate().for_each(|(i, w)| {
+                    regex.push_str(&w);
+                    if i != number_of_words - 1 { regex.push('|') }
+                });
+                regex.push_str(r")\b");
+                let re = Regex::new(&regex).unwrap();
 
                 for id in documents_ids {
                     let content = index.documents.get(&rtxn, &BEU32::new(id)).unwrap();
