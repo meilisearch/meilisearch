@@ -426,10 +426,26 @@ async fn displayed_and_searchable_attributes_reset_to_wildcard() {
     let mut server = common::Server::test_server().await;
     server.update_all_settings(json!({ "searchableAttributes": ["color"], "displayedAttributes": ["color"] })).await;
     let (response, _) = server.get_all_settings().await;
+
     assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "color");
     assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "color");
+
     server.delete_searchable_attributes().await;
     server.delete_displayed_attributes().await;
+
+    let (response, _) = server.get_all_settings().await;
+
+    assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
+    assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
+
+    let mut server = common::Server::test_server().await;
+    server.update_all_settings(json!({ "searchableAttributes": ["color"], "displayedAttributes": ["color"] })).await;
+    let (response, _) = server.get_all_settings().await;
+    assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "color");
+    assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "color");
+
+    server.update_all_settings(json!({ "searchableAttributes": [], "displayedAttributes": [] })).await;
+
     let (response, _) = server.get_all_settings().await;
     assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
     assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
