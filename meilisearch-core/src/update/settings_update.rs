@@ -93,6 +93,7 @@ pub fn apply_settings_update(
             }
         },
         UpdateState::Clear => {
+            println!("\n\n\n\nHERRE\n\n\n");
             schema.set_all_fields_as_displayed();
         },
         UpdateState::Nothing => (),
