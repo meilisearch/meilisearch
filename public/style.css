@@ -4,6 +4,14 @@
   padding: 0;
 }
 
+#logo-white {
+  display: none;
+}
+
+#logo-black {
+  display: inherit;
+}
+
 .notification {
   display: flex;
   justify-content: center;
@@ -79,6 +87,14 @@
 }
 
 @media (prefers-color-scheme:dark) {
+  #logo-white {
+    display: inherit;
+  }
+
+  #logo-black {
+    display: none;
+  }
+
   .hero.is-light {
     background-color: #242424;
     color: inherit;

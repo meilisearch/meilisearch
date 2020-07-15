@@ -138,6 +138,20 @@ async fn main() -> anyhow::Result<()> {
             .body(include_str!("../../public/script.js"))
         );
 
+    let dash_logo_white_route = warp::filters::method::get()
+        .and(warp::path!("logo-white.svg"))
+        .map(|| Response::builder()
+            .header("content-type", "image/svg+xml")
+            .body(include_str!("../../public/logo-white.svg"))
+        );
+
+    let dash_logo_black_route = warp::filters::method::get()
+        .and(warp::path!("logo-black.svg"))
+        .map(|| Response::builder()
+            .header("content-type", "image/svg+xml")
+            .body(include_str!("../../public/logo-black.svg"))
+        );
+
     #[derive(Deserialize)]
     struct QueryBody {
         query: String,
@@ -197,6 +211,8 @@ async fn main() -> anyhow::Result<()> {
         .or(dash_papaparse_route)
         .or(dash_filesize_route)
         .or(dash_script_route)
+        .or(dash_logo_white_route)
+        .or(dash_logo_black_route)
         .or(query_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr).unwrap();
