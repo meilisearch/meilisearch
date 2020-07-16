@@ -276,9 +276,7 @@ impl Schema {
 
     pub fn is_displayed(&self, id: FieldId) -> bool {
         match self.displayed {
-            OptionAll::Some(ref v) => {
-                v.get(&id).is_some()
-            }
+            OptionAll::Some(ref v) => v.contains(&id),
             OptionAll::All => true,
             OptionAll::None => false,
         }

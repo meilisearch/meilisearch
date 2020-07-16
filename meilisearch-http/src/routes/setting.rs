@@ -520,7 +520,7 @@ fn get_indexed_attributes(schema: &Schema) -> Vec<String> {
         schema.indexed_name()
             .iter()
             .map(|s| s.to_string())
-            .collect::<Vec<String>>()
+            .collect()
     }
 }
 
@@ -531,6 +531,6 @@ fn get_displayed_attributes(schema: &Schema) -> HashSet<String> {
         schema.displayed_name()
             .iter()
             .map(|s| s.to_string())
-            .collect::<HashSet<String>>()
+            .collect()
     }
 }

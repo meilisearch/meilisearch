@@ -435,6 +435,8 @@ async fn displayed_and_searchable_attributes_reset_to_wildcard() {
 
     let (response, _) = server.get_all_settings().await;
 
+    assert_eq!(response["searchableAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(response["displayedAttributes"].as_array().unwrap().len(), 1);
     assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
     assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
 
@@ -447,6 +449,22 @@ async fn displayed_and_searchable_attributes_reset_to_wildcard() {
     server.update_all_settings(json!({ "searchableAttributes": [], "displayedAttributes": [] })).await;
 
     let (response, _) = server.get_all_settings().await;
+
+    assert_eq!(response["searchableAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(response["displayedAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
+    assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
+}
+
+#[actix_rt::test]
+async fn settings_that_contains_wildcard_is_wildcard() {
+    let mut server = common::Server::test_server().await;
+    server.update_all_settings(json!({ "searchableAttributes": ["color", "*"], "displayedAttributes": ["color", "*"] })).await;
+
+    let (response, _) = server.get_all_settings().await;
+
+    assert_eq!(response["searchableAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(response["displayedAttributes"].as_array().unwrap().len(), 1);
     assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
     assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
 }
