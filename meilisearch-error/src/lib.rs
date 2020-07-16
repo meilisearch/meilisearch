@@ -142,7 +142,7 @@ impl Code {
 
     /// return the doc url ascociated with the error
     fn url(&self) -> String {
-        format!("https://docs.meilisearch.com/error/{}", self.name())
+        format!("https://docs.meilisearch.com/errors#{}", self.name())
     }
 }
 
