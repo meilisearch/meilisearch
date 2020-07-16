@@ -1,6 +1,7 @@
 use actix_web::{web, HttpResponse};
 use actix_web_macros::{delete, get, post};
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
+use meilisearch_schema::Schema;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::error::{Error, ResponseError};
@@ -24,8 +25,6 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(get_displayed)
         .service(update_displayed)
         .service(delete_displayed)
-        .service(get_accept_new_fields)
-        .service(update_accept_new_fields)
         .service(get_attributes_for_faceting)
         .service(delete_attributes_for_faceting)
         .service(update_attributes_for_faceting);
@@ -108,23 +107,8 @@ async fn get_all(
         _ => vec![],
     };
 
-    println!("{:?}", attributes_for_faceting);
-
-    let searchable_attributes = schema.as_ref().map(|s| {
-        s.indexed_name()
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>()
-    });
-
-    let displayed_attributes = schema.as_ref().map(|s| {
-        s.displayed_name()
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<HashSet<String>>()
-    });
-
-    let accept_new_fields = schema.map(|s| s.accept_new_fields());
+    let searchable_attributes = schema.as_ref().map(get_indexed_attributes);
+    let displayed_attributes = schema.as_ref().map(get_displayed_attributes);
 
     let settings = Settings {
         ranking_rules: Some(Some(ranking_rules)),
@@ -133,7 +117,6 @@ async fn get_all(
         displayed_attributes: Some(displayed_attributes),
         stop_words: Some(Some(stop_words)),
         synonyms: Some(Some(synonyms)),
-        accept_new_fields: Some(accept_new_fields),
         attributes_for_faceting: Some(Some(attributes_for_faceting)),
     };
 
@@ -158,7 +141,6 @@ async fn delete_all(
         displayed_attributes: UpdateState::Clear,
         stop_words: UpdateState::Clear,
         synonyms: UpdateState::Clear,
-        accept_new_fields: UpdateState::Clear,
         attributes_for_faceting: UpdateState::Clear,
     };
 
@@ -326,7 +308,7 @@ async fn get_searchable(
     let reader = data.db.main_read_txn()?;
     let schema = index.main.schema(&reader)?;
     let searchable_attributes: Option<Vec<String>> =
-        schema.map(|s| s.indexed_name().iter().map(|i| i.to_string()).collect());
+        schema.as_ref().map(get_indexed_attributes);
 
     Ok(HttpResponse::Ok().json(searchable_attributes))
 }
@@ -396,8 +378,7 @@ async fn get_displayed(
 
     let schema = index.main.schema(&reader)?;
 
-    let displayed_attributes: Option<HashSet<String>> =
-        schema.map(|s| s.displayed_name().iter().map(|i| i.to_string()).collect());
+    let displayed_attributes = schema.as_ref().map(get_displayed_attributes);
 
     Ok(HttpResponse::Ok().json(displayed_attributes))
 }
@@ -445,52 +426,6 @@ async fn delete_displayed(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
-
-#[get(
-    "/indexes/{index_uid}/settings/accept-new-fields",
-    wrap = "Authentication::Private"
-)]
-async fn get_accept_new_fields(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-    let reader = data.db.main_read_txn()?;
-
-    let schema = index.main.schema(&reader)?;
-
-    let accept_new_fields = schema.map(|s| s.accept_new_fields());
-
-    Ok(HttpResponse::Ok().json(accept_new_fields))
-}
-
-#[post(
-    "/indexes/{index_uid}/settings/accept-new-fields",
-    wrap = "Authentication::Private"
-)]
-async fn update_accept_new_fields(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    body: web::Json<Option<bool>>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let settings = Settings {
-        accept_new_fields: Some(body.into_inner()),
-        ..Settings::default()
-    };
-
-    let settings = settings.to_update().map_err(Error::bad_request)?;
     let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
@@ -576,4 +511,26 @@ async fn delete_attributes_for_faceting(
     let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
+
+fn get_indexed_attributes(schema: &Schema) -> Vec<String> {
+    if schema.is_indexed_all() {
+        ["*"].iter().map(|s| s.to_string()).collect()
+    } else {
+        schema.indexed_name()
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+}
+
+fn get_displayed_attributes(schema: &Schema) -> HashSet<String> {
+    if schema.is_displayed_all() {
+        ["*"].iter().map(|s| s.to_string()).collect()
+    } else {
+        schema.displayed_name()
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
 }

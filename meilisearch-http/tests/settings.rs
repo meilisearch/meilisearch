@@ -48,7 +48,6 @@ async fn write_all_and_delete() {
             "street": ["avenue"],
         },
         "attributesForFaceting": ["name"],
-        "acceptNewFields": false,
     });
 
     server.update_all_settings(body.clone()).await;
@@ -77,46 +76,11 @@ async fn write_all_and_delete() {
           "exactness"
         ],
         "distinctAttribute": null,
-        "searchableAttributes": [
-          "address",
-          "id",
-          "longitude",
-          "phone",
-          "age",
-          "gender",
-          "latitude",
-          "email",
-          "about",
-          "registered",
-          "picture",
-          "isActive",
-          "tags",
-          "name",
-          "color",
-          "balance"
-        ],
-        "displayedAttributes": [
-          "address",
-          "id",
-          "longitude",
-          "phone",
-          "age",
-          "gender",
-          "latitude",
-          "email",
-          "about",
-          "registered",
-          "picture",
-          "isActive",
-          "tags",
-          "name",
-          "color",
-          "balance"
-        ],
+        "searchableAttributes": ["*"],
+        "displayedAttributes": ["*"],
         "stopWords": [],
         "synonyms": {},
         "attributesForFaceting": [],
-        "acceptNewFields": true,
     });
 
     assert_json_eq!(expect, response, ordered: false);
@@ -168,7 +132,6 @@ async fn write_all_and_update() {
             "street": ["avenue"],
         },
         "attributesForFaceting": ["name"],
-        "acceptNewFields": false,
     });
 
     server.update_all_settings(body.clone()).await;
@@ -210,7 +173,6 @@ async fn write_all_and_update() {
             "street": ["avenue"],
         },
         "attributesForFaceting": ["title"],
-        "acceptNewFields": false,
     });
 
     server.update_all_settings(body).await;
@@ -248,7 +210,6 @@ async fn write_all_and_update() {
             "street": ["avenue"],
         },
         "attributesForFaceting": ["title"],
-        "acceptNewFields": false,
     });
 
     assert_json_eq!(expected, response, ordered: false);
@@ -274,12 +235,11 @@ async fn test_default_settings() {
             "exactness"
         ],
         "distinctAttribute": null,
-        "searchableAttributes": [],
-        "displayedAttributes": [],
+        "searchableAttributes": ["*"],
+        "displayedAttributes": ["*"],
         "stopWords": [],
         "synonyms": {},
         "attributesForFaceting": [],
-        "acceptNewFields": true,
     });
 
     let (response, _status_code) = server.get_all_settings().await;
@@ -308,16 +268,11 @@ async fn test_default_settings_2() {
             "exactness"
         ],
         "distinctAttribute": null,
-        "searchableAttributes": [
-            "id"
-        ],
-        "displayedAttributes": [
-            "id"
-        ],
+        "searchableAttributes": ["*"],
+        "displayedAttributes": ["*"],
         "stopWords": [],
         "synonyms": {},
         "attributesForFaceting": [],
-        "acceptNewFields": true,
     });
 
     let (response, _status_code) = server.get_all_settings().await;
@@ -381,7 +336,6 @@ async fn write_setting_and_update_partial() {
             "road": ["street", "avenue"],
             "street": ["avenue"],
         },
-        "acceptNewFields": false,
     });
 
     server.update_all_settings(body.clone()).await;
@@ -427,7 +381,6 @@ async fn write_setting_and_update_partial() {
             "street": ["avenue"],
         },
         "attributesForFaceting": [],
-        "acceptNewFields": false,
     });
 
     let (response, _status_code) = server.get_all_settings().await;
@@ -469,17 +422,49 @@ async fn setting_ranking_rules_dont_mess_with_other_settings() {
 }
 
 #[actix_rt::test]
-async fn distinct_attribute_recorded_as_known_field() {
-   let mut server = common::Server::test_server().await;
-   let body = json!({
-       "distinctAttribute": "foobar",
-       "acceptNewFields": true
-   });
-   server.update_all_settings(body).await;
-   let document = json!([{"id": 9348127, "foobar": "hello", "foo": "bar"}]);
-   server.add_or_update_multiple_documents(document).await;
-   // foobar should not be added to the searchable attributes because it is already known, but "foo" should
-   let (response, _) = server.get_all_settings().await;
-   assert!(response["searchableAttributes"].as_array().unwrap().iter().any(|v| v.as_str().unwrap() == "foo"));
-   assert!(!response["searchableAttributes"].as_array().unwrap().iter().any(|v| v.as_str().unwrap() == "foobar"));
+async fn displayed_and_searchable_attributes_reset_to_wildcard() {
+    let mut server = common::Server::test_server().await;
+    server.update_all_settings(json!({ "searchableAttributes": ["color"], "displayedAttributes": ["color"] })).await;
+    let (response, _) = server.get_all_settings().await;
+
+    assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "color");
+    assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "color");
+
+    server.delete_searchable_attributes().await;
+    server.delete_displayed_attributes().await;
+
+    let (response, _) = server.get_all_settings().await;
+
+    assert_eq!(response["searchableAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(response["displayedAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
+    assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
+
+    let mut server = common::Server::test_server().await;
+    server.update_all_settings(json!({ "searchableAttributes": ["color"], "displayedAttributes": ["color"] })).await;
+    let (response, _) = server.get_all_settings().await;
+    assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "color");
+    assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "color");
+
+    server.update_all_settings(json!({ "searchableAttributes": [], "displayedAttributes": [] })).await;
+
+    let (response, _) = server.get_all_settings().await;
+
+    assert_eq!(response["searchableAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(response["displayedAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
+    assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
+}
+
+#[actix_rt::test]
+async fn settings_that_contains_wildcard_is_wildcard() {
+    let mut server = common::Server::test_server().await;
+    server.update_all_settings(json!({ "searchableAttributes": ["color", "*"], "displayedAttributes": ["color", "*"] })).await;
+
+    let (response, _) = server.get_all_settings().await;
+
+    assert_eq!(response["searchableAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(response["displayedAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
+    assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
 }

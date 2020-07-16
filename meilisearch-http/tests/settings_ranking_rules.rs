@@ -171,6 +171,7 @@ async fn write_custom_ranking_and_index_documents() {
 
     let expected = json!({
         "id": 1,
+        "name": "Cherry Orr",
         "color": "green"
     });
 

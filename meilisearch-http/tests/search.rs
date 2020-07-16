@@ -1195,14 +1195,20 @@ async fn search_with_differents_attributes_8() {
 
 #[actix_rt::test]
 async fn test_faceted_search_valid() {
-    let mut server = common::Server::test_server().await;
+    // set facetting attributes before adding documents
+    let mut server = common::Server::with_uid("test");
+    server.create_index(json!({ "uid": "test" })).await;
 
-    // simple tests on attributes with string value
     let body = json!({
         "attributesForFaceting": ["color"]
     });
-
     server.update_all_settings(body).await;
+
+    let dataset = include_bytes!("assets/test_set.json");
+    let body: Value = serde_json::from_slice(dataset).unwrap();
+    server.add_or_update_multiple_documents(body).await;
+
+    // simple tests on attributes with string value
 
     let query = json!({
         "q": "a",
@@ -1357,8 +1363,8 @@ async fn test_faceted_search_invalid() {
     test_post_get_search!(server, query, |response, status_code| {
 
         assert_eq!(status_code, 400);
-        assert_eq!(response["errorCode"], "invalid_facet"); 
-    }); 
+        assert_eq!(response["errorCode"], "invalid_facet");
+    });
 
     let body = json!({
         "attributesForFaceting": ["color", "tags"]
@@ -1373,7 +1379,7 @@ async fn test_faceted_search_invalid() {
 
     test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
-        assert_eq!(response["errorCode"], "invalid_facet"); 
+        assert_eq!(response["errorCode"], "invalid_facet");
     });
     // [[]]
     let query = json!({
@@ -1383,7 +1389,7 @@ async fn test_faceted_search_invalid() {
 
     test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
-        assert_eq!(response["errorCode"], "invalid_facet"); 
+        assert_eq!(response["errorCode"], "invalid_facet");
     });
 
     // ["color:green", []]
@@ -1394,7 +1400,7 @@ async fn test_faceted_search_invalid() {
 
     test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
-        assert_eq!(response["errorCode"], "invalid_facet"); 
+        assert_eq!(response["errorCode"], "invalid_facet");
     });
 
     // too much depth
@@ -1406,7 +1412,7 @@ async fn test_faceted_search_invalid() {
 
     test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
-        assert_eq!(response["errorCode"], "invalid_facet"); 
+        assert_eq!(response["errorCode"], "invalid_facet");
     });
 
     // [["color:green", ["color:blue"]]]
@@ -1417,7 +1423,7 @@ async fn test_faceted_search_invalid() {
 
     test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
-        assert_eq!(response["errorCode"], "invalid_facet"); 
+        assert_eq!(response["errorCode"], "invalid_facet");
     });
 
     // "color:green"
@@ -1428,7 +1434,7 @@ async fn test_faceted_search_invalid() {
 
     test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 400);
-        assert_eq!(response["errorCode"], "invalid_facet"); 
+        assert_eq!(response["errorCode"], "invalid_facet");
     });
 }
 
