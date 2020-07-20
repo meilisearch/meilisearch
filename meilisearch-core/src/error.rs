@@ -158,7 +158,7 @@ impl fmt::Display for Error {
             SchemaMissing => write!(f, "this index does not have a schema"),
             SerdeJson(e) => write!(f, "serde json error; {}", e),
             Serializer(e) => write!(f, "serializer error; {}", e),
-            VersionMismatch(version) => write!(f, "Cannot open database, expected MeiliSearch engine version: {}, currrent engine version: {}.{}.{}",
+            VersionMismatch(version) => write!(f, "Cannot open database, expected MeiliSearch engine version: {}, current engine version: {}.{}.{}",
                 version,
                 env!("CARGO_PKG_VERSION_MAJOR"),
                 env!("CARGO_PKG_VERSION_MINOR"),
