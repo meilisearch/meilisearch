@@ -588,3 +588,48 @@ async fn placeholder_search_with_empty_query() {
         assert_eq!(response["hits"].as_array().unwrap().len(), 3);
     });
 }
+
+#[actix_rt::test]
+async fn test_filter_nb_hits_search_placeholder() {
+    let mut server = common::Server::with_uid("test");
+
+    let body = json!({
+        "uid": "test",
+        "primaryKey": "id",
+    });
+
+    server.create_index(body).await;
+    let documents = json!([
+        {
+            "id": 1,
+            "content": "a",
+            "color": "green",
+            "size": 1,
+        },
+        {
+            "id": 2,
+            "content": "a",
+            "color": "green",
+            "size": 2,
+        },
+        {
+            "id": 3,
+            "content": "a",
+            "color": "blue",
+            "size": 3,
+        },
+    ]);
+
+    server.add_or_update_multiple_documents(documents).await;
+    let (response, _) = server.search_post(json!({})).await;
+    assert_eq!(response["nbHits"], 3);
+
+    server.update_distinct_attribute(json!("color")).await;
+
+    let (response, _) = server.search_post(json!({})).await;
+    assert_eq!(response["nbHits"], 2);
+
+    let (response, _) = server.search_post(json!({"filters": "size < 3"})).await;
+    println!("result: {}", response);
+    assert_eq!(response["nbHits"], 1);
+}
