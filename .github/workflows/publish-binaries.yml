@@ -1,9 +1,8 @@
-name: Publish binaries to GitHub release
-
 on:
-  push:
-    tags:
-      - '*'
+  release:
+    types: [published]
+
+name: Publish binaries to release
 
 jobs:
   publish:

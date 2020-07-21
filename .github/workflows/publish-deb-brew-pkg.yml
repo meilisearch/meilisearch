@@ -2,7 +2,7 @@ name: Publish deb pkg to GitHub release & APT repository & Homebrew
 
 on:
   release:
-    types: [published]
+    types: [released]
 
 jobs:
   debian:

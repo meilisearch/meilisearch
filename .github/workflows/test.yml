@@ -2,8 +2,11 @@
 on:
   push:
     branches:
-      - staging
+      - release-v*
       - trying
+      - staging
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+' # this only concerns tags on stable
 
 name: Test binaries with cargo test
 
@@ -14,7 +17,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-
     steps:
     - uses: actions/checkout@v1
     - uses: actions-rs/toolchain@v1
@@ -32,6 +34,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: clippy
+
   build-image:
     name: Test the build of Docker image
     runs-on: ubuntu-latest
@@ -39,3 +42,52 @@ jobs:
     - uses: actions/checkout@v1
     - run: docker build . --file Dockerfile -t meilisearch
       name: Docker build
+
+  ## A push occurred on a release branch, a prerelease is created and assets are generated
+  prerelease:
+    name: create prerelease
+    needs: [check, build-image]
+    if: ${{ contains(github.ref, 'release-') && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Get version number
+        id: version-number
+        run: echo "##[set-output name=number;]$(echo ${{ github.ref }} | sed 's/.*\(v.*\)/\1/')"
+      - name: Get commit count
+        id: commit-count
+        run: echo "##[set-output name=count;]$(git rev-list remotes/origin/master..remotes/origin/release-${{ steps.version-number.outputs.number }} --count)"
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLISH_TOKEN }} # Personal Access Token
+        with:
+          tag_name: ${{ steps.version-number.outputs.number }}rc${{ steps.commit-count.outputs.count }}
+          release_name: Pre-release ${{ steps.version-number.outputs.number }}-rc${{ steps.commit-count.outputs.count }}
+          prerelease: true
+
+  ## If a tag is pushed, a release is created for this tag, and assets will be generated
+  release:
+    name: create release
+    needs: [check, build-image]
+    if:  ${{ contains(github.ref, 'tags/v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Get version number
+        id: version-number
+        run: echo "##[set-output name=number;]$(echo ${{ github.ref }} | sed 's/.*\(v.*\)/\1/')" 
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLISH_TOKEN }} # PAT
+        with:
+          tag_name: ${{ steps.version-number.outputs.number }}
+          release_name: Meilisearch ${{ steps.version-number.outputs.number }}
+          prerelease: false
