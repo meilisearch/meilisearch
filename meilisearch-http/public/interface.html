@@ -136,13 +136,13 @@
               <div class="level-item has-text-centered">
                 <div>
                   <p class="heading">Documents</p>
-                  <p id="count" class="title">25</p>
+                  <p id="count" class="title">0</p>
                 </div>
               </div>
               <div class="level-item has-text-centered">
                 <div>
                   <p class="heading">Time Spent</p>
-                  <p id="time" class="title">4ms</p>
+                  <p id="time" class="title">N/A</p>
                 </div>
               </div>
             </nav>
@@ -221,7 +221,7 @@
                 results.innerHTML = '';
 
                 let processingTimeMs = httpResults.processingTimeMs;
-                let numberOfDocuments = httpResults.hits.length;
+                let numberOfDocuments = httpResults.nbHits;
                 time.innerHTML = `${processingTimeMs}ms`;
                 count.innerHTML = `${numberOfDocuments}`;
 
