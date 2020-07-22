@@ -1,7 +1,7 @@
 ---
 on:
   release:
-    types: [published]
+    types: [released]
 
 name: Publish latest image to Docker Hub
 
