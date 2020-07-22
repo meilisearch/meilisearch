@@ -1,7 +1,15 @@
-## v0.13.0 (unreleased)
+## v0.13.0
 
   - placeholder search (#771)
   - Add database version mismatch check (#794)
+  - Displayed and searchable attributes wildcard (#846)
+  - Remove sys-info route (#810)
+  - Fix facet distribution case (#797)
+  - Check database version mismatch (#794)
+  - Fix unique docid bug (#841)
+  - Error codes in updates (#792)
+  - Sentry disable argument (#813)
+  - Log analytics if enabled (#825)
 
 ## v0.12.0
 
