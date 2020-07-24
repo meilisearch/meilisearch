@@ -10,6 +10,7 @@
   - Error codes in updates (#792)
   - Sentry disable argument (#813)
   - Log analytics if enabled (#825)
+  - Fix default values displayed on web interface (#874)
 
 ## v0.12.0
 
