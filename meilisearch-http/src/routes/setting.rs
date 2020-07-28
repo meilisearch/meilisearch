@@ -1,13 +1,15 @@
-use actix_web::{web, HttpResponse};
-use actix_web::{delete, get, post};
-use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
-use meilisearch_schema::Schema;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+use actix_web::{delete, get, post};
+use actix_web::{web, HttpResponse};
+use meilisearch_core::{MainReader, UpdateWriter};
+use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
+use meilisearch_schema::Schema;
+
+use crate::Data;
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
-use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(update_all)
@@ -30,73 +32,77 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(update_attributes_for_faceting);
 }
 
+pub fn update_all_settings_txn(
+    data: &web::Data<Data>,
+    settings: SettingsUpdate,
+    index_uid: &str,
+    write_txn: &mut UpdateWriter,
+) -> Result<u64, Error> {
+    let index = data
+        .db
+        .open_index(index_uid)
+        .ok_or(Error::index_not_found(index_uid))?;
+
+    let update_id = index.settings_update(write_txn, settings)?;
+    Ok(update_id)
+}
+
 #[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn update_all(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     body: web::Json<Settings>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+    let settings = body
+        .into_inner()
+        .to_update()
+        .map_err(Error::bad_request)?;
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let settings = body
-            .into_inner()
-            .to_update()
-            .map_err(Error::bad_request)?;
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
+    let update_id = data.db.update_write::<_, _, Error>(|writer| {
+        update_all_settings_txn(&data, settings, &path.index_uid, writer)
     })?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
-#[get("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
-async fn get_all(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-) -> Result<HttpResponse, ResponseError> {
+pub fn get_all_sync(data: &web::Data<Data>, reader: &MainReader, index_uid: &str) -> Result<Settings, Error> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let reader = data.db.main_read_txn()?;
+        .open_index(index_uid)
+        .ok_or(Error::index_not_found(index_uid))?;
 
     let stop_words: BTreeSet<String> = index
         .main
-        .stop_words(&reader)?
+        .stop_words(reader)?
         .into_iter()
         .collect();
 
-    let synonyms_list = index.main.synonyms(&reader)?;
+    let synonyms_list = index.main.synonyms(reader)?;
 
     let mut synonyms = BTreeMap::new();
     let index_synonyms = &index.synonyms;
     for synonym in synonyms_list {
-        let list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
+        let list = index_synonyms.synonyms(reader, synonym.as_bytes())?;
         synonyms.insert(synonym, list);
     }
 
     let ranking_rules = index
         .main
-        .ranking_rules(&reader)?
+        .ranking_rules(reader)?
         .unwrap_or(DEFAULT_RANKING_RULES.to_vec())
         .into_iter()
         .map(|r| r.to_string())
         .collect();
 
 
-    let schema = index.main.schema(&reader)?;
+    let schema = index.main.schema(reader)?;
 
-    let distinct_attribute = match (index.main.distinct_attribute(&reader)?, &schema) {
+    let distinct_attribute = match (index.main.distinct_attribute(reader)?, &schema) {
         (Some(id), Some(schema)) => schema.name(id).map(str::to_string),
         _ => None,
     };
 
-    let attributes_for_faceting = match (&schema, &index.main.attributes_for_faceting(&reader)?) {
+    let attributes_for_faceting = match (&schema, &index.main.attributes_for_faceting(reader)?) {
         (Some(schema), Some(attrs)) => {
             attrs
                 .iter()
@@ -110,7 +116,7 @@ async fn get_all(
     let searchable_attributes = schema.as_ref().map(get_indexed_attributes);
     let displayed_attributes = schema.as_ref().map(get_displayed_attributes);
 
-    let settings = Settings {
+    Ok(Settings {
         ranking_rules: Some(Some(ranking_rules)),
         distinct_attribute: Some(distinct_attribute),
         searchable_attributes: Some(searchable_attributes),
@@ -118,7 +124,16 @@ async fn get_all(
         stop_words: Some(Some(stop_words)),
         synonyms: Some(Some(synonyms)),
         attributes_for_faceting: Some(Some(attributes_for_faceting)),
-    };
+    })
+}
+
+#[get("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
+async fn get_all(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let reader = data.db.main_read_txn()?;
+    let settings = get_all_sync(&data, &reader, &path.index_uid)?;
 
     Ok(HttpResponse::Ok().json(settings))
 }

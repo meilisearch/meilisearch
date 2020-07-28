@@ -6,7 +6,7 @@ use main_error::MainError;
 use meilisearch_http::helpers::NormalizePath;
 use meilisearch_http::{create_app, index_update_callback, Data, Opt};
 use structopt::StructOpt;
-use meilisearch_http::snapshot;
+use meilisearch_http::{snapshot, backup};
 
 mod analytics;
 
@@ -68,6 +68,11 @@ async fn main() -> Result<(), MainError> {
     data.db.set_update_callback(Box::new(move |name, status| {
         index_update_callback(name, &data_cloned, status);
     }));
+
+
+    if let Some(path) = &opt.import_backup {
+        backup::import_backup(&data, path, opt.backup_batch_size)?;
+    }
 
     if let Some(path) = &opt.snapshot_path {
         snapshot::schedule_snapshot(data.clone(), &path, opt.snapshot_interval_sec.unwrap_or(86400))?;

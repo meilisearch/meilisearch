@@ -1,11 +1,11 @@
 use std::collections::{BTreeSet, HashSet};
 
-use actix_web::{web, HttpResponse};
 use actix_web::{delete, get, post, put};
+use actix_web::{web, HttpResponse};
 use indexmap::IndexMap;
-use meilisearch_core::update;
-use serde::Deserialize;
+use meilisearch_core::{update, MainReader};
 use serde_json::Value;
+use serde::Deserialize;
 
 use crate::Data;
 use crate::error::{Error, ResponseError};
@@ -85,41 +85,61 @@ struct BrowseQuery {
     attributes_to_retrieve: Option<String>,
 }
 
+pub fn get_all_documents_sync(
+    data: &web::Data<Data>,
+    reader: &MainReader,
+    index_uid: &str,
+    offset: usize,
+    limit: usize,
+    attributes_to_retrieve: Option<&String>
+) -> Result<Vec<Document>, Error> {
+    let index = data
+        .db
+        .open_index(index_uid)
+        .ok_or(Error::index_not_found(index_uid))?;
+
+
+    let documents_ids: Result<BTreeSet<_>, _> = index
+        .documents_fields_counts
+        .documents_ids(reader)?
+        .skip(offset)
+        .take(limit)
+        .collect();
+
+    let attributes: Option<HashSet<&str>> = attributes_to_retrieve
+        .map(|a| a.split(',').collect());
+
+    let mut documents = Vec::new();
+    for document_id in documents_ids? {
+        if let Ok(Some(document)) =
+            index.document::<Document>(reader, attributes.as_ref(), document_id)
+        {
+            documents.push(document);
+        }
+    }
+
+    Ok(documents)
+}
+
 #[get("/indexes/{index_uid}/documents", wrap = "Authentication::Public")]
 async fn get_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
     let offset = params.offset.unwrap_or(0);
     let limit = params.limit.unwrap_or(20);
-
+    let index_uid = &path.index_uid;
     let reader = data.db.main_read_txn()?;
-    let documents_ids: Result<BTreeSet<_>, _> = index
-        .documents_fields_counts
-        .documents_ids(&reader)?
-        .skip(offset)
-        .take(limit)
-        .collect();
-
-    let attributes: Option<HashSet<&str>> = params
-        .attributes_to_retrieve
-        .as_ref()
-        .map(|a| a.split(',').collect());
-
-    let mut documents = Vec::new();
-    for document_id in documents_ids? {
-        if let Ok(Some(document)) =
-            index.document::<Document>(&reader, attributes.as_ref(), document_id)
-        {
-            documents.push(document);
-        }
-    }
+    
+    let documents = get_all_documents_sync(
+        &data,
+        &reader,
+        index_uid,
+        offset,
+        limit,
+        params.attributes_to_retrieve.as_ref()
+    )?;
 
     Ok(HttpResponse::Ok().json(documents))
 }
