@@ -182,7 +182,7 @@ fn version_guard(path: &Path, create: bool) -> MResult<()> {
             let version = re
                 .captures_iter(&version)
                 .next()
-                .ok_or(Error::VersionMismatch("bad VERSION file".to_string()))?;
+                .ok_or_else(|| Error::VersionMismatch("bad VERSION file".to_string()))?;
             // the first is always the complete match, safe to unwrap because we have a match
             let version_major = version.get(1).unwrap().as_str();
             let version_minor = version.get(2).unwrap().as_str();
@@ -205,7 +205,7 @@ fn version_guard(path: &Path, create: bool) -> MResult<()> {
                     } else {
                         // when no version file is found and we were not told to create one, this
                         // means that the version is inferior to the one this feature was added in.
-                        return Err(Error::VersionMismatch(format!("<0.12.0")));
+                        return Err(Error::VersionMismatch("<0.12.0".to_string()));
                     }
                 }
                 _ => return Err(error.into())
