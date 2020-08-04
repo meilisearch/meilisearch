@@ -22,6 +22,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85bb70cc08ec97ca5450e6eba421deeea5f172c0fc61f78b5357b2a8e8be195f"
 
 [[package]]
+name = "arc-cache"
+version = "0.2.4"
+source = "git+https://github.com/Kerollmops/rust-arc-cache.git?rev=56530f2#56530f2d219823f8f88dc03851f8fe057bd72564"
+dependencies = [
+ "xlru-cache",
+]
+
+[[package]]
 name = "arc-swap"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -893,6 +901,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3baa92041a6fec78c687fa0cc2b3fae8884f743d672cf551bed1d6dac6988d0f"
 
 [[package]]
+name = "linked-hash-map"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8dd5a6d5999d9907cda8ed67bbd137d3af8085216c2ac62de5be860bd41f304a"
+
+[[package]]
 name = "lmdb-rkv-sys"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -963,6 +977,7 @@ name = "milli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arc-cache",
  "askama",
  "askama_warp",
  "bitpacking",
@@ -1200,12 +1215,14 @@ checksum = "2839e79665f131bdb5782e51f2c6c9599c133c6098982a54c794358bf432529c"
 [[package]]
 name = "oxidized-mtbl"
 version = "0.1.0"
-source = "git+https://github.com/Kerollmops/oxidized-mtbl.git?rev=9451be8#9451be8829562f7d1f8d34aa3ecb81c5106a0623"
+source = "git+https://github.com/Kerollmops/oxidized-mtbl.git?rev=6b8a3a8#6b8a3a83a8b83bfdba38f7ea67bfa5868e668741"
 dependencies = [
  "byteorder",
  "crc32c",
  "flate2",
+ "memmap",
  "snap",
+ "tempfile",
  "zstd",
 ]
 
@@ -2338,6 +2355,14 @@ checksum = "d59cefebd0c892fa2dd6de581e937301d8552cb44489cdff035c6187cb63fa5e"
 dependencies = [
  "winapi 0.2.8",
  "winapi-build",
+]
+
+[[package]]
+name = "xlru-cache"
+version = "0.1.2"
+source = "git+https://github.com/Kerollmops/rust-xlru-cache.git?rev=3c90f49#3c90f49e11758ee0cc4ff145b2606ba143188b77"
+dependencies = [
+ "linked-hash-map",
 ]
 
 [[package]]
