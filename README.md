@@ -2,7 +2,7 @@
   <img alt="the milli logo" src="public/logo-black.svg">
 </p>
 
-<p align="center">The fastest search engine that ever existed, it also index in parallel.</p>
+<p align="center">A concurrent indexer combined with fast and relevant search algorithms.</p>
 
 ## Introduction
 
