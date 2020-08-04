@@ -1,5 +1,8 @@
-# milli
-A prototype of concurrent indexing, only contains postings ids
+<p align="center">
+  <img alt="the milli logo" src="public/logo-black.svg">
+</p>
+
+<p align="center">The fastest search engine that ever existed, it also index in parallel.</p>
 
 ## Introduction
 
