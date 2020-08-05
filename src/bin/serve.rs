@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -7,8 +8,8 @@ use std::time::Instant;
 
 use askama_warp::Template;
 use heed::EnvOpenOptions;
-use regex::Regex;
 use serde::Deserialize;
+use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 use warp::{Filter, http::Response};
 
@@ -42,6 +43,18 @@ struct Opt {
     /// The ip and port on which the database will listen for HTTP requests.
     #[structopt(short = "l", long, default_value = "127.0.0.1:9700")]
     http_listen_addr: String,
+}
+
+fn highlight_string(string: &str, words: &HashSet<String>) -> String {
+    let mut output = String::new();
+    for token in string.linear_group_by_key(|c| c.is_alphanumeric()) {
+        let lowercase_token = token.to_lowercase();
+        let to_highlight = words.contains(&lowercase_token);
+        if to_highlight { output.push_str("<mark>") }
+        output.push_str(token);
+        if to_highlight { output.push_str("</mark>") }
+    }
+    output
 }
 
 #[derive(Template)]
@@ -173,15 +186,6 @@ async fn main() -> anyhow::Result<()> {
                 // We write the headers
                 body.extend_from_slice(headers);
 
-                let mut regex = format!(r"(?i)\b(");
-                let number_of_words = words.len();
-                words.into_iter().enumerate().for_each(|(i, w)| {
-                    regex.push_str(&w);
-                    if i != number_of_words - 1 { regex.push('|') }
-                });
-                regex.push_str(r")\b");
-                let re = Regex::new(&regex).unwrap();
-
                 for id in documents_ids {
                     let content = index.documents.get(&rtxn, &BEU32::new(id)).unwrap();
                     let content = content.expect(&format!("could not find document {}", id));
@@ -190,7 +194,7 @@ async fn main() -> anyhow::Result<()> {
                     let content = if disable_highlighting {
                         Cow::from(content)
                     } else {
-                        re.replace_all(content, "<mark>$1</mark>")
+                        Cow::from(highlight_string(content, &words))
                     };
 
                     body.extend_from_slice(content.as_bytes());
