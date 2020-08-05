@@ -9,7 +9,7 @@ $('#search').on('input', function () {
     data: JSON.stringify({ 'query': query }),
     contentType: 'application/json',
     success: function (data, textStatus, request) {
-      let httpResults = Papa.parse(data, { header: true, skipEmptyLines: true });
+      let httpResults = Papa.parse(data, { delimiter: ",", header: true, skipEmptyLines: true });
       results.innerHTML = '';
 
       let timeSpent = request.getResponseHeader('Time-Ms');
