@@ -165,8 +165,7 @@ impl Store {
             key.truncate(1);
             key.extend_from_slice(&word);
             // we postfix the word by the positions it appears in
-            let position_bytes = pos.to_be_bytes();
-            key.extend_from_slice(&position_bytes);
+            key.extend_from_slice(&pos.to_be_bytes());
             // We serialize the document ids into a buffer
             buffer.clear();
             ids.serialize_into(&mut buffer)?;
@@ -174,8 +173,6 @@ impl Store {
             if lmdb_key_valid_size(&key) {
                 sorter.insert(&key, &buffer)?;
             }
-            // And cleanup the position afterward
-            key.truncate(key.len() - position_bytes.len());
         }
 
         Ok(())
@@ -429,15 +426,16 @@ fn main() -> anyhow::Result<()> {
     let index = Index::new(&env)?;
 
     let num_threads = rayon::current_num_threads();
-
     let max_nb_chunks = opt.max_nb_chunks;
     let max_memory = opt.max_memory;
 
     // We duplicate the file # jobs times.
     let file = opt.csv_file.unwrap();
-    let csv_readers: Vec<_> = (0..num_threads).map(|_| csv::Reader::from_path(&file)).collect::<Result<_, _>>()?;
+    let csv_readers = (0..num_threads)
+        .map(|_| csv::Reader::from_path(&file))
+        .collect::<Result<Vec<_>, _>>()?;
 
-    let stores: Vec<_> = csv_readers
+    let stores = csv_readers
         .into_par_iter()
         .enumerate()
         .map(|(i, rdr)| index_csv(rdr, i, num_threads, max_nb_chunks, max_memory))
