@@ -1,7 +1,9 @@
 use std::convert::TryFrom;
 use std::fs::File;
+use std::io::{self, Read, Write};
 use std::iter::FromIterator;
 use std::path::PathBuf;
+use std::thread;
 use std::time::Instant;
 
 use anyhow::Context;
@@ -71,6 +73,7 @@ struct Opt {
     verbose: usize,
 
     /// CSV file to index, if unspecified the CSV is read from standard input.
+    /// Note that it is much faster to index from a file.
     csv_file: Option<PathBuf>,
 }
 
@@ -346,7 +349,7 @@ where F: FnMut(&[u8], &[u8]) -> anyhow::Result<()>
 }
 
 fn index_csv(
-    mut rdr: csv::Reader<File>,
+    mut rdr: csv::Reader<Box<dyn Read + Send>>,
     thread_index: usize,
     num_threads: usize,
     arc_cache_size: Option<usize>,
@@ -429,11 +432,43 @@ fn main() -> anyhow::Result<()> {
     let max_nb_chunks = opt.max_nb_chunks;
     let max_memory = opt.max_memory;
 
-    // We duplicate the file # jobs times.
-    let file = opt.csv_file.unwrap();
-    let csv_readers = (0..num_threads)
-        .map(|_| csv::Reader::from_path(&file))
-        .collect::<Result<Vec<_>, _>>()?;
+    let csv_readers = match opt.csv_file {
+        Some(file_path) => {
+            // We open the file # jobs times.
+            (0..num_threads)
+                .map(|_| {
+                    let file = File::open(&file_path)?;
+                    let r = Box::new(file) as Box<dyn Read + Send>;
+                    Ok(csv::Reader::from_reader(r)) as io::Result<_>
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        },
+        None => {
+            let mut csv_readers = Vec::new();
+            let mut writers = Vec::new();
+            for (r, w) in (0..num_threads).map(|_| pipe::pipe()) {
+                let r = Box::new(r) as Box<dyn Read + Send>;
+                csv_readers.push(csv::Reader::from_reader(r));
+                writers.push(w);
+            }
+
+            thread::spawn(move || {
+                let stdin = std::io::stdin();
+                let mut stdin = stdin.lock();
+                let mut buffer = [0u8; 4096];
+                loop {
+                    match stdin.read(&mut buffer)? {
+                        0 => return Ok(()) as io::Result<()>,
+                        size => for w in &mut writers {
+                            w.write_all(&buffer[..size])?;
+                        }
+                    }
+                }
+            });
+
+            csv_readers
+        },
+    };
 
     let stores = csv_readers
         .into_par_iter()
