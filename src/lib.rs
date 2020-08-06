@@ -16,6 +16,7 @@ use heed::{PolyDatabase, Database};
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use log::debug;
 use once_cell::sync::Lazy;
+use oxidized_mtbl::Reader;
 use roaring::RoaringBitmap;
 
 use self::best_proximity::BestProximity;
@@ -49,8 +50,6 @@ pub struct Index {
     pub prefix_word_position_docids: Database<ByteSlice, RoaringBitmapCodec>,
     /// Maps a word and an attribute (u32) to all the documents ids that it appears in.
     pub word_attribute_docids: Database<ByteSlice, RoaringBitmapCodec>,
-    /// Maps an internal document to the content of the document in CSV.
-    pub documents: Database<OwnedType<BEU32>, ByteSlice>,
 }
 
 impl Index {
@@ -62,7 +61,6 @@ impl Index {
             word_position_docids: env.create_database(Some("word-position-docids"))?,
             prefix_word_position_docids: env.create_database(Some("prefix-word-position-docids"))?,
             word_attribute_docids: env.create_database(Some("word-attribute-docids"))?,
-            documents: env.create_database(Some("documents"))?,
         })
     }
 
@@ -72,6 +70,13 @@ impl Index {
 
     pub fn headers<'t>(&self, rtxn: &'t heed::RoTxn) -> heed::Result<Option<&'t [u8]>> {
         self.main.get::<_, Str, ByteSlice>(rtxn, "headers")
+    }
+
+    pub fn documents<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<Option<Reader<&'t [u8]>>> {
+        match self.main.get::<_, Str, ByteSlice>(rtxn, "documents")? {
+            Some(bytes) => Ok(Some(Reader::new(bytes)?)),
+            None => Ok(None),
+        }
     }
 
     pub fn number_of_attributes<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<Option<usize>> {

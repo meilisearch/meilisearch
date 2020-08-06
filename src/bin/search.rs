@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use heed::EnvOpenOptions;
 use log::debug;
-use milli::{Index, BEU32};
+use milli::Index;
 use structopt::StructOpt;
 
 #[cfg(target_os = "linux")]
@@ -67,9 +67,11 @@ fn main() -> anyhow::Result<()> {
         let mut stdout = io::stdout();
         stdout.write_all(&headers)?;
 
+        let documents = index.documents(&rtxn)?.unwrap();
         for id in &documents_ids {
-            if let Some(content) = index.documents.get(&rtxn, &BEU32::new(*id))? {
-                stdout.write_all(&content)?;
+            let id_bytes = id.to_be_bytes();
+            if let Some(content) = documents.clone().get(&id_bytes)? {
+                stdout.write_all(content.as_ref())?;
             }
         }
 

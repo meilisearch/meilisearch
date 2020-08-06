@@ -13,7 +13,7 @@ use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 use warp::{Filter, http::Response};
 
-use milli::{BEU32, Index};
+use milli::Index;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -87,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
     // the disk file size and the number of documents in the database.
     let db_name = opt.database.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
     let db_size = File::open(opt.database.join("data.mdb"))?.metadata()?.len() as usize;
-    let docs_count = env.read_txn().and_then(|r| index.documents.len(&r))?;
+    let docs_count = env.read_txn().and_then(|r| Ok(index.documents(&r).unwrap().unwrap().metadata().count_entries))?;
 
     // We run and wait on the HTTP server
 
@@ -98,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
             IndexTemplate {
                 db_name: db_name.clone(),
                 db_size,
-                docs_count,
+                docs_count: docs_count as usize,
             }
         });
 
@@ -185,11 +185,13 @@ async fn main() -> anyhow::Result<()> {
             if let Some(headers) = index.headers(&rtxn).unwrap() {
                 // We write the headers
                 body.extend_from_slice(headers);
+                let documents = index.documents(&rtxn).unwrap().unwrap();
 
                 for id in documents_ids {
-                    let content = index.documents.get(&rtxn, &BEU32::new(id)).unwrap();
+                    let id_bytes = id.to_be_bytes();
+                    let content = documents.clone().get(&id_bytes).unwrap();
                     let content = content.expect(&format!("could not find document {}", id));
-                    let content = std::str::from_utf8(content).unwrap();
+                    let content = std::str::from_utf8(content.as_ref()).unwrap();
 
                     let content = if disable_highlighting {
                         Cow::from(content)

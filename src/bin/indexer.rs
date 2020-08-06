@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -30,10 +31,10 @@ const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 
 const HEADERS_KEY: &[u8] = b"\0headers";
 const WORDS_FST_KEY: &[u8] = b"\x05words-fst";
+const DOCUMENTS_KEY: &[u8] = b"\x06documents";
 const WORD_POSITIONS_BYTE: u8 = 1;
 const WORD_POSITION_DOCIDS_BYTE: u8 = 2;
 const WORD_ATTRIBUTE_DOCIDS_BYTE: u8 = 3;
-const DOCUMENT_BYTE: u8 = 4;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -88,21 +89,22 @@ struct Store {
     word_position_docids: ArcCache<(SmallVec32<u8>, Position), RoaringBitmap>,
     word_attribute_docids: ArcCache<(SmallVec32<u8>, Attribute), RoaringBitmap>,
     sorter: Sorter<MergeFn>,
+    documents_sorter: Sorter<MergeFn>,
 }
 
 impl Store {
     fn new(arc_cache_size: Option<usize>, max_nb_chunks: Option<usize>, max_memory: Option<usize>) -> Store {
         let mut builder = Sorter::builder(merge as MergeFn);
-
         builder.chunk_compression_type(CompressionType::Snappy);
-
         if let Some(nb_chunks) = max_nb_chunks {
             builder.max_nb_chunks(nb_chunks);
         }
-
         if let Some(memory) = max_memory {
             builder.max_memory(memory);
         }
+
+        let mut documents_builder = Sorter::builder(docs_merge as MergeFn);
+        documents_builder.chunk_compression_type(CompressionType::Snappy);
 
         let arc_cache_size = arc_cache_size.unwrap_or(65_535);
 
@@ -111,6 +113,7 @@ impl Store {
             word_position_docids: ArcCache::new(arc_cache_size),
             word_attribute_docids: ArcCache::new(arc_cache_size),
             sorter: builder.build(),
+            documents_sorter: documents_builder.build(),
         }
     }
 
@@ -144,13 +147,7 @@ impl Store {
     }
 
     pub fn write_document(&mut self, id: DocumentId, content: &[u8]) -> anyhow::Result<()> {
-        let id =  id.to_be_bytes();
-        let mut key = Vec::with_capacity(1 + id.len());
-
-        key.push(DOCUMENT_BYTE);
-        key.extend_from_slice(&id);
-
-        Ok(self.sorter.insert(&key, content)?)
+        Ok(self.documents_sorter.insert(id.to_be_bytes(), content)?)
     }
 
     fn write_word_positions<I>(sorter: &mut Sorter<MergeFn>, iter: I) -> anyhow::Result<()>
@@ -245,12 +242,24 @@ impl Store {
         let fst = builder.into_set();
         wtr.insert(WORDS_FST_KEY, fst.as_fst().as_bytes())?;
 
+        let mut docs_wtr = tempfile::tempfile().map(Writer::new)?;
+        self.documents_sorter.write_into(&mut docs_wtr)?;
+        let docs_file = docs_wtr.into_inner()?;
+        let docs_mmap = unsafe { Mmap::map(&docs_file)? };
+        wtr.insert(DOCUMENTS_KEY, docs_mmap)?;
+
         let file = wtr.into_inner()?;
         let mmap = unsafe { Mmap::map(&file)? };
         let reader = Reader::new(mmap)?;
 
         Ok(reader)
     }
+}
+
+fn docs_merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
+    let key = key.try_into().unwrap();
+    let id = u32::from_be_bytes(key);
+    panic!("documents must not conflict ({} with {} values)!", id, values.len())
 }
 
 fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
@@ -271,6 +280,20 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
             assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
             Ok(values[0].to_vec())
         },
+        DOCUMENTS_KEY => {
+            let sources: Vec<_> = values.iter().map(Reader::new).collect::<Result<_, _>>().unwrap();
+
+            let mut builder = Merger::builder(docs_merge);
+            builder.extend(sources);
+            let merger = builder.build();
+
+            let mut builder = Writer::builder();
+            builder.compression_type(CompressionType::Snappy);
+
+            let mut wtr = builder.memory();
+            merger.write_into(&mut wtr).unwrap();
+            Ok(wtr.into_inner().unwrap())
+        },
         key => match key[0] {
               WORD_POSITIONS_BYTE | WORD_POSITION_DOCIDS_BYTE | WORD_ATTRIBUTE_DOCIDS_BYTE => {
                 let mut first = RoaringBitmap::deserialize_from(values[0].as_slice()).unwrap();
@@ -283,10 +306,6 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
                 let mut vec = Vec::new();
                 first.serialize_into(&mut vec).unwrap();
                 Ok(vec)
-            },
-            DOCUMENT_BYTE => {
-                assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
-                Ok(values[0].to_vec())
             },
             otherwise => panic!("wut {:?}", otherwise),
         }
@@ -304,6 +323,10 @@ fn lmdb_writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) ->
         // Write the headers
         index.main.put::<_, Str, ByteSlice>(wtxn, "headers", val)?;
     }
+    else if key == DOCUMENTS_KEY {
+        // Write the documents
+        index.main.put::<_, Str, ByteSlice>(wtxn, "documents", val)?;
+    }
     else if key.starts_with(&[WORD_POSITIONS_BYTE]) {
         // Write the postings lists
         index.word_positions.as_polymorph()
@@ -317,11 +340,6 @@ fn lmdb_writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) ->
     else if key.starts_with(&[WORD_ATTRIBUTE_DOCIDS_BYTE]) {
         // Write the attribute postings lists
         index.word_attribute_docids.as_polymorph()
-            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
-    }
-    else if key.starts_with(&[DOCUMENT_BYTE]) {
-        // Write the documents
-        index.documents.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
 
@@ -357,7 +375,7 @@ fn index_csv(
     max_memory: Option<usize>,
 ) -> anyhow::Result<Reader<Mmap>>
 {
-    debug!("{:?}: Indexing into an Indexed...", thread_index);
+    debug!("{:?}: Indexing into a Store...", thread_index);
 
     let mut store = Store::new(arc_cache_size, max_nb_chunks, max_memory);
 
@@ -480,7 +498,7 @@ fn main() -> anyhow::Result<()> {
     let mut wtxn = env.write_txn()?;
 
     merge_into_lmdb(stores, |k, v| lmdb_writer(&mut wtxn, &index, k, v))?;
-    let count = index.documents.len(&wtxn)?;
+    let count = index.documents(&wtxn)?.unwrap().metadata().count_entries;
 
     wtxn.commit()?;
     debug!("Wrote {} documents into LMDB", count);
