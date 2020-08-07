@@ -426,6 +426,7 @@ fn main() -> anyhow::Result<()> {
 
     let index = Index::new(&env)?;
 
+    let documents_path = opt.database.join("documents.mtbl");
     let num_threads = rayon::current_num_threads();
     let arc_cache_size = opt.arc_cache_size;
     let max_nb_chunks = opt.max_nb_chunks;
@@ -483,25 +484,29 @@ fn main() -> anyhow::Result<()> {
         docs_stores.push(d);
     });
 
-    debug!("We are writing into LMDB...");
-    let mut wtxn = env.write_txn()?;
+    debug!("We are writing into LMDB and MTBL...");
 
-    // We merge the postings lists into LMDB.
-    merge_into_lmdb(stores, |k, v| lmdb_writer(&mut wtxn, &index, k, v))?;
+    // We run both merging steps in parallel.
+    let (lmdb, mtbl) = rayon::join(|| {
+        // We merge the postings lists into LMDB.
+        let mut wtxn = env.write_txn()?;
+        merge_into_lmdb(stores, |k, v| lmdb_writer(&mut wtxn, &index, k, v))?;
+        Ok(wtxn.commit()?) as anyhow::Result<_>
+    }, || {
+        // We also merge the documents into its own MTBL store.
+        let file = OpenOptions::new().create(true).truncate(true).write(true).read(true).open(documents_path)?;
+        let mut writer = Writer::builder().compression_type(CompressionType::Snappy).build(file);
+        let mut builder = Merger::builder(docs_merge);
+        builder.extend(docs_stores);
+        builder.build().write_into(&mut writer)?;
+        Ok(writer.into_inner()?) as anyhow::Result<_>
+    });
 
-    // We also merge the documents into its own MTBL store.
-    let path = opt.database.join("documents.mtbl");
-    let file = OpenOptions::new().create(true).truncate(true).write(true).read(true).open(path)?;
-    let mut writer = Writer::builder().compression_type(CompressionType::Snappy).build(file);
-    let mut builder = Merger::builder(docs_merge);
-    builder.extend(docs_stores);
-    builder.build().write_into(&mut writer)?;
-    let file = writer.into_inner()?;
+    let file = lmdb.and(mtbl)?;
     let mmap = unsafe { Mmap::map(&file)? };
-    let documents = Reader::new(&mmap)?;
+    let documents = Reader::new(mmap)?;
     let count = documents.metadata().count_entries;
 
-    wtxn.commit()?;
     debug!("Wrote {} documents into LMDB", count);
 
     Ok(())
