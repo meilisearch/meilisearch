@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::io::{self, Write, BufRead};
 use std::iter::once;
 use std::path::PathBuf;
@@ -6,6 +7,7 @@ use std::time::Instant;
 use heed::EnvOpenOptions;
 use log::debug;
 use milli::Index;
+use oxidized_mtbl::Reader;
 use structopt::StructOpt;
 
 #[cfg(target_os = "linux")]
@@ -42,9 +44,16 @@ fn main() -> anyhow::Result<()> {
         .map_size(100 * 1024 * 1024 * 1024) // 100 GB
         .max_readers(10)
         .max_dbs(10)
-        .open(opt.database)?;
+        .open(&opt.database)?;
 
+    // Open the LMDB database.
     let index = Index::new(&env)?;
+
+    // Open the documents MTBL database.
+    let path = opt.database.join("documents.mtbl");
+    let file = File::open(path)?;
+    let mmap = unsafe { memmap::Mmap::map(&file)? };
+    let documents = Reader::new(mmap.as_ref())?;
 
     let rtxn = env.read_txn()?;
 
@@ -67,7 +76,6 @@ fn main() -> anyhow::Result<()> {
         let mut stdout = io::stdout();
         stdout.write_all(&headers)?;
 
-        let documents = index.documents(&rtxn)?.unwrap();
         for id in &documents_ids {
             let id_bytes = id.to_be_bytes();
             if let Some(content) = documents.clone().get(&id_bytes)? {

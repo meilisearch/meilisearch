@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 use std::convert::TryFrom;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::iter::FromIterator;
 use std::path::PathBuf;
@@ -31,7 +31,6 @@ const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 
 const HEADERS_KEY: &[u8] = b"\0headers";
 const WORDS_FST_KEY: &[u8] = b"\x05words-fst";
-const DOCUMENTS_KEY: &[u8] = b"\x06documents";
 const WORD_POSITIONS_BYTE: u8 = 1;
 const WORD_POSITION_DOCIDS_BYTE: u8 = 2;
 const WORD_ATTRIBUTE_DOCIDS_BYTE: u8 = 3;
@@ -220,7 +219,7 @@ impl Store {
         Ok(())
     }
 
-    pub fn finish(mut self) -> anyhow::Result<Reader<Mmap>> {
+    pub fn finish(mut self) -> anyhow::Result<(Reader<Mmap>, Reader<Mmap>)> {
         Self::write_word_positions(&mut self.sorter, self.word_positions)?;
         Self::write_word_position_docids(&mut self.sorter, self.word_position_docids)?;
         Self::write_word_attribute_docids(&mut self.sorter, self.word_attribute_docids)?;
@@ -246,13 +245,13 @@ impl Store {
         self.documents_sorter.write_into(&mut docs_wtr)?;
         let docs_file = docs_wtr.into_inner()?;
         let docs_mmap = unsafe { Mmap::map(&docs_file)? };
-        wtr.insert(DOCUMENTS_KEY, docs_mmap)?;
+        let docs_reader = Reader::new(docs_mmap)?;
 
         let file = wtr.into_inner()?;
         let mmap = unsafe { Mmap::map(&file)? };
         let reader = Reader::new(mmap)?;
 
-        Ok(reader)
+        Ok((reader, docs_reader))
     }
 }
 
@@ -279,20 +278,6 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
         HEADERS_KEY => {
             assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
             Ok(values[0].to_vec())
-        },
-        DOCUMENTS_KEY => {
-            let sources: Vec<_> = values.iter().map(Reader::new).collect::<Result<_, _>>().unwrap();
-
-            let mut builder = Merger::builder(docs_merge);
-            builder.extend(sources);
-            let merger = builder.build();
-
-            let mut builder = Writer::builder();
-            builder.compression_type(CompressionType::Snappy);
-
-            let mut wtr = builder.memory();
-            merger.write_into(&mut wtr).unwrap();
-            Ok(wtr.into_inner().unwrap())
         },
         key => match key[0] {
               WORD_POSITIONS_BYTE | WORD_POSITION_DOCIDS_BYTE | WORD_ATTRIBUTE_DOCIDS_BYTE => {
@@ -322,10 +307,6 @@ fn lmdb_writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) ->
     else if key == HEADERS_KEY {
         // Write the headers
         index.main.put::<_, Str, ByteSlice>(wtxn, "headers", val)?;
-    }
-    else if key == DOCUMENTS_KEY {
-        // Write the documents
-        index.main.put::<_, Str, ByteSlice>(wtxn, "documents", val)?;
     }
     else if key.starts_with(&[WORD_POSITIONS_BYTE]) {
         // Write the postings lists
@@ -373,7 +354,7 @@ fn index_csv(
     arc_cache_size: Option<usize>,
     max_nb_chunks: Option<usize>,
     max_memory: Option<usize>,
-) -> anyhow::Result<Reader<Mmap>>
+) -> anyhow::Result<(Reader<Mmap>, Reader<Mmap>)>
 {
     debug!("{:?}: Indexing into a Store...", thread_index);
 
@@ -418,9 +399,9 @@ fn index_csv(
         store.write_document(document_id, &document)?;
     }
 
-    let reader = store.finish()?;
+    let (reader, docs_reader) = store.finish()?;
     debug!("{:?}: Store created!", thread_index);
-    Ok(reader)
+    Ok((reader, docs_reader))
 }
 
 fn main() -> anyhow::Result<()> {
@@ -441,7 +422,7 @@ fn main() -> anyhow::Result<()> {
         .map_size(100 * 1024 * 1024 * 1024) // 100 GB
         .max_readers(10)
         .max_dbs(10)
-        .open(opt.database)?;
+        .open(&opt.database)?;
 
     let index = Index::new(&env)?;
 
@@ -488,17 +469,37 @@ fn main() -> anyhow::Result<()> {
         },
     };
 
-    let stores = csv_readers
+    let readers = csv_readers
         .into_par_iter()
         .enumerate()
         .map(|(i, rdr)| index_csv(rdr, i, num_threads, arc_cache_size, max_nb_chunks, max_memory))
-        .collect::<Result<_, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut stores = Vec::with_capacity(readers.len());
+    let mut docs_stores = Vec::with_capacity(readers.len());
+
+    readers.into_iter().for_each(|(s, d)| {
+        stores.push(s);
+        docs_stores.push(d);
+    });
 
     debug!("We are writing into LMDB...");
     let mut wtxn = env.write_txn()?;
 
+    // We merge the postings lists into LMDB.
     merge_into_lmdb(stores, |k, v| lmdb_writer(&mut wtxn, &index, k, v))?;
-    let count = index.documents(&wtxn)?.unwrap().metadata().count_entries;
+
+    // We also merge the documents into its own MTBL store.
+    let path = opt.database.join("documents.mtbl");
+    let file = OpenOptions::new().create(true).truncate(true).write(true).read(true).open(path)?;
+    let mut writer = Writer::builder().compression_type(CompressionType::Snappy).build(file);
+    let mut builder = Merger::builder(docs_merge);
+    builder.extend(docs_stores);
+    builder.build().write_into(&mut writer)?;
+    let file = writer.into_inner()?;
+    let mmap = unsafe { Mmap::map(&file)? };
+    let documents = Reader::new(&mmap)?;
+    let count = documents.metadata().count_entries;
 
     wtxn.commit()?;
     debug!("Wrote {} documents into LMDB", count);

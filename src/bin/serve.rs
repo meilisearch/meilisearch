@@ -4,10 +4,12 @@ use std::fs::File;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Instant;
 
 use askama_warp::Template;
 use heed::EnvOpenOptions;
+use oxidized_mtbl::Reader;
 use serde::Deserialize;
 use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
@@ -57,6 +59,21 @@ fn highlight_string(string: &str, words: &HashSet<String>) -> String {
     output
 }
 
+// TODO find a better way or move this elsewhere
+struct TransitiveArc<T>(Arc<T>);
+
+impl<T: AsRef<[u8]>> AsRef<[u8]> for TransitiveArc<T> {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref().as_ref()
+    }
+}
+
+impl<T> Clone for TransitiveArc<T> {
+    fn clone(&self) -> TransitiveArc<T> {
+        TransitiveArc(self.0.clone())
+    }
+}
+
 #[derive(Template)]
 #[template(path = "index.html")]
 struct IndexTemplate {
@@ -81,13 +98,23 @@ async fn main() -> anyhow::Result<()> {
         .max_dbs(10)
         .open(&opt.database)?;
 
+    // Open the LMDB database.
     let index = Index::new(&env)?;
+
+    // Open the documents MTBL database.
+    let path = opt.database.join("documents.mtbl");
+    let file = File::open(path)?;
+    let mmap = unsafe { memmap::Mmap::map(&file)? };
+    let mmap = TransitiveArc(Arc::new(mmap));
+    let documents = Reader::new(mmap)?;
 
     // Retrieve the database the file stem (w/o the extension),
     // the disk file size and the number of documents in the database.
     let db_name = opt.database.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
     let db_size = File::open(opt.database.join("data.mdb"))?.metadata()?.len() as usize;
-    let docs_count = env.read_txn().and_then(|r| Ok(index.documents(&r).unwrap().unwrap().metadata().count_entries))?;
+
+    // Retrieve the documents count.
+    let docs_count = documents.metadata().count_entries;
 
     // We run and wait on the HTTP server
 
@@ -171,6 +198,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let env_cloned = env.clone();
+    let documents_cloned = documents.clone();
     let disable_highlighting = opt.disable_highlighting;
     let query_route = warp::filters::method::post()
         .and(warp::path!("query"))
@@ -185,11 +213,10 @@ async fn main() -> anyhow::Result<()> {
             if let Some(headers) = index.headers(&rtxn).unwrap() {
                 // We write the headers
                 body.extend_from_slice(headers);
-                let documents = index.documents(&rtxn).unwrap().unwrap();
 
                 for id in documents_ids {
                     let id_bytes = id.to_be_bytes();
-                    let content = documents.clone().get(&id_bytes).unwrap();
+                    let content = documents_cloned.clone().get(&id_bytes).unwrap();
                     let content = content.expect(&format!("could not find document {}", id));
                     let content = std::str::from_utf8(content.as_ref()).unwrap();
 

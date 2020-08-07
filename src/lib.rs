@@ -16,7 +16,6 @@ use heed::{PolyDatabase, Database};
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use log::debug;
 use once_cell::sync::Lazy;
-use oxidized_mtbl::Reader;
 use roaring::RoaringBitmap;
 
 use self::best_proximity::BestProximity;
@@ -70,13 +69,6 @@ impl Index {
 
     pub fn headers<'t>(&self, rtxn: &'t heed::RoTxn) -> heed::Result<Option<&'t [u8]>> {
         self.main.get::<_, Str, ByteSlice>(rtxn, "headers")
-    }
-
-    pub fn documents<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<Option<Reader<&'t [u8]>>> {
-        match self.main.get::<_, Str, ByteSlice>(rtxn, "documents")? {
-            Some(bytes) => Ok(Some(Reader::new(bytes)?)),
-            None => Ok(None),
-        }
     }
 
     pub fn number_of_attributes<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<Option<usize>> {
