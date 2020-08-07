@@ -27,7 +27,7 @@ impl<'a> BytesEncode<'a> for FacetData {
     fn bytes_encode(item: &'a Self::EItem) -> Option<Cow<'a, [u8]>> {
         // get size of the first item
         let first_size =  item.0.as_bytes().len();
-        let size = mem::size_of::<usize>()
+        let size = mem::size_of::<u64>()
             + first_size
             + item.1.len() * mem::size_of::<DocumentId>();
         let mut buffer = Vec::with_capacity(size);
@@ -44,13 +44,14 @@ impl<'a> BytesDecode<'a> for FacetData {
     type DItem = (&'a str, Cow<'a, Set<DocumentId>>);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let mut size_buf = [0; 8];
-        size_buf.copy_from_slice(bytes.get(0..8)?);
+        let len = mem::size_of::<u64>();
+        let mut size_buf = [0; len];
+        size_buf.copy_from_slice(bytes.get(0..len)?);
         // decode size of the first item from the bytes
         let first_size = usize::from_be_bytes(size_buf);
         // decode first and second items
-        let first_item = Str::bytes_decode(bytes.get(8..(8 + first_size))?)?;
-        let second_item = CowSet::bytes_decode(bytes.get((8 + first_size)..)?)?;
+        let first_item = Str::bytes_decode(bytes.get(len..(len + first_size))?)?;
+        let second_item = CowSet::bytes_decode(bytes.get((len + first_size)..)?)?;
         Some((first_item, second_item))
     }
 }
