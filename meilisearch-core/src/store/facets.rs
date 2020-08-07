@@ -44,14 +44,14 @@ impl<'a> BytesDecode<'a> for FacetData {
     type DItem = (&'a str, Cow<'a, Set<DocumentId>>);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let len = mem::size_of::<u64>();
-        let mut size_buf = [0; len];
-        size_buf.copy_from_slice(bytes.get(0..len)?);
+        const LEN: usize = mem::size_of::<u64>();
+        let mut size_buf = [0; LEN];
+        size_buf.copy_from_slice(bytes.get(0..LEN)?);
         // decode size of the first item from the bytes
         let first_size = usize::from_be_bytes(size_buf);
         // decode first and second items
-        let first_item = Str::bytes_decode(bytes.get(len..(len + first_size))?)?;
-        let second_item = CowSet::bytes_decode(bytes.get((len + first_size)..)?)?;
+        let first_item = Str::bytes_decode(bytes.get(LEN..(LEN + first_size))?)?;
+        let second_item = CowSet::bytes_decode(bytes.get((LEN + first_size)..)?)?;
         Some((first_item, second_item))
     }
 }
