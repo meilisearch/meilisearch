@@ -20,6 +20,11 @@ struct Opt {
     #[structopt(long = "db", parse(from_os_str))]
     database: PathBuf,
 
+    /// The maximum size the database can take on disk. It is recommended to specify
+    /// the whole disk space (value must be a multiple of a page size).
+    #[structopt(long = "db-size", default_value = "107374182400")] // 100 GB
+    database_size: usize,
+
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
     verbose: usize,
@@ -39,8 +44,7 @@ fn main() -> anyhow::Result<()> {
 
     std::fs::create_dir_all(&opt.database)?;
     let env = EnvOpenOptions::new()
-        .map_size(100 * 1024 * 1024 * 1024) // 100 GB
-        .max_readers(10)
+        .map_size(opt.database_size)
         .max_dbs(10)
         .open(&opt.database)?;
 
