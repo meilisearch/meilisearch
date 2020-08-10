@@ -424,7 +424,7 @@ fn main() -> anyhow::Result<()> {
         .max_dbs(10)
         .open(&opt.database)?;
 
-    let index = Index::new(&env)?;
+    let mut index = Index::new(&env, &opt.database)?;
 
     let documents_path = opt.database.join("documents.mtbl");
     let num_threads = rayon::current_num_threads();
@@ -499,13 +499,12 @@ fn main() -> anyhow::Result<()> {
         let mut builder = Merger::builder(docs_merge);
         builder.extend(docs_stores);
         builder.build().write_into(&mut writer)?;
-        Ok(writer.into_inner()?) as anyhow::Result<_>
+        Ok(writer.finish()?) as anyhow::Result<_>
     });
 
-    let file = lmdb.and(mtbl)?;
-    let mmap = unsafe { Mmap::map(&file)? };
-    let documents = Reader::new(mmap)?;
-    let count = documents.metadata().count_entries;
+    lmdb.and(mtbl)?;
+    index.refresh_documents()?;
+    let count = index.number_of_documents();
 
     debug!("Wrote {} documents into LMDB", count);
 

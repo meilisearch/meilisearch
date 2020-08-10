@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::io::{self, Write, BufRead};
 use std::iter::once;
 use std::path::PathBuf;
@@ -7,7 +6,6 @@ use std::time::Instant;
 use heed::EnvOpenOptions;
 use log::debug;
 use milli::Index;
-use oxidized_mtbl::Reader;
 use structopt::StructOpt;
 
 #[cfg(target_os = "linux")]
@@ -47,14 +45,7 @@ fn main() -> anyhow::Result<()> {
         .open(&opt.database)?;
 
     // Open the LMDB database.
-    let index = Index::new(&env)?;
-
-    // Open the documents MTBL database.
-    let path = opt.database.join("documents.mtbl");
-    let file = File::open(path)?;
-    let mmap = unsafe { memmap::Mmap::map(&file)? };
-    let documents = Reader::new(mmap.as_ref())?;
-
+    let index = Index::new(&env, opt.database)?;
     let rtxn = env.read_txn()?;
 
     let stdin = io::stdin();
@@ -72,15 +63,13 @@ fn main() -> anyhow::Result<()> {
             Some(headers) => headers,
             None => return Ok(()),
         };
+        let documents = index.documents(documents_ids.iter().cloned())?;
 
         let mut stdout = io::stdout();
         stdout.write_all(&headers)?;
 
-        for id in &documents_ids {
-            let id_bytes = id.to_be_bytes();
-            if let Some(content) = documents.clone().get(&id_bytes)? {
-                stdout.write_all(content.as_ref())?;
-            }
+        for (_id, content) in documents {
+            stdout.write_all(&content)?;
         }
 
         debug!("Took {:.02?} to find {} documents", before.elapsed(), documents_ids.len());
