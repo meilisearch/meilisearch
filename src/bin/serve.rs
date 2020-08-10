@@ -62,6 +62,7 @@ fn highlight_string(string: &str, words: &HashSet<String>) -> String {
 struct IndexTemplate {
     db_name: String,
     db_size: usize,
+    docs_size: usize,
     docs_count: usize,
 }
 
@@ -88,6 +89,7 @@ async fn main() -> anyhow::Result<()> {
     // the disk file size and the number of documents in the database.
     let db_name = opt.database.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
     let db_size = File::open(opt.database.join("data.mdb"))?.metadata()?.len() as usize;
+    let docs_size = File::open(opt.database.join("documents.mtbl"))?.metadata()?.len() as usize;
     let docs_count = index.number_of_documents();
 
     // We run and wait on the HTTP server
@@ -99,6 +101,7 @@ async fn main() -> anyhow::Result<()> {
             IndexTemplate {
                 db_name: db_name.clone(),
                 db_size,
+                docs_size,
                 docs_count: docs_count as usize,
             }
         });

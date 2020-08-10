@@ -81,11 +81,10 @@ impl<'a> Iterator for QueryTokens<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use QueryToken::{Quoted, Free};
 
     #[test]
     fn one_quoted_string() {
-        use QueryToken::Quoted;
-
         let mut iter = QueryTokens::new("\"hello\"");
         assert_eq!(iter.next(), Some(Quoted("hello")));
         assert_eq!(iter.next(), None);
@@ -93,8 +92,6 @@ mod tests {
 
     #[test]
     fn one_pending_quoted_string() {
-        use QueryToken::Quoted;
-
         let mut iter = QueryTokens::new("\"hello");
         assert_eq!(iter.next(), Some(Quoted("hello")));
         assert_eq!(iter.next(), None);
@@ -102,8 +99,6 @@ mod tests {
 
     #[test]
     fn one_non_quoted_string() {
-        use QueryToken::Free;
-
         let mut iter = QueryTokens::new("hello");
         assert_eq!(iter.next(), Some(Free("hello")));
         assert_eq!(iter.next(), None);
@@ -111,8 +106,6 @@ mod tests {
 
     #[test]
     fn quoted_directly_followed_by_free_strings() {
-        use QueryToken::{Quoted, Free};
-
         let mut iter = QueryTokens::new("\"hello\"world");
         assert_eq!(iter.next(), Some(Quoted("hello")));
         assert_eq!(iter.next(), Some(Free("world")));
@@ -121,8 +114,6 @@ mod tests {
 
     #[test]
     fn free_directly_followed_by_quoted_strings() {
-        use QueryToken::{Quoted, Free};
-
         let mut iter = QueryTokens::new("hello\"world\"");
         assert_eq!(iter.next(), Some(Free("hello")));
         assert_eq!(iter.next(), Some(Quoted("world")));
@@ -131,8 +122,6 @@ mod tests {
 
     #[test]
     fn free_followed_by_quoted_strings() {
-        use QueryToken::{Quoted, Free};
-
         let mut iter = QueryTokens::new("hello \"world\"");
         assert_eq!(iter.next(), Some(Free("hello")));
         assert_eq!(iter.next(), Some(Quoted("world")));
@@ -141,8 +130,6 @@ mod tests {
 
     #[test]
     fn multiple_spaces_separated_strings() {
-        use QueryToken::Free;
-
         let mut iter = QueryTokens::new("hello    world   ");
         assert_eq!(iter.next(), Some(Free("hello")));
         assert_eq!(iter.next(), Some(Free("world")));
@@ -151,13 +138,20 @@ mod tests {
 
     #[test]
     fn multi_interleaved_quoted_free_strings() {
-        use QueryToken::{Quoted, Free};
-
         let mut iter = QueryTokens::new("hello \"world\" coucou \"monde\"");
         assert_eq!(iter.next(), Some(Free("hello")));
         assert_eq!(iter.next(), Some(Quoted("world")));
         assert_eq!(iter.next(), Some(Free("coucou")));
         assert_eq!(iter.next(), Some(Quoted("monde")));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn multi_quoted_strings() {
+        let mut iter = QueryTokens::new("\"hello world\" coucou \"monde est beau\"");
+        assert_eq!(iter.next(), Some(Quoted("hello world")));
+        assert_eq!(iter.next(), Some(Free("coucou")));
+        assert_eq!(iter.next(), Some(Quoted("monde est beau")));
         assert_eq!(iter.next(), None);
     }
 }

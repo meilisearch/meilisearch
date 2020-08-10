@@ -185,9 +185,9 @@ impl Index {
             let mut stream = fst.search(&dfa).into_stream();
             while let Some(word) = stream.next() {
                 let word = std::str::from_utf8(word)?;
-                if let Some(right) = self.word_positions.get(rtxn, word)? {
-                    union_positions.union_with(&right);
-                    derived_words.push((word.as_bytes().to_vec(), right));
+                if let Some(positions) = self.word_positions.get(rtxn, word)? {
+                    union_positions.union_with(&positions);
+                    derived_words.push((word.as_bytes().to_vec(), positions));
                     count += 1;
                 }
             }
@@ -206,7 +206,7 @@ impl Index {
         let number_of_attributes = self.number_of_attributes(rtxn)?.map_or(0, |n| n as u32);
         for (i, derived_words) in words.iter().enumerate() {
             let mut union_docids = RoaringBitmap::new();
-            for (word, _) in derived_words {
+            for (word, _positions) in derived_words {
                 for attr in 0..number_of_attributes {
                     let mut key = word.to_vec();
                     key.extend_from_slice(&attr.to_be_bytes());
