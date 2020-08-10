@@ -4,7 +4,6 @@ use std::fs::File;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::time::Instant;
 
 use askama_warp::Template;
@@ -56,21 +55,6 @@ fn highlight_string(string: &str, words: &HashSet<String>) -> String {
         if to_highlight { output.push_str("</mark>") }
     }
     output
-}
-
-// TODO find a better way or move this elsewhere
-struct TransitiveArc<T>(Arc<T>);
-
-impl<T: AsRef<[u8]>> AsRef<[u8]> for TransitiveArc<T> {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref().as_ref()
-    }
-}
-
-impl<T> Clone for TransitiveArc<T> {
-    fn clone(&self) -> TransitiveArc<T> {
-        TransitiveArc(self.0.clone())
-    }
 }
 
 #[derive(Template)]
