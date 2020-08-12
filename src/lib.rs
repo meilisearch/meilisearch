@@ -1,4 +1,5 @@
 mod best_proximity;
+mod criterion;
 mod heed_codec;
 mod iter_shortest_paths;
 mod query_tokens;
