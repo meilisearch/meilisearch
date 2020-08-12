@@ -97,16 +97,14 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
                                     .unwrap_or_default();
                                 ors.push(docids);
                             }
-                            let sets: Vec<_> = ors.iter().map(Cow::deref).collect();
-                            let or_result = sdset::multi::OpBuilder::from_vec(sets)
-                                .union()
-                                .into_set_buf();
+                            let sets: Vec<_> = ors.iter().map(|(_, i)| i).map(Cow::deref).collect();
+                            let or_result = sdset::multi::OpBuilder::from_vec(sets).union().into_set_buf();
                             ands.push(Cow::Owned(or_result));
                             ors.clear();
                         }
                         Either::Right(key) => {
                             match self.index.facets.facet_document_ids(reader, &key)? {
-                                Some(docids) => ands.push(docids),
+                                Some((_name, docids)) => ands.push(docids),
                                 // no candidates for search, early return.
                                 None => return Ok(Some(SetBuf::default())),
                             }
@@ -206,7 +204,7 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
         }
     }
 
-    fn facet_count_docids<'a>(&self, reader: &'a MainReader) -> MResult<Option<HashMap<String, HashMap<String, Cow<'a, Set<DocumentId>>>>>> {
+    fn facet_count_docids<'a>(&self, reader: &'a MainReader) -> MResult<Option<HashMap<String, HashMap<String, (&'a str, Cow<'a, Set<DocumentId>>)>>>> {
         match self.facets {
             Some(ref field_ids) => {
                 let mut facet_count_map = HashMap::new();

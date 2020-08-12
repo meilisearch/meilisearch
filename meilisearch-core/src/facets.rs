@@ -164,7 +164,7 @@ impl<'a> heed::BytesDecode<'a> for FacetKey {
 }
 
 pub fn add_to_facet_map(
-    facet_map: &mut HashMap<FacetKey, Vec<DocumentId>>,
+    facet_map: &mut HashMap<FacetKey, (String, Vec<DocumentId>)>,
     field_id: FieldId,
     value: Value,
     document_id: DocumentId,
@@ -175,8 +175,8 @@ pub fn add_to_facet_map(
         Value::Null => return Ok(()),
         value => return Err(FacetError::InvalidDocumentAttribute(value.to_string())),
     };
-    let key = FacetKey::new(field_id, value);
-    facet_map.entry(key).or_insert_with(Vec::new).push(document_id);
+    let key = FacetKey::new(field_id, value.clone());
+    facet_map.entry(key).or_insert_with(|| (value, Vec::new())).1.push(document_id);
     Ok(())
 }
 
@@ -185,8 +185,10 @@ pub fn facet_map_from_docids(
     index: &crate::Index,
     document_ids: &[DocumentId],
     attributes_for_facetting: &[FieldId],
-) -> MResult<HashMap<FacetKey, Vec<DocumentId>>> {
-    let mut facet_map = HashMap::new();
+) -> MResult<HashMap<FacetKey, (String, Vec<DocumentId>)>> {
+    // A hashmap that ascociate a facet key to a pair containing the original facet attribute
+    // string with it's case preserved, and a list of document ids for that facet attribute.
+    let mut facet_map: HashMap<FacetKey, (String, Vec<DocumentId>)> = HashMap::new();
     for document_id in document_ids {
         for result in index
             .documents_fields
@@ -212,7 +214,7 @@ pub fn facet_map_from_docs(
     schema: &Schema,
     documents: &HashMap<DocumentId, IndexMap<String, Value>>,
     attributes_for_facetting: &[FieldId],
-) -> MResult<HashMap<FacetKey, Vec<DocumentId>>> {
+) -> MResult<HashMap<FacetKey, (String, Vec<DocumentId>)>> {
     let mut facet_map = HashMap::new();
     let attributes_for_facetting = attributes_for_facetting
         .iter()
