@@ -114,10 +114,10 @@ impl fmt::Display for FacetCountError {
         use FacetCountError::*;
 
         match self {
-            AttributeNotSet(attr) => write!(f, "attribute {} is not set as facet", attr),
-            SyntaxError(msg) => write!(f, "syntax error: {}", msg),
-            UnexpectedToken { expected, found } => write!(f, "unexpected {} found, expected {:?}", found, expected),
-            NoFacetSet => write!(f, "can't perform facet count, as no facet is set"),
+            AttributeNotSet(attr) => write!(f, "Attribute {} is not set as facet", attr),
+            SyntaxError(msg) => write!(f, "Syntax error: {}", msg),
+            UnexpectedToken { expected, found } => write!(f, "Unexpected {} found, expected {:?}", found, expected),
+            NoFacetSet => write!(f, "Can't perform facet count, as no facet is set"),
         }
     }
 }
@@ -195,9 +195,9 @@ impl fmt::Display for Error {
             Self::MissingAuthorizationHeader => f.write_str("You must have an authorization token"),
             Self::NotFound(err) => write!(f, "{} not found", err),
             Self::OpenIndex(err) => write!(f, "Impossible to open index; {}", err),
-            Self::RetrieveDocument(id, err) => write!(f, "impossible to retrieve the document with id: {}; {}", id, err),
-            Self::SearchDocuments(err) => write!(f, "impossible to search documents; {}", err),
-            Self::PayloadTooLarge => f.write_str("Payload to large"),
+            Self::RetrieveDocument(id, err) => write!(f, "Impossible to retrieve the document with id: {}; {}", id, err),
+            Self::SearchDocuments(err) => write!(f, "Impossible to search documents; {}", err),
+            Self::PayloadTooLarge => f.write_str("Payload too large"),
             Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
         }
     }
