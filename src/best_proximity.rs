@@ -1,8 +1,9 @@
 use std::cmp;
 use std::time::Instant;
 
-use log::debug;
 use crate::iter_shortest_paths::astar_bag;
+use log::debug;
+use roaring::RoaringBitmap;
 
 const ONE_ATTRIBUTE: u32 = 1000;
 const MAX_DISTANCE: u32 = 8;
@@ -47,21 +48,21 @@ impl Node {
     // TODO we must skip the successors that have already been seen
     // TODO we must skip the successors that doesn't return any documents
     //      this way we are able to skip entire paths
-    fn successors(&self, positions: &[Vec<u32>], best_proximity: u32) -> Vec<(Node, u32)> {
+    fn successors(&self, positions: &[RoaringBitmap], best_proximity: u32) -> Vec<(Node, u32)> {
         match self {
             Node::Uninit => {
-                positions[0].iter().map(|p| {
-                    (Node::Init { layer: 0, position: *p, acc_proximity: 0, parent_position: 0 }, 0)
+                positions[0].iter().map(|position| {
+                    (Node::Init { layer: 0, position, acc_proximity: 0, parent_position: 0 }, 0)
                 }).collect()
             },
             // We reached the highest layer
             n @ Node::Init { .. } if n.is_complete(positions) => vec![],
             Node::Init { layer, position, acc_proximity, .. } => {
                 positions[layer + 1].iter().filter_map(|p| {
-                    let proximity = positions_proximity(*position, *p);
+                    let proximity = positions_proximity(*position, p);
                     let node = Node::Init {
                         layer: layer + 1,
-                        position: *p,
+                        position: p,
                         acc_proximity: acc_proximity + proximity,
                         parent_position: *position,
                     };
@@ -76,7 +77,7 @@ impl Node {
         }
     }
 
-    fn is_complete(&self, positions: &[Vec<u32>]) -> bool {
+    fn is_complete(&self, positions: &[RoaringBitmap]) -> bool {
         match self {
             Node::Uninit => false,
             Node::Init { layer, .. } => *layer == positions.len() - 1,
@@ -121,19 +122,19 @@ impl Node {
 }
 
 pub struct BestProximity {
-    positions: Vec<Vec<u32>>,
+    positions: Vec<RoaringBitmap>,
     best_proximity: u32,
 }
 
 impl BestProximity {
-    pub fn new(positions: Vec<Vec<u32>>) -> BestProximity {
+    pub fn new(positions: Vec<RoaringBitmap>) -> BestProximity {
         let best_proximity = (positions.len() as u32).saturating_sub(1);
         BestProximity { positions, best_proximity }
     }
 }
 
 impl BestProximity {
-    pub fn next<F>(&mut self, mut contains_documents: F) -> Option<(u32, Vec<Vec<u32>>)>
+    pub fn next<F>(&mut self, mut contains_documents: F) -> Option<(u32, Vec<RoaringBitmap>)>
     where F: FnMut((usize, u32), (usize, u32)) -> bool,
     {
         let before = Instant::now();
@@ -176,6 +177,7 @@ impl BestProximity {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::iter::FromIterator;
 
     fn sort<T: Ord>(mut val: (u32, Vec<T>)) -> (u32, Vec<T>) {
         val.1.sort_unstable();
@@ -185,37 +187,37 @@ mod tests {
     #[test]
     fn same_attribute() {
         let positions = vec![
-            vec![0,    2, 3, 4   ],
-            vec![   1,           ],
-            vec![         3,    6],
+            RoaringBitmap::from_iter(vec![0,    2, 3, 4   ]),
+            RoaringBitmap::from_iter(vec![   1,           ]),
+            RoaringBitmap::from_iter(vec![         3,    6]),
         ];
         let mut iter = BestProximity::new(positions);
         let f = |_, _| true;
 
-        assert_eq!(iter.next(f), Some((1+2, vec![vec![0, 1, 3]]))); // 3
-        assert_eq!(iter.next(f), Some((2+2, vec![vec![2, 1, 3]]))); // 4
-        assert_eq!(iter.next(f), Some((3+2, vec![vec![3, 1, 3]]))); // 5
-        assert_eq!(iter.next(f).map(sort), Some((1+5, vec![vec![0, 1, 6], vec![4, 1, 3]]))); // 6
-        assert_eq!(iter.next(f), Some((2+5, vec![vec![2, 1, 6]]))); // 7
-        assert_eq!(iter.next(f), Some((3+5, vec![vec![3, 1, 6]]))); // 8
-        assert_eq!(iter.next(f), Some((4+5, vec![vec![4, 1, 6]]))); // 9
+        assert_eq!(iter.next(f), Some((1+2, vec![RoaringBitmap::from_iter(vec![0, 1, 3])]))); // 3
+        assert_eq!(iter.next(f), Some((2+2, vec![RoaringBitmap::from_iter(vec![2, 1, 3])]))); // 4
+        assert_eq!(iter.next(f), Some((3+2, vec![RoaringBitmap::from_iter(vec![3, 1, 3])]))); // 5
+        assert_eq!(iter.next(f), Some((1+5, vec![RoaringBitmap::from_iter(vec![0, 1, 6]), RoaringBitmap::from_iter(vec![4, 1, 3])]))); // 6
+        assert_eq!(iter.next(f), Some((2+5, vec![RoaringBitmap::from_iter(vec![2, 1, 6])]))); // 7
+        assert_eq!(iter.next(f), Some((3+5, vec![RoaringBitmap::from_iter(vec![3, 1, 6])]))); // 8
+        assert_eq!(iter.next(f), Some((4+5, vec![RoaringBitmap::from_iter(vec![4, 1, 6])]))); // 9
         assert_eq!(iter.next(f), None);
     }
 
     #[test]
     fn different_attributes() {
         let positions = vec![
-            vec![0,    2,       1000, 1001, 2000      ],
-            vec![   1,          1000,       2001      ],
-            vec![         3, 6,             2002, 3000],
+            RoaringBitmap::from_iter(vec![0,    2,       1000, 1001, 2000      ]),
+            RoaringBitmap::from_iter(vec![   1,          1000,       2001      ]),
+            RoaringBitmap::from_iter(vec![         3, 6,             2002, 3000]),
         ];
         let mut iter = BestProximity::new(positions);
         let f = |_, _| true;
 
-        assert_eq!(iter.next(f), Some((1+1, vec![vec![2000, 2001, 2002]]))); // 2
-        assert_eq!(iter.next(f), Some((1+2, vec![vec![0, 1, 3]]))); // 3
-        assert_eq!(iter.next(f), Some((2+2, vec![vec![2, 1, 3]]))); // 4
-        assert_eq!(iter.next(f), Some((1+5, vec![vec![0, 1, 6]]))); // 6
+        assert_eq!(iter.next(f), Some((1+1, vec![RoaringBitmap::from_iter(vec![2000, 2001, 2002])]))); // 2
+        assert_eq!(iter.next(f), Some((1+2, vec![RoaringBitmap::from_iter(vec![0, 1, 3])]))); // 3
+        assert_eq!(iter.next(f), Some((2+2, vec![RoaringBitmap::from_iter(vec![2, 1, 3])]))); // 4
+        assert_eq!(iter.next(f), Some((1+5, vec![RoaringBitmap::from_iter(vec![0, 1, 6])]))); // 6
         // We ignore others here...
     }
 

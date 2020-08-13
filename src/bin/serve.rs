@@ -13,7 +13,7 @@ use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 use warp::{Filter, http::Response};
 
-use milli::Index;
+use milli::{Index, SearchResult};
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -183,7 +183,10 @@ async fn main() -> anyhow::Result<()> {
             let before_search = Instant::now();
             let rtxn = env_cloned.read_txn().unwrap();
 
-            let (words, documents_ids) = index.search(&rtxn, &query.query).unwrap();
+            let SearchResult { found_words, documents_ids } = index.search(&rtxn)
+                .query(query.query)
+                .execute()
+                .unwrap();
 
             let mut body = Vec::new();
             if let Some(headers) = index.headers(&rtxn).unwrap() {
@@ -196,7 +199,7 @@ async fn main() -> anyhow::Result<()> {
                     let content = if disable_highlighting {
                         Cow::from(content)
                     } else {
-                        Cow::from(highlight_string(content, &words))
+                        Cow::from(highlight_string(content, &found_words))
                     };
 
                     body.extend_from_slice(content.as_bytes());

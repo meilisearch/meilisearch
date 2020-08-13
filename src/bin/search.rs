@@ -62,12 +62,13 @@ fn main() -> anyhow::Result<()> {
         let before = Instant::now();
 
         let query = result?;
-        let (_, documents_ids) = index.search(&rtxn, &query)?;
+        let result = index.search(&rtxn).query(query).execute().unwrap();
+
         let headers = match index.headers(&rtxn)? {
             Some(headers) => headers,
             None => return Ok(()),
         };
-        let documents = index.documents(documents_ids.iter().cloned())?;
+        let documents = index.documents(result.documents_ids.iter().cloned())?;
 
         let mut stdout = io::stdout();
         stdout.write_all(&headers)?;
@@ -76,7 +77,7 @@ fn main() -> anyhow::Result<()> {
             stdout.write_all(&content)?;
         }
 
-        debug!("Took {:.02?} to find {} documents", before.elapsed(), documents_ids.len());
+        debug!("Took {:.02?} to find {} documents", before.elapsed(), result.documents_ids.len());
     }
 
     Ok(())
