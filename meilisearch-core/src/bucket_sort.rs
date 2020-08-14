@@ -370,12 +370,12 @@ where
     let mut documents = Vec::with_capacity(range.len());
     for raw_document in raw_documents.into_iter().skip(distinct_raw_offset) {
         let filter_accepted = match &filter {
-            Some(_) => filter_map.remove(&raw_document.id).unwrap(),
+            Some(_) => filter_map.remove(&raw_document.id).unwrap_or_default(),
             None => true,
         };
 
         if filter_accepted {
-            let key = key_cache.remove(&raw_document.id).unwrap();
+            let key = key_cache.remove(&raw_document.id).unwrap_or_default();
             let distinct_accepted = match key {
                 Some(key) => seen.register(key),
                 None => seen.register_without_key(),
