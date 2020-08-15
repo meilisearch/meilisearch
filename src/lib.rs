@@ -1,7 +1,6 @@
-mod best_proximity;
 mod criterion;
 mod heed_codec;
-mod iter_shortest_paths;
+mod node;
 mod query_tokens;
 mod search;
 mod transitive_arc;

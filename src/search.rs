@@ -1,14 +1,18 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
+use astar_iter::AstarBagIter;
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
+use log::debug;
 use once_cell::sync::Lazy;
 use roaring::RoaringBitmap;
 
+use crate::node::{self, Node};
 use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, DocumentId, Position, Attribute};
-use crate::best_proximity::{self, BestProximity};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -214,20 +218,30 @@ impl<'a> Search<'a> {
         };
 
         let (derived_words, union_positions) = Self::fetch_words_positions(rtxn, index, &fst, dfas)?;
-        let mut candidates = Self::compute_candidates(rtxn, index, &derived_words)?;
+        let candidates = Self::compute_candidates(rtxn, index, &derived_words)?;
 
-        let mut union_cache = HashMap::new();
+        let union_cache = HashMap::new();
         let mut intersect_cache = HashMap::new();
 
         let mut attribute_union_cache = HashMap::new();
         let mut attribute_intersect_cache = HashMap::new();
 
+        let candidates = Rc::new(RefCell::new(candidates));
+        let union_cache = Rc::new(RefCell::new(union_cache));
+
         // Returns `true` if there is documents in common between the two words and positions given.
-        let mut contains_documents = |(lword, lpos), (rword, rpos), union_cache: &mut HashMap<_, _>, candidates: &RoaringBitmap| {
+        // TODO move this closure to a better place.
+        let candidates_cloned = candidates.clone();
+        let union_cache_cloned = union_cache.clone();
+        let mut contains_documents = |(lword, lpos), (rword, rpos)| {
             if lpos == rpos { return false }
 
-            let (lattr, _) = best_proximity::extract_position(lpos);
-            let (rattr, _) = best_proximity::extract_position(rpos);
+            // TODO move this function to a better place.
+            let (lattr, _) = node::extract_position(lpos);
+            let (rattr, _) = node::extract_position(rpos);
+
+            let candidates = &candidates_cloned.borrow();
+            let mut union_cache = union_cache_cloned.borrow_mut();
 
             if lattr == rattr {
                 // We retrieve or compute the intersection between the two given words and positions.
@@ -277,19 +291,33 @@ impl<'a> Search<'a> {
             }
         };
 
+        // We instantiate an astar bag Iterator that returns the best paths incrementally,
+        // it means that it will first return the best paths then the next best paths...
+        let astar_iter = AstarBagIter::new(
+            Node::Uninit, // start
+            |n| n.successors(&union_positions, &mut contains_documents), // successors
+            |_| 0, // heuristic
+            |n| n.is_complete(&union_positions), // success
+        );
+
         let mut documents = Vec::new();
-        let mut iter = BestProximity::new(union_positions);
-        while let Some((_proximity, mut positions)) = iter.next(|l, r| contains_documents(l, r, &mut union_cache, &candidates)) {
-            positions.sort_unstable_by(|a, b| a.iter().cmp(b.iter()));
+        for (paths, proximity) in astar_iter {
+
+            let mut union_cache = union_cache.borrow_mut();
+            let mut candidates = candidates.borrow_mut();
+
+            let mut positions: Vec<Vec<_>> = paths.map(|p| p.iter().filter_map(Node::position).collect()).collect();
+            positions.sort_unstable();
+
+            debug!("Found {} positions with a proximity of {}", positions.len(), proximity);
 
             let mut same_proximity_union = RoaringBitmap::default();
             for positions in positions {
-
                 // Precompute the potentially missing unions
                 positions.iter().enumerate().for_each(|(word, pos)| {
-                    union_cache.entry((word, pos)).or_insert_with(|| {
+                    union_cache.entry((word, *pos)).or_insert_with(|| {
                         let words = &derived_words[word];
-                        Self::union_word_position(rtxn, index, words, pos).unwrap()
+                        Self::union_word_position(rtxn, index, words, *pos).unwrap()
                     });
                 });
 
@@ -297,7 +325,7 @@ impl<'a> Search<'a> {
                 let mut to_intersect: Vec<_> = positions.iter()
                     .enumerate()
                     .map(|(word, pos)| {
-                        let docids = union_cache.get(&(word, pos)).unwrap();
+                        let docids = union_cache.get(&(word, *pos)).unwrap();
                         (docids.len(), docids)
                     })
                     .collect();
