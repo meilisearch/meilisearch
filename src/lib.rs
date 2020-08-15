@@ -4,6 +4,7 @@ mod node;
 mod query_tokens;
 mod search;
 mod transitive_arc;
+pub mod lexer;
 
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};

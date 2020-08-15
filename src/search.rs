@@ -217,6 +217,10 @@ impl<'a> Search<'a> {
             None => return Ok(Default::default()),
         };
 
+        if dfas.is_empty() {
+            return Ok(Default::default());
+        }
+
         let (derived_words, union_positions) = Self::fetch_words_positions(rtxn, index, &fst, dfas)?;
         let candidates = Self::compute_candidates(rtxn, index, &derived_words)?;
 

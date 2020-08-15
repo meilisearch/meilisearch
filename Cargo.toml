@@ -10,6 +10,7 @@ anyhow = "1.0.28"
 arc-cache = { git = "https://github.com/Kerollmops/rust-arc-cache.git", rev = "56530f2" }
 astar-iter = { git = "https://github.com/Kerollmops/astar-iter" }
 bitpacking = "0.8.2"
+bstr = "0.2.13"
 byteorder = "1.3.4"
 cow-utils = "0.1.2"
 csv = "1.1.3"
@@ -29,6 +30,7 @@ smallstr = "0.2.0"
 smallvec = "1.4.0"
 structopt = { version = "0.3.14", default-features = false }
 tempfile = "3.1.0"
+unicode-linebreak = "0.1.0"
 
 # logging
 log = "0.4.8"

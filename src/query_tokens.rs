@@ -1,4 +1,5 @@
 use std::{mem, str};
+use unicode_linebreak::{break_property, BreakClass};
 
 use QueryToken::{Quoted, Free};
 
@@ -8,6 +9,7 @@ pub enum QueryToken<'a> {
     Quoted(&'a str),
 }
 
+#[derive(Debug)]
 enum State {
     Free(usize),
     Quoted(usize),
@@ -67,8 +69,13 @@ impl<'a> Iterator for QueryTokens<'a> {
                     },
                     State::Fused => return None,
                 }
-            }
-            else if !self.state.is_quoted() && !c.is_alphanumeric() {
+            } else if break_property(c as u32) == BreakClass::Ideographic {
+                match self.state.replace_by(State::Free(afteri)) {
+                    State::Quoted(s) => return Some(Quoted(&self.string[s..afteri])),
+                    State::Free(s) => return Some(Free(&self.string[s..afteri])),
+                    _ => self.state = State::Free(afteri),
+                }
+            } else if !self.state.is_quoted() && !c.is_alphanumeric() {
                 match self.state.replace_by(State::Free(afteri)) {
                     State::Free(s) if i > s => return Some(Free(&self.string[s..i])),
                     _ => self.state = State::Free(afteri),
@@ -82,6 +89,15 @@ impl<'a> Iterator for QueryTokens<'a> {
 mod tests {
     use super::*;
     use QueryToken::{Quoted, Free};
+
+    #[test]
+    fn empty() {
+        let mut iter = QueryTokens::new("");
+        assert_eq!(iter.next(), None);
+
+        let mut iter = QueryTokens::new(" ");
+        assert_eq!(iter.next(), None);
+    }
 
     #[test]
     fn one_quoted_string() {
@@ -152,6 +168,16 @@ mod tests {
         assert_eq!(iter.next(), Some(Quoted("hello world")));
         assert_eq!(iter.next(), Some(Free("coucou")));
         assert_eq!(iter.next(), Some(Quoted("monde est beau")));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn chinese() {
+        let mut iter = QueryTokens::new("汽车男生");
+        assert_eq!(iter.next(), Some(Free("汽")));
+        assert_eq!(iter.next(), Some(Free("车")));
+        assert_eq!(iter.next(), Some(Free("男")));
+        assert_eq!(iter.next(), Some(Free("生")));
         assert_eq!(iter.next(), None);
     }
 }

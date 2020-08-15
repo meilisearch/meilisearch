@@ -9,6 +9,7 @@ use std::time::Instant;
 
 use anyhow::Context;
 use arc_cache::ArcCache;
+use bstr::ByteSlice as _;
 use cow_utils::CowUtils;
 use fst::IntoStreamer;
 use heed::EnvOpenOptions;
@@ -18,12 +19,11 @@ use memmap::Mmap;
 use oxidized_mtbl::{Reader, Writer, Merger, Sorter, CompressionType};
 use rayon::prelude::*;
 use roaring::RoaringBitmap;
-use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 
-use milli::{SmallVec32, Index, DocumentId, Position, Attribute};
+use milli::{lexer, SmallVec32, Index, DocumentId, Position, Attribute};
 
-const LMDB_MAX_KEY_LENGTH: usize = 512;
+const LMDB_MAX_KEY_LENGTH: usize = 511;
 const ONE_MILLION: usize = 1_000_000;
 
 const MAX_POSITION: usize = 1000;
@@ -38,11 +38,6 @@ const WORD_ATTRIBUTE_DOCIDS_BYTE: u8 = 3;
 #[cfg(target_os = "linux")]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
-
-pub fn simple_alphanumeric_tokens(string: &str) -> impl Iterator<Item = &str> {
-    let is_alphanumeric = |s: &&str| s.chars().next().map_or(false, char::is_alphanumeric);
-    string.linear_group_by_key(|c| c.is_alphanumeric()).filter(is_alphanumeric)
-}
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "milli-indexer", about = "The indexer binary of the milli project.")]
@@ -345,7 +340,7 @@ where F: FnMut(&[u8], &[u8]) -> anyhow::Result<()>
     let mut iter = merger.into_merge_iter()?;
     while let Some(result) = iter.next() {
         let (k, v) = result?;
-        (f)(&k, &v)?;
+        (f)(&k, &v).with_context(|| format!("writing {:?} {:?} into LMDB", k.as_bstr(), k.as_bstr()))?;
     }
 
     debug!("MTBL stores merged in {:.02?}!", before.elapsed());
@@ -389,7 +384,7 @@ fn index_csv(
         }
 
         for (attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
-            for (pos, word) in simple_alphanumeric_tokens(&content).enumerate().take(MAX_POSITION) {
+            for (pos, word) in lexer::break_string(&content).enumerate().take(MAX_POSITION) {
                 let word = word.cow_to_lowercase();
                 let position = (attr * MAX_POSITION + pos) as u32;
                 store.insert_word_position(&word, position)?;
