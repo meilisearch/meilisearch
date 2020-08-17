@@ -213,5 +213,70 @@ async fn documents_with_same_id_are_overwritten() {
     server.add_or_replace_multiple_documents(documents).await;
     let (response, _status) = server.get_all_documents().await;
     assert_eq!(response.as_array().unwrap().len(), 1);
-    assert_eq!(response.as_array().unwrap()[0].as_object().unwrap()["content"], "test2");
+
+#[actix_rt::test]
+async fn create_index_lazy_by_pushing_documents() {
+    let mut server = common::Server::with_uid("movies");
+
+    // 1 - Add documents
+
+    let body = json!([{
+      "title": "Test",
+      "comment": "comment test"
+    }]);
+
+    let url = "/indexes/movies/documents?primaryKey=title";
+    let (response, status_code) = server.post_request(&url, body).await;
+    eprintln!("{:#?}", response);
+    assert_eq!(status_code, 202);
+    let update_id = response["updateId"].as_u64().unwrap();
+    server.wait_update_id(update_id).await;
+
+    // 3 - Check update success
+
+    let (response, status_code) = server.get_update_status(update_id).await;
+    assert_eq!(status_code, 200);
+    assert_eq!(response["status"], "processed");
+}
+
+#[actix_rt::test]
+async fn create_index_lazy_by_pushing_documents_and_discover_pk() {
+    let mut server = common::Server::with_uid("movies");
+
+    // 1 - Add documents
+
+    let body = json!([{
+      "id": 1,
+      "title": "Test",
+      "comment": "comment test"
+    }]);
+
+    let url = "/indexes/movies/documents";
+    let (response, status_code) = server.post_request(&url, body).await;
+    eprintln!("{:#?}", response);
+    assert_eq!(status_code, 202);
+    let update_id = response["updateId"].as_u64().unwrap();
+    server.wait_update_id(update_id).await;
+
+    // 3 - Check update success
+
+    let (response, status_code) = server.get_update_status(update_id).await;
+    assert_eq!(status_code, 200);
+    assert_eq!(response["status"], "processed");
+}
+
+#[actix_rt::test]
+async fn create_index_lazy_by_pushing_documents_with_wwrong_name() {
+    let mut server = common::Server::with_uid("wrong&name");
+
+    let body = json!([{
+      "title": "Test",
+      "comment": "comment test"
+    }]);
+
+    let url = "/indexes/wrong&name/documents?primaryKey=title";
+    let (response, status_code) = server.post_request(&url, body).await;
+    eprintln!("{:#?}", response);
+    assert_eq!(status_code, 400);
+    assert_eq!(response["errorCode"], "invalid_index_uid");
 }
