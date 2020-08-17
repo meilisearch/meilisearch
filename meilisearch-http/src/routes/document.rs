@@ -159,6 +159,36 @@ struct UpdateDocumentsQuery {
     primary_key: Option<String>,
 }
 
+fn create_index(data: &Data, uid: &str) -> Result<Index, ResponseError> {
+    if !uid
+        .chars()
+        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+    {
+        return Err(Error::InvalidIndexUid.into());
+    }
+
+    let created_index = data.db.create_index(&uid).map_err(|e| match e {
+        meilisearch_core::Error::IndexAlreadyExists => e.into(),
+        _ => ResponseError::from(Error::create_index(e)),
+    })?;
+
+    data.db.main_write::<_, _, ResponseError>(|mut writer| {
+        created_index.main.put_name(&mut writer, uid)?;
+
+        created_index
+            .main
+            .created_at(&writer)?
+            .ok_or(Error::internal("Impossible to read created at"))?;
+
+        created_index
+            .main
+            .updated_at(&writer)?
+            .ok_or(Error::internal("Impossible to read updated at"))?;
+        Ok(())
+    })?;
+
+    Ok(created_index)
+}
 async fn update_multiple_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
@@ -169,7 +199,8 @@ async fn update_multiple_documents(
     let index = data
         .db
         .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .ok_or(Error::index_not_found(&path.index_uid))
+        .or(create_index(&data, &path.index_uid))?;
 
     let reader = data.db.main_read_txn()?;
 
