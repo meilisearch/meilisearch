@@ -192,7 +192,9 @@ async fn add_document_with_long_field() {
         "url":"/configuration/app/web.html#locations"
     }]);
     server.add_or_replace_multiple_documents(body).await;
-    let (response, _status) = server.search_post(json!({ "q": "request_buffering" })).await;
+    let (response, _status) = server
+        .search_post(json!({ "q": "request_buffering" }))
+        .await;
     assert!(!response["hits"].as_array().unwrap().is_empty());
 }
 
@@ -213,6 +215,11 @@ async fn documents_with_same_id_are_overwritten() {
     server.add_or_replace_multiple_documents(documents).await;
     let (response, _status) = server.get_all_documents().await;
     assert_eq!(response.as_array().unwrap().len(), 1);
+    assert_eq!(
+        response.as_array().unwrap()[0].as_object().unwrap()["content"],
+        "test2"
+    );
+}
 
 #[actix_rt::test]
 async fn create_index_lazy_by_pushing_documents() {
