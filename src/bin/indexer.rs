@@ -494,7 +494,7 @@ fn main() -> anyhow::Result<()> {
     }, || {
         // We also merge the documents into its own MTBL store.
         let file = OpenOptions::new().create(true).truncate(true).write(true).read(true).open(documents_path)?;
-        let mut writer = Writer::builder().compression_type(CompressionType::Snappy).build(file);
+        let mut writer = Writer::builder().compression_type(CompressionType::Zlib).compression_level(9).build(file);
         let mut builder = Merger::builder(docs_merge);
         builder.extend(docs_stores);
         builder.build().write_into(&mut writer)?;
