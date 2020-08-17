@@ -9,7 +9,7 @@ use std::time::Instant;
 use std::fmt;
 
 use compact_arena::{SmallArena, Idx32, mk_arena};
-use log::debug;
+use log::{debug, error};
 use sdset::{Set, SetBuf, exponential_search, SetOperation, Counter, duo::OpBuilder};
 use slice_group_by::{GroupBy, GroupByMut};
 
@@ -370,12 +370,18 @@ where
     let mut documents = Vec::with_capacity(range.len());
     for raw_document in raw_documents.into_iter().skip(distinct_raw_offset) {
         let filter_accepted = match &filter {
-            Some(_) => filter_map.remove(&raw_document.id).unwrap_or_default(),
+            Some(_) => filter_map.remove(&raw_document.id).unwrap_or_else(|| {
+                error!("error during filtering: expected value for document id {}", &raw_document.id.0);
+                Default::default()
+            }),
             None => true,
         };
 
         if filter_accepted {
-            let key = key_cache.remove(&raw_document.id).unwrap_or_default();
+            let key = key_cache.remove(&raw_document.id).unwrap_or_else(|| {
+                error!("error during distinct: expected value for document id {}", &raw_document.id.0);
+                Default::default()
+            });
             let distinct_accepted = match key {
                 Some(key) => seen.register(key),
                 None => seen.register_without_key(),
