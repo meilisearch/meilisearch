@@ -495,3 +495,19 @@ async fn placeholder_test_sort() {
         });
     });
 }
+
+#[actix_rt::test]
+async fn placeholder_search_with_empty_query() {
+    let mut server = common::Server::test_server().await;
+
+    let query = json! ({
+        "q": "",
+        "limit": 3
+    });
+
+    test_post_get_search!(server, query, |response, status_code| {
+        eprintln!("{}", response);
+        assert_eq!(status_code, 200);
+        assert_eq!(response["hits"].as_array().unwrap().len(), 3);
+    });
+}
