@@ -50,7 +50,14 @@ enum Command {
     WordsFrequencies {
         /// The words you want to retrieve frequencies of.
         words: Vec<String>,
-    }
+    },
+
+    /// Outputs a CSV with the biggest entries of the database.
+    BiggestValueSizes {
+        /// The maximum number of sizes to return.
+        #[structopt(default_value = "10")]
+        limit: usize,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -74,6 +81,7 @@ fn main() -> anyhow::Result<()> {
     match opt.command {
         Command::MostCommonWords { limit } => most_common_words(&index, &rtxn, limit),
         Command::WordsFrequencies { words } => words_frequencies(&index, &rtxn, words),
+        Command::BiggestValueSizes { limit } => biggest_value_sizes(&index, &rtxn, limit),
     }
 }
 
@@ -146,4 +154,58 @@ fn words_frequencies(index: &Index, rtxn: &heed::RoTxn, words: Vec<String>) -> a
     }
 
     Ok(wtr.flush()?)
+}
+
+fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow::Result<()> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+    use std::convert::TryInto;
+    use heed::types::{Str, ByteSlice};
+
+    let word_positions_name = "word_positions";
+    let word_position_docids_name = "word_position_docids";
+    let word_attribute_docids_name = "word_attribute_docids";
+
+    let mut heap = BinaryHeap::with_capacity(limit + 1);
+
+    if limit > 0 {
+        for result in index.word_positions.as_polymorph().iter::<_, Str, ByteSlice>(rtxn)? {
+            let (word, value) = result?;
+            heap.push(Reverse((value.len(), word.to_string(), word_positions_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        for result in index.word_position_docids.as_polymorph().iter::<_, ByteSlice, ByteSlice>(rtxn)? {
+            let (key_bytes, value) = result?;
+            let (word, position) = key_bytes.split_at(key_bytes.len() - 4);
+            let word = str::from_utf8(word)?;
+            let position = position.try_into().map(u32::from_be_bytes)?;
+
+            let key = format!("{} {}", word, position);
+            heap.push(Reverse((value.len(), key, word_position_docids_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        for result in index.word_attribute_docids.as_polymorph().iter::<_, ByteSlice, ByteSlice>(rtxn)? {
+            let (key_bytes, value) = result?;
+            let (word, attribute) = key_bytes.split_at(key_bytes.len() - 4);
+            let word = str::from_utf8(word)?;
+            let attribute = attribute.try_into().map(u32::from_be_bytes)?;
+
+            let key = format!("{} {}", word, attribute);
+            heap.push(Reverse((value.len(), key, word_attribute_docids_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+    }
+
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["size", "key_name", "database_name"])?;
+
+    for Reverse((size, key_name, database_name)) in heap.into_sorted_vec() {
+        wtr.write_record(&[database_name.to_string(), key_name, size.to_string()])?;
+    }
+
+    Ok(wtr.flush()?)
+
 }
