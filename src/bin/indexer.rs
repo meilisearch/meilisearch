@@ -1,5 +1,4 @@
-use std::convert::TryInto;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::iter::FromIterator;
@@ -11,6 +10,7 @@ use anyhow::Context;
 use arc_cache::ArcCache;
 use bstr::ByteSlice as _;
 use cow_utils::CowUtils;
+use flate2::read::GzDecoder;
 use fst::IntoStreamer;
 use heed::EnvOpenOptions;
 use heed::types::*;
@@ -73,6 +73,9 @@ struct Opt {
     verbose: usize,
 
     /// CSV file to index, if unspecified the CSV is read from standard input.
+    ///
+    /// You can also provide a ".gz" or ".gzip" CSV file, the indexer will figure out
+    /// how to decode and read it.
     ///
     /// Note that it is much faster to index from a file as when the indexer reads from stdin
     /// it will dedicate a thread for that and context switches could slow down the indexing jobs.
@@ -501,7 +504,12 @@ fn main() -> anyhow::Result<()> {
             (0..num_threads)
                 .map(|_| {
                     let file = File::open(&file_path)?;
-                    let r = Box::new(file) as Box<dyn Read + Send>;
+                    // if the file extension is "gz" or "gzip" we can decode and read it.
+                    let r = if file_path.extension().map_or(false, |ext| ext == "gz" || ext == "gzip") {
+                        Box::new(GzDecoder::new(file)) as Box<dyn Read + Send>
+                    } else {
+                        Box::new(file) as Box<dyn Read + Send>
+                    };
                     Ok(csv::Reader::from_reader(r)) as io::Result<_>
                 })
                 .collect::<Result<Vec<_>, _>>()?
