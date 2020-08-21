@@ -342,16 +342,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam-channel"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09ee0cc8804d5393478d743b035099520087a5186f3b93fa58cec08fa62407b6"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
-]
-
-[[package]]
 name = "crossbeam-deque"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1027,8 +1017,8 @@ dependencies = [
  "memmap",
  "once_cell",
  "oxidized-mtbl",
- "pipe",
  "rayon",
+ "ringtail",
  "roaring",
  "serde",
  "slice-group-by",
@@ -1344,15 +1334,6 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
-
-[[package]]
-name = "pipe"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcd11e042e056991b5df9c0c5ae6bd0cce219b74294c40f65b89f40f7030106c"
-dependencies = [
- "crossbeam-channel",
-]
 
 [[package]]
 name = "pkg-config"
@@ -1671,6 +1652,12 @@ checksum = "4a83fa3702a688b9359eccba92d153ac33fd2e8462f9e0e3fdf155239ea7792e"
 dependencies = [
  "winapi 0.3.8",
 ]
+
+[[package]]
+name = "ringtail"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21215c1b9d8f7832b433255bd9eea3e2779aa55b21b2f8e13aad62c74749b237"
 
 [[package]]
 name = "roaring"

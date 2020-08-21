@@ -73,7 +73,9 @@ struct Opt {
     verbose: usize,
 
     /// CSV file to index, if unspecified the CSV is read from standard input.
-    /// Note that it is much faster to index from a file.
+    ///
+    /// Note that it is much faster to index from a file as when the indexer reads from stdin
+    /// it will dedicate a thread for that and context switches could slow down the indexing jobs.
     csv_file: Option<PathBuf>,
 }
 
@@ -507,7 +509,7 @@ fn main() -> anyhow::Result<()> {
         None => {
             let mut csv_readers = Vec::new();
             let mut writers = Vec::new();
-            for (r, w) in (0..num_threads).map(|_| pipe::pipe()) {
+            for (r, w) in (0..num_threads).map(|_| ringtail::io::pipe()) {
                 let r = Box::new(r) as Box<dyn Read + Send>;
                 csv_readers.push(csv::Reader::from_reader(r));
                 writers.push(w);
