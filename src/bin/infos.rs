@@ -1,9 +1,12 @@
 use std::path::PathBuf;
 use std::{str, io};
 
+use anyhow::Context;
 use heed::EnvOpenOptions;
 use milli::Index;
 use structopt::StructOpt;
+
+use Command::*;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -58,6 +61,24 @@ enum Command {
         #[structopt(default_value = "10")]
         limit: usize,
     },
+
+    /// Outputs a CSV with the document ids for all the positions of the given words.
+    WordPositionDocIds {
+        /// Show the value entirely, not just the debug version.
+        #[structopt(long)]
+        full_display: bool,
+        /// The words you want to display the values of.
+        words: Vec<String>,
+    },
+
+    /// Outputs a CSV with all the positions of the given words.
+    WordPositions {
+        /// Show the value entirely, not just the debug version.
+        #[structopt(long)]
+        full_display: bool,
+        /// The words you want to display the values of.
+        words: Vec<String>,
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -79,9 +100,11 @@ fn main() -> anyhow::Result<()> {
     let rtxn = env.read_txn()?;
 
     match opt.command {
-        Command::MostCommonWords { limit } => most_common_words(&index, &rtxn, limit),
-        Command::WordsFrequencies { words } => words_frequencies(&index, &rtxn, words),
-        Command::BiggestValueSizes { limit } => biggest_value_sizes(&index, &rtxn, limit),
+        MostCommonWords { limit } => most_common_words(&index, &rtxn, limit),
+        WordsFrequencies { words } => words_frequencies(&index, &rtxn, words),
+        BiggestValueSizes { limit } => biggest_value_sizes(&index, &rtxn, limit),
+        WordPositionDocIds { full_display, words } => word_position_doc_ids(&index, &rtxn, !full_display, words),
+        WordPositions { full_display, words } => word_positions(&index, &rtxn, !full_display, words),
     }
 }
 
@@ -207,5 +230,61 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     }
 
     Ok(wtr.flush()?)
+}
 
+fn word_position_doc_ids(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: Vec<String>) -> anyhow::Result<()> {
+    use std::convert::TryInto;
+
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["word", "position", "document_ids"])?;
+
+    let mut non_debug = Vec::new();
+    for word in words {
+        for result in index.word_position_docids.prefix_iter(rtxn, word.as_bytes())? {
+            let (bytes, postings) = result?;
+            let (w, position) = bytes.split_at(bytes.len() - 4);
+            let position = position.try_into().map(u32::from_be_bytes)?;
+
+            // if the word is not exactly the word we requested then it means
+            // we found a word that *starts with* the requested word and we must stop.
+            if word.as_bytes() != w { break }
+
+            let postings_string = if debug {
+                format!("{:?}", postings)
+            } else {
+                non_debug.clear();
+                non_debug.extend(postings);
+                format!("{:?}", non_debug)
+            };
+
+            wtr.write_record(&[&word, &position.to_string(), &postings_string])?;
+        }
+    }
+
+    Ok(wtr.flush()?)
+}
+
+fn word_positions(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: Vec<String>) -> anyhow::Result<()> {
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["word", "positions"])?;
+
+    let mut non_debug = Vec::new();
+    for word in words {
+        let postings = index.word_positions.get(rtxn, &word)?
+            .with_context(|| format!("could not find word {:?}", &word))?;
+
+        let postings_string = if debug {
+            format!("{:?}", postings)
+        } else {
+            non_debug.clear();
+            non_debug.extend(postings);
+            format!("{:?}", non_debug)
+        };
+
+        wtr.write_record(&[word, postings_string])?;
+    }
+
+    Ok(wtr.flush()?)
 }
