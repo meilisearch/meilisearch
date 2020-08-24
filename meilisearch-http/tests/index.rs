@@ -1,6 +1,5 @@
 use assert_json_diff::assert_json_eq;
 use serde_json::json;
-use serde_json::Value;
 
 mod common;
 
