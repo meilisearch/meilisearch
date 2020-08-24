@@ -1,4 +1,3 @@
-use assert_json_diff::assert_json_eq;
 use serde_json::json;
 use serde_json::Value;
 use assert_json_diff::assert_json_include;

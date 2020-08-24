@@ -44,8 +44,8 @@ impl Server {
             master_key: None,
             env: "development".to_owned(),
             no_analytics: true,
-            main_map_size: default_db_options.main_map_size,
-            update_map_size: default_db_options.update_map_size,
+            max_mdb_size: default_db_options.main_map_size,
+            max_udb_size: default_db_options.update_map_size,
             http_payload_size_limit: 10000000,
             ..Opt::default()
         };

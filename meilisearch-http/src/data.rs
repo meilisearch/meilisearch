@@ -60,8 +60,8 @@ impl Data {
         let server_pid = std::process::id();
 
         let db_opt = DatabaseOptions {
-            main_map_size: opt.main_map_size,
-            update_map_size: opt.update_map_size,
+            main_map_size: opt.max_mdb_size,
+            update_map_size: opt.max_udb_size,
         };
 
         let http_payload_size_limit = opt.http_payload_size_limit;
