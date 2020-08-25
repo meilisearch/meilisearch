@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
-use meilisearch_core::{update, Database, DatabaseOptions};
+use meilisearch_core::{settings::SettingsUpdate, update, Database, DatabaseOptions};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -271,6 +271,25 @@ impl Data {
         } else {
             Err(Error::index_not_found(index_uid).into())
         }
+    }
+
+    /// updates all the settings
+    pub fn update_settings(
+        &self,
+        index_uid: &str,
+        update: SettingsUpdate,
+    ) -> Result<IndexUpdateResponse, ResponseError> {
+        let index = self
+            .db
+            .open_index(index_uid)
+            .ok_or(Error::index_not_found(index_uid))?;
+
+        let update_id = self.db.update_write::<_, _, ResponseError>(|writer| {
+            let update_id = index.settings_update(writer, update)?;
+            Ok(update_id)
+        })?;
+
+        Ok(IndexUpdateResponse::with_id(update_id))
     }
 }
 

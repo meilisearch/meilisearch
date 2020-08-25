@@ -6,8 +6,45 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
-use crate::routes::IndexUpdateResponse;
 use crate::Data;
+
+macro_rules! make_delete_route {
+    ($route:literal, $name:ident, $attr:ident) => {
+        #[delete($route, wrap = "Authentication::Private")]
+        async fn $name(
+            data: web::Data<Data>,
+            index_uid: web::Path<String>,
+        ) -> Result<HttpResponse, ResponseError> {
+            let settings_update = SettingsUpdate {
+                $attr: UpdateState::Clear,
+                ..SettingsUpdate::default()
+            };
+            let response = data.update_settings(index_uid.as_ref(), settings_update)?;
+            Ok(HttpResponse::Accepted().json(response))
+        }
+    };
+}
+
+macro_rules! make_update_route {
+    ($route:literal, $name:ident, $type:ty, $attr:ident) => {
+        #[post($route, wrap = "Authentication::Private")]
+        async fn $name(
+            data: web::Data<Data>,
+            index_uid: web::Path<String>,
+            body: web::Json<$type>,
+        ) -> Result<HttpResponse, ResponseError> {
+            let settings = Settings {
+                $attr: Some(body.into_inner()),
+                ..Settings::default()
+            };
+
+            let settings_update = settings.to_update().map_err(Error::bad_request)?;
+            let response = data.update_settings(index_uid.as_ref(), settings_update)?;
+
+            Ok(HttpResponse::Accepted().json(response))
+        }
+    };
+}
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(update_all)
@@ -36,18 +73,9 @@ async fn update_all(
     index_uid: web::Path<String>,
     body: web::Json<Settings>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
-
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let settings = body.into_inner().to_update().map_err(Error::bad_request)?;
-        let update_id = index.settings_update(writer, settings)?;
-        Ok(update_id)
-    })?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+    let settings_update = body.to_update().map_err(Error::bad_request)?;
+    let response = data.update_settings(index_uid.as_ref(), settings_update)?;
+    Ok(HttpResponse::Accepted().json(response))
 }
 
 #[get("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
@@ -118,11 +146,6 @@ async fn delete_all(
     data: web::Data<Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
-
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
         distinct_attribute: UpdateState::Clear,
@@ -133,12 +156,9 @@ async fn delete_all(
         synonyms: UpdateState::Clear,
         attributes_for_faceting: UpdateState::Clear,
     };
+    let response = data.update_settings(index_uid.as_ref(), settings)?;
 
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+    Ok(HttpResponse::Accepted().json(response))
 }
 
 #[get(
@@ -166,57 +186,18 @@ async fn get_rules(
     Ok(HttpResponse::Ok().json(ranking_rules))
 }
 
-#[post(
+make_update_route!(
     "/indexes/{index_uid}/settings/ranking-rules",
-    wrap = "Authentication::Private"
-)]
-async fn update_rules(
-    data: web::Data<Data>,
-    index_uid: web::Path<String>,
-    body: web::Json<Option<Vec<String>>>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
+    update_rules,
+    Option<Vec<String>>,
+    ranking_rules
+);
 
-    let settings = Settings {
-        ranking_rules: Some(body.into_inner()),
-        ..Settings::default()
-    };
-
-    let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
-
-#[delete(
+make_delete_route!(
     "/indexes/{index_uid}/settings/ranking-rules",
-    wrap = "Authentication::Private"
-)]
-async fn delete_rules(
-    data: web::Data<Data>,
-    index_uid: web::Path<String>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
-
-    let settings = SettingsUpdate {
-        ranking_rules: UpdateState::Clear,
-        ..SettingsUpdate::default()
-    };
-
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
+    delete_rules,
+    ranking_rules
+);
 
 #[get(
     "/indexes/{index_uid}/settings/distinct-attribute",
@@ -241,58 +222,18 @@ async fn get_distinct(
     Ok(HttpResponse::Ok().json(distinct_attribute))
 }
 
-#[post(
+make_update_route!(
     "/indexes/{index_uid}/settings/distinct-attribute",
-    wrap = "Authentication::Private"
-)]
-async fn update_distinct(
-    data: web::Data<Data>,
-    index_uid: web::Path<String>,
-    body: web::Json<Option<String>>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
+    update_distinct,
+    Option<String>,
+    distinct_attribute
+);
 
-    let settings = Settings {
-        distinct_attribute: Some(body.into_inner()),
-        ..Settings::default()
-    };
-
-    let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
-
-#[delete(
+make_delete_route!(
     "/indexes/{index_uid}/settings/distinct-attribute",
-    wrap = "Authentication::Private"
-)]
-async fn delete_distinct(
-    data: web::Data<Data>,
-    index_uid: web::Path<String>,
-) -> Result<HttpResponse, ResponseError> {
-    let uid = index_uid.into_inner();
-    let index = data
-        .db
-        .open_index(&uid)
-        .ok_or(Error::index_not_found(&uid))?;
-
-    let settings = SettingsUpdate {
-        distinct_attribute: UpdateState::Clear,
-        ..SettingsUpdate::default()
-    };
-
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
+    delete_distinct,
+    distinct_attribute
+);
 
 #[get(
     "/indexes/{index_uid}/settings/searchable-attributes",
@@ -313,58 +254,18 @@ async fn get_searchable(
     Ok(HttpResponse::Ok().json(searchable_attributes))
 }
 
-#[post(
+make_update_route!(
     "/indexes/{index_uid}/settings/searchable-attributes",
-    wrap = "Authentication::Private"
-)]
-async fn update_searchable(
-    data: web::Data<Data>,
-    index_uid: web::Path<String>,
-    body: web::Json<Option<Vec<String>>>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
+    update_searchable,
+    Option<Vec<String>>,
+    searchable_attributes
+);
 
-    let settings = Settings {
-        searchable_attributes: Some(body.into_inner()),
-        ..Settings::default()
-    };
-
-    let settings = settings.to_update().map_err(Error::bad_request)?;
-
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
-
-#[delete(
+make_delete_route!(
     "/indexes/{index_uid}/settings/searchable-attributes",
-    wrap = "Authentication::Private"
-)]
-async fn delete_searchable(
-    data: web::Data<Data>,
-    index_uid: web::Path<String>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
-
-    let settings = SettingsUpdate {
-        searchable_attributes: UpdateState::Clear,
-        ..SettingsUpdate::default()
-    };
-
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
+    delete_searchable,
+    searchable_attributes
+);
 
 #[get(
     "/indexes/{index_uid}/settings/displayed-attributes",
@@ -387,57 +288,18 @@ async fn get_displayed(
     Ok(HttpResponse::Ok().json(displayed_attributes))
 }
 
-#[post(
+make_update_route!(
     "/indexes/{index_uid}/settings/displayed-attributes",
-    wrap = "Authentication::Private"
-)]
-async fn update_displayed(
-    data: web::Data<Data>,
-    index_uid: web::Path<String>,
-    body: web::Json<Option<HashSet<String>>>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
+    update_displayed,
+    Option<HashSet<String>>,
+    displayed_attributes
+);
 
-    let settings = Settings {
-        displayed_attributes: Some(body.into_inner()),
-        ..Settings::default()
-    };
-
-    let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
-
-#[delete(
+make_delete_route!(
     "/indexes/{index_uid}/settings/displayed-attributes",
-    wrap = "Authentication::Private"
-)]
-async fn delete_displayed(
-    data: web::Data<Data>,
-    index_uid: web::Path<String>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
-
-    let settings = SettingsUpdate {
-        displayed_attributes: UpdateState::Clear,
-        ..SettingsUpdate::default()
-    };
-
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
+    delete_displayed,
+    displayed_attributes
+);
 
 #[get(
     "/indexes/{index_uid}/settings/attributes-for-faceting",
@@ -469,57 +331,18 @@ async fn get_attributes_for_faceting(
     Ok(HttpResponse::Ok().json(attributes_for_faceting))
 }
 
-#[post(
+make_update_route!(
     "/indexes/{index_uid}/settings/attributes-for-faceting",
-    wrap = "Authentication::Private"
-)]
-async fn update_attributes_for_faceting(
-    data: web::Data<Data>,
-    index_uid: web::Path<String>,
-    body: web::Json<Option<Vec<String>>>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
+    update_attributes_for_faceting,
+    Option<Vec<String>>,
+    attributes_for_faceting
+);
 
-    let settings = Settings {
-        attributes_for_faceting: Some(body.into_inner()),
-        ..Settings::default()
-    };
-
-    let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
-
-#[delete(
+make_delete_route!(
     "/indexes/{index_uid}/settings/attributes-for-faceting",
-    wrap = "Authentication::Private"
-)]
-async fn delete_attributes_for_faceting(
-    data: web::Data<Data>,
-    index_uid: web::Path<String>,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
-
-    let settings = SettingsUpdate {
-        attributes_for_faceting: UpdateState::Clear,
-        ..SettingsUpdate::default()
-    };
-
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
+    delete_attributes_for_faceting,
+    attributes_for_faceting
+);
 
 fn get_indexed_attributes(schema: &Schema) -> Vec<String> {
     if schema.is_indexed_all() {
