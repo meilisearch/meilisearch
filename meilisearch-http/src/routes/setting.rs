@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse};
 use actix_web_macros::{delete, get, post};
+use indexmap::IndexMap;
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
 use meilisearch_schema::Schema;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -31,7 +32,7 @@ macro_rules! make_update_route {
         async fn $name(
             data: web::Data<Data>,
             index_uid: web::Path<String>,
-            body: web::Json<$type>,
+            body: web::Json<Option<$type>>,
         ) -> Result<HttpResponse, ResponseError> {
             let settings = Settings {
                 $attr: Some(body.into_inner()),
@@ -64,7 +65,13 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(delete_displayed)
         .service(get_attributes_for_faceting)
         .service(delete_attributes_for_faceting)
-        .service(update_attributes_for_faceting);
+        .service(update_attributes_for_faceting)
+        .service(get_synonyms)
+        .service(update_synonyms)
+        .service(delete_synonyms)
+        .service(get_stop_words)
+        .service(update_stop_words)
+        .service(delete_stop_words);
 }
 
 #[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
@@ -189,7 +196,7 @@ async fn get_rules(
 make_update_route!(
     "/indexes/{index_uid}/settings/ranking-rules",
     update_rules,
-    Option<Vec<String>>,
+    Vec<String>,
     ranking_rules
 );
 
@@ -225,7 +232,7 @@ async fn get_distinct(
 make_update_route!(
     "/indexes/{index_uid}/settings/distinct-attribute",
     update_distinct,
-    Option<String>,
+    String,
     distinct_attribute
 );
 
@@ -257,7 +264,7 @@ async fn get_searchable(
 make_update_route!(
     "/indexes/{index_uid}/settings/searchable-attributes",
     update_searchable,
-    Option<Vec<String>>,
+    Vec<String>,
     searchable_attributes
 );
 
@@ -291,7 +298,7 @@ async fn get_displayed(
 make_update_route!(
     "/indexes/{index_uid}/settings/displayed-attributes",
     update_displayed,
-    Option<HashSet<String>>,
+    HashSet<String>,
     displayed_attributes
 );
 
@@ -334,7 +341,7 @@ async fn get_attributes_for_faceting(
 make_update_route!(
     "/indexes/{index_uid}/settings/attributes-for-faceting",
     update_attributes_for_faceting,
-    Option<Vec<String>>,
+    Vec<String>,
     attributes_for_faceting
 );
 
@@ -342,6 +349,77 @@ make_delete_route!(
     "/indexes/{index_uid}/settings/attributes-for-faceting",
     delete_attributes_for_faceting,
     attributes_for_faceting
+);
+
+#[get(
+    "/indexes/{index_uid}/settings/synonyms",
+    wrap = "Authentication::Private"
+)]
+async fn get_synonyms(
+    data: web::Data<Data>,
+    index_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
+
+    let reader = data.db.main_read_txn()?;
+
+    let synonyms_list = index.main.synonyms(&reader)?;
+
+    let mut synonyms = IndexMap::new();
+    let index_synonyms = &index.synonyms;
+    for synonym in synonyms_list {
+        let list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
+        synonyms.insert(synonym, list);
+    }
+
+    Ok(HttpResponse::Ok().json(synonyms))
+}
+
+make_update_route!(
+    "/indexes/{index_uid}/settings/synonyms",
+    update_synonyms,
+    BTreeMap<String, Vec<String>>,
+    synonyms
+);
+
+make_delete_route!(
+    "/indexes/{index_uid}/settings/synonyms",
+    delete_synonyms,
+    synonyms
+);
+
+#[get(
+    "/indexes/{index_uid}/settings/stop-words",
+    wrap = "Authentication::Private"
+)]
+async fn get_stop_words(
+    data: web::Data<Data>,
+    index_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = data
+        .db
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
+    let reader = data.db.main_read_txn()?;
+    let stop_words = index.main.stop_words(&reader)?;
+
+    Ok(HttpResponse::Ok().json(stop_words))
+}
+
+make_update_route!(
+    "/indexes/{index_uid}/settings/stop-words",
+    update_stop_words,
+    BTreeSet<String>,
+    stop_words
+);
+
+make_delete_route!(
+    "/indexes/{index_uid}/settings/stop-words",
+    delete_stop_words,
+    stop_words
 );
 
 fn get_indexed_attributes(schema: &Schema) -> Vec<String> {

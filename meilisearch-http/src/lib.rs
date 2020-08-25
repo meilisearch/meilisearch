@@ -51,8 +51,6 @@ pub fn create_app(
         .configure(routes::index::services)
         .configure(routes::search::services)
         .configure(routes::setting::services)
-        .configure(routes::stop_words::services)
-        .configure(routes::synonym::services)
         .configure(routes::health::services)
         .configure(routes::stats::services)
         .configure(routes::key::services)

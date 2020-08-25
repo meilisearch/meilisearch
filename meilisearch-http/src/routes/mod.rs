@@ -8,8 +8,6 @@ pub mod key;
 pub mod search;
 pub mod setting;
 pub mod stats;
-pub mod stop_words;
-pub mod synonym;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
