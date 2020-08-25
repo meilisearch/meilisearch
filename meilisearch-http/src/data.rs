@@ -4,6 +4,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
 use meilisearch_core::{settings::SettingsUpdate, update, Database, DatabaseOptions};
+use raft::Store;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -60,6 +61,21 @@ pub struct UpdateIndexResponse {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     primary_key: Option<String>,
+}
+
+#[raft::async_trait]
+impl Store for Data {
+    async fn apply(&mut self, _message: &[u8]) -> raft::Result<Vec<u8>> {
+        todo!()
+    }
+
+    async fn snapshot(&self) -> raft::Result<Vec<u8>> {
+        todo!()
+    }
+
+    async fn restore(&mut self, _snapshot: &[u8]) -> raft::Result<()> {
+        todo!()
+    }
 }
 
 impl Data {
