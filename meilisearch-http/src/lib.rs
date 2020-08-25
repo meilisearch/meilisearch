@@ -50,7 +50,7 @@ pub fn create_app(
         .configure(routes::document::services)
         .configure(routes::index::services)
         .configure(routes::search::services)
-        .configure(routes::setting::services)
+        .configure(routes::settings::services)
         .configure(routes::health::services)
         .configure(routes::stats::services)
         .configure(routes::key::services)
