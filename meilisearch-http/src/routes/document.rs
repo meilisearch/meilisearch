@@ -2,17 +2,13 @@ use std::collections::{BTreeSet, HashSet};
 
 use actix_web::{web, HttpResponse};
 use actix_web_macros::{delete, get, post, put};
-use indexmap::IndexMap;
-use meilisearch_core::update;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::data::{Data, Document, UpdateDocumentsQuery};
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
-use crate::Data;
-
-type Document = IndexMap<String, Value>;
 
 #[derive(Deserialize)]
 struct DocumentParam {
@@ -125,69 +121,6 @@ async fn get_all_documents(
     Ok(HttpResponse::Ok().json(documents))
 }
 
-fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
-    for key in document.keys() {
-        if key.to_lowercase().contains("id") {
-            return Some(key.to_string());
-        }
-    }
-    None
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct UpdateDocumentsQuery {
-    primary_key: Option<String>,
-}
-
-async fn update_multiple_documents(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    params: web::Query<UpdateDocumentsQuery>,
-    body: web::Json<Vec<Document>>,
-    is_partial: bool,
-) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let reader = data.db.main_read_txn()?;
-
-    let mut schema = index
-        .main
-        .schema(&reader)?
-        .ok_or(meilisearch_core::Error::SchemaMissing)?;
-
-    if schema.primary_key().is_none() {
-        let id = match &params.primary_key {
-            Some(id) => id.to_string(),
-            None => body
-                .first()
-                .and_then(find_primary_key)
-                .ok_or(meilisearch_core::Error::MissingPrimaryKey)?,
-        };
-
-        schema.set_primary_key(&id).map_err(Error::bad_request)?;
-
-        data.db.main_write(|w| index.main.put_schema(w, &schema))?;
-    }
-
-    let mut document_addition = if is_partial {
-        index.documents_partial_addition()
-    } else {
-        index.documents_addition()
-    };
-
-    for document in body.into_inner() {
-        document_addition.update_document(document);
-    }
-
-    let update_id = data.db.update_write(|w| document_addition.finalize(w))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
-}
-
 #[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn add_documents(
     data: web::Data<Data>,
@@ -195,7 +128,13 @@ async fn add_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
 ) -> Result<HttpResponse, ResponseError> {
-    update_multiple_documents(data, path, params, body, false).await
+    let response = data.update_multiple_documents(
+        path.into_inner(),
+        params.into_inner(),
+        body.into_inner(),
+        false,
+    )?;
+    Ok(HttpResponse::Accepted().json(response))
 }
 
 #[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
@@ -205,7 +144,13 @@ async fn update_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
 ) -> Result<HttpResponse, ResponseError> {
-    update_multiple_documents(data, path, params, body, true).await
+    let response = data.update_multiple_documents(
+        path.into_inner(),
+        params.into_inner(),
+        body.into_inner(),
+        true,
+    )?;
+    Ok(HttpResponse::Accepted().json(response))
 }
 
 #[post(
@@ -217,21 +162,8 @@ async fn delete_documents(
     path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let mut documents_deletion = index.documents_deletion();
-
-    for document_id in body.into_inner() {
-        let document_id = update::value_to_string(&document_id);
-        documents_deletion.delete_document_by_external_docid(document_id);
-    }
-
-    let update_id = data.db.update_write(|w| documents_deletion.finalize(w))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+    let response = data.delete_documents(path.into_inner(), body.into_inner())?;
+    Ok(HttpResponse::Accepted().json(response))
 }
 
 #[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
@@ -239,12 +171,6 @@ async fn clear_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let update_id = data.db.update_write(|w| index.clear_all(w))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+    let response = data.clear_all_documents(path.into_inner())?;
+    Ok(HttpResponse::Accepted().json(response))
 }
