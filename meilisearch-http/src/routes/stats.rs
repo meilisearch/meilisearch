@@ -45,11 +45,12 @@ async fn index_stats(
 
     let update_reader = data.db.update_read_txn()?;
 
-    let is_indexing =
-        data.db.is_indexing(&update_reader, &path.index_uid)?
-            .ok_or(Error::internal(
-                "Impossible to know if the database is indexing",
-            ))?;
+    let is_indexing = data
+        .db
+        .is_indexing(&update_reader, &path.index_uid)?
+        .ok_or(Error::internal(
+            "Impossible to know if the database is indexing",
+        ))?;
 
     Ok(HttpResponse::Ok().json(IndexStatsResponse {
         number_of_documents,
@@ -80,11 +81,15 @@ async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError>
             Some(index) => {
                 let number_of_documents = index.main.number_of_documents(&reader)?;
 
-                let fields_distribution = index.main.fields_distribution(&reader)?.unwrap_or_default();
+                let fields_distribution =
+                    index.main.fields_distribution(&reader)?.unwrap_or_default();
 
-                let is_indexing = data.db.is_indexing(&update_reader, &index_uid)?.ok_or(
-                    Error::internal("Impossible to know if the database is indexing"),
-                )?;
+                let is_indexing =
+                    data.db
+                        .is_indexing(&update_reader, &index_uid)?
+                        .ok_or(Error::internal(
+                            "Impossible to know if the database is indexing",
+                        ))?;
 
                 let response = IndexStatsResponse {
                     number_of_documents,

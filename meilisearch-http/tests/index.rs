@@ -71,7 +71,10 @@ async fn create_index_with_uid() {
     let (response, status_code) = server.create_index(body).await;
 
     assert_eq!(status_code, 400);
-    assert_eq!(response["errorCode"].as_str().unwrap(), "index_already_exists");
+    assert_eq!(
+        response["errorCode"].as_str().unwrap(),
+        "index_already_exists"
+    );
 
     // 2 - Check the list of indexes
 
@@ -661,4 +664,3 @@ async fn check_add_documents_without_primary_key() {
     assert_eq!(response["errorCode"], "missing_primary_key");
     assert_eq!(status_code, 400);
 }
-

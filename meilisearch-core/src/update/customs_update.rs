@@ -1,7 +1,6 @@
-
 use crate::database::{MainT, UpdateT};
-use crate::{store, MResult};
 use crate::update::{next_update_id, Update};
+use crate::{store, MResult};
 
 pub fn apply_customs_update(
     writer: &mut heed::RwTxn<MainT>,

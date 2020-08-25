@@ -1,5 +1,5 @@
-use heed::types::{ByteSlice, OwnedType};
 use crate::database::MainT;
+use heed::types::{ByteSlice, OwnedType};
 use heed::Result as ZResult;
 use meilisearch_schema::FieldId;
 

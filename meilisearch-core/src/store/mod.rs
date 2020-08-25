@@ -1,8 +1,8 @@
 mod cow_set;
 mod docs_words;
-mod documents_ids;
 mod documents_fields;
 mod documents_fields_counts;
+mod documents_ids;
 mod facets;
 mod main;
 mod postings_lists;
@@ -15,8 +15,10 @@ mod updates_results;
 pub use self::cow_set::CowSet;
 pub use self::docs_words::DocsWords;
 pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
-pub use self::documents_fields_counts::{DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter};
-pub use self::documents_ids::{DocumentsIds, DiscoverIds};
+pub use self::documents_fields_counts::{
+    DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter,
+};
+pub use self::documents_ids::{DiscoverIds, DocumentsIds};
 pub use self::facets::Facets;
 pub use self::main::Main;
 pub use self::postings_lists::PostingsLists;
@@ -31,8 +33,8 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 use std::{mem, ptr};
 
-use heed::{BytesEncode, BytesDecode};
-use meilisearch_schema::{IndexedPos, FieldId};
+use heed::{BytesDecode, BytesEncode};
+use meilisearch_schema::{FieldId, IndexedPos};
 use sdset::{Set, SetBuf};
 use serde::de::{self, Deserialize};
 use zerocopy::{AsBytes, FromBytes};
@@ -112,7 +114,8 @@ fn aligned_to(bytes: &[u8], align: usize) -> bool {
 }
 
 fn from_bytes_to_set<'a, T: 'a>(bytes: &'a [u8]) -> Option<Cow<'a, Set<T>>>
-where T: Clone + FromBytes
+where
+    T: Clone + FromBytes,
 {
     match zerocopy::LayoutVerified::<_, [T]>::new_slice(bytes) {
         Some(layout) => Some(Cow::Borrowed(Set::new_unchecked(layout.into_slice()))),
@@ -233,7 +236,12 @@ impl Index {
         let schema = schema.ok_or(Error::SchemaMissing)?;
 
         let attributes = match attributes {
-            Some(attributes) => Some(attributes.iter().filter_map(|name| schema.id(*name)).collect()),
+            Some(attributes) => Some(
+                attributes
+                    .iter()
+                    .filter_map(|name| schema.id(*name))
+                    .collect(),
+            ),
             None => None,
         };
 
@@ -278,14 +286,32 @@ impl Index {
         }
     }
 
-    pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> MResult<u64> {
+    pub fn customs_update(
+        &self,
+        writer: &mut heed::RwTxn<UpdateT>,
+        customs: Vec<u8>,
+    ) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
-        Ok(update::push_customs_update(writer, self.updates, self.updates_results, customs)?)
+        Ok(update::push_customs_update(
+            writer,
+            self.updates,
+            self.updates_results,
+            customs,
+        )?)
     }
 
-    pub fn settings_update(&self, writer: &mut heed::RwTxn<UpdateT>, update: SettingsUpdate) -> MResult<u64> {
+    pub fn settings_update(
+        &self,
+        writer: &mut heed::RwTxn<UpdateT>,
+        update: SettingsUpdate,
+    ) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
-        Ok(update::push_settings_update(writer, self.updates, self.updates_results, update)?)
+        Ok(update::push_settings_update(
+            writer,
+            self.updates,
+            self.updates_results,
+            update,
+        )?)
     }
 
     pub fn documents_addition<D>(&self) -> update::DocumentsAddition<D> {
@@ -332,7 +358,10 @@ impl Index {
         update::update_status(reader, self.updates, self.updates_results, update_id)
     }
 
-    pub fn all_updates_status(&self, reader: &heed::RoTxn<UpdateT>) -> MResult<Vec<update::UpdateStatus>> {
+    pub fn all_updates_status(
+        &self,
+        reader: &heed::RoTxn<UpdateT>,
+    ) -> MResult<Vec<update::UpdateStatus>> {
         let mut updates = Vec::new();
         let mut last_update_result_id = 0;
 
@@ -400,7 +429,8 @@ pub fn create(
     let synonyms = env.create_database(Some(&synonyms_name))?;
     let docs_words = env.create_database(Some(&docs_words_name))?;
     let prefix_documents_cache = env.create_database(Some(&prefix_documents_cache_name))?;
-    let prefix_postings_lists_cache = env.create_database(Some(&prefix_postings_lists_cache_name))?;
+    let prefix_postings_lists_cache =
+        env.create_database(Some(&prefix_postings_lists_cache_name))?;
     let updates = update_env.create_database(Some(&updates_name))?;
     let updates_results = update_env.create_database(Some(&updates_results_name))?;
 
@@ -408,11 +438,17 @@ pub fn create(
         main: Main { main },
         postings_lists: PostingsLists { postings_lists },
         documents_fields: DocumentsFields { documents_fields },
-        documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
+        documents_fields_counts: DocumentsFieldsCounts {
+            documents_fields_counts,
+        },
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
-        prefix_postings_lists_cache: PrefixPostingsListsCache { prefix_postings_lists_cache },
-        prefix_documents_cache: PrefixDocumentsCache { prefix_documents_cache },
+        prefix_postings_lists_cache: PrefixPostingsListsCache {
+            prefix_postings_lists_cache,
+        },
+        prefix_documents_cache: PrefixDocumentsCache {
+            prefix_documents_cache,
+        },
         facets: Facets { facets },
 
         updates: Updates { updates },
@@ -473,10 +509,11 @@ pub fn open(
         Some(facets) => facets,
         None => return Ok(None),
     };
-    let prefix_postings_lists_cache = match env.open_database(Some(&prefix_postings_lists_cache_name))? {
-        Some(prefix_postings_lists_cache) => prefix_postings_lists_cache,
-        None => return Ok(None),
-    };
+    let prefix_postings_lists_cache =
+        match env.open_database(Some(&prefix_postings_lists_cache_name))? {
+            Some(prefix_postings_lists_cache) => prefix_postings_lists_cache,
+            None => return Ok(None),
+        };
     let updates = match update_env.open_database(Some(&updates_name))? {
         Some(updates) => updates,
         None => return Ok(None),
@@ -490,12 +527,18 @@ pub fn open(
         main: Main { main },
         postings_lists: PostingsLists { postings_lists },
         documents_fields: DocumentsFields { documents_fields },
-        documents_fields_counts: DocumentsFieldsCounts { documents_fields_counts },
+        documents_fields_counts: DocumentsFieldsCounts {
+            documents_fields_counts,
+        },
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
-        prefix_documents_cache: PrefixDocumentsCache { prefix_documents_cache },
+        prefix_documents_cache: PrefixDocumentsCache {
+            prefix_documents_cache,
+        },
         facets: Facets { facets },
-        prefix_postings_lists_cache: PrefixPostingsListsCache { prefix_postings_lists_cache },
+        prefix_postings_lists_cache: PrefixPostingsListsCache {
+            prefix_postings_lists_cache,
+        },
         updates: Updates { updates },
         updates_results: UpdatesResults { updates_results },
         updates_notifier,

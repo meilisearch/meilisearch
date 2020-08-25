@@ -1,20 +1,21 @@
-use std::cmp::Ordering;
-use slice_group_by::GroupBy;
+use super::{prepare_bare_matches, Context, ContextMut, Criterion};
 use crate::bucket_sort::SimpleMatch;
-use crate::{RawDocument, MResult};
-use super::{Criterion, Context, ContextMut, prepare_bare_matches};
+use crate::{MResult, RawDocument};
+use slice_group_by::GroupBy;
+use std::cmp::Ordering;
 
 pub struct WordsPosition;
 
 impl Criterion for WordsPosition {
-    fn name(&self) -> &str { "words position" }
+    fn name(&self) -> &str {
+        "words position"
+    }
 
     fn prepare<'h, 'p, 'tag, 'txn, 'q, 'r>(
         &self,
         ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q>,
         documents: &mut [RawDocument<'r, 'tag>],
-    ) -> MResult<()>
-    {
+    ) -> MResult<()> {
         prepare_bare_matches(documents, ctx.postings_lists, ctx.query_mapping);
         Ok(())
     }

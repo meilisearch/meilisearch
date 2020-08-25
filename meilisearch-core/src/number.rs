@@ -63,7 +63,7 @@ impl PartialOrd for Number {
 
 impl Ord for Number {
     fn cmp(&self, other: &Self) -> Ordering {
-        use Number::{Float, Signed, Unsigned, Null};
+        use Number::{Float, Null, Signed, Unsigned};
 
         match (*self, *other) {
             (Unsigned(a), Unsigned(b)) => a.cmp(&b),

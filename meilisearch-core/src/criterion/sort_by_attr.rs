@@ -1,9 +1,9 @@
+use super::{Context, Criterion};
+use crate::{RankedMap, RawDocument};
+use meilisearch_schema::{FieldId, Schema};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
-use meilisearch_schema::{Schema, FieldId};
-use crate::{RankedMap, RawDocument};
-use super::{Criterion, Context};
 
 /// An helper struct that permit to sort documents by
 /// some of their stored attributes.

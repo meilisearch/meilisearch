@@ -1,9 +1,9 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
-use log::warn;
 use actix_web::web;
 use actix_web::HttpResponse;
 use actix_web_macros::{get, post};
+use log::warn;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -14,11 +14,10 @@ use crate::routes::IndexParam;
 use crate::Data;
 
 use meilisearch_core::facets::FacetFilter;
-use meilisearch_schema::{Schema, FieldId};
+use meilisearch_schema::{FieldId, Schema};
 
 pub fn services(cfg: &mut web::ServiceConfig) {
-    cfg.service(search_with_post)
-        .service(search_with_url_query);
+    cfg.service(search_with_post).service(search_with_url_query);
 }
 
 #[derive(Serialize, Deserialize)]
@@ -93,7 +92,11 @@ async fn search_with_post(
 }
 
 impl SearchQuery {
-    fn search(&self, index_uid: &str, data: web::Data<Data>) -> Result<SearchResult, ResponseError> {
+    fn search(
+        &self,
+        index_uid: &str,
+        data: web::Data<Data>,
+    ) -> Result<SearchResult, ResponseError> {
         let index = data
             .db
             .open_index(index_uid)
@@ -118,7 +121,8 @@ impl SearchQuery {
         let mut restricted_attributes: HashSet<&str>;
         match &self.attributes_to_retrieve {
             Some(attributes_to_retrieve) => {
-                let attributes_to_retrieve: HashSet<&str> = attributes_to_retrieve.split(',').collect();
+                let attributes_to_retrieve: HashSet<&str> =
+                    attributes_to_retrieve.split(',').collect();
                 if attributes_to_retrieve.contains("*") {
                     restricted_attributes = available_attributes.clone();
                 } else {
@@ -132,15 +136,22 @@ impl SearchQuery {
                         }
                     }
                 }
-            },
+            }
             None => {
                 restricted_attributes = available_attributes.clone();
             }
         }
 
         if let Some(ref facet_filters) = self.facet_filters {
-            let attrs = index.main.attributes_for_faceting(&reader)?.unwrap_or_default();
-            search_builder.add_facet_filters(FacetFilter::from_str(facet_filters, &schema, &attrs)?);
+            let attrs = index
+                .main
+                .attributes_for_faceting(&reader)?
+                .unwrap_or_default();
+            search_builder.add_facet_filters(FacetFilter::from_str(
+                facet_filters,
+                &schema,
+                &attrs,
+            )?);
         }
 
         if let Some(facets) = &self.facets_distribution {
@@ -148,7 +159,7 @@ impl SearchQuery {
                 Some(ref attrs) => {
                     let field_ids = prepare_facet_list(&facets, &schema, attrs)?;
                     search_builder.add_facets(field_ids);
-                },
+                }
                 None => return Err(FacetCountError::NoFacetSet.into()),
             }
         }
@@ -160,20 +171,23 @@ impl SearchQuery {
             for attribute in attributes_to_crop.split(',') {
                 let mut attribute = attribute.split(':');
                 let attr = attribute.next();
-                let length = attribute.next().and_then(|s| s.parse().ok()).unwrap_or(default_length);
+                let length = attribute
+                    .next()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(default_length);
                 match attr {
                     Some("*") => {
                         for attr in &restricted_attributes {
                             final_attributes.insert(attr.to_string(), length);
                         }
-                    },
+                    }
                     Some(attr) => {
                         if available_attributes.contains(attr) {
                             final_attributes.insert(attr.to_string(), length);
                         } else {
                             warn!("The attributes {:?} present in attributesToCrop parameter doesn't exist", attr);
                         }
-                    },
+                    }
                     None => (),
                 }
             }
@@ -215,7 +229,11 @@ impl SearchQuery {
 ///
 /// An error is returned if the array is malformed, or if it contains attributes that are
 /// unexisting, or not set as facets.
-fn prepare_facet_list(facets: &str, schema: &Schema, facet_attrs: &[FieldId]) -> Result<Vec<(FieldId, String)>, FacetCountError> {
+fn prepare_facet_list(
+    facets: &str,
+    schema: &Schema,
+    facet_attrs: &[FieldId],
+) -> Result<Vec<(FieldId, String)>, FacetCountError> {
     let json_array = serde_json::from_str(facets)?;
     match json_array {
         Value::Array(vals) => {
@@ -243,6 +261,6 @@ fn prepare_facet_list(facets: &str, schema: &Schema, facet_attrs: &[FieldId]) ->
             }
             Ok(field_ids)
         }
-        bad_val => Err(FacetCountError::unexpected_token(bad_val, &["[String]"]))
+        bad_val => Err(FacetCountError::unexpected_token(bad_val, &["[String]"])),
     }
 }

@@ -1,6 +1,6 @@
 use std::hash::{Hash, Hasher};
-use std::{error, thread};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::{error, thread};
 
 use log::error;
 use serde::Serialize;
@@ -116,7 +116,7 @@ pub fn analytics_sender(data: Data, opt: Opt) {
             time,
             app_version,
             user_properties,
-            event_properties
+            event_properties,
         };
         let event = serde_json::to_string(&event).unwrap();
 

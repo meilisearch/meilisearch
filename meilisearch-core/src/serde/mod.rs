@@ -4,9 +4,9 @@ pub use self::deserializer::{Deserializer, DeserializerError};
 
 use std::{error::Error, fmt};
 
+use meilisearch_schema::Error as SchemaError;
 use serde::ser;
 use serde_json::Error as SerdeJsonError;
-use meilisearch_schema::Error as SchemaError;
 
 use crate::ParseNumberError;
 
@@ -88,5 +88,5 @@ impl From<ParseNumberError> for SerializerError {
 impl From<SchemaError> for SerializerError {
     fn from(error: SchemaError) -> SerializerError {
         SerializerError::Schema(error)
-   }
+    }
 }

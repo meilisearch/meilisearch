@@ -1,7 +1,7 @@
-use std::{error, fs};
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::{error, fs};
 
 use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use rustls::{
@@ -29,7 +29,11 @@ pub struct Opt {
     /// The Sentry DSN to use for error reporting. This defaults to the MeiliSearch Sentry project.
     /// You can disable sentry all together using the `--no-sentry` flag or `MEILI_NO_SENTRY` environment variable.
     #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    #[structopt(long, env = "SENTRY_DSN", default_value = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337")]
+    #[structopt(
+        long,
+        env = "SENTRY_DSN",
+        default_value = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337"
+    )]
     pub sentry_dsn: String,
 
     /// Disable Sentry error reporting.
@@ -57,7 +61,11 @@ pub struct Opt {
     pub max_udb_size: usize,
 
     /// The maximum size, in bytes, of accepted JSON payloads
-    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "10485760")] // 10MB
+    #[structopt(
+        long,
+        env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT",
+        default_value = "10485760"
+    )] // 10MB
     pub http_payload_size_limit: usize,
 
     /// Read server certificates from CERTFILE.
@@ -101,11 +109,19 @@ pub struct Opt {
     pub load_from_snapshot: Option<PathBuf>,
 
     /// The engine will ignore a missing snapshot and not return an error in such case.
-    #[structopt(long, requires = "load-from-snapshot", env = "MEILI_IGNORE_MISSING_SNAPSHOT")]
+    #[structopt(
+        long,
+        requires = "load-from-snapshot",
+        env = "MEILI_IGNORE_MISSING_SNAPSHOT"
+    )]
     pub ignore_missing_snapshot: bool,
 
     /// The engine will skip snapshot importation and not return an error in such case.
-    #[structopt(long, requires = "load-from-snapshot", env = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS")]
+    #[structopt(
+        long,
+        requires = "load-from-snapshot",
+        env = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS"
+    )]
     pub ignore_snapshot_if_db_exists: bool,
 
     /// Defines the directory path where meilisearch will create snapshot each snapshot_time_gap.

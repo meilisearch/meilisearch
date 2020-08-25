@@ -1,12 +1,12 @@
 #![allow(clippy::or_fun_call)]
 
+pub mod analytics;
 pub mod data;
 pub mod error;
 pub mod helpers;
 pub mod models;
 pub mod option;
 pub mod routes;
-pub mod analytics;
 pub mod snapshot;
 
 use actix_http::Error;
@@ -17,9 +17,9 @@ use log::error;
 
 use meilisearch_core::ProcessedUpdateResult;
 
-pub use option::Opt;
 pub use self::data::Data;
 use self::error::{payload_error_handler, ResponseError};
+pub use option::Opt;
 
 pub fn create_app(
     data: &Data,
@@ -43,7 +43,7 @@ pub fn create_app(
         )
         .app_data(
             web::QueryConfig::default()
-            .error_handler(|err, _req| payload_error_handler(err).into())
+                .error_handler(|err, _req| payload_error_handler(err).into()),
         )
         .service(routes::load_html)
         .service(routes::load_css)

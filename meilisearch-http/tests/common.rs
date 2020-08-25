@@ -15,15 +15,24 @@ use meilisearch_http::option::Opt;
 #[macro_export]
 macro_rules! test_post_get_search {
     ($server:expr, $query:expr, |$response:ident, $status_code:ident | $block:expr) => {
-        let post_query: meilisearch_http::routes::search::SearchQueryPost = serde_json::from_str(&$query.clone().to_string()).unwrap();
+        let post_query: meilisearch_http::routes::search::SearchQueryPost =
+            serde_json::from_str(&$query.clone().to_string()).unwrap();
         let get_query: meilisearch_http::routes::search::SearchQuery = post_query.into();
         let get_query = ::serde_url_params::to_string(&get_query).unwrap();
         let ($response, $status_code) = $server.search_get(&get_query).await;
-        let _ =::std::panic::catch_unwind(|| $block)
-            .map_err(|e| panic!("panic in get route: {:?}", e.downcast_ref::<&str>().unwrap()));
+        let _ = ::std::panic::catch_unwind(|| $block).map_err(|e| {
+            panic!(
+                "panic in get route: {:?}",
+                e.downcast_ref::<&str>().unwrap()
+            )
+        });
         let ($response, $status_code) = $server.search_post($query).await;
-        let _ = ::std::panic::catch_unwind(|| $block)
-            .map_err(|e| panic!("panic in post route: {:?}", e.downcast_ref::<&str>().unwrap()));
+        let _ = ::std::panic::catch_unwind(|| $block).map_err(|e| {
+            panic!(
+                "panic in post route: {:?}",
+                e.downcast_ref::<&str>().unwrap()
+            )
+        });
     };
 }
 
@@ -59,7 +68,6 @@ impl Server {
     }
 
     pub async fn test_server() -> Self {
-
         let mut server = Self::with_uid("test");
 
         let body = json!({
@@ -124,7 +132,6 @@ impl Server {
         server
     }
 
-
     pub async fn wait_update_id(&mut self, update_id: u64) {
         // try 10 times to get status, or panic to not wait forever
         for _ in 0..10 {
@@ -146,7 +153,8 @@ impl Server {
     pub async fn get_request(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("get_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+        let mut app =
+            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::get().uri(url).to_request();
         let res = test::call_service(&mut app, req).await;
@@ -160,7 +168,8 @@ impl Server {
     pub async fn post_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("post_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+        let mut app =
+            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::post()
             .uri(url)
@@ -189,7 +198,8 @@ impl Server {
     pub async fn put_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("put_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+        let mut app =
+            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::put()
             .uri(url)
@@ -217,7 +227,8 @@ impl Server {
     pub async fn delete_request(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("delete_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+        let mut app =
+            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::delete().uri(url).to_request();
         let res = test::call_service(&mut app, req).await;

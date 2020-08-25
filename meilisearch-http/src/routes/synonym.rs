@@ -60,7 +60,9 @@ async fn update(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -83,7 +85,9 @@ async fn delete(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

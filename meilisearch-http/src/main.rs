@@ -4,9 +4,9 @@ use actix_cors::Cors;
 use actix_web::{middleware, HttpServer};
 use main_error::MainError;
 use meilisearch_http::helpers::NormalizePath;
+use meilisearch_http::snapshot;
 use meilisearch_http::{create_app, index_update_callback, Data, Opt};
 use structopt::StructOpt;
-use meilisearch_http::snapshot;
 
 mod analytics;
 
@@ -53,7 +53,12 @@ async fn main() -> Result<(), MainError> {
     }
 
     if let Some(path) = &opt.load_from_snapshot {
-        snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
+        snapshot::load_snapshot(
+            &opt.db_path,
+            path,
+            opt.ignore_snapshot_if_db_exists,
+            opt.ignore_missing_snapshot,
+        )?;
     }
 
     let data = Data::new(opt.clone())?;
@@ -70,7 +75,11 @@ async fn main() -> Result<(), MainError> {
     }));
 
     if let Some(path) = &opt.snapshot_path {
-        snapshot::schedule_snapshot(data.clone(), &path, opt.snapshot_interval_sec.unwrap_or(86400))?;
+        snapshot::schedule_snapshot(
+            data.clone(),
+            &path,
+            opt.snapshot_interval_sec.unwrap_or(86400),
+        )?;
     }
 
     print_launch_resume(&opt, &data);

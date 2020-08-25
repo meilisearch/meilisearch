@@ -1,16 +1,16 @@
-mod parser;
 mod condition;
+mod parser;
 
 pub(crate) use parser::Rule;
 
 use std::ops::Not;
 
-use condition::Condition;
 use crate::error::Error;
-use crate::{DocumentId, MainT, store::Index};
+use crate::{store::Index, DocumentId, MainT};
+use condition::Condition;
 use heed::RoTxn;
 use meilisearch_schema::Schema;
-use parser::{PREC_CLIMBER, FilterParser};
+use parser::{FilterParser, PREC_CLIMBER};
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 
@@ -113,9 +113,21 @@ mod test {
         assert!(FilterParser::parse(Rule::prgm, r#"field < 10 AND NOT field > 7.5"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"field=true OR NOT field=5"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"NOT field=true OR NOT field=5"#).is_ok());
-        assert!(FilterParser::parse(Rule::prgm, r#"field='hello world' OR ( NOT field=true OR NOT field=5 )"#).is_ok());
-        assert!(FilterParser::parse(Rule::prgm, r#"field='hello \'worl\'d' OR ( NOT field=true OR NOT field=5 )"#).is_ok());
-        assert!(FilterParser::parse(Rule::prgm, r#"field="hello \"worl\"d" OR ( NOT field=true OR NOT field=5 )"#).is_ok());
+        assert!(FilterParser::parse(
+            Rule::prgm,
+            r#"field='hello world' OR ( NOT field=true OR NOT field=5 )"#
+        )
+        .is_ok());
+        assert!(FilterParser::parse(
+            Rule::prgm,
+            r#"field='hello \'worl\'d' OR ( NOT field=true OR NOT field=5 )"#
+        )
+        .is_ok());
+        assert!(FilterParser::parse(
+            Rule::prgm,
+            r#"field="hello \"worl\"d" OR ( NOT field=true OR NOT field=5 )"#
+        )
+        .is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#"((((((hello=world))))))"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#""foo bar" > 10"#).is_ok());
         assert!(FilterParser::parse(Rule::prgm, r#""foo bar" = 10"#).is_ok());

@@ -1,5 +1,5 @@
 use once_cell::sync::Lazy;
-use pest::prec_climber::{Operator, Assoc, PrecClimber};
+use pest::prec_climber::{Assoc, Operator, PrecClimber};
 
 pub static PREC_CLIMBER: Lazy<PrecClimber<Rule>> = Lazy::new(|| {
     use Assoc::*;

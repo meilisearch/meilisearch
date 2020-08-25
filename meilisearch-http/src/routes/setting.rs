@@ -42,10 +42,7 @@ async fn update_all(
         .ok_or(Error::index_not_found(&path.index_uid))?;
 
     let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
-        let settings = body
-            .into_inner()
-            .to_update()
-            .map_err(Error::bad_request)?;
+        let settings = body.into_inner().to_update().map_err(Error::bad_request)?;
         let update_id = index.settings_update(writer, settings)?;
         Ok(update_id)
     })?;
@@ -65,11 +62,7 @@ async fn get_all(
 
     let reader = data.db.main_read_txn()?;
 
-    let stop_words: BTreeSet<String> = index
-        .main
-        .stop_words(&reader)?
-        .into_iter()
-        .collect();
+    let stop_words: BTreeSet<String> = index.main.stop_words(&reader)?.into_iter().collect();
 
     let synonyms_list = index.main.synonyms(&reader)?;
 
@@ -88,7 +81,6 @@ async fn get_all(
         .map(|r| r.to_string())
         .collect();
 
-
     let schema = index.main.schema(&reader)?;
 
     let distinct_attribute = match (index.main.distinct_attribute(&reader)?, &schema) {
@@ -97,13 +89,11 @@ async fn get_all(
     };
 
     let attributes_for_faceting = match (&schema, &index.main.attributes_for_faceting(&reader)?) {
-        (Some(schema), Some(attrs)) => {
-            attrs
-                .iter()
-                .filter_map(|&id| schema.name(id))
-                .map(str::to_string)
-                .collect()
-        }
+        (Some(schema), Some(attrs)) => attrs
+            .iter()
+            .filter_map(|&id| schema.name(id))
+            .map(str::to_string)
+            .collect(),
         _ => vec![],
     };
 
@@ -144,7 +134,9 @@ async fn delete_all(
         attributes_for_faceting: UpdateState::Clear,
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -194,7 +186,9 @@ async fn update_rules(
     };
 
     let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -217,7 +211,9 @@ async fn delete_rules(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -265,7 +261,9 @@ async fn update_distinct(
     };
 
     let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -288,7 +286,9 @@ async fn delete_distinct(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -307,8 +307,7 @@ async fn get_searchable(
         .ok_or(Error::index_not_found(&path.index_uid))?;
     let reader = data.db.main_read_txn()?;
     let schema = index.main.schema(&reader)?;
-    let searchable_attributes: Option<Vec<String>> =
-        schema.as_ref().map(get_indexed_attributes);
+    let searchable_attributes: Option<Vec<String>> = schema.as_ref().map(get_indexed_attributes);
 
     Ok(HttpResponse::Ok().json(searchable_attributes))
 }
@@ -334,7 +333,9 @@ async fn update_searchable(
 
     let settings = settings.to_update().map_err(Error::bad_request)?;
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -357,7 +358,9 @@ async fn delete_searchable(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -403,7 +406,9 @@ async fn update_displayed(
     };
 
     let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -426,7 +431,9 @@ async fn delete_displayed(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -444,20 +451,16 @@ async fn get_attributes_for_faceting(
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
 
-    let attributes_for_faceting = data
-        .db
-        .main_read::<_, _, ResponseError>(|reader| {
+    let attributes_for_faceting = data.db.main_read::<_, _, ResponseError>(|reader| {
         let schema = index.main.schema(reader)?;
         let attrs = index.main.attributes_for_faceting(reader)?;
         let attr_names = match (&schema, &attrs) {
-            (Some(schema), Some(attrs)) => {
-                attrs
-                    .iter()
-                    .filter_map(|&id| schema.name(id))
-                    .map(str::to_string)
-                    .collect()
-            }
-            _ => vec![]
+            (Some(schema), Some(attrs)) => attrs
+                .iter()
+                .filter_map(|&id| schema.name(id))
+                .map(str::to_string)
+                .collect(),
+            _ => vec![],
         };
         Ok(attr_names)
     })?;
@@ -485,7 +488,9 @@ async fn update_attributes_for_faceting(
     };
 
     let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -508,7 +513,9 @@ async fn delete_attributes_for_faceting(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -517,7 +524,8 @@ fn get_indexed_attributes(schema: &Schema) -> Vec<String> {
     if schema.is_indexed_all() {
         ["*"].iter().map(|s| s.to_string()).collect()
     } else {
-        schema.indexed_name()
+        schema
+            .indexed_name()
             .iter()
             .map(|s| s.to_string())
             .collect()
@@ -528,7 +536,8 @@ fn get_displayed_attributes(schema: &Schema) -> HashSet<String> {
     if schema.is_displayed_all() {
         ["*"].iter().map(|s| s.to_string()).collect()
     } else {
-        schema.displayed_name()
+        schema
+            .displayed_name()
             .iter()
             .map(|s| s.to_string())
             .collect()

@@ -1,22 +1,23 @@
-use std::cmp::{self, Ordering};
+use super::{prepare_bare_matches, Context, ContextMut, Criterion};
+use crate::bucket_sort::SimpleMatch;
+use crate::{MResult, RawDocument};
 use slice_group_by::GroupBy;
-use crate::bucket_sort::{SimpleMatch};
-use crate::{RawDocument, MResult};
-use super::{Criterion, Context, ContextMut, prepare_bare_matches};
+use std::cmp::{self, Ordering};
 
 const MAX_DISTANCE: u16 = 8;
 
 pub struct Proximity;
 
 impl Criterion for Proximity {
-    fn name(&self) -> &str { "proximity" }
+    fn name(&self) -> &str {
+        "proximity"
+    }
 
     fn prepare<'h, 'p, 'tag, 'txn, 'q, 'r>(
         &self,
         ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q>,
         documents: &mut [RawDocument<'r, 'tag>],
-    ) -> MResult<()>
-    {
+    ) -> MResult<()> {
         prepare_bare_matches(documents, ctx.postings_lists, ctx.query_mapping);
         Ok(())
     }
@@ -31,8 +32,11 @@ impl Criterion for Proximity {
         }
 
         fn attribute_proximity(lhs: SimpleMatch, rhs: SimpleMatch) -> u16 {
-            if lhs.attribute != rhs.attribute { MAX_DISTANCE }
-            else { index_proximity(lhs.word_index, rhs.word_index) }
+            if lhs.attribute != rhs.attribute {
+                MAX_DISTANCE
+            } else {
+                index_proximity(lhs.word_index, rhs.word_index)
+            }
         }
 
         fn min_proximity(lhs: &[SimpleMatch], rhs: &[SimpleMatch]) -> u16 {
@@ -46,7 +50,7 @@ impl Criterion for Proximity {
             min_prox
         }
 
-        fn matches_proximity(matches: &[SimpleMatch],) -> u16 {
+        fn matches_proximity(matches: &[SimpleMatch]) -> u16 {
             let mut proximity = 0;
             let mut iter = matches.linear_group_by_key(|m| m.query_index);
 

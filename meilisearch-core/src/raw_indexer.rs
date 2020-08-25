@@ -7,8 +7,8 @@ use meilisearch_schema::IndexedPos;
 use meilisearch_tokenizer::{is_cjk, SeqTokenizer, Token, Tokenizer};
 use sdset::SetBuf;
 
-use crate::{DocIndex, DocumentId};
 use crate::FstSetCow;
+use crate::{DocIndex, DocumentId};
 
 const WORD_LENGTH_LIMIT: usize = 80;
 
@@ -101,7 +101,10 @@ impl<A: AsRef<[u8]>> RawIndexer<A> {
             .map(|(id, mut words)| {
                 words.sort_unstable();
                 words.dedup();
-                let fst = fst::Set::from_iter(words).unwrap().map_data(Cow::Owned).unwrap();
+                let fst = fst::Set::from_iter(words)
+                    .unwrap()
+                    .map_data(Cow::Owned)
+                    .unwrap();
                 (id, fst)
             })
             .collect();
@@ -122,7 +125,8 @@ fn index_token<A>(
     words_doc_indexes: &mut BTreeMap<Word, Vec<DocIndex>>,
     docs_words: &mut HashMap<DocumentId, Vec<Word>>,
 ) -> bool
-where A: AsRef<[u8]>,
+where
+    A: AsRef<[u8]>,
 {
     if token.index >= word_limit {
         return false;
@@ -289,7 +293,9 @@ mod tests {
         let Indexed {
             words_doc_indexes, ..
         } = indexer.build();
-        assert!(words_doc_indexes.get(&"buffering".to_owned().into_bytes()).is_some());
+        assert!(words_doc_indexes
+            .get(&"buffering".to_owned().into_bytes())
+            .is_some());
     }
 
     #[test]
@@ -306,7 +312,11 @@ mod tests {
         let Indexed {
             words_doc_indexes, ..
         } = indexer.build();
-        assert!(words_doc_indexes.get(&"less".to_owned().into_bytes()).is_some());
-        assert!(words_doc_indexes.get(&"more".to_owned().into_bytes()).is_none());
+        assert!(words_doc_indexes
+            .get(&"less".to_owned().into_bytes())
+            .is_some());
+        assert!(words_doc_indexes
+            .get(&"more".to_owned().into_bytes())
+            .is_none());
     }
 }

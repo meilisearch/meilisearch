@@ -392,18 +392,28 @@ async fn write_setting_and_update_partial() {
 async fn attributes_for_faceting_settings() {
     let mut server = common::Server::test_server().await;
     // initial attributes array should be empty
-    let (response, _status_code) = server.get_request("/indexes/test/settings/attributes-for-faceting").await;
+    let (response, _status_code) = server
+        .get_request("/indexes/test/settings/attributes-for-faceting")
+        .await;
     assert_eq!(response, json!([]));
     // add an attribute and test for its presence
-    let (_response, _status_code) = server.post_request_async(
-        "/indexes/test/settings/attributes-for-faceting",
-        json!(["foobar"])).await;
-    let (response, _status_code) = server.get_request("/indexes/test/settings/attributes-for-faceting").await;
+    let (_response, _status_code) = server
+        .post_request_async(
+            "/indexes/test/settings/attributes-for-faceting",
+            json!(["foobar"]),
+        )
+        .await;
+    let (response, _status_code) = server
+        .get_request("/indexes/test/settings/attributes-for-faceting")
+        .await;
     assert_eq!(response, json!(["foobar"]));
     // remove all attributes and test for emptiness
-    let (_response, _status_code) = server.delete_request_async(
-        "/indexes/test/settings/attributes-for-faceting").await;
-    let (response, _status_code) = server.get_request("/indexes/test/settings/attributes-for-faceting").await;
+    let (_response, _status_code) = server
+        .delete_request_async("/indexes/test/settings/attributes-for-faceting")
+        .await;
+    let (response, _status_code) = server
+        .get_request("/indexes/test/settings/attributes-for-faceting")
+        .await;
     assert_eq!(response, json!([]));
 }
 
@@ -416,41 +426,86 @@ async fn setting_ranking_rules_dont_mess_with_other_settings() {
     server.update_all_settings(body).await;
     let (response, _) = server.get_all_settings().await;
     assert_eq!(response["rankingRules"].as_array().unwrap().len(), 1);
-    assert_eq!(response["rankingRules"].as_array().unwrap().first().unwrap().as_str().unwrap(), "asc(foobar)");
-    assert!(!response["searchableAttributes"].as_array().unwrap().iter().any(|e| e.as_str().unwrap() == "foobar"));
-    assert!(!response["displayedAttributes"].as_array().unwrap().iter().any(|e| e.as_str().unwrap() == "foobar"));
+    assert_eq!(
+        response["rankingRules"]
+            .as_array()
+            .unwrap()
+            .first()
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "asc(foobar)"
+    );
+    assert!(!response["searchableAttributes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e.as_str().unwrap() == "foobar"));
+    assert!(!response["displayedAttributes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|e| e.as_str().unwrap() == "foobar"));
 }
 
 #[actix_rt::test]
 async fn displayed_and_searchable_attributes_reset_to_wildcard() {
     let mut server = common::Server::test_server().await;
-    server.update_all_settings(json!({ "searchableAttributes": ["color"], "displayedAttributes": ["color"] })).await;
+    server
+        .update_all_settings(
+            json!({ "searchableAttributes": ["color"], "displayedAttributes": ["color"] }),
+        )
+        .await;
     let (response, _) = server.get_all_settings().await;
 
-    assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "color");
-    assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "color");
+    assert_eq!(
+        response["searchableAttributes"].as_array().unwrap()[0],
+        "color"
+    );
+    assert_eq!(
+        response["displayedAttributes"].as_array().unwrap()[0],
+        "color"
+    );
 
     server.delete_searchable_attributes().await;
     server.delete_displayed_attributes().await;
 
     let (response, _) = server.get_all_settings().await;
 
-    assert_eq!(response["searchableAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        response["searchableAttributes"].as_array().unwrap().len(),
+        1
+    );
     assert_eq!(response["displayedAttributes"].as_array().unwrap().len(), 1);
     assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
     assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
 
     let mut server = common::Server::test_server().await;
-    server.update_all_settings(json!({ "searchableAttributes": ["color"], "displayedAttributes": ["color"] })).await;
+    server
+        .update_all_settings(
+            json!({ "searchableAttributes": ["color"], "displayedAttributes": ["color"] }),
+        )
+        .await;
     let (response, _) = server.get_all_settings().await;
-    assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "color");
-    assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "color");
+    assert_eq!(
+        response["searchableAttributes"].as_array().unwrap()[0],
+        "color"
+    );
+    assert_eq!(
+        response["displayedAttributes"].as_array().unwrap()[0],
+        "color"
+    );
 
-    server.update_all_settings(json!({ "searchableAttributes": [], "displayedAttributes": [] })).await;
+    server
+        .update_all_settings(json!({ "searchableAttributes": [], "displayedAttributes": [] }))
+        .await;
 
     let (response, _) = server.get_all_settings().await;
 
-    assert_eq!(response["searchableAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        response["searchableAttributes"].as_array().unwrap().len(),
+        1
+    );
     assert_eq!(response["displayedAttributes"].as_array().unwrap().len(), 1);
     assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
     assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
@@ -463,7 +518,10 @@ async fn settings_that_contains_wildcard_is_wildcard() {
 
     let (response, _) = server.get_all_settings().await;
 
-    assert_eq!(response["searchableAttributes"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        response["searchableAttributes"].as_array().unwrap().len(),
+        1
+    );
     assert_eq!(response["displayedAttributes"].as_array().unwrap().len(), 1);
     assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
     assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");

@@ -1,18 +1,19 @@
+use super::{prepare_query_distances, Context, ContextMut, Criterion};
+use crate::{MResult, RawDocument};
 use std::cmp::Ordering;
-use crate::{RawDocument, MResult};
-use super::{Criterion, Context, ContextMut, prepare_query_distances};
 
 pub struct Typo;
 
 impl Criterion for Typo {
-    fn name(&self) -> &str { "typo" }
+    fn name(&self) -> &str {
+        "typo"
+    }
 
     fn prepare<'h, 'p, 'tag, 'txn, 'q, 'r>(
         &self,
         ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q>,
         documents: &mut [RawDocument<'r, 'tag>],
-    ) -> MResult<()>
-    {
+    ) -> MResult<()> {
         prepare_query_distances(documents, ctx.query_mapping, ctx.postings_lists);
         Ok(())
     }

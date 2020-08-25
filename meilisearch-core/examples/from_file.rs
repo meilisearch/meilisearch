@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use std::collections::btree_map::{BTreeMap, Entry};
+use std::collections::HashSet;
 use std::error::Error;
 use std::io::{Read, Write};
 use std::iter::FromIterator;
@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-use meilisearch_core::{Database, DatabaseOptions, Highlight, ProcessedUpdateResult};
 use meilisearch_core::settings::Settings;
+use meilisearch_core::{Database, DatabaseOptions, Highlight, ProcessedUpdateResult};
 use meilisearch_schema::FieldId;
 
 #[cfg(target_os = "linux")]

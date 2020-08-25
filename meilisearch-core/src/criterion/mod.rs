@@ -6,28 +6,28 @@ use compact_arena::SmallArena;
 use sdset::SetBuf;
 use slice_group_by::GroupBy;
 
-use crate::bucket_sort::{SimpleMatch, PostingsListView};
+use crate::bucket_sort::{PostingsListView, SimpleMatch};
 use crate::database::MainT;
 use crate::query_tree::QueryId;
-use crate::{store, RawDocument, MResult};
+use crate::{store, MResult, RawDocument};
 
+mod attribute;
+mod document_id;
+mod exactness;
+mod proximity;
+mod sort_by_attr;
 mod typo;
 mod words;
-mod proximity;
-mod attribute;
 mod words_position;
-mod exactness;
-mod document_id;
-mod sort_by_attr;
 
+pub use self::attribute::Attribute;
+pub use self::document_id::DocumentId;
+pub use self::exactness::Exactness;
+pub use self::proximity::Proximity;
+pub use self::sort_by_attr::SortByAttr;
 pub use self::typo::Typo;
 pub use self::words::Words;
-pub use self::proximity::Proximity;
-pub use self::attribute::Attribute;
 pub use self::words_position::WordsPosition;
-pub use self::exactness::Exactness;
-pub use self::document_id::DocumentId;
-pub use self::sort_by_attr::SortByAttr;
 
 pub trait Criterion {
     fn name(&self) -> &str;
@@ -36,8 +36,7 @@ pub trait Criterion {
         &self,
         _ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q>,
         _documents: &mut [RawDocument<'r, 'tag>],
-    ) -> MResult<()>
-    {
+    ) -> MResult<()> {
         Ok(())
     }
 
@@ -54,8 +53,7 @@ pub trait Criterion {
         ctx: &Context<'p, 'tag, 'txn, 'q>,
         lhs: &RawDocument<'r, 'tag>,
         rhs: &RawDocument<'r, 'tag>,
-    ) -> bool
-    {
+    ) -> bool {
         self.evaluate(ctx, lhs, rhs) == Ordering::Equal
     }
 }
@@ -143,11 +141,15 @@ fn prepare_query_distances<'a, 'tag, 'txn>(
     postings_lists: &SmallArena<'tag, PostingsListView<'txn>>,
 ) {
     for document in documents {
-        if !document.processed_distances.is_empty() { continue }
+        if !document.processed_distances.is_empty() {
+            continue;
+        }
 
         let mut processed = Vec::new();
         for m in document.bare_matches.iter() {
-            if postings_lists[m.postings_list].is_empty() { continue }
+            if postings_lists[m.postings_list].is_empty() {
+                continue;
+            }
 
             let range = query_mapping[&(m.query_index as usize)].clone();
             let new_len = cmp::max(range.end as usize, processed.len());
@@ -173,7 +175,9 @@ fn prepare_bare_matches<'a, 'tag, 'txn>(
     query_mapping: &HashMap<QueryId, Range<usize>>,
 ) {
     for document in documents {
-        if !document.processed_matches.is_empty() { continue }
+        if !document.processed_matches.is_empty() {
+            continue;
+        }
 
         let mut processed = Vec::new();
         for m in document.bare_matches.iter() {
@@ -199,8 +203,7 @@ fn prepare_bare_matches<'a, 'tag, 'txn>(
 fn multiword_rewrite_matches(
     matches: &mut [SimpleMatch],
     query_mapping: &HashMap<QueryId, Range<usize>>,
-) -> SetBuf<SimpleMatch>
-{
+) -> SetBuf<SimpleMatch> {
     matches.sort_unstable_by_key(|m| (m.attribute, m.word_index));
 
     let mut padded_matches = Vec::with_capacity(matches.len());
@@ -225,7 +228,11 @@ fn multiword_rewrite_matches(
 
                 if let Some(query_index) = replacement.next() {
                     let word_index = match_.word_index + padding as u16;
-                    let match_ = SimpleMatch { query_index, word_index, ..*match_ };
+                    let match_ = SimpleMatch {
+                        query_index,
+                        word_index,
+                        ..*match_
+                    };
                     padded_matches.push(match_);
                 }
 
@@ -236,7 +243,11 @@ fn multiword_rewrite_matches(
                 'padding: for (x, next_group) in nexts.enumerate() {
                     for (i, query_index) in replacement.clone().enumerate().skip(x) {
                         let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
-                        let padmatch = SimpleMatch { query_index, word_index, ..*match_ };
+                        let padmatch = SimpleMatch {
+                            query_index,
+                            word_index,
+                            ..*match_
+                        };
 
                         for nmatch_ in next_group {
                             let mut rep = query_mapping[&(nmatch_.query_index as usize)].clone();
@@ -245,9 +256,15 @@ fn multiword_rewrite_matches(
                                 if !found {
                                     // if we find a corresponding padding for the
                                     // first time we must push preceding paddings
-                                    for (i, query_index) in replacement.clone().enumerate().take(i) {
-                                        let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
-                                        let match_ = SimpleMatch { query_index, word_index, ..*match_ };
+                                    for (i, query_index) in replacement.clone().enumerate().take(i)
+                                    {
+                                        let word_index =
+                                            match_.word_index + padding as u16 + (i + 1) as u16;
+                                        let match_ = SimpleMatch {
+                                            query_index,
+                                            word_index,
+                                            ..*match_
+                                        };
                                         padded_matches.push(match_);
                                         biggest = biggest.max(i + 1);
                                     }
@@ -270,7 +287,11 @@ fn multiword_rewrite_matches(
                     // we must insert the entire padding
                     for (i, query_index) in replacement.enumerate() {
                         let word_index = match_.word_index + padding as u16 + (i + 1) as u16;
-                        let match_ = SimpleMatch { query_index, word_index, ..*match_ };
+                        let match_ = SimpleMatch {
+                            query_index,
+                            word_index,
+                            ..*match_
+                        };
                         padded_matches.push(match_);
                     }
 

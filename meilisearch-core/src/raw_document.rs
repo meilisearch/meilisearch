@@ -1,8 +1,8 @@
+use crate::bucket_sort::{BareMatch, PostingsListView, SimpleMatch};
+use crate::reordered_attrs::ReorderedAttrs;
+use crate::DocIndex;
 use compact_arena::SmallArena;
 use sdset::SetBuf;
-use crate::DocIndex;
-use crate::bucket_sort::{SimpleMatch, BareMatch, PostingsListView};
-use crate::reordered_attrs::ReorderedAttrs;
 
 pub struct RawDocument<'a, 'tag> {
     pub id: crate::DocumentId,
@@ -20,8 +20,7 @@ impl<'a, 'tag> RawDocument<'a, 'tag> {
         bare_matches: &'a mut [BareMatch<'tag>],
         postings_lists: &mut SmallArena<'tag, PostingsListView<'txn>>,
         searchable_attrs: Option<&ReorderedAttrs>,
-    ) -> RawDocument<'a, 'tag>
-    {
+    ) -> RawDocument<'a, 'tag> {
         if let Some(reordered_attrs) = searchable_attrs {
             for bm in bare_matches.iter() {
                 let postings_list = &postings_lists[bm.postings_list];

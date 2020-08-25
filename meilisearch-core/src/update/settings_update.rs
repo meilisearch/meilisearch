@@ -1,15 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use heed::Result as ZResult;
 use fst::{set::OpBuilder, SetBuilder};
-use sdset::SetBuf;
+use heed::Result as ZResult;
 use meilisearch_schema::Schema;
+use sdset::SetBuf;
 
 use crate::database::{MainT, UpdateT};
-use crate::settings::{UpdateState, SettingsUpdate, RankingRule};
+use crate::settings::{RankingRule, SettingsUpdate, UpdateState};
 use crate::update::documents_addition::reindex_all_documents;
 use crate::update::{next_update_id, Update};
-use crate::{store, MResult, Error};
+use crate::{store, Error, MResult};
 
 pub fn push_settings_update(
     writer: &mut heed::RwTxn<UpdateT>,
@@ -34,12 +34,10 @@ pub fn apply_settings_update(
 
     let mut schema = match index.main.schema(writer)? {
         Some(schema) => schema,
-        None => {
-            match settings.primary_key.clone() {
-                UpdateState::Update(id) => Schema::with_primary_key(&id),
-                _ => return Err(Error::MissingPrimaryKey)
-            }
-        }
+        None => match settings.primary_key.clone() {
+            UpdateState::Update(id) => Schema::with_primary_key(&id),
+            _ => return Err(Error::MissingPrimaryKey),
+        },
     };
 
     match settings.ranking_rules {
@@ -48,12 +46,12 @@ pub fn apply_settings_update(
             schema.update_ranked(&ranked_field)?;
             index.main.put_ranking_rules(writer, &v)?;
             must_reindex = true;
-        },
+        }
         UpdateState::Clear => {
             index.main.delete_ranking_rules(writer)?;
             schema.clear_ranked();
             must_reindex = true;
-        },
+        }
         UpdateState::Nothing => (),
     }
 
@@ -61,10 +59,10 @@ pub fn apply_settings_update(
         UpdateState::Update(v) => {
             let field_id = schema.insert(&v)?;
             index.main.put_distinct_attribute(writer, field_id)?;
-        },
+        }
         UpdateState::Clear => {
             index.main.delete_distinct_attribute(writer)?;
-        },
+        }
         UpdateState::Nothing => (),
     }
 
@@ -76,11 +74,11 @@ pub fn apply_settings_update(
                 schema.update_indexed(v)?;
             }
             must_reindex = true;
-        },
+        }
         UpdateState::Clear => {
             schema.set_all_fields_as_indexed();
             must_reindex = true;
-        },
+        }
         UpdateState::Nothing => (),
     }
     match settings.displayed_attributes.clone() {
@@ -90,10 +88,10 @@ pub fn apply_settings_update(
             } else {
                 schema.update_displayed(v)?
             }
-        },
+        }
         UpdateState::Clear => {
             schema.set_all_fields_as_displayed();
-        },
+        }
         UpdateState::Nothing => (),
     }
 
@@ -101,11 +99,11 @@ pub fn apply_settings_update(
         UpdateState::Update(attrs) => {
             apply_attributes_for_faceting_update(writer, index, &mut schema, &attrs)?;
             must_reindex = true;
-        },
+        }
         UpdateState::Clear => {
             index.main.delete_attributes_for_faceting(writer)?;
             index.facets.clear(writer)?;
-        },
+        }
         UpdateState::Nothing => (),
     }
 
@@ -116,12 +114,12 @@ pub fn apply_settings_update(
             if apply_stop_words_update(writer, index, stop_words)? {
                 must_reindex = true;
             }
-        },
+        }
         UpdateState::Clear => {
             if apply_stop_words_update(writer, index, BTreeSet::new())? {
                 must_reindex = true;
             }
-        },
+        }
         UpdateState::Nothing => (),
     }
 
@@ -142,14 +140,16 @@ fn apply_attributes_for_faceting_update(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     schema: &mut Schema,
-    attributes: &[String]
-    ) -> MResult<()> {
+    attributes: &[String],
+) -> MResult<()> {
     let mut attribute_ids = Vec::new();
     for name in attributes {
         attribute_ids.push(schema.insert(name)?);
     }
     let attributes_for_faceting = SetBuf::from_dirty(attribute_ids);
-    index.main.put_attributes_for_faceting(writer, &attributes_for_faceting)?;
+    index
+        .main
+        .put_attributes_for_faceting(writer, &attributes_for_faceting)?;
     Ok(())
 }
 
@@ -157,11 +157,11 @@ pub fn apply_stop_words_update(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     stop_words: BTreeSet<String>,
-) -> MResult<bool>
-{
+) -> MResult<bool> {
     let mut must_reindex = false;
 
-    let old_stop_words: BTreeSet<String> = index.main
+    let old_stop_words: BTreeSet<String> = index
+        .main
         .stop_words_fst(writer)?
         .stream()
         .into_strs()?
@@ -203,8 +203,7 @@ fn apply_stop_words_addition(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     addition: BTreeSet<String>,
-) -> MResult<()>
-{
+) -> MResult<()> {
     let main_store = index.main;
     let postings_lists_store = index.postings_lists;
 
@@ -256,7 +255,6 @@ fn apply_stop_words_deletion(
     index: &store::Index,
     deletion: BTreeSet<String>,
 ) -> MResult<()> {
-
     let mut stop_words_builder = SetBuilder::memory();
 
     for word in deletion {
@@ -286,7 +284,6 @@ pub fn apply_synonyms_update(
     index: &store::Index,
     synonyms: BTreeMap<String, Vec<String>>,
 ) -> MResult<()> {
-
     let main_store = index.main;
     let synonyms_store = index.synonyms;
 

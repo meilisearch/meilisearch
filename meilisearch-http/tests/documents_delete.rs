@@ -18,7 +18,7 @@ async fn delete() {
 async fn delete_batch() {
     let mut server = common::Server::test_server().await;
 
-    let doc_ids = vec!(50, 55, 60);
+    let doc_ids = vec![50, 55, 60];
     for doc_id in &doc_ids {
         let (_response, status_code) = server.get_document(doc_id).await;
         assert_eq!(status_code, 200);

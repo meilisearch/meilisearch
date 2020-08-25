@@ -1,16 +1,16 @@
-use crate::Data;
 use crate::error::Error;
+use crate::Data;
 
-use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
+use flate2::Compression;
 use log::error;
 use std::fs::{create_dir_all, File};
 use std::io;
 use std::path::Path;
 use std::thread;
-use std::time::{Duration};
-use tar::{Builder, Archive};
+use std::time::Duration;
+use tar::{Archive, Builder};
 use tempfile::TempDir;
 
 fn pack(src: &Path, dest: &Path) -> io::Result<()> {
@@ -41,16 +41,22 @@ pub fn load_snapshot(
     db_path: &str,
     snapshot_path: &Path,
     ignore_snapshot_if_db_exists: bool,
-    ignore_missing_snapshot: bool
+    ignore_missing_snapshot: bool,
 ) -> Result<(), Error> {
     let db_path = Path::new(db_path);
 
     if !db_path.exists() && snapshot_path.exists() {
         unpack(snapshot_path, db_path)
     } else if db_path.exists() && !ignore_snapshot_if_db_exists {
-        Err(Error::Internal(format!("database already exists at {:?}", db_path)))
+        Err(Error::Internal(format!(
+            "database already exists at {:?}",
+            db_path
+        )))
     } else if !snapshot_path.exists() && !ignore_missing_snapshot {
-        Err(Error::Internal(format!("snapshot doesn't exist at {:?}", snapshot_path)))
+        Err(Error::Internal(format!(
+            "snapshot doesn't exist at {:?}",
+            snapshot_path
+        )))
     } else {
         Ok(())
     }
@@ -61,18 +67,26 @@ pub fn create_snapshot(data: &Data, snapshot_path: &Path) -> Result<(), Error> {
 
     data.db.copy_and_compact_to_path(tmp_dir.path())?;
 
-    pack(tmp_dir.path(), snapshot_path).or_else(|e| Err(Error::Internal(format!("something went wrong during snapshot compression: {}", e))))
+    pack(tmp_dir.path(), snapshot_path).or_else(|e| {
+        Err(Error::Internal(format!(
+            "something went wrong during snapshot compression: {}",
+            e
+        )))
+    })
 }
 
 pub fn schedule_snapshot(data: Data, snapshot_dir: &Path, time_gap_s: u64) -> Result<(), Error> {
-    if snapshot_dir.file_name().is_none() { 
+    if snapshot_dir.file_name().is_none() {
         return Err(Error::Internal("invalid snapshot file path".to_string()));
     }
-    let db_name = Path::new(&data.db_path).file_name().ok_or_else(|| Error::Internal("invalid database name".to_string()))?;
+    let db_name = Path::new(&data.db_path)
+        .file_name()
+        .ok_or_else(|| Error::Internal("invalid database name".to_string()))?;
     create_dir_all(snapshot_dir)?;
-    let snapshot_path = snapshot_dir.join(format!("{}.tar.gz", db_name.to_str().unwrap_or("data.ms")));
-    
-    thread::spawn(move || loop { 
+    let snapshot_path =
+        snapshot_dir.join(format!("{}.tar.gz", db_name.to_str().unwrap_or("data.ms")));
+
+    thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(time_gap_s));
         if let Err(e) = create_snapshot(&data, &snapshot_path) {
             error!("Unsuccessful snapshot creation: {}", e);
@@ -85,8 +99,8 @@ pub fn schedule_snapshot(data: Data, snapshot_dir: &Path, time_gap_s: u64) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::prelude::*;
     use std::fs;
+    use std::io::prelude::*;
 
     #[test]
     fn test_pack_unpack() {
@@ -100,12 +114,17 @@ mod tests {
         let file_1_relative = Path::new("file1.txt");
         let subfolder_relative = Path::new("subfolder/");
         let file_2_relative = Path::new("subfolder/file2.txt");
-        
-        create_dir_all(src_dir.join(subfolder_relative)).unwrap();
-        File::create(src_dir.join(file_1_relative)).unwrap().write_all(b"Hello_file_1").unwrap();
-        File::create(src_dir.join(file_2_relative)).unwrap().write_all(b"Hello_file_2").unwrap();
 
-        
+        create_dir_all(src_dir.join(subfolder_relative)).unwrap();
+        File::create(src_dir.join(file_1_relative))
+            .unwrap()
+            .write_all(b"Hello_file_1")
+            .unwrap();
+        File::create(src_dir.join(file_2_relative))
+            .unwrap()
+            .write_all(b"Hello_file_2")
+            .unwrap();
+
         assert!(pack(&src_dir, &archive_path).is_ok());
         assert!(archive_path.exists());
         assert!(load_snapshot(&dest_dir.to_str().unwrap(), &archive_path, false, false).is_ok());
@@ -117,7 +136,7 @@ mod tests {
 
         let contents = fs::read_to_string(dest_dir.join(file_1_relative)).unwrap();
         assert_eq!(contents, "Hello_file_1");
-    
+
         let contents = fs::read_to_string(dest_dir.join(file_2_relative)).unwrap();
         assert_eq!(contents, "Hello_file_2");
     }
