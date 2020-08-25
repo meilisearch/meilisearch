@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
-use crate::routes::{IndexParam, IndexUpdateResponse};
+use crate::routes::IndexUpdateResponse;
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
@@ -18,12 +18,12 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 )]
 async fn get(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
     let reader = data.db.main_read_txn()?;
     let stop_words = index.main.stop_words(&reader)?;
 
@@ -36,13 +36,13 @@ async fn get(
 )]
 async fn update(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
     body: web::Json<BTreeSet<String>>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Update(body.into_inner()),
@@ -62,12 +62,12 @@ async fn update(
 )]
 async fn delete(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = SettingsUpdate {
         stop_words: UpdateState::Clear,

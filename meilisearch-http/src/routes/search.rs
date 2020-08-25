@@ -10,7 +10,6 @@ use serde_json::Value;
 use crate::error::{Error, FacetCountError, ResponseError};
 use crate::helpers::meilisearch::{IndexSearchExt, SearchResult};
 use crate::helpers::Authentication;
-use crate::routes::IndexParam;
 use crate::Data;
 
 use meilisearch_core::facets::FacetFilter;
@@ -39,10 +38,10 @@ pub struct SearchQuery {
 #[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
 async fn search_with_url_query(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
     params: web::Query<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_result = params.search(&path.index_uid, data)?;
+    let search_result = params.search(&index_uid.as_ref(), data)?;
     Ok(HttpResponse::Ok().json(search_result))
 }
 
@@ -83,11 +82,11 @@ impl From<SearchQueryPost> for SearchQuery {
 #[post("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
 async fn search_with_post(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
     params: web::Json<SearchQueryPost>,
 ) -> Result<HttpResponse, ResponseError> {
     let query: SearchQuery = params.0.into();
-    let search_result = query.search(&path.index_uid, data)?;
+    let search_result = query.search(&index_uid.as_ref(), data)?;
     Ok(HttpResponse::Ok().json(search_result))
 }
 

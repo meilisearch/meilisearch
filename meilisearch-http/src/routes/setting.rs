@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
-use crate::routes::{IndexParam, IndexUpdateResponse};
+use crate::routes::IndexUpdateResponse;
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
@@ -33,13 +33,13 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 #[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn update_all(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
     body: web::Json<Settings>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
         let settings = body.into_inner().to_update().map_err(Error::bad_request)?;
@@ -53,12 +53,12 @@ async fn update_all(
 #[get("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn get_all(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let reader = data.db.main_read_txn()?;
 
@@ -116,12 +116,12 @@ async fn get_all(
 #[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn delete_all(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
@@ -147,12 +147,12 @@ async fn delete_all(
 )]
 async fn get_rules(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
     let reader = data.db.main_read_txn()?;
 
     let ranking_rules = index
@@ -172,13 +172,13 @@ async fn get_rules(
 )]
 async fn update_rules(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
     body: web::Json<Option<Vec<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = Settings {
         ranking_rules: Some(body.into_inner()),
@@ -199,12 +199,12 @@ async fn update_rules(
 )]
 async fn delete_rules(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
@@ -224,12 +224,12 @@ async fn delete_rules(
 )]
 async fn get_distinct(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
     let reader = data.db.main_read_txn()?;
     let distinct_attribute_id = index.main.distinct_attribute(&reader)?;
     let schema = index.main.schema(&reader)?;
@@ -247,13 +247,13 @@ async fn get_distinct(
 )]
 async fn update_distinct(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
     body: web::Json<Option<String>>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = Settings {
         distinct_attribute: Some(body.into_inner()),
@@ -274,12 +274,13 @@ async fn update_distinct(
 )]
 async fn delete_distinct(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
+    let uid = index_uid.into_inner();
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&uid)
+        .ok_or(Error::index_not_found(&uid))?;
 
     let settings = SettingsUpdate {
         distinct_attribute: UpdateState::Clear,
@@ -299,12 +300,12 @@ async fn delete_distinct(
 )]
 async fn get_searchable(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
     let reader = data.db.main_read_txn()?;
     let schema = index.main.schema(&reader)?;
     let searchable_attributes: Option<Vec<String>> = schema.as_ref().map(get_indexed_attributes);
@@ -318,13 +319,13 @@ async fn get_searchable(
 )]
 async fn update_searchable(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
     body: web::Json<Option<Vec<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = Settings {
         searchable_attributes: Some(body.into_inner()),
@@ -346,12 +347,12 @@ async fn update_searchable(
 )]
 async fn delete_searchable(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = SettingsUpdate {
         searchable_attributes: UpdateState::Clear,
@@ -371,12 +372,12 @@ async fn delete_searchable(
 )]
 async fn get_displayed(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
     let reader = data.db.main_read_txn()?;
 
     let schema = index.main.schema(&reader)?;
@@ -392,13 +393,13 @@ async fn get_displayed(
 )]
 async fn update_displayed(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
     body: web::Json<Option<HashSet<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = Settings {
         displayed_attributes: Some(body.into_inner()),
@@ -419,12 +420,12 @@ async fn update_displayed(
 )]
 async fn delete_displayed(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = SettingsUpdate {
         displayed_attributes: UpdateState::Clear,
@@ -444,12 +445,12 @@ async fn delete_displayed(
 )]
 async fn get_attributes_for_faceting(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let attributes_for_faceting = data.db.main_read::<_, _, ResponseError>(|reader| {
         let schema = index.main.schema(reader)?;
@@ -474,13 +475,13 @@ async fn get_attributes_for_faceting(
 )]
 async fn update_attributes_for_faceting(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
     body: web::Json<Option<Vec<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = Settings {
         attributes_for_faceting: Some(body.into_inner()),
@@ -501,12 +502,12 @@ async fn update_attributes_for_faceting(
 )]
 async fn delete_attributes_for_faceting(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let settings = SettingsUpdate {
         attributes_for_faceting: UpdateState::Clear,

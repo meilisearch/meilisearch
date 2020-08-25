@@ -6,7 +6,6 @@ use serde::Deserialize;
 use crate::data::{Data, IndexCreateRequest, IndexResponse};
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
-use crate::routes::IndexParam;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(list_indexes)
@@ -69,12 +68,12 @@ async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseErr
 #[get("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn get_index(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let reader = data.db.main_read_txn()?;
     let name = index
@@ -97,7 +96,7 @@ async fn get_index(
     };
     let index_response = IndexResponse {
         name,
-        uid: path.index_uid.clone(),
+        uid: index_uid.clone(),
         created_at,
         updated_at,
         primary_key,
@@ -118,19 +117,19 @@ async fn create_index(
 #[put("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn update_index(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
-    let response = data.update_index(path.into_inner(), body.into_inner())?;
+    let response = data.update_index(index_uid.as_ref(), body.into_inner())?;
     Ok(HttpResponse::Ok().json(response))
 }
 
 #[delete("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn delete_index(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    data.delete_index(path.into_inner())?;
+    data.delete_index(index_uid.as_ref())?;
     Ok(HttpResponse::NoContent().finish())
 }
 
@@ -150,8 +149,8 @@ async fn get_update_status(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(path.index_uid.as_str())
+        .ok_or(Error::index_not_found(path.index_uid.as_str()))?;
 
     let reader = data.db.update_read_txn()?;
 
@@ -166,12 +165,12 @@ async fn get_update_status(
 #[get("/indexes/{index_uid}/updates", wrap = "Authentication::Private")]
 async fn get_all_updates_status(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let reader = data.db.update_read_txn()?;
 

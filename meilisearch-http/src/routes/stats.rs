@@ -10,7 +10,6 @@ use walkdir::WalkDir;
 
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
-use crate::routes::IndexParam;
 use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
@@ -30,12 +29,12 @@ struct IndexStatsResponse {
 #[get("/indexes/{index_uid}/stats", wrap = "Authentication::Private")]
 async fn index_stats(
     data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+        .open_index(&index_uid.as_ref())
+        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let reader = data.db.main_read_txn()?;
 
@@ -47,7 +46,7 @@ async fn index_stats(
 
     let is_indexing = data
         .db
-        .is_indexing(&update_reader, &path.index_uid)?
+        .is_indexing(&update_reader, &index_uid.as_ref())?
         .ok_or(Error::internal(
             "Impossible to know if the database is indexing",
         ))?;

@@ -12,7 +12,7 @@ use sha2::Digest;
 use crate::error::{Error, ResponseError};
 use crate::index_update_callback;
 use crate::option::Opt;
-use crate::routes::{IndexParam, IndexUpdateResponse};
+use crate::routes::IndexUpdateResponse;
 
 pub type Document = IndexMap<String, Value>;
 
@@ -65,15 +65,15 @@ pub struct UpdateIndexResponse {
 impl Data {
     pub fn update_multiple_documents(
         &self,
-        path: IndexParam,
+        index_uid: &str,
         params: UpdateDocumentsQuery,
         body: Vec<Document>,
         is_partial: bool,
     ) -> Result<IndexUpdateResponse, ResponseError> {
         let index = self
             .db
-            .open_index(&path.index_uid)
-            .ok_or(Error::index_not_found(&path.index_uid))?;
+            .open_index(index_uid)
+            .ok_or(Error::index_not_found(index_uid))?;
 
         let reader = self.db.main_read_txn()?;
 
@@ -113,13 +113,13 @@ impl Data {
 
     pub fn delete_documents(
         &self,
-        path: IndexParam,
+        index_uid: &str,
         body: Vec<Value>,
     ) -> Result<IndexUpdateResponse, ResponseError> {
         let index = self
             .db
-            .open_index(&path.index_uid)
-            .ok_or(Error::index_not_found(&path.index_uid))?;
+            .open_index(index_uid)
+            .ok_or(Error::index_not_found(index_uid))?;
 
         let mut documents_deletion = index.documents_deletion();
 
@@ -135,12 +135,12 @@ impl Data {
 
     pub fn clear_all_documents(
         &self,
-        path: IndexParam,
+        index_uid: &str,
     ) -> Result<IndexUpdateResponse, ResponseError> {
         let index = self
             .db
-            .open_index(&path.index_uid)
-            .ok_or(Error::index_not_found(&path.index_uid))?;
+            .open_index(index_uid)
+            .ok_or(Error::index_not_found(index_uid))?;
 
         let update_id = self.db.update_write(|w| index.clear_all(w))?;
 
@@ -211,13 +211,13 @@ impl Data {
 
     pub fn update_index(
         &self,
-        path: IndexParam,
+        index_uid: &str,
         body: IndexCreateRequest,
     ) -> Result<IndexResponse, ResponseError> {
         let index = self
             .db
-            .open_index(&path.index_uid)
-            .ok_or(Error::index_not_found(&path.index_uid))?;
+            .open_index(index_uid)
+            .ok_or(Error::index_not_found(index_uid))?;
 
         self.db.main_write::<_, _, ResponseError>(|writer| {
             if let Some(name) = &body.name {
@@ -256,7 +256,7 @@ impl Data {
 
         let index_response = IndexResponse {
             name,
-            uid: path.index_uid.clone(),
+            uid: index_uid.into(),
             created_at,
             updated_at,
             primary_key,
@@ -265,11 +265,11 @@ impl Data {
         Ok(index_response)
     }
 
-    pub fn delete_index(&self, path: IndexParam) -> Result<(), ResponseError> {
-        if self.db.delete_index(&path.index_uid)? {
+    pub fn delete_index(&self, index_uid: &str) -> Result<(), ResponseError> {
+        if self.db.delete_index(index_uid)? {
             Ok(())
         } else {
-            Err(Error::index_not_found(&path.index_uid).into())
+            Err(Error::index_not_found(index_uid).into())
         }
     }
 }

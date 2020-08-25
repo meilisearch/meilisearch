@@ -1,5 +1,5 @@
 use actix_web::{get, HttpResponse};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 pub mod document;
 pub mod health;
@@ -10,11 +10,6 @@ pub mod setting;
 pub mod stats;
 pub mod stop_words;
 pub mod synonym;
-
-#[derive(Deserialize)]
-pub struct IndexParam {
-    pub index_uid: String,
-}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
