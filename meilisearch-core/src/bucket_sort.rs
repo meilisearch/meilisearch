@@ -470,16 +470,13 @@ fn cleanup_bare_matches<'tag, 'txn>(
     let docidslen = docids.len() as f32;
     let mut bare_matches = Vec::new();
 
-    for (
-        PostingsKey {
+    for (postings_key, matches) in queries {
+        let PostingsKey {
             query,
             input,
             distance,
             is_exact,
-        },
-        matches,
-    ) in queries
-    {
+        } = postings_key;
         let postings_list_view = PostingsListView::original(Rc::from(input), Rc::new(matches));
         let pllen = postings_list_view.len() as f32;
 
