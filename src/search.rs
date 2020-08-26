@@ -272,6 +272,7 @@ impl<'a> Search<'a> {
     pub fn execute(&self) -> anyhow::Result<SearchResult> {
         let rtxn = self.rtxn;
         let index = self.index;
+        let limit = self.limit;
 
         let fst = match index.fst(rtxn)? {
             Some(fst) => fst,
@@ -291,6 +292,8 @@ impl<'a> Search<'a> {
 
         let (derived_words, union_positions) = Self::fetch_words_positions(rtxn, index, &fst, dfas)?;
         let candidates = Self::compute_candidates(rtxn, index, &derived_words)?;
+
+        debug!("candidates: {:?}", candidates);
 
         let union_cache = HashMap::new();
         let mut non_disjoint_cache = HashMap::new();
@@ -342,66 +345,55 @@ impl<'a> Search<'a> {
                 positions.iter().enumerate().for_each(|(word, pos)| {
                     union_cache.entry((word, *pos)).or_insert_with(|| {
                         let words = &&derived_words[word];
-
                         Self::union_word_position(rtxn, index, words, *pos).unwrap()
                     });
                 });
 
                 // Retrieve the unions along with the popularity of it.
-                let mut to_intersect: Vec<_> = positions.iter()
-                    .enumerate()
-                    .map(|(word, pos)| {
-                        let docids = union_cache.get(&(word, *pos)).unwrap();
-                        (docids.len(), docids)
-                    })
-                    .collect();
+                let mut to_intersect = Vec::new();
+                for (word, pos) in positions.into_iter().enumerate() {
+                    let docids = union_cache.get(&(word, pos)).unwrap();
+                    to_intersect.push((docids.len(), docids));
+                }
 
                 // Sort the unions by popularity to help reduce
                 // the number of documents as soon as possible.
                 to_intersect.sort_unstable_by_key(|(l, _)| *l);
 
-                let intersect_docids: Option<RoaringBitmap> = to_intersect.into_iter()
-                    .fold(None, |acc, (_, union_docids)| {
-                        match acc {
-                            Some(mut left) => {
-                                left.intersect_with(&union_docids);
-                                Some(left)
-                            },
-                            None => Some(union_docids.clone()),
-                        }
-                    });
-
-                if let Some(intersect_docids) = intersect_docids {
-                    same_proximity_union.union_with(&intersect_docids);
+                // Intersect all the unions in the inverse popularity order.
+                let mut intersect_docids = RoaringBitmap::new();
+                for (i, (_, union_docids)) in to_intersect.into_iter().enumerate() {
+                    if i == 0 {
+                        intersect_docids = union_docids.clone();
+                    } else {
+                        intersect_docids.intersect_with(union_docids);
+                    }
                 }
 
-                // We found enough documents we can stop here
-                if documents.iter().map(RoaringBitmap::len).sum::<u64>() + same_proximity_union.len() >= 20 {
-                    break;
-                }
+                same_proximity_union.union_with(&intersect_docids);
             }
 
             // We achieve to find valid documents ids so we remove them from the candidates list.
             candidates.difference_with(&same_proximity_union);
 
-            documents.push(same_proximity_union);
-
-            // We remove the double occurences of documents.
-            for i in 0..documents.len() {
-                if let Some((docs, others)) = documents[..=i].split_last_mut() {
-                    others.iter().for_each(|other| docs.difference_with(other));
-                }
+            // We remove documents we have already been seen in previous
+            // fetches from this set of documents we just fetched.
+            for previous_documents in &documents {
+                same_proximity_union.difference_with(previous_documents);
             }
-            documents.retain(|rb| !rb.is_empty());
+
+            if !same_proximity_union.is_empty() {
+                documents.push(same_proximity_union);
+            }
 
             // We found enough documents we can stop here.
-            if documents.iter().map(RoaringBitmap::len).sum::<u64>() >= 20 {
+            if documents.iter().map(RoaringBitmap::len).sum::<u64>() >= limit as u64 {
                 break;
             }
         }
 
         let found_words = derived_words.into_iter().flatten().map(|(w, _, _)| w).collect();
-        let documents_ids = documents.iter().flatten().take(20).collect();
+        let documents_ids = documents.iter().flatten().take(limit).collect();
 
         Ok(SearchResult { found_words, documents_ids })
     }
