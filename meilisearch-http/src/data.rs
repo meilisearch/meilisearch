@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
-use meilisearch_core::{settings::SettingsUpdate, update, Database, DatabaseOptions};
-use raft::Store;
+use meilisearch_core::settings::SettingsUpdate;
+use meilisearch_core::{update, Database, DatabaseOptions};
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -23,7 +23,7 @@ pub struct UpdateDocumentsQuery {
     primary_key: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexResponse {
     pub name: String,
@@ -33,7 +33,7 @@ pub struct IndexResponse {
     pub primary_key: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct IndexCreateRequest {
     name: Option<String>,
@@ -61,21 +61,6 @@ pub struct UpdateIndexResponse {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     primary_key: Option<String>,
-}
-
-#[raft::async_trait]
-impl Store for Data {
-    async fn apply(&mut self, _message: &[u8]) -> raft::Result<Vec<u8>> {
-        todo!()
-    }
-
-    async fn snapshot(&self) -> raft::Result<Vec<u8>> {
-        todo!()
-    }
-
-    async fn restore(&mut self, _snapshot: &[u8]) -> raft::Result<()> {
-        todo!()
-    }
 }
 
 impl Data {
@@ -163,12 +148,15 @@ impl Data {
         Ok(IndexUpdateResponse::with_id(update_id))
     }
 
-    pub fn create_index(&self, body: IndexCreateRequest) -> Result<IndexResponse, ResponseError> {
-        if let (None, None) = (body.name.clone(), body.uid.clone()) {
+    pub fn create_index(
+        &self,
+        index_info: &IndexCreateRequest,
+    ) -> Result<IndexResponse, ResponseError> {
+        if let (None, None) = (index_info.name.clone(), index_info.uid.clone()) {
             return Err(Error::bad_request("Index creation must have an uid").into());
         }
 
-        let uid = match &body.uid {
+        let uid = match &index_info.uid {
             Some(uid) => {
                 if uid
                     .chars()
@@ -193,7 +181,7 @@ impl Data {
         })?;
 
         let index_response = self.db.main_write::<_, _, ResponseError>(|mut writer| {
-            let name = body.name.as_ref().unwrap_or(&uid);
+            let name = index_info.name.as_ref().unwrap_or(&uid);
             created_index.main.put_name(&mut writer, name)?;
 
             let created_at = created_index
@@ -206,7 +194,7 @@ impl Data {
                 .updated_at(&writer)?
                 .ok_or(Error::internal("Impossible to read updated at"))?;
 
-            if let Some(id) = body.primary_key.clone() {
+            if let Some(id) = index_info.primary_key.clone() {
                 if let Some(mut schema) = created_index.main.schema(&writer)? {
                     schema.set_primary_key(&id).map_err(Error::bad_request)?;
                     created_index.main.put_schema(&mut writer, &schema)?;
@@ -217,7 +205,7 @@ impl Data {
                 uid,
                 created_at,
                 updated_at,
-                primary_key: body.primary_key.clone(),
+                primary_key: index_info.primary_key.clone(),
             };
             Ok(index_response)
         })?;

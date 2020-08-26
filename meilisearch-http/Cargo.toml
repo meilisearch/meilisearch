@@ -23,12 +23,16 @@ actix-rt = "1"
 actix-service = "1.0.5"
 actix-web = { version = "2.0.0", features = ["rustls"] }
 actix-web-macros = "0.1.0"
+anyhow = "1.0"
+async-raft = "0.5.0"
+bincode = "1.3.1"
 bytes = "0.5.4"
 chrono = { version = "0.4.11", features = ["serde"] }
 crossbeam-channel = "0.4.2"
 env_logger = "0.7.1"
 flate2 = "1.0.16"
 futures = "0.3.4"
+heed = "0.8.0"
 http = "0.1.19"
 indexmap = { version = "1.3.2", features = ["serde-1"] }
 log = "0.4.8"
@@ -38,7 +42,6 @@ meilisearch-error = { path = "../meilisearch-error", version = "0.14.0" }
 meilisearch-schema = { path = "../meilisearch-schema", version = "0.14.0" }
 meilisearch-tokenizer = {path = "../meilisearch-tokenizer", version = "0.14.0"}
 mime = "0.3.16"
-raft = { git = "https://github.com/MarinPostma/raft-frp.git" }
 rand = "0.7.3"
 regex = "1.3.6"
 rustls = "0.16.0"
@@ -52,6 +55,7 @@ structopt = "0.3.12"
 tar = "0.4.29"
 tempfile = "3.1.0"
 tokio = { version = "0.2.18", features = ["macros"] }
+tonic = "0.3.0"
 ureq = { version = "0.12.0", features = ["tls"], default-features = false }
 walkdir = "2.3.1"
 whoami = "0.8.1"
@@ -75,6 +79,7 @@ optional = true
 serde_url_params = "0.2.0"
 tempdir = "0.3.7"
 tokio = { version = "0.2.18", features = ["macros", "time"] }
+tonic-build = "0.3.0"
 
 [dev-dependencies.assert-json-diff]
 git = "https://github.com/qdequele/assert-json-diff"

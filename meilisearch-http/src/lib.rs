@@ -6,8 +6,12 @@ pub mod error;
 pub mod helpers;
 pub mod models;
 pub mod option;
+pub mod raft;
 pub mod routes;
 pub mod snapshot;
+
+#[macro_use]
+extern crate async_raft;
 
 use actix_http::Error;
 use actix_service::ServiceFactory;

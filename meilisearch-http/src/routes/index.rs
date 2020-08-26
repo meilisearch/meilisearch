@@ -110,7 +110,7 @@ async fn create_index(
     data: web::Data<Data>,
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
-    let response = data.create_index(body.into_inner())?;
+    let response = data.create_index(&body.into_inner())?;
     Ok(HttpResponse::Created().json(response))
 }
 
