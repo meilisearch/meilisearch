@@ -185,6 +185,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     use std::convert::TryInto;
     use heed::types::{Str, ByteSlice};
 
+    let main_name = "main";
     let word_positions_name = "word_positions";
     let word_position_docids_name = "word_position_docids";
     let word_attribute_docids_name = "word_attribute_docids";
@@ -192,6 +193,11 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     let mut heap = BinaryHeap::with_capacity(limit + 1);
 
     if limit > 0 {
+        if let Some(fst) = index.fst(rtxn)? {
+            heap.push(Reverse((fst.as_fst().as_bytes().len(), format!("words-fst"), main_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
         for result in index.word_positions.as_polymorph().iter::<_, Str, ByteSlice>(rtxn)? {
             let (word, value) = result?;
             heap.push(Reverse((value.len(), word.to_string(), word_positions_name)));
@@ -223,7 +229,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
 
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
-    wtr.write_record(&["size", "key_name", "database_name"])?;
+    wtr.write_record(&["database_name", "key_name", "size"])?;
 
     for Reverse((size, key_name, database_name)) in heap.into_sorted_vec() {
         wtr.write_record(&[database_name.to_string(), key_name, size.to_string()])?;
