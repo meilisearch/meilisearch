@@ -7,4 +7,11 @@ fn main() {
 
     // Generate the 'cargo:' key output
     generate_cargo_keys(ConstantsFlags::all()).expect("Unable to generate the cargo keys!");
+
+    // gRPC codegen
+    tonic_build::configure()
+        .build_client(true)
+        .build_server(true)
+        .compile(&["proto/raft_service.proto"], &["proto/"])
+        .expect("error compiling proto");
 }

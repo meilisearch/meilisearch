@@ -1,0 +1,32 @@
+syntax = "proto3";
+package raftservice;
+
+service RaftService {
+  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
+  rpc Vote(VoteRequest) returns (VoteResponse) {}
+  rpc InstallSnapshot(InstallSnapshotRequest) returns (InstallSnapshotResponse) {}
+}
+
+message AppendEntriesRequest {
+  bytes data = 1;
+}
+
+message AppendEntriesResponse {
+  bytes data = 1;
+}
+
+message VoteRequest {
+  bytes data = 1;
+}
+
+message VoteResponse {
+  bytes data = 1;
+}
+
+message InstallSnapshotRequest {
+  bytes data = 1;
+}
+
+message InstallSnapshotResponse {
+  bytes data = 1;
+}

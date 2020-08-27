@@ -42,6 +42,7 @@ meilisearch-error = { path = "../meilisearch-error", version = "0.14.0" }
 meilisearch-schema = { path = "../meilisearch-schema", version = "0.14.0" }
 meilisearch-tokenizer = {path = "../meilisearch-tokenizer", version = "0.14.0"}
 mime = "0.3.16"
+prost = "0.6"
 rand = "0.7.3"
 regex = "1.3.6"
 rustls = "0.16.0"
@@ -79,7 +80,6 @@ optional = true
 serde_url_params = "0.2.0"
 tempdir = "0.3.7"
 tokio = { version = "0.2.18", features = ["macros", "time"] }
-tonic-build = "0.3.0"
 
 [dev-dependencies.assert-json-diff]
 git = "https://github.com/qdequele/assert-json-diff"
@@ -87,6 +87,7 @@ branch = "master"
 
 [build-dependencies]
 vergen = "3.1.0"
+tonic-build = "0.3.0"
 
 [target.'cfg(unix)'.dependencies]
 jemallocator = "0.3.2"

@@ -1,6 +1,9 @@
-use super::snapshot::RaftSnapshot;
-use super::{ClientRequest, ClientResponse, Message};
-use crate::data::Data;
+use std::path::PathBuf;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
+
 use anyhow::Result;
 use async_raft::async_trait::async_trait;
 use async_raft::raft::{Entry, EntryPayload, MembershipConfig};
@@ -8,12 +11,10 @@ use async_raft::storage::{CurrentSnapshotData, HardState, InitialState, RaftStor
 use async_raft::NodeId;
 use heed::types::{OwnedType, Str};
 use heed::{Database, Env, PolyDatabase};
-use std::path::PathBuf;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
-};
 use tokio::fs::File;
+
+use super::{snapshot::RaftSnapshot, ClientRequest, ClientResponse, Message};
+use crate::data::Data;
 
 const ERR_INCONSISTENT_LOG: &str =
     "a query was received which was expecting data to be in place which does not exist in the log";
@@ -51,7 +52,7 @@ derive_heed!(HardState, HeedHardState);
 derive_heed!(Entry<ClientRequest>, HeedEntry);
 derive_heed!(RaftSnapshot, HeedRaftSnapshot);
 
-struct RaftStore {
+pub struct RaftStore {
     id: NodeId,
     db: PolyDatabase,
     logs: Database<OwnedType<u64>, HeedEntry>,

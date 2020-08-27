@@ -1,11 +1,21 @@
+mod cluster;
+mod router;
 mod snapshot;
 mod store;
+
+pub mod raft_service {
+    tonic::include_proto!("raftservice");
+}
 
 use crate::data::{IndexCreateRequest, IndexResponse};
 use async_raft::{AppData, AppDataResponse};
 use meilisearch_core::settings::Settings;
+use router::RaftRouter;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use store::RaftStore;
+
+type Raft = async_raft::Raft<ClientRequest, ClientResponse, RaftRouter, RaftStore>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Message {
