@@ -1,15 +1,19 @@
-use crate::data::{Data, IndexCreateRequest, IndexResponse};
+use super::snapshot::RaftSnapshot;
+use super::{ClientRequest, ClientResponse, Message};
+use crate::data::Data;
 use anyhow::Result;
 use async_raft::async_trait::async_trait;
 use async_raft::raft::{Entry, EntryPayload, MembershipConfig};
 use async_raft::storage::{CurrentSnapshotData, HardState, InitialState, RaftStorage};
-use async_raft::{AppData, AppDataResponse, NodeId};
+use async_raft::NodeId;
 use heed::types::{OwnedType, Str};
 use heed::{Database, Env, PolyDatabase};
-use meilisearch_core::settings::Settings;
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
+use tokio::fs::File;
 
 const ERR_INCONSISTENT_LOG: &str =
     "a query was received which was expecting data to be in place which does not exist in the log";
@@ -19,48 +23,7 @@ const HARD_STATE_KEY: &str = "hard_state";
 const LAST_APPLIED_KEY: &str = "last_commited";
 const SNAPSHOT_PATH_KEY: &str = "snapshot_path";
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum Message {
-    CreateIndex(IndexCreateRequest),
-    SettingChange(Settings),
-    DocumentAddition {
-        index_uid: String,
-        addition: PathBuf,
-        partial: bool,
-    },
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ClientRequest {
-    /// The ID of the client which has sent the request.
-    pub client: String,
-    /// The serial number of this request.
-    pub serial: u64,
-    /// A string describing the status of the client. For a real application, this should probably
-    /// be an enum representing all of the various types of requests / operations which a client
-    /// can perform.
-    pub message: Message,
-}
-///
-/// The application data response type which the `MemStore` works with.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ClientResponse {
-    IndexCreation(std::result::Result<IndexResponse, String>),
-}
-
-impl AppDataResponse for ClientResponse {}
-
-/// Error data response.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ClientError {
-    /// This request has already been applied to the state machine, and the original response
-    /// no longer exists.
-    OldRequestReplayed,
-}
-
-impl AppData for ClientRequest {}
-
-macro_rules! derive_bytes {
+macro_rules! derive_heed {
     ($type:ty, $name:ident) => {
         struct $name;
 
@@ -83,9 +46,10 @@ macro_rules! derive_bytes {
     };
 }
 
-derive_bytes!(MembershipConfig, HeedMembershipConfig);
-derive_bytes!(HardState, HeedHardState);
-derive_bytes!(Entry<ClientRequest>, HeedEntry);
+derive_heed!(MembershipConfig, HeedMembershipConfig);
+derive_heed!(HardState, HeedHardState);
+derive_heed!(Entry<ClientRequest>, HeedEntry);
+derive_heed!(RaftSnapshot, HeedRaftSnapshot);
 
 struct RaftStore {
     id: NodeId,
@@ -94,17 +58,8 @@ struct RaftStore {
     env: Env,
     store: Arc<Data>,
     snapshot_dir: PathBuf,
-    current_snapshot: RwLock<Option<tokio::fs::File>>,
+    next_id: AtomicU64,
 }
-
-struct RaftSnapshot {
-    file: tokio::fs::File,
-    index: u64,
-    term: u64,
-    membership: MembershipConfig,
-}
-
-impl AsyncRead for RaftSnapshot
 
 impl RaftStore {
     fn hard_state(&self, txn: &heed::RoTxn) -> Result<Option<HardState>> {
@@ -141,20 +96,21 @@ impl RaftStore {
             .put::<_, Str, HeedMembershipConfig>(txn, MEMBERSHIP_CONFIG_KEY, cfg)?)
     }
 
-    fn snapshot_id<'a>(&self, txn: &'a heed::RoTxn) -> Result<Option<&'a str>> {
-        Ok(self.db.get::<_, Str, Str>(txn, SNAPSHOT_PATH_KEY)?)
-    }
-
-    fn snapshot_id_owned(&self) -> Result<Option<String>> {
-        let txn = self.env.read_txn()?;
+    fn current_snapshot(&self, txn: &heed::RoTxn) -> Result<Option<RaftSnapshot>> {
         Ok(self
             .db
-            .get::<_, Str, Str>(&txn, SNAPSHOT_PATH_KEY)?
-            .map(str::to_string))
+            .get::<_, Str, HeedRaftSnapshot>(txn, SNAPSHOT_PATH_KEY)?)
     }
 
-    fn set_snapshot_id(&self, txn: &mut heed::RwTxn, id: &str) -> Result<()> {
-        Ok(self.db.put::<_, Str, Str>(txn, SNAPSHOT_PATH_KEY, id)?)
+    fn current_snapshot_txn(&self) -> Result<Option<RaftSnapshot>> {
+        let txn = self.env.read_txn()?;
+        self.current_snapshot(&txn)
+    }
+
+    fn set_current_snapshot(&self, txn: &mut heed::RwTxn, snapshot: &RaftSnapshot) -> Result<()> {
+        Ok(self
+            .db
+            .put::<_, Str, HeedRaftSnapshot>(txn, SNAPSHOT_PATH_KEY, snapshot)?)
     }
 
     fn put_log(
@@ -174,6 +130,11 @@ impl RaftStore {
         Ok(())
     }
 
+    fn generate_snapshot_id(&self) -> String {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        format!("snapshot-{}", id)
+    }
+
     fn apply_message(&self, message: &Message) -> ClientResponse {
         match message {
             Message::CreateIndex(ref index_info) => {
@@ -191,10 +152,7 @@ impl RaftStore {
         self.snapshot_dir.join(format!("{}.snap", id))
     }
 
-    fn create_snapshot_and_compact(
-        &self,
-        through: u64,
-    ) -> Result<(u64, PathBuf, MembershipConfig)> {
+    fn create_snapshot_and_compact(&self, through: u64) -> Result<RaftSnapshot> {
         let mut txn = self.env.write_txn()?;
 
         // 1. get term
@@ -204,7 +162,7 @@ impl RaftStore {
             .ok_or_else(|| anyhow::anyhow!(ERR_INCONSISTENT_LOG))?
             .term;
         // 2. snapshot_id is term-index
-        let snapshot_id = format!("{}-{}", term, through);
+        let snapshot_id = self.generate_snapshot_id();
 
         // 3. get current membership config
         let membership_config = self
@@ -222,15 +180,26 @@ impl RaftStore {
         self.logs.delete_range(&mut txn, &(0..=through))?;
 
         // 6. insert new snapshot entry
-        let entry =
-            Entry::new_snapshot_pointer(through, term, snapshot_id, membership_config.clone());
+        let entry = Entry::new_snapshot_pointer(
+            through,
+            term,
+            snapshot_id.clone(),
+            membership_config.clone(),
+        );
         self.put_log(&mut txn, through, &entry)?;
 
-        // 7. set snapshot path, for later retrieve
-        self.set_snapshot_id(&mut txn, &snapshot_id)?;
+        let raft_snapshot = RaftSnapshot {
+            path: snapshot_path,
+            id: snapshot_id,
+            index: through,
+            term,
+            membership: membership_config,
+        };
+
+        self.set_current_snapshot(&mut txn, &raft_snapshot)?;
 
         txn.commit()?;
-        Ok((term, snapshot_path, membership_config))
+        Ok(raft_snapshot)
     }
 }
 
@@ -353,21 +322,21 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
     async fn do_log_compaction(&self, through: u64) -> Result<CurrentSnapshotData<Self::Snapshot>> {
         // it is necessary to do all the heed transation in a standalone function because heed
         // transations are not thread safe.
-        let (term, snapshot_path, membership_config) = self.create_snapshot_and_compact(through)?;
-        let snapshot_file = tokio::fs::File::open(snapshot_path).await?;
+        let snapshot = self.create_snapshot_and_compact(through)?;
+        let snapshot_file = File::open(&snapshot.path).await?;
 
         Ok(CurrentSnapshotData {
-            term,
-            index: through,
-            membership: membership_config.clone(),
+            term: snapshot.term,
+            index: snapshot.index,
+            membership: snapshot.membership.clone(),
             snapshot: Box::new(snapshot_file),
         })
     }
 
     async fn create_snapshot(&self) -> Result<(String, Box<Self::Snapshot>)> {
-        let id = self.snapshot_id_owned()?.unwrap_or_default();
+        let id = self.generate_snapshot_id();
         let path = self.snapshot_path_from_id(&id);
-        let file = tokio::fs::File::create(path).await?;
+        let file = File::open(path).await?;
         Ok((id, Box::new(file)))
     }
 
@@ -389,8 +358,18 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         let membership_config = self
             .membership_config(&txn)?
             .unwrap_or_else(|| MembershipConfig::new_initial(self.id));
-        let entry = Entry::new_snapshot_pointer(index, term, id, membership_config);
+        let entry = Entry::new_snapshot_pointer(index, term, id.clone(), membership_config.clone());
         self.put_log(&mut txn, index, &entry)?;
+
+        let raft_snapshot = RaftSnapshot {
+            index,
+            term,
+            membership: membership_config,
+            path: self.snapshot_path_from_id(&id),
+            id,
+        };
+
+        self.set_current_snapshot(&mut txn, &raft_snapshot)?;
         txn.commit()?;
 
         //TODO:
@@ -402,6 +381,25 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
     async fn get_current_snapshot(
         &self,
     ) -> Result<Option<async_raft::storage::CurrentSnapshotData<Self::Snapshot>>> {
-        todo!()
+        let current_snapshot = self.current_snapshot_txn()?;
+        match current_snapshot {
+            Some(RaftSnapshot {
+                path,
+                index,
+                membership,
+                term,
+                ..
+            }) => {
+                let file = File::open(path).await?;
+                let snapshot_data = CurrentSnapshotData {
+                    index,
+                    term,
+                    membership,
+                    snapshot: Box::new(file),
+                };
+                Ok(Some(snapshot_data))
+            }
+            None => Ok(None),
+        }
     }
 }
