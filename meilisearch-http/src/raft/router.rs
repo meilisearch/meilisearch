@@ -20,6 +20,13 @@ pub struct RaftRouter {
     clients: HashMap<NodeId, RwLock<RaftServiceClient<Channel>>>,
 }
 
+impl RaftRouter {
+    pub fn new() -> Self {
+        let clients = HashMap::new();
+        Self { clients }
+    }
+}
+
 #[async_trait]
 impl RaftNetwork<ClientRequest> for RaftRouter {
     async fn append_entries(

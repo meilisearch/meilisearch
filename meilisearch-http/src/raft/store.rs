@@ -10,7 +10,7 @@ use async_raft::raft::{Entry, EntryPayload, MembershipConfig};
 use async_raft::storage::{CurrentSnapshotData, HardState, InitialState, RaftStorage};
 use async_raft::NodeId;
 use heed::types::{OwnedType, Str};
-use heed::{Database, Env, PolyDatabase};
+use heed::{Database, Env, EnvOpenOptions, PolyDatabase};
 use tokio::fs::File;
 
 use super::{snapshot::RaftSnapshot, ClientRequest, ClientResponse, Message};
@@ -23,6 +23,8 @@ const MEMBERSHIP_CONFIG_KEY: &str = "membership";
 const HARD_STATE_KEY: &str = "hard_state";
 const LAST_APPLIED_KEY: &str = "last_commited";
 const SNAPSHOT_PATH_KEY: &str = "snapshot_path";
+
+const LOG_DB_SIZE: usize = 10 * 1024 * 1024 * 1024; //10GB
 
 macro_rules! derive_heed {
     ($type:ty, $name:ident) => {
@@ -60,6 +62,35 @@ pub struct RaftStore {
     store: Arc<Data>,
     snapshot_dir: PathBuf,
     next_id: AtomicU64,
+}
+
+impl RaftStore {
+    pub fn new(
+        id: NodeId,
+        db_path: PathBuf,
+        store: Arc<Data>,
+        snapshot_dir: PathBuf,
+    ) -> Result<Self> {
+        let env = EnvOpenOptions::new().map_size(LOG_DB_SIZE).open(db_path)?;
+        let db = match env.open_poly_database(Some("meta"))? {
+            Some(db) => db,
+            None => env.create_poly_database(Some("meta"))?,
+        };
+        let logs = match env.open_database::<OwnedType<u64>, HeedEntry>(Some("logs"))? {
+            Some(db) => db,
+            None => env.create_database(Some("logs"))?,
+        };
+        let next_id = AtomicU64::new(0);
+        Ok(Self {
+            id,
+            env,
+            db,
+            logs,
+            next_id,
+            store,
+            snapshot_dir,
+        })
+    }
 }
 
 impl RaftStore {

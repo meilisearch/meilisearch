@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bincode::{deserialize, serialize};
 use tonic::{Code, Request, Response, Status};
 
@@ -8,12 +10,18 @@ use super::raft_service::{
 };
 use super::Raft;
 
-pub struct RaftCluster {
-    raft: Raft,
+pub struct RaftServerService {
+    raft: Arc<Raft>,
+}
+
+impl RaftServerService {
+    pub fn new(raft: Arc<Raft>) -> Self {
+        Self { raft }
+    }
 }
 
 #[tonic::async_trait]
-impl RaftService for RaftCluster {
+impl RaftService for RaftServerService {
     async fn vote(&self, request: Request<VoteRequest>) -> Result<Response<VoteResponse>, Status> {
         let request = match deserialize(&request.into_inner().data) {
             Ok(request) => request,
