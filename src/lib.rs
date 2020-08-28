@@ -42,11 +42,9 @@ pub struct Index {
     pub main: PolyDatabase,
     /// A word and all the positions where it appears in the whole dataset.
     pub word_positions: Database<Str, RoaringBitmapCodec>,
-    pub prefix_word_positions: Database<Str, RoaringBitmapCodec>,
-    /// Maps a word at a position (u32) and all the documents ids where it appears.
+    /// Maps a word at a position (u32) and all the documents ids where the given word appears.
     pub word_position_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
-    pub prefix_word_position_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
-    /// Maps a word and an attribute (u32) to all the documents ids that it appears in.
+    /// Maps a word and an attribute (u32) to all the documents ids where the given word appears.
     pub word_attribute_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
     /// The MTBL store that contains the documents content.
     documents: omtbl::Reader<TransitiveArc<Mmap>>,
@@ -66,9 +64,7 @@ impl Index {
             path: path.as_ref().to_path_buf(),
             main: env.create_poly_database(None)?,
             word_positions: env.create_database(Some("word-positions"))?,
-            prefix_word_positions: env.create_database(Some("prefix-word-positions"))?,
             word_position_docids: env.create_database(Some("word-position-docids"))?,
-            prefix_word_position_docids: env.create_database(Some("prefix-word-position-docids"))?,
             word_attribute_docids: env.create_database(Some("word-attribute-docids"))?,
             documents: omtbl::Reader::new(TransitiveArc(Arc::new(documents)))?,
         })
