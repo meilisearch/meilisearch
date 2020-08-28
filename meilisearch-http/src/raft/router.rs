@@ -17,13 +17,23 @@ use super::raft_service::raft_service_client::RaftServiceClient;
 use super::ClientRequest;
 
 pub struct RaftRouter {
-    clients: HashMap<NodeId, RwLock<RaftServiceClient<Channel>>>,
+    clients: RwLock<HashMap<NodeId, RaftServiceClient<Channel>>>,
 }
 
 impl RaftRouter {
     pub fn new() -> Self {
-        let clients = HashMap::new();
+        let clients = RwLock::new(HashMap::new());
         Self { clients }
+    }
+
+    pub async fn add_client(&self, id: NodeId, addr: String) -> Result<()>  {
+        let client = RaftServiceClient::connect(addr).await?;
+        self
+            .clients
+            .write()
+            .await
+            .insert(id, client);
+        Ok(())
     }
 }
 
@@ -34,12 +44,13 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
         target: NodeId,
         rpc: AppendEntriesRequest<ClientRequest>,
     ) -> Result<AppendEntriesResponse> {
-        let mut client = self
+        let mut clients = self
             .clients
-            .get(&target)
-            .ok_or_else(|| anyhow::Error::msg("Client not found"))?
             .write()
             .await;
+        let client = clients
+            .get_mut(&target)
+            .ok_or_else(|| anyhow::Error::msg("Client not found"))?;
         let payload = raft_service::AppendEntriesRequest {
             data: serialize(&rpc)?,
         };
@@ -57,12 +68,13 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
         target: NodeId,
         rpc: InstallSnapshotRequest,
     ) -> Result<InstallSnapshotResponse> {
-        let mut client = self
+        let mut clients = self
             .clients
-            .get(&target)
-            .ok_or_else(|| anyhow::Error::msg("Client not found"))?
             .write()
             .await;
+        let client = clients
+            .get_mut(&target)
+            .ok_or_else(|| anyhow::Error::msg("Client not found"))?;
         let payload = raft_service::InstallSnapshotRequest {
             data: serialize(&rpc)?,
         };
@@ -76,12 +88,13 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
     }
 
     async fn vote(&self, target: NodeId, rpc: VoteRequest) -> Result<VoteResponse> {
-        let mut client = self
+        let mut clients = self
             .clients
-            .get(&target)
-            .ok_or_else(|| anyhow::Error::msg("Client not found"))?
             .write()
             .await;
+        let client = clients
+            .get_mut(&target)
+            .ok_or_else(|| anyhow::Error::msg("Client not found"))?;
         let payload = raft_service::VoteRequest {
             data: serialize(&rpc)?,
         };

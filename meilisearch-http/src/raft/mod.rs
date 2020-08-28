@@ -72,11 +72,11 @@ pub fn run_raft(
     Arc<Raft>,
     tokio::task::JoinHandle<Result<(), tonic::transport::Error>>,
 )> {
-    let network = Arc::new(RaftRouter::new());
+    let router = Arc::new(RaftRouter::new());
     let storage = Arc::new(RaftStore::new(id, db_path, store, snapshot_dir)?);
-    let raft = Raft::new(id, config, network, storage);
+    let raft = Raft::new(id, config, router.clone(), storage);
     let raft = Arc::new(raft);
-    let svc = RaftServerService::new(raft.clone());
+    let svc = RaftServerService::new(raft.clone(), router.clone());
     let handle = tokio::spawn(
         Server::builder()
             .add_service(RaftServiceServer::new(svc))
