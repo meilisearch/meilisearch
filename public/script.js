@@ -63,8 +63,5 @@ $('#docs-count').text(function(index, text) {
 
 // Make the database a little bit easier to read
 $('#db-size').text(function(index, text) {
-  let arr = text.split("+");
-  let database_size = filesize(parseInt(arr[0]));
-  let documents_size = filesize(parseInt(arr[1]));
-  return `${database_size} + ${documents_size}`
+  return filesize(parseInt(text))
 });

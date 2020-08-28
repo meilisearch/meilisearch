@@ -96,7 +96,7 @@ fn main() -> anyhow::Result<()> {
         .open(&opt.database)?;
 
     // Open the LMDB database.
-    let index = Index::new(&env, opt.database)?;
+    let index = Index::new(&env)?;
     let rtxn = env.read_txn()?;
 
     match opt.command {
@@ -197,6 +197,11 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     if limit > 0 {
         if let Some(fst) = index.fst(rtxn)? {
             heap.push(Reverse((fst.as_fst().as_bytes().len(), format!("words-fst"), main_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        if let Some(documents) = index.main.get::<_, ByteSlice, ByteSlice>(rtxn, b"documents")? {
+            heap.push(Reverse((documents.len(), format!("documents"), main_name)));
             if heap.len() > limit { heap.pop(); }
         }
 

@@ -49,7 +49,7 @@ fn main() -> anyhow::Result<()> {
         .open(&opt.database)?;
 
     // Open the LMDB database.
-    let index = Index::new(&env, opt.database)?;
+    let index = Index::new(&env)?;
     let rtxn = env.read_txn()?;
 
     let stdin = io::stdin();
@@ -68,7 +68,7 @@ fn main() -> anyhow::Result<()> {
             Some(headers) => headers,
             None => return Ok(()),
         };
-        let documents = index.documents(result.documents_ids.iter().cloned())?;
+        let documents = index.documents(&rtxn, result.documents_ids.iter().cloned())?;
 
         let mut stdout = io::stdout();
         stdout.write_all(&headers)?;

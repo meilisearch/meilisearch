@@ -1,5 +1,5 @@
 use std::convert::{TryFrom, TryInto};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{self, Read, Write};
 use std::iter::FromIterator;
 use std::path::PathBuf;
@@ -14,7 +14,7 @@ use flate2::read::GzDecoder;
 use fst::IntoStreamer;
 use heed::EnvOpenOptions;
 use heed::types::*;
-use log::debug;
+use log::{debug, info};
 use memmap::Mmap;
 use oxidized_mtbl::{Reader, Writer, Merger, Sorter, CompressionType};
 use rayon::prelude::*;
@@ -486,9 +486,9 @@ fn main() -> anyhow::Result<()> {
         .max_dbs(10)
         .open(&opt.database)?;
 
-    let mut index = Index::new(&env, &opt.database)?;
+    let before_indexing = Instant::now();
+    let index = Index::new(&env)?;
 
-    let documents_path = opt.database.join("documents.mtbl");
     let num_threads = rayon::current_num_threads();
     let arc_cache_size = opt.indexer.arc_cache_size;
     let max_nb_chunks = opt.indexer.max_nb_chunks;
@@ -566,32 +566,28 @@ fn main() -> anyhow::Result<()> {
         docs_stores.push(d);
     });
 
-    debug!("We are writing into LMDB and MTBL...");
+    debug!("We are writing the documents into MTBL on disk...");
+    // We also merge the documents into its own MTBL store.
+    let file = tempfile::tempfile()?;
+    let mut writer = Writer::builder()
+        .compression_type(documents_compression_type)
+        .compression_level(documents_compression_level)
+        .build(file);
+    let mut builder = Merger::builder(docs_merge);
+    builder.extend(docs_stores);
+    builder.build().write_into(&mut writer)?;
+    let file = writer.into_inner()?;
+    let documents_mmap = unsafe { memmap::Mmap::map(&file)? };
 
-    // We run both merging steps in parallel.
-    let (lmdb, mtbl) = rayon::join(|| {
-        // We merge the postings lists into LMDB.
-        let mut wtxn = env.write_txn()?;
-        merge_into_lmdb(stores, |k, v| lmdb_writer(&mut wtxn, &index, k, v))?;
-        Ok(wtxn.commit()?) as anyhow::Result<_>
-    }, || {
-        // We also merge the documents into its own MTBL store.
-        let file = OpenOptions::new().create(true).truncate(true).write(true).read(true).open(documents_path)?;
-        let mut writer = Writer::builder()
-            .compression_type(documents_compression_type)
-            .compression_level(documents_compression_level)
-            .build(file);
-        let mut builder = Merger::builder(docs_merge);
-        builder.extend(docs_stores);
-        builder.build().write_into(&mut writer)?;
-        Ok(writer.finish()?) as anyhow::Result<_>
-    });
+    debug!("We are writing the postings lists and documents into LMDB on disk...");
+    // We merge the postings lists into LMDB.
+    let mut wtxn = env.write_txn()?;
+    merge_into_lmdb(stores, |k, v| lmdb_writer(&mut wtxn, &index, k, v))?;
+    index.put_documents(&mut wtxn, &documents_mmap)?;
+    let count = index.number_of_documents(&wtxn)?;
+    wtxn.commit()?;
 
-    lmdb.and(mtbl)?;
-    index.refresh_documents()?;
-    let count = index.number_of_documents();
-
-    debug!("Wrote {} documents into LMDB", count);
+    info!("Wrote {} documents in {:.02?}", count, before_indexing.elapsed());
 
     Ok(())
 }
