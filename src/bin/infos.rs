@@ -118,10 +118,7 @@ fn most_common_words(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow:
     for result in index.word_position_docids.iter(rtxn)? {
         if limit == 0 { break }
 
-        let (bytes, postings) = result?;
-        let (word, _position) = bytes.split_at(bytes.len() - 4);
-        let word = str::from_utf8(word)?;
-
+        let ((word, _position), postings) = result?;
         match prev.as_mut() {
             Some((prev_word, freq, docids)) if prev_word == word => {
                 *freq += postings.len();
@@ -153,6 +150,9 @@ fn most_common_words(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow:
 }
 
 fn words_frequencies(index: &Index, rtxn: &heed::RoTxn, words: Vec<String>) -> anyhow::Result<()> {
+    use heed::BytesDecode;
+    use heed::types::ByteSlice;
+    use milli::heed_codec::{RoaringBitmapCodec, StrBEU32Codec};
     use roaring::RoaringBitmap;
 
     let stdout = io::stdout();
@@ -162,13 +162,14 @@ fn words_frequencies(index: &Index, rtxn: &heed::RoTxn, words: Vec<String>) -> a
     for word in words {
         let mut document_frequency = RoaringBitmap::new();
         let mut frequency = 0;
-        for result in index.word_position_docids.prefix_iter(rtxn, word.as_bytes())? {
+        let db = index.word_position_docids.as_polymorph();
+        for result in db.prefix_iter::<_, ByteSlice, RoaringBitmapCodec>(rtxn, word.as_bytes())? {
             let (bytes, postings) = result?;
-            let (w, _position) = bytes.split_at(bytes.len() - 4);
+            let (w, _position) = StrBEU32Codec::bytes_decode(bytes).unwrap();
 
             // if the word is not exactly the word we requested then it means
             // we found a word that *starts with* the requested word and we must stop.
-            if word.as_bytes() != w { break }
+            if word != w { break }
 
             document_frequency.union_with(&postings);
             frequency += postings.len();
@@ -182,8 +183,9 @@ fn words_frequencies(index: &Index, rtxn: &heed::RoTxn, words: Vec<String>) -> a
 fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow::Result<()> {
     use std::cmp::Reverse;
     use std::collections::BinaryHeap;
-    use std::convert::TryInto;
+    use heed::BytesDecode;
     use heed::types::{Str, ByteSlice};
+    use milli::heed_codec::StrBEU32Codec;
 
     let main_name = "main";
     let word_positions_name = "word_positions";
@@ -206,10 +208,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
 
         for result in index.word_position_docids.as_polymorph().iter::<_, ByteSlice, ByteSlice>(rtxn)? {
             let (key_bytes, value) = result?;
-            let (word, position) = key_bytes.split_at(key_bytes.len() - 4);
-            let word = str::from_utf8(word)?;
-            let position = position.try_into().map(u32::from_be_bytes)?;
-
+            let (word, position) = StrBEU32Codec::bytes_decode(key_bytes).unwrap();
             let key = format!("{} {}", word, position);
             heap.push(Reverse((value.len(), key, word_position_docids_name)));
             if heap.len() > limit { heap.pop(); }
@@ -217,10 +216,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
 
         for result in index.word_attribute_docids.as_polymorph().iter::<_, ByteSlice, ByteSlice>(rtxn)? {
             let (key_bytes, value) = result?;
-            let (word, attribute) = key_bytes.split_at(key_bytes.len() - 4);
-            let word = str::from_utf8(word)?;
-            let attribute = attribute.try_into().map(u32::from_be_bytes)?;
-
+            let (word, attribute) = StrBEU32Codec::bytes_decode(key_bytes).unwrap();
             let key = format!("{} {}", word, attribute);
             heap.push(Reverse((value.len(), key, word_attribute_docids_name)));
             if heap.len() > limit { heap.pop(); }
@@ -239,7 +235,9 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
 }
 
 fn word_position_doc_ids(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: Vec<String>) -> anyhow::Result<()> {
-    use std::convert::TryInto;
+    use heed::BytesDecode;
+    use heed::types::ByteSlice;
+    use milli::heed_codec::{RoaringBitmapCodec, StrBEU32Codec};
 
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
@@ -247,14 +245,14 @@ fn word_position_doc_ids(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: 
 
     let mut non_debug = Vec::new();
     for word in words {
-        for result in index.word_position_docids.prefix_iter(rtxn, word.as_bytes())? {
+        let db = index.word_position_docids.as_polymorph();
+        for result in db.prefix_iter::<_, ByteSlice, RoaringBitmapCodec>(rtxn, word.as_bytes())? {
             let (bytes, postings) = result?;
-            let (w, position) = bytes.split_at(bytes.len() - 4);
-            let position = position.try_into().map(u32::from_be_bytes)?;
+            let (w, position) = StrBEU32Codec::bytes_decode(bytes).unwrap();
 
             // if the word is not exactly the word we requested then it means
             // we found a word that *starts with* the requested word and we must stop.
-            if word.as_bytes() != w { break }
+            if word != w { break }
 
             let postings_string = if debug {
                 format!("{:?}", postings)

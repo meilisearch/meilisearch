@@ -1,9 +1,9 @@
 mod criterion;
-mod heed_codec;
 mod node;
 mod query_tokens;
 mod search;
 mod transitive_arc;
+pub mod heed_codec;
 pub mod lexer;
 
 use std::collections::HashMap;
@@ -21,7 +21,7 @@ use oxidized_mtbl as omtbl;
 
 pub use self::search::{Search, SearchResult};
 pub use self::criterion::{Criterion, default_criteria};
-use self::heed_codec::RoaringBitmapCodec;
+use self::heed_codec::{RoaringBitmapCodec, StrBEU32Codec};
 use self::transitive_arc::TransitiveArc;
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
@@ -44,10 +44,10 @@ pub struct Index {
     pub word_positions: Database<Str, RoaringBitmapCodec>,
     pub prefix_word_positions: Database<Str, RoaringBitmapCodec>,
     /// Maps a word at a position (u32) and all the documents ids where it appears.
-    pub word_position_docids: Database<ByteSlice, RoaringBitmapCodec>,
-    pub prefix_word_position_docids: Database<ByteSlice, RoaringBitmapCodec>,
+    pub word_position_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
+    pub prefix_word_position_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
     /// Maps a word and an attribute (u32) to all the documents ids that it appears in.
-    pub word_attribute_docids: Database<ByteSlice, RoaringBitmapCodec>,
+    pub word_attribute_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
     /// The MTBL store that contains the documents content.
     documents: omtbl::Reader<TransitiveArc<Mmap>>,
 }

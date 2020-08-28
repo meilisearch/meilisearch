@@ -138,14 +138,10 @@ impl<'a> Search<'a> {
         let number_of_attributes = index.number_of_attributes(rtxn)?.map_or(0, |n| n as u32);
 
         for (i, derived_words) in derived_words.iter().enumerate() {
-
             let mut union_docids = RoaringBitmap::new();
             for (word, _distance, _positions) in derived_words {
                 for attr in 0..number_of_attributes {
-
-                    let mut key = word.clone().into_bytes();
-                    key.extend_from_slice(&attr.to_be_bytes());
-                    if let Some(docids) = index.word_attribute_docids.get(rtxn, &key)? {
+                    if let Some(docids) = index.word_attribute_docids.get(rtxn, &(word, attr))? {
                         union_docids.union_with(&docids);
                     }
                 }
@@ -172,9 +168,7 @@ impl<'a> Search<'a> {
         let mut union_docids = RoaringBitmap::new();
         for (word, _distance, positions) in words {
             if positions.contains(position) {
-                let mut key = word.clone().into_bytes();
-                key.extend_from_slice(&position.to_be_bytes());
-                if let Some(docids) = index.word_position_docids.get(rtxn, &key)? {
+                if let Some(docids) = index.word_position_docids.get(rtxn, &(word, position))? {
                     union_docids.union_with(&docids);
                 }
             }
@@ -192,9 +186,7 @@ impl<'a> Search<'a> {
     {
         let mut union_docids = RoaringBitmap::new();
         for (word, _distance, _positions) in words {
-            let mut key = word.clone().into_bytes();
-            key.extend_from_slice(&attribute.to_be_bytes());
-            if let Some(docids) = index.word_attribute_docids.get(rtxn, &key)? {
+            if let Some(docids) = index.word_attribute_docids.get(rtxn, &(word, attribute))? {
                 union_docids.union_with(&docids);
             }
         }
