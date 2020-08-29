@@ -8,15 +8,14 @@ pub mod lexer;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 
-use anyhow::{bail, Context};
+use anyhow::Context;
 use fxhash::{FxHasher32, FxHasher64};
 use heed::types::*;
 use heed::{PolyDatabase, Database};
-use oxidized_mtbl as omtbl;
 
 pub use self::search::{Search, SearchResult};
 pub use self::criterion::{Criterion, default_criteria};
-use self::heed_codec::{MtblCodec, RoaringBitmapCodec, StrBEU32Codec};
+use self::heed_codec::{RoaringBitmapCodec, StrBEU32Codec};
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
@@ -30,7 +29,7 @@ pub type Position = u32;
 
 const WORDS_FST_KEY: &str = "words-fst";
 const HEADERS_KEY: &str = "headers";
-const DOCUMENTS_KEY: &str = "documents";
+const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 
 #[derive(Clone)]
 pub struct Index {
@@ -42,6 +41,8 @@ pub struct Index {
     pub word_position_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
     /// Maps a word and an attribute (u32) to all the documents ids where the given word appears.
     pub word_attribute_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
+    /// Maps the document id to the document as a CSV line.
+    pub documents: Database<OwnedType<BEU32>, ByteSlice>,
 }
 
 impl Index {
@@ -51,6 +52,7 @@ impl Index {
             word_positions: env.create_database(Some("word-positions"))?,
             word_position_docids: env.create_database(Some("word-position-docids"))?,
             word_attribute_docids: env.create_database(Some("word-attribute-docids"))?,
+            documents: env.create_database(Some("documents"))?,
         })
     }
 
@@ -91,29 +93,18 @@ impl Index {
         iter: impl IntoIterator<Item=DocumentId>,
     ) -> anyhow::Result<Vec<(DocumentId, Vec<u8>)>>
     {
-        match self.main.get::<_, Str, MtblCodec<&[u8]>>(rtxn, DOCUMENTS_KEY)? {
-            Some(documents) => {
-                iter.into_iter().map(|id| {
-                    let key = id.to_be_bytes();
-                    let content = documents.clone().get(&key)?
-                        .with_context(|| format!("Could not find document {}", id))?;
-                    Ok((id, content.as_ref().to_vec()))
-                }).collect()
-            },
-            None => bail!("No documents database found"),
-        }
-    }
-
-    pub fn put_documents<A: AsRef<[u8]>>(&self, wtxn: &mut heed::RwTxn, documents: &omtbl::Reader<A>) -> anyhow::Result<()> {
-        Ok(self.main.put::<_, Str, MtblCodec<A>>(wtxn, DOCUMENTS_KEY, documents)?)
+        iter.into_iter().map(|id| {
+            let content = self.documents.get(rtxn, &BEU32::new(id))?
+                .with_context(|| format!("Could not find document {}", id))?;
+            Ok((id, content.to_vec()))
+        }).collect()
     }
 
     /// Returns the number of documents indexed in the database.
     pub fn number_of_documents<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<usize> {
-        match self.main.get::<_, Str, MtblCodec<&[u8]>>(rtxn, DOCUMENTS_KEY)? {
-            Some(documents) => Ok(documents.metadata().count_entries as usize),
-            None => return Ok(0),
-        }
+        let docids = self.main.get::<_, Str, RoaringBitmapCodec>(rtxn, DOCUMENTS_IDS_KEY)?
+            .with_context(|| format!("Could not find the list of documents ids"))?;
+        Ok(docids.len() as usize)
     }
 
     pub fn search<'a>(&'a self, rtxn: &'a heed::RoTxn) -> Search<'a> {
