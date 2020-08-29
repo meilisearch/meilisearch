@@ -39,6 +39,8 @@ pub struct Index {
     pub word_positions: Database<Str, RoaringBitmapCodec>,
     /// Maps a word at a position (u32) and all the documents ids where the given word appears.
     pub word_position_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
+    /// Maps a word and a range of 4 positions, i.e. 0..4, 4..8, 12..16.
+    pub word_four_positions_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
     /// Maps a word and an attribute (u32) to all the documents ids where the given word appears.
     pub word_attribute_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
     /// Maps the document id to the document as a CSV line.
@@ -51,6 +53,7 @@ impl Index {
             main: env.create_poly_database(None)?,
             word_positions: env.create_database(Some("word-positions"))?,
             word_position_docids: env.create_database(Some("word-position-docids"))?,
+            word_four_positions_docids: env.create_database(Some("word-four-positions-docids"))?,
             word_attribute_docids: env.create_database(Some("word-attribute-docids"))?,
             documents: env.create_database(Some("documents"))?,
         })

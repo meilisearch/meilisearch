@@ -31,11 +31,12 @@ const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 
 const HEADERS_KEY: &[u8] = b"\0headers";
 const DOCUMENTS_IDS_KEY: &[u8] = b"\x04documents-ids";
-const WORDS_FST_KEY: &[u8] = b"\x05words-fst";
-const WORD_POSITIONS_BYTE: u8 = 1;
-const WORD_POSITION_DOCIDS_BYTE: u8 = 2;
-const WORD_ATTRIBUTE_DOCIDS_BYTE: u8 = 3;
+const WORDS_FST_KEY: &[u8] = b"\x06words-fst";
 const DOCUMENTS_IDS_BYTE: u8 = 4;
+const WORD_ATTRIBUTE_DOCIDS_BYTE: u8 = 3;
+const WORD_FOUR_POSITIONS_DOCIDS_BYTE: u8 = 5;
+const WORD_POSITION_DOCIDS_BYTE: u8 = 2;
+const WORD_POSITIONS_BYTE: u8 = 1;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -87,8 +88,8 @@ struct IndexerOpt {
     max_memory: Option<usize>,
 
     /// Size of the ARC cache when indexing.
-    #[structopt(long)]
-    arc_cache_size: Option<usize>,
+    #[structopt(long, default_value = "65535")]
+    arc_cache_size: usize,
 
     /// The name of the compression algorithm to use when compressing intermediate
     /// chunks during indexing documents.
@@ -122,6 +123,7 @@ type MergeFn = fn(&[u8], &[Vec<u8>]) -> Result<Vec<u8>, ()>;
 struct Store {
     word_positions: ArcCache<SmallVec32<u8>, RoaringBitmap>,
     word_position_docids: ArcCache<(SmallVec32<u8>, Position), RoaringBitmap>,
+    word_four_positions_docids: ArcCache<(SmallVec32<u8>, Position), RoaringBitmap>,
     word_attribute_docids: ArcCache<(SmallVec32<u8>, Attribute), RoaringBitmap>,
     documents_ids: RoaringBitmap,
     sorter: Sorter<MergeFn>,
@@ -130,7 +132,7 @@ struct Store {
 
 impl Store {
     fn new(
-        arc_cache_size: Option<usize>,
+        arc_cache_size: usize,
         max_nb_chunks: Option<usize>,
         max_memory: Option<usize>,
         chunk_compression_type: CompressionType,
@@ -155,24 +157,15 @@ impl Store {
             builder.chunk_compression_level(level);
         }
 
-        let arc_cache_size = arc_cache_size.unwrap_or(65_535);
-
         Store {
             word_positions: ArcCache::new(arc_cache_size),
             word_position_docids: ArcCache::new(arc_cache_size),
+            word_four_positions_docids: ArcCache::new(arc_cache_size),
             word_attribute_docids: ArcCache::new(arc_cache_size),
             documents_ids: RoaringBitmap::new(),
             sorter: builder.build(),
             documents_sorter: documents_builder.build(),
         }
-    }
-
-    // Save the positions where this word has been seen.
-    pub fn insert_word_position(&mut self, word: &str, position: Position) -> anyhow::Result<()> {
-        let word = SmallVec32::from(word.as_bytes());
-        let position = RoaringBitmap::from_iter(Some(position));
-        let (_, lrus) = self.word_positions.insert(word, position, |old, new| old.union_with(&new));
-        Self::write_word_positions(&mut self.sorter, lrus)
     }
 
     // Save the documents ids under the position and word we have seen it.
@@ -181,7 +174,26 @@ impl Store {
         let ids = RoaringBitmap::from_iter(Some(id));
         let (_, lrus) = self.word_position_docids.insert((word_vec, position), ids, |old, new| old.union_with(&new));
         Self::write_word_position_docids(&mut self.sorter, lrus)?;
-        self.insert_word_attribute_docid(word, position / MAX_POSITION as u32, id)
+        self.insert_word_position(word, position)?;
+        self.insert_word_four_positions_docid(word, position, id)?;
+        self.insert_word_attribute_docid(word, position / MAX_POSITION as u32, id)?;
+        Ok(())
+    }
+
+    pub fn insert_word_four_positions_docid(&mut self, word: &str, position: Position, id: DocumentId) -> anyhow::Result<()> {
+        let position = position - position % 4;
+        let word_vec = SmallVec32::from(word.as_bytes());
+        let ids = RoaringBitmap::from_iter(Some(id));
+        let (_, lrus) = self.word_position_docids.insert((word_vec, position), ids, |old, new| old.union_with(&new));
+        Self::write_word_four_positions_docids(&mut self.sorter, lrus)
+    }
+
+    // Save the positions where this word has been seen.
+    pub fn insert_word_position(&mut self, word: &str, position: Position) -> anyhow::Result<()> {
+        let word = SmallVec32::from(word.as_bytes());
+        let position = RoaringBitmap::from_iter(Some(position));
+        let (_, lrus) = self.word_positions.insert(word, position, |old, new| old.union_with(&new));
+        Self::write_word_positions(&mut self.sorter, lrus)
     }
 
     // Save the documents ids under the attribute and word we have seen it.
@@ -196,11 +208,8 @@ impl Store {
         Ok(self.sorter.insert(HEADERS_KEY, headers)?)
     }
 
-    pub fn write_document_id(&mut self, id: DocumentId) {
-        self.documents_ids.insert(id);
-    }
-
     pub fn write_document(&mut self, id: DocumentId, content: &[u8]) -> anyhow::Result<()> {
+        self.documents_ids.insert(id);
         Ok(self.documents_sorter.insert(id.to_be_bytes(), content)?)
     }
 
@@ -232,6 +241,31 @@ impl Store {
     {
         // postings positions ids keys are all prefixed
         let mut key = vec![WORD_POSITION_DOCIDS_BYTE];
+        let mut buffer = Vec::new();
+
+        for ((word, pos), ids) in iter {
+            key.truncate(1);
+            key.extend_from_slice(&word);
+            // we postfix the word by the positions it appears in
+            key.extend_from_slice(&pos.to_be_bytes());
+            // We serialize the document ids into a buffer
+            buffer.clear();
+            buffer.reserve(ids.serialized_size());
+            ids.serialize_into(&mut buffer)?;
+            // that we write under the generated key into MTBL
+            if lmdb_key_valid_size(&key) {
+                sorter.insert(&key, &buffer)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_word_four_positions_docids<I>(sorter: &mut Sorter<MergeFn>, iter: I) -> anyhow::Result<()>
+    where I: IntoIterator<Item=((SmallVec32<u8>, Position), RoaringBitmap)>
+    {
+        // postings positions ids keys are all prefixed
+        let mut key = vec![WORD_FOUR_POSITIONS_DOCIDS_BYTE];
         let mut buffer = Vec::new();
 
         for ((word, pos), ids) in iter {
@@ -287,6 +321,7 @@ impl Store {
     pub fn finish(mut self) -> anyhow::Result<(Reader<Mmap>, Reader<Mmap>)> {
         Self::write_word_positions(&mut self.sorter, self.word_positions)?;
         Self::write_word_position_docids(&mut self.sorter, self.word_position_docids)?;
+        Self::write_word_four_positions_docids(&mut self.sorter, self.word_four_positions_docids)?;
         Self::write_word_attribute_docids(&mut self.sorter, self.word_attribute_docids)?;
         Self::write_documents_ids(&mut self.sorter, self.documents_ids)?;
 
@@ -346,7 +381,12 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
             Ok(values[0].to_vec())
         },
         key => match key[0] {
-              DOCUMENTS_IDS_BYTE | WORD_POSITIONS_BYTE | WORD_POSITION_DOCIDS_BYTE | WORD_ATTRIBUTE_DOCIDS_BYTE => {
+                DOCUMENTS_IDS_BYTE
+              | WORD_POSITIONS_BYTE
+              | WORD_POSITION_DOCIDS_BYTE
+              | WORD_FOUR_POSITIONS_DOCIDS_BYTE
+              | WORD_ATTRIBUTE_DOCIDS_BYTE =>
+            {
                 let mut first = RoaringBitmap::deserialize_from(values[0].as_slice()).unwrap();
 
                 for value in &values[1..] {
@@ -388,6 +428,11 @@ fn lmdb_writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) ->
         index.word_position_docids.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
+    else if key.starts_with(&[WORD_FOUR_POSITIONS_DOCIDS_BYTE]) {
+        // Write the postings lists
+        index.word_four_positions_docids.as_polymorph()
+            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
+    }
     else if key.starts_with(&[WORD_ATTRIBUTE_DOCIDS_BYTE]) {
         // Write the attribute postings lists
         index.word_attribute_docids.as_polymorph()
@@ -421,7 +466,7 @@ fn index_csv(
     mut rdr: csv::Reader<Box<dyn Read + Send>>,
     thread_index: usize,
     num_threads: usize,
-    arc_cache_size: Option<usize>,
+    arc_cache_size: usize,
     max_nb_chunks: Option<usize>,
     max_memory: Option<usize>,
     chunk_compression_type: CompressionType,
@@ -463,7 +508,6 @@ fn index_csv(
                 for (pos, word) in lexer::break_string(&content).enumerate().take(MAX_POSITION) {
                     let word = word.cow_to_lowercase();
                     let position = (attr * MAX_POSITION + pos) as u32;
-                    store.insert_word_position(&word, position)?;
                     store.insert_word_position_docid(&word, position, document_id)?;
                 }
             }
@@ -473,7 +517,6 @@ fn index_csv(
             writer.write_byte_record(document.as_byte_record())?;
             let document = writer.into_inner()?;
             store.write_document(document_id, &document)?;
-            store.write_document_id(document_id);
         }
 
         // Compute the document id of the the next document.
