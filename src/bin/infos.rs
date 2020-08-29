@@ -78,7 +78,7 @@ enum Command {
         full_display: bool,
         /// The words you want to display the values of.
         words: Vec<String>,
-    }
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -190,6 +190,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     let main_name = "main";
     let word_positions_name = "word_positions";
     let word_position_docids_name = "word_position_docids";
+    let word_four_positions_docids_name = "word_four_positions_docids";
     let word_attribute_docids_name = "word_attribute_docids";
 
     let mut heap = BinaryHeap::with_capacity(limit + 1);
@@ -200,8 +201,13 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             if heap.len() > limit { heap.pop(); }
         }
 
-        if let Some(documents) = index.main.get::<_, ByteSlice, ByteSlice>(rtxn, b"documents")? {
+        if let Some(documents) = index.main.get::<_, Str, ByteSlice>(rtxn, "documents")? {
             heap.push(Reverse((documents.len(), format!("documents"), main_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        if let Some(documents_ids) = index.main.get::<_, Str, ByteSlice>(rtxn, "documents-ids")? {
+            heap.push(Reverse((documents_ids.len(), format!("documents-ids"), main_name)));
             if heap.len() > limit { heap.pop(); }
         }
 
@@ -216,6 +222,14 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             let (word, position) = StrBEU32Codec::bytes_decode(key_bytes).unwrap();
             let key = format!("{} {}", word, position);
             heap.push(Reverse((value.len(), key, word_position_docids_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        for result in index.word_four_positions_docids.as_polymorph().iter::<_, ByteSlice, ByteSlice>(rtxn)? {
+            let (key_bytes, value) = result?;
+            let (word, lower_position) = StrBEU32Codec::bytes_decode(key_bytes).unwrap();
+            let key = format!("{} {}..{}", word, lower_position, lower_position + 4);
+            heap.push(Reverse((value.len(), key, word_four_positions_docids_name)));
             if heap.len() > limit { heap.pop(); }
         }
 
