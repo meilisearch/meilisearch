@@ -12,6 +12,7 @@ use anyhow::{bail, Context};
 use fxhash::{FxHasher32, FxHasher64};
 use heed::types::*;
 use heed::{PolyDatabase, Database};
+use oxidized_mtbl as omtbl;
 
 pub use self::search::{Search, SearchResult};
 pub use self::criterion::{Criterion, default_criteria};
@@ -90,7 +91,7 @@ impl Index {
         iter: impl IntoIterator<Item=DocumentId>,
     ) -> anyhow::Result<Vec<(DocumentId, Vec<u8>)>>
     {
-        match self.main.get::<_, Str, MtblCodec>(rtxn, DOCUMENTS_KEY)? {
+        match self.main.get::<_, Str, MtblCodec<&[u8]>>(rtxn, DOCUMENTS_KEY)? {
             Some(documents) => {
                 iter.into_iter().map(|id| {
                     let key = id.to_be_bytes();
@@ -103,13 +104,13 @@ impl Index {
         }
     }
 
-    pub fn put_documents(&self, wtxn: &mut heed::RwTxn, documents: &[u8]) -> anyhow::Result<()> {
-        Ok(self.main.put::<_, Str, MtblCodec>(wtxn, DOCUMENTS_KEY, documents)?)
+    pub fn put_documents<A: AsRef<[u8]>>(&self, wtxn: &mut heed::RwTxn, documents: &omtbl::Reader<A>) -> anyhow::Result<()> {
+        Ok(self.main.put::<_, Str, MtblCodec<A>>(wtxn, DOCUMENTS_KEY, documents)?)
     }
 
     /// Returns the number of documents indexed in the database.
     pub fn number_of_documents<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<usize> {
-        match self.main.get::<_, Str, MtblCodec>(rtxn, DOCUMENTS_KEY)? {
+        match self.main.get::<_, Str, MtblCodec<&[u8]>>(rtxn, DOCUMENTS_KEY)? {
             Some(documents) => Ok(documents.metadata().count_entries as usize),
             None => return Ok(0),
         }

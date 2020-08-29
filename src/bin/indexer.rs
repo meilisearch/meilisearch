@@ -579,13 +579,16 @@ fn main() -> anyhow::Result<()> {
     builder.extend(docs_stores);
     builder.build().write_into(&mut writer)?;
     let file = writer.into_inner()?;
+
+    // Read back the documents MTBL database from the file.
     let documents_mmap = unsafe { memmap::Mmap::map(&file)? };
+    let documents = Reader::new(documents_mmap)?;
 
     debug!("We are writing the postings lists and documents into LMDB on disk...");
     // We merge the postings lists into LMDB.
     let mut wtxn = env.write_txn()?;
     merge_into_lmdb(stores, |k, v| lmdb_writer(&mut wtxn, &index, k, v))?;
-    index.put_documents(&mut wtxn, &documents_mmap)?;
+    index.put_documents(&mut wtxn, &documents)?;
     let count = index.number_of_documents(&wtxn)?;
     wtxn.commit()?;
 
