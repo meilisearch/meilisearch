@@ -434,32 +434,34 @@ fn index_csv(
     let mut document_id: usize = 0;
     let mut document = csv::StringRecord::new();
     while rdr.read_record(&mut document)? {
-        document_id = document_id + 1;
 
-        // We skip documents that must not be indexed by this thread
-        if document_id % num_threads != thread_index { continue }
-
-        let document_id = DocumentId::try_from(document_id).context("generated id is too big")?;
-        if document_id % (ONE_MILLION as u32) == 0 {
-            debug!("We have seen {}m documents so far ({:.02?}).",
-                document_id / ONE_MILLION as u32, before.elapsed());
-            before = Instant::now();
-        }
-
-        for (attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
-            for (pos, word) in lexer::break_string(&content).enumerate().take(MAX_POSITION) {
-                let word = word.cow_to_lowercase();
-                let position = (attr * MAX_POSITION + pos) as u32;
-                store.insert_word_position(&word, position)?;
-                store.insert_word_position_docid(&word, position, document_id)?;
+        // We skip documents that must not be indexed by this thread.
+        if document_id % num_threads == thread_index {
+            if document_id % ONE_MILLION == 0 {
+                debug!("We have seen {}m documents so far ({:.02?}).",
+                    document_id / ONE_MILLION, before.elapsed());
+                before = Instant::now();
             }
+
+            let document_id = DocumentId::try_from(document_id).context("generated id is too big")?;
+            for (attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
+                for (pos, word) in lexer::break_string(&content).enumerate().take(MAX_POSITION) {
+                    let word = word.cow_to_lowercase();
+                    let position = (attr * MAX_POSITION + pos) as u32;
+                    store.insert_word_position(&word, position)?;
+                    store.insert_word_position_docid(&word, position, document_id)?;
+                }
+            }
+
+            // We write the document in the database.
+            let mut writer = csv::WriterBuilder::new().has_headers(false).from_writer(Vec::new());
+            writer.write_byte_record(document.as_byte_record())?;
+            let document = writer.into_inner()?;
+            store.write_document(document_id, &document)?;
         }
 
-        // We write the document in the database.
-        let mut writer = csv::WriterBuilder::new().has_headers(false).from_writer(Vec::new());
-        writer.write_byte_record(document.as_byte_record())?;
-        let document = writer.into_inner()?;
-        store.write_document(document_id, &document)?;
+        // Compute the document id of the the next document.
+        document_id = document_id + 1;
     }
 
     let (reader, docs_reader) = store.finish()?;
