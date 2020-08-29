@@ -16,8 +16,13 @@ use super::raft_service;
 use super::raft_service::raft_service_client::RaftServiceClient;
 use super::ClientRequest;
 
+struct Client {
+    rpc_client: RaftServiceClient<Channel>,
+    addr: String,
+}
+
 pub struct RaftRouter {
-    clients: RwLock<HashMap<NodeId, RaftServiceClient<Channel>>>,
+    clients: RwLock<HashMap<NodeId, Client>>,
 }
 
 impl RaftRouter {
@@ -27,13 +32,17 @@ impl RaftRouter {
     }
 
     pub async fn add_client(&self, id: NodeId, addr: String) -> Result<()>  {
-        let client = RaftServiceClient::connect(addr).await?;
+        let client = Client { rpc_client: RaftServiceClient::connect(addr.clone()).await?, addr };
         self
             .clients
             .write()
             .await
             .insert(id, client);
         Ok(())
+    }
+
+    pub async fn clients(&self) -> Vec<(NodeId, String)> {
+        self.clients.read().await.iter().map(|(&id, client)| (id, client.addr.clone())).collect()
     }
 }
 
@@ -54,7 +63,7 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
         let payload = raft_service::AppendEntriesRequest {
             data: serialize(&rpc)?,
         };
-        match client.append_entries(payload).await {
+        match client.rpc_client.append_entries(payload).await {
             Ok(response) => {
                 let response = deserialize(&response.into_inner().data)?;
                 Ok(response)
@@ -78,7 +87,7 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
         let payload = raft_service::InstallSnapshotRequest {
             data: serialize(&rpc)?,
         };
-        match client.install_snapshot(payload).await {
+        match client.rpc_client.install_snapshot(payload).await {
             Ok(response) => {
                 let response = deserialize(&response.into_inner().data)?;
                 Ok(response)
@@ -98,7 +107,7 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
         let payload = raft_service::VoteRequest {
             data: serialize(&rpc)?,
         };
-        match client.vote(payload).await {
+        match client.rpc_client.vote(payload).await {
             Ok(response) => {
                 let response = deserialize(&response.into_inner().data)?;
                 Ok(response)
