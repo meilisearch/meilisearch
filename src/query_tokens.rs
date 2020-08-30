@@ -1,5 +1,4 @@
 use std::{mem, str};
-use unicode_linebreak::{break_property, BreakClass};
 
 use QueryToken::{Quoted, Free};
 
@@ -68,12 +67,6 @@ impl<'a> Iterator for QueryTokens<'a> {
                         if i > s { return Some(Free(&self.string[s..i])) }
                     },
                     State::Fused => return None,
-                }
-            } else if break_property(c as u32) == BreakClass::Ideographic {
-                match self.state.replace_by(State::Free(afteri)) {
-                    State::Quoted(s) => return Some(Quoted(&self.string[s..afteri])),
-                    State::Free(s) => return Some(Free(&self.string[s..afteri])),
-                    _ => self.state = State::Free(afteri),
                 }
             } else if !self.state.is_quoted() && !c.is_alphanumeric() {
                 match self.state.replace_by(State::Free(afteri)) {

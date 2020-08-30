@@ -9,10 +9,10 @@ use std::time::Instant;
 use askama_warp::Template;
 use heed::EnvOpenOptions;
 use serde::Deserialize;
-use slice_group_by::StrGroupBy;
 use structopt::StructOpt;
 use warp::{Filter, http::Response};
 
+use milli::tokenizer::{simple_tokenizer, TokenType};
 use milli::{Index, SearchResult};
 
 #[cfg(target_os = "linux")]
@@ -47,12 +47,16 @@ struct Opt {
 
 fn highlight_string(string: &str, words: &HashSet<String>) -> String {
     let mut output = String::new();
-    for token in string.linear_group_by_key(|c| c.is_alphanumeric()) {
-        let lowercase_token = token.to_lowercase();
-        let to_highlight = words.contains(&lowercase_token);
-        if to_highlight { output.push_str("<mark>") }
-        output.push_str(token);
-        if to_highlight { output.push_str("</mark>") }
+    for (token_type, token) in simple_tokenizer(string) {
+        if token_type == TokenType::Word {
+            let lowercase_token = token.to_lowercase();
+            let to_highlight = words.contains(&lowercase_token);
+            if to_highlight { output.push_str("<mark>") }
+            output.push_str(token);
+            if to_highlight { output.push_str("</mark>") }
+        } else {
+            output.push_str(token);
+        }
     }
     output
 }

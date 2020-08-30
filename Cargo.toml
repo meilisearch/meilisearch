@@ -31,7 +31,6 @@ smallstr = "0.2.0"
 smallvec = "1.4.0"
 structopt = { version = "0.3.14", default-features = false }
 tempfile = "3.1.0"
-unicode-linebreak = "0.1.0"
 
 # logging
 log = "0.4.8"

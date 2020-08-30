@@ -21,7 +21,8 @@ use rayon::prelude::*;
 use roaring::RoaringBitmap;
 use structopt::StructOpt;
 
-use milli::{lexer, SmallVec32, Index, DocumentId, Position, Attribute, BEU32};
+use milli::{SmallVec32, Index, DocumentId, Position, Attribute, BEU32};
+use milli::tokenizer::{simple_tokenizer, only_words};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
 const ONE_MILLION: usize = 1_000_000;
@@ -367,7 +368,7 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
         WORDS_FST_KEY => {
             let fsts: Vec<_> = values.iter().map(|v| fst::Set::new(v).unwrap()).collect();
 
-            // Union of the two FSTs
+            // Union of the FSTs
             let mut op = fst::set::OpBuilder::new();
             fsts.iter().for_each(|fst| op.push(fst.into_stream()));
             let op = op.r#union();
@@ -387,15 +388,16 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
               | WORD_FOUR_POSITIONS_DOCIDS_BYTE
               | WORD_ATTRIBUTE_DOCIDS_BYTE =>
             {
-                let mut first = RoaringBitmap::deserialize_from(values[0].as_slice()).unwrap();
+                let (head, tail) = values.split_first().unwrap();
 
-                for value in &values[1..] {
+                let mut head = RoaringBitmap::deserialize_from(head.as_slice()).unwrap();
+                for value in tail {
                     let bitmap = RoaringBitmap::deserialize_from(value.as_slice()).unwrap();
-                    first.union_with(&bitmap);
+                    head.union_with(&bitmap);
                 }
 
-                let mut vec = Vec::new();
-                first.serialize_into(&mut vec).unwrap();
+                let mut vec = Vec::with_capacity(head.serialized_size());
+                head.serialize_into(&mut vec).unwrap();
                 Ok(vec)
             },
             otherwise => panic!("wut {:?}", otherwise),
@@ -505,8 +507,8 @@ fn index_csv(
 
             let document_id = DocumentId::try_from(document_id).context("generated id is too big")?;
             for (attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
-                for (pos, word) in lexer::break_string(&content).enumerate().take(MAX_POSITION) {
-                    let word = word.cow_to_lowercase();
+                for (pos, (_, token)) in simple_tokenizer(&content).filter(only_words).enumerate().take(MAX_POSITION) {
+                    let word = token.cow_to_lowercase();
                     let position = (attr * MAX_POSITION + pos) as u32;
                     store.insert_word_position_docid(&word, position, document_id)?;
                 }

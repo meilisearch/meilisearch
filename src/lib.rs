@@ -3,7 +3,7 @@ mod node;
 mod query_tokens;
 mod search;
 pub mod heed_codec;
-pub mod lexer;
+pub mod tokenizer;
 
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
