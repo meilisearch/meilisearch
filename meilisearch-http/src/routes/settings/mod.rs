@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
+use crate::raft::Raft;
 use crate::Data;
 
 mod attributes_for_faceting;
@@ -33,6 +34,27 @@ macro_rules! make_update_delete_routes {
             Ok(HttpResponse::Accepted().json(response))
         }
 
+        #[actix_web_macros::delete($route, wrap = "Authentication::Private")]
+        pub async fn delete_raft(
+            data: web::Data<crate::raft::Raft>,
+            index_uid: web::Path<String>,
+        ) -> Result<HttpResponse, ResponseError> {
+            use meilisearch_core::settings::{SettingsUpdate, UpdateState};
+            let settings_update = SettingsUpdate {
+                $attr: UpdateState::Clear,
+                ..SettingsUpdate::default()
+            };
+            let message = crate::raft::Message::SettingsUpdate {
+                index_uid: index_uid.into_inner(),
+                update: settings_update,
+            };
+            let response = data
+                .propose(message)
+                .await
+                .map_err(|e| Error::RaftError(e.to_string()))?;
+            Ok(HttpResponse::Accepted().json(response))
+        }
+
         #[actix_web_macros::post($route, wrap = "Authentication::Private")]
         pub async fn update(
             data: actix_web::web::Data<Data>,
@@ -48,6 +70,30 @@ macro_rules! make_update_delete_routes {
             let settings_update = settings.to_update().map_err(Error::bad_request)?;
             let response = data.update_settings(index_uid.as_ref(), settings_update)?;
 
+            Ok(HttpResponse::Accepted().json(response))
+        }
+
+        #[actix_web_macros::post($route, wrap = "Authentication::Private")]
+        pub async fn update_raft(
+            data: web::Data<crate::raft::Raft>,
+            index_uid: actix_web::web::Path<String>,
+            body: actix_web::web::Json<Option<$type>>,
+        ) -> std::result::Result<HttpResponse, ResponseError> {
+            use meilisearch_core::settings::Settings;
+            let settings = Settings {
+                $attr: Some(body.into_inner()),
+                ..Settings::default()
+            };
+
+            let settings_update = settings.to_update().map_err(Error::bad_request)?;
+            let message = crate::raft::Message::SettingsUpdate {
+                index_uid: index_uid.into_inner(),
+                update: settings_update,
+            };
+            let response = data
+                .propose(message)
+                .await
+                .map_err(|e| Error::RaftError(e.to_string()))?;
             Ok(HttpResponse::Accepted().json(response))
         }
     };
@@ -70,7 +116,34 @@ macro_rules! create_services {
     };
 }
 
+macro_rules! create_services_raft {
+    ($($mod:ident),*) => {
+
+        pub fn services_raft(cfg: &mut web::ServiceConfig) {
+            cfg
+                .service(update_all_raft)
+                .service(get_all)
+                .service(delete_all_raft)
+                $(
+                    .service($mod::get)
+                    .service($mod::update_raft)
+                    .service($mod::delete_raft)
+                )*;
+        }
+    };
+}
+
 create_services!(
+    attributes_for_faceting,
+    displayed_attributes,
+    distinct_attributes,
+    ranking_rules,
+    searchable_attributes,
+    stop_words,
+    synonyms
+);
+
+create_services_raft!(
     attributes_for_faceting,
     displayed_attributes,
     distinct_attributes,
@@ -88,6 +161,24 @@ async fn update_all(
 ) -> Result<HttpResponse, ResponseError> {
     let settings_update = body.to_update().map_err(Error::bad_request)?;
     let response = data.update_settings(index_uid.as_ref(), settings_update)?;
+    Ok(HttpResponse::Accepted().json(response))
+}
+
+#[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
+async fn update_all_raft(
+    data: web::Data<Raft>,
+    index_uid: web::Path<String>,
+    body: web::Json<Settings>,
+) -> Result<HttpResponse, ResponseError> {
+    let settings_update = body.to_update().map_err(Error::bad_request)?;
+    let message = crate::raft::Message::SettingsUpdate {
+        index_uid: index_uid.into_inner(),
+        update: settings_update,
+    };
+    let response = data
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
     Ok(HttpResponse::Accepted().json(response))
 }
 
@@ -156,6 +247,32 @@ async fn get_all(
 
 #[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn delete_all(
+    data: web::Data<Raft>,
+    index_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    let settings_update = SettingsUpdate {
+        ranking_rules: UpdateState::Clear,
+        distinct_attribute: UpdateState::Clear,
+        primary_key: UpdateState::Clear,
+        searchable_attributes: UpdateState::Clear,
+        displayed_attributes: UpdateState::Clear,
+        stop_words: UpdateState::Clear,
+        synonyms: UpdateState::Clear,
+        attributes_for_faceting: UpdateState::Clear,
+    };
+    let message = crate::raft::Message::SettingsUpdate {
+        index_uid: index_uid.into_inner(),
+        update: settings_update,
+    };
+    let response = data
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
+    Ok(HttpResponse::Accepted().json(response))
+}
+
+#[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
+async fn delete_all_raft(
     data: web::Data<Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {

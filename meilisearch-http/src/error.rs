@@ -54,6 +54,7 @@ pub enum Error {
     SearchDocuments(String),
     PayloadTooLarge,
     UnsupportedMediaType,
+    RaftError(String),
 }
 
 impl error::Error for Error {}
@@ -78,6 +79,7 @@ impl ErrorCode for Error {
             SearchDocuments(_) => Code::SearchDocuments,
             PayloadTooLarge => Code::PayloadTooLarge,
             UnsupportedMediaType => Code::UnsupportedMediaType,
+            RaftError(_) => Code::Internal,
         }
     }
 }
@@ -209,6 +211,7 @@ impl fmt::Display for Error {
             Self::SearchDocuments(err) => write!(f, "Impossible to search documents; {}", err),
             Self::PayloadTooLarge => f.write_str("Payload too large"),
             Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
+            Self::RaftError(err) => write!(f, "Raft error: {}", err),
         }
     }
 }
