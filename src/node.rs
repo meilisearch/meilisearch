@@ -24,6 +24,11 @@ pub fn extract_position(position: u32) -> (u32, u32) {
     (position / ONE_ATTRIBUTE, position % ONE_ATTRIBUTE)
 }
 
+// Returns the group of four positions in which this position reside (i.e. 0, 4, 12).
+pub fn group_of_four(position: u32) -> u32 {
+    position - position % 4
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Node {
     // Is this node is the first node.

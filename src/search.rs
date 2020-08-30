@@ -176,6 +176,24 @@ impl<'a> Search<'a> {
         Ok(union_docids)
     }
 
+    /// Returns the union of the same gorup of four positions for all the given words.
+    fn union_word_four_positions(
+        rtxn: &heed::RoTxn,
+        index: &Index,
+        words: &[(String, u8, RoaringBitmap)],
+        group: Position,
+    ) -> anyhow::Result<RoaringBitmap>
+    {
+        let mut union_docids = RoaringBitmap::new();
+        for (word, _distance, _positions) in words {
+            // TODO would be better to check if the group exist
+            if let Some(docids) = index.word_four_positions_docids.get(rtxn, &(word, group))? {
+                union_docids.union_with(&docids);
+            }
+        }
+        Ok(union_docids)
+    }
+
     /// Returns the union of the same attribute for all the given words.
     fn union_word_attribute(
         rtxn: &heed::RoTxn,
@@ -203,6 +221,8 @@ impl<'a> Search<'a> {
         derived_words: &[Vec<(String, u8, RoaringBitmap)>],
         union_cache: &mut HashMap<(usize, u32), RoaringBitmap>,
         non_disjoint_cache: &mut HashMap<((usize, u32), (usize, u32)), bool>,
+        group_four_union_cache: &mut HashMap<(usize, u32), RoaringBitmap>,
+        group_four_non_disjoint_cache: &mut HashMap<((usize, u32), (usize, u32)), bool>,
         attribute_union_cache: &mut HashMap<(usize, u32), RoaringBitmap>,
         attribute_non_disjoint_cache: &mut HashMap<((usize, u32), (usize, u32)), bool>,
     ) -> bool
@@ -214,37 +234,68 @@ impl<'a> Search<'a> {
         let (rattr, _) = node::extract_position(rpos);
 
         if lattr == rattr {
-            // We retrieve or compute the intersection between the two given words and positions.
-            *non_disjoint_cache.entry(((lword, lpos), (rword, rpos))).or_insert_with(|| {
-                // We retrieve or compute the unions for the two words and positions.
-                union_cache.entry((lword, lpos)).or_insert_with(|| {
-                    let words: &Vec<_> = &derived_words[lword];
-                    Self::union_word_position(rtxn, index, words, lpos).unwrap()
-                });
-                union_cache.entry((rword, rpos)).or_insert_with(|| {
-                    let words: &Vec<_> = &derived_words[rword];
-                    Self::union_word_position(rtxn, index, words, rpos).unwrap()
-                });
+            // TODO move this function to a better place.
+            let lgroup = node::group_of_four(lpos);
+            let rgroup = node::group_of_four(rpos);
 
-                // TODO is there a way to avoid this double gets?
-                let lunion_docids = union_cache.get(&(lword, lpos)).unwrap();
-                let runion_docids = union_cache.get(&(rword, rpos)).unwrap();
+            // We can't compute a disjunction on a group of four positions if those
+            // two positions are in the same group, we must go down to the position.
+            if lgroup == rgroup {
+                // We retrieve or compute the intersection between the two given words and positions.
+                *non_disjoint_cache.entry(((lword, lpos), (rword, rpos))).or_insert_with(|| {
+                    // We retrieve or compute the unions for the two words and positions.
+                    union_cache.entry((lword, lpos)).or_insert_with(|| {
+                        let words = &derived_words[lword];
+                        Self::union_word_position(rtxn, index, words, lpos).unwrap()
+                    });
+                    union_cache.entry((rword, rpos)).or_insert_with(|| {
+                        let words = &derived_words[rword];
+                        Self::union_word_position(rtxn, index, words, rpos).unwrap()
+                    });
 
-                // We first check that the docids of these unions are part of the candidates.
-                if lunion_docids.is_disjoint(candidates) { return false }
-                if runion_docids.is_disjoint(candidates) { return false }
+                    // TODO is there a way to avoid this double gets?
+                    let lunion_docids = union_cache.get(&(lword, lpos)).unwrap();
+                    let runion_docids = union_cache.get(&(rword, rpos)).unwrap();
 
-                !lunion_docids.is_disjoint(&runion_docids)
-            })
+                    // We first check that the docids of these unions are part of the candidates.
+                    if lunion_docids.is_disjoint(candidates) { return false }
+                    if runion_docids.is_disjoint(candidates) { return false }
+
+                    !lunion_docids.is_disjoint(&runion_docids)
+                })
+            } else {
+                // We retrieve or compute the intersection between the two given words and positions.
+                *group_four_non_disjoint_cache.entry(((lword, lgroup), (rword, rgroup))).or_insert_with(|| {
+                    // We retrieve or compute the unions for the two words and group of four positions.
+                    group_four_union_cache.entry((lword, lgroup)).or_insert_with(|| {
+                        let words = &derived_words[lword];
+                        Self::union_word_four_positions(rtxn, index, words, lgroup).unwrap()
+                    });
+                    group_four_union_cache.entry((rword, rgroup)).or_insert_with(|| {
+                        let words = &derived_words[rword];
+                        Self::union_word_four_positions(rtxn, index, words, rgroup).unwrap()
+                    });
+
+                    // TODO is there a way to avoid this double gets?
+                    let lunion_group_docids = group_four_union_cache.get(&(lword, lgroup)).unwrap();
+                    let runion_group_docids = group_four_union_cache.get(&(rword, rgroup)).unwrap();
+
+                    // We first check that the docids of these unions are part of the candidates.
+                    if lunion_group_docids.is_disjoint(candidates) { return false }
+                    if runion_group_docids.is_disjoint(candidates) { return false }
+
+                    !lunion_group_docids.is_disjoint(&runion_group_docids)
+                })
+            }
         } else {
             *attribute_non_disjoint_cache.entry(((lword, lattr), (rword, rattr))).or_insert_with(|| {
                 // We retrieve or compute the unions for the two words and positions.
                 attribute_union_cache.entry((lword, lattr)).or_insert_with(|| {
-                    let words: &Vec<_> = &derived_words[lword];
+                    let words = &derived_words[lword];
                     Self::union_word_attribute(rtxn, index, words, lattr).unwrap()
                 });
                 attribute_union_cache.entry((rword, rattr)).or_insert_with(|| {
-                    let words: &Vec<_> = &derived_words[rword];
+                    let words = &derived_words[rword];
                     Self::union_word_attribute(rtxn, index, words, rattr).unwrap()
                 });
 
@@ -290,6 +341,9 @@ impl<'a> Search<'a> {
         let union_cache = HashMap::new();
         let mut non_disjoint_cache = HashMap::new();
 
+        let mut group_four_union_cache = HashMap::new();
+        let mut group_four_non_disjoint_cache = HashMap::new();
+
         let mut attribute_union_cache = HashMap::new();
         let mut attribute_non_disjoint_cache = HashMap::new();
 
@@ -306,13 +360,13 @@ impl<'a> Search<'a> {
                 &derived_words,
                 &mut union_cache_cloned.borrow_mut(),
                 &mut non_disjoint_cache,
+                &mut group_four_union_cache,
+                &mut group_four_non_disjoint_cache,
                 &mut attribute_union_cache,
                 &mut attribute_non_disjoint_cache,
             )
         };
 
-        // We instantiate an astar bag Iterator that returns the best paths incrementally,
-        // it means that it will first return the best paths then the next best paths...
         let astar_iter = AstarBagIter::new(
             Node::Uninit, // start
             |n| n.successors(&union_positions, &mut contains_documents), // successors
@@ -322,7 +376,6 @@ impl<'a> Search<'a> {
 
         let mut documents = Vec::new();
         for (paths, proximity) in astar_iter {
-
             let mut union_cache = union_cache.borrow_mut();
             let mut candidates = candidates.borrow_mut();
 

@@ -88,7 +88,7 @@ struct IndexerOpt {
     max_memory: Option<usize>,
 
     /// Size of the ARC cache when indexing.
-    #[structopt(long, default_value = "65535")]
+    #[structopt(long, default_value = "43690")]
     arc_cache_size: usize,
 
     /// The name of the compression algorithm to use when compressing intermediate
@@ -184,7 +184,7 @@ impl Store {
         let position = position - position % 4;
         let word_vec = SmallVec32::from(word.as_bytes());
         let ids = RoaringBitmap::from_iter(Some(id));
-        let (_, lrus) = self.word_position_docids.insert((word_vec, position), ids, |old, new| old.union_with(&new));
+        let (_, lrus) = self.word_four_positions_docids.insert((word_vec, position), ids, |old, new| old.union_with(&new));
         Self::write_word_four_positions_docids(&mut self.sorter, lrus)
     }
 
