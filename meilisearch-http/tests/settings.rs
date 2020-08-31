@@ -1,5 +1,5 @@
 use assert_json_diff::assert_json_eq;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::convert::Into;
 mod common;
 
@@ -520,4 +520,72 @@ async fn test_displayed_attributes_field() {
     let (response, _status_code) = server.get_all_settings().await;
 
     assert_json_eq!(body, response, ordered: true);
+}
+
+#[actix_rt::test]
+async fn push_documents_after_updating_settings_should_not_change_settings() {
+    let mut server = common::Server::with_uid("test");
+
+    let index_body = json!({
+        "uid": "test",
+        "primaryKey": "id",
+    });
+
+    let settings_body = json!({
+        "rankingRules": [
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness",
+            "desc(registered)",
+            "desc(age)",
+        ],
+        "distinctAttribute": "id",
+        "searchableAttributes": [
+            "id",
+            "name",
+            "color",
+            "gender",
+            "email",
+            "phone",
+            "address",
+            "registered",
+            "about"
+        ],
+        "displayedAttributes": [
+            "name",
+            "gender",
+            "email",
+            "registered",
+            "age",
+        ],
+        "stopWords": [
+            "ad",
+            "in",
+            "ut",
+        ],
+        "synonyms": {
+            "road": ["street", "avenue"],
+            "street": ["avenue"],
+        },
+        "attributesForFaceting": ["name", "color"],
+    });
+
+    let dataset = include_bytes!("assets/test_set.json");
+
+    let documents_body: Value = serde_json::from_slice(dataset).unwrap();
+
+    server.create_index(index_body).await;
+
+    server.update_all_settings(settings_body.clone()).await;
+
+    server.add_or_replace_multiple_documents(documents_body).await;
+
+    // === check if settings are the same ====
+
+    let (response, _status_code) = server.get_all_settings().await;
+
+    assert_json_eq!(settings_body, response, ordered: false);
 }

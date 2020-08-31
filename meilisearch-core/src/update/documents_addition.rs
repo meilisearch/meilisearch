@@ -201,12 +201,14 @@ pub fn apply_addition<'a, 'b>(
             };
 
             let old_document = Option::<HashMap<String, Value>>::deserialize(&mut deserializer)?;
+        println!("old document: {:#?}", old_document);
             if let Some(old_document) = old_document {
                 for (key, value) in old_document {
                     document.entry(key).or_insert(value);
                 }
             }
         }
+        println!("new document: {:#?}", document);
         documents_additions.insert(internal_docid, document);
     }
 

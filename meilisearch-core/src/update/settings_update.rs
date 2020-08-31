@@ -70,9 +70,11 @@ pub fn apply_settings_update(
 
     match settings.searchable_attributes.clone() {
         UpdateState::Update(v) => {
+            println!("updating indexed attributes");
             if v.iter().any(|e| e == "*") || v.is_empty() {
                 schema.set_all_fields_as_indexed();
             } else {
+                println!("updating indexed");
                 schema.update_indexed(v)?;
             }
             must_reindex = true;
