@@ -1,4 +1,4 @@
-use std::io::{self, Write, BufRead};
+use std::io::{self, BufRead};
 use std::iter::once;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -70,12 +70,12 @@ fn main() -> anyhow::Result<()> {
         };
         let documents = index.documents(&rtxn, result.documents_ids.iter().cloned())?;
 
-        let mut stdout = io::stdout();
-        stdout.write_all(&headers)?;
-
-        for (_id, content) in documents {
-            stdout.write_all(&content)?;
+        let mut wtr = csv::Writer::from_writer(io::stdout());
+        wtr.write_record(&headers)?;
+        for (_id, record) in documents {
+            wtr.write_record(&record)?;
         }
+        wtr.flush()?;
 
         debug!("Took {:.02?} to find {} documents", before.elapsed(), result.documents_ids.len());
     }

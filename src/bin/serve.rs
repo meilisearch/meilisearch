@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs::File;
 use std::net::SocketAddr;
@@ -45,20 +44,25 @@ struct Opt {
     http_listen_addr: String,
 }
 
-fn highlight_string(string: &str, words: &HashSet<String>) -> String {
-    let mut output = String::new();
-    for (token_type, token) in simple_tokenizer(string) {
-        if token_type == TokenType::Word {
-            let lowercase_token = token.to_lowercase();
-            let to_highlight = words.contains(&lowercase_token);
-            if to_highlight { output.push_str("<mark>") }
-            output.push_str(token);
-            if to_highlight { output.push_str("</mark>") }
-        } else {
-            output.push_str(token);
+fn highlight_record(record: &csv::StringRecord, words: &HashSet<String>) -> csv::StringRecord {
+    let mut output_record = csv::StringRecord::new();
+    let mut buffer = String::new();
+    for field in record {
+        buffer.clear();
+        for (token_type, token) in simple_tokenizer(field) {
+            if token_type == TokenType::Word {
+                let lowercase_token = token.to_lowercase();
+                let to_highlight = words.contains(&lowercase_token);
+                if to_highlight { buffer.push_str("<mark>") }
+                buffer.push_str(token);
+                if to_highlight { buffer.push_str("</mark>") }
+            } else {
+                buffer.push_str(token);
+            }
         }
+        output_record.push_field(&buffer);
     }
-    output
+    output_record
 }
 
 #[derive(Template)]
@@ -186,23 +190,27 @@ async fn main() -> anyhow::Result<()> {
                 .execute()
                 .unwrap();
 
-            let mut body = Vec::new();
-            if let Some(headers) = index.headers(&rtxn).unwrap() {
-                // We write the headers
-                body.extend_from_slice(headers);
-                let documents = index.documents(&rtxn, documents_ids).unwrap();
+            let body = match index.headers(&rtxn).unwrap() {
+                Some(headers) => {
+                    let mut wtr = csv::Writer::from_writer(Vec::new());
 
-                for (_id, content) in documents {
-                    let content = std::str::from_utf8(content.as_ref()).unwrap();
-                    let content = if disable_highlighting {
-                        Cow::from(content)
-                    } else {
-                        Cow::from(highlight_string(content, &found_words))
-                    };
+                    // We write the headers
+                    wtr.write_record(&headers).unwrap();
 
-                    body.extend_from_slice(content.as_bytes());
-                }
-            }
+                    let documents = index.documents(&rtxn, documents_ids).unwrap();
+                    for (_id, record) in documents {
+                        let record = if disable_highlighting {
+                            record
+                        } else {
+                            highlight_record(&record, &found_words)
+                        };
+                        wtr.write_record(&record).unwrap();
+                    }
+
+                    wtr.into_inner().unwrap()
+                },
+                None => Vec::new(),
+            };
 
             Response::builder()
                 .header("Content-Type", "text/csv")

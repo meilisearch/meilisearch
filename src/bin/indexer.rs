@@ -10,8 +10,10 @@ use anyhow::Context;
 use arc_cache::ArcCache;
 use bstr::ByteSlice as _;
 use cow_utils::CowUtils;
+use csv::StringRecord;
 use flate2::read::GzDecoder;
 use fst::IntoStreamer;
+use heed::BytesEncode;
 use heed::EnvOpenOptions;
 use heed::types::*;
 use log::{debug, info};
@@ -21,8 +23,9 @@ use rayon::prelude::*;
 use roaring::RoaringBitmap;
 use structopt::StructOpt;
 
-use milli::{SmallVec32, Index, DocumentId, Position, Attribute, BEU32};
+use milli::heed_codec::CsvStringRecordCodec;
 use milli::tokenizer::{simple_tokenizer, only_words};
+use milli::{SmallVec32, Index, DocumentId, Position, Attribute, BEU32};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
 const ONE_MILLION: usize = 1_000_000;
@@ -205,13 +208,17 @@ impl Store {
         Self::write_word_attribute_docids(&mut self.sorter, lrus)
     }
 
-    pub fn write_headers(&mut self, headers: &[u8]) -> anyhow::Result<()> {
+    pub fn write_headers(&mut self, headers: &StringRecord) -> anyhow::Result<()> {
+        let headers = CsvStringRecordCodec::bytes_encode(headers)
+            .with_context(|| format!("could not encode csv record"))?;
         Ok(self.sorter.insert(HEADERS_KEY, headers)?)
     }
 
-    pub fn write_document(&mut self, id: DocumentId, content: &[u8]) -> anyhow::Result<()> {
+    pub fn write_document(&mut self, id: DocumentId, record: &StringRecord) -> anyhow::Result<()> {
+        let record = CsvStringRecordCodec::bytes_encode(record)
+            .with_context(|| format!("could not encode csv record"))?;
         self.documents_ids.insert(id);
-        Ok(self.documents_sorter.insert(id.to_be_bytes(), content)?)
+        Ok(self.documents_sorter.insert(id.to_be_bytes(), record)?)
     }
 
     fn write_word_positions<I>(sorter: &mut Sorter<MergeFn>, iter: I) -> anyhow::Result<()>
@@ -487,9 +494,6 @@ fn index_csv(
 
     // Write the headers into a Vec of bytes and then into the store.
     let headers = rdr.headers()?;
-    let mut writer = csv::WriterBuilder::new().has_headers(false).from_writer(Vec::new());
-    writer.write_byte_record(headers.as_byte_record())?;
-    let headers = writer.into_inner()?;
     store.write_headers(&headers)?;
 
     let mut before = Instant::now();
@@ -500,7 +504,7 @@ fn index_csv(
         // We skip documents that must not be indexed by this thread.
         if document_id % num_threads == thread_index {
             if document_id % ONE_MILLION == 0 {
-                debug!("We have seen {}m documents so far ({:.02?}).",
+                info!("We have seen {}m documents so far ({:.02?}).",
                     document_id / ONE_MILLION, before.elapsed());
                 before = Instant::now();
             }
@@ -515,9 +519,6 @@ fn index_csv(
             }
 
             // We write the document in the database.
-            let mut writer = csv::WriterBuilder::new().has_headers(false).from_writer(Vec::new());
-            writer.write_byte_record(document.as_byte_record())?;
-            let document = writer.into_inner()?;
             store.write_document(document_id, &document)?;
         }
 

@@ -9,13 +9,14 @@ use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 
 use anyhow::Context;
+use csv::StringRecord;
 use fxhash::{FxHasher32, FxHasher64};
 use heed::types::*;
 use heed::{PolyDatabase, Database};
 
 pub use self::search::{Search, SearchResult};
 pub use self::criterion::{Criterion, default_criteria};
-use self::heed_codec::{RoaringBitmapCodec, StrBEU32Codec};
+use self::heed_codec::{RoaringBitmapCodec, StrBEU32Codec, CsvStringRecordCodec};
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
@@ -59,21 +60,17 @@ impl Index {
         })
     }
 
-    pub fn put_headers(&self, wtxn: &mut heed::RwTxn, headers: &[u8]) -> anyhow::Result<()> {
-        Ok(self.main.put::<_, Str, ByteSlice>(wtxn, HEADERS_KEY, headers)?)
+    pub fn put_headers(&self, wtxn: &mut heed::RwTxn, headers: &StringRecord) -> heed::Result<()> {
+        self.main.put::<_, Str, CsvStringRecordCodec>(wtxn, HEADERS_KEY, headers)
     }
 
-    pub fn headers<'t>(&self, rtxn: &'t heed::RoTxn) -> heed::Result<Option<&'t [u8]>> {
-        self.main.get::<_, Str, ByteSlice>(rtxn, HEADERS_KEY)
+    pub fn headers(&self, rtxn: &heed::RoTxn) -> heed::Result<Option<StringRecord>> {
+        self.main.get::<_, Str, CsvStringRecordCodec>(rtxn, HEADERS_KEY)
     }
 
-    pub fn number_of_attributes<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<Option<usize>> {
+    pub fn number_of_attributes(&self, rtxn: &heed::RoTxn) -> anyhow::Result<Option<usize>> {
         match self.headers(rtxn)? {
-            Some(headers) => {
-                let mut rdr = csv::Reader::from_reader(headers);
-                let headers = rdr.headers()?;
-                Ok(Some(headers.len()))
-            }
+            Some(headers) => Ok(Some(headers.len())),
             None => Ok(None),
         }
     }
@@ -94,13 +91,25 @@ impl Index {
         &self,
         rtxn: &'t heed::RoTxn,
         iter: impl IntoIterator<Item=DocumentId>,
-    ) -> anyhow::Result<Vec<(DocumentId, Vec<u8>)>>
+    ) -> anyhow::Result<Vec<(DocumentId, StringRecord)>>
     {
-        iter.into_iter().map(|id| {
-            let content = self.documents.get(rtxn, &BEU32::new(id))?
+        let ids: Vec<_> = iter.into_iter().collect();
+        let mut content = Vec::new();
+
+        for id in ids.iter().cloned() {
+            let document_content = self.documents.get(rtxn, &BEU32::new(id))?
                 .with_context(|| format!("Could not find document {}", id))?;
-            Ok((id, content.to_vec()))
-        }).collect()
+            content.extend_from_slice(document_content);
+        }
+
+        let mut rdr = csv::ReaderBuilder::new().has_headers(false).from_reader(&content[..]);
+
+        let mut documents = Vec::with_capacity(ids.len());
+        for (id, result) in ids.into_iter().zip(rdr.records()) {
+            documents.push((id, result?));
+        }
+
+        Ok(documents)
     }
 
     /// Returns the number of documents indexed in the database.
