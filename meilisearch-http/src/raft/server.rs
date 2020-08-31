@@ -1,24 +1,31 @@
 use std::sync::Arc;
 
+use async_raft::storage::RaftStorage;
 use bincode::{deserialize, serialize};
 use tonic::{Code, Request, Response, Status};
 
 use super::raft_service::raft_service_server::RaftService;
 use super::raft_service::{
     AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest, InstallSnapshotResponse,
-    VoteRequest, VoteResponse, JoinRequest, JoinResponse, JoinStatus,
+    JoinRequest, JoinResponse, JoinStatus, VoteRequest, VoteResponse,
 };
-use super::Raft;
 use super::router::RaftRouter;
+use super::store::RaftStore;
+use super::InnerRaft;
 
 pub struct RaftServerService {
-    raft: Arc<Raft>,
+    raft: Arc<InnerRaft>,
+    store: Arc<RaftStore>,
     router: Arc<RaftRouter>,
 }
 
 impl RaftServerService {
-    pub fn new(raft: Arc<Raft>, router: Arc<RaftRouter>) -> Self {
-        Self { raft, router }
+    pub fn new(raft: Arc<InnerRaft>, router: Arc<RaftRouter>, store: Arc<RaftStore>) -> Self {
+        Self {
+            raft,
+            router,
+            store,
+        }
     }
 }
 
@@ -65,21 +72,26 @@ impl RaftService for RaftServerService {
     // non-voting node, wait for it to synchronize, and finally request a membership change
     // with this new node in. If all goes well we can return SUCCESS to the new node.
     async fn join(&self, request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
+        let membership = self
+            .store
+            .get_membership_config()
+            .await
+            .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
         let JoinRequest { addr, id } = request.into_inner();
-        self.router.add_client(id, addr)
+        self.router
+            .add_client(id, addr)
             .await
             .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
-        self.raft.add_non_voter(id)
+        self.raft
+            .add_non_voter(id)
             .await
             .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
-        let mut all_nodes = self.raft
-            .metrics()
-            .recv()
-            .await
-            .ok_or_else(|| Status::new(Code::Internal, "unable to get membership information"))?
-            .membership_config.all_nodes();
+        let mut all_nodes = membership.all_nodes();
         all_nodes.insert(id);
-        self.raft.change_membership(all_nodes).await.unwrap();
+        self.raft
+            .change_membership(all_nodes)
+            .await
+            .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
         let mut result = JoinResponse::default();
         result.set_status(JoinStatus::Success);
         Ok(Response::new(result))

@@ -208,9 +208,6 @@ impl RaftStore {
         let snapshot_path = self.snapshot_path_from_id(&snapshot_id);
         std::fs::rename(snapshot_path_temp, snapshot_path.clone())?;
 
-        // 5. compact logs
-        self.logs.delete_range(&mut txn, &(0..=through))?;
-
         // 6. insert new snapshot entry
         let entry = Entry::new_snapshot_pointer(
             through,

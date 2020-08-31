@@ -30,10 +30,24 @@ use crate::data::{IndexCreateRequest, IndexResponse, UpdateDocumentsQuery};
 
 type InnerRaft = async_raft::Raft<ClientRequest, ClientResponse, RaftRouter, RaftStore>;
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct RaftConfig {
+    id: NodeId,
+    addr: SocketAddr,
+    peers: Vec<(NodeId, SocketAddr)>,
+    shared_folder: PathBuf,
+    snapshot_dir: PathBuf,
+    log_db_path: PathBuf,
+    cluster_name: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Message {
     CreateIndex(IndexCreateRequest),
-    UpdateIndex(IndexCreateRequest),
+    UpdateIndex {
+        index_uid: String,
+        update: IndexCreateRequest,
+    },
     DeleteIndex(String),
     SettingsUpdate {
         index_uid: String,
@@ -76,7 +90,7 @@ impl AppData for ClientRequest {}
 
 #[allow(dead_code)]
 pub struct Raft {
-    inner: Arc<InnerRaft>,
+    pub inner: Arc<InnerRaft>,
     id: NodeId,
     server_handle: tokio::task::JoinHandle<Result<(), tonic::transport::Error>>,
     next_id: AtomicU64,
@@ -97,30 +111,33 @@ impl Raft {
     }
 }
 
-pub fn run_raft(
-    id: NodeId,
-    config: Arc<Config>,
-    db_path: PathBuf,
-    store: Arc<Data>,
-    snapshot_dir: PathBuf,
-    raft_addr: SocketAddr,
-    shared_folder: PathBuf,
-) -> Result<Raft> {
+pub fn run_raft(raft_config: RaftConfig, store: Arc<Data>) -> Result<Raft> {
+    let config = Arc::new(Config::build(raft_config.cluster_name).validate()?);
     let router = Arc::new(RaftRouter::new());
-    let storage = Arc::new(RaftStore::new(id, db_path, store, snapshot_dir)?);
-    let inner = Arc::new(InnerRaft::new(id, config, router.clone(), storage.clone()));
+    let storage = Arc::new(RaftStore::new(
+        raft_config.id,
+        raft_config.log_db_path,
+        store,
+        raft_config.snapshot_dir,
+    )?);
+    let inner = Arc::new(InnerRaft::new(
+        raft_config.id,
+        config,
+        router.clone(),
+        storage.clone(),
+    ));
     let svc = RaftServerService::new(inner.clone(), router.clone(), storage);
     let server_handle = tokio::spawn(
         Server::builder()
             .add_service(RaftServiceServer::new(svc))
-            .serve(raft_addr),
+            .serve(raft_config.addr),
     );
     let next_id = AtomicU64::new(0);
     Ok(Raft {
         inner,
-        id,
+        id: raft_config.id,
         server_handle,
         next_id,
-        shared_folder,
+        shared_folder: raft_config.shared_folder,
     })
 }
