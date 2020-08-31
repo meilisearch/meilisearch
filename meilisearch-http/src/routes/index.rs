@@ -6,6 +6,7 @@ use serde::Deserialize;
 use crate::data::{Data, IndexCreateRequest, IndexResponse};
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
+use crate::raft::{Message, Raft};
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(list_indexes)
@@ -13,6 +14,16 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(create_index)
         .service(update_index)
         .service(delete_index)
+        .service(get_update_status)
+        .service(get_all_updates_status);
+}
+
+pub fn services_raft(cfg: &mut web::ServiceConfig) {
+    cfg.service(list_indexes)
+        .service(get_index)
+        .service(create_index_raft)
+        .service(update_index_raft)
+        .service(delete_index_raft)
         .service(get_update_status)
         .service(get_all_updates_status);
 }
@@ -114,6 +125,20 @@ async fn create_index(
     Ok(HttpResponse::Created().json(response))
 }
 
+#[post("/indexes", wrap = "Authentication::Private")]
+async fn create_index_raft(
+    raft: web::Data<Raft>,
+    body: web::Json<IndexCreateRequest>,
+) -> Result<HttpResponse, ResponseError> {
+    let message = Message::CreateIndex(body.into_inner());
+    let response = raft
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
+
+    Ok(HttpResponse::Accepted().json(response))
+}
+
 #[put("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn update_index(
     data: web::Data<Data>,
@@ -124,6 +149,24 @@ async fn update_index(
     Ok(HttpResponse::Ok().json(response))
 }
 
+#[put("/indexes/{index_uid}", wrap = "Authentication::Private")]
+async fn update_index_raft(
+    raft: web::Data<Raft>,
+    index_uid: web::Path<String>,
+    body: web::Json<IndexCreateRequest>,
+) -> Result<HttpResponse, ResponseError> {
+    let message = Message::UpdateIndex {
+        index_uid: index_uid.into_inner(),
+        update: body.into_inner(),
+    };
+    let response = raft
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
+
+    Ok(HttpResponse::Accepted().json(response))
+}
+
 #[delete("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn delete_index(
     data: web::Data<Data>,
@@ -131,6 +174,20 @@ async fn delete_index(
 ) -> Result<HttpResponse, ResponseError> {
     data.delete_index(index_uid.as_ref())?;
     Ok(HttpResponse::NoContent().finish())
+}
+
+#[delete("/indexes/{index_uid}", wrap = "Authentication::Private")]
+async fn delete_index_raft(
+    raft: web::Data<Raft>,
+    index_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    let message = Message::DeleteIndex(index_uid.into_inner());
+    let response = raft
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
+
+    Ok(HttpResponse::Accepted().json(response))
 }
 
 #[derive(Deserialize)]

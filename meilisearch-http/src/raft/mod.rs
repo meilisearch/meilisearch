@@ -33,6 +33,8 @@ type InnerRaft = async_raft::Raft<ClientRequest, ClientResponse, RaftRouter, Raf
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Message {
     CreateIndex(IndexCreateRequest),
+    UpdateIndex(IndexCreateRequest),
+    DeleteIndex(String),
     SettingsUpdate {
         index_uid: String,
         update: SettingsUpdate,
