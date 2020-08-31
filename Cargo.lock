@@ -1664,6 +1664,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "ureq",
+ "uuid",
  "vergen",
  "walkdir",
  "whoami",

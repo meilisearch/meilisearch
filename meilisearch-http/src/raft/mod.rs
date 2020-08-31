@@ -21,21 +21,33 @@ use meilisearch_core::settings::SettingsUpdate;
 use raft_service::raft_service_server::RaftServiceServer;
 use router::RaftRouter;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use server::RaftServerService;
 use store::RaftStore;
 use tonic::transport::Server;
 
-use crate::data::{IndexCreateRequest, IndexResponse};
+use crate::data::{IndexCreateRequest, IndexResponse, UpdateDocumentsQuery};
 
 type InnerRaft = async_raft::Raft<ClientRequest, ClientResponse, RaftRouter, RaftStore>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Message {
     CreateIndex(IndexCreateRequest),
-    SettingsUpdate(String, SettingsUpdate),
-    DocumentAddition {
+    SettingsUpdate {
         index_uid: String,
-        addition: PathBuf,
+        update: SettingsUpdate,
+    },
+    DocumentsDeletion {
+        index_uid: String,
+        ids: Vec<Value>,
+    },
+    ClearAllDocuments {
+        index_uid: String,
+    },
+    DocumentAddition {
+        update_query: UpdateDocumentsQuery,
+        index_uid: String,
+        filename: String,
         partial: bool,
     },
 }
@@ -66,6 +78,7 @@ pub struct Raft {
     id: NodeId,
     server_handle: tokio::task::JoinHandle<Result<(), tonic::transport::Error>>,
     next_id: AtomicU64,
+    pub shared_folder: PathBuf,
 }
 
 impl Raft {
@@ -89,6 +102,7 @@ pub fn run_raft(
     store: Arc<Data>,
     snapshot_dir: PathBuf,
     raft_addr: SocketAddr,
+    shared_folder: PathBuf,
 ) -> Result<Raft> {
     let router = Arc::new(RaftRouter::new());
     let storage = Arc::new(RaftStore::new(id, db_path, store, snapshot_dir)?);
@@ -105,5 +119,6 @@ pub fn run_raft(
         id,
         server_handle,
         next_id,
+        shared_folder,
     })
 }

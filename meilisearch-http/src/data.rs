@@ -17,7 +17,7 @@ use crate::routes::IndexUpdateResponse;
 
 pub type Document = IndexMap<String, Value>;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
     primary_key: Option<String>,

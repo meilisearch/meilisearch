@@ -4,10 +4,14 @@ use actix_web::{web, HttpResponse};
 use actix_web_macros::{delete, get, post, put};
 use serde::Deserialize;
 use serde_json::Value;
+use tokio::fs::File;
+use tokio::prelude::*;
+use uuid::Uuid;
 
 use crate::data::{Data, Document, UpdateDocumentsQuery};
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
+use crate::raft::{Message, Raft};
 use crate::routes::IndexUpdateResponse;
 
 #[derive(Deserialize)]
@@ -24,6 +28,16 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(update_documents)
         .service(delete_documents)
         .service(clear_all_documents);
+}
+
+pub fn services_raft(cfg: &mut web::ServiceConfig) {
+    cfg.service(get_document)
+        .service(delete_document_raft)
+        .service(get_all_documents)
+        .service(add_documents_raft)
+        .service(update_documents_raft)
+        .service(delete_documents_raft)
+        .service(clear_all_documents_raft);
 }
 
 #[get(
@@ -72,6 +86,26 @@ async fn delete_document(
     let update_id = data.db.update_write(|w| documents_deletion.finalize(w))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+}
+
+#[delete(
+    "/indexes/{index_uid}/documents/{document_id}",
+    wrap = "Authentication::Private"
+)]
+async fn delete_document_raft(
+    raft: web::Data<Raft>,
+    path: web::Path<DocumentParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let message = Message::DocumentsDeletion {
+        index_uid: path.index_uid.clone(),
+        ids: vec![Value::String(path.document_id.clone())],
+    };
+    let response = raft
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
+
+    Ok(HttpResponse::Accepted().json(response))
 }
 
 #[derive(Deserialize)]
@@ -137,6 +171,43 @@ async fn add_documents(
     Ok(HttpResponse::Accepted().json(response))
 }
 
+/// For raft documents additions, we want to first write the addition to a shared storage. This
+/// allows us to commit the additon location and let the nodes fetch the addition when they are
+/// ready to do so. This keeps to log size as small as possible.
+#[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn add_documents_raft(
+    raft: web::Data<Raft>,
+    index_uid: web::Path<String>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: web::Json<Vec<Document>>,
+) -> Result<HttpResponse, ResponseError> {
+    // write to shared path and send proposal
+    let filename = format!("{}.json", Uuid::new_v4());
+    let file_path = raft.shared_folder.join(&filename);
+    let mut file = File::create(&file_path)
+        .await
+        .map_err(|e| Error::Internal(e.to_string()))?;
+    let json =
+        serde_json::to_string(&body.into_inner()).map_err(|e| Error::Internal(e.to_string()))?;
+    file.write_all(json.as_bytes())
+        .await
+        .map_err(|e| Error::Internal(e.to_string()))?;
+
+    let message = Message::DocumentAddition {
+        update_query: params.into_inner(),
+        index_uid: index_uid.into_inner(),
+        filename,
+        partial: false,
+    };
+
+    let response = raft
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
+
+    Ok(HttpResponse::Accepted().json(response))
+}
+
 #[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn update_documents(
     data: web::Data<Data>,
@@ -153,6 +224,40 @@ async fn update_documents(
     Ok(HttpResponse::Accepted().json(response))
 }
 
+#[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn update_documents_raft(
+    raft: web::Data<Raft>,
+    index_uid: web::Path<String>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: web::Json<Vec<Document>>,
+) -> Result<HttpResponse, ResponseError> {
+    // write to shared path and send proposal
+    let filename = format!("{}.json", Uuid::new_v4());
+    let file_path = raft.shared_folder.join(&filename);
+    let mut file = File::create(&file_path)
+        .await
+        .map_err(|e| Error::Internal(e.to_string()))?;
+    let json =
+        serde_json::to_string(&body.into_inner()).map_err(|e| Error::Internal(e.to_string()))?;
+    file.write_all(json.as_bytes())
+        .await
+        .map_err(|e| Error::Internal(e.to_string()))?;
+
+    let message = Message::DocumentAddition {
+        update_query: params.into_inner(),
+        index_uid: index_uid.into_inner(),
+        filename,
+        partial: true,
+    };
+
+    let response = raft
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
+
+    Ok(HttpResponse::Accepted().json(response))
+}
+
 #[post(
     "/indexes/{index_uid}/documents/delete-batch",
     wrap = "Authentication::Private"
@@ -166,11 +271,48 @@ async fn delete_documents(
     Ok(HttpResponse::Accepted().json(response))
 }
 
+#[post(
+    "/indexes/{index_uid}/documents/delete-batch",
+    wrap = "Authentication::Private"
+)]
+async fn delete_documents_raft(
+    raft: web::Data<Raft>,
+    index_uid: web::Path<String>,
+    body: web::Json<Vec<Value>>,
+) -> Result<HttpResponse, ResponseError> {
+    let message = Message::DocumentsDeletion {
+        index_uid: index_uid.into_inner(),
+        ids: body.into_inner(),
+    };
+    let response = raft
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
+
+    Ok(HttpResponse::Accepted().json(response))
+}
+
 #[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn clear_all_documents(
     data: web::Data<Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let response = data.clear_all_documents(index_uid.as_ref())?;
+    Ok(HttpResponse::Accepted().json(response))
+}
+
+#[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn clear_all_documents_raft(
+    raft: web::Data<Raft>,
+    index_uid: web::Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    let message = Message::ClearAllDocuments {
+        index_uid: index_uid.into_inner(),
+    };
+    let response = raft
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
+
     Ok(HttpResponse::Accepted().json(response))
 }
