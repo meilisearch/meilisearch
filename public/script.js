@@ -1,59 +1,68 @@
 var request = null;
+var timeoutID = null;
 
 $('#search').on('input', function () {
   var query = $(this).val();
-  request = $.ajax({
-    type: "POST",
-    url: "query",
-    contentType: 'application/json',
-    data: JSON.stringify({ 'query': query }),
-    contentType: 'application/json',
-    success: function (data, textStatus, request) {
-      let httpResults = Papa.parse(data, { delimiter: ",", header: true, skipEmptyLines: true });
-      results.innerHTML = '';
+  var timeoutMs = 100;
 
-      let timeSpent = request.getResponseHeader('Time-Ms');
-      let numberOfDocuments = httpResults.data.length;
-      count.innerHTML = `${numberOfDocuments}`;
-      time.innerHTML = `${timeSpent}ms`;
-      time.classList.remove('fade-in-out');
+  if (timeoutID !== null) {
+    window.clearTimeout(timeoutID);
+  }
 
-      for (element of httpResults.data) {
-        const elem = document.createElement('li');
-        elem.classList.add("document");
+  timeoutID = window.setTimeout(function () {
+    request = $.ajax({
+      type: "POST",
+      url: "query",
+      contentType: 'application/json',
+      data: JSON.stringify({ 'query': query }),
+      contentType: 'application/json',
+      success: function (data, textStatus, request) {
+        let httpResults = Papa.parse(data, { delimiter: ",", header: true, skipEmptyLines: true });
+        results.innerHTML = '';
 
-        const ol = document.createElement('ol');
+        let timeSpent = request.getResponseHeader('Time-Ms');
+        let numberOfDocuments = httpResults.data.length;
+        count.innerHTML = `${numberOfDocuments}`;
+        time.innerHTML = `${timeSpent}ms`;
+        time.classList.remove('fade-in-out');
 
-        for (const prop in element) {
-          const field = document.createElement('li');
-          field.classList.add("field");
+        for (element of httpResults.data) {
+          const elem = document.createElement('li');
+          elem.classList.add("document");
 
-          const attribute = document.createElement('div');
-          attribute.classList.add("attribute");
-          attribute.innerHTML = prop;
+          const ol = document.createElement('ol');
 
-          const content = document.createElement('div');
-          content.classList.add("content");
-          content.innerHTML = element[prop];
+          for (const prop in element) {
+            const field = document.createElement('li');
+            field.classList.add("field");
 
-          field.appendChild(attribute);
-          field.appendChild(content);
+            const attribute = document.createElement('div');
+            attribute.classList.add("attribute");
+            attribute.innerHTML = prop;
 
-          ol.appendChild(field);
+            const content = document.createElement('div');
+            content.classList.add("content");
+            content.innerHTML = element[prop];
+
+            field.appendChild(attribute);
+            field.appendChild(content);
+
+            ol.appendChild(field);
+          }
+
+          elem.appendChild(ol);
+          results.appendChild(elem)
         }
 
-        elem.appendChild(ol);
-        results.appendChild(elem)
-      }
-
-    },
-    beforeSend: function () {
-      if (request !== null) {
-        request.abort();
-        time.classList.add('fade-in-out');
-      }
-    },
-  });
+      },
+      beforeSend: function () {
+        if (request !== null) {
+          request.abort();
+          time.classList.add('fade-in-out');
+        }
+      },
+    });
+  }, timeoutMs);
 });
 
 // Make the number of document a little bit prettier
