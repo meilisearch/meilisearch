@@ -11,10 +11,12 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::Data;
 use anyhow::Result;
 use async_raft::config::Config;
+use async_raft::error::InitializeError;
 use async_raft::raft::ClientWriteRequest;
 use async_raft::{AppData, AppDataResponse, NodeId};
 use meilisearch_core::settings::SettingsUpdate;
@@ -24,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use server::RaftServerService;
 use store::RaftStore;
+use tokio::time;
 use tonic::transport::Server;
 
 use crate::data::{IndexCreateRequest, IndexResponse, UpdateDocumentsQuery};
@@ -111,7 +114,7 @@ impl Raft {
     }
 }
 
-pub fn run_raft(raft_config: RaftConfig, store: Arc<Data>) -> Result<Raft> {
+pub async fn run_raft(raft_config: RaftConfig, store: Arc<Data>) -> Result<Raft> {
     let config = Arc::new(Config::build(raft_config.cluster_name).validate()?);
     let router = Arc::new(RaftRouter::new());
     let storage = Arc::new(RaftStore::new(
@@ -133,6 +136,20 @@ pub fn run_raft(raft_config: RaftConfig, store: Arc<Data>) -> Result<Raft> {
             .serve(raft_config.addr),
     );
     let next_id = AtomicU64::new(0);
+    for (id, addr) in &raft_config.peers {
+        router.add_client(*id, addr.to_string()).await;
+    }
+
+    // TODO: we want to wait until all the peers have been discovered and connected to before
+    // running the raft, we could for example timeout for connection on return only the peers that
+    // we could connect to.
+    time::delay_for(Duration::from_millis(10_000)).await;
+    let members = raft_config.peers.iter().map(|(id, _)| *id).collect();
+    match inner.initialize(members).await {
+        Ok(()) | Err(InitializeError::NotAllowed) => (),
+        Err(e) => return Err(anyhow::Error::new(e)),
+    }
+
     Ok(Raft {
         inner,
         id: raft_config.id,

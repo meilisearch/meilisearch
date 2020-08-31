@@ -47,13 +47,12 @@ impl RaftRouter {
         Self { clients }
     }
 
-    pub async fn add_client(&self, id: NodeId, addr: String) -> Result<()> {
+    pub async fn add_client(&self, id: NodeId, addr: String) {
         let client = Client {
             rpc_client: None,
             addr,
         };
         self.clients.write().await.insert(id, RwLock::new(client));
-        Ok(())
     }
 
     #[allow(dead_code)]

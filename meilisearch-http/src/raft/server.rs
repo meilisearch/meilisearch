@@ -78,10 +78,7 @@ impl RaftService for RaftServerService {
             .await
             .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
         let JoinRequest { addr, id } = request.into_inner();
-        self.router
-            .add_client(id, addr)
-            .await
-            .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
+        self.router.add_client(id, addr).await;
         self.raft
             .add_non_voter(id)
             .await
