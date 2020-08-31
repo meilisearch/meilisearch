@@ -1,12 +1,16 @@
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::{env, thread};
 
 use actix_cors::Cors;
 use actix_web::{middleware, HttpServer};
 use main_error::MainError;
 use meilisearch_http::helpers::NormalizePath;
-use meilisearch_http::snapshot;
-use meilisearch_http::{create_app, index_update_callback, Data, Opt};
+use meilisearch_http::raft::{init_raft, RaftConfig};
+use meilisearch_http::{create_app, create_app_raft, index_update_callback, snapshot, Data, Opt};
 use structopt::StructOpt;
+use tokio::fs::File;
+use tokio::prelude::*;
 
 mod analytics;
 
@@ -52,6 +56,66 @@ async fn main() -> Result<(), MainError> {
         _ => unreachable!(),
     }
 
+    match opt.raft_config {
+        Some(ref path) => run_raft(&opt, path).await,
+        None => run(&opt).await,
+    }
+}
+
+async fn run_raft(opt: &Opt, raft_config_path: &PathBuf) -> Result<(), MainError> {
+    let data = Data::new(opt.clone())?;
+
+    let mut file = File::open(raft_config_path).await?;
+    let mut config = String::new();
+    file.read_to_string(&mut config).await?;
+    let config: RaftConfig = toml::from_str(&config)?;
+
+    let raft = init_raft(config, data.clone()).await?;
+    let raft = Arc::new(raft);
+
+    if !opt.no_analytics {
+        let analytics_data = data.clone();
+        let analytics_opt = opt.clone();
+        thread::spawn(move || analytics::analytics_sender(analytics_data, analytics_opt));
+    }
+
+    let data_cloned = data.clone();
+    data.db.set_update_callback(Box::new(move |name, status| {
+        index_update_callback(name, &data_cloned, status);
+    }));
+
+    print_launch_resume(&opt, &data);
+
+    let http_server = HttpServer::new(move || {
+        create_app_raft(raft.clone())
+            .wrap(
+                Cors::new()
+                    .send_wildcard()
+                    .allowed_headers(vec!["content-type", "x-meili-api-key"])
+                    .max_age(86_400) // 24h
+                    .finish(),
+            )
+            .wrap(middleware::Logger::default())
+            .wrap(middleware::Compress::default())
+            .wrap(NormalizePath)
+    });
+
+    let server_handle = if let Some(config) = opt.get_ssl_config()? {
+        tokio::spawn(
+            http_server
+                .bind_rustls(opt.http_addr.clone(), config)?
+                .run(),
+        )
+    } else {
+        tokio::spawn(http_server.bind(opt.http_addr.clone())?.run())
+    };
+
+    tokio::try_join!(server_handle)?.0?;
+
+    Ok(())
+}
+
+async fn run(opt: &Opt) -> Result<(), MainError> {
     if let Some(path) = &opt.load_from_snapshot {
         snapshot::load_snapshot(
             &opt.db_path,
@@ -100,11 +164,11 @@ async fn main() -> Result<(), MainError> {
 
     if let Some(config) = opt.get_ssl_config()? {
         http_server
-            .bind_rustls(opt.http_addr, config)?
+            .bind_rustls(opt.http_addr.clone(), config)?
             .run()
             .await?;
     } else {
-        http_server.bind(opt.http_addr)?.run().await?;
+        http_server.bind(opt.http_addr.clone())?.run().await?;
     }
 
     Ok(())

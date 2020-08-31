@@ -131,6 +131,9 @@ pub struct Opt {
     /// Defines time interval, in seconds, between each snapshot creation.
     #[structopt(long, requires = "snapshot-path", env = "MEILI_SNAPSHOT_INTERVAL_SEC")]
     pub snapshot_interval_sec: Option<u64>,
+
+    #[structopt(long)]
+    pub raft_config: Option<PathBuf>,
 }
 
 impl Opt {

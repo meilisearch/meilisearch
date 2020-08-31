@@ -1,8 +1,5 @@
 use std::path::PathBuf;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Result;
 use async_raft::async_trait::async_trait;
@@ -59,18 +56,13 @@ pub struct RaftStore {
     db: PolyDatabase,
     logs: Database<OwnedType<u64>, HeedEntry>,
     env: Env,
-    store: Arc<Data>,
+    store: Data,
     snapshot_dir: PathBuf,
     next_id: AtomicU64,
 }
 
 impl RaftStore {
-    pub fn new(
-        id: NodeId,
-        db_path: PathBuf,
-        store: Arc<Data>,
-        snapshot_dir: PathBuf,
-    ) -> Result<Self> {
+    pub fn new(id: NodeId, db_path: PathBuf, store: Data, snapshot_dir: PathBuf) -> Result<Self> {
         let env = EnvOpenOptions::new().map_size(LOG_DB_SIZE).open(db_path)?;
         let db = match env.open_poly_database(Some("meta"))? {
             Some(db) => db,

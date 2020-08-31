@@ -94,6 +94,7 @@ impl AppData for ClientRequest {}
 #[allow(dead_code)]
 pub struct Raft {
     pub inner: Arc<InnerRaft>,
+    pub store: Data,
     id: NodeId,
     server_handle: tokio::task::JoinHandle<Result<(), tonic::transport::Error>>,
     next_id: AtomicU64,
@@ -114,13 +115,13 @@ impl Raft {
     }
 }
 
-pub async fn run_raft(raft_config: RaftConfig, store: Arc<Data>) -> Result<Raft> {
+pub async fn init_raft(raft_config: RaftConfig, store: Data) -> Result<Raft> {
     let config = Arc::new(Config::build(raft_config.cluster_name).validate()?);
     let router = Arc::new(RaftRouter::new());
     let storage = Arc::new(RaftStore::new(
         raft_config.id,
         raft_config.log_db_path,
-        store,
+        store.clone(),
         raft_config.snapshot_dir,
     )?);
     let inner = Arc::new(InnerRaft::new(
@@ -156,5 +157,6 @@ pub async fn run_raft(raft_config: RaftConfig, store: Arc<Data>) -> Result<Raft>
         server_handle,
         next_id,
         shared_folder: raft_config.shared_folder,
+        store,
     })
 }

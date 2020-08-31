@@ -56,6 +56,7 @@ structopt = "0.3.12"
 tar = "0.4.29"
 tempfile = "3.1.0"
 tokio = { version = "0.2.18", features = ["macros"] }
+toml = "0.5"
 tonic = "0.3.0"
 ureq = { version = "0.12.0", features = ["tls"], default-features = false }
 uuid = { version = "0.8", features = ["v4"] }

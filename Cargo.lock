@@ -1661,6 +1661,7 @@ dependencies = [
  "tempdir",
  "tempfile",
  "tokio 0.2.21",
+ "toml",
  "tonic",
  "tonic-build",
  "ureq",
@@ -3166,6 +3167,15 @@ dependencies = [
  "log",
  "pin-project-lite",
  "tokio 0.2.21",
+]
+
+[[package]]
+name = "toml"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffc92d160b1eef40665be3a05630d003936a3bc7da7421277846c2613e92c71a"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
