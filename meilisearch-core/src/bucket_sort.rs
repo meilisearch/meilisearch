@@ -100,17 +100,17 @@ where
     debug!("found {} documents", docids.len());
     debug!("number of postings {:?}", queries.len());
 
+    if let Some(f) = facet_count_docids {
+        // hardcoded value, until approximation optimization
+        result.exhaustive_facets_count = Some(true);
+        result.facets = Some(facet_count(f, &docids));
+    }
+
     if let Some(facets_docids) = facets_docids {
         let intersection = sdset::duo::OpBuilder::new(docids.as_ref(), facets_docids.as_set())
             .intersection()
             .into_set_buf();
         docids = Cow::Owned(intersection);
-    }
-
-    if let Some(f) = facet_count_docids {
-        // hardcoded value, until approximation optimization
-        result.exhaustive_facets_count = Some(true);
-        result.facets = Some(facet_count(f, &docids));
     }
 
     let before = Instant::now();
@@ -243,17 +243,17 @@ where
     debug!("found {} documents", docids.len());
     debug!("number of postings {:?}", queries.len());
 
+    if let Some(f) = facet_count_docids {
+        // hardcoded value, until approximation optimization
+        result.exhaustive_facets_count = Some(true);
+        result.facets = Some(facet_count(f, &docids));
+    }
+
     if let Some(facets_docids) = facets_docids {
         let intersection = OpBuilder::new(docids.as_ref(), facets_docids.as_set())
             .intersection()
             .into_set_buf();
         docids = Cow::Owned(intersection);
-    }
-
-    if let Some(f) = facet_count_docids {
-        // hardcoded value, until approximation optimization
-        result.exhaustive_facets_count = Some(true);
-        result.facets = Some(facet_count(f, &docids));
     }
 
     let before = Instant::now();

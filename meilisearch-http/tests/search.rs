@@ -1466,7 +1466,6 @@ async fn test_facet_count() {
     server.update_all_settings(body).await;
     // same as before, but now facets are set:
     test_post_get_search!(server, query, |response, _status_code|{
-        println!("{}", response);
         assert!(response.get("exhaustiveFacetsCount").is_some());
         assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 1);
         // assert that case is preserved
@@ -1695,4 +1694,38 @@ async fn update_documents_with_facet_distribution() {
     server.add_or_update_multiple_documents(update2).await;
     let (response2, _) = server.search_post(search).await;
     assert_json_eq!(expected_facet_distribution, response2["facetsDistribution"].clone());
+}
+
+#[actix_rt::test]
+async fn test_facet_count_with_facet_filter() {
+    let mut server = common::Server::test_server().await;
+    let body = json!({
+        "attributesForFaceting": ["gender"]
+    });
+    server.update_all_settings(body).await;
+    let query = json!({
+        "q": "a",
+        "facetsDistribution": ["gender"],
+        "facetFilters": ["gender:male"],
+    });
+
+    test_post_get_search!(server, query, |response, _status_code|{
+        assert!(response.get("exhaustiveFacetsCount").is_some());
+        let facets_distribution = response.get("facetsDistribution").unwrap().as_object();
+        assert_eq!(facets_distribution.unwrap()["gender"]["male"], 37);
+        assert_eq!(facets_distribution.unwrap()["gender"]["female"], 39);
+    });
+    // facet distribution should remain the same when facet filter changes
+    let query = json!({
+        "q": "a",
+        "facetsDistribution": ["gender"],
+        "facetFilters": [["gender:male", "gender:female"]],
+    });
+
+    test_post_get_search!(server, query, |response, _status_code|{
+        assert!(response.get("exhaustiveFacetsCount").is_some());
+        let facets_distribution = response.get("facetsDistribution").unwrap().as_object();
+        assert_eq!(facets_distribution.unwrap()["gender"]["male"], 37);
+        assert_eq!(facets_distribution.unwrap()["gender"]["female"], 39);
+    });
 }
