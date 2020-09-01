@@ -20,6 +20,7 @@ use async_raft::config::Config;
 use async_raft::error::InitializeError;
 use async_raft::raft::ClientWriteRequest;
 use async_raft::{AppData, AppDataResponse, NodeId};
+use log::info;
 use meilisearch_core::settings::SettingsUpdate;
 use raft_service::raft_service_server::RaftServiceServer;
 use router::RaftRouter;
@@ -166,6 +167,8 @@ pub async fn init_raft(raft_config: RaftConfig, store: Data) -> Result<Raft> {
         Ok(()) | Err(InitializeError::NotAllowed) => (),
         Err(e) => return Err(anyhow::Error::new(e)),
     }
+
+    info!("Raft started at {}", raft_config.addr.to_string());
 
     Ok(Raft {
         inner,

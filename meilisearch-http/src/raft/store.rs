@@ -8,6 +8,7 @@ use async_raft::storage::{CurrentSnapshotData, HardState, InitialState, RaftStor
 use async_raft::NodeId;
 use heed::types::{OwnedType, Str};
 use heed::{Database, Env, EnvOpenOptions, PolyDatabase};
+use log::{debug, error, info};
 use std::io::prelude::*;
 use tokio::fs::File;
 
@@ -84,7 +85,8 @@ impl RaftStore {
             None => env.create_database(Some("logs"))?,
         };
         let next_id = AtomicU64::new(0);
-        println!("here");
+
+        debug!("Opened database");
         Ok(Self {
             id,
             env,
@@ -177,11 +179,11 @@ impl RaftStore {
 
         match message {
             Message::CreateIndex(ref index_info) => {
-                println!("creating index");
                 let result = self
                     .store
                     .create_index(index_info)
                     .map_err(|e| e.to_string());
+                info!("Created index");
                 Ok(ClientResponse::IndexCreation(result))
             }
             Message::DocumentAddition {
@@ -199,6 +201,7 @@ impl RaftStore {
                     .store
                     .update_multiple_documents(&index_uid, update_query, documents, partial)
                     .map_err(|e| e.to_string());
+                info!("Added documents");
                 Ok(ClientResponse::IndexUpdate(result))
             }
             m => {
@@ -405,6 +408,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         id: String,
         _snapshot: Box<Self::Snapshot>,
     ) -> Result<()> {
+        info!("Restoring snapshot.");
         let mut txn = self.env.write_txn()?;
         match delete_through {
             Some(index) => {
@@ -432,6 +436,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         //TODO:
         // I can't find a way at the moment to apply the snapshot,
         // maybe clear all the dbs, and clone it from the downloaded db? IDK
+        error!("Can't install snapshot");
         Ok(())
     }
 
