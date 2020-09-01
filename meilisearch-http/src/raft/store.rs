@@ -183,8 +183,11 @@ impl RaftStore {
                     .store
                     .create_index(index_info)
                     .map_err(|e| e.to_string());
-                info!("Created index");
-                Ok(ClientResponse::IndexCreation(result))
+                info!(
+                    "Created index: {}",
+                    index_info.uid.as_deref().unwrap_or_default()
+                );
+                Ok(ClientResponse::IndexUpdate(result))
             }
             Message::DocumentAddition {
                 update_query,
@@ -201,12 +204,44 @@ impl RaftStore {
                     .store
                     .update_multiple_documents(&index_uid, update_query, documents, partial)
                     .map_err(|e| e.to_string());
-                info!("Added documents");
+                info!("Added documents to index: {}", index_uid);
+                Ok(ClientResponse::UpdateResponse(result))
+            }
+            Message::UpdateIndex { index_uid, update } => {
+                let result = self
+                    .store
+                    .update_index(&index_uid, update)
+                    .map_err(|e| e.to_string());
+                info!("Updated index: {}", index_uid);
                 Ok(ClientResponse::IndexUpdate(result))
             }
-            m => {
-                println!("applying message: {:?}", m);
-                Ok(ClientResponse::Default)
+            Message::DeleteIndex(index_uid) => {
+                let result = self
+                    .store
+                    .delete_index(&index_uid)
+                    .map_err(|e| e.to_string());
+                Ok(ClientResponse::DeleteIndex(result))
+            }
+            Message::SettingsUpdate { index_uid, update } => {
+                let result = self
+                    .store
+                    .update_settings(&index_uid, update)
+                    .map_err(|e| e.to_string());
+                Ok(ClientResponse::UpdateResponse(result))
+            }
+            Message::DocumentsDeletion { index_uid, ids } => {
+                let result = self
+                    .store
+                    .delete_documents(&index_uid, ids)
+                    .map_err(|e| e.to_string());
+                Ok(ClientResponse::UpdateResponse(result))
+            }
+            Message::ClearAllDocuments { index_uid } => {
+                let result = self
+                    .store
+                    .clear_all_documents(&index_uid)
+                    .map_err(|e| e.to_string());
+                Ok(ClientResponse::UpdateResponse(result))
             }
         }
     }

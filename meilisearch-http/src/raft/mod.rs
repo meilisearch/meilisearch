@@ -93,9 +93,10 @@ pub struct ClientRequest {
 /// The application data response type which the `MemStore` works with.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientResponse {
-    IndexCreation(std::result::Result<IndexResponse, String>),
-    IndexUpdate(std::result::Result<IndexUpdateResponse, String>),
-    Default,
+    IndexUpdate(std::result::Result<IndexResponse, String>),
+    UpdateResponse(std::result::Result<IndexUpdateResponse, String>),
+    DeleteIndex(std::result::Result<(), String>),
+    Ok,
 }
 
 impl AppDataResponse for ClientResponse {}

@@ -36,9 +36,9 @@ pub struct IndexResponse {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct IndexCreateRequest {
-    name: Option<String>,
-    uid: Option<String>,
-    primary_key: Option<String>,
+    pub name: Option<String>,
+    pub uid: Option<String>,
+    pub primary_key: Option<String>,
 }
 
 #[derive(Clone)]
