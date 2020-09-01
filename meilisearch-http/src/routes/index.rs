@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use actix_web::{web, HttpResponse};
 use actix_web_macros::{delete, get, post, put};
 use log::error;
@@ -127,7 +129,7 @@ async fn create_index(
 
 #[post("/indexes", wrap = "Authentication::Private")]
 async fn create_index_raft(
-    raft: web::Data<Raft>,
+    raft: web::Data<Arc<Raft>>,
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
     let message = Message::CreateIndex(body.into_inner());
@@ -151,7 +153,7 @@ async fn update_index(
 
 #[put("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn update_index_raft(
-    raft: web::Data<Raft>,
+    raft: web::Data<Arc<Raft>>,
     index_uid: web::Path<String>,
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -178,7 +180,7 @@ async fn delete_index(
 
 #[delete("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn delete_index_raft(
-    raft: web::Data<Raft>,
+    raft: web::Data<Arc<Raft>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let message = Message::DeleteIndex(index_uid.into_inner());

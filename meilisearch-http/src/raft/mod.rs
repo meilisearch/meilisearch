@@ -7,6 +7,7 @@ pub mod raft_service {
     tonic::include_proto!("raftservice");
 }
 
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -34,10 +35,16 @@ use crate::data::{IndexCreateRequest, IndexResponse, UpdateDocumentsQuery};
 type InnerRaft = async_raft::Raft<ClientRequest, ClientResponse, RaftRouter, RaftStore>;
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Peer {
+    id: NodeId,
+    addr: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct RaftConfig {
     id: NodeId,
     addr: SocketAddr,
-    peers: Vec<(NodeId, SocketAddr)>,
+    peers: Vec<Peer>,
     shared_folder: PathBuf,
     snapshot_dir: PathBuf,
     log_db_path: PathBuf,
@@ -85,6 +92,7 @@ pub struct ClientRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientResponse {
     IndexCreation(std::result::Result<IndexResponse, String>),
+    Default,
 }
 
 impl AppDataResponse for ClientResponse {}
@@ -137,7 +145,7 @@ pub async fn init_raft(raft_config: RaftConfig, store: Data) -> Result<Raft> {
             .serve(raft_config.addr),
     );
     let next_id = AtomicU64::new(0);
-    for (id, addr) in &raft_config.peers {
+    for Peer { id, addr } in &raft_config.peers {
         router.add_client(*id, addr.to_string()).await;
     }
 
@@ -145,7 +153,12 @@ pub async fn init_raft(raft_config: RaftConfig, store: Data) -> Result<Raft> {
     // running the raft, we could for example timeout for connection on return only the peers that
     // we could connect to.
     time::delay_for(Duration::from_millis(10_000)).await;
-    let members = raft_config.peers.iter().map(|(id, _)| *id).collect();
+    let mut members = raft_config
+        .peers
+        .iter()
+        .map(|Peer { id, .. }| *id)
+        .collect::<HashSet<_, _>>();
+    members.insert(raft_config.id);
     match inner.initialize(members).await {
         Ok(()) | Err(InitializeError::NotAllowed) => (),
         Err(e) => return Err(anyhow::Error::new(e)),

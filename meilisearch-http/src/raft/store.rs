@@ -63,7 +63,10 @@ pub struct RaftStore {
 
 impl RaftStore {
     pub fn new(id: NodeId, db_path: PathBuf, store: Data, snapshot_dir: PathBuf) -> Result<Self> {
-        let env = EnvOpenOptions::new().map_size(LOG_DB_SIZE).open(db_path)?;
+        let env = EnvOpenOptions::new()
+            .max_dbs(10)
+            .map_size(LOG_DB_SIZE)
+            .open(db_path)?;
         let db = match env.open_poly_database(Some("meta"))? {
             Some(db) => db,
             None => env.create_poly_database(Some("meta"))?,
@@ -73,6 +76,7 @@ impl RaftStore {
             None => env.create_database(Some("logs"))?,
         };
         let next_id = AtomicU64::new(0);
+        println!("here");
         Ok(Self {
             id,
             env,
@@ -162,13 +166,17 @@ impl RaftStore {
     fn apply_message(&self, message: &Message) -> ClientResponse {
         match message {
             Message::CreateIndex(ref index_info) => {
+                println!("creating index");
                 let result = self
                     .store
                     .create_index(index_info)
                     .map_err(|e| e.to_string());
                 ClientResponse::IndexCreation(result)
             }
-            _ => todo!(),
+            m => {
+                println!("applying message: {:?}", m);
+                ClientResponse::Default
+            }
         }
     }
 
@@ -232,7 +240,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         let txn = self.env.read_txn()?;
         Ok(self
             .membership_config(&txn)?
-            .expect("expected membership config"))
+            .unwrap_or_else(|| MembershipConfig::new_initial(self.id)))
     }
 
     async fn get_initial_state(&self) -> Result<InitialState> {

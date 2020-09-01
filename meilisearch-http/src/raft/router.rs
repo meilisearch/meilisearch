@@ -9,6 +9,7 @@ use async_raft::raft::{
 };
 use async_raft::NodeId;
 use bincode::{deserialize, serialize};
+use log::{error, info};
 use tokio::sync::RwLock;
 use tonic::transport::channel::Channel;
 
@@ -31,6 +32,7 @@ impl Client {
             None => {
                 self.rpc_client
                     .replace(RaftServiceClient::connect(self.addr.clone()).await?);
+                info!("connected to {}", self.addr);
                 Ok(self.rpc_client.as_mut().unwrap())
             }
         }
@@ -127,7 +129,10 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
                 let response = deserialize(&response.into_inner().data)?;
                 Ok(response)
             }
-            Err(status) => Err(anyhow::Error::msg(status.to_string())),
+            Err(status) => {
+                error!("error connecting to peer: {}", status.to_string());
+                Err(anyhow::Error::msg(status.to_string()))
+            }
         }
     }
 }

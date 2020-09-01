@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashSet};
+use std::sync::Arc;
 
 use actix_web::{web, HttpResponse};
 use actix_web_macros::{delete, get, post, put};
@@ -93,7 +94,7 @@ async fn delete_document(
     wrap = "Authentication::Private"
 )]
 async fn delete_document_raft(
-    raft: web::Data<Raft>,
+    raft: web::Data<Arc<Raft>>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
     let message = Message::DocumentsDeletion {
@@ -176,7 +177,7 @@ async fn add_documents(
 /// ready to do so. This keeps to log size as small as possible.
 #[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn add_documents_raft(
-    raft: web::Data<Raft>,
+    raft: web::Data<Arc<Raft>>,
     index_uid: web::Path<String>,
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
@@ -226,7 +227,7 @@ async fn update_documents(
 
 #[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn update_documents_raft(
-    raft: web::Data<Raft>,
+    raft: web::Data<Arc<Raft>>,
     index_uid: web::Path<String>,
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Json<Vec<Document>>,
@@ -276,7 +277,7 @@ async fn delete_documents(
     wrap = "Authentication::Private"
 )]
 async fn delete_documents_raft(
-    raft: web::Data<Raft>,
+    raft: web::Data<Arc<Raft>>,
     index_uid: web::Path<String>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -303,7 +304,7 @@ async fn clear_all_documents(
 
 #[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn clear_all_documents_raft(
-    raft: web::Data<Raft>,
+    raft: web::Data<Arc<Raft>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let message = Message::ClearAllDocuments {

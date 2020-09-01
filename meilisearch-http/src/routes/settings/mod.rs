@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use actix_web::{web, HttpResponse};
 use actix_web_macros::{delete, get, post};
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
@@ -36,7 +38,7 @@ macro_rules! make_update_delete_routes {
 
         #[actix_web_macros::delete($route, wrap = "Authentication::Private")]
         pub async fn delete_raft(
-            data: web::Data<crate::raft::Raft>,
+            data: web::Data<std::sync::Arc<crate::raft::Raft>>,
             index_uid: web::Path<String>,
         ) -> Result<HttpResponse, ResponseError> {
             use meilisearch_core::settings::{SettingsUpdate, UpdateState};
@@ -75,7 +77,7 @@ macro_rules! make_update_delete_routes {
 
         #[actix_web_macros::post($route, wrap = "Authentication::Private")]
         pub async fn update_raft(
-            data: web::Data<crate::raft::Raft>,
+            data: web::Data<std::sync::Arc<crate::raft::Raft>>,
             index_uid: actix_web::web::Path<String>,
             body: actix_web::web::Json<Option<$type>>,
         ) -> std::result::Result<HttpResponse, ResponseError> {
@@ -166,7 +168,7 @@ async fn update_all(
 
 #[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn update_all_raft(
-    data: web::Data<Raft>,
+    data: web::Data<Arc<Raft>>,
     index_uid: web::Path<String>,
     body: web::Json<Settings>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -247,7 +249,7 @@ async fn get_all(
 
 #[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn delete_all(
-    data: web::Data<Raft>,
+    data: web::Data<Arc<Raft>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings_update = SettingsUpdate {
