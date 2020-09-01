@@ -78,6 +78,7 @@ pub fn create_app_raft(
 > {
     App::new()
         .app_data(web::Data::new(raft.clone()))
+        .app_data(web::Data::new(raft.store.clone()))
         .app_data(
             web::JsonConfig::default()
                 .limit(raft.store.http_payload_size_limit)

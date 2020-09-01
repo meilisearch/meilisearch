@@ -1,5 +1,5 @@
 use actix_web::{get, HttpResponse};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub mod document;
 pub mod health;
@@ -9,7 +9,7 @@ pub mod search;
 pub mod settings;
 pub mod stats;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexUpdateResponse {
     pub update_id: u64,

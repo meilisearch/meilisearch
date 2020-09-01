@@ -31,6 +31,7 @@ use tokio::time;
 use tonic::transport::Server;
 
 use crate::data::{IndexCreateRequest, IndexResponse, UpdateDocumentsQuery};
+use crate::routes::IndexUpdateResponse;
 
 type InnerRaft = async_raft::Raft<ClientRequest, ClientResponse, RaftRouter, RaftStore>;
 
@@ -92,6 +93,7 @@ pub struct ClientRequest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientResponse {
     IndexCreation(std::result::Result<IndexResponse, String>),
+    IndexUpdate(std::result::Result<IndexUpdateResponse, String>),
     Default,
 }
 
@@ -131,6 +133,7 @@ pub async fn init_raft(raft_config: RaftConfig, store: Data) -> Result<Raft> {
         raft_config.log_db_path,
         store.clone(),
         raft_config.snapshot_dir,
+        raft_config.shared_folder.clone(),
     )?);
     let inner = Arc::new(InnerRaft::new(
         raft_config.id,

@@ -8,6 +8,7 @@ use async_raft::storage::{CurrentSnapshotData, HardState, InitialState, RaftStor
 use async_raft::NodeId;
 use heed::types::{OwnedType, Str};
 use heed::{Database, Env, EnvOpenOptions, PolyDatabase};
+use std::io::prelude::*;
 use tokio::fs::File;
 
 use super::{snapshot::RaftSnapshot, ClientRequest, ClientResponse, Message};
@@ -58,11 +59,18 @@ pub struct RaftStore {
     env: Env,
     store: Data,
     snapshot_dir: PathBuf,
+    shared_dir: PathBuf,
     next_id: AtomicU64,
 }
 
 impl RaftStore {
-    pub fn new(id: NodeId, db_path: PathBuf, store: Data, snapshot_dir: PathBuf) -> Result<Self> {
+    pub fn new(
+        id: NodeId,
+        db_path: PathBuf,
+        store: Data,
+        snapshot_dir: PathBuf,
+        shared_dir: PathBuf,
+    ) -> Result<Self> {
         let env = EnvOpenOptions::new()
             .max_dbs(10)
             .map_size(LOG_DB_SIZE)
@@ -83,6 +91,7 @@ impl RaftStore {
             db,
             logs,
             next_id,
+            shared_dir,
             store,
             snapshot_dir,
         })
@@ -107,9 +116,9 @@ impl RaftStore {
     }
 
     fn set_last_applied_log(&self, txn: &mut heed::RwTxn, last_applied: u64) -> Result<()> {
-        Ok(self
-            .db
-            .put::<_, Str, OwnedType<u64>>(txn, LAST_APPLIED_KEY, &last_applied)?)
+        self.db
+            .put::<_, Str, OwnedType<u64>>(txn, LAST_APPLIED_KEY, &last_applied)?;
+        Ok(())
     }
 
     fn membership_config(&self, txn: &heed::RoTxn) -> Result<Option<MembershipConfig>> {
@@ -163,7 +172,9 @@ impl RaftStore {
         format!("snapshot-{}", id)
     }
 
-    fn apply_message(&self, message: &Message) -> ClientResponse {
+    fn apply_message(&self, message: Message) -> Result<ClientResponse> {
+        use std::fs::File;
+
         match message {
             Message::CreateIndex(ref index_info) => {
                 println!("creating index");
@@ -171,11 +182,28 @@ impl RaftStore {
                     .store
                     .create_index(index_info)
                     .map_err(|e| e.to_string());
-                ClientResponse::IndexCreation(result)
+                Ok(ClientResponse::IndexCreation(result))
+            }
+            Message::DocumentAddition {
+                update_query,
+                index_uid,
+                filename,
+                partial,
+            } => {
+                let update_path = self.shared_dir.join(filename);
+                let mut file = File::open(update_path)?;
+                let mut json = String::new();
+                file.read_to_string(&mut json)?;
+                let documents = serde_json::from_str(&json)?;
+                let result = self
+                    .store
+                    .update_multiple_documents(&index_uid, update_query, documents, partial)
+                    .map_err(|e| e.to_string());
+                Ok(ClientResponse::IndexUpdate(result))
             }
             m => {
                 println!("applying message: {:?}", m);
-                ClientResponse::Default
+                Ok(ClientResponse::Default)
             }
         }
     }
@@ -331,7 +359,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         let mut txn = self.env.write_txn()?;
         let last_applied_log = *index;
         self.set_last_applied_log(&mut txn, last_applied_log)?;
-        let response = self.apply_message(&data.message);
+        let response = self.apply_message(data.message.clone())?;
         txn.commit()?;
         Ok(response)
     }
@@ -341,7 +369,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         let mut last_applied_log = self.last_applied_log(&txn)?.unwrap_or_default();
         for (index, request) in entries {
             last_applied_log = **index;
-            self.apply_message(&request.message);
+            self.apply_message(request.message.clone())?;
         }
         self.set_last_applied_log(&mut txn, last_applied_log)?;
         txn.commit()?;
