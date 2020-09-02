@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::iter::IntoIterator;
 
@@ -23,7 +23,7 @@ pub struct Settings {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub searchable_attributes: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub displayed_attributes: Option<Option<HashSet<String>>>,
+    pub displayed_attributes: Option<Option<BTreeSet<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub stop_words: Option<Option<BTreeSet<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
@@ -161,7 +161,7 @@ pub struct SettingsUpdate {
     pub distinct_attribute: UpdateState<String>,
     pub primary_key: UpdateState<String>,
     pub searchable_attributes: UpdateState<Vec<String>>,
-    pub displayed_attributes: UpdateState<HashSet<String>>,
+    pub displayed_attributes: UpdateState<BTreeSet<String>>,
     pub stop_words: UpdateState<BTreeSet<String>>,
     pub synonyms: UpdateState<BTreeMap<String, Vec<String>>>,
     pub attributes_for_faceting: UpdateState<Vec<String>>,
