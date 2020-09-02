@@ -1,5 +1,6 @@
 ## v0.14.0
 
+  - Sort displayedAttributes (#943)
   - Fix facet distribution case (#797)
   - Snapshotting (#839)
   - Fix bucket-sort unwrap bug (#915)
