@@ -61,7 +61,7 @@ pub struct RaftStore {
     store: Data,
     snapshot_dir: PathBuf,
     shared_dir: PathBuf,
-    next_id: AtomicU64,
+    next_serial: AtomicU64,
 }
 
 impl RaftStore {
@@ -92,7 +92,7 @@ impl RaftStore {
             env,
             db,
             logs,
-            next_id,
+            next_serial: next_id,
             shared_dir,
             store,
             snapshot_dir,
@@ -170,7 +170,7 @@ impl RaftStore {
     }
 
     fn generate_snapshot_id(&self) -> String {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let id = self.next_serial.fetch_add(1, Ordering::Relaxed);
         format!("snapshot-{}", id)
     }
 
@@ -394,12 +394,18 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         index: &u64,
         data: &ClientRequest,
     ) -> Result<ClientResponse> {
-        let mut txn = self.env.write_txn()?;
-        let last_applied_log = *index;
-        self.set_last_applied_log(&mut txn, last_applied_log)?;
-        let response = self.apply_message(data.message.clone())?;
-        txn.commit()?;
-        Ok(response)
+        // message is already applied, move on
+        if data.serial <= self.next_serial.load(Ordering::Acquire) {
+            Ok(ClientResponse::Ok)
+        } else {
+            self.next_serial.store(data.serial, Ordering::Release);
+            let mut txn = self.env.write_txn()?;
+            let last_applied_log = *index;
+            self.set_last_applied_log(&mut txn, last_applied_log)?;
+            let response = self.apply_message(data.message.clone())?;
+            txn.commit()?;
+            Ok(response)
+        }
     }
 
     async fn replicate_to_state_machine(&self, entries: &[(&u64, &ClientRequest)]) -> Result<()> {
