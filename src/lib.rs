@@ -1,5 +1,4 @@
 mod criterion;
-mod node;
 mod query_tokens;
 mod search;
 pub mod heed_codec;
@@ -16,7 +15,7 @@ use heed::{PolyDatabase, Database};
 
 pub use self::search::{Search, SearchResult};
 pub use self::criterion::{Criterion, default_criteria};
-use self::heed_codec::{RoaringBitmapCodec, StrBEU32Codec, CsvStringRecordCodec};
+pub use self::heed_codec::{RoaringBitmapCodec, StrBEU32Codec, CsvStringRecordCodec};
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
@@ -36,14 +35,10 @@ const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 pub struct Index {
     /// Contains many different types (e.g. the documents CSV headers).
     pub main: PolyDatabase,
-    /// A word and all the positions where it appears in the whole dataset.
-    pub word_positions: Database<Str, RoaringBitmapCodec>,
-    /// Maps a word at a position (u32) and all the documents ids where the given word appears.
-    pub word_position_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
-    /// Maps a word and a range of 4 positions, i.e. 0..4, 4..8, 12..16.
-    pub word_four_positions_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
-    /// Maps a word and an attribute (u32) to all the documents ids where the given word appears.
-    pub word_attribute_docids: Database<StrBEU32Codec, RoaringBitmapCodec>,
+    /// A word and all the documents ids containing the word.
+    pub word_docids: Database<Str, RoaringBitmapCodec>,
+    /// Maps a word and a document id (u32) to all the positions where the given word appears.
+    pub word_docid_positions: Database<StrBEU32Codec, RoaringBitmapCodec>,
     /// Maps the document id to the document as a CSV line.
     pub documents: Database<OwnedType<BEU32>, ByteSlice>,
 }
@@ -52,10 +47,8 @@ impl Index {
     pub fn new(env: &heed::Env) -> anyhow::Result<Index> {
         Ok(Index {
             main: env.create_poly_database(None)?,
-            word_positions: env.create_database(Some("word-positions"))?,
-            word_position_docids: env.create_database(Some("word-position-docids"))?,
-            word_four_positions_docids: env.create_database(Some("word-four-positions-docids"))?,
-            word_attribute_docids: env.create_database(Some("word-attribute-docids"))?,
+            word_docids: env.create_database(Some("word-docids"))?,
+            word_docid_positions: env.create_database(Some("word-docid-positions"))?,
             documents: env.create_database(Some("documents"))?,
         })
     }

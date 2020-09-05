@@ -8,8 +8,7 @@ impl<'a> heed::BytesDecode<'a> for StrBEU32Codec {
     type DItem = (&'a str, u32);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
-        let str_len = bytes.len().checked_sub(4)?;
-        let (str_bytes, n_bytes) = bytes.split_at(str_len);
+        let (str_bytes, n_bytes) = bytes.split_at(bytes.len() - 4);
         let s = str::from_utf8(str_bytes).ok()?;
         let n = n_bytes.try_into().map(u32::from_be_bytes).ok()?;
         Some((s, n))

@@ -86,15 +86,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "astar-iter"
-version = "0.1.0"
-source = "git+https://github.com/Kerollmops/astar-iter#87cb97a11c701f1a6025b72b673a8bfd0ca249a5"
-dependencies = [
- "indexmap",
- "num-traits",
-]
-
-[[package]]
 name = "atty"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -990,7 +981,6 @@ dependencies = [
  "arc-cache",
  "askama",
  "askama_warp",
- "astar-iter",
  "bitpacking",
  "bstr",
  "byteorder",

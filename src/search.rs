@@ -1,8 +1,5 @@
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
 
-use astar_iter::AstarBagIter;
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
@@ -10,7 +7,6 @@ use log::debug;
 use once_cell::sync::Lazy;
 use roaring::RoaringBitmap;
 
-use crate::node::{self, Node};
 use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, DocumentId, Position, Attribute};
 
@@ -86,230 +82,58 @@ impl<'a> Search<'a> {
         .collect()
     }
 
-    /// Fetch the words from the given FST related to the given DFAs along with the associated
-    /// positions and the unions of those positions where the words found appears in the documents.
-    fn fetch_words_positions(
+    /// Fetch the words from the given FST related to the
+    /// given DFAs along with the associated documents ids.
+    fn fetch_words_docids(
         rtxn: &heed::RoTxn,
         index: &Index,
         fst: &fst::Set<&[u8]>,
         dfas: Vec<(String, bool, DFA)>,
-    ) -> anyhow::Result<(Vec<Vec<(String, u8, RoaringBitmap)>>, Vec<RoaringBitmap>)>
+    ) -> anyhow::Result<Vec<(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)>>
     {
         // A Vec storing all the derived words from the original query words, associated
-        // with the distance from the original word and the positions it appears at.
-        // The index the derived words appears in the Vec corresponds to the original query
-        // word position.
-        let mut derived_words = Vec::<Vec::<(String, u8, RoaringBitmap)>>::with_capacity(dfas.len());
-        // A Vec storing the unions of all of each of the derived words positions. The index
-        // the union appears in the Vec corresponds to the original query word position.
-        let mut union_positions = Vec::<RoaringBitmap>::with_capacity(dfas.len());
+        // with the distance from the original word and the docids where the words appears.
+        let mut derived_words = Vec::<(HashMap::<String, (u8, RoaringBitmap)>, RoaringBitmap)>::with_capacity(dfas.len());
 
         for (_word, _is_prefix, dfa) in dfas {
 
-            let mut acc_derived_words = Vec::new();
-            let mut acc_union_positions = RoaringBitmap::new();
+            let mut acc_derived_words = HashMap::new();
+            let mut unions_docids = RoaringBitmap::new();
             let mut stream = fst.search_with_state(&dfa).into_stream();
             while let Some((word, state)) = stream.next() {
 
                 let word = std::str::from_utf8(word)?;
-                let positions = index.word_positions.get(rtxn, word)?.unwrap();
+                let docids = index.word_docids.get(rtxn, word)?.unwrap();
                 let distance = dfa.distance(state);
-                acc_union_positions.union_with(&positions);
-                acc_derived_words.push((word.to_string(), distance.to_u8(), positions));
+                unions_docids.union_with(&docids);
+                acc_derived_words.insert(word.to_string(), (distance.to_u8(), docids));
             }
-            derived_words.push(acc_derived_words);
-            union_positions.push(acc_union_positions);
+            derived_words.push((acc_derived_words, unions_docids));
         }
 
-        Ok((derived_words, union_positions))
+        Ok(derived_words)
     }
 
     /// Returns the set of docids that contains all of the query words.
     fn compute_candidates(
         rtxn: &heed::RoTxn,
         index: &Index,
-        derived_words: &[Vec<(String, u8, RoaringBitmap)>],
+        derived_words: &[(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
     ) -> anyhow::Result<RoaringBitmap>
     {
         // we do a union between all the docids of each of the derived words,
         // we got N unions (the number of original query words), we then intersect them.
-        // TODO we must store the words documents ids to avoid these unions.
         let mut candidates = RoaringBitmap::new();
-        let number_of_attributes = index.number_of_attributes(rtxn)?.map_or(0, |n| n as u32);
 
-        for (i, derived_words) in derived_words.iter().enumerate() {
-            let mut union_docids = RoaringBitmap::new();
-            for (word, _distance, _positions) in derived_words {
-                for attr in 0..number_of_attributes {
-                    if let Some(docids) = index.word_attribute_docids.get(rtxn, &(word, attr))? {
-                        union_docids.union_with(&docids);
-                    }
-                }
-            }
-
+        for (i, (_, union_docids)) in derived_words.iter().enumerate() {
             if i == 0 {
-                candidates = union_docids;
+                candidates = union_docids.clone();
             } else {
                 candidates.intersect_with(&union_docids);
             }
         }
 
         Ok(candidates)
-    }
-
-    /// Returns the union of the same position for all the given words.
-    fn union_word_position(
-        rtxn: &heed::RoTxn,
-        index: &Index,
-        words: &[(String, u8, RoaringBitmap)],
-        position: Position,
-    ) -> anyhow::Result<RoaringBitmap>
-    {
-        let mut union_docids = RoaringBitmap::new();
-        for (word, _distance, positions) in words {
-            if positions.contains(position) {
-                if let Some(docids) = index.word_position_docids.get(rtxn, &(word, position))? {
-                    union_docids.union_with(&docids);
-                }
-            }
-        }
-        Ok(union_docids)
-    }
-
-    /// Returns the union of the same gorup of four positions for all the given words.
-    fn union_word_four_positions(
-        rtxn: &heed::RoTxn,
-        index: &Index,
-        words: &[(String, u8, RoaringBitmap)],
-        group: Position,
-    ) -> anyhow::Result<RoaringBitmap>
-    {
-        let mut union_docids = RoaringBitmap::new();
-        for (word, _distance, _positions) in words {
-            // TODO would be better to check if the group exist
-            if let Some(docids) = index.word_four_positions_docids.get(rtxn, &(word, group))? {
-                union_docids.union_with(&docids);
-            }
-        }
-        Ok(union_docids)
-    }
-
-    /// Returns the union of the same attribute for all the given words.
-    fn union_word_attribute(
-        rtxn: &heed::RoTxn,
-        index: &Index,
-        words: &[(String, u8, RoaringBitmap)],
-        attribute: Attribute,
-    ) -> anyhow::Result<RoaringBitmap>
-    {
-        let mut union_docids = RoaringBitmap::new();
-        for (word, _distance, _positions) in words {
-            if let Some(docids) = index.word_attribute_docids.get(rtxn, &(word, attribute))? {
-                union_docids.union_with(&docids);
-            }
-        }
-        Ok(union_docids)
-    }
-
-    // Returns `true` if there is documents in common between the two words and positions given.
-    fn contains_documents(
-        rtxn: &heed::RoTxn,
-        index: &Index,
-        (lword, lpos): (usize, u32),
-        (rword, rpos): (usize, u32),
-        candidates: &RoaringBitmap,
-        derived_words: &[Vec<(String, u8, RoaringBitmap)>],
-        union_cache: &mut HashMap<(usize, u32), RoaringBitmap>,
-        non_disjoint_cache: &mut HashMap<((usize, u32), (usize, u32)), bool>,
-        group_four_union_cache: &mut HashMap<(usize, u32), RoaringBitmap>,
-        group_four_non_disjoint_cache: &mut HashMap<((usize, u32), (usize, u32)), bool>,
-        attribute_union_cache: &mut HashMap<(usize, u32), RoaringBitmap>,
-        attribute_non_disjoint_cache: &mut HashMap<((usize, u32), (usize, u32)), bool>,
-    ) -> bool
-    {
-        if lpos == rpos { return false }
-
-        // TODO move this function to a better place.
-        let (lattr, _) = node::extract_position(lpos);
-        let (rattr, _) = node::extract_position(rpos);
-
-        if lattr == rattr {
-            // TODO move this function to a better place.
-            let lgroup = node::group_of_four(lpos);
-            let rgroup = node::group_of_four(rpos);
-
-            // We can't compute a disjunction on a group of four positions if those
-            // two positions are in the same group, we must go down to the position.
-            if lgroup == rgroup {
-                // We retrieve or compute the intersection between the two given words and positions.
-                *non_disjoint_cache.entry(((lword, lpos), (rword, rpos))).or_insert_with(|| {
-                    // We retrieve or compute the unions for the two words and positions.
-                    union_cache.entry((lword, lpos)).or_insert_with(|| {
-                        let words = &derived_words[lword];
-                        Self::union_word_position(rtxn, index, words, lpos).unwrap()
-                    });
-                    union_cache.entry((rword, rpos)).or_insert_with(|| {
-                        let words = &derived_words[rword];
-                        Self::union_word_position(rtxn, index, words, rpos).unwrap()
-                    });
-
-                    // TODO is there a way to avoid this double gets?
-                    let lunion_docids = union_cache.get(&(lword, lpos)).unwrap();
-                    let runion_docids = union_cache.get(&(rword, rpos)).unwrap();
-
-                    // We first check that the docids of these unions are part of the candidates.
-                    if lunion_docids.is_disjoint(candidates) { return false }
-                    if runion_docids.is_disjoint(candidates) { return false }
-
-                    !lunion_docids.is_disjoint(&runion_docids)
-                })
-            } else {
-                // We retrieve or compute the intersection between the two given words and positions.
-                *group_four_non_disjoint_cache.entry(((lword, lgroup), (rword, rgroup))).or_insert_with(|| {
-                    // We retrieve or compute the unions for the two words and group of four positions.
-                    group_four_union_cache.entry((lword, lgroup)).or_insert_with(|| {
-                        let words = &derived_words[lword];
-                        Self::union_word_four_positions(rtxn, index, words, lgroup).unwrap()
-                    });
-                    group_four_union_cache.entry((rword, rgroup)).or_insert_with(|| {
-                        let words = &derived_words[rword];
-                        Self::union_word_four_positions(rtxn, index, words, rgroup).unwrap()
-                    });
-
-                    // TODO is there a way to avoid this double gets?
-                    let lunion_group_docids = group_four_union_cache.get(&(lword, lgroup)).unwrap();
-                    let runion_group_docids = group_four_union_cache.get(&(rword, rgroup)).unwrap();
-
-                    // We first check that the docids of these unions are part of the candidates.
-                    if lunion_group_docids.is_disjoint(candidates) { return false }
-                    if runion_group_docids.is_disjoint(candidates) { return false }
-
-                    !lunion_group_docids.is_disjoint(&runion_group_docids)
-                })
-            }
-        } else {
-            *attribute_non_disjoint_cache.entry(((lword, lattr), (rword, rattr))).or_insert_with(|| {
-                // We retrieve or compute the unions for the two words and positions.
-                attribute_union_cache.entry((lword, lattr)).or_insert_with(|| {
-                    let words = &derived_words[lword];
-                    Self::union_word_attribute(rtxn, index, words, lattr).unwrap()
-                });
-                attribute_union_cache.entry((rword, rattr)).or_insert_with(|| {
-                    let words = &derived_words[rword];
-                    Self::union_word_attribute(rtxn, index, words, rattr).unwrap()
-                });
-
-                // TODO is there a way to avoid this double gets?
-                let lunion_docids = attribute_union_cache.get(&(lword, lattr)).unwrap();
-                let runion_docids = attribute_union_cache.get(&(rword, rattr)).unwrap();
-
-                // We first check that the docids of these unions are part of the candidates.
-                if lunion_docids.is_disjoint(candidates) { return false }
-                if runion_docids.is_disjoint(candidates) { return false }
-
-                !lunion_docids.is_disjoint(&runion_docids)
-            })
-        }
     }
 
     pub fn execute(&self) -> anyhow::Result<SearchResult> {
@@ -333,111 +157,14 @@ impl<'a> Search<'a> {
             return Ok(Default::default());
         }
 
-        let (derived_words, union_positions) = Self::fetch_words_positions(rtxn, index, &fst, dfas)?;
+        let derived_words = Self::fetch_words_docids(rtxn, index, &fst, dfas)?;
         let candidates = Self::compute_candidates(rtxn, index, &derived_words)?;
 
         debug!("candidates: {:?}", candidates);
 
-        let union_cache = HashMap::new();
-        let mut non_disjoint_cache = HashMap::new();
+        let documents = vec![candidates];
 
-        let mut group_four_union_cache = HashMap::new();
-        let mut group_four_non_disjoint_cache = HashMap::new();
-
-        let mut attribute_union_cache = HashMap::new();
-        let mut attribute_non_disjoint_cache = HashMap::new();
-
-        let candidates = Rc::new(RefCell::new(candidates));
-        let union_cache = Rc::new(RefCell::new(union_cache));
-
-        let candidates_cloned = candidates.clone();
-        let union_cache_cloned = union_cache.clone();
-        let mut contains_documents = |left, right| {
-            Self::contains_documents(
-                rtxn, index,
-                left, right,
-                &candidates_cloned.borrow(),
-                &derived_words,
-                &mut union_cache_cloned.borrow_mut(),
-                &mut non_disjoint_cache,
-                &mut group_four_union_cache,
-                &mut group_four_non_disjoint_cache,
-                &mut attribute_union_cache,
-                &mut attribute_non_disjoint_cache,
-            )
-        };
-
-        let astar_iter = AstarBagIter::new(
-            Node::Uninit, // start
-            |n| n.successors(&union_positions, &mut contains_documents), // successors
-            |_| 0, // heuristic
-            |n| n.is_complete(&union_positions), // success
-        );
-
-        let mut documents = Vec::new();
-        for (paths, proximity) in astar_iter {
-            let mut union_cache = union_cache.borrow_mut();
-            let mut candidates = candidates.borrow_mut();
-
-            let mut positions: Vec<Vec<_>> = paths.map(|p| p.iter().filter_map(Node::position).collect()).collect();
-            positions.sort_unstable();
-
-            debug!("Found {} positions with a proximity of {}", positions.len(), proximity);
-
-            let mut same_proximity_union = RoaringBitmap::default();
-            for positions in positions {
-                // Precompute the potentially missing unions
-                positions.iter().enumerate().for_each(|(word, pos)| {
-                    union_cache.entry((word, *pos)).or_insert_with(|| {
-                        let words = &&derived_words[word];
-                        Self::union_word_position(rtxn, index, words, *pos).unwrap()
-                    });
-                });
-
-                // Retrieve the unions along with the popularity of it.
-                let mut to_intersect = Vec::new();
-                for (word, pos) in positions.into_iter().enumerate() {
-                    let docids = union_cache.get(&(word, pos)).unwrap();
-                    to_intersect.push((docids.len(), docids));
-                }
-
-                // Sort the unions by popularity to help reduce
-                // the number of documents as soon as possible.
-                to_intersect.sort_unstable_by_key(|(l, _)| *l);
-
-                // Intersect all the unions in the inverse popularity order.
-                let mut intersect_docids = RoaringBitmap::new();
-                for (i, (_, union_docids)) in to_intersect.into_iter().enumerate() {
-                    if i == 0 {
-                        intersect_docids = union_docids.clone();
-                    } else {
-                        intersect_docids.intersect_with(union_docids);
-                    }
-                }
-
-                same_proximity_union.union_with(&intersect_docids);
-            }
-
-            // We achieve to find valid documents ids so we remove them from the candidates list.
-            candidates.difference_with(&same_proximity_union);
-
-            // We remove documents we have already been seen in previous
-            // fetches from this set of documents we just fetched.
-            for previous_documents in &documents {
-                same_proximity_union.difference_with(previous_documents);
-            }
-
-            if !same_proximity_union.is_empty() {
-                documents.push(same_proximity_union);
-            }
-
-            // We found enough documents we can stop here.
-            if documents.iter().map(RoaringBitmap::len).sum::<u64>() >= limit as u64 {
-                break;
-            }
-        }
-
-        let found_words = derived_words.into_iter().flatten().map(|(w, _, _)| w).collect();
+        let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
         let documents_ids = documents.iter().flatten().take(limit).collect();
 
         Ok(SearchResult { found_words, documents_ids })
