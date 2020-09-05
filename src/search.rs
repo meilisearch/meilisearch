@@ -5,7 +5,9 @@ use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use log::debug;
 use once_cell::sync::Lazy;
-use roaring::RoaringBitmap;
+use roaring::bitmap::{IntoIter, RoaringBitmap};
+
+use near_proximity::near_proximity;
 
 use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, DocumentId, Position, Attribute};
@@ -136,6 +138,31 @@ impl<'a> Search<'a> {
         Ok(candidates)
     }
 
+    fn fecth_keywords(
+        rtxn: &heed::RoTxn,
+        index: &Index,
+        derived_words: &[(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
+        candidate: DocumentId,
+    ) -> anyhow::Result<Vec<IntoIter>>
+    {
+        let mut keywords = Vec::with_capacity(derived_words.len());
+
+        for (words, _) in derived_words {
+
+            let mut union_positions = RoaringBitmap::new();
+            for (word, (_distance, docids)) in words {
+
+                if docids.contains(candidate) {
+                    let positions = index.word_docid_positions.get(rtxn, &(word, candidate))?.unwrap();
+                    union_positions.union_with(&positions);
+                }
+            }
+            keywords.push(union_positions.into_iter());
+        }
+
+        Ok(keywords)
+    }
+
     pub fn execute(&self) -> anyhow::Result<SearchResult> {
         let rtxn = self.rtxn;
         let index = self.index;
@@ -162,10 +189,28 @@ impl<'a> Search<'a> {
 
         debug!("candidates: {:?}", candidates);
 
-        let documents = vec![candidates];
+        let mut documents = Vec::new();
+
+        let min_proximity = derived_words.len() as u32;
+        let mut number_min_proximity = 0;
+
+        let mut paths = Vec::new();
+        for candidate in candidates {
+            let keywords = Self::fecth_keywords(rtxn, index, &derived_words, candidate)?;
+            near_proximity(keywords, &mut paths);
+            if let Some((prox, _path)) = paths.first() {
+                documents.push((*prox, candidate));
+                if *prox == min_proximity {
+                    number_min_proximity += 1;
+                    if number_min_proximity >= limit { break }
+                }
+            }
+        }
+
+        documents.sort_unstable_by_key(|(prox, _)| *prox);
 
         let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
-        let documents_ids = documents.iter().flatten().take(limit).collect();
+        let documents_ids = documents.into_iter().map(|(_, id)| id).take(limit).collect();
 
         Ok(SearchResult { found_words, documents_ids })
     }

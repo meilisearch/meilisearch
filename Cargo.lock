@@ -997,6 +997,7 @@ dependencies = [
  "levenshtein_automata",
  "log 0.4.11",
  "memmap",
+ "near-proximity",
  "once_cell",
  "oxidized-mtbl",
  "rayon",
@@ -1139,6 +1140,14 @@ dependencies = [
  "safemem",
  "tempfile",
  "twoway",
+]
+
+[[package]]
+name = "near-proximity"
+version = "0.1.0"
+source = "git+https://github.com/Kerollmops/plane-sweep-proximity#f6c9e7e5fc1f7b456d080981e877d0e7943f82bd"
+dependencies = [
+ "tinyvec",
 ]
 
 [[package]]
@@ -1963,6 +1972,21 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "tinyvec"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f331a553cacb14e99d183e5573c86044dd177b5a5277b21e562fd1bd5e1076e1"
+dependencies = [
+ "tinyvec_macros",
+]
+
+[[package]]
+name = "tinyvec_macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tokio"
