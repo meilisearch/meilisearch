@@ -3,14 +3,14 @@ use std::collections::{HashMap, HashSet};
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
-use log::debug;
+use log::{debug, error};
 use once_cell::sync::Lazy;
 use roaring::bitmap::{IntoIter, RoaringBitmap};
 
 use near_proximity::near_proximity;
 
 use crate::query_tokens::{QueryTokens, QueryToken};
-use crate::{Index, DocumentId, Position, Attribute};
+use crate::{Index, DocumentId};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -118,10 +118,8 @@ impl<'a> Search<'a> {
 
     /// Returns the set of docids that contains all of the query words.
     fn compute_candidates(
-        rtxn: &heed::RoTxn,
-        index: &Index,
         derived_words: &[(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
-    ) -> anyhow::Result<RoaringBitmap>
+    ) -> RoaringBitmap
     {
         // we do a union between all the docids of each of the derived words,
         // we got N unions (the number of original query words), we then intersect them.
@@ -135,7 +133,7 @@ impl<'a> Search<'a> {
             }
         }
 
-        Ok(candidates)
+        candidates
     }
 
     fn fecth_keywords(
@@ -153,8 +151,10 @@ impl<'a> Search<'a> {
             for (word, (_distance, docids)) in words {
 
                 if docids.contains(candidate) {
-                    let positions = index.word_docid_positions.get(rtxn, &(word, candidate))?.unwrap();
-                    union_positions.union_with(&positions);
+                    match index.word_docid_positions.get(rtxn, &(word, candidate))? {
+                        Some(positions) => union_positions.union_with(&positions),
+                        None => error!("position missing for candidate {} and word {}", candidate, word),
+                    }
                 }
             }
             keywords.push(union_positions.into_iter());
@@ -185,13 +185,13 @@ impl<'a> Search<'a> {
         }
 
         let derived_words = Self::fetch_words_docids(rtxn, index, &fst, dfas)?;
-        let candidates = Self::compute_candidates(rtxn, index, &derived_words)?;
+        let candidates = Self::compute_candidates(&derived_words);
 
         debug!("candidates: {:?}", candidates);
 
         let mut documents = Vec::new();
 
-        let min_proximity = derived_words.len() as u32;
+        let min_proximity = derived_words.len() as u32 - 1;
         let mut number_min_proximity = 0;
 
         let mut paths = Vec::new();

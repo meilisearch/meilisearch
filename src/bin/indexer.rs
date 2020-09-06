@@ -10,7 +10,6 @@ use std::time::Instant;
 use anyhow::Context;
 use arc_cache::ArcCache;
 use bstr::ByteSlice as _;
-use cow_utils::CowUtils;
 use csv::StringRecord;
 use flate2::read::GzDecoder;
 use fst::IntoStreamer;
