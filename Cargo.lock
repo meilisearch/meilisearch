@@ -1145,7 +1145,7 @@ dependencies = [
 [[package]]
 name = "near-proximity"
 version = "0.1.0"
-source = "git+https://github.com/Kerollmops/plane-sweep-proximity#f6c9e7e5fc1f7b456d080981e877d0e7943f82bd"
+source = "git+https://github.com/Kerollmops/plane-sweep-proximity?rev=2f5ad5c#2f5ad5cdafde54731cd75d17ec6228ea3ca1f9b4"
 dependencies = [
  "tinyvec",
 ]
