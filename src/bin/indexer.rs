@@ -260,8 +260,7 @@ impl Store {
         let mut iter = self.sorter.into_iter()?;
         while let Some(result) = iter.next() {
             let (key, val) = result?;
-            if let Some((&1, bytes)) = key.split_first() {
-                let (word, _docid) = StrBEU32Codec::bytes_decode(bytes).unwrap();
+            if let Some((&WORD_DOCIDS_BYTE, word)) = key.split_first() {
                 // This is a lexicographically ordered word position
                 // we use the key to construct the words fst.
                 builder.insert(word)?;
