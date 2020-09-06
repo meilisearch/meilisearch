@@ -151,7 +151,7 @@ impl<'a> Search<'a> {
             for (word, (_distance, docids)) in words {
 
                 if docids.contains(candidate) {
-                    match index.word_docid_positions.get(rtxn, &(word, candidate))? {
+                    match index.docid_word_positions.get(rtxn, &(candidate, word))? {
                         Some(positions) => union_positions.union_with(&positions),
                         None => error!("position missing for candidate {} and word {}", candidate, word),
                     }

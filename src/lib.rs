@@ -15,7 +15,7 @@ use heed::{PolyDatabase, Database};
 
 pub use self::search::{Search, SearchResult};
 pub use self::criterion::{Criterion, default_criteria};
-pub use self::heed_codec::{RoaringBitmapCodec, StrBEU32Codec, CsvStringRecordCodec};
+pub use self::heed_codec::{RoaringBitmapCodec, BEU32StrCodec, CsvStringRecordCodec};
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
@@ -38,7 +38,7 @@ pub struct Index {
     /// A word and all the documents ids containing the word.
     pub word_docids: Database<Str, RoaringBitmapCodec>,
     /// Maps a word and a document id (u32) to all the positions where the given word appears.
-    pub word_docid_positions: Database<StrBEU32Codec, RoaringBitmapCodec>,
+    pub docid_word_positions: Database<BEU32StrCodec, RoaringBitmapCodec>,
     /// Maps the document id to the document as a CSV line.
     pub documents: Database<OwnedType<BEU32>, ByteSlice>,
 }
@@ -48,7 +48,7 @@ impl Index {
         Ok(Index {
             main: env.create_poly_database(None)?,
             word_docids: env.create_database(Some("word-docids"))?,
-            word_docid_positions: env.create_database(Some("word-docid-positions"))?,
+            docid_word_positions: env.create_database(Some("docid-word-positions"))?,
             documents: env.create_database(Some("documents"))?,
         })
     }

@@ -13,10 +13,7 @@ use bstr::ByteSlice as _;
 use csv::StringRecord;
 use flate2::read::GzDecoder;
 use fst::IntoStreamer;
-use heed::BytesDecode;
-use heed::BytesEncode;
-use heed::EnvOpenOptions;
-use heed::types::*;
+use heed::{EnvOpenOptions, BytesEncode, types::*};
 use log::{debug, info};
 use memmap::Mmap;
 use oxidized_mtbl::{Reader, Writer, Merger, Sorter, CompressionType};
@@ -26,7 +23,7 @@ use structopt::StructOpt;
 
 use milli::heed_codec::CsvStringRecordCodec;
 use milli::tokenizer::{simple_tokenizer, only_words};
-use milli::{SmallVec32, Index, DocumentId, BEU32, StrBEU32Codec};
+use milli::{SmallVec32, Index, DocumentId, BEU32};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
 const ONE_MILLION: usize = 1_000_000;
@@ -202,12 +199,13 @@ impl Store {
         let mut key = vec![WORD_DOCID_POSITIONS_BYTE];
         let mut buffer = Vec::new();
 
+        // We serialize the document ids into a buffer
+        // We prefix the words by the document id.
+        key.extend_from_slice(&id.to_be_bytes());
+
         for (word, positions) in iter {
-            key.truncate(1);
+            key.truncate(1 + 4);
             key.extend_from_slice(word.as_bytes());
-            // We prefix the words by the document id.
-            key.extend_from_slice(&id.to_be_bytes());
-            // We serialize the document ids into a buffer
             buffer.clear();
             buffer.reserve(positions.serialized_size());
             positions.serialize_into(&mut buffer)?;
@@ -350,7 +348,7 @@ fn lmdb_writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) ->
     }
     else if key.starts_with(&[WORD_DOCID_POSITIONS_BYTE]) {
         // Write the postings lists
-        index.word_docid_positions.as_polymorph()
+        index.docid_word_positions.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
 
