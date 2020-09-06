@@ -199,13 +199,14 @@ impl Store {
         let mut key = vec![WORD_DOCID_POSITIONS_BYTE];
         let mut buffer = Vec::new();
 
-        // We serialize the document ids into a buffer
         // We prefix the words by the document id.
         key.extend_from_slice(&id.to_be_bytes());
+        let base_size = key.len();
 
         for (word, positions) in iter {
-            key.truncate(1 + 4);
+            key.truncate(base_size);
             key.extend_from_slice(word.as_bytes());
+            // We serialize the positions into a buffer.
             buffer.clear();
             buffer.reserve(positions.serialized_size());
             positions.serialize_into(&mut buffer)?;

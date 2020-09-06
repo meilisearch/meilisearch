@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::cmp;
 
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
@@ -10,7 +11,7 @@ use roaring::bitmap::{IntoIter, RoaringBitmap};
 use near_proximity::near_proximity;
 
 use crate::query_tokens::{QueryTokens, QueryToken};
-use crate::{Index, DocumentId};
+use crate::{Index, DocumentId, Position};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -153,7 +154,7 @@ impl<'a> Search<'a> {
                 if docids.contains(candidate) {
                     match index.docid_word_positions.get(rtxn, &(candidate, word))? {
                         Some(positions) => union_positions.union_with(&positions),
-                        None => error!("position missing for candidate {} and word {}", candidate, word),
+                        None => error!("position missing for candidate {} and word {:?}", candidate, word),
                     }
                 }
             }
@@ -194,10 +195,37 @@ impl<'a> Search<'a> {
         let min_proximity = derived_words.len() as u32 - 1;
         let mut number_min_proximity = 0;
 
+        // TODO move this function elsewhere
+        fn compute_proximity(path: &[Position]) -> u32 {
+            const ONE_ATTRIBUTE: u32 = 1000;
+            const MAX_DISTANCE: u32 = 8;
+
+            fn index_proximity(lhs: u32, rhs: u32) -> u32 {
+                if lhs <= rhs {
+                    cmp::min(rhs - lhs, MAX_DISTANCE)
+                } else {
+                    cmp::min((lhs - rhs) + 1, MAX_DISTANCE)
+                }
+            }
+
+            fn positions_proximity(lhs: u32, rhs: u32) -> u32 {
+                let (lhs_attr, lhs_index) = extract_position(lhs);
+                let (rhs_attr, rhs_index) = extract_position(rhs);
+                if lhs_attr != rhs_attr { MAX_DISTANCE }
+                else { index_proximity(lhs_index, rhs_index) }
+            }
+
+            fn extract_position(position: u32) -> (u32, u32) {
+                (position / ONE_ATTRIBUTE, position % ONE_ATTRIBUTE)
+            }
+
+             path.windows(2).map(|w| positions_proximity(w[0], w[1])).sum::<u32>()
+        }
+
         let mut paths = Vec::new();
         for candidate in candidates {
             let keywords = Self::fecth_keywords(rtxn, index, &derived_words, candidate)?;
-            near_proximity(keywords, &mut paths);
+            near_proximity(keywords, &mut paths, compute_proximity);
             if let Some((prox, _path)) = paths.first() {
                 documents.push((*prox, candidate));
                 if *prox == min_proximity {
