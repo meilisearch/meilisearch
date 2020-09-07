@@ -257,13 +257,13 @@ fn average_number_of_words_by_doc(index: &Index, rtxn: &heed::RoTxn) -> anyhow::
 
 fn average_number_of_positions(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use heed::types::DecodeIgnore;
-    use milli::RoaringBitmapCodec;
+    use milli::ByteorderXRoaringBitmapCodec;
 
     let mut values_length = Vec::new();
     let mut count = 0;
 
-    let iter = index.docid_word_positions.as_polymorph().iter::<_, DecodeIgnore, RoaringBitmapCodec>(rtxn)?;
-    for result in iter {
+    let db = index.docid_word_positions.as_polymorph();
+    for result in db.iter::<_, DecodeIgnore, ByteorderXRoaringBitmapCodec>(rtxn)? {
         let ((), val) = result?;
         values_length.push(val.len() as u32);
         count += 1;

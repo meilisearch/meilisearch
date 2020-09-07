@@ -21,7 +21,7 @@ use rayon::prelude::*;
 use roaring::RoaringBitmap;
 use structopt::StructOpt;
 
-use milli::heed_codec::CsvStringRecordCodec;
+use milli::heed_codec::{CsvStringRecordCodec, ByteorderXRoaringBitmapCodec};
 use milli::tokenizer::{simple_tokenizer, only_words};
 use milli::{SmallVec32, Index, DocumentId, BEU32};
 
@@ -197,7 +197,6 @@ impl Store {
     {
         // postings positions ids keys are all prefixed
         let mut key = vec![WORD_DOCID_POSITIONS_BYTE];
-        let mut buffer = Vec::new();
 
         // We prefix the words by the document id.
         key.extend_from_slice(&id.to_be_bytes());
@@ -207,12 +206,11 @@ impl Store {
             key.truncate(base_size);
             key.extend_from_slice(word.as_bytes());
             // We serialize the positions into a buffer.
-            buffer.clear();
-            buffer.reserve(positions.serialized_size());
-            positions.serialize_into(&mut buffer)?;
+            let bytes = ByteorderXRoaringBitmapCodec::bytes_encode(&positions)
+                .with_context(|| format!("could not serialize positions"))?;
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
-                sorter.insert(&key, &buffer)?;
+                sorter.insert(&key, &bytes)?;
             }
         }
 
@@ -309,7 +307,11 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
             Ok(values[0].to_vec())
         },
         key => match key[0] {
-            DOCUMENTS_IDS_BYTE | WORD_DOCIDS_BYTE | WORD_DOCID_POSITIONS_BYTE => {
+            WORD_DOCID_POSITIONS_BYTE => {
+                assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
+                Ok(values[0].to_vec())
+            },
+            DOCUMENTS_IDS_BYTE | WORD_DOCIDS_BYTE => {
                 let (head, tail) = values.split_first().unwrap();
 
                 let mut head = RoaringBitmap::deserialize_from(head.as_slice()).unwrap();
