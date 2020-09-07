@@ -122,6 +122,10 @@ impl<'a> Search<'a> {
         derived_words: &[(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
     ) -> RoaringBitmap
     {
+        // We sort the derived words by inverse popularity, this way intersections are faster.
+        let mut derived_words: Vec<_> = derived_words.iter().collect();
+        derived_words.sort_unstable_by_key(|(_, docids)| docids.len());
+
         // we do a union between all the docids of each of the derived words,
         // we got N unions (the number of original query words), we then intersect them.
         let mut candidates = RoaringBitmap::new();
