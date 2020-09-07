@@ -52,6 +52,16 @@ enum Command {
         limit: usize,
     },
 
+    /// Outputs a CSV with the documents ids where the given words appears.
+    WordsDocids {
+        /// Display the whole documents ids in details.
+        #[structopt(long)]
+        full_display: bool,
+
+        /// The words to display the documents ids of.
+        words: Vec<String>,
+    },
+
     /// Outputs the total size of all the docid-word-positions keys and values.
     TotalDocidWordPositionsSize,
 
@@ -93,6 +103,7 @@ fn main() -> anyhow::Result<()> {
     match opt.command {
         MostCommonWords { limit } => most_common_words(&index, &rtxn, limit),
         BiggestValues { limit } => biggest_value_sizes(&index, &rtxn, limit),
+        WordsDocids { full_display, words } => words_docids(&index, &rtxn, !full_display, words),
         TotalDocidWordPositionsSize => total_docid_word_positions_size(&index, &rtxn),
         AverageNumberOfWordsByDoc => average_number_of_words_by_doc(&index, &rtxn),
         AverageNumberOfPositions => average_number_of_positions(&index, &rtxn),
@@ -171,6 +182,25 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
 
     for Reverse((size, key_name, database_name)) in heap.into_sorted_vec() {
         wtr.write_record(&[database_name.to_string(), key_name, size.to_string()])?;
+    }
+
+    Ok(wtr.flush()?)
+}
+
+fn words_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: Vec<String>) -> anyhow::Result<()> {
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["word", "documents_ids"])?;
+
+    for word in words {
+        if let Some(docids) = index.word_docids.get(rtxn, &word)? {
+            let docids = if debug {
+                format!("{:?}", docids)
+            } else {
+                format!("{:?}", docids.iter().collect::<Vec<_>>())
+            };
+            wtr.write_record(&[word, docids])?;
+        }
     }
 
     Ok(wtr.flush()?)
