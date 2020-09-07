@@ -58,6 +58,9 @@ enum Command {
     /// Outputs the average number of *different* words by document.
     AverageNumberOfWordsByDoc,
 
+    /// Outputs the average number of positions for each document words.
+    AverageNumberOfPositions,
+
     /// Outputs the words FST to disk.
     ///
     /// One can use the FST binary helper to dissect and analyze it,
@@ -92,6 +95,7 @@ fn main() -> anyhow::Result<()> {
         BiggestValues { limit } => biggest_value_sizes(&index, &rtxn, limit),
         TotalDocidWordPositionsSize => total_docid_word_positions_size(&index, &rtxn),
         AverageNumberOfWordsByDoc => average_number_of_words_by_doc(&index, &rtxn),
+        AverageNumberOfPositions => average_number_of_positions(&index, &rtxn),
         ExportWordsFst { output } => export_words_fst(&index, &rtxn, output),
     }
 }
@@ -247,6 +251,28 @@ fn average_number_of_words_by_doc(index: &Index, rtxn: &heed::RoTxn) -> anyhow::
     let count = count as f64;
 
     println!("average number of different words by document: {}", words_count / count);
+
+    Ok(())
+}
+
+fn average_number_of_positions(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+    use heed::types::DecodeIgnore;
+    use milli::RoaringBitmapCodec;
+
+    let mut values_length = Vec::new();
+    let mut count = 0;
+
+    let iter = index.docid_word_positions.as_polymorph().iter::<_, DecodeIgnore, RoaringBitmapCodec>(rtxn)?;
+    for result in iter {
+        let ((), val) = result?;
+        values_length.push(val.len() as u32);
+        count += 1;
+    }
+
+    let values_length_sum = values_length.into_iter().map(|c| c as usize).sum::<usize>() as f64;
+    let count = count as f64;
+
+    println!("average number of positions by word: {}", values_length_sum / count);
 
     Ok(())
 }
