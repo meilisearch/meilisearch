@@ -52,6 +52,12 @@ enum Command {
         limit: usize,
     },
 
+    /// Outputs the total size of all the docid-word-positions keys and values.
+    TotalDocidWordPositionsSize,
+
+    /// Outputs the average number of *different* words by document.
+    AverageNumberOfWordsByDoc,
+
     /// Outputs the words FST to disk.
     ///
     /// One can use the FST binary helper to dissect and analyze it,
@@ -84,6 +90,8 @@ fn main() -> anyhow::Result<()> {
     match opt.command {
         MostCommonWords { limit } => most_common_words(&index, &rtxn, limit),
         BiggestValues { limit } => biggest_value_sizes(&index, &rtxn, limit),
+        TotalDocidWordPositionsSize => total_docid_word_positions_size(&index, &rtxn),
+        AverageNumberOfWordsByDoc => average_number_of_words_by_doc(&index, &rtxn),
         ExportWordsFst { output } => export_words_fst(&index, &rtxn, output),
     }
 }
@@ -178,6 +186,67 @@ fn export_words_fst(index: &Index, rtxn: &heed::RoTxn, output: PathBuf) -> anyho
             output.write_all(fst.as_fst().as_bytes())?;
         },
     }
+
+    Ok(())
+}
+
+fn total_docid_word_positions_size(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+    use heed::types::ByteSlice;
+
+    let mut total_key_size = 0;
+    let mut total_val_size = 0;
+    let mut count = 0;
+
+    let iter = index.docid_word_positions.as_polymorph().iter::<_, ByteSlice, ByteSlice>(rtxn)?;
+    for result in iter {
+        let (key, val) = result?;
+        total_key_size += key.len();
+        total_val_size += val.len();
+        count += 1;
+    }
+
+    println!("number of keys: {}", count);
+    println!("total key size: {}", total_key_size);
+    println!("total value size: {}", total_val_size);
+
+    Ok(())
+}
+
+fn average_number_of_words_by_doc(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+    use heed::types::DecodeIgnore;
+    use milli::{DocumentId, BEU32StrCodec};
+
+    let mut words_counts = Vec::new();
+    let mut count = 0;
+    let mut prev = None as Option<(DocumentId, u32)>;
+
+    let iter = index.docid_word_positions.as_polymorph().iter::<_, BEU32StrCodec, DecodeIgnore>(rtxn)?;
+    for result in iter {
+        let ((docid, _word), ()) = result?;
+
+        match prev.as_mut() {
+            Some((prev_docid, prev_count)) if docid == *prev_docid => {
+                *prev_count += 1;
+            },
+            Some((prev_docid, prev_count)) => {
+                words_counts.push(*prev_count);
+                *prev_docid = docid;
+                *prev_count = 0;
+                count += 1;
+            },
+            None => prev = Some((docid, 1)),
+        }
+    }
+
+    if let Some((_, prev_count)) = prev.take() {
+        words_counts.push(prev_count);
+        count += 1;
+    }
+
+    let words_count = words_counts.into_iter().map(|c| c as usize).sum::<usize>() as f64;
+    let count = count as f64;
+
+    println!("average number of different words by document: {}", words_count / count);
 
     Ok(())
 }
