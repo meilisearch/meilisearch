@@ -1493,7 +1493,7 @@ checksum = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
 
 [[package]]
 name = "meilisearch-core"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "arc-swap",
  "assert_matches",
@@ -1540,14 +1540,14 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-error"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "actix-http",
 ]
 
 [[package]]
 name = "meilisearch-http"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -1596,7 +1596,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-schema"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "indexmap",
  "meilisearch-error",
@@ -1607,7 +1607,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-tokenizer"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "deunicode",
  "slice-group-by",
@@ -1615,7 +1615,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "serde",
  "zerocopy",
