@@ -196,9 +196,6 @@ impl<'a> Search<'a> {
 
         let mut documents = Vec::new();
 
-        let min_proximity = derived_words.len() as u32 - 1;
-        let mut number_min_proximity = 0;
-
         // TODO move this function elsewhere
         fn compute_proximity(path: &[Position]) -> u32 {
             const ONE_ATTRIBUTE: u32 = 1000;
@@ -232,10 +229,6 @@ impl<'a> Search<'a> {
             near_proximity(keywords, &mut paths, compute_proximity);
             if let Some((prox, _path)) = paths.first() {
                 documents.push((*prox, candidate));
-                if *prox == min_proximity {
-                    number_min_proximity += 1;
-                    if number_min_proximity >= limit { break }
-                }
             }
         }
 
