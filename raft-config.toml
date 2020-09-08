@@ -5,3 +5,4 @@ log_db_path = "/usr/logs/"
 cluster_name = "ishmael"
 cluster_formation_timeout = 15
 discovery_interval = 5
+#metrics_server = "http://metrics:8080"

@@ -46,6 +46,7 @@ pub struct RaftConfig {
     cluster_name: String,
     cluster_formation_timeout: u64,
     discovery_interval: u64,
+    metrics_server: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -236,18 +237,20 @@ async fn init_raft_cluster(raft_config: RaftConfig, store: Data) -> Result<Raft>
         Err(e) => return Err(anyhow::Error::new(e)),
     }
 
-    let mut metrics = inner.metrics();
-    tokio::spawn(async move {
-        while let Some(info) = metrics.recv().await {
-            let metrics: Metrics = info.into();
-            let client = reqwest::Client::new();
-            let _ = client
-                .post(&format!("http://metrics:8080/put/{}", id))
-                .json(&metrics)
-                .send()
-                .await;
-        }
-    });
+    if let Some(metrics_server) = raft_config.metrics_server {
+        let mut metrics = inner.metrics();
+        tokio::spawn(async move {
+            while let Some(info) = metrics.recv().await {
+                let metrics: Metrics = info.into();
+                let client = reqwest::Client::new();
+                let _ = client
+                    .post(&format!("{}/put/{}", metrics_server, id))
+                    .json(&metrics)
+                    .send()
+                    .await;
+            }
+        });
+    }
 
     info!("Raft started at {}", raft_config.addr.to_string());
 

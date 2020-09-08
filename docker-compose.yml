@@ -7,15 +7,15 @@ services:
       - "7700"
     volumes:
       - shared_drive:/usr/share/shared
-  metrics:
-    image: marinpostma/raft-metrics
-    hostname: "metrics"
-    logging:
-      driver: none
-    depends_on:
-      - raft
-    ports:
-      - "8080:8080"
+  #metrics:
+    #image: marinpostma/raft-metrics
+    #hostname: "metrics"
+    #logging:
+     #driver: none
+    #depends_on:
+      #- raft
+    #ports:
+      #- "8080:8080"
   nginx:
     image: nginx:latest
     volumes:
