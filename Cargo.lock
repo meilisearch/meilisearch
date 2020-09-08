@@ -1650,7 +1650,8 @@ checksum = "21215c1b9d8f7832b433255bd9eea3e2779aa55b21b2f8e13aad62c74749b237"
 [[package]]
 name = "roaring"
 version = "0.6.0"
-source = "git+https://github.com/Kerollmops/roaring-rs.git?branch=mem-usage#a71692552902019751ef5b0e57336f030045a76a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d6c40b0f4a172f43c3dab852f6c05df5a643aebe7395dbeb598a2f5bb318c1e"
 dependencies = [
  "byteorder",
 ]
