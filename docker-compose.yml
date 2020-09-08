@@ -3,7 +3,7 @@ services:
   raft:
     image: marinpostma/meilisearch
     command: ./meilisearch --http-addr 0.0.0.0:7700 --raft-config /raft-config.toml
-    ports:
+    expose:
       - "7700"
     volumes:
       - shared_drive:/usr/share/shared
@@ -11,9 +11,19 @@ services:
     image: marinpostma/raft-metrics
     hostname: "metrics"
     logging:
-      - driver: none
+      driver: none
+    depends_on:
+      - raft
     ports:
       - "8080:8080"
+  nginx:
+    image: nginx:latest
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "7700:7700"
+    depends_on:
+      - raft
 volumes:
   shared_drive:
     driver: local
