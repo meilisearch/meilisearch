@@ -10,14 +10,14 @@ pub mod raft_service {
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::Data;
 use anyhow::Result;
 use async_raft::config::Config;
-//use async_raft::error::ClientWriteError;
+use async_raft::error::ClientWriteError;
 use async_raft::metrics::RaftMetrics;
 use async_raft::raft::ClientWriteRequest;
 use async_raft::{AppData, AppDataResponse, InitializeError, NodeId};
@@ -114,22 +114,24 @@ impl Raft {
     }
 
     pub async fn propose(&self, message: Message) -> Result<ClientResponse> {
-        let serial = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let serial = rand::random();
         let client_request = ClientRequest { serial, message };
         let request = ClientWriteRequest::new(client_request);
         match self.inner.client_write(request).await {
             Ok(response) => Ok(response.data),
-            //Err(ClientWriteError::ForwardToLeader(req, id)) => {
-            //info!("Forwarding request to leader: {:?}", id);
-            //let response = self
-            //.router
-            //.clients
-            //.get_mut(&id.unwrap())
-            //.ok_or_else(|| anyhow::Error::msg("Can't find leader node"))?
-            //.forward(req)
-            //.await?;
-            //Ok(response)
-            //}
+            Err(ClientWriteError::ForwardToLeader(req, id)) => {
+                info!("Forwarding request to leader: {:?}", id);
+                let response = self
+                    .router
+                    .clients
+                    .get(&id.unwrap())
+                    .ok_or_else(|| anyhow::Error::msg("Can't find leader node"))?
+                    .write()
+                    .await
+                    .forward(req)
+                    .await?;
+                Ok(response.data)
+            }
             Err(e) => Err(anyhow::Error::new(e)),
         }
     }

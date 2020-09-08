@@ -4,11 +4,11 @@ use anyhow::Result;
 use async_raft::async_trait::async_trait;
 use async_raft::network::RaftNetwork;
 use async_raft::raft::{
-    AppendEntriesRequest, AppendEntriesResponse, ClientWriteRequest, InstallSnapshotRequest,
-    InstallSnapshotResponse, VoteRequest, VoteResponse,
+    AppendEntriesRequest, AppendEntriesResponse, ClientWriteRequest, ClientWriteResponse,
+    InstallSnapshotRequest, InstallSnapshotResponse, VoteRequest, VoteResponse,
 };
-use async_raft::AppData;
 use async_raft::NodeId;
+use async_raft::{AppData, AppDataResponse};
 use bincode::{deserialize, serialize};
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
@@ -18,7 +18,7 @@ use tonic::transport::channel::Channel;
 
 use super::raft_service;
 use super::raft_service::raft_service_client::RaftServiceClient;
-use super::{ClientRequest, ClientResponse};
+use super::ClientRequest;
 
 #[allow(dead_code)]
 pub struct Client {
@@ -27,15 +27,16 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn forward<D: AppData>(
+    pub async fn forward<D: AppData, R: AppDataResponse>(
         &mut self,
         req: ClientWriteRequest<D>,
-    ) -> Result<ClientResponse> {
+    ) -> Result<ClientWriteResponse<R>> {
         let message = raft_service::ClientWriteRequest {
             data: serialize(&req)?,
         };
         let response = self.rpc_client.forward(message).await?;
-        Ok(deserialize(&response.get_ref().data)?)
+        let response = deserialize(&response.into_inner().data)?;
+        Ok(response)
     }
 }
 

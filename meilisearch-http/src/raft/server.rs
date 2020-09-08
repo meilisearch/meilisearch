@@ -71,8 +71,10 @@ impl RaftService for RaftServerService {
         &self,
         request: Request<ClientWriteRequest>,
     ) -> Result<Response<ClientWriteResponse>, Status> {
-        let request = deserialize(&request.into_inner().data)
-            .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
+        let request: async_raft::raft::ClientWriteRequest<super::ClientRequest> =
+            deserialize(&request.into_inner().data)
+                .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
+
         let data = match self.raft.client_write(request).await {
             Ok(ref response) => serialize(response).unwrap(),
             Err(e) => return Err(Status::new(Code::Internal, e.to_string())),
