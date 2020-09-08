@@ -50,17 +50,16 @@ async fn update(
     path: web::Path<IndexParam>,
     body: web::Json<BTreeMap<String, Vec<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
+    let update_id = data.get_or_create_index(&path.index_uid, |index| {
+        let settings = SettingsUpdate {
+            synonyms: UpdateState::Update(body.into_inner()),
+            ..SettingsUpdate::default()
+        };
 
-    let settings = SettingsUpdate {
-        synonyms: UpdateState::Update(body.into_inner()),
-        ..SettingsUpdate::default()
-    };
-
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+        Ok(data
+            .db
+            .update_write(|w| index.settings_update(w, settings))?)
+    })?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -83,7 +82,9 @@ async fn delete(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data
+        .db
+        .update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
