@@ -1,4 +1,5 @@
 target
+!target/debug/meilisearch
 Dockerfile
 .dockerignore
 .git

@@ -5,7 +5,24 @@ service RaftService {
   rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
   rpc Vote(VoteRequest) returns (VoteResponse) {}
   rpc InstallSnapshot(InstallSnapshotRequest) returns (InstallSnapshotResponse) {}
-  rpc join(JoinRequest) returns (JoinResponse) {}
+  rpc Forward(ClientWriteRequest) returns (ClientWriteResponse) {}
+  rpc RequestConnection(ConnectionRequest) returns (ConnectionResponse) {}
+}
+
+message ConnectionRequest {
+  uint64 id = 1;
+}
+
+message ConnectionResponse {
+  Status status = 1;
+  bytes data = 2;
+}
+message ClientWriteRequest {
+  bytes data = 1;
+}
+
+message ClientWriteResponse {
+  bytes data = 1;
 }
 
 message AppendEntriesRequest {
@@ -32,18 +49,8 @@ message InstallSnapshotResponse {
   bytes data = 1;
 }
 
-message JoinRequest {
-  string addr = 1;
-  uint64 id = 2;
-}
-
-enum JoinStatus {
+enum Status {
   SUCCESS = 0;
   WRONG_LEADER = 1;
   ERROR = 2;
-}
-
-message JoinResponse {
-  JoinStatus status = 1;
-  bytes message = 2;
 }

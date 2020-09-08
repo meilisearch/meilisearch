@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use async_raft::storage::RaftStorage;
 use bincode::{deserialize, serialize};
 use tonic::{Code, Request, Response, Status};
 
 use super::raft_service::raft_service_server::RaftService;
 use super::raft_service::{
-    AppendEntriesRequest, AppendEntriesResponse, InstallSnapshotRequest, InstallSnapshotResponse,
-    JoinRequest, JoinResponse, JoinStatus, VoteRequest, VoteResponse,
+    self, AppendEntriesRequest, AppendEntriesResponse, ClientWriteRequest, ClientWriteResponse,
+    ConnectionRequest, ConnectionResponse, InstallSnapshotRequest, InstallSnapshotResponse,
+    VoteRequest, VoteResponse,
 };
 use super::router::RaftRouter;
 use super::store::RaftStore;
@@ -67,30 +67,36 @@ impl RaftService for RaftServerService {
         Ok(Response::new(InstallSnapshotResponse { data }))
     }
 
-    // we'll need to bring the new node up to date with the cluster. In order to do that, we
-    // first need to establish a connection with the new node, add it to the cluster as a
-    // non-voting node, wait for it to synchronize, and finally request a membership change
-    // with this new node in. If all goes well we can return SUCCESS to the new node.
-    async fn join(&self, request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
-        let membership = self
-            .store
-            .get_membership_config()
-            .await
+    async fn forward(
+        &self,
+        request: Request<ClientWriteRequest>,
+    ) -> Result<Response<ClientWriteResponse>, Status> {
+        let request = deserialize(&request.into_inner().data)
             .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
-        let JoinRequest { addr, id } = request.into_inner();
-        self.router.add_client(id, addr).await;
-        self.raft
-            .add_non_voter(id)
-            .await
-            .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
-        let mut all_nodes = membership.all_nodes();
-        all_nodes.insert(id);
-        self.raft
-            .change_membership(all_nodes)
-            .await
-            .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
-        let mut result = JoinResponse::default();
-        result.set_status(JoinStatus::Success);
-        Ok(Response::new(result))
+        let data = match self.raft.client_write(request).await {
+            Ok(ref response) => serialize(response).unwrap(),
+            Err(e) => return Err(Status::new(Code::Internal, e.to_string())),
+        };
+        Ok(Response::new(ClientWriteResponse { data }))
+    }
+
+    async fn request_connection(
+        &self,
+        request: Request<ConnectionRequest>,
+    ) -> Result<Response<ConnectionResponse>, Status> {
+        let mut response = ConnectionResponse::default();
+        match request.remote_addr() {
+            Some(addr) => {
+                let ConnectionRequest { id } = request.get_ref();
+                let _ = self.router.add_client(*id, addr).await;
+                response.data = serialize(&self.store.id).unwrap();
+                response.set_status(raft_service::Status::Success);
+            }
+            None => {
+                response.set_status(raft_service::Status::Success);
+                response.data = serialize(&"can't get peer addr".to_string()).unwrap();
+            }
+        }
+        Ok(Response::new(response))
     }
 }

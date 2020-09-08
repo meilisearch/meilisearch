@@ -134,6 +134,9 @@ pub struct Opt {
 
     #[structopt(long)]
     pub raft_config: Option<PathBuf>,
+
+    #[structopt(long)]
+    pub raft_node_id: Option<u64>,
 }
 
 impl Opt {

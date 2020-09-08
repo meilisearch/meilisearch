@@ -54,7 +54,7 @@ derive_heed!(Entry<ClientRequest>, HeedEntry);
 derive_heed!(RaftSnapshot, HeedRaftSnapshot);
 
 pub struct RaftStore {
-    id: NodeId,
+    pub id: NodeId,
     db: PolyDatabase,
     logs: Database<OwnedType<u64>, HeedEntry>,
     env: Env,
@@ -220,6 +220,7 @@ impl RaftStore {
                     .store
                     .delete_index(&index_uid)
                     .map_err(|e| e.to_string());
+                info!("Deleted index: {}", index_uid);
                 Ok(ClientResponse::DeleteIndex(result))
             }
             Message::SettingsUpdate { index_uid, update } => {
@@ -227,6 +228,7 @@ impl RaftStore {
                     .store
                     .update_settings(&index_uid, update)
                     .map_err(|e| e.to_string());
+                info!("Update settings for index: {}", index_uid);
                 Ok(ClientResponse::UpdateResponse(result))
             }
             Message::DocumentsDeletion { index_uid, ids } => {
@@ -234,6 +236,7 @@ impl RaftStore {
                     .store
                     .delete_documents(&index_uid, ids)
                     .map_err(|e| e.to_string());
+                info!("Deleted documents for index: {}", index_uid);
                 Ok(ClientResponse::UpdateResponse(result))
             }
             Message::ClearAllDocuments { index_uid } => {
@@ -241,6 +244,7 @@ impl RaftStore {
                     .store
                     .clear_all_documents(&index_uid)
                     .map_err(|e| e.to_string());
+                info!("Deleted all documents for index: {}", index_uid);
                 Ok(ClientResponse::UpdateResponse(result))
             }
         }
@@ -394,18 +398,13 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         index: &u64,
         data: &ClientRequest,
     ) -> Result<ClientResponse> {
-        // message is already applied, move on
-        if data.serial <= self.next_serial.load(Ordering::Acquire) {
-            Ok(ClientResponse::Ok)
-        } else {
-            self.next_serial.store(data.serial, Ordering::Release);
-            let mut txn = self.env.write_txn()?;
-            let last_applied_log = *index;
-            self.set_last_applied_log(&mut txn, last_applied_log)?;
-            let response = self.apply_message(data.message.clone())?;
-            txn.commit()?;
-            Ok(response)
-        }
+        self.next_serial.store(data.serial, Ordering::Release);
+        let mut txn = self.env.write_txn()?;
+        let last_applied_log = *index;
+        self.set_last_applied_log(&mut txn, last_applied_log)?;
+        let response = self.apply_message(data.message.clone())?;
+        txn.commit()?;
+        Ok(response)
     }
 
     async fn replicate_to_state_machine(&self, entries: &[(&u64, &ClientRequest)]) -> Result<()> {

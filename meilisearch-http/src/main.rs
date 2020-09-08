@@ -4,6 +4,7 @@ use std::{env, thread};
 
 use actix_cors::Cors;
 use actix_web::{middleware, HttpServer};
+use log::info;
 use main_error::MainError;
 use meilisearch_http::helpers::NormalizePath;
 use meilisearch_http::raft::{init_raft, RaftConfig};
@@ -63,6 +64,7 @@ async fn main() -> Result<(), MainError> {
 }
 
 async fn run_raft(opt: &Opt, raft_config_path: &PathBuf) -> Result<(), MainError> {
+    info!("running raft");
     let data = Data::new(opt.clone())?;
 
     let mut file = File::open(raft_config_path).await?;
@@ -116,6 +118,7 @@ async fn run_raft(opt: &Opt, raft_config_path: &PathBuf) -> Result<(), MainError
 }
 
 async fn run(opt: &Opt) -> Result<(), MainError> {
+    info!("running normal");
     if let Some(path) = &opt.load_from_snapshot {
         snapshot::load_snapshot(
             &opt.db_path,

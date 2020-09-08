@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
-use crate::raft::Raft;
+use crate::raft::{Message, Raft};
 use crate::Data;
 
 mod attributes_for_faceting;
@@ -41,6 +41,7 @@ macro_rules! make_update_delete_routes {
             data: web::Data<std::sync::Arc<crate::raft::Raft>>,
             index_uid: web::Path<String>,
         ) -> Result<HttpResponse, ResponseError> {
+            log::warn!("herrrrre");
             use meilisearch_core::settings::{SettingsUpdate, UpdateState};
             let settings_update = SettingsUpdate {
                 $attr: UpdateState::Clear,
@@ -115,11 +116,6 @@ macro_rules! create_services {
                     .service($mod::delete)
                 )*;
         }
-    };
-}
-
-macro_rules! create_services_raft {
-    ($($mod:ident),*) => {
 
         pub fn services_raft(cfg: &mut web::ServiceConfig) {
             cfg
@@ -136,16 +132,6 @@ macro_rules! create_services_raft {
 }
 
 create_services!(
-    attributes_for_faceting,
-    displayed_attributes,
-    distinct_attributes,
-    ranking_rules,
-    searchable_attributes,
-    stop_words,
-    synonyms
-);
-
-create_services_raft!(
     attributes_for_faceting,
     displayed_attributes,
     distinct_attributes,
@@ -275,7 +261,7 @@ async fn delete_all(
 
 #[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn delete_all_raft(
-    data: web::Data<Data>,
+    raft: web::Data<Arc<Raft>>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = SettingsUpdate {
@@ -288,8 +274,14 @@ async fn delete_all_raft(
         synonyms: UpdateState::Clear,
         attributes_for_faceting: UpdateState::Clear,
     };
-    let response = data.update_settings(index_uid.as_ref(), settings)?;
-
+    let message = Message::SettingsUpdate {
+        index_uid: index_uid.into_inner(),
+        update: settings,
+    };
+    let response = raft
+        .propose(message)
+        .await
+        .map_err(|e| Error::RaftError(e.to_string()))?;
     Ok(HttpResponse::Accepted().json(response))
 }
 

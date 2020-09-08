@@ -1,0 +1,7 @@
+addr = "0.0.0.0:8000"
+shared_folder = "/usr/share/shared"
+snapshot_dir = "/usr/share/shared"
+log_db_path = "/usr/logs/"
+cluster_name = "ishmael"
+cluster_formation_timeout = 15
+discovery_interval = 5
