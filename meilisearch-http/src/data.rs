@@ -3,9 +3,10 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use meilisearch_core::{Database, DatabaseOptions};
+use meilisearch_core::{Database, DatabaseOptions, Index};
 use sha2::Digest;
 
+use crate::error::{Error as MSError, ResponseError};
 use crate::index_update_callback;
 use crate::option::Opt;
 
@@ -101,5 +102,61 @@ impl Data {
         }));
 
         Ok(data)
+    }
+
+    fn create_index(&self, uid: &str) -> Result<Index, ResponseError> {
+        if !uid
+            .chars()
+            .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+        {
+            return Err(MSError::InvalidIndexUid.into());
+        }
+
+        let created_index = self.db.create_index(&uid).map_err(|e| match e {
+            meilisearch_core::Error::IndexAlreadyExists => e.into(),
+            _ => ResponseError::from(MSError::create_index(e)),
+        })?;
+
+        self.db.main_write::<_, _, ResponseError>(|mut writer| {
+            created_index.main.put_name(&mut writer, uid)?;
+
+            created_index
+                .main
+                .created_at(&writer)?
+                .ok_or(MSError::internal("Impossible to read created at"))?;
+
+            created_index
+                .main
+                .updated_at(&writer)?
+                .ok_or(MSError::internal("Impossible to read updated at"))?;
+            Ok(())
+        })?;
+
+        Ok(created_index)
+    }
+
+    pub fn get_or_create_index<F, R>(&self, uid: &str, f: F) -> Result<R, ResponseError>
+    where
+        F: FnOnce(&Index) -> Result<R, ResponseError>,
+    {
+        let mut index_has_been_created = false;
+
+        let index = match self.db.open_index(&uid) {
+            Some(index) => index,
+            None => {
+                index_has_been_created = true;
+                self.create_index(&uid)?
+            }
+        };
+
+        match f(&index) {
+            Ok(r) => Ok(r),
+            Err(err) => {
+                if index_has_been_created {
+                    let _ = self.db.delete_index(&uid);
+                }
+                Err(err)
+            }
+        }
     }
 }

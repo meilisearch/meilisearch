@@ -160,37 +160,6 @@ struct UpdateDocumentsQuery {
     primary_key: Option<String>,
 }
 
-fn create_index(data: &Data, uid: &str) -> Result<Index, ResponseError> {
-    if !uid
-        .chars()
-        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
-    {
-        return Err(Error::InvalidIndexUid.into());
-    }
-
-    let created_index = data.db.create_index(&uid).map_err(|e| match e {
-        meilisearch_core::Error::IndexAlreadyExists => e.into(),
-        _ => ResponseError::from(Error::create_index(e)),
-    })?;
-
-    data.db.main_write::<_, _, ResponseError>(|mut writer| {
-        created_index.main.put_name(&mut writer, uid)?;
-
-        created_index
-            .main
-            .created_at(&writer)?
-            .ok_or(Error::internal("Impossible to read created at"))?;
-
-        created_index
-            .main
-            .updated_at(&writer)?
-            .ok_or(Error::internal("Impossible to read updated at"))?;
-        Ok(())
-    })?;
-
-    Ok(created_index)
-}
-
 async fn update_multiple_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
@@ -198,46 +167,41 @@ async fn update_multiple_documents(
     body: web::Json<Vec<Document>>,
     is_partial: bool,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))
-        .or(create_index(&data, &path.index_uid))?;
+    let update_id = data.get_or_create_index(&path.index_uid, |index| {
+        let reader = data.db.main_read_txn()?;
 
-    let reader = data.db.main_read_txn()?;
+        let mut schema = index
+            .main
+            .schema(&reader)?
+            .ok_or(meilisearch_core::Error::SchemaMissing)?;
 
-    let mut schema = index
-        .main
-        .schema(&reader)?
-        .ok_or(meilisearch_core::Error::SchemaMissing)?;
+        if schema.primary_key().is_none() {
+            let id = match &params.primary_key {
+                Some(id) => id.to_string(),
+                None => body
+                    .first()
+                    .and_then(find_primary_key)
+                    .ok_or(meilisearch_core::Error::MissingPrimaryKey)?,
+            };
 
-    if schema.primary_key().is_none() {
-        let id = match &params.primary_key {
-            Some(id) => id.to_string(),
-            None => body
-                .first()
-                .and_then(find_primary_key)
-                .ok_or(meilisearch_core::Error::MissingPrimaryKey)?,
+            schema.set_primary_key(&id).map_err(Error::bad_request)?;
+
+            data.db.main_write(|w| index.main.put_schema(w, &schema))?;
+        }
+
+        let mut document_addition = if is_partial {
+            index.documents_partial_addition()
+        } else {
+            index.documents_addition()
         };
 
-        schema.set_primary_key(&id).map_err(Error::bad_request)?;
+        for document in body.into_inner() {
+            document_addition.update_document(document);
+        }
 
-        data.db.main_write(|w| index.main.put_schema(w, &schema))?;
-    }
-
-    let mut document_addition = if is_partial {
-        index.documents_partial_addition()
-    } else {
-        index.documents_addition()
-    };
-
-    for document in body.into_inner() {
-        document_addition.update_document(document);
-    }
-
-    let update_id = data.db.update_write(|w| document_addition.finalize(w))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+        Ok(data.db.update_write(|w| document_addition.finalize(w))?)
+    })?;
+    return Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)));
 }
 
 #[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
