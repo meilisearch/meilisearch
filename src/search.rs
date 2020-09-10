@@ -4,7 +4,7 @@ use std::cmp;
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
-use log::{debug, error};
+use log::debug;
 use once_cell::sync::Lazy;
 use roaring::bitmap::{IntoIter, RoaringBitmap};
 
@@ -155,11 +155,9 @@ impl<'a> Search<'a> {
             let mut union_positions = RoaringBitmap::new();
             for (word, (_distance, docids)) in words {
 
-                if docids.contains(candidate) {
-                    match index.docid_word_positions.get(rtxn, &(candidate, word))? {
-                        Some(positions) => union_positions.union_with(&positions),
-                        None => error!("position missing for candidate {} and word {:?}", candidate, word),
-                    }
+                if !docids.contains(candidate) { continue; }
+                if let Some(positions) = index.docid_word_positions.get(rtxn, &(candidate, word))? {
+                    union_positions.union_with(&positions);
                 }
             }
             keywords.push(union_positions.into_iter());
@@ -223,6 +221,13 @@ impl<'a> Search<'a> {
              path.windows(2).map(|w| positions_proximity(w[0], w[1])).sum::<u32>()
         }
 
+        // If there only is one word, no need to compute the best proximities.
+        if derived_words.len() == 1 {
+            let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
+            let documents_ids = candidates.iter().take(limit).collect();
+            return Ok(SearchResult { found_words, documents_ids });
+        }
+
         let mut paths = Vec::new();
         for candidate in candidates {
             let keywords = Self::fecth_keywords(rtxn, index, &derived_words, candidate)?;
@@ -236,7 +241,6 @@ impl<'a> Search<'a> {
 
         let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
         let documents_ids = documents.into_iter().map(|(_, id)| id).take(limit).collect();
-
         Ok(SearchResult { found_words, documents_ids })
     }
 }

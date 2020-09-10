@@ -137,15 +137,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
-name = "bitpacking"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3744aff20a3437a99ebc0bb7733e9e60c7bf590478c9b897e95b38d57e5acb68"
-dependencies = [
- "crunchy",
-]
-
-[[package]]
 name = "block-buffer"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,12 +259,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cow-utils"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79bb3adfaf5f75d24b01aee375f7555907840fa2800e5ec8fa3b9e2031830173"
-
-[[package]]
 name = "crc32c"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -369,12 +354,6 @@ dependencies = [
  "cfg-if",
  "lazy_static 1.4.0",
 ]
-
-[[package]]
-name = "crunchy"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
 name = "csv"
@@ -981,18 +960,14 @@ dependencies = [
  "arc-cache",
  "askama",
  "askama_warp",
- "bitpacking",
  "bstr",
  "byteorder",
- "cow-utils",
  "criterion",
  "csv",
  "flate2",
  "fst",
  "fxhash",
  "heed",
- "indexmap",
- "itertools",
  "jemallocator",
  "levenshtein_automata",
  "log 0.4.11",
@@ -1649,9 +1624,9 @@ checksum = "21215c1b9d8f7832b433255bd9eea3e2779aa55b21b2f8e13aad62c74749b237"
 
 [[package]]
 name = "roaring"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d6c40b0f4a172f43c3dab852f6c05df5a643aebe7395dbeb598a2f5bb318c1e"
+checksum = "99a260b0fb7df2095948f4a1d37afe5d1a08a2ccc7380f418cec049dc9560077"
 dependencies = [
  "byteorder",
 ]

@@ -8,10 +8,8 @@ default-run = "indexer"
 [dependencies]
 anyhow = "1.0.28"
 arc-cache = { git = "https://github.com/Kerollmops/rust-arc-cache.git", rev = "56530f2" }
-bitpacking = "0.8.2"
 bstr = "0.2.13"
 byteorder = "1.3.4"
-cow-utils = "0.1.2"
 csv = "1.1.3"
 flate2 = "1.0.17"
 fst = "0.4.3"
@@ -25,7 +23,7 @@ once_cell = "1.4.0"
 oxidized-mtbl = { git = "https://github.com/Kerollmops/oxidized-mtbl.git", rev = "9bf47a7" }
 rayon = "1.3.1"
 ringtail = "0.3.0"
-roaring = "0.6.0"
+roaring = "0.6.1"
 slice-group-by = "0.2.6"
 smallstr = "0.2.0"
 smallvec = "1.4.0"
@@ -35,12 +33,6 @@ tempfile = "3.1.0"
 # logging
 log = "0.4.11"
 stderrlog = "0.4.3"
-
-# best proximity
-indexmap = "1.5.1"
-
-# to implement internally
-itertools = "0.9.0"
 
 # http server
 askama = "0.10.1"
