@@ -15,15 +15,24 @@ use meilisearch_http::option::Opt;
 #[macro_export]
 macro_rules! test_post_get_search {
     ($server:expr, $query:expr, |$response:ident, $status_code:ident | $block:expr) => {
-        let post_query: meilisearch_http::routes::search::SearchQueryPost = serde_json::from_str(&$query.clone().to_string()).unwrap();
+        let post_query: meilisearch_http::routes::search::SearchQueryPost =
+            serde_json::from_str(&$query.clone().to_string()).unwrap();
         let get_query: meilisearch_http::routes::search::SearchQuery = post_query.into();
         let get_query = ::serde_url_params::to_string(&get_query).unwrap();
         let ($response, $status_code) = $server.search_get(&get_query).await;
-        let _ =::std::panic::catch_unwind(|| $block)
-            .map_err(|e| panic!("panic in get route: {:?}", e.downcast_ref::<&str>().unwrap()));
+        let _ = ::std::panic::catch_unwind(|| $block).map_err(|e| {
+            panic!(
+                "panic in get route: {:?}",
+                e.downcast_ref::<&str>().unwrap()
+            )
+        });
         let ($response, $status_code) = $server.search_post($query).await;
-        let _ = ::std::panic::catch_unwind(|| $block)
-            .map_err(|e| panic!("panic in post route: {:?}", e.downcast_ref::<&str>().unwrap()));
+        let _ = ::std::panic::catch_unwind(|| $block).map_err(|e| {
+            panic!(
+                "panic in post route: {:?}",
+                e.downcast_ref::<&str>().unwrap()
+            )
+        });
     };
 }
 
@@ -61,7 +70,6 @@ impl Server {
     }
 
     pub async fn test_server() -> Self {
-
         let mut server = Self::with_uid("test");
 
         let body = json!({
@@ -151,7 +159,8 @@ impl Server {
     pub async fn get_request(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("get_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+        let mut app =
+            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::get().uri(url).to_request();
         let res = test::call_service(&mut app, req).await;
@@ -165,7 +174,8 @@ impl Server {
     pub async fn post_request(&self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("post_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+        let mut app =
+            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::post()
             .uri(url)
@@ -183,8 +193,7 @@ impl Server {
         eprintln!("post_request_async: {}", url);
 
         let (response, status_code) = self.post_request(url, body).await;
-        // eprintln!("response: {}", response);
-        assert_eq!(status_code, 202);
+        eprintln!("response: {}", response);
         assert!(response["updateId"].as_u64().is_some());
         self.wait_update_id(response["updateId"].as_u64().unwrap())
             .await;
@@ -194,7 +203,8 @@ impl Server {
     pub async fn put_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("put_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+        let mut app =
+            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::put()
             .uri(url)
@@ -222,7 +232,8 @@ impl Server {
     pub async fn delete_request(&mut self, url: &str) -> (Value, StatusCode) {
         eprintln!("delete_request: {}", url);
 
-        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+        let mut app =
+            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::delete().uri(url).to_request();
         let res = test::call_service(&mut app, req).await;
@@ -340,9 +351,9 @@ impl Server {
         self.delete_request_async(&url).await
     }
 
-    pub async fn delete_multiple_documents(&mut self, body: Value) {
+    pub async fn delete_multiple_documents(&mut self, body: Value) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/documents/delete-batch", self.uid);
-        self.post_request_async(&url, body).await;
+        self.post_request_async(&url, body).await
     }
 
     pub async fn get_all_settings(&mut self) -> (Value, StatusCode) {
@@ -353,6 +364,11 @@ impl Server {
     pub async fn update_all_settings(&mut self, body: Value) {
         let url = format!("/indexes/{}/settings", self.uid);
         self.post_request_async(&url, body).await;
+    }
+
+    pub async fn update_all_settings_sync(&mut self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings", self.uid);
+        self.post_request(&url, body).await
     }
 
     pub async fn delete_all_settings(&mut self) -> (Value, StatusCode) {
@@ -390,6 +406,11 @@ impl Server {
         self.post_request_async(&url, body).await;
     }
 
+    pub async fn update_distinct_attribute_sync(&mut self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/distinct-attribute", self.uid);
+        self.post_request(&url, body).await
+    }
+
     pub async fn delete_distinct_attribute(&mut self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings/distinct-attribute", self.uid);
         self.delete_request_async(&url).await
@@ -410,6 +431,11 @@ impl Server {
         self.post_request_async(&url, body).await;
     }
 
+    pub async fn update_searchable_attributes_sync(&mut self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/searchable-attributes", self.uid);
+        self.post_request(&url, body).await
+    }
+
     pub async fn delete_searchable_attributes(&mut self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings/searchable-attributes", self.uid);
         self.delete_request_async(&url).await
@@ -425,8 +451,36 @@ impl Server {
         self.post_request_async(&url, body).await;
     }
 
+    pub async fn update_displayed_attributes_sync(&mut self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/displayed-attributes", self.uid);
+        self.post_request(&url, body).await
+    }
+
     pub async fn delete_displayed_attributes(&mut self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings/displayed-attributes", self.uid);
+        self.delete_request_async(&url).await
+    }
+
+    pub async fn get_attributes_for_faceting(&mut self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/attributes-for-faceting", self.uid);
+        self.get_request(&url).await
+    }
+
+    pub async fn update_attributes_for_faceting(&mut self, body: Value) {
+        let url = format!("/indexes/{}/settings/attributes-for-faceting", self.uid);
+        self.post_request_async(&url, body).await;
+    }
+
+    pub async fn update_attributes_for_faceting_sync(
+        &mut self,
+        body: Value,
+    ) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/attributes-for-faceting", self.uid);
+        self.post_request(&url, body).await
+    }
+
+    pub async fn delete_attributes_for_faceting(&mut self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/attributes-for-faceting", self.uid);
         self.delete_request_async(&url).await
     }
 
@@ -438,6 +492,11 @@ impl Server {
     pub async fn update_synonyms(&mut self, body: Value) {
         let url = format!("/indexes/{}/settings/synonyms", self.uid);
         self.post_request_async(&url, body).await;
+    }
+
+    pub async fn update_synonyms_sync(&mut self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/synonyms", self.uid);
+        self.post_request(&url, body).await
     }
 
     pub async fn delete_synonyms(&mut self) -> (Value, StatusCode) {
@@ -453,6 +512,11 @@ impl Server {
     pub async fn update_stop_words(&mut self, body: Value) {
         let url = format!("/indexes/{}/settings/stop-words", self.uid);
         self.post_request_async(&url, body).await;
+    }
+
+    pub async fn update_stop_words_sync(&mut self, body: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/stop-words", self.uid);
+        self.post_request(&url, body).await
     }
 
     pub async fn delete_stop_words(&mut self) -> (Value, StatusCode) {

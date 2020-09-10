@@ -3,14 +3,14 @@ use std::collections::{BTreeSet, HashSet};
 use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use indexmap::IndexMap;
-use meilisearch_core::{update, Index};
+use meilisearch_core::{update, MainReader};
 use serde_json::Value;
 use serde::Deserialize;
 
+use crate::Data;
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::routes::{IndexParam, IndexUpdateResponse};
-use crate::Data;
 
 type Document = IndexMap<String, Value>;
 

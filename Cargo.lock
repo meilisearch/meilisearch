@@ -1923,7 +1923,7 @@ dependencies = [
 [[package]]
 name = "pest"
 version = "2.1.3"
-source = "git+https://github.com/MarinPostma/pest.git?tag=meilisearch-patch1#e1031ad0134d5e9893c470dbea50811b2b746926"
+source = "git+https://github.com/pest-parser/pest.git?rev=51fd1d49f1041f7839975664ef71fe15c7dcaf67#51fd1d49f1041f7839975664ef71fe15c7dcaf67"
 dependencies = [
  "ucd-trie",
 ]
