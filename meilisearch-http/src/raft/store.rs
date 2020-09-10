@@ -369,6 +369,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         Ok(())
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn append_entry_to_log(
         &self,
         entry: &async_raft::raft::Entry<ClientRequest>,

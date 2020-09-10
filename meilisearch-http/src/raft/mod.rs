@@ -120,12 +120,12 @@ impl Raft {
         let request = ClientWriteRequest::new(client_request);
         match self.inner.client_write(request).await {
             Ok(response) => Ok(response.data),
-            Err(ClientWriteError::ForwardToLeader(req, id)) => {
+            Err(ClientWriteError::ForwardToLeader(req, Some(id))) => {
                 info!("Forwarding request to leader: {:?}", id);
                 let response = self
                     .router
                     .clients
-                    .get(&id.unwrap())
+                    .get(&id)
                     .ok_or_else(|| anyhow::Error::msg("Can't find leader node"))?
                     .write()
                     .await
@@ -180,13 +180,13 @@ async fn init_raft_cluster(raft_config: RaftConfig, store: Data) -> Result<Raft>
     // generate random id
     let id = rand::random();
 
-    println!("started raft with id: {}", id);
+    info!("started raft with id: {}", id);
 
     let config = Arc::new(
         Config::build(raft_config.cluster_name)
-            .election_timeout_min(3000)
-            .election_timeout_max(5000)
-            .heartbeat_interval(500)
+            .heartbeat_interval(150)
+            .election_timeout_min(1000)
+            .election_timeout_max(1500)
             .validate()?,
     );
     let router = Arc::new(RaftRouter::new());
@@ -207,7 +207,7 @@ async fn init_raft_cluster(raft_config: RaftConfig, store: Data) -> Result<Raft>
     let next_id = AtomicU64::new(0);
 
     let mut mdns = MDNSServer::new(Duration::from_secs(raft_config.discovery_interval))?;
-    mdns.advertise(id, raft_config.addr.port()).await?;
+    let svc = mdns.advertise(id, raft_config.addr.port()).await?;
     let mut peers_receiver = mdns.discover();
 
     let mut timeout =
@@ -226,9 +226,12 @@ async fn init_raft_cluster(raft_config: RaftConfig, store: Data) -> Result<Raft>
         }
     }
 
+    // stop advertizing service
+    drop(svc);
+
     let nodes = router.clients.iter().map(|e| *e.key()).collect();
 
-    println!("starting with nodes: {:?}", nodes);
+    info!("starting with nodes: {:?}", nodes);
 
     tokio::time::delay_for(Duration::from_secs(5)).await;
 

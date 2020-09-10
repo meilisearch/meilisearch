@@ -67,6 +67,13 @@ async fn run_raft(opt: &Opt, raft_config_path: &PathBuf) -> Result<(), MainError
     info!("running raft");
     let data = Data::new(opt.clone())?;
 
+    // create subscriber for tracing
+    //let subscriber = tracing_subscriber::fmt()
+    //// filter spans/events with level TRACE or higher.
+    //.with_max_level(tracing::Level::TRACE)
+    //// build but do not install the subscriber.
+    //.finish();
+    //tracing::subscriber::set_global_default(subscriber)?;
     let mut file = File::open(raft_config_path).await?;
     let mut config = String::new();
     file.read_to_string(&mut config).await?;

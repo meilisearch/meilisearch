@@ -68,6 +68,9 @@ uuid = { version = "0.8", features = ["v4"] }
 walkdir = "2.3.1"
 whoami = "0.8.1"
 reqwest = "0.10.8"
+tracing = "0.1"
+tracing-subscriber = "0.2"
+tracing-futures = "0.2"
 
 [dependencies.sentry]
 version = "0.18.1"

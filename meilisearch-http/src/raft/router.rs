@@ -1,3 +1,4 @@
+use std::fmt;
 use std::net::SocketAddr;
 
 use anyhow::Result;
@@ -44,6 +45,24 @@ pub struct RaftRouter {
     pub clients: DashMap<NodeId, RwLock<Client>>,
 }
 
+impl fmt::Debug for RaftRouter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RaftRouter")
+            .field(
+                "clients",
+                &format!(
+                    "{:?}",
+                    &self
+                        .clients
+                        .iter()
+                        .map(|e| e.key().clone())
+                        .collect::<Vec<_>>()
+                ),
+            )
+            .finish()
+    }
+}
+
 impl RaftRouter {
     pub fn new() -> Self {
         let clients = DashMap::new();
@@ -72,6 +91,7 @@ impl RaftRouter {
 
 #[async_trait]
 impl RaftNetwork<ClientRequest> for RaftRouter {
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn append_entries(
         &self,
         target: NodeId,
@@ -96,6 +116,7 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn install_snapshot(
         &self,
         target: NodeId,
@@ -120,6 +141,7 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn vote(&self, target: NodeId, rpc: VoteRequest) -> Result<VoteResponse> {
         let client = self
             .clients

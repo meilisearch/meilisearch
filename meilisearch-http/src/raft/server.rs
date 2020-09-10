@@ -31,6 +31,7 @@ impl RaftServerService {
 
 #[tonic::async_trait]
 impl RaftService for RaftServerService {
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn vote(&self, request: Request<VoteRequest>) -> Result<Response<VoteResponse>, Status> {
         let request = deserialize(&request.into_inner().data)
             .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
@@ -41,6 +42,7 @@ impl RaftService for RaftServerService {
         Ok(Response::new(VoteResponse { data }))
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn append_entries(
         &self,
         request: Request<AppendEntriesRequest>,
@@ -54,6 +56,7 @@ impl RaftService for RaftServerService {
         Ok(Response::new(AppendEntriesResponse { data }))
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn install_snapshot(
         &self,
         request: Request<InstallSnapshotRequest>,
@@ -67,6 +70,7 @@ impl RaftService for RaftServerService {
         Ok(Response::new(InstallSnapshotResponse { data }))
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn forward(
         &self,
         request: Request<ClientWriteRequest>,
@@ -82,6 +86,7 @@ impl RaftService for RaftServerService {
         Ok(Response::new(ClientWriteResponse { data }))
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     async fn request_connection(
         &self,
         request: Request<ConnectionRequest>,

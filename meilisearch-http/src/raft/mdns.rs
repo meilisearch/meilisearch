@@ -1,10 +1,14 @@
 use std::collections::HashSet;
+use std::fmt;
 use std::net::SocketAddr;
 use std::time::Duration;
 
 use anyhow::Result;
 use futures_util::{pin_mut, stream::StreamExt};
 use libmdns::Responder;
+use libmdns::Service;
+use tokio::sync::oneshot;
+
 use mdns::discover;
 use tokio::sync::{broadcast, mpsc};
 
@@ -16,10 +20,19 @@ pub struct Node {
     pub id: u64,
 }
 
-#[derive(Debug)]
 struct Ad {
     port: u16,
     id: u64,
+    tx: oneshot::Sender<Service>,
+}
+
+impl fmt::Debug for Ad {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Ad")
+            .field("id", &self.id)
+            .field("port", &self.port)
+            .finish()
+    }
 }
 
 struct Server {
@@ -31,17 +44,16 @@ impl Server {
         let (responder, task) = Responder::with_default_handle()?;
         tokio::spawn(task);
         tokio::spawn(async move {
-            let mut services = Vec::new();
             loop {
                 match self.rx.recv().await {
-                    Some(Ad { port, id, .. }) => {
+                    Some(Ad { tx, port, id, .. }) => {
                         let svc = responder.register(
                             RAFT_SERVICE.to_owned(),
                             RAFT_SERVICE.to_owned(),
                             port,
                             &[&format!("id:{}", id)],
                         );
-                        services.push(svc);
+                        let _ = tx.send(svc);
                     }
                     _ => (),
                 }
@@ -118,8 +130,10 @@ impl MDNSServer {
         self.broadcast_tx.subscribe()
     }
 
-    pub async fn advertise(&mut self, id: u64, port: u16) -> Result<()> {
-        self.server_tx.send(Ad { id, port }).await?;
-        Ok(())
+    pub async fn advertise(&mut self, id: u64, port: u16) -> Result<Service> {
+        let (tx, rx) = oneshot::channel();
+        self.server_tx.send(Ad { id, port, tx }).await?;
+        let svc = rx.await?;
+        Ok(svc)
     }
 }

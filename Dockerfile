@@ -1,11 +1,10 @@
 # start from base
-FROM ubuntu:latest
+FROM archlinux:latest
 
-RUN apt -yqq update
-RUN apt -yqq install libc-bin libssl-dev
+RUN pacman -Syy gcc --noconfirm
 # install system-wide deps for python and node
 # copy our application code
-ADD target/debug/meilisearch /opt/
+ADD target/release/meilisearch /opt/
 ADD raft-config.toml /
 RUN mkdir /usr/logs
 WORKDIR /opt
