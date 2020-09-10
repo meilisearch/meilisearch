@@ -1227,7 +1227,7 @@ checksum = "2839e79665f131bdb5782e51f2c6c9599c133c6098982a54c794358bf432529c"
 [[package]]
 name = "oxidized-mtbl"
 version = "0.1.0"
-source = "git+https://github.com/Kerollmops/oxidized-mtbl.git?rev=5426182#5426182d9ad8b74a9ebb386f03d33ce073cef0e0"
+source = "git+https://github.com/Kerollmops/oxidized-mtbl.git?rev=9bf47a7#9bf47a7d4f17dd45d395f12874291e00b2eadf40"
 dependencies = [
  "byteorder",
  "crc32c",

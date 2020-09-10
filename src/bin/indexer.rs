@@ -34,9 +34,10 @@ const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 const HEADERS_KEY: &[u8] = b"\0headers";
 const DOCUMENTS_IDS_KEY: &[u8] = b"\x04documents-ids";
 const WORDS_FST_KEY: &[u8] = b"\x06words-fst";
-const DOCUMENTS_IDS_BYTE: u8 = 4;
-const WORD_DOCIDS_BYTE: u8 = 2;
+const HEADERS_BYTE: u8 = 0;
 const WORD_DOCID_POSITIONS_BYTE: u8 = 1;
+const WORD_DOCIDS_BYTE: u8 = 2;
+const DOCUMENTS_IDS_BYTE: u8 = 4;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -302,12 +303,8 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
             build.extend_stream(op.into_stream()).unwrap();
             Ok(build.into_inner().unwrap())
         },
-        HEADERS_KEY => {
-            assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
-            Ok(values[0].to_vec())
-        },
         key => match key[0] {
-            WORD_DOCID_POSITIONS_BYTE => {
+            HEADERS_BYTE | WORD_DOCID_POSITIONS_BYTE => {
                 assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
                 Ok(values[0].to_vec())
             },
