@@ -1,3 +1,7 @@
+## v0.14.1
+
+  - Fix version mismatch in snapshot importation (#959)
+
 ## v0.14.0
 
   - Fix facet distribution case (#797)
