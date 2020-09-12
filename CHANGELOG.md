@@ -1,3 +1,7 @@
+## Unreleased
+
+  - Update actix-web dependency to 3.0.0 (#963)
+
 ## v0.14.1
 
   - Fix version mismatch in snapshot importation (#959)

@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse};
-use actix_web_macros::{delete, get, post};
+use actix_web::{delete, get, post};
 use meilisearch_core::settings::{SettingsUpdate, UpdateState};
 use std::collections::BTreeSet;
 

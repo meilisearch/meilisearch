@@ -34,7 +34,7 @@ pub fn create_app(
     actix_http::body::Body,
 > {
     App::new()
-        .app_data(web::Data::new(data.clone()))
+        .data(data.clone())
         .app_data(
             web::JsonConfig::default()
                 .limit(data.http_payload_size_limit)
