@@ -119,6 +119,15 @@ fn lmdb_key_valid_size(key: &[u8]) -> bool {
     !key.is_empty() && key.len() <= LMDB_MAX_KEY_LENGTH
 }
 
+fn create_writer(type_: CompressionType, level: Option<u32>, file: File) -> Writer<File> {
+    let mut builder = Writer::builder();
+    builder.compression_type(type_);
+    if let Some(level) = level {
+        builder.compression_level(level);
+    }
+    builder.build(file)
+}
+
 type MergeFn = fn(&[u8], &[Vec<u8>]) -> Result<Vec<u8>, ()>;
 
 struct Store {
@@ -126,6 +135,8 @@ struct Store {
     documents_ids: RoaringBitmap,
     sorter: Sorter<MergeFn>,
     documents_sorter: Sorter<MergeFn>,
+    chunk_compression_type: CompressionType,
+    chunk_compression_level: Option<u32>,
 }
 
 impl Store {
@@ -160,6 +171,8 @@ impl Store {
             documents_ids: RoaringBitmap::new(),
             sorter: builder.build(),
             documents_sorter: documents_builder.build(),
+            chunk_compression_type,
+            chunk_compression_level,
         }
     }
 
@@ -299,10 +312,14 @@ impl Store {
     }
 
     fn finish(mut self) -> anyhow::Result<(Reader<Mmap>, Reader<Mmap>)> {
+        let compression_type = self.chunk_compression_type;
+        let compression_level = self.chunk_compression_level;
+
         Self::write_word_docids(&mut self.sorter, self.word_docids)?;
         Self::write_documents_ids(&mut self.sorter, self.documents_ids)?;
 
-        let mut wtr = tempfile::tempfile().map(Writer::new)?;
+        let wtr_file = tempfile::tempfile()?;
+        let mut wtr = create_writer(compression_type, compression_level, wtr_file);
         let mut builder = fst::SetBuilder::memory();
 
         let mut iter = self.sorter.into_iter()?;
@@ -319,7 +336,8 @@ impl Store {
         let fst = builder.into_set();
         wtr.insert(WORDS_FST_KEY, fst.as_fst().as_bytes())?;
 
-        let mut docs_wtr = tempfile::tempfile().map(Writer::new)?;
+        let docs_wtr_file = tempfile::tempfile()?;
+        let mut docs_wtr = create_writer(compression_type, compression_level, docs_wtr_file);
         self.documents_sorter.write_into(&mut docs_wtr)?;
         let docs_file = docs_wtr.into_inner()?;
         let docs_mmap = unsafe { Mmap::map(&docs_file)? };
