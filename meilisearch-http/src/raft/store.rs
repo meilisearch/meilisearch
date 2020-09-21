@@ -9,7 +9,6 @@ use async_raft::NodeId;
 use heed::types::{OwnedType, Str};
 use heed::{Database, Env, EnvOpenOptions, PolyDatabase};
 use log::{debug, error, info};
-use std::io::prelude::*;
 use tokio::fs::File;
 
 use super::{snapshot::RaftSnapshot, ClientRequest, ClientResponse, Message};
@@ -60,18 +59,11 @@ pub struct RaftStore {
     env: Env,
     store: Data,
     snapshot_dir: PathBuf,
-    shared_dir: PathBuf,
     next_serial: AtomicU64,
 }
 
 impl RaftStore {
-    pub fn new(
-        id: NodeId,
-        db_path: PathBuf,
-        store: Data,
-        snapshot_dir: PathBuf,
-        shared_dir: PathBuf,
-    ) -> Result<Self> {
+    pub fn new(id: NodeId, db_path: PathBuf, store: Data, snapshot_dir: PathBuf) -> Result<Self> {
         let env = EnvOpenOptions::new()
             .max_dbs(10)
             .map_size(LOG_DB_SIZE)
@@ -93,7 +85,6 @@ impl RaftStore {
             db,
             logs,
             next_serial: next_id,
-            shared_dir,
             store,
             snapshot_dir,
         })
@@ -175,8 +166,6 @@ impl RaftStore {
     }
 
     fn apply_message(&self, message: Message) -> Result<ClientResponse> {
-        use std::fs::File;
-
         match message {
             Message::CreateIndex(ref index_info) => {
                 let result = self
@@ -192,14 +181,10 @@ impl RaftStore {
             Message::DocumentAddition {
                 update_query,
                 index_uid,
-                filename,
+                documents,
                 partial,
             } => {
-                let update_path = self.shared_dir.join(filename);
-                let mut file = File::open(update_path)?;
-                let mut json = String::new();
-                file.read_to_string(&mut json)?;
-                let documents = serde_json::from_str(&json)?;
+                let documents = serde_json::from_str(&documents)?;
                 let result = self
                     .store
                     .update_multiple_documents(&index_uid, update_query, documents, partial)
@@ -271,7 +256,7 @@ impl RaftStore {
             .membership_config(&txn)?
             .unwrap_or_else(|| MembershipConfig::new_initial(self.id));
 
-        // 4. create snapshot (_ means that the snapshot is not yet ready)
+        // 4. create snapshot file
         let snapshot_path_temp = self.snapshot_dir.join("temp.snap");
         crate::snapshot::create_snapshot(&self.store, &snapshot_path_temp)?;
         // snapshot is finished, rename it:

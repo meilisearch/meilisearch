@@ -5,9 +5,6 @@ use actix_web::{web, HttpResponse};
 use actix_web_macros::{delete, get, post, put};
 use serde::Deserialize;
 use serde_json::Value;
-use tokio::fs::File;
-use tokio::prelude::*;
-use uuid::Uuid;
 
 use crate::data::{Data, Document, UpdateDocumentsQuery};
 use crate::error::{Error, ResponseError};
@@ -183,21 +180,13 @@ async fn add_documents_raft(
     body: web::Json<Vec<Document>>,
 ) -> Result<HttpResponse, ResponseError> {
     // write to shared path and send proposal
-    let filename = format!("{}.json", Uuid::new_v4());
-    let file_path = raft.shared_folder.join(&filename);
-    let mut file = File::create(&file_path)
-        .await
-        .map_err(|e| Error::Internal(e.to_string()))?;
-    let json =
+    let documents =
         serde_json::to_string(&body.into_inner()).map_err(|e| Error::Internal(e.to_string()))?;
-    file.write_all(json.as_bytes())
-        .await
-        .map_err(|e| Error::Internal(e.to_string()))?;
 
     let message = Message::DocumentAddition {
         update_query: params.into_inner(),
         index_uid: index_uid.into_inner(),
-        filename,
+        documents,
         partial: false,
     };
 
@@ -233,21 +222,13 @@ async fn update_documents_raft(
     body: web::Json<Vec<Document>>,
 ) -> Result<HttpResponse, ResponseError> {
     // write to shared path and send proposal
-    let filename = format!("{}.json", Uuid::new_v4());
-    let file_path = raft.shared_folder.join(&filename);
-    let mut file = File::create(&file_path)
-        .await
-        .map_err(|e| Error::Internal(e.to_string()))?;
-    let json =
+    let documents =
         serde_json::to_string(&body.into_inner()).map_err(|e| Error::Internal(e.to_string()))?;
-    file.write_all(json.as_bytes())
-        .await
-        .map_err(|e| Error::Internal(e.to_string()))?;
 
     let message = Message::DocumentAddition {
         update_query: params.into_inner(),
         index_uid: index_uid.into_inner(),
-        filename,
+        documents,
         partial: true,
     };
 

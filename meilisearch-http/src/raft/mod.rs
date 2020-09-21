@@ -40,7 +40,6 @@ type InnerRaft = async_raft::Raft<ClientRequest, ClientResponse, RaftRouter, Raf
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct RaftConfig {
     addr: SocketAddr,
-    shared_folder: PathBuf,
     snapshot_dir: PathBuf,
     log_db_path: PathBuf,
     cluster_name: String,
@@ -71,7 +70,7 @@ pub enum Message {
     DocumentAddition {
         update_query: UpdateDocumentsQuery,
         index_uid: String,
-        filename: String,
+        documents: String,
         partial: bool,
     },
 }
@@ -106,7 +105,6 @@ pub struct Raft {
     id: NodeId,
     server_handle: tokio::task::JoinHandle<Result<(), tonic::transport::Error>>,
     next_id: AtomicU64,
-    pub shared_folder: PathBuf,
 }
 
 impl Raft {
@@ -195,7 +193,6 @@ async fn init_raft_cluster(raft_config: RaftConfig, store: Data) -> Result<Raft>
         raft_config.log_db_path,
         store.clone(),
         raft_config.snapshot_dir,
-        raft_config.shared_folder.clone(),
     )?);
     let inner = Arc::new(InnerRaft::new(id, config, router.clone(), storage.clone()));
     let svc = RaftServerService::new(inner.clone(), router.clone(), storage.clone());
@@ -263,7 +260,6 @@ async fn init_raft_cluster(raft_config: RaftConfig, store: Data) -> Result<Raft>
         server_handle,
         next_id,
         router,
-        shared_folder: raft_config.shared_folder,
         store,
     })
 }
