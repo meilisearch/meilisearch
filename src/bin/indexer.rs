@@ -147,8 +147,6 @@ fn compute_words_pair_proximities(
             if prox > 0 && prox < 8 { distances.insert(prox); }
         }
         if !distances.is_empty() {
-            // We only store the proximites under one word pair.
-            let (w1, w2) = if w1 > w2 { (w2, w1) } else { (w1, w2) };
             words_pair_proximities.entry((w1.as_str(), w2.as_str()))
                 .or_insert_with(RoaringBitmap::new)
                 .union_with(&distances);
@@ -256,7 +254,6 @@ impl Store {
         let mut buffer = Vec::new();
 
         for ((w1, w2), proximities) in words_pair_proximities {
-            assert!(w1 <= w2);
             key.truncate(1);
             key.extend_from_slice(w1.as_bytes());
             key.push(0);

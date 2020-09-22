@@ -74,7 +74,7 @@ enum Command {
     /// Outputs a CSV with the proximities for the two specidied words and
     /// the documents ids where these relations appears.
     ///
-    /// `word1`, `word2` defines the word pair specified and sorted.
+    /// `word1`, `word2` defines the word pair specified *in this specific order*.
     /// `proximity` defines the proximity between the two specified words.
     /// `documents_ids` defines the documents ids where the relation appears.
     WordPairProximitiesDocids {
@@ -339,17 +339,15 @@ fn word_pair_proximities_docids(
     use heed::types::ByteSlice;
     use milli::RoaringBitmapCodec;
 
-    let (w1, w2) = if word1 > word2 { (word2, word1) } else { (word1, word2) };
-
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
     wtr.write_record(&["word1", "word2", "proximity", "documents_ids"])?;
 
     // Create the prefix key with only the pair of words.
-    let mut prefix = Vec::with_capacity(w1.len() + w2.len() + 1);
-    prefix.extend_from_slice(w1.as_bytes());
+    let mut prefix = Vec::with_capacity(word1.len() + word2.len() + 1);
+    prefix.extend_from_slice(word1.as_bytes());
     prefix.push(0);
-    prefix.extend_from_slice(w2.as_bytes());
+    prefix.extend_from_slice(word2.as_bytes());
 
     let db = index.word_pair_proximity_docids.as_polymorph();
     let iter = db.prefix_iter::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &prefix)?;
@@ -366,7 +364,7 @@ fn word_pair_proximities_docids(
         } else {
             format!("{:?}", docids.iter().collect::<Vec<_>>())
         };
-        wtr.write_record(&[&w1, &w2, &proximity.to_string(), &docids])?;
+        wtr.write_record(&[&word1, &word2, &proximity.to_string(), &docids])?;
     }
 
     Ok(wtr.flush()?)
