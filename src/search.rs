@@ -28,13 +28,7 @@ pub struct Search<'a> {
 
 impl<'a> Search<'a> {
     pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> Search<'a> {
-        Search {
-            query: None,
-            offset: 0,
-            limit: 20,
-            rtxn,
-            index,
-        }
+        Search { query: None, offset: 0, limit: 20, rtxn, index }
     }
 
     pub fn query(&mut self, query: impl Into<String>) -> &mut Search<'a> {
@@ -85,8 +79,8 @@ impl<'a> Search<'a> {
         .collect()
     }
 
-    /// Fetch the words from the given FST related to the
-    /// given DFAs along with the associated documents ids.
+    /// Fetch the words from the given FST related to the given DFAs along with
+    /// the associated documents ids.
     fn fetch_words_docids(
         rtxn: &heed::RoTxn,
         index: &Index,
@@ -194,26 +188,36 @@ impl<'a> Search<'a> {
 
         let mut documents = Vec::new();
 
-        // If there only is one word, no need to compute the best proximities.
-        if derived_words.len() == 1 {
+        // If there is only one query word, no need to compute the best proximities.
+        if derived_words.len() == 1 || candidates.is_empty() {
             let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
             let documents_ids = candidates.iter().take(limit).collect();
             return Ok(SearchResult { found_words, documents_ids });
         }
 
-        let mut paths = Vec::new();
-        for candidate in candidates {
-            let keywords = Self::fecth_keywords(rtxn, index, &derived_words, candidate)?;
-            near_proximity(keywords, &mut paths, path_proximity);
-            if let Some((prox, _path)) = paths.first() {
-                documents.push((*prox, candidate));
+        let mut answer = RoaringBitmap::new();
+        for (i, words) in derived_words.windows(2).enumerate() {
+            let w1: Vec<_> = words[0].0.keys().collect();
+            let w2: Vec<_> = words[1].0.keys().collect();
+
+            let key = (w1[0].as_str(), w2[0].as_str(), 1);
+            match index.word_pair_proximity_docids.get(rtxn, &key)? {
+                Some(docids) => if i == 0 {
+                    answer = docids;
+                } else {
+                    answer.intersect_with(&docids);
+                },
+                None => {
+                    answer = RoaringBitmap::new();
+                    break;
+                },
             }
         }
 
-        documents.sort_unstable_by_key(|(prox, _)| *prox);
+        documents.push(answer);
 
         let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
-        let documents_ids = documents.into_iter().map(|(_, id)| id).take(limit).collect();
+        let documents_ids = documents.into_iter().flatten().take(limit).collect();
         Ok(SearchResult { found_words, documents_ids })
     }
 }
