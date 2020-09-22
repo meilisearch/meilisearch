@@ -2,6 +2,7 @@ mod criterion;
 mod query_tokens;
 mod search;
 pub mod heed_codec;
+pub mod proximity;
 pub mod tokenizer;
 
 use std::collections::HashMap;
