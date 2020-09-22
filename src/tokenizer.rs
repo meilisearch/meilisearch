@@ -16,6 +16,6 @@ pub fn simple_tokenizer(text: &str) -> impl Iterator<Item=(TokenType, &str)> {
         })
 }
 
-pub fn only_words((t, _): &(TokenType, &str)) -> bool {
-    *t == TokenType::Word
+pub fn only_token((t, w): (TokenType, &str)) -> Option<&str> {
+    if t == TokenType::Word { Some(w) } else { None }
 }

@@ -22,7 +22,7 @@ use roaring::RoaringBitmap;
 use structopt::StructOpt;
 
 use milli::heed_codec::{CsvStringRecordCodec, ByteorderXRoaringBitmapCodec};
-use milli::tokenizer::{simple_tokenizer, only_words};
+use milli::tokenizer::{simple_tokenizer, only_token};
 use milli::{SmallVec32, Index, DocumentId, BEU32};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
@@ -290,7 +290,7 @@ impl Store {
 
                 let document_id = DocumentId::try_from(document_id).context("generated id is too big")?;
                 for (attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
-                    for (pos, (_, token)) in simple_tokenizer(&content).filter(only_words).enumerate().take(MAX_POSITION) {
+                    for (pos, token) in simple_tokenizer(&content).filter_map(only_token).enumerate().take(MAX_POSITION) {
                         let word = token.to_lowercase();
                         let position = (attr * MAX_POSITION + pos) as u32;
                         self.insert_word_docid(&word, document_id)?;
