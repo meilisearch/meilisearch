@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse};
-use actix_web_macros::{delete, get, post};
+use actix_web::{delete, get, post};
 use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
 use meilisearch_schema::Schema;
 use std::collections::{BTreeMap, BTreeSet, HashSet};

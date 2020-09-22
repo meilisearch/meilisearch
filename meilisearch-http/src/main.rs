@@ -14,7 +14,7 @@ mod analytics;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-#[actix_rt::main]
+#[actix_web::main]
 async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
 

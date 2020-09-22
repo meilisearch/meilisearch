@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use actix_web::{web, HttpResponse};
-use actix_web_macros::{delete, get, post, put};
+use actix_web::{delete, get, post, put};
 use indexmap::IndexMap;
 use meilisearch_core::update;
 use serde::Deserialize;

@@ -3,7 +3,7 @@ use std::collections::{HashSet, HashMap};
 use log::warn;
 use actix_web::web;
 use actix_web::HttpResponse;
-use actix_web_macros::{get, post};
+use actix_web::{get, post};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

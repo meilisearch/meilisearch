@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::task::{Context, Poll};
 
 use actix_service::{Service, Transform};
-use actix_web::{dev::ServiceRequest, dev::ServiceResponse};
+use actix_web::{dev::ServiceRequest, dev::ServiceResponse, web};
 use futures::future::{err, ok, Future, Ready};
 
 use crate::error::{Error, ResponseError};
@@ -63,7 +63,7 @@ where
         let mut svc = self.service.clone();
         // This unwrap is left because this error should never appear. If that's the case, then
         // it means that actix-web has an issue or someone changes the type `Data`.
-        let data = req.app_data::<Data>().unwrap();
+        let data = req.app_data::<web::Data<Data>>().unwrap();
 
         if data.api_keys.master.is_none() {
             return Box::pin(svc.call(req));
