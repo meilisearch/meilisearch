@@ -193,21 +193,31 @@ impl Store {
 
     fn write_document(
         &mut self,
-        id: DocumentId,
-        iter: impl IntoIterator<Item=(String, RoaringBitmap)>,
+        document_id: DocumentId,
+        words_positions: &HashMap<String, RoaringBitmap>,
         record: &StringRecord,
     ) -> anyhow::Result<()>
     {
+        // We store document_id associated with all the words the record contains.
+        for (word, _) in words_positions {
+            self.insert_word_docid(word, document_id)?;
+        }
+
         let record = CsvStringRecordCodec::bytes_encode(record)
-            .with_context(|| format!("could not encode csv record"))?;
-        self.documents_ids.insert(id);
-        self.documents_sorter.insert(id.to_be_bytes(), record)?;
-        Self::write_docid_word_positions(&mut self.sorter, id, iter)?;
+            .with_context(|| format!("could not encode CSV record"))?;
+
+        self.documents_ids.insert(document_id);
+        self.documents_sorter.insert(document_id.to_be_bytes(), record)?;
+        Self::write_docid_word_positions(&mut self.sorter, document_id, words_positions)?;
+
         Ok(())
     }
 
-    fn write_docid_word_positions<I>(sorter: &mut Sorter<MergeFn>, id: DocumentId, iter: I) -> anyhow::Result<()>
-    where I: IntoIterator<Item=(String, RoaringBitmap)>
+    fn write_docid_word_positions(
+        sorter: &mut Sorter<MergeFn>,
+        id: DocumentId,
+        words_positions: &HashMap<String, RoaringBitmap>,
+    ) -> anyhow::Result<()>
     {
         // postings positions ids keys are all prefixed
         let mut key = vec![WORD_DOCID_POSITIONS_BYTE];
@@ -216,7 +226,7 @@ impl Store {
         key.extend_from_slice(&id.to_be_bytes());
         let base_size = key.len();
 
-        for (word, positions) in iter {
+        for (word, positions) in words_positions {
             key.truncate(base_size);
             key.extend_from_slice(word.as_bytes());
             // We serialize the positions into a buffer.
@@ -278,8 +288,8 @@ impl Store {
         let mut document_id: usize = 0;
         let mut document = csv::StringRecord::new();
         let mut word_positions = HashMap::new();
-        while rdr.read_record(&mut document)? {
 
+        while rdr.read_record(&mut document)? {
             // We skip documents that must not be indexed by this thread.
             if document_id % num_threads == thread_index {
                 if document_id % ONE_MILLION == 0 {
@@ -293,13 +303,13 @@ impl Store {
                     for (pos, token) in simple_tokenizer(&content).filter_map(only_token).enumerate().take(MAX_POSITION) {
                         let word = token.to_lowercase();
                         let position = (attr * MAX_POSITION + pos) as u32;
-                        self.insert_word_docid(&word, document_id)?;
                         word_positions.entry(word).or_insert_with(RoaringBitmap::new).insert(position);
                     }
                 }
 
                 // We write the document in the documents store.
-                self.write_document(document_id, word_positions.drain(), &document)?;
+                self.write_document(document_id, &word_positions, &document)?;
+                word_positions.clear();
             }
 
             // Compute the document id of the next document.
