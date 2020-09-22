@@ -37,6 +37,7 @@ const WORDS_FST_KEY: &[u8] = b"\x06words-fst";
 const HEADERS_BYTE: u8 = 0;
 const WORD_DOCID_POSITIONS_BYTE: u8 = 1;
 const WORD_DOCIDS_BYTE: u8 = 2;
+const WORDS_PROXIMITIES_BYTE: u8 = 5;
 const DOCUMENTS_IDS_BYTE: u8 = 4;
 
 #[cfg(target_os = "linux")]
@@ -128,6 +129,35 @@ fn create_writer(type_: CompressionType, level: Option<u32>, file: File) -> Writ
     builder.build(file)
 }
 
+fn compute_words_pair_proximities(
+    word_positions: &HashMap<String, RoaringBitmap>,
+) -> HashMap<(&str, &str), RoaringBitmap>
+{
+    use itertools::Itertools;
+
+    let mut words_pair_proximities = HashMap::new();
+    for (w1, w2) in word_positions.keys().cartesian_product(word_positions.keys()) {
+        let mut distances = RoaringBitmap::new();
+        let positions1: Vec<_> = word_positions[w1].iter().collect();
+        let positions2: Vec<_> = word_positions[w2].iter().collect();
+        for (ps1, ps2) in positions1.iter().cartesian_product(positions2.iter()) {
+            let prox = milli::proximity::positions_proximity(*ps1, *ps2);
+            // We don't care about a word that appear at the
+            // same position or too far from the other.
+            if prox > 0 && prox < 8 { distances.insert(prox); }
+        }
+        if !distances.is_empty() {
+            // We only store the proximites under one word pair.
+            let (w1, w2) = if w1 > w2 { (w2, w1) } else { (w1, w2) };
+            words_pair_proximities.entry((w1.as_str(), w2.as_str()))
+                .or_insert_with(RoaringBitmap::new)
+                .union_with(&distances);
+        }
+    }
+
+    words_pair_proximities
+}
+
 type MergeFn = fn(&[u8], &[Vec<u8>]) -> Result<Vec<u8>, ()>;
 
 struct Store {
@@ -209,6 +239,43 @@ impl Store {
         self.documents_ids.insert(document_id);
         self.documents_sorter.insert(document_id.to_be_bytes(), record)?;
         Self::write_docid_word_positions(&mut self.sorter, document_id, words_positions)?;
+
+        Ok(())
+    }
+
+    // FIXME We must store those pairs in an ArcCache to reduce the number of I/O operations,
+    //       We must store the documents ids associated with the words pairs and proximities.
+    fn write_words_proximities(
+        sorter: &mut Sorter<MergeFn>,
+        document_id: DocumentId,
+        words_pair_proximities: &HashMap<(&str, &str), RoaringBitmap>,
+    ) -> anyhow::Result<()>
+    {
+        // words proximities keys are all prefixed
+        let mut key = vec![WORDS_PROXIMITIES_BYTE];
+        let mut buffer = Vec::new();
+
+        for ((w1, w2), proximities) in words_pair_proximities {
+            assert!(w1 <= w2);
+            key.truncate(1);
+            key.extend_from_slice(w1.as_bytes());
+            key.push(0);
+            key.extend_from_slice(w2.as_bytes());
+            let pair_len = key.len();
+            for prox in proximities {
+                key.truncate(pair_len);
+                key.push(u8::try_from(prox).unwrap());
+                // We serialize the document ids into a buffer
+                buffer.clear();
+                let ids = RoaringBitmap::from_iter(Some(document_id));
+                buffer.reserve(ids.serialized_size());
+                ids.serialize_into(&mut buffer)?;
+                // that we write under the generated key into MTBL
+                if lmdb_key_valid_size(&key) {
+                    sorter.insert(&key, &buffer)?;
+                }
+            }
+        }
 
         Ok(())
     }
@@ -307,6 +374,9 @@ impl Store {
                     }
                 }
 
+                let words_pair_proximities = compute_words_pair_proximities(&word_positions);
+                Self::write_words_proximities(&mut self.sorter, document_id, &words_pair_proximities)?;
+
                 // We write the document in the documents store.
                 self.write_document(document_id, &word_positions, &document)?;
                 word_positions.clear();
@@ -386,7 +456,7 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
                 assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
                 Ok(values[0].to_vec())
             },
-            DOCUMENTS_IDS_BYTE | WORD_DOCIDS_BYTE => {
+            DOCUMENTS_IDS_BYTE | WORD_DOCIDS_BYTE | WORDS_PROXIMITIES_BYTE => {
                 let (head, tail) = values.split_first().unwrap();
 
                 let mut head = RoaringBitmap::deserialize_from(head.as_slice()).unwrap();
@@ -427,6 +497,10 @@ fn lmdb_writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) ->
     else if key.starts_with(&[WORD_DOCID_POSITIONS_BYTE]) {
         // Write the postings lists
         index.docid_word_positions.as_polymorph()
+            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
+    } else if key.starts_with(&[WORDS_PROXIMITIES_BYTE]) {
+        // Write the word pair proximity document ids
+        index.word_pair_proximity_docids.as_polymorph()
             .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
     }
 

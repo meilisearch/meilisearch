@@ -17,8 +17,8 @@ use heed::{PolyDatabase, Database};
 pub use self::search::{Search, SearchResult};
 pub use self::criterion::{Criterion, default_criteria};
 pub use self::heed_codec::{
-    RoaringBitmapCodec, BEU32StrCodec, CsvStringRecordCodec,
-    ByteorderXRoaringBitmapCodec,
+    RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec,
+    CsvStringRecordCodec, ByteorderXRoaringBitmapCodec,
 };
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
@@ -45,6 +45,8 @@ pub struct Index {
     pub docid_word_positions: Database<BEU32StrCodec, ByteorderXRoaringBitmapCodec>,
     /// Maps the document id to the document as a CSV line.
     pub documents: Database<OwnedType<BEU32>, ByteSlice>,
+    /// Maps the proximity between a pair of words with all the docids where this relation appears.
+    pub word_pair_proximity_docids: Database<StrStrU8Codec, RoaringBitmapCodec>,
 }
 
 impl Index {
@@ -54,6 +56,7 @@ impl Index {
             word_docids: env.create_database(Some("word-docids"))?,
             docid_word_positions: env.create_database(Some("docid-word-positions"))?,
             documents: env.create_database(Some("documents"))?,
+            word_pair_proximity_docids: env.create_database(Some("word-pair-proximity-docids"))?,
         })
     }
 

@@ -968,6 +968,7 @@ dependencies = [
  "fst",
  "fxhash",
  "heed",
+ "itertools",
  "jemallocator",
  "levenshtein_automata",
  "log 0.4.11",
