@@ -13,14 +13,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85bb70cc08ec97ca5450e6eba421deeea5f172c0fc61f78b5357b2a8e8be195f"
 
 [[package]]
-name = "arc-cache"
-version = "0.2.4"
-source = "git+https://github.com/Kerollmops/rust-arc-cache.git?rev=56530f2#56530f2d219823f8f88dc03851f8fe057bd72564"
-dependencies = [
- "xlru-cache",
-]
-
-[[package]]
 name = "arc-swap"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -957,7 +949,6 @@ name = "milli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arc-cache",
  "askama",
  "askama_warp",
  "bstr",
@@ -971,6 +962,7 @@ dependencies = [
  "itertools",
  "jemallocator",
  "levenshtein_automata",
+ "linked-hash-map",
  "log 0.4.11",
  "memmap",
  "near-proximity",
@@ -2354,14 +2346,6 @@ checksum = "d59cefebd0c892fa2dd6de581e937301d8552cb44489cdff035c6187cb63fa5e"
 dependencies = [
  "winapi 0.2.8",
  "winapi-build",
-]
-
-[[package]]
-name = "xlru-cache"
-version = "0.1.2"
-source = "git+https://github.com/Kerollmops/rust-xlru-cache.git?rev=3c90f49#3c90f49e11758ee0cc4ff145b2606ba143188b77"
-dependencies = [
- "linked-hash-map",
 ]
 
 [[package]]

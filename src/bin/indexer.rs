@@ -8,12 +8,12 @@ use std::{iter, thread};
 use std::time::Instant;
 
 use anyhow::Context;
-use arc_cache::ArcCache;
 use bstr::ByteSlice as _;
 use csv::StringRecord;
 use flate2::read::GzDecoder;
 use fst::IntoStreamer;
 use heed::{EnvOpenOptions, BytesEncode, types::*};
+use linked_hash_map::LinkedHashMap;
 use log::{debug, info};
 use memmap::Mmap;
 use oxidized_mtbl::{Reader, Writer, Merger, Sorter, CompressionType};
@@ -89,9 +89,10 @@ struct IndexerOpt {
     #[structopt(long, default_value = "1610612736")] // 1.5 GB
     max_memory: usize,
 
-    /// Size of the ARC cache when indexing.
-    #[structopt(long, default_value = "43690")]
-    arc_cache_size: usize,
+    /// Size of the linked hash map cache when indexing.
+    /// The bigger it is, the faster the indexing is but the more memory it takes.
+    #[structopt(long, default_value = "4096")]
+    linked_hash_map_size: usize,
 
     /// The name of the compression algorithm to use when compressing intermediate
     /// chunks during indexing documents.
@@ -159,7 +160,7 @@ fn compute_words_pair_proximities(
 type MergeFn = fn(&[u8], &[Vec<u8>]) -> Result<Vec<u8>, ()>;
 
 struct Store {
-    word_docids: ArcCache<SmallVec32<u8>, RoaringBitmap>,
+    word_docids: LinkedHashMap<SmallVec32<u8>, RoaringBitmap>,
     documents_ids: RoaringBitmap,
     sorter: Sorter<MergeFn>,
     documents_sorter: Sorter<MergeFn>,
@@ -169,7 +170,7 @@ struct Store {
 
 impl Store {
     pub fn new(
-        arc_cache_size: usize,
+        linked_hash_map_size: usize,
         max_nb_chunks: Option<usize>,
         max_memory: Option<usize>,
         chunk_compression_type: CompressionType,
@@ -195,7 +196,8 @@ impl Store {
         }
 
         Store {
-            word_docids: ArcCache::new(arc_cache_size),
+            // We overflow by one before poping the LRU element.
+            word_docids: LinkedHashMap::with_capacity(linked_hash_map_size + 1),
             documents_ids: RoaringBitmap::new(),
             sorter: builder.build(),
             documents_sorter: documents_builder.build(),
@@ -207,9 +209,21 @@ impl Store {
     // Save the documents ids under the position and word we have seen it.
     fn insert_word_docid(&mut self, word: &str, id: DocumentId) -> anyhow::Result<()> {
         let word_vec = SmallVec32::from(word.as_bytes());
-        let ids = RoaringBitmap::from_iter(Some(id));
-        let (_, lrus) = self.word_docids.insert(word_vec, ids, |old, new| old.union_with(&new));
-        Self::write_word_docids(&mut self.sorter, lrus)?;
+        // if get_refresh finds the element it is assured to be at the end of the linked hash map.
+        match self.word_docids.get_refresh(&word_vec) {
+            Some(old) => { old.insert(id); },
+            None => {
+                // A newly inserted element is append at the end of the linked hash map.
+                self.word_docids.insert(word_vec, RoaringBitmap::from_iter(Some(id)));
+                // If the word docids just reached it's capacity we must make sure to remove
+                // one element, this way next time we insert we doesn't grow the capacity.
+                if self.word_docids.len() == self.word_docids.capacity() {
+                    // Removing the front element is equivalent to removing the LRU element.
+                    let lru = self.word_docids.pop_front();
+                    Self::write_word_docids(&mut self.sorter, lru)?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -600,7 +614,7 @@ fn main() -> anyhow::Result<()> {
     let index = Index::new(&env)?;
 
     let num_threads = rayon::current_num_threads();
-    let arc_cache_size = opt.indexer.arc_cache_size;
+    let linked_hash_map_size = opt.indexer.linked_hash_map_size;
     let max_nb_chunks = opt.indexer.max_nb_chunks;
     let max_memory = opt.indexer.max_memory;
     let chunk_compression_type = compression_type_from_str(&opt.indexer.chunk_compression_type);
@@ -611,7 +625,7 @@ fn main() -> anyhow::Result<()> {
         .enumerate()
         .map(|(i, rdr)| {
             Store::new(
-                arc_cache_size,
+                linked_hash_map_size,
                 max_nb_chunks,
                 Some(max_memory),
                 chunk_compression_type,
