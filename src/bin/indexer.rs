@@ -86,8 +86,8 @@ struct IndexerOpt {
     max_nb_chunks: Option<usize>,
 
     /// MTBL max memory in bytes.
-    #[structopt(long)]
-    max_memory: Option<usize>,
+    #[structopt(long, default_value = "1610612736")] // 1.5 GB
+    max_memory: usize,
 
     /// Size of the ARC cache when indexing.
     #[structopt(long, default_value = "43690")]
@@ -613,7 +613,7 @@ fn main() -> anyhow::Result<()> {
             Store::new(
                 arc_cache_size,
                 max_nb_chunks,
-                max_memory,
+                Some(max_memory),
                 chunk_compression_type,
                 chunk_compression_level,
             ).index_csv(rdr, i, num_threads)
