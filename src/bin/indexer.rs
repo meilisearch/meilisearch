@@ -517,7 +517,7 @@ where F: FnMut(&[u8], &[u8]) -> anyhow::Result<()>
     let mut iter = merger.into_merge_iter()?;
     while let Some(result) = iter.next() {
         let (k, v) = result?;
-        (f)(&k, &v).with_context(|| format!("writing {:?} {:?} into LMDB", k.as_bstr(), k.as_bstr()))?;
+        (f)(&k, &v).with_context(|| format!("writing {:?} into LMDB", k.as_bstr()))?;
     }
 
     debug!("MTBL stores merged in {:.02?}!", before.elapsed());
