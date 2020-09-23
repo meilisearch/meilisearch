@@ -130,6 +130,14 @@ fn create_writer(type_: CompressionType, level: Option<u32>, file: File) -> Writ
     builder.build(file)
 }
 
+/// Outputs a list of all pairs of words with the proximities between 1 and 7 inclusive.
+///
+/// This list is used by the engine to calculate the documents containing the word that are
+/// close to each other.
+//
+// TODO we currently store both words pairs (a,b) and (b,a) but we can maybe optimize
+// that by only storing the lexicographically ordered pair and increment by one the pair
+// that is not in the right order. This way we would avoid storing pairs in both orders.
 fn compute_words_pair_proximities(
     word_positions: &HashMap<String, RoaringBitmap>,
 ) -> HashMap<(&str, &str), RoaringBitmap>
@@ -240,6 +248,10 @@ impl Store {
         record: &StringRecord,
     ) -> anyhow::Result<()>
     {
+        // We compute the list of words pairs proximities (self-join) and write it directly to disk.
+        let words_pair_proximities = compute_words_pair_proximities(&words_positions);
+        Self::write_words_pairs_proximities(&mut self.sorter, document_id, &words_pair_proximities)?;
+
         // We store document_id associated with all the words the record contains.
         for (word, _) in words_positions {
             self.insert_word_docid(word, document_id)?;
@@ -255,9 +267,9 @@ impl Store {
         Ok(())
     }
 
-    // FIXME We must store those pairs in an ArcCache to reduce the number of I/O operations,
+    // FIXME We must store those pairs in a cache to reduce the number of I/O operations,
     //       We must store the documents ids associated with the words pairs and proximities.
-    fn write_words_proximities(
+    fn write_words_pairs_proximities(
         sorter: &mut Sorter<MergeFn>,
         document_id: DocumentId,
         words_pair_proximities: &HashMap<(&str, &str), RoaringBitmap>,
@@ -365,7 +377,7 @@ impl Store {
         let mut before = Instant::now();
         let mut document_id: usize = 0;
         let mut document = csv::StringRecord::new();
-        let mut word_positions = HashMap::new();
+        let mut words_positions = HashMap::new();
 
         while rdr.read_record(&mut document)? {
             // We skip documents that must not be indexed by this thread.
@@ -381,16 +393,13 @@ impl Store {
                     for (pos, token) in simple_tokenizer(&content).filter_map(only_token).enumerate().take(MAX_POSITION) {
                         let word = token.to_lowercase();
                         let position = (attr * MAX_POSITION + pos) as u32;
-                        word_positions.entry(word).or_insert_with(RoaringBitmap::new).insert(position);
+                        words_positions.entry(word).or_insert_with(RoaringBitmap::new).insert(position);
                     }
                 }
 
-                let words_pair_proximities = compute_words_pair_proximities(&word_positions);
-                Self::write_words_proximities(&mut self.sorter, document_id, &words_pair_proximities)?;
-
                 // We write the document in the documents store.
-                self.write_document(document_id, &word_positions, &document)?;
-                word_positions.clear();
+                self.write_document(document_id, &words_positions, &document)?;
+                words_positions.clear();
             }
 
             // Compute the document id of the next document.
