@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 
-use heed::types::{CowSlice, OwnedType};
+use heed::types::{OwnedType, CowSlice};
 use heed::Result as ZResult;
 use zerocopy::{AsBytes, FromBytes};
 
-use super::{BEU32, BEU64};
-use crate::database::MainT;
+use super::{BEU64, BEU32};
 use crate::{DocumentId, Highlight};
+use crate::database::MainT;
 
 #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]

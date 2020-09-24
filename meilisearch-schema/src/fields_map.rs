@@ -1,15 +1,15 @@
-use std::collections::hash_map::Iter;
 use std::collections::HashMap;
+use std::collections::hash_map::Iter;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{FieldId, SResult};
+use crate::{SResult, FieldId};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FieldsMap {
     name_map: HashMap<String, FieldId>,
     id_map: HashMap<FieldId, String>,
-    next_id: FieldId,
+    next_id: FieldId
 }
 
 impl FieldsMap {
@@ -23,7 +23,7 @@ impl FieldsMap {
 
     pub fn insert(&mut self, name: &str) -> SResult<FieldId> {
         if let Some(id) = self.name_map.get(name) {
-            return Ok(*id);
+            return Ok(*id)
         }
         let id = self.next_id;
         self.next_id = self.next_id.next()?;

@@ -53,8 +53,7 @@ async fn get_document(
 
     let reader = data.db.main_read_txn()?;
 
-    let internal_id = index
-        .main
+    let internal_id = index.main
         .external_to_internal_docid(&reader, &path.document_id)?
         .ok_or(Error::document_not_found(&path.document_id))?;
 

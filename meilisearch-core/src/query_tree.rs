@@ -6,15 +6,15 @@ use std::time::Instant;
 use std::{cmp, fmt, iter::once};
 
 use fst::{IntoStreamer, Streamer};
-use itertools::{merge_join_by, EitherOrBoth};
-use log::debug;
+use itertools::{EitherOrBoth, merge_join_by};
 use meilisearch_tokenizer::split_query_string;
 use sdset::{Set, SetBuf, SetOperation};
+use log::debug;
 
-use crate::automaton::{build_dfa, build_exact_dfa, build_prefix_dfa, normalize_str};
 use crate::database::MainT;
+use crate::{store, DocumentId, DocIndex, MResult, FstSetCow};
+use crate::automaton::{normalize_str, build_dfa, build_prefix_dfa, build_exact_dfa};
 use crate::QueryWordsMapper;
-use crate::{store, DocIndex, DocumentId, FstSetCow, MResult};
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Operation {
@@ -29,16 +29,12 @@ impl fmt::Debug for Operation {
             match op {
                 Operation::And(children) => {
                     writeln!(f, "{:1$}AND", "", depth * 2)?;
-                    children
-                        .iter()
-                        .try_for_each(|c| pprint_tree(f, c, depth + 1))
-                }
+                    children.iter().try_for_each(|c| pprint_tree(f, c, depth + 1))
+                },
                 Operation::Or(children) => {
                     writeln!(f, "{:1$}OR", "", depth * 2)?;
-                    children
-                        .iter()
-                        .try_for_each(|c| pprint_tree(f, c, depth + 1))
-                }
+                    children.iter().try_for_each(|c| pprint_tree(f, c, depth + 1))
+                },
                 Operation::Query(query) => writeln!(f, "{:2$}{:?}", "", query, depth * 2),
             }
         }
@@ -49,31 +45,16 @@ impl fmt::Debug for Operation {
 
 impl Operation {
     fn tolerant(id: QueryId, prefix: bool, s: &str) -> Operation {
-        Operation::Query(Query {
-            id,
-            prefix,
-            exact: true,
-            kind: QueryKind::Tolerant(s.to_string()),
-        })
+        Operation::Query(Query { id, prefix, exact: true, kind: QueryKind::Tolerant(s.to_string()) })
     }
 
     fn non_tolerant(id: QueryId, prefix: bool, s: &str) -> Operation {
-        Operation::Query(Query {
-            id,
-            prefix,
-            exact: true,
-            kind: QueryKind::NonTolerant(s.to_string()),
-        })
+        Operation::Query(Query { id, prefix, exact: true, kind: QueryKind::NonTolerant(s.to_string()) })
     }
 
     fn phrase2(id: QueryId, prefix: bool, (left, right): (&str, &str)) -> Operation {
         let kind = QueryKind::Phrase(vec![left.to_owned(), right.to_owned()]);
-        Operation::Query(Query {
-            id,
-            prefix,
-            exact: true,
-            kind,
-        })
+        Operation::Query(Query { id, prefix, exact: true, kind })
     }
 }
 
@@ -109,30 +90,18 @@ pub enum QueryKind {
 
 impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Query {
-            id, prefix, kind, ..
-        } = self;
-        let prefix = if *prefix {
-            String::from("Prefix")
-        } else {
-            String::default()
-        };
+        let Query { id, prefix, kind, .. } = self;
+        let prefix = if *prefix { String::from("Prefix") } else { String::default() };
         match kind {
-            QueryKind::NonTolerant(word) => f
-                .debug_struct(&(prefix + "NonTolerant"))
-                .field("id", &id)
-                .field("word", &word)
-                .finish(),
-            QueryKind::Tolerant(word) => f
-                .debug_struct(&(prefix + "Tolerant"))
-                .field("id", &id)
-                .field("word", &word)
-                .finish(),
-            QueryKind::Phrase(words) => f
-                .debug_struct(&(prefix + "Phrase"))
-                .field("id", &id)
-                .field("words", &words)
-                .finish(),
+            QueryKind::NonTolerant(word) => {
+                f.debug_struct(&(prefix + "NonTolerant")).field("id", &id).field("word", &word).finish()
+            },
+            QueryKind::Tolerant(word) => {
+                f.debug_struct(&(prefix + "Tolerant")).field("id", &id).field("word", &word).finish()
+            },
+            QueryKind::Phrase(words) => {
+                f.debug_struct(&(prefix + "Phrase")).field("id", &id).field("words", &words).finish()
+            },
         }
     }
 }
@@ -151,24 +120,18 @@ pub struct Context<'a> {
     pub prefix_postings_lists: store::PrefixPostingsListsCache,
 }
 
-fn split_best_frequency<'a>(
-    reader: &heed::RoTxn<MainT>,
-    ctx: &Context,
-    word: &'a str,
-) -> MResult<Option<(&'a str, &'a str)>> {
+fn split_best_frequency<'a>(reader: &heed::RoTxn<MainT>, ctx: &Context, word: &'a str) -> MResult<Option<(&'a str, &'a str)>> {
     let chars = word.char_indices().skip(1);
     let mut best = None;
 
     for (i, _) in chars {
         let (left, right) = word.split_at(i);
 
-        let left_freq = ctx
-            .postings_lists
+        let left_freq = ctx.postings_lists
             .postings_list(reader, left.as_bytes())?
             .map(|p| p.docids.len())
             .unwrap_or(0);
-        let right_freq = ctx
-            .postings_lists
+        let right_freq = ctx.postings_lists
             .postings_list(reader, right.as_bytes())?
             .map(|p| p.docids.len())
             .unwrap_or(0);
@@ -182,11 +145,7 @@ fn split_best_frequency<'a>(
     Ok(best.map(|(_, l, r)| (l, r)))
 }
 
-fn fetch_synonyms(
-    reader: &heed::RoTxn<MainT>,
-    ctx: &Context,
-    words: &[&str],
-) -> MResult<Vec<Vec<String>>> {
+fn fetch_synonyms(reader: &heed::RoTxn<MainT>, ctx: &Context, words: &[&str]) -> MResult<Vec<Vec<String>>> {
     let words = normalize_str(&words.join(" "));
     let set = ctx.synonyms.synonyms_fst(reader, words.as_bytes())?;
 
@@ -194,10 +153,7 @@ fn fetch_synonyms(
     let mut stream = set.stream();
     while let Some(input) = stream.next() {
         if let Ok(input) = std::str::from_utf8(input) {
-            let alts = input
-                .split_ascii_whitespace()
-                .map(ToOwned::to_owned)
-                .collect();
+            let alts = input.split_ascii_whitespace().map(ToOwned::to_owned).collect();
             strings.push(alts);
         }
     }
@@ -206,9 +162,8 @@ fn fetch_synonyms(
 }
 
 fn create_operation<I, F>(iter: I, f: F) -> Operation
-where
-    I: IntoIterator<Item = Operation>,
-    F: Fn(Vec<Operation>) -> Operation,
+where I: IntoIterator<Item=Operation>,
+      F: Fn(Vec<Operation>) -> Operation,
 {
     let mut iter = iter.into_iter();
     match (iter.next(), iter.next()) {
@@ -223,7 +178,8 @@ pub fn create_query_tree(
     reader: &heed::RoTxn<MainT>,
     ctx: &Context,
     query: &str,
-) -> MResult<(Operation, HashMap<QueryId, Range<usize>>)> {
+) -> MResult<(Operation, HashMap<QueryId, Range<usize>>)>
+{
     let words = split_query_string(query).map(str::to_lowercase);
     let words = words.filter(|w| !ctx.stop_words.contains(w));
     let words: Vec<_> = words.enumerate().collect();
@@ -235,7 +191,8 @@ pub fn create_query_tree(
         ctx: &Context,
         mapper: &mut QueryWordsMapper,
         words: &[(usize, String)],
-    ) -> MResult<Vec<Operation>> {
+    ) -> MResult<Vec<Operation>>
+    {
         let mut alts = Vec::new();
 
         for ngram in 1..=MAX_NGRAM {
@@ -249,47 +206,42 @@ pub fn create_query_tree(
                 match group {
                     [(id, word)] => {
                         let mut idgen = ((id + 1) * 100)..;
-                        let range = (*id)..id + 1;
+                        let range = (*id)..id+1;
 
-                        let phrase = split_best_frequency(reader, ctx, word)?.map(|ws| {
-                            let id = idgen.next().unwrap();
-                            idgen.next().unwrap();
-                            mapper.declare(range.clone(), id, &[ws.0, ws.1]);
-                            Operation::phrase2(id, is_last, ws)
-                        });
+                        let phrase = split_best_frequency(reader, ctx, word)?
+                            .map(|ws| {
+                                let id = idgen.next().unwrap();
+                                idgen.next().unwrap();
+                                mapper.declare(range.clone(), id, &[ws.0, ws.1]);
+                                Operation::phrase2(id, is_last, ws)
+                            });
 
-                        let synonyms =
-                            fetch_synonyms(reader, ctx, &[word])?
-                                .into_iter()
-                                .map(|alts| {
-                                    let exact = alts.len() == 1;
+                        let synonyms = fetch_synonyms(reader, ctx, &[word])?
+                            .into_iter()
+                            .map(|alts| {
+                                let exact = alts.len() == 1;
+                                let id = idgen.next().unwrap();
+                                mapper.declare(range.clone(), id, &alts);
+
+                                let mut idgen = once(id).chain(&mut idgen);
+                                let iter = alts.into_iter().map(|w| {
                                     let id = idgen.next().unwrap();
-                                    mapper.declare(range.clone(), id, &alts);
-
-                                    let mut idgen = once(id).chain(&mut idgen);
-                                    let iter = alts.into_iter().map(|w| {
-                                        let id = idgen.next().unwrap();
-                                        let kind = QueryKind::NonTolerant(w);
-                                        Operation::Query(Query {
-                                            id,
-                                            prefix: false,
-                                            exact,
-                                            kind,
-                                        })
-                                    });
-
-                                    create_operation(iter, Operation::And)
+                                    let kind = QueryKind::NonTolerant(w);
+                                    Operation::Query(Query { id, prefix: false, exact, kind })
                                 });
+
+                                create_operation(iter, Operation::And)
+                            });
 
                         let original = Operation::tolerant(*id, is_last, word);
 
                         group_alts.push(original);
                         group_alts.extend(synonyms.chain(phrase));
-                    }
+                    },
                     words => {
                         let id = words[0].0;
                         let mut idgen = ((id + 1) * 100_usize.pow(ngram as u32))..;
-                        let range = id..id + ngram;
+                        let range = id..id+ngram;
 
                         let words: Vec<_> = words.iter().map(|(_, s)| s.as_str()).collect();
 
@@ -302,12 +254,7 @@ pub fn create_query_tree(
                             let synonym = synonym.into_iter().map(|s| {
                                 let id = idgen.next().unwrap();
                                 let kind = QueryKind::NonTolerant(s);
-                                Operation::Query(Query {
-                                    id,
-                                    prefix: false,
-                                    exact,
-                                    kind,
-                                })
+                                Operation::Query(Query { id, prefix: false, exact, kind })
                             });
                             group_alts.push(create_operation(synonym, Operation::And));
                         }
@@ -360,7 +307,8 @@ pub fn traverse_query_tree<'o, 'txn>(
     reader: &'txn heed::RoTxn<MainT>,
     ctx: &Context,
     tree: &'o Operation,
-) -> MResult<QueryResult<'o, 'txn>> {
+) -> MResult<QueryResult<'o, 'txn>>
+{
     fn execute_and<'o, 'txn>(
         reader: &'txn heed::RoTxn<MainT>,
         ctx: &Context,
@@ -368,7 +316,8 @@ pub fn traverse_query_tree<'o, 'txn>(
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
         operations: &'o [Operation],
-    ) -> MResult<Cow<'txn, Set<DocumentId>>> {
+    ) -> MResult<Cow<'txn, Set<DocumentId>>>
+    {
         debug!("{:1$}AND", "", depth * 2);
 
         let before = Instant::now();
@@ -377,15 +326,9 @@ pub fn traverse_query_tree<'o, 'txn>(
         for op in operations {
             if cache.get(op).is_none() {
                 let docids = match op {
-                    Operation::And(ops) => {
-                        execute_and(reader, ctx, cache, postings, depth + 1, &ops)?
-                    }
-                    Operation::Or(ops) => {
-                        execute_or(reader, ctx, cache, postings, depth + 1, &ops)?
-                    }
-                    Operation::Query(query) => {
-                        execute_query(reader, ctx, postings, depth + 1, &query)?
-                    }
+                    Operation::And(ops) => execute_and(reader, ctx, cache, postings, depth + 1, &ops)?,
+                    Operation::Or(ops) => execute_or(reader, ctx, cache, postings, depth + 1, &ops)?,
+                    Operation::Query(query) => execute_query(reader, ctx, postings, depth + 1, &query)?,
                 };
                 cache.insert(op, docids);
             }
@@ -400,13 +343,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         let op = sdset::multi::Intersection::new(results);
         let docids = op.into_set_buf();
 
-        debug!(
-            "{:3$}--- AND fetched {} documents in {:.02?}",
-            "",
-            docids.len(),
-            before.elapsed(),
-            depth * 2
-        );
+        debug!("{:3$}--- AND fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
 
         Ok(Cow::Owned(docids))
     }
@@ -418,7 +355,8 @@ pub fn traverse_query_tree<'o, 'txn>(
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
         operations: &'o [Operation],
-    ) -> MResult<Cow<'txn, Set<DocumentId>>> {
+    ) -> MResult<Cow<'txn, Set<DocumentId>>>
+    {
         debug!("{:1$}OR", "", depth * 2);
 
         let before = Instant::now();
@@ -427,15 +365,9 @@ pub fn traverse_query_tree<'o, 'txn>(
         for op in operations {
             if cache.get(op).is_none() {
                 let docids = match op {
-                    Operation::And(ops) => {
-                        execute_and(reader, ctx, cache, postings, depth + 1, &ops)?
-                    }
-                    Operation::Or(ops) => {
-                        execute_or(reader, ctx, cache, postings, depth + 1, &ops)?
-                    }
-                    Operation::Query(query) => {
-                        execute_query(reader, ctx, postings, depth + 1, &query)?
-                    }
+                    Operation::And(ops) => execute_and(reader, ctx, cache, postings, depth + 1, &ops)?,
+                    Operation::Or(ops) => execute_or(reader, ctx, cache, postings, depth + 1, &ops)?,
+                    Operation::Query(query) => execute_query(reader, ctx, postings, depth + 1, &query)?,
                 };
                 cache.insert(op, docids);
             }
@@ -450,13 +382,7 @@ pub fn traverse_query_tree<'o, 'txn>(
         let op = sdset::multi::Union::new(results);
         let docids = op.into_set_buf();
 
-        debug!(
-            "{:3$}--- OR fetched {} documents in {:.02?}",
-            "",
-            docids.len(),
-            before.elapsed(),
-            depth * 2
-        );
+        debug!("{:3$}--- OR fetched {} documents in {:.02?}", "", docids.len(), before.elapsed(), depth * 2);
 
         Ok(Cow::Owned(docids))
     }
@@ -467,15 +393,11 @@ pub fn traverse_query_tree<'o, 'txn>(
         postings: &mut Postings<'o, 'txn>,
         depth: usize,
         query: &'o Query,
-    ) -> MResult<Cow<'txn, Set<DocumentId>>> {
+    ) -> MResult<Cow<'txn, Set<DocumentId>>>
+    {
         let before = Instant::now();
 
-        let Query {
-            prefix,
-            kind,
-            exact,
-            ..
-        } = query;
+        let Query { prefix, kind, exact, .. } = query;
         let docids: Cow<Set<_>> = match kind {
             QueryKind::Tolerant(word) => {
                 if *prefix && word.len() <= 2 {
@@ -488,62 +410,33 @@ pub fn traverse_query_tree<'o, 'txn>(
 
                     // We retrieve the cached postings lists for all
                     // the words that starts with this short prefix.
-                    let result = ctx
-                        .prefix_postings_lists
-                        .prefix_postings_list(reader, prefix)?
-                        .unwrap_or_default();
-                    let key = PostingsKey {
-                        query,
-                        input: word.clone().into_bytes(),
-                        distance: 0,
-                        is_exact: false,
-                    };
+                    let result = ctx.prefix_postings_lists.prefix_postings_list(reader, prefix)?.unwrap_or_default();
+                    let key = PostingsKey { query, input: word.clone().into_bytes(), distance: 0, is_exact: false };
                     postings.insert(key, result.matches);
                     let prefix_docids = &result.docids;
 
                     // We retrieve the exact postings list for the prefix,
                     // because we must consider these matches as exact.
-                    let result = ctx
-                        .postings_lists
-                        .postings_list(reader, word.as_bytes())?
-                        .unwrap_or_default();
-                    let key = PostingsKey {
-                        query,
-                        input: word.clone().into_bytes(),
-                        distance: 0,
-                        is_exact: true,
-                    };
+                    let result = ctx.postings_lists.postings_list(reader, word.as_bytes())?.unwrap_or_default();
+                    let key = PostingsKey { query, input: word.clone().into_bytes(), distance: 0, is_exact: true };
                     postings.insert(key, result.matches);
                     let exact_docids = &result.docids;
 
                     let before = Instant::now();
                     let docids = sdset::duo::Union::new(prefix_docids, exact_docids).into_set_buf();
-                    debug!(
-                        "{:4$}prefix docids ({} and {}) construction took {:.02?}",
-                        "",
-                        prefix_docids.len(),
-                        exact_docids.len(),
-                        before.elapsed(),
-                        depth * 2
-                    );
+                    debug!("{:4$}prefix docids ({} and {}) construction took {:.02?}",
+                        "", prefix_docids.len(), exact_docids.len(), before.elapsed(), depth * 2);
 
                     Cow::Owned(docids)
+
                 } else {
-                    let dfa = if *prefix {
-                        build_prefix_dfa(word)
-                    } else {
-                        build_dfa(word)
-                    };
+                    let dfa = if *prefix { build_prefix_dfa(word) } else { build_dfa(word) };
 
                     let byte = word.as_bytes()[0];
                     let mut stream = if byte == u8::max_value() {
                         ctx.words_set.search(&dfa).ge(&[byte]).into_stream()
                     } else {
-                        ctx.words_set
-                            .search(&dfa)
-                            .ge(&[byte])
-                            .lt(&[byte + 1])
-                            .into_stream()
+                        ctx.words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
                     };
 
                     let before = Instant::now();
@@ -553,22 +446,11 @@ pub fn traverse_query_tree<'o, 'txn>(
                             let distance = dfa.eval(input).to_u8();
                             let is_exact = *exact && distance == 0 && input.len() == word.len();
                             results.push(result.docids);
-                            let key = PostingsKey {
-                                query,
-                                input: input.to_owned(),
-                                distance,
-                                is_exact,
-                            };
+                            let key = PostingsKey { query, input: input.to_owned(), distance, is_exact };
                             postings.insert(key, result.matches);
                         }
                     }
-                    debug!(
-                        "{:3$}docids retrieval ({:?}) took {:.02?}",
-                        "",
-                        results.len(),
-                        before.elapsed(),
-                        depth * 2
-                    );
+                    debug!("{:3$}docids retrieval ({:?}) took {:.02?}", "", results.len(), before.elapsed(), depth * 2);
 
                     let before = Instant::now();
                     let docids = if results.len() > 10 {
@@ -582,16 +464,11 @@ pub fn traverse_query_tree<'o, 'txn>(
                         let sets = results.iter().map(AsRef::as_ref).collect();
                         sdset::multi::Union::new(sets).into_set_buf()
                     };
-                    debug!(
-                        "{:2$}docids construction took {:.02?}",
-                        "",
-                        before.elapsed(),
-                        depth * 2
-                    );
+                    debug!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                     Cow::Owned(docids)
                 }
-            }
+            },
             QueryKind::NonTolerant(word) => {
                 // TODO support prefix and non-prefix exact DFA
                 let dfa = build_exact_dfa(word);
@@ -600,11 +477,7 @@ pub fn traverse_query_tree<'o, 'txn>(
                 let mut stream = if byte == u8::max_value() {
                     ctx.words_set.search(&dfa).ge(&[byte]).into_stream()
                 } else {
-                    ctx.words_set
-                        .search(&dfa)
-                        .ge(&[byte])
-                        .lt(&[byte + 1])
-                        .into_stream()
+                    ctx.words_set.search(&dfa).ge(&[byte]).lt(&[byte + 1]).into_stream()
                 };
 
                 let before = Instant::now();
@@ -613,22 +486,11 @@ pub fn traverse_query_tree<'o, 'txn>(
                     if let Some(result) = ctx.postings_lists.postings_list(reader, input)? {
                         let distance = dfa.eval(input).to_u8();
                         results.push(result.docids);
-                        let key = PostingsKey {
-                            query,
-                            input: input.to_owned(),
-                            distance,
-                            is_exact: *exact,
-                        };
+                        let key = PostingsKey { query, input: input.to_owned(), distance, is_exact: *exact };
                         postings.insert(key, result.matches);
                     }
                 }
-                debug!(
-                    "{:3$}docids retrieval ({:?}) took {:.02?}",
-                    "",
-                    results.len(),
-                    before.elapsed(),
-                    depth * 2
-                );
+                debug!("{:3$}docids retrieval ({:?}) took {:.02?}", "", results.len(), before.elapsed(), depth * 2);
 
                 let before = Instant::now();
                 let docids = if results.len() > 10 {
@@ -642,36 +504,21 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let sets = results.iter().map(AsRef::as_ref).collect();
                     sdset::multi::Union::new(sets).into_set_buf()
                 };
-                debug!(
-                    "{:2$}docids construction took {:.02?}",
-                    "",
-                    before.elapsed(),
-                    depth * 2
-                );
+                debug!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                 Cow::Owned(docids)
-            }
+            },
             QueryKind::Phrase(words) => {
                 // TODO support prefix and non-prefix exact DFA
                 if let [first, second] = words.as_slice() {
-                    let first = ctx
-                        .postings_lists
-                        .postings_list(reader, first.as_bytes())?
-                        .unwrap_or_default();
-                    let second = ctx
-                        .postings_lists
-                        .postings_list(reader, second.as_bytes())?
-                        .unwrap_or_default();
+                    let first = ctx.postings_lists.postings_list(reader, first.as_bytes())?.unwrap_or_default();
+                    let second = ctx.postings_lists.postings_list(reader, second.as_bytes())?.unwrap_or_default();
 
-                    let iter = merge_join_by(
-                        first.matches.as_slice(),
-                        second.matches.as_slice(),
-                        |a, b| {
-                            let x = (a.document_id, a.attribute, (a.word_index as u32) + 1);
-                            let y = (b.document_id, b.attribute, b.word_index as u32);
-                            x.cmp(&y)
-                        },
-                    );
+                    let iter = merge_join_by(first.matches.as_slice(), second.matches.as_slice(), |a, b| {
+                        let x = (a.document_id, a.attribute, (a.word_index as u32) + 1);
+                        let y = (b.document_id, b.attribute, b.word_index as u32);
+                        x.cmp(&y)
+                    });
 
                     let matches: Vec<_> = iter
                         .filter_map(EitherOrBoth::both)
@@ -682,20 +529,10 @@ pub fn traverse_query_tree<'o, 'txn>(
                     let mut docids: Vec<_> = matches.iter().map(|m| m.document_id).collect();
                     docids.dedup();
                     let docids = SetBuf::new(docids).unwrap();
-                    debug!(
-                        "{:2$}docids construction took {:.02?}",
-                        "",
-                        before.elapsed(),
-                        depth * 2
-                    );
+                    debug!("{:2$}docids construction took {:.02?}", "", before.elapsed(), depth * 2);
 
                     let matches = Cow::Owned(SetBuf::from_dirty(matches));
-                    let key = PostingsKey {
-                        query,
-                        input: vec![],
-                        distance: 0,
-                        is_exact: true,
-                    };
+                    let key = PostingsKey { query, input: vec![], distance: 0, is_exact: true };
                     postings.insert(key, matches);
 
                     Cow::Owned(docids)
@@ -703,17 +540,10 @@ pub fn traverse_query_tree<'o, 'txn>(
                     debug!("{:2$}{:?} skipped", "", words, depth * 2);
                     Cow::default()
                 }
-            }
+            },
         };
 
-        debug!(
-            "{:4$}{:?} fetched {:?} documents in {:.02?}",
-            "",
-            query,
-            docids.len(),
-            before.elapsed(),
-            depth * 2
-        );
+        debug!("{:4$}{:?} fetched {:?} documents in {:.02?}", "", query, docids.len(), before.elapsed(), depth * 2);
         Ok(docids)
     }
 
@@ -726,8 +556,5 @@ pub fn traverse_query_tree<'o, 'txn>(
         Operation::Query(query) => execute_query(reader, ctx, &mut postings, 0, &query)?,
     };
 
-    Ok(QueryResult {
-        docids,
-        queries: postings,
-    })
+    Ok(QueryResult { docids, queries: postings })
 }

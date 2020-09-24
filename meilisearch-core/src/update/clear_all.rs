@@ -2,14 +2,13 @@ use crate::database::{MainT, UpdateT};
 use crate::update::{next_update_id, Update};
 use crate::{store, MResult, RankedMap};
 
-pub fn apply_clear_all(writer: &mut heed::RwTxn<MainT>, index: &store::Index) -> MResult<()> {
+pub fn apply_clear_all(
+    writer: &mut heed::RwTxn<MainT>,
+    index: &store::Index,
+) -> MResult<()> {
     index.main.put_words_fst(writer, &fst::Set::default())?;
-    index
-        .main
-        .put_external_docids(writer, &fst::Map::default())?;
-    index
-        .main
-        .put_internal_docids(writer, &sdset::SetBuf::default())?;
+    index.main.put_external_docids(writer, &fst::Map::default())?;
+    index.main.put_internal_docids(writer, &sdset::SetBuf::default())?;
     index.main.put_ranked_map(writer, &RankedMap::default())?;
     index.main.put_number_of_documents(writer, |_| 0)?;
     index.documents_fields.clear(writer)?;

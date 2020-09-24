@@ -5,10 +5,10 @@ use std::time::Instant;
 
 use indexmap::IndexMap;
 use log::error;
-use meilisearch_core::criterion::*;
-use meilisearch_core::facets::FacetFilter;
-use meilisearch_core::settings::RankingRule;
 use meilisearch_core::{Filter, MainReader};
+use meilisearch_core::facets::FacetFilter;
+use meilisearch_core::criterion::*;
+use meilisearch_core::settings::RankingRule;
 use meilisearch_core::{Highlight, Index, RankedMap};
 use meilisearch_schema::{FieldId, Schema};
 use meilisearch_tokenizer::is_cjk;
@@ -52,7 +52,7 @@ pub struct SearchBuilder<'a> {
     filters: Option<String>,
     matches: bool,
     facet_filters: Option<FacetFilter>,
-    facets: Option<Vec<(FieldId, String)>>,
+    facets: Option<Vec<(FieldId, String)>>
 }
 
 impl<'a> SearchBuilder<'a> {
@@ -156,11 +156,7 @@ impl<'a> SearchBuilder<'a> {
         query_builder.set_facets(self.facets);
 
         let start = Instant::now();
-        let result = query_builder.query(
-            reader,
-            self.query.as_deref(),
-            self.offset..(self.offset + self.limit),
-        );
+        let result = query_builder.query(reader, self.query.as_deref(), self.offset..(self.offset + self.limit));
         let search_result = result.map_err(Error::search_documents)?;
         let time_ms = start.elapsed().as_millis() as usize;
 
@@ -180,7 +176,7 @@ impl<'a> SearchBuilder<'a> {
                 }
 
                 all_attributes.extend(&all_formatted);
-            }
+            },
             None => {
                 all_attributes.extend(schema.displayed_name());
                 // If we specified at least one attribute to highlight or crop then
@@ -188,7 +184,7 @@ impl<'a> SearchBuilder<'a> {
                 if self.attributes_to_highlight.is_some() || self.attributes_to_crop.is_some() {
                     all_formatted.extend(all_attributes.iter().cloned());
                 }
-            }
+            },
         }
 
         let mut hits = Vec::with_capacity(self.limit);
@@ -201,8 +197,7 @@ impl<'a> SearchBuilder<'a> {
                     "Impossible to retrieve the document; Corrupted data",
                 ))?;
 
-            let mut formatted = document
-                .iter()
+            let mut formatted = document.iter()
                 .filter(|(key, _)| all_formatted.contains(key.as_str()))
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect();
@@ -216,17 +211,16 @@ impl<'a> SearchBuilder<'a> {
 
             // Transform to readable matches
             if let Some(attributes_to_highlight) = &self.attributes_to_highlight {
-                let matches =
-                    calculate_matches(&matches, self.attributes_to_highlight.clone(), &schema);
+                let matches = calculate_matches(
+                    &matches,
+                    self.attributes_to_highlight.clone(),
+                    &schema,
+                );
                 formatted = calculate_highlights(&formatted, &matches, attributes_to_highlight);
             }
 
             let matches_info = if self.matches {
-                Some(calculate_matches(
-                    &matches,
-                    self.attributes_to_retrieve.clone(),
-                    &schema,
-                ))
+                Some(calculate_matches(&matches, self.attributes_to_retrieve.clone(), &schema))
             } else {
                 None
             };
@@ -349,42 +343,22 @@ fn aligned_crop(text: &str, match_index: usize, context: usize) -> (usize, usize
     let is_word_component = |c: &char| c.is_alphanumeric() && !is_cjk(*c);
 
     let word_end_index = |mut index| {
-        if text
-            .chars()
-            .nth(index - 1)
-            .map_or(false, |c| is_word_component(&c))
-        {
-            index += text
-                .chars()
-                .skip(index)
-                .take_while(is_word_component)
-                .count();
+        if text.chars().nth(index - 1).map_or(false, |c| is_word_component(&c)) {
+            index += text.chars().skip(index).take_while(is_word_component).count();
         }
         index
     };
 
     if context == 0 {
         // count need to be at least 1 for cjk queries to return something
-        return (
-            match_index,
-            1 + text
-                .chars()
-                .skip(match_index)
-                .take_while(is_word_component)
-                .count(),
-        );
+        return (match_index, 1 + text.chars().skip(match_index).take_while(is_word_component).count());
     }
     let start = match match_index.saturating_sub(context) {
         0 => 0,
         n => {
             let word_end_index = word_end_index(n);
             // skip whitespaces if any
-            word_end_index
-                + text
-                    .chars()
-                    .skip(word_end_index)
-                    .take_while(char::is_ascii_whitespace)
-                    .count()
+            word_end_index + text.chars().skip(word_end_index).take_while(char::is_ascii_whitespace).count()
         }
     };
     let end = word_end_index(match_index + context);
@@ -542,34 +516,16 @@ mod tests {
 
         // simple test
         let (start, length) = aligned_crop(&text, 6, 2);
-        let cropped = text
-            .chars()
-            .skip(start)
-            .take(length)
-            .collect::<String>()
-            .trim()
-            .to_string();
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
         assert_eq!("début", cropped);
 
         // first word test
         let (start, length) = aligned_crop(&text, 0, 1);
-        let cropped = text
-            .chars()
-            .skip(start)
-            .take(length)
-            .collect::<String>()
-            .trim()
-            .to_string();
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
         assert_eq!("En", cropped);
         // last word test
         let (start, length) = aligned_crop(&text, 510, 2);
-        let cropped = text
-            .chars()
-            .skip(start)
-            .take(length)
-            .collect::<String>()
-            .trim()
-            .to_string();
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
         assert_eq!("Fondation", cropped);
 
         // CJK tests
@@ -577,48 +533,27 @@ mod tests {
 
         // mixed charset
         let (start, length) = aligned_crop(&text, 5, 3);
-        let cropped = text
-            .chars()
-            .skip(start)
-            .take(length)
-            .collect::<String>()
-            .trim()
-            .to_string();
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
         assert_eq!("isの", cropped);
 
         // split regular word / CJK word, no space
         let (start, length) = aligned_crop(&text, 7, 1);
-        let cropped = text
-            .chars()
-            .skip(start)
-            .take(length)
-            .collect::<String>()
-            .trim()
-            .to_string();
+        let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
         assert_eq!("の", cropped);
     }
 
     #[test]
     fn calculate_matches() {
         let mut matches = Vec::new();
-        matches.push(Highlight {
-            attribute: 0,
-            char_index: 0,
-            char_length: 3,
-        });
-        matches.push(Highlight {
-            attribute: 0,
-            char_index: 0,
-            char_length: 2,
-        });
+        matches.push(Highlight { attribute: 0, char_index: 0, char_length: 3});
+        matches.push(Highlight { attribute: 0, char_index: 0, char_length: 2});
 
         let mut attributes_to_retrieve: HashSet<String> = HashSet::new();
         attributes_to_retrieve.insert("title".to_string());
 
         let schema = Schema::with_primary_key("title");
 
-        let matches_result =
-            super::calculate_matches(&matches, Some(attributes_to_retrieve), &schema);
+        let matches_result = super::calculate_matches(&matches, Some(attributes_to_retrieve), &schema);
 
         let mut matches_result_expected: HashMap<String, Vec<MatchPosition>> = HashMap::new();
 

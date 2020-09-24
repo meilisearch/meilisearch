@@ -1,7 +1,7 @@
-use intervaltree::{Element, IntervalTree};
 use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::ops::Range;
+use intervaltree::{Element, IntervalTree};
 
 pub type QueryId = usize;
 
@@ -12,22 +12,17 @@ pub struct QueryWordsMapper {
 
 impl QueryWordsMapper {
     pub fn new<I, A>(originals: I) -> QueryWordsMapper
-    where
-        I: IntoIterator<Item = A>,
-        A: ToString,
+    where I: IntoIterator<Item = A>,
+          A: ToString,
     {
         let originals = originals.into_iter().map(|s| s.to_string()).collect();
-        QueryWordsMapper {
-            originals,
-            mappings: HashMap::new(),
-        }
+        QueryWordsMapper { originals, mappings: HashMap::new() }
     }
 
     #[allow(clippy::len_zero)]
     pub fn declare<I, A>(&mut self, range: Range<usize>, id: QueryId, replacement: I)
-    where
-        I: IntoIterator<Item = A>,
-        A: ToString,
+    where I: IntoIterator<Item = A>,
+          A: ToString,
     {
         assert!(range.len() != 0);
         assert!(self.originals.get(range.clone()).is_some());
@@ -60,8 +55,7 @@ impl QueryWordsMapper {
 
         {
             let replacement = replacement[common_left..replacement.len() - common_right].to_vec();
-            self.mappings
-                .insert(id + common_left, (range.clone(), replacement));
+            self.mappings.insert(id + common_left, (range.clone(), replacement));
         }
 
         for i in 0..common_right {
@@ -82,19 +76,12 @@ impl QueryWordsMapper {
         // We map each original word to the biggest number of
         // associated words.
         for i in 0..self.originals.len() {
-            let max = intervals
-                .query_point(i)
+            let max = intervals.query_point(i)
                 .filter_map(|e| {
                     if e.range.end - 1 == i {
                         let len = e.value.1.iter().skip(i - e.range.start).count();
-                        if len != 0 {
-                            Some(len)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
+                        if len != 0 { Some(len) } else { None }
+                    } else { None }
                 })
                 .max()
                 .unwrap_or(1);
@@ -107,21 +94,13 @@ impl QueryWordsMapper {
         // We retrieve the range that each original word
         // is mapped to and apply it to each of the words.
         for i in 0..self.originals.len() {
+
             let iter = intervals.query_point(i).filter(|e| e.range.end - 1 == i);
-            for Element {
-                range,
-                value: (id, words),
-            } in iter
-            {
+            for Element { range, value: (id, words) } in iter {
+
                 // We ask for the complete range mapped to the area we map.
-                let start = output
-                    .get(&range.start)
-                    .map(|r| r.start)
-                    .unwrap_or(range.start);
-                let end = output
-                    .get(&(range.end - 1))
-                    .map(|r| r.end)
-                    .unwrap_or(range.end);
+                let start = output.get(&range.start).map(|r| r.start).unwrap_or(range.start);
+                let end = output.get(&(range.end - 1)).map(|r| r.end).unwrap_or(range.end);
                 let range = start..end;
 
                 // We map each query id to one word until the last,
@@ -222,16 +201,16 @@ mod tests {
 
         let mapping = builder.mapping();
 
-        assert_eq!(mapping[&0], 0..1); // a
-        assert_eq!(mapping[&1], 1..2); // b
-        assert_eq!(mapping[&2], 2..3); // x
-        assert_eq!(mapping[&3], 3..4); // x
-        assert_eq!(mapping[&4], 4..5); // a
-        assert_eq!(mapping[&5], 5..6); // b
-        assert_eq!(mapping[&6], 6..7); // c
-        assert_eq!(mapping[&7], 7..11); // d
-        assert_eq!(mapping[&8], 11..12); // e
-        assert_eq!(mapping[&9], 12..13); // f
+        assert_eq!(mapping[&0],  0..1); // a
+        assert_eq!(mapping[&1],  1..2); // b
+        assert_eq!(mapping[&2],  2..3); // x
+        assert_eq!(mapping[&3],  3..4); // x
+        assert_eq!(mapping[&4],  4..5); // a
+        assert_eq!(mapping[&5],  5..6); // b
+        assert_eq!(mapping[&6],  6..7); // c
+        assert_eq!(mapping[&7],  7..11); // d
+        assert_eq!(mapping[&8],  11..12); // e
+        assert_eq!(mapping[&9],  12..13); // f
         assert_eq!(mapping[&10], 13..14); // g
 
         assert_eq!(mapping[&11], 4..5); // a

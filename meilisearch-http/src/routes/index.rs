@@ -40,16 +40,21 @@ async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseErr
 
         match index {
             Some(index) => {
-                let name = index
+                let name = index.main.name(&reader)?.ok_or(Error::internal(
+                        "Impossible to get the name of an index",
+                ))?;
+                let created_at = index
                     .main
-                    .name(&reader)?
-                    .ok_or(Error::internal("Impossible to get the name of an index"))?;
-                let created_at = index.main.created_at(&reader)?.ok_or(Error::internal(
-                    "Impossible to get the create date of an index",
-                ))?;
-                let updated_at = index.main.updated_at(&reader)?.ok_or(Error::internal(
-                    "Impossible to get the last update date of an index",
-                ))?;
+                    .created_at(&reader)?
+                    .ok_or(Error::internal(
+                            "Impossible to get the create date of an index",
+                    ))?;
+                let updated_at = index
+                    .main
+                    .updated_at(&reader)?
+                    .ok_or(Error::internal(
+                            "Impossible to get the last update date of an index",
+                    ))?;
 
                 let primary_key = match index.main.schema(&reader) {
                     Ok(Some(schema)) => match schema.primary_key() {
@@ -89,16 +94,21 @@ async fn get_index(
         .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
     let reader = data.db.main_read_txn()?;
-    let name = index
+    let name = index.main.name(&reader)?.ok_or(Error::internal(
+            "Impossible to get the name of an index",
+    ))?;
+    let created_at = index
         .main
-        .name(&reader)?
-        .ok_or(Error::internal("Impossible to get the name of an index"))?;
-    let created_at = index.main.created_at(&reader)?.ok_or(Error::internal(
-        "Impossible to get the create date of an index",
-    ))?;
-    let updated_at = index.main.updated_at(&reader)?.ok_or(Error::internal(
-        "Impossible to get the last update date of an index",
-    ))?;
+        .created_at(&reader)?
+        .ok_or(Error::internal(
+                "Impossible to get the create date of an index",
+        ))?;
+    let updated_at = index
+        .main
+        .updated_at(&reader)?
+        .ok_or(Error::internal(
+                "Impossible to get the last update date of an index",
+        ))?;
 
     let primary_key = match index.main.schema(&reader) {
         Ok(Some(schema)) => match schema.primary_key() {
@@ -217,7 +227,10 @@ async fn get_update_status(
 
     match status {
         Some(status) => Ok(HttpResponse::Ok().json(status)),
-        None => Err(Error::NotFound(format!("Update {}", path.update_id)).into()),
+        None => Err(Error::NotFound(format!(
+            "Update {}",
+            path.update_id
+        )).into()),
     }
 }
 

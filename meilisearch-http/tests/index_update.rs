@@ -1,6 +1,6 @@
-use assert_json_diff::assert_json_include;
 use serde_json::json;
 use serde_json::Value;
+use assert_json_diff::assert_json_include;
 
 mod common;
 
@@ -77,6 +77,7 @@ async fn return_update_status_of_pushed_documents() {
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
 
+
     let bodies = vec![
         json!([{
         "title": "Test",
@@ -93,13 +94,13 @@ async fn return_update_status_of_pushed_documents() {
     ];
 
     let mut update_ids = Vec::new();
-
+    
     let url = "/indexes/test/documents?primaryKey=title";
     for body in bodies {
-        let (response, status_code) = server.post_request(&url, body).await;
-        assert_eq!(status_code, 202);
-        let update_id = response["updateId"].as_u64().unwrap();
-        update_ids.push(update_id);
+      let (response, status_code) = server.post_request(&url, body).await;
+      assert_eq!(status_code, 202);
+      let update_id = response["updateId"].as_u64().unwrap();
+      update_ids.push(update_id);
     }
 
     // 2. Fetch the status of index.
@@ -172,7 +173,7 @@ async fn should_return_existing_update() {
     let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
-
+    
     let body = json!([{
         "title": "Test",
         "comment": "comment test"

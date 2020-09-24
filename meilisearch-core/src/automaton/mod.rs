@@ -2,7 +2,7 @@ mod dfa;
 
 use meilisearch_tokenizer::is_cjk;
 
-pub use self::dfa::{build_dfa, build_exact_dfa, build_prefix_dfa};
+pub use self::dfa::{build_dfa, build_prefix_dfa, build_exact_dfa};
 
 pub fn normalize_str(string: &str) -> String {
     let mut string = string.to_lowercase();

@@ -1,17 +1,17 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::iter::IntoIterator;
 use std::str::FromStr;
+use std::iter::IntoIterator;
 
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer, Serialize};
+use once_cell::sync::Lazy;
 
 use self::RankingRule::*;
 
-pub const DEFAULT_RANKING_RULES: [RankingRule; 6] =
-    [Typo, Words, Proximity, Attribute, WordsPosition, Exactness];
+pub const DEFAULT_RANKING_RULES: [RankingRule; 6] = [Typo, Words, Proximity, Attribute, WordsPosition, Exactness];
 
-static RANKING_RULE_REGEX: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new(r"(asc|desc)\(([a-zA-Z0-9-_]*)\)").unwrap());
+static RANKING_RULE_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+    regex::Regex::new(r"(asc|desc)\(([a-zA-Z0-9-_]*)\)").unwrap()
+});
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -34,9 +34,8 @@ pub struct Settings {
 
 // Any value that is present is considered Some value, including null.
 fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    T: Deserialize<'de>,
-    D: Deserializer<'de>,
+    where T: Deserialize<'de>,
+          D: Deserializer<'de>
 {
     Deserialize::deserialize(deserializer).map(Some)
 }
@@ -71,7 +70,7 @@ pub enum UpdateState<T> {
     Nothing,
 }
 
-impl<T> From<Option<Option<T>>> for UpdateState<T> {
+impl <T> From<Option<Option<T>>> for UpdateState<T> {
     fn from(opt: Option<Option<T>>) -> UpdateState<T> {
         match opt {
             Some(Some(t)) => UpdateState::Update(t),
@@ -129,13 +128,11 @@ impl FromStr for RankingRule {
             "wordsPosition" => RankingRule::WordsPosition,
             "exactness" => RankingRule::Exactness,
             _ => {
-                let captures = RANKING_RULE_REGEX
-                    .captures(s)
-                    .ok_or(RankingRuleConversionError)?;
+                let captures = RANKING_RULE_REGEX.captures(s).ok_or(RankingRuleConversionError)?;
                 match (captures.get(1).map(|m| m.as_str()), captures.get(2)) {
                     (Some("asc"), Some(field)) => RankingRule::Asc(field.as_str().to_string()),
                     (Some("desc"), Some(field)) => RankingRule::Desc(field.as_str().to_string()),
-                    _ => return Err(RankingRuleConversionError),
+                    _ => return Err(RankingRuleConversionError)
                 }
             }
         };
@@ -151,11 +148,8 @@ impl RankingRule {
         }
     }
 
-    pub fn try_from_iter(
-        rules: impl IntoIterator<Item = impl AsRef<str>>,
-    ) -> Result<Vec<RankingRule>, RankingRuleConversionError> {
-        rules
-            .into_iter()
+    pub fn try_from_iter(rules: impl IntoIterator<Item = impl AsRef<str>>) -> Result<Vec<RankingRule>, RankingRuleConversionError> {
+        rules.into_iter()
             .map(|s| RankingRule::from_str(s.as_ref()))
             .collect()
     }

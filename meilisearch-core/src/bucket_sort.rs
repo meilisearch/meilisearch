@@ -1,28 +1,28 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt;
 use std::mem;
 use std::ops::Deref;
 use std::ops::Range;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
+use std::fmt;
 
-use compact_arena::{mk_arena, Idx32, SmallArena};
+use compact_arena::{SmallArena, Idx32, mk_arena};
 use log::{debug, error};
-use sdset::{duo::OpBuilder, exponential_search, Counter, Set, SetBuf, SetOperation};
+use sdset::{Set, SetBuf, exponential_search, SetOperation, Counter, duo::OpBuilder};
 use slice_group_by::{GroupBy, GroupByMut};
 
 use meilisearch_types::DocIndex;
 
-use crate::criterion::{Context, ContextMut, Criteria};
+use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
-use crate::query_tree::Context as QTContext;
-use crate::query_tree::{create_query_tree, traverse_query_tree};
-use crate::query_tree::{Operation, PostingsKey, QueryId, QueryKind, QueryResult};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
-use crate::{store, Document, DocumentId, Error, Index, MResult, MainReader, RankedMap};
+use crate::{store, Document, DocumentId, MResult, Index, RankedMap, MainReader, Error};
+use crate::query_tree::{create_query_tree, traverse_query_tree};
+use crate::query_tree::{Operation, QueryResult, QueryKind, QueryId, PostingsKey};
+use crate::query_tree::Context as QTContext;
 
 #[derive(Debug, Default)]
 pub struct SortResult {
@@ -89,19 +89,14 @@ where
         match operation {
             Operation::And(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
             Operation::Or(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
-            Operation::Query(query) => {
-                map.insert(query.id, &query.kind);
-            }
+            Operation::Query(query) => { map.insert(query.id, &query.kind); },
         }
     }
 
     let mut queries_kinds = HashMap::new();
     recurs_operation(&mut queries_kinds, &operation);
 
-    let QueryResult {
-        mut docids,
-        queries,
-    } = traverse_query_tree(reader, &context, &operation)?;
+    let QueryResult { mut docids, queries } = traverse_query_tree(reader, &context, &operation)?;
     debug!("found {} documents", docids.len());
     debug!("number of postings {:?}", queries.len());
 
@@ -131,8 +126,7 @@ where
         let raw_document = RawDocument::new(bare_matches, &mut arena, searchable_attrs.as_ref());
         raw_documents.push(raw_document);
     }
-    debug!(
-        "creating {} candidates documents took {:.02?}",
+    debug!("creating {} candidates documents took {:.02?}",
         raw_documents.len(),
         before_raw_documents_building.elapsed(),
     );
@@ -157,11 +151,7 @@ where
             };
 
             criterion.prepare(ctx, &mut group)?;
-            debug!(
-                "{:?} preparation took {:.02?}",
-                criterion.name(),
-                before_criterion_preparation.elapsed()
-            );
+            debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
 
             let ctx = Context {
                 postings_lists: &arena,
@@ -170,18 +160,10 @@ where
 
             let before_criterion_sort = Instant::now();
             group.sort_unstable_by(|a, b| criterion.evaluate(&ctx, a, b));
-            debug!(
-                "{:?} evaluation took {:.02?}",
-                criterion.name(),
-                before_criterion_sort.elapsed()
-            );
+            debug!("{:?} evaluation took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
 
             for group in group.binary_group_by_mut(|a, b| criterion.eq(&ctx, a, b)) {
-                debug!(
-                    "{:?} produced a group of size {}",
-                    criterion.name(),
-                    group.len()
-                );
+                debug!("{:?} produced a group of size {}", criterion.name(), group.len());
 
                 documents_seen += group.len();
                 groups.push(group);
@@ -195,29 +177,12 @@ where
         }
     }
 
-    debug!(
-        "criterion loop took {:.02?}",
-        before_criterion_loop.elapsed()
-    );
-    debug!(
-        "proximity evaluation called {} times",
-        proximity_count.load(Ordering::Relaxed)
-    );
+    debug!("criterion loop took {:.02?}", before_criterion_loop.elapsed());
+    debug!("proximity evaluation called {} times", proximity_count.load(Ordering::Relaxed));
 
     let schema = index.main.schema(reader)?.ok_or(Error::SchemaMissing)?;
-    let iter = raw_documents
-        .into_iter()
-        .skip(range.start)
-        .take(range.len());
-    let iter = iter.map(|rd| {
-        Document::from_raw(
-            rd,
-            &queries_kinds,
-            &arena,
-            searchable_attrs.as_ref(),
-            &schema,
-        )
-    });
+    let iter = raw_documents.into_iter().skip(range.start).take(range.len());
+    let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref(), &schema));
     let documents = iter.collect();
 
     debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
@@ -267,19 +232,14 @@ where
         match operation {
             Operation::And(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
             Operation::Or(ops) => ops.iter().for_each(|op| recurs_operation(map, op)),
-            Operation::Query(query) => {
-                map.insert(query.id, &query.kind);
-            }
+            Operation::Query(query) => { map.insert(query.id, &query.kind); },
         }
     }
 
     let mut queries_kinds = HashMap::new();
     recurs_operation(&mut queries_kinds, &operation);
 
-    let QueryResult {
-        mut docids,
-        queries,
-    } = traverse_query_tree(reader, &context, &operation)?;
+    let QueryResult { mut docids, queries } = traverse_query_tree(reader, &context, &operation)?;
     debug!("found {} documents", docids.len());
     debug!("number of postings {:?}", queries.len());
 
@@ -307,8 +267,7 @@ where
         let raw_document = RawDocument::new(bare_matches, &mut arena, searchable_attrs.as_ref());
         raw_documents.push(raw_document);
     }
-    debug!(
-        "creating {} candidates documents took {:.02?}",
+    debug!("creating {} candidates documents took {:.02?}",
         raw_documents.len(),
         before_raw_documents_building.elapsed(),
     );
@@ -346,11 +305,7 @@ where
 
             let before_criterion_preparation = Instant::now();
             criterion.prepare(ctx, &mut group)?;
-            debug!(
-                "{:?} preparation took {:.02?}",
-                criterion.name(),
-                before_criterion_preparation.elapsed()
-            );
+            debug!("{:?} preparation took {:.02?}", criterion.name(), before_criterion_preparation.elapsed());
 
             let ctx = Context {
                 postings_lists: &arena,
@@ -359,11 +314,7 @@ where
 
             let before_criterion_sort = Instant::now();
             group.sort_unstable_by(|a, b| criterion.evaluate(&ctx, a, b));
-            debug!(
-                "{:?} evaluation took {:.02?}",
-                criterion.name(),
-                before_criterion_sort.elapsed()
-            );
+            debug!("{:?} evaluation took {:.02?}", criterion.name(), before_criterion_sort.elapsed());
 
             for group in group.binary_group_by_mut(|a, b| criterion.eq(&ctx, a, b)) {
                 // we must compute the real distinguished len of this sub-group
@@ -420,10 +371,7 @@ where
     for raw_document in raw_documents.into_iter().skip(distinct_raw_offset) {
         let filter_accepted = match &filter {
             Some(_) => filter_map.remove(&raw_document.id).unwrap_or_else(|| {
-                error!(
-                    "error during filtering: expected value for document id {}",
-                    &raw_document.id.0
-                );
+                error!("error during filtering: expected value for document id {}", &raw_document.id.0);
                 Default::default()
             }),
             None => true,
@@ -431,10 +379,7 @@ where
 
         if filter_accepted {
             let key = key_cache.remove(&raw_document.id).unwrap_or_else(|| {
-                error!(
-                    "error during distinct: expected value for document id {}",
-                    &raw_document.id.0
-                );
+                error!("error during distinct: expected value for document id {}", &raw_document.id.0);
                 Default::default()
             });
             let distinct_accepted = match key {
@@ -443,13 +388,7 @@ where
             };
 
             if distinct_accepted && seen.len() > range.start {
-                documents.push(Document::from_raw(
-                    raw_document,
-                    &queries_kinds,
-                    &arena,
-                    searchable_attrs.as_ref(),
-                    &schema,
-                ));
+                documents.push(Document::from_raw(raw_document, &queries_kinds, &arena, searchable_attrs.as_ref(), &schema));
                 if documents.len() == range.len() {
                     break;
                 }
@@ -466,20 +405,12 @@ fn cleanup_bare_matches<'tag, 'txn>(
     arena: &mut SmallArena<'tag, PostingsListView<'txn>>,
     docids: &Set<DocumentId>,
     queries: HashMap<PostingsKey, Cow<'txn, Set<DocIndex>>>,
-) -> Vec<BareMatch<'tag>> {
+) -> Vec<BareMatch<'tag>>
+{
     let docidslen = docids.len() as f32;
     let mut bare_matches = Vec::new();
 
-    for (
-        PostingsKey {
-            query,
-            input,
-            distance,
-            is_exact,
-        },
-        matches,
-    ) in queries
-    {
+    for (PostingsKey { query, input, distance, is_exact }, matches) in queries {
         let postings_list_view = PostingsListView::original(Rc::from(input), Rc::new(matches));
         let pllen = postings_list_view.len() as f32;
 
@@ -504,15 +435,12 @@ fn cleanup_bare_matches<'tag, 'txn>(
 
                 offset += matches.len();
             }
+
         } else {
             let mut offset = 0;
             for id in docids.as_slice() {
-                let di = DocIndex {
-                    document_id: *id,
-                    ..DocIndex::default()
-                };
-                let pos =
-                    exponential_search(&postings_list_view[offset..], &di).unwrap_or_else(|x| x);
+                let di = DocIndex { document_id: *id, ..DocIndex::default() };
+                let pos = exponential_search(&postings_list_view[offset..], &di).unwrap_or_else(|x| x);
 
                 offset += pos;
 
@@ -541,10 +469,7 @@ fn cleanup_bare_matches<'tag, 'txn>(
 
     let before_raw_documents_presort = Instant::now();
     bare_matches.sort_unstable_by_key(|sm| sm.document_id);
-    debug!(
-        "sort by documents ids took {:.02?}",
-        before_raw_documents_presort.elapsed()
-    );
+    debug!("sort by documents ids took {:.02?}", before_raw_documents_presort.elapsed());
 
     bare_matches
 }
@@ -601,24 +526,13 @@ impl fmt::Debug for PostingsListView<'_> {
 }
 
 impl<'txn> PostingsListView<'txn> {
-    pub fn original(
-        input: Rc<[u8]>,
-        postings_list: Rc<Cow<'txn, Set<DocIndex>>>,
-    ) -> PostingsListView<'txn> {
+    pub fn original(input: Rc<[u8]>, postings_list: Rc<Cow<'txn, Set<DocIndex>>>) -> PostingsListView<'txn> {
         let len = postings_list.len();
-        PostingsListView::Original {
-            input,
-            postings_list,
-            offset: 0,
-            len,
-        }
+        PostingsListView::Original { input, postings_list, offset: 0, len }
     }
 
     pub fn rewritten(input: Rc<[u8]>, postings_list: SetBuf<DocIndex>) -> PostingsListView<'txn> {
-        PostingsListView::Rewritten {
-            input,
-            postings_list,
-        }
+        PostingsListView::Rewritten { input, postings_list }
     }
 
     pub fn rewrite_with(&mut self, postings_list: SetBuf<DocIndex>) {
@@ -645,12 +559,7 @@ impl<'txn> PostingsListView<'txn> {
 
     pub fn range(&self, range_offset: usize, range_len: usize) -> PostingsListView<'txn> {
         match self {
-            PostingsListView::Original {
-                input,
-                postings_list,
-                offset,
-                len,
-            } => {
+            PostingsListView::Original { input, postings_list, offset, len } => {
                 assert!(range_offset + range_len <= *len);
                 PostingsListView::Original {
                     input: input.clone(),
@@ -658,7 +567,7 @@ impl<'txn> PostingsListView<'txn> {
                     offset: offset + range_offset,
                     len: range_len,
                 }
-            }
+            },
             PostingsListView::Rewritten { .. } => {
                 panic!("Cannot create a range on a rewritten postings list view");
             }
@@ -677,15 +586,10 @@ impl Deref for PostingsListView<'_> {
 
     fn deref(&self) -> &Set<DocIndex> {
         match *self {
-            PostingsListView::Original {
-                ref postings_list,
-                offset,
-                len,
-                ..
-            } => Set::new_unchecked(&postings_list[offset..offset + len]),
-            PostingsListView::Rewritten {
-                ref postings_list, ..
-            } => postings_list,
+            PostingsListView::Original { ref postings_list, offset, len, .. } => {
+                Set::new_unchecked(&postings_list[offset..offset + len])
+            },
+            PostingsListView::Rewritten { ref postings_list, .. } => postings_list,
         }
     }
 }
@@ -695,7 +599,7 @@ pub fn placeholder_document_sort(
     document_ids: &mut [DocumentId],
     index: &store::Index,
     reader: &MainReader,
-    ranked_map: &RankedMap,
+    ranked_map: &RankedMap
 ) -> MResult<()> {
     use crate::settings::RankingRule;
     use std::cmp::Ordering;
@@ -706,18 +610,17 @@ pub fn placeholder_document_sort(
     }
 
     if let Some(ranking_rules) = index.main.ranking_rules(reader)? {
-        let schema = index.main.schema(reader)?.ok_or(Error::SchemaMissing)?;
+        let schema = index.main.schema(reader)?
+            .ok_or(Error::SchemaMissing)?;
 
         // Select custom rules from ranking rules, and map them to custom rules
         // containing a field_id
-        let ranking_rules = ranking_rules
-            .iter()
-            .filter_map(|r| match r {
+        let ranking_rules = ranking_rules.iter().filter_map(|r|
+            match r {
                 RankingRule::Asc(name) => schema.id(name).map(|f| (f, SortOrder::Asc)),
                 RankingRule::Desc(name) => schema.id(name).map(|f| (f, SortOrder::Desc)),
                 _ => None,
-            })
-            .collect::<Vec<_>>();
+            }).collect::<Vec<_>>();
 
         document_ids.sort_unstable_by(|a, b| {
             for (field_id, order) in &ranking_rules {

@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use heed::{types::CowSlice, BytesDecode, BytesEncode};
+use heed::{types::CowSlice, BytesEncode, BytesDecode};
 use sdset::{Set, SetBuf};
 use zerocopy::{AsBytes, FromBytes};
 

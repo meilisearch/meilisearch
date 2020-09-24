@@ -48,8 +48,7 @@ pub struct LoggingMiddleware<S> {
 #[allow(clippy::type_complexity)]
 impl<S, B> Service for LoggingMiddleware<S>
 where
-    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error>
-        + 'static,
+    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
     S::Future: 'static,
     B: 'static,
 {
@@ -78,16 +77,10 @@ where
         let auth_header = match req.headers().get("X-Meili-API-Key") {
             Some(auth) => match auth.to_str() {
                 Ok(auth) => auth,
-                Err(_) => {
-                    return Box::pin(err(
-                        ResponseError::from(Error::MissingAuthorizationHeader).into()
-                    ))
-                }
+                Err(_) => return Box::pin(err(ResponseError::from(Error::MissingAuthorizationHeader).into())),
             },
             None => {
-                return Box::pin(err(
-                    ResponseError::from(Error::MissingAuthorizationHeader).into()
-                ));
+                return Box::pin(err(ResponseError::from(Error::MissingAuthorizationHeader).into()));
             }
         };
 
@@ -107,10 +100,9 @@ where
         if authenticated {
             Box::pin(svc.call(req))
         } else {
-            Box::pin(err(ResponseError::from(Error::InvalidToken(
-                auth_header.to_string(),
+            Box::pin(err(
+                ResponseError::from(Error::InvalidToken(auth_header.to_string())).into()
             ))
-            .into()))
         }
     }
 }

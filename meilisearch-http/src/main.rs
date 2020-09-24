@@ -129,12 +129,7 @@ async fn run_raft(opt: &Opt, raft_config_path: &PathBuf) -> Result<(), MainError
 async fn run(opt: &Opt) -> Result<(), MainError> {
     info!("running normal");
     if let Some(path) = &opt.load_from_snapshot {
-        snapshot::load_snapshot(
-            &opt.db_path,
-            path,
-            opt.ignore_snapshot_if_db_exists,
-            opt.ignore_missing_snapshot,
-        )?;
+        snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
     }
 
     let data = Data::new(opt.clone())?;
@@ -151,11 +146,7 @@ async fn run(opt: &Opt) -> Result<(), MainError> {
     }));
 
     if let Some(path) = &opt.snapshot_path {
-        snapshot::schedule_snapshot(
-            data.clone(),
-            &path,
-            opt.snapshot_interval_sec.unwrap_or(86400),
-        )?;
+        snapshot::schedule_snapshot(data.clone(), &path, opt.snapshot_interval_sec.unwrap_or(86400))?;
     }
 
     print_launch_resume(&opt, &data);

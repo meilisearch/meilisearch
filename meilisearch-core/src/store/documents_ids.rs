@@ -3,8 +3,8 @@ use std::borrow::Cow;
 use heed::{BytesDecode, BytesEncode};
 use sdset::Set;
 
-use super::cow_set::CowSet;
 use crate::DocumentId;
+use super::cow_set::CowSet;
 
 pub struct DocumentsIds;
 
@@ -36,12 +36,7 @@ impl DiscoverIds<'_> {
         let mut ids_iter = ids.iter();
         let right_id = ids_iter.next().map(|id| id.0);
         let available_range = 0..right_id.unwrap_or(u32::max_value());
-        DiscoverIds {
-            ids_iter,
-            left_id: None,
-            right_id,
-            available_range,
-        }
+        DiscoverIds { ids_iter, left_id: None, right_id, available_range }
     }
 }
 
@@ -61,18 +56,16 @@ impl Iterator for DiscoverIds<'_> {
                     match (self.left_id, self.right_id) {
                         // We found a gap in the used ids, we can yield all ids
                         // until the end of the gap
-                        (Some(l), Some(r)) => {
-                            if l.saturating_add(1) != r {
-                                self.available_range = (l + 1)..r;
-                                break;
-                            }
-                        }
+                        (Some(l), Some(r)) => if l.saturating_add(1) != r {
+                            self.available_range = (l + 1)..r;
+                            break;
+                        },
                         // The last used id has been reached, we can use all ids
                         // until u32 MAX
                         (Some(l), None) => {
                             self.available_range = l.saturating_add(1)..u32::max_value();
                             break;
-                        }
+                        },
                         _ => (),
                     }
                 },

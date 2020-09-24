@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error::Error, fmt};
 
-use meilisearch_schema::{FieldId, Schema};
+use meilisearch_schema::{Schema, FieldId};
 use serde::{de, forward_to_deserialize_any};
 use serde_json::de::IoRead as SerdeJsonIoRead;
 use serde_json::Deserializer as SerdeJsonDeserializer;

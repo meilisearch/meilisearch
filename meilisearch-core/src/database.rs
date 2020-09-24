@@ -1,19 +1,19 @@
 use std::collections::hash_map::{Entry, HashMap};
 use std::fs::File;
-use std::io::{ErrorKind, Read, Write};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
+use std::io::{Read, Write, ErrorKind};
 
 use chrono::{DateTime, Utc};
 use crossbeam_channel::{Receiver, Sender};
-use heed::types::{SerdeBincode, Str, Unit};
 use heed::CompactionOption;
+use heed::types::{Str, Unit, SerdeBincode};
 use log::{debug, error};
 use meilisearch_schema::Schema;
 use regex::Regex;
 
-use crate::{store, update, Error, Index, MResult};
+use crate::{store, update, Index, MResult, Error};
 
 pub type BoxUpdateFn = Box<dyn Fn(&str, update::ProcessedUpdateResult) + Send + Sync + 'static>;
 
@@ -50,7 +50,7 @@ pub struct DatabaseOptions {
 impl Default for DatabaseOptions {
     fn default() -> DatabaseOptions {
         DatabaseOptions {
-            main_map_size: 100 * 1024 * 1024 * 1024,   //100Gb
+            main_map_size: 100 * 1024 * 1024 * 1024, //100Gb
             update_map_size: 100 * 1024 * 1024 * 1024, //100Gb
         }
     }
@@ -85,6 +85,7 @@ fn update_awaiter(
     index: Index,
 ) -> MResult<()> {
     for event in receiver {
+
         // if we receive a *MustClear* event, clear the index and break the loop
         if let UpdateEvent::MustClear = event {
             let mut writer = env.typed_write_txn::<MainT>()?;
@@ -97,7 +98,7 @@ fn update_awaiter(
 
             debug!("store {} cleared", index_uid);
 
-            break;
+            break
         }
 
         loop {
@@ -187,10 +188,7 @@ fn version_guard(path: &Path, create: bool) -> MResult<()> {
             let version_minor = version.get(2).unwrap().as_str();
 
             if version_major != current_version_major || version_minor != current_version_minor {
-                return Err(Error::VersionMismatch(format!(
-                    "{}.{}.XX",
-                    version_major, version_minor
-                )));
+                return Err(Error::VersionMismatch(format!("{}.{}.XX", version_major, version_minor)));
             }
         }
         Err(error) => {
@@ -200,20 +198,17 @@ fn version_guard(path: &Path, create: bool) -> MResult<()> {
                         // when no version file is found, and we've been told to create one,
                         // create a new file with the current version in it.
                         let mut version_file = File::create(&version_path)?;
-                        version_file.write_all(
-                            format!(
-                                "{}.{}.{}",
-                                current_version_major, current_version_minor, current_version_patch
-                            )
-                            .as_bytes(),
-                        )?;
+                        version_file.write_all(format!("{}.{}.{}",
+                                current_version_major,
+                                current_version_minor,
+                                current_version_patch).as_bytes())?;
                     } else {
                         // when no version file is found and we were not told to create one, this
                         // means that the version is inferior to the one this feature was added in.
                         return Err(Error::VersionMismatch("<0.12.0".to_string()));
                     }
                 }
-                _ => return Err(error.into()),
+                _ => return Err(error.into())
             }
         }
     }
@@ -479,20 +474,15 @@ impl Database {
         fs::create_dir(&env_update_path)?;
 
         let env_path = env_path.join("data.mdb");
-        let env_file = self
-            .env
-            .copy_to_path(&env_path, CompactionOption::Enabled)?;
+        let env_file = self.env.copy_to_path(&env_path, CompactionOption::Enabled)?;
 
         let env_update_path = env_update_path.join("data.mdb");
-        match self
-            .update_env
-            .copy_to_path(env_update_path, CompactionOption::Enabled)
-        {
+        match self.update_env.copy_to_path(env_update_path, CompactionOption::Enabled) {
             Ok(update_env_file) => Ok((env_file, update_env_file)),
             Err(e) => {
                 fs::remove_file(env_path)?;
                 Err(e.into())
-            }
+            },
         }
     }
 
@@ -506,20 +496,14 @@ impl Database {
     }
 
     pub fn last_update(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<DateTime<Utc>>> {
-        match self
-            .common_store()
-            .get::<_, Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)?
-        {
-            Some(datetime) => Ok(Some(datetime)),
-            None => Ok(None),
-        }
+        match self.common_store()
+            .get::<_, Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)? {
+                Some(datetime) => Ok(Some(datetime)),
+                None => Ok(None),
+            }
     }
 
-    pub fn set_last_update(
-        &self,
-        writer: &mut heed::RwTxn<MainT>,
-        time: &DateTime<Utc>,
-    ) -> MResult<()> {
+    pub fn set_last_update(&self, writer: &mut heed::RwTxn<MainT>, time: &DateTime<Utc>) -> MResult<()> {
         self.common_store()
             .put::<_, Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, time)?;
         Ok(())
@@ -575,7 +559,9 @@ impl Database {
             .filter_map(|(a, c)| schema.name(a).map(|name| (name.to_string(), c)))
             .collect();
 
-        index.main.put_fields_distribution(writer, &frequency)
+        index
+            .main
+            .put_fields_distribution(writer, &frequency)
     }
 }
 
@@ -585,8 +571,8 @@ mod tests {
 
     use crate::bucket_sort::SortResult;
     use crate::criterion::{self, CriteriaBuilder};
-    use crate::settings::Settings;
     use crate::update::{ProcessedUpdateResult, UpdateStatus};
+    use crate::settings::Settings;
     use crate::{Document, DocumentId};
     use serde::de::IgnoredAny;
     use std::sync::mpsc;
@@ -607,10 +593,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let mut writer = db.main_write_txn().unwrap();
-        index
-            .main
-            .put_schema(&mut writer, &Schema::with_primary_key("id"))
-            .unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
 
         // block until the transaction is processed
@@ -675,10 +658,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let mut writer = db.main_write_txn().unwrap();
-        index
-            .main
-            .put_schema(&mut writer, &Schema::with_primary_key("id"))
-            .unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
 
         let settings = {
@@ -740,10 +720,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let mut writer = db.main_write_txn().unwrap();
-        index
-            .main
-            .put_schema(&mut writer, &Schema::with_primary_key("id"))
-            .unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
 
         let settings = {
@@ -798,10 +775,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let mut writer = db.main_write_txn().unwrap();
-        index
-            .main
-            .put_schema(&mut writer, &Schema::with_primary_key("id"))
-            .unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
 
         let settings = {
@@ -900,10 +874,7 @@ mod tests {
 
         // even try to search for a document
         let reader = db.main_read_txn().unwrap();
-        let SortResult { documents, .. } = index
-            .query_builder()
-            .query(&reader, Some("21 "), 0..20)
-            .unwrap();
+        let SortResult {documents, .. } = index.query_builder().query(&reader, Some("21 "), 0..20).unwrap();
         assert_matches!(documents.len(), 1);
 
         reader.abort().unwrap();
@@ -948,10 +919,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let mut writer = db.main_write_txn().unwrap();
-        index
-            .main
-            .put_schema(&mut writer, &Schema::with_primary_key("id"))
-            .unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
 
         let settings = {
@@ -1004,10 +972,14 @@ mod tests {
         let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
         assert!(document.is_none());
 
-        let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(0)).unwrap();
+        let document: Option<IgnoredAny> = index
+            .document(&reader, None, DocumentId(0))
+            .unwrap();
         assert!(document.is_some());
 
-        let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(1)).unwrap();
+        let document: Option<IgnoredAny> = index
+            .document(&reader, None, DocumentId(1))
+            .unwrap();
         assert!(document.is_some());
     }
 
@@ -1027,10 +999,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let mut writer = db.main_write_txn().unwrap();
-        index
-            .main
-            .put_schema(&mut writer, &Schema::with_primary_key("id"))
-            .unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
 
         let settings = {
@@ -1083,10 +1052,14 @@ mod tests {
         let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
         assert!(document.is_none());
 
-        let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(0)).unwrap();
+        let document: Option<IgnoredAny> = index
+            .document(&reader, None, DocumentId(0))
+            .unwrap();
         assert!(document.is_some());
 
-        let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(1)).unwrap();
+        let document: Option<IgnoredAny> = index
+            .document(&reader, None, DocumentId(1))
+            .unwrap();
         assert!(document.is_some());
 
         reader.abort().unwrap();
@@ -1121,8 +1094,9 @@ mod tests {
         update_reader.abort().unwrap();
 
         let reader = db.main_read_txn().unwrap();
-        let document: Option<serde_json::Value> =
-            index.document(&reader, None, DocumentId(0)).unwrap();
+        let document: Option<serde_json::Value> = index
+            .document(&reader, None, DocumentId(0))
+            .unwrap();
 
         let new_doc1 = serde_json::json!({
             "id": 123,
@@ -1131,8 +1105,9 @@ mod tests {
         });
         assert_eq!(document, Some(new_doc1));
 
-        let document: Option<serde_json::Value> =
-            index.document(&reader, None, DocumentId(1)).unwrap();
+        let document: Option<serde_json::Value> = index
+            .document(&reader, None, DocumentId(1))
+            .unwrap();
 
         let new_doc2 = serde_json::json!({
             "id": 234,
@@ -1146,8 +1121,7 @@ mod tests {
     fn delete_index() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database =
-            Arc::new(Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap());
+        let database = Arc::new(Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap());
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -1164,10 +1138,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let mut writer = db.main_write_txn().unwrap();
-        index
-            .main
-            .put_schema(&mut writer, &Schema::with_primary_key("id"))
-            .unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
 
         let settings = {
@@ -1234,10 +1205,7 @@ mod tests {
         database.set_update_callback(Box::new(update_fn));
 
         let mut writer = db.main_write_txn().unwrap();
-        index
-            .main
-            .put_schema(&mut writer, &Schema::with_primary_key("id"))
-            .unwrap();
+        index.main.put_schema(&mut writer, &Schema::with_primary_key("id")).unwrap();
         writer.commit().unwrap();
 
         let settings = {
@@ -1304,19 +1272,21 @@ mod tests {
 
         let builder = index.query_builder_with_criteria(criteria);
 
-        let SortResult { documents, .. } = builder.query(&reader, Some("Kevin"), 0..20).unwrap();
+        let SortResult {documents, .. } = builder.query(&reader, Some("Kevin"), 0..20).unwrap();
         let mut iter = documents.into_iter();
 
         assert_matches!(
             iter.next(),
             Some(Document {
-                id: DocumentId(0), ..
+                id: DocumentId(0),
+                ..
             })
         );
         assert_matches!(
             iter.next(),
             Some(Document {
-                id: DocumentId(1), ..
+                id: DocumentId(1),
+                ..
             })
         );
         assert_matches!(iter.next(), None);

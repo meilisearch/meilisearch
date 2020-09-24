@@ -2,18 +2,14 @@ mod clear_all;
 mod customs_update;
 mod documents_addition;
 mod documents_deletion;
-mod helpers;
 mod settings_update;
+mod helpers;
 
 pub use self::clear_all::{apply_clear_all, push_clear_all};
 pub use self::customs_update::{apply_customs_update, push_customs_update};
-pub use self::documents_addition::{
-    apply_documents_addition, apply_documents_partial_addition, DocumentsAddition,
-};
+pub use self::documents_addition::{apply_documents_addition, apply_documents_partial_addition, DocumentsAddition};
 pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
-pub use self::helpers::{
-    discover_document_id, extract_document_id, index_value, value_to_number, value_to_string,
-};
+pub use self::helpers::{index_value, value_to_string, value_to_number, discover_document_id, extract_document_id};
 pub use self::settings_update::{apply_settings_update, push_settings_update};
 
 use std::cmp;
@@ -31,9 +27,9 @@ use serde_json::Value;
 use meilisearch_error::ErrorCode;
 use meilisearch_types::DocumentId;
 
+use crate::{store, MResult, RankedMap};
 use crate::database::{MainT, UpdateT};
 use crate::settings::SettingsUpdate;
-use crate::{store, MResult, RankedMap};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Update {
@@ -92,7 +88,7 @@ pub enum UpdateData {
     DocumentsAddition(Vec<IndexMap<String, Value>>),
     DocumentsPartial(Vec<IndexMap<String, Value>>),
     DocumentsDeletion(Vec<String>),
-    Settings(Box<SettingsUpdate>),
+    Settings(Box<SettingsUpdate>)
 }
 
 impl UpdateData {
@@ -185,7 +181,7 @@ pub fn update_status(
             } else {
                 Ok(Some(UpdateStatus::Processed { content: result }))
             }
-        }
+        },
         None => match updates_store.get(update_reader, update_id)? {
             Some(update) => Ok(Some(UpdateStatus::Enqueued {
                 content: EnqueuedUpdateResult {
@@ -283,7 +279,11 @@ pub fn update_task<'a, 'b>(
                 settings: settings.clone(),
             };
 
-            let result = apply_settings_update(writer, index, *settings);
+            let result = apply_settings_update(
+                writer,
+                index,
+                *settings,
+            );
 
             (update_type, result, start.elapsed())
         }
@@ -314,8 +314,7 @@ fn compute_short_prefixes<A>(
     words_fst: &fst::Set<A>,
     index: &store::Index,
 ) -> MResult<()>
-where
-    A: AsRef<[u8]>,
+where A: AsRef<[u8]>,
 {
     // clear the prefixes
     let pplc_store = index.prefix_postings_lists_cache;
@@ -326,19 +325,14 @@ where
         let mut previous_prefix: Option<([u8; 4], Vec<_>)> = None;
         let mut stream = words_fst.into_stream();
         while let Some(input) = stream.next() {
+
             // We skip the prefixes that are shorter than the current length
             // we want to cache (<). We must ignore the input when it is exactly the
             // same word as the prefix because if we match exactly on it we need
             // to consider it as an exact match and not as a prefix (=).
-            if input.len() <= prefix_len {
-                continue;
-            }
+            if input.len() <= prefix_len { continue }
 
-            if let Some(postings_list) = index
-                .postings_lists
-                .postings_list(writer, input)?
-                .map(|p| p.matches.into_owned())
-            {
+            if let Some(postings_list) = index.postings_lists.postings_list(writer, input)?.map(|p| p.matches.into_owned()) {
                 let prefix = &input[..prefix_len];
 
                 let mut arr_prefix = [0; 4];
@@ -350,11 +344,7 @@ where
                         prev_pl.dedup();
 
                         if let Ok(prefix) = std::str::from_utf8(&prev_prefix[..prefix_len]) {
-                            debug!(
-                                "writing the prefix of {:?} of length {}",
-                                prefix,
-                                prev_pl.len()
-                            );
+                            debug!("writing the prefix of {:?} of length {}", prefix, prev_pl.len());
                         }
 
                         let pls = Set::new_unchecked(&prev_pl);
@@ -363,7 +353,7 @@ where
                         *prev_prefix = arr_prefix;
                         prev_pl.clear();
                         prev_pl.extend_from_slice(&postings_list);
-                    }
+                    },
                     Some((_, ref mut prev_pl)) => prev_pl.extend_from_slice(&postings_list),
                     None => previous_prefix = Some((arr_prefix, postings_list.to_vec())),
                 }
@@ -390,7 +380,5 @@ fn cache_document_ids_sorted(
     document_ids: &mut [DocumentId],
 ) -> MResult<()> {
     crate::bucket_sort::placeholder_document_sort(document_ids, index, writer, ranked_map)?;
-    index
-        .main
-        .put_sorted_document_ids_cache(writer, &document_ids)
+    index.main.put_sorted_document_ids_cache(writer, &document_ids)
 }

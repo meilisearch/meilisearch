@@ -8,10 +8,7 @@ pub struct ReorderedAttrs {
 
 impl ReorderedAttrs {
     pub fn new() -> ReorderedAttrs {
-        ReorderedAttrs {
-            reorders: Vec::new(),
-            reverse: Vec::new(),
-        }
+        ReorderedAttrs { reorders: Vec::new(), reverse: Vec::new() }
     }
 
     pub fn insert_attribute(&mut self, attribute: u16) {

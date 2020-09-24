@@ -1,15 +1,14 @@
 use super::DocumentFieldIndexedKey;
 use crate::database::MainT;
 use crate::DocumentId;
-use crate::MResult;
 use heed::types::OwnedType;
 use heed::Result as ZResult;
 use meilisearch_schema::IndexedPos;
+use crate::MResult;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFieldsCounts {
-    pub(crate) documents_fields_counts:
-        heed::Database<OwnedType<DocumentFieldIndexedKey>, OwnedType<u16>>,
+    pub(crate) documents_fields_counts: heed::Database<OwnedType<DocumentFieldIndexedKey>, OwnedType<u16>>,
 }
 
 impl DocumentsFieldsCounts {
@@ -31,8 +30,7 @@ impl DocumentsFieldsCounts {
     ) -> ZResult<usize> {
         let start = DocumentFieldIndexedKey::new(document_id, IndexedPos::min());
         let end = DocumentFieldIndexedKey::new(document_id, IndexedPos::max());
-        self.documents_fields_counts
-            .delete_range(writer, &(start..=end))
+        self.documents_fields_counts.delete_range(writer, &(start..=end))
     }
 
     pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
@@ -63,10 +61,7 @@ impl DocumentsFieldsCounts {
         Ok(DocumentFieldsCountsIter { iter })
     }
 
-    pub fn documents_ids<'txn>(
-        self,
-        reader: &'txn heed::RoTxn<MainT>,
-    ) -> MResult<DocumentsIdsIter<'txn>> {
+    pub fn documents_ids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> MResult<DocumentsIdsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
         Ok(DocumentsIdsIter {
             last_seen_id: None,

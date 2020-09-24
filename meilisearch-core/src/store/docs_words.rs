@@ -1,11 +1,11 @@
 use std::borrow::Cow;
 
-use heed::types::{ByteSlice, OwnedType};
 use heed::Result as ZResult;
+use heed::types::{ByteSlice, OwnedType};
 
-use super::BEU32;
 use crate::database::MainT;
 use crate::{DocumentId, FstSetCow};
+use super::BEU32;
 
 #[derive(Copy, Clone)]
 pub struct DocsWords {
@@ -24,11 +24,7 @@ impl DocsWords {
         self.docs_words.put(writer, &document_id, bytes)
     }
 
-    pub fn del_doc_words(
-        self,
-        writer: &mut heed::RwTxn<MainT>,
-        document_id: DocumentId,
-    ) -> ZResult<bool> {
+    pub fn del_doc_words(self, writer: &mut heed::RwTxn<MainT>, document_id: DocumentId) -> ZResult<bool> {
         let document_id = BEU32::new(document_id.0);
         self.docs_words.delete(writer, &document_id)
     }
@@ -37,17 +33,10 @@ impl DocsWords {
         self.docs_words.clear(writer)
     }
 
-    pub fn doc_words(
-        self,
-        reader: &heed::RoTxn<MainT>,
-        document_id: DocumentId,
-    ) -> ZResult<FstSetCow> {
+    pub fn doc_words(self, reader: &heed::RoTxn<MainT>, document_id: DocumentId) -> ZResult<FstSetCow> {
         let document_id = BEU32::new(document_id.0);
         match self.docs_words.get(reader, &document_id)? {
-            Some(bytes) => Ok(fst::Set::new(bytes)
-                .unwrap()
-                .map_data(Cow::Borrowed)
-                .unwrap()),
+            Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
             None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
         }
     }

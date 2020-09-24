@@ -1,21 +1,20 @@
-use super::{prepare_bare_matches, Context, ContextMut, Criterion};
-use crate::bucket_sort::SimpleMatch;
-use crate::{MResult, RawDocument};
-use slice_group_by::GroupBy;
 use std::cmp::Ordering;
+use slice_group_by::GroupBy;
+use crate::{RawDocument, MResult};
+use crate::bucket_sort::SimpleMatch;
+use super::{Criterion, Context, ContextMut, prepare_bare_matches};
 
 pub struct Attribute;
 
 impl Criterion for Attribute {
-    fn name(&self) -> &str {
-        "attribute"
-    }
+    fn name(&self) -> &str { "attribute" }
 
     fn prepare<'h, 'p, 'tag, 'txn, 'q, 'r>(
         &self,
         ctx: ContextMut<'h, 'p, 'tag, 'txn, 'q>,
         documents: &mut [RawDocument<'r, 'tag>],
-    ) -> MResult<()> {
+    ) -> MResult<()>
+    {
         prepare_bare_matches(documents, ctx.postings_lists, ctx.query_mapping);
         Ok(())
     }

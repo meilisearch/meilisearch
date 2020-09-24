@@ -7,8 +7,8 @@ use crate::database::{MainT, UpdateT};
 use crate::database::{UpdateEvent, UpdateEventsEmitter};
 use crate::facets;
 use crate::store;
-use crate::update::{compute_short_prefixes, next_update_id, Update};
-use crate::{DocumentId, Error, Index, MResult, MainWriter, RankedMap};
+use crate::update::{next_update_id, compute_short_prefixes, Update};
+use crate::{DocumentId, Error, MResult, RankedMap, MainWriter, Index};
 
 pub struct DocumentsDeletion {
     updates_store: store::Updates,
@@ -48,7 +48,7 @@ impl DocumentsDeletion {
 }
 
 impl Extend<String> for DocumentsDeletion {
-    fn extend<T: IntoIterator<Item = String>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item=String>>(&mut self, iter: T) {
         self.external_docids.extend(iter)
     }
 }
@@ -71,7 +71,8 @@ pub fn apply_documents_deletion(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     external_docids: Vec<String>,
-) -> MResult<()> {
+) -> MResult<()>
+{
     let (external_docids, internal_docids) = {
         let new_external_docids = SetBuf::from_dirty(external_docids);
         let mut internal_docids = Vec::new();
@@ -83,8 +84,7 @@ pub fn apply_documents_deletion(
             }
         }
 
-        let new_external_docids =
-            fst::Map::from_iter(new_external_docids.into_iter().map(|k| (k, 0))).unwrap();
+        let new_external_docids = fst::Map::from_iter(new_external_docids.into_iter().map(|k| (k, 0))).unwrap();
         (new_external_docids, SetBuf::from_dirty(internal_docids))
     };
 
@@ -100,12 +100,7 @@ pub fn apply_documents_deletion(
 
     // facet filters deletion
     if let Some(attributes_for_facetting) = index.main.attributes_for_faceting(writer)? {
-        let facet_map = facets::facet_map_from_docids(
-            writer,
-            &index,
-            &internal_docids,
-            &attributes_for_facetting,
-        )?;
+        let facet_map = facets::facet_map_from_docids(writer, &index, &internal_docids, &attributes_for_facetting)?;
         index.facets.remove(writer, facet_map)?;
     }
 
@@ -138,18 +133,11 @@ pub fn apply_documents_deletion(
         let document_ids = SetBuf::from_dirty(document_ids);
 
         if let Some(postings) = index.postings_lists.postings_list(writer, &word)? {
-            let op = DifferenceByKey::new(
-                &postings.matches,
-                &document_ids,
-                |d| d.document_id,
-                |id| *id,
-            );
+            let op = DifferenceByKey::new(&postings.matches, &document_ids, |d| d.document_id, |id| *id);
             let doc_indexes = op.into_set_buf();
 
             if !doc_indexes.is_empty() {
-                index
-                    .postings_lists
-                    .put_postings_list(writer, &word, &doc_indexes)?;
+                index.postings_lists.put_postings_list(writer, &word, &doc_indexes)?;
             } else {
                 index.postings_lists.del_postings_list(writer, &word)?;
                 removed_words.insert(word);
@@ -157,9 +145,7 @@ pub fn apply_documents_deletion(
         }
 
         for id in document_ids {
-            index
-                .documents_fields_counts
-                .del_all_document_fields_counts(writer, id)?;
+            index.documents_fields_counts.del_all_document_fields_counts(writer, id)?;
             if index.documents_fields.del_all_document_fields(writer, id)? != 0 {
                 deleted_documents.insert(id);
             }
@@ -186,17 +172,11 @@ pub fn apply_documents_deletion(
 
     index.main.put_words_fst(writer, &words)?;
     index.main.put_ranked_map(writer, &ranked_map)?;
-    index
-        .main
-        .put_number_of_documents(writer, |old| old - deleted_documents_len)?;
+    index.main.put_number_of_documents(writer, |old| old - deleted_documents_len)?;
 
     // We apply the changes to the user and internal ids
-    index
-        .main
-        .remove_external_docids(writer, &external_docids)?;
-    index
-        .main
-        .remove_internal_docids(writer, &internal_docids)?;
+    index.main.remove_external_docids(writer, &external_docids)?;
+    index.main.remove_internal_docids(writer, &internal_docids)?;
 
     compute_short_prefixes(writer, &words, index)?;
 
@@ -208,20 +188,13 @@ pub fn apply_documents_deletion(
 
 /// rebuilds the document id cache by either removing deleted documents from the existing cache,
 /// and generating a new one from docs in store
-fn document_cache_remove_deleted(
-    writer: &mut MainWriter,
-    index: &Index,
-    ranked_map: &RankedMap,
-    documents_to_delete: &HashSet<DocumentId>,
-) -> MResult<()> {
+fn document_cache_remove_deleted(writer: &mut MainWriter, index: &Index, ranked_map: &RankedMap, documents_to_delete: &HashSet<DocumentId>) -> MResult<()> {
     let new_cache = match index.main.sorted_document_ids_cache(writer)? {
         // only keep documents that are not in the list of deleted documents. Order is preserved,
         // no need to resort
-        Some(old_cache) => old_cache
-            .iter()
-            .filter(|docid| !documents_to_delete.contains(docid))
-            .cloned()
-            .collect::<Vec<_>>(),
+        Some(old_cache) => {
+            old_cache.iter().filter(|docid| !documents_to_delete.contains(docid)).cloned().collect::<Vec<_>>()
+        }
         // couldn't find cached documents, try building a new cache from documents in store
         None => {
             let mut document_ids = index.main.internal_docids(writer)?.to_vec();
@@ -229,8 +202,6 @@ fn document_cache_remove_deleted(
             document_ids
         }
     };
-    index
-        .main
-        .put_sorted_document_ids_cache(writer, &new_cache)?;
+    index.main.put_sorted_document_ids_cache(writer, &new_cache)?;
     Ok(())
 }

@@ -8,9 +8,7 @@ pub use schema::Schema;
 use serde::{Deserialize, Serialize};
 use zerocopy::{AsBytes, FromBytes};
 
-#[derive(
-    Serialize, Deserialize, Debug, Copy, Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash,
-)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct IndexedPos(pub u16);
 
 impl IndexedPos {
@@ -39,21 +37,9 @@ impl Into<u16> for IndexedPos {
     }
 }
 
-#[derive(
-    Debug,
-    Copy,
-    Clone,
-    Default,
-    PartialOrd,
-    Ord,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    AsBytes,
-    FromBytes,
-)]
+#[derive(Debug, Copy, Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize)]
+#[derive(AsBytes, FromBytes)]
 #[repr(C)]
 pub struct FieldId(pub u16);
 
@@ -71,10 +57,7 @@ impl FieldId {
     }
 
     pub fn next(self) -> SResult<FieldId> {
-        self.0
-            .checked_add(1)
-            .map(FieldId)
-            .ok_or(Error::MaxFieldsLimitExceeded)
+        self.0.checked_add(1).map(FieldId).ok_or(Error::MaxFieldsLimitExceeded)
     }
 }
 
