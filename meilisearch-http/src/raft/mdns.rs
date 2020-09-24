@@ -1,139 +1,79 @@
-use std::collections::HashSet;
-use std::fmt;
+use madness::dns::PacketBuilder;
+use madness::packet::MdnsPacket;
+use madness::service::MdnsService;
+use std::io;
+use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use anyhow::Result;
-use futures_util::{pin_mut, stream::StreamExt};
-use libmdns::Responder;
-use libmdns::Service;
-use tokio::sync::oneshot;
+use async_stream::stream;
+use futures_core::Stream;
 
-use mdns::discover;
-use tokio::sync::{broadcast, mpsc};
-
-const RAFT_SERVICE: &str = "_meili-raft._tcp";
-
-#[derive(Debug, Clone)]
-pub struct Node {
-    pub addr: SocketAddr,
-    pub id: u64,
-}
-
-struct Ad {
-    port: u16,
+/// Returns a stream of dicovered peers
+pub fn discover_peers(
+    service_name: &str,
     id: u64,
-    tx: oneshot::Sender<Service>,
-}
-
-impl fmt::Debug for Ad {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Ad")
-            .field("id", &self.id)
-            .field("port", &self.port)
-            .finish()
-    }
-}
-
-struct Server {
-    rx: mpsc::Receiver<Ad>,
-}
-
-impl Server {
-    fn run(mut self) -> Result<()> {
-        let (responder, task) = Responder::with_default_handle()?;
-        tokio::spawn(task);
-        tokio::spawn(async move {
-            loop {
-                match self.rx.recv().await {
-                    Some(Ad { tx, port, id, .. }) => {
-                        let svc = responder.register(
-                            RAFT_SERVICE.to_owned(),
-                            RAFT_SERVICE.to_owned(),
-                            port,
-                            &[&format!("id:{}", id)],
-                        );
-                        let _ = tx.send(svc);
-                    }
-                    _ => (),
-                }
-            }
-        });
-        Ok(())
-    }
-}
-
-struct Client {
-    tx: broadcast::Sender<Node>,
-    known_hosts: HashSet<String>,
-}
-
-impl Client {
-    async fn run(mut self, discovery_interval: Duration) -> Result<()> {
-        let stream =
-            discover::all(&format!("{}.local", RAFT_SERVICE), discovery_interval)?.listen();
-        pin_mut!(stream);
+    port: u16,
+) -> impl Stream<Item = (SocketAddr, u64)> {
+    let service_name = service_name.to_owned();
+    stream! {
+        let mut service = MdnsService::new(false).unwrap();
+        let node_fqdn = format!("{}.{}", id, service_name);
+        let node_target = format!("{}.local", id);
+        service.register(&service_name);
+        let _svc_discovery = service.discover(&service_name, Duration::from_secs(5));
         loop {
-            match stream.next().await {
-                Some(Ok(response)) => {
-                    if let Some(addr) = response.socket_address() {
-                        if self.known_hosts.insert(addr.to_string()) {
-                            println!("new host! addr: {}", addr.to_string());
-                            let id = response
-                                .txt_records()
-                                .filter_map(|r| {
-                                    let mut split = r.split(":");
-                                    match (split.next(), split.next()) {
-                                        (Some(key), Some(value)) if key == "id" => {
-                                            value.parse().ok()
-                                        }
-                                        _ => None,
+            let (mut srv, packets) = service.next().await;
+            for packet in packets {
+                match packet {
+                    MdnsPacket::Query(query) => {
+                        if query.service_name == service_name {
+                            let mut resp = PacketBuilder::new();
+                            resp.add_ptr(&service_name, &node_fqdn, Duration::from_secs(3600));
+                            resp.add_srv(&service_name, port, Duration::from_secs(3600), 1, 1, &node_target);
+
+                            // add an address record with the IpAddr for each interface
+                            // TODO: this can probably just be done once
+                            if let Ok(interfaces) = get_if_addrs::get_if_addrs() {
+                                for interface in interfaces {
+                                    if interface.is_loopback() {
+                                        continue
                                     }
-                                })
-                                .next();
-                            if let Some(id) = id {
-                                let _ = self.tx.send(Node { id, addr });
+
+                                    match interface.ip() {
+                                        IpAddr::V4(ip) => {
+                                            resp.add_a(&node_target, ip, Duration::from_secs(3600));
+                                        }
+                                        _ => continue,
+                                    }
+                                }
                             }
+
+                            let resp = resp.build_answer(rand::random());
+                            srv.enqueue_response(resp);
                         }
                     }
+                    MdnsPacket::Response(response) => {
+                        let socket_addr = response.socket_address();
+                        let id: Option<u64> = response.hostname()
+                            .map(|s| s.split(".").next())
+                            .flatten()
+                            .map(|id| id.parse().ok())
+                            .flatten();
+                        match (socket_addr, id) {
+                            (Some(addr), Some(id)) => yield (addr, id),
+                            _ => continue,
+                        }
+                    }
+                    MdnsPacket::ServiceDiscovery(_disc) => {
+                        let mut packet = PacketBuilder::new();
+                        packet.add_ptr("_services._dns-sd._udp.local", &service_name, Duration::from_secs(3600));
+                        let packet = packet.build_answer(rand::random());
+                        srv.enqueue_response(packet);
+                    }
                 }
-                _ => (),
             }
+            service = srv;
         }
-    }
-}
-
-pub struct MDNSServer {
-    broadcast_tx: broadcast::Sender<Node>,
-    server_tx: mpsc::Sender<Ad>,
-}
-
-impl MDNSServer {
-    pub fn new(discover_duration: Duration) -> Result<MDNSServer> {
-        let (broadcast_tx, _) = broadcast::channel(1000);
-        let client = Client {
-            tx: broadcast_tx.clone(),
-            known_hosts: HashSet::new(),
-        };
-        let _client_handle = tokio::spawn(client.run(discover_duration));
-        let (server_tx, rx) = mpsc::channel(1000);
-        let server = Server { rx };
-        let _server_handle = server.run()?;
-        Ok(MDNSServer {
-            broadcast_tx,
-            server_tx,
-        })
-    }
-
-    /// returns a receiver to discovered nodes.
-    pub fn discover(&self) -> broadcast::Receiver<Node> {
-        self.broadcast_tx.subscribe()
-    }
-
-    pub async fn advertise(&mut self, id: u64, port: u16) -> Result<Service> {
-        let (tx, rx) = oneshot::channel();
-        self.server_tx.send(Ad { id, port, tx }).await?;
-        let svc = rx.await?;
-        Ok(svc)
     }
 }

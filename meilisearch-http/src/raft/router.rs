@@ -1,4 +1,5 @@
 use std::fmt;
+use std::collections::HashSet;
 use std::net::SocketAddr;
 
 use anyhow::Result;
@@ -83,9 +84,8 @@ impl RaftRouter {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    pub async fn clients(&self) -> Vec<(NodeId, String)> {
-        todo!()
+    pub fn members(&self) -> HashSet<NodeId> {
+        self.clients.iter().map(|e| *e.key()).collect()
     }
 }
 

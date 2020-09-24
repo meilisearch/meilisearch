@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{env, thread};
+use std::time::Duration;
 
 use actix_cors::Cors;
 use actix_web::{middleware, HttpServer};
@@ -81,6 +82,7 @@ async fn run_raft(opt: &Opt, raft_config_path: &PathBuf) -> Result<(), MainError
 
     let raft = init_raft(config, data.clone()).await?;
     let raft = Arc::new(raft);
+    raft.start(Duration::from_secs(10)).await;
 
     if !opt.no_analytics {
         let analytics_data = data.clone();
