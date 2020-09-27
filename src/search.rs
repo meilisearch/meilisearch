@@ -217,10 +217,14 @@ impl<'a> Search<'a> {
             eprintln!("found pairs {:?}", pairs);
 
             let mut pairs_union = RoaringBitmap::new();
-            for (w1, w2) in pairs {
-                let key = (w1, w2, 1);
-                if let Some(docids) = index.word_pair_proximity_docids.get(rtxn, &key)? {
-                    pairs_union.union_with(&docids);
+            'pairs: for (w1, w2) in pairs {
+                for prox in 1..=7 {
+                    let key = (w1, w2, prox);
+                    eprintln!("{:?}", key);
+                    if let Some(docids) = index.word_pair_proximity_docids.get(rtxn, &key)? {
+                        pairs_union.union_with(&docids);
+                        continue 'pairs;
+                    }
                 }
             }
 
