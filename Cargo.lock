@@ -1636,6 +1636,7 @@ dependencies = [
  "meilisearch-schema",
  "meilisearch-tokenizer",
  "mime",
+ "once_cell",
  "rand 0.7.3",
  "regex",
  "rustls 0.18.1",

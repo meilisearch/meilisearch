@@ -586,6 +586,8 @@ impl Database {
             .main
             .put_fields_distribution(writer, &frequency)
     }
+
+    pub fn version(&self) -> (u32, u32, u32) { self.database_version }
 }
 
 #[cfg(test)]

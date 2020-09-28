@@ -28,8 +28,8 @@ macro_rules! test_post_get_search {
 }
 
 pub struct Server {
-    uid: String,
-    data: Data,
+    pub uid: String,
+    pub data: Data,
 }
 
 impl Server {
@@ -39,7 +39,9 @@ impl Server {
         let default_db_options = DatabaseOptions::default();
 
         let opt = Opt {
-            db_path: tmp_dir.path().to_str().unwrap().to_string(),
+            db_path: tmp_dir.path().join("db").to_str().unwrap().to_string(),
+            backup_folder: tmp_dir.path().join("backup"),
+            backup_batch_size: 16,
             http_addr: "127.0.0.1:7700".to_owned(),
             master_key: None,
             env: "development".to_owned(),
@@ -124,6 +126,9 @@ impl Server {
         server
     }
 
+    pub fn data(&self) -> &Data {
+        &self.data
+    }
 
     pub async fn wait_update_id(&mut self, update_id: u64) {
         // try 10 times to get status, or panic to not wait forever
@@ -132,7 +137,7 @@ impl Server {
             assert_eq!(status_code, 200);
 
             if response["status"] == "processed" || response["status"] == "failed" {
-                eprintln!("{:#?}", response);
+                // eprintln!("{:#?}", response);
                 return;
             }
 
@@ -157,7 +162,7 @@ impl Server {
         (response, status_code)
     }
 
-    pub async fn post_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
+    pub async fn post_request(&self, url: &str, body: Value) -> (Value, StatusCode) {
         eprintln!("post_request: {}", url);
 
         let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
@@ -178,7 +183,7 @@ impl Server {
         eprintln!("post_request_async: {}", url);
 
         let (response, status_code) = self.post_request(url, body).await;
-        eprintln!("response: {}", response);
+        // eprintln!("response: {}", response);
         assert_eq!(status_code, 202);
         assert!(response["updateId"].as_u64().is_some());
         self.wait_update_id(response["updateId"].as_u64().unwrap())
@@ -482,5 +487,19 @@ impl Server {
 
     pub async fn get_sys_info_pretty(&mut self) -> (Value, StatusCode) {
         self.get_request("/sys-info/pretty").await
+    }
+
+    pub async fn trigger_backup(&self) -> (Value, StatusCode) {
+        self.post_request("/backups", Value::Null).await
+    }
+
+    pub async fn get_backup_status(&mut self, backup_uid: &str) -> (Value, StatusCode) {
+        let url = format!("/backups/{}/status", backup_uid);
+        self.get_request(&url).await
+    }
+
+    pub async fn trigger_backup_importation(&mut self, backup_uid: &str) -> (Value, StatusCode) {
+        let url = format!("/backups/{}/import", backup_uid);
+        self.get_request(&url).await
     }
 }

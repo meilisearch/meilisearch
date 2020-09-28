@@ -1,41 +1,13 @@
 use crate::Data;
 use crate::error::Error;
+use crate::helpers::compression;
 
-use flate2::Compression;
-use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
 use log::error;
-use std::fs::{create_dir_all, File};
-use std::io;
+use std::fs::create_dir_all;
 use std::path::Path;
 use std::thread;
 use std::time::{Duration};
-use tar::{Builder, Archive};
 use tempfile::TempDir;
-
-fn pack(src: &Path, dest: &Path) -> io::Result<()> {
-    let f = File::create(dest)?;
-    let gz_encoder = GzEncoder::new(f, Compression::default());
-
-    let mut tar_encoder = Builder::new(gz_encoder);
-    tar_encoder.append_dir_all(".", src)?;
-    let gz_encoder = tar_encoder.into_inner()?;
-
-    gz_encoder.finish()?;
-
-    Ok(())
-}
-
-fn unpack(src: &Path, dest: &Path) -> Result<(), Error> {
-    let f = File::open(src)?;
-    let gz = GzDecoder::new(f);
-    let mut ar = Archive::new(gz);
-
-    create_dir_all(dest)?;
-    ar.unpack(dest)?;
-
-    Ok(())
-}
 
 pub fn load_snapshot(
     db_path: &str,
@@ -46,7 +18,7 @@ pub fn load_snapshot(
     let db_path = Path::new(db_path);
 
     if !db_path.exists() && snapshot_path.exists() {
-        unpack(snapshot_path, db_path)
+        compression::from_tar_gz(snapshot_path, db_path)
     } else if db_path.exists() && !ignore_snapshot_if_db_exists {
         Err(Error::Internal(format!("database already exists at {:?}", db_path)))
     } else if !snapshot_path.exists() && !ignore_missing_snapshot {
@@ -61,7 +33,7 @@ pub fn create_snapshot(data: &Data, snapshot_path: &Path) -> Result<(), Error> {
 
     data.db.copy_and_compact_to_path(tmp_dir.path())?;
 
-    pack(tmp_dir.path(), snapshot_path).or_else(|e| Err(Error::Internal(format!("something went wrong during snapshot compression: {}", e))))
+    compression::to_tar_gz(tmp_dir.path(), snapshot_path).or_else(|e| Err(Error::Internal(format!("something went wrong during snapshot compression: {}", e))))
 }
 
 pub fn schedule_snapshot(data: Data, snapshot_dir: &Path, time_gap_s: u64) -> Result<(), Error> {
@@ -102,11 +74,11 @@ mod tests {
         let file_2_relative = Path::new("subfolder/file2.txt");
         
         create_dir_all(src_dir.join(subfolder_relative)).unwrap();
-        File::create(src_dir.join(file_1_relative)).unwrap().write_all(b"Hello_file_1").unwrap();
-        File::create(src_dir.join(file_2_relative)).unwrap().write_all(b"Hello_file_2").unwrap();
+        fs::File::create(src_dir.join(file_1_relative)).unwrap().write_all(b"Hello_file_1").unwrap();
+        fs::File::create(src_dir.join(file_2_relative)).unwrap().write_all(b"Hello_file_2").unwrap();
 
         
-        assert!(pack(&src_dir, &archive_path).is_ok());
+        assert!(compression::to_tar_gz(&src_dir, &archive_path).is_ok());
         assert!(archive_path.exists());
         assert!(load_snapshot(&dest_dir.to_str().unwrap(), &archive_path, false, false).is_ok());
 
