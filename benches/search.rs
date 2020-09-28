@@ -28,7 +28,7 @@ fn bench_search(c: &mut criterion::Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(query), &query, |b, &query| {
             b.iter(|| {
                 let rtxn = env.read_txn().unwrap();
-                let _documents_ids = index.search(&rtxn, query).unwrap();
+                let _documents_ids = index.search(&rtxn).query(*query).execute().unwrap();
             });
         });
     }
