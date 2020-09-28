@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::Entry::{Occupied, Vacant};
 
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
@@ -215,22 +216,28 @@ impl<'a> Search<'a> {
             words: &[(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
             candidates: &RoaringBitmap,
             parent_docids: Option<&RoaringBitmap>,
+            union_cache: &mut HashMap<(usize, u8), RoaringBitmap>,
         ) -> anyhow::Result<Option<RoaringBitmap>>
         {
             let (words1, words2) = (&words[0].0, &words[1].0);
             let pairs = words_pair_combinations(words1, words2);
 
             for proximity in 1..=8 {
-
-                let mut docids = RoaringBitmap::new();
-                if proximity == 8 {
-                    docids = candidates.clone();
-                } else {
-                    for (w1, w2) in pairs.iter().cloned() {
-                        let key = (w1, w2, proximity);
-                        if let Some(di) = index.word_pair_proximity_docids.get(rtxn, &key)? {
-                            docids.union_with(&di);
+                let mut docids = match union_cache.entry((words.len(), proximity)) {
+                    Occupied(entry) => entry.get().clone(),
+                    Vacant(entry) => {
+                        let mut docids = RoaringBitmap::new();
+                        if proximity == 8 {
+                            docids = candidates.clone();
+                        } else {
+                            for (w1, w2) in pairs.iter().cloned() {
+                                let key = (w1, w2, proximity);
+                                if let Some(di) = index.word_pair_proximity_docids.get(rtxn, &key)? {
+                                    docids.union_with(&di);
+                                }
+                            }
                         }
+                        entry.insert(docids).clone()
                     }
                 };
 
@@ -242,7 +249,7 @@ impl<'a> Search<'a> {
                     let words = &words[1..];
                     // We are the last word.
                     if words.len() < 2 { return Ok(Some(docids)) }
-                    if let Some(di) = depth_first_search(index, rtxn, words, candidates, Some(&docids))? {
+                    if let Some(di) = depth_first_search(index, rtxn, words, candidates, Some(&docids), union_cache)? {
                         return Ok(Some(di))
                     }
                 }
@@ -251,8 +258,10 @@ impl<'a> Search<'a> {
             Ok(None)
         }
 
+        let mut union_cache = HashMap::new();
+        let answer = depth_first_search(index, rtxn, &derived_words, &candidates, None, &mut union_cache)?;
+
         let mut documents = Vec::new();
-        let answer = depth_first_search(index, rtxn, &derived_words, &candidates, None)?;
         if let Some(answer) = answer {
             documents.push(answer);
         }
