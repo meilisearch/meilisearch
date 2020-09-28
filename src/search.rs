@@ -186,8 +186,6 @@ impl<'a> Search<'a> {
 
         debug!("candidates: {:?}", candidates);
 
-        let mut documents = Vec::new();
-
         // If there is only one query word, no need to compute the best proximities.
         if derived_words.len() == 1 || candidates.is_empty() {
             let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
@@ -211,31 +209,53 @@ impl<'a> Search<'a> {
             pairs
         }
 
-        let mut answer = RoaringBitmap::new();
-        for (i, words) in derived_words.windows(2).enumerate() {
-            let pairs = words_pair_combinations(&words[0].0, &words[1].0);
-            eprintln!("found pairs {:?}", pairs);
+        fn depth_first_search(
+            index: &Index,
+            rtxn: &heed::RoTxn,
+            words: &[(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
+            candidates: &RoaringBitmap,
+            parent_docids: Option<&RoaringBitmap>,
+        ) -> anyhow::Result<Option<RoaringBitmap>>
+        {
+            let (words1, words2) = (&words[0].0, &words[1].0);
+            let pairs = words_pair_combinations(words1, words2);
 
-            let mut pairs_union = RoaringBitmap::new();
-            'pairs: for (w1, w2) in pairs {
-                for prox in 1..=7 {
-                    let key = (w1, w2, prox);
-                    eprintln!("{:?}", key);
-                    if let Some(docids) = index.word_pair_proximity_docids.get(rtxn, &key)? {
-                        pairs_union.union_with(&docids);
-                        continue 'pairs;
+            for proximity in 1..=8 {
+
+                let mut docids = RoaringBitmap::new();
+                if proximity == 8 {
+                    docids = candidates.clone();
+                } else {
+                    for (w1, w2) in pairs.iter().cloned() {
+                        let key = (w1, w2, proximity);
+                        if let Some(di) = index.word_pair_proximity_docids.get(rtxn, &key)? {
+                            docids.union_with(&di);
+                        }
+                    }
+                };
+
+                if let Some(parent_docids) = &parent_docids {
+                    docids.intersect_with(parent_docids);
+                }
+
+                if !docids.is_empty() {
+                    let words = &words[1..];
+                    // We are the last word.
+                    if words.len() < 2 { return Ok(Some(docids)) }
+                    if let Some(di) = depth_first_search(index, rtxn, words, candidates, Some(&docids))? {
+                        return Ok(Some(di))
                     }
                 }
             }
 
-            if i == 0 {
-                answer = pairs_union;
-            } else {
-                answer.intersect_with(&pairs_union);
-            }
+            Ok(None)
         }
 
-        documents.push(answer);
+        let mut documents = Vec::new();
+        let answer = depth_first_search(index, rtxn, &derived_words, &candidates, None)?;
+        if let Some(answer) = answer {
+            documents.push(answer);
+        }
 
         let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
         let documents_ids = documents.into_iter().flatten().take(limit).collect();
