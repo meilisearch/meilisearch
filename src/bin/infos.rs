@@ -69,7 +69,8 @@ enum Command {
     AverageNumberOfWordsByDoc,
 
     /// Outputs the average number of positions for each document words.
-    AverageNumberOfPositions,
+    AverageNumberOfPositionsByWord,
+
 
     /// Outputs a CSV with the proximities for the two specidied words and
     /// the documents ids where these relations appears.
@@ -124,7 +125,9 @@ fn main() -> anyhow::Result<()> {
         WordsDocids { full_display, words } => words_docids(&index, &rtxn, !full_display, words),
         TotalDocidWordPositionsSize => total_docid_word_positions_size(&index, &rtxn),
         AverageNumberOfWordsByDoc => average_number_of_words_by_doc(&index, &rtxn),
-        AverageNumberOfPositions => average_number_of_positions(&index, &rtxn),
+        AverageNumberOfPositionsByWord => {
+            average_number_of_positions_by_word(&index, &rtxn)
+        },
         WordPairProximitiesDocids { full_display, word1, word2 } => {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
         },
@@ -306,7 +309,7 @@ fn average_number_of_words_by_doc(index: &Index, rtxn: &heed::RoTxn) -> anyhow::
     Ok(())
 }
 
-fn average_number_of_positions(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+fn average_number_of_positions_by_word(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use heed::types::DecodeIgnore;
     use milli::ByteorderXRoaringBitmapCodec;
 
