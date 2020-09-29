@@ -12,6 +12,7 @@ use log::{debug, error, info};
 use tokio::fs::File;
 
 use super::{snapshot::RaftSnapshot, ClientRequest, ClientResponse, Message};
+use super::raft_service::NodeState;
 use crate::data::Data;
 
 const ERR_INCONSISTENT_LOG: &str =
@@ -284,6 +285,16 @@ impl RaftStore {
 
         txn.commit()?;
         Ok(raft_snapshot)
+    }
+
+    /// Returns the current state of the node
+    pub async fn state(&self) -> Result<NodeState> {
+        let members = self.get_membership_config().await?.members;
+        if members.len() <= 1 {
+            Ok(NodeState::Uninitialized)
+        } else {
+            Ok(NodeState::Initialized)
+        }
     }
 }
 

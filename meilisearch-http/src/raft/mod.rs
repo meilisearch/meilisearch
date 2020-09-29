@@ -8,11 +8,11 @@ pub mod raft_service {
     tonic::include_proto!("raftservice");
 }
 
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::Data;
 use anyhow::Result;
@@ -26,13 +26,17 @@ use futures_util::StreamExt;
 use log::info;
 use meilisearch_core::settings::SettingsUpdate;
 use raft_service::raft_service_server::RaftServiceServer;
+use raft_service::NodeState;
 use router::RaftRouter;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use server::RaftServerService;
 use store::RaftStore;
+use tokio::sync::mpsc::{self, error::SendError};
+use tokio::sync::RwLock;
 use tokio::time;
 use tonic::transport::Server;
+use router::Client;
 
 use crate::data::{IndexCreateRequest, IndexResponse, UpdateDocumentsQuery};
 use crate::routes::IndexUpdateResponse;
@@ -101,15 +105,14 @@ impl AppData for ClientRequest {}
 
 #[allow(dead_code)]
 pub struct Raft {
-    running: bool,
     cluster_name: String,
     port: u16,
     pub inner: Arc<InnerRaft>,
     router: Arc<RaftRouter>,
+    log_store: Arc<RaftStore>,
     pub store: Data,
     id: NodeId,
     server_handle: tokio::task::JoinHandle<Result<(), tonic::transport::Error>>,
-    next_id: AtomicU64,
 }
 
 impl Raft {
@@ -127,8 +130,8 @@ impl Raft {
                 info!("Forwarding request to leader: {:?}", id);
                 let response = self
                     .router
-                    .clients
-                    .get(&id)
+                    .client(id)
+                    .await
                     .ok_or_else(|| anyhow::Error::msg("Can't find leader node"))?
                     .write()
                     .await
@@ -142,30 +145,90 @@ impl Raft {
 
     /// starts the raft cluster. Initally tries to form a cluster during the `cluster_formation_timeout` period.
     pub async fn start(&self, cluster_formation_timeout: Duration) -> Result<()> {
-    let service_name = format!("_raft_{}._tcp.local", self.cluster_name);
-    let stream = mdns::discover_peers(&service_name, self.id, self.port);
-    pin_mut!(stream);
+        let name = self.cluster_name.clone();
+        let id = self.id;
+        let port = self.port;
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let router = self.router.clone();
+
+        // Peer discovery will try to send a handle to the client through the tx channel will it is
+        // open. This allows the initial cluster formation to get information about the current
+        // state of the cluster, and react accordingly. As soon as the tx is dropped, the discovery
+        // service will continue to quietly initiate connection with new discover peers and add
+        // them to the router.
+        tokio::spawn(async move {
+            let service_name = format!("_raft_{}._tcp.local", name);
+            let stream = mdns::discover_peers(&service_name, id, port);
+            pin_mut!(stream);
+            loop {
+                if let Some((id, addr)) = stream.next().await {
+                    if let Ok(client) = router.add_client(id, addr).await {
+                        match tx.send((id, client)) {
+                            Ok(()) => (),
+                            Err(SendError((_id, _client))) => {}
+                        }
+                    }
+                }
+            }
+        });
+
+        let mut peers = HashMap::new();
         let mut timeout = time::delay_for(cluster_formation_timeout);
+
         loop {
             tokio::select! {
-                _ = &mut timeout, if !timeout.is_elapsed() => break,
-                peer = stream.next() => {
-                    if let Some((addr, id)) = peer {
-                        self.router.add_client(id, addr).await?;
+                _ = &mut timeout, if !timeout.is_elapsed() => {
+                    // purge the pending newly discovered clients if any.
+                    while let Ok((id, client)) = rx.try_recv() {
+                        if let Ok(state) = client.clone().write().await.handshake(self.id, self.log_store.state().await?).await {
+                            peers.insert(id, (client, state));
+                        }
+                    }
+                    drop(rx);
+                    break
+                },
+                Some((id, client)) = rx.recv() => {
+                    if let Ok(state) = client.clone().write().await.handshake(self.id, self.log_store.state().await?).await {
+                        peers.insert(id, (client, state));
                     }
                 }
             }
         }
 
-        let members = self.router.members();
-
-        match self.inner.initialize(members).await {
-            Ok(()) | Err(InitializeError::NotAllowed) => (),
-            Err(e) => return Err(anyhow::Error::new(e)),
+        if peers
+            .iter()
+            .all(|(_, (_, state))| *state == NodeState::Uninitialized)
+        {
+            let peer_ids = peers
+                .iter()
+                .map(|(id, _)| id)
+                .chain([self.id].iter())
+                .cloned()
+                .collect();
+            self.join_uninitialized(peer_ids).await?;
+        } else {
+            let cluster_members = peers
+                .iter()
+                .filter_map(|(_, (client, state))| if *state == NodeState::Initialized { Some(client.clone()) } else { None });
+            self.join_cluster(cluster_members).await?;
         }
+
         Ok(())
     }
+
+    async fn join_cluster(&self, members: impl Iterator<Item = Arc<RwLock<Client>>>) -> Result<()>{
+        unimplemented!()
+    }
+
+    async fn join_uninitialized(&self, ids: HashSet<NodeId>) -> Result<()> {
+        info!("initializing cluster with peers: {:?}", ids);
+        match self.inner.initialize(ids).await {
+            Ok(()) | Err(InitializeError::NotAllowed) => Ok(()),
+            Err(e) => Err(anyhow::Error::new(e)),
+        }
+    }
 }
+
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct Metrics {
@@ -205,55 +268,35 @@ impl From<RaftMetrics> for Metrics {
 }
 
 /// initial cluster formation, from seed host
-async fn init_raft_cluster(raft_config: RaftConfig, store: Data) -> Result<Raft> {
-    // generate random id
-    let id = rand::random();
-
-    info!("started raft with id: {}", id);
-
+async fn init_raft_cluster(raft_config: RaftConfig, store: Data, id: NodeId) -> Result<Raft> {
     // the raft configuration used to initialize the node
     let config = Arc::new(
         Config::build(raft_config.cluster_name.clone())
-            .heartbeat_interval(150)
-            .election_timeout_min(1000)
-            .election_timeout_max(1500)
-            .validate()?,
+        .heartbeat_interval(150)
+        .election_timeout_min(1000)
+        .election_timeout_max(1500)
+        .validate()?,
     );
 
     let router = Arc::new(RaftRouter::new());
-    let storage = Arc::new(RaftStore::new(
-        id,
-        raft_config.log_db_path,
-        store.clone(),
-        raft_config.snapshot_dir,
+    let log_store = Arc::new(RaftStore::new(
+            id,
+            raft_config.log_db_path,
+            store.clone(),
+            raft_config.snapshot_dir,
     )?);
-    let inner = Arc::new(InnerRaft::new(id, config, router.clone(), storage.clone()));
-    let svc = RaftServerService::new(inner.clone(), router.clone(), storage.clone());
+    let inner = Arc::new(InnerRaft::new(
+            id,
+            config,
+            router.clone(),
+            log_store.clone(),
+    ));
+    let svc = RaftServerService::new(inner.clone(), router.clone(), log_store.clone());
     let server_handle = tokio::spawn(
         Server::builder()
-            .add_service(RaftServiceServer::new(svc))
-            .serve(raft_config.addr),
+        .add_service(RaftServiceServer::new(svc))
+        .serve(raft_config.addr),
     );
-
-    // handle dynamic membership changes
-    //let inner_cloned = inner.clone();
-    //let router_cloned = router.clone();
-    //tokio::spawn(async move {
-    //let stream = mdns::discover_peers(&service_name, id, raft_port);
-    //pin_mut!(stream);
-    //loop {
-    //let inner = inner_cloned.clone();
-    //let router = router_cloned.clone();
-    //if let Some((addr, id)) = stream.next().await {
-    //tokio::spawn(async move {
-    //let _ = router.add_client(id, addr).await;
-    //let _ = inner.add_non_voter(id).await;
-    //let members = router.members();
-    //let _ = inner.change_membership(members).await;
-    //});
-    //}
-    //}
-    //});
 
     if let Some(metrics_server) = raft_config.metrics_server {
         let mut metrics = inner.metrics();
@@ -266,23 +309,22 @@ async fn init_raft_cluster(raft_config: RaftConfig, store: Data) -> Result<Raft>
                     .json(&metrics)
                     .send()
                     .await;
-            }
+                }
         });
     }
 
     Ok(Raft {
         cluster_name: raft_config.cluster_name,
         port: raft_config.addr.port(),
-        running: false,
         inner,
         id,
         server_handle,
-        next_id: AtomicU64::new(0),
         router,
         store,
+        log_store,
     })
 }
 
-pub async fn init_raft(raft_config: RaftConfig, store: Data) -> Result<Raft> {
-    init_raft_cluster(raft_config, store).await
+pub async fn init_raft(raft_config: RaftConfig, store: Data, id: NodeId) -> Result<Raft> {
+    init_raft_cluster(raft_config, store, id).await
 }

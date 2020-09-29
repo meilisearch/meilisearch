@@ -7,6 +7,7 @@ service RaftService {
   rpc InstallSnapshot(InstallSnapshotRequest) returns (InstallSnapshotResponse) {}
   rpc Forward(ClientWriteRequest) returns (ClientWriteResponse) {}
   rpc RequestConnection(ConnectionRequest) returns (ConnectionResponse) {}
+  rpc Handshake(HandshakeRequest) returns (HandshakeResponse) {}
 }
 
 message ConnectionRequest {
@@ -53,4 +54,18 @@ enum Status {
   SUCCESS = 0;
   WRONG_LEADER = 1;
   ERROR = 2;
+}
+
+enum NodeState {
+  Initialized = 0;
+  Uninitialized = 1;
+}
+
+message HandshakeRequest {
+  NodeState state = 1;
+  uint64 id = 2;
+}
+
+message HandshakeResponse {
+  NodeState state = 1;
 }

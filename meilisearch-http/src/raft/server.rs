@@ -7,7 +7,7 @@ use super::raft_service::raft_service_server::RaftService;
 use super::raft_service::{
     self, AppendEntriesRequest, AppendEntriesResponse, ClientWriteRequest, ClientWriteResponse,
     ConnectionRequest, ConnectionResponse, InstallSnapshotRequest, InstallSnapshotResponse,
-    VoteRequest, VoteResponse,
+    VoteRequest, VoteResponse, HandshakeRequest, HandshakeResponse 
 };
 use super::router::RaftRouter;
 use super::store::RaftStore;
@@ -15,16 +15,16 @@ use super::InnerRaft;
 
 pub struct RaftServerService {
     raft: Arc<InnerRaft>,
-    store: Arc<RaftStore>,
+    log_store: Arc<RaftStore>,
     router: Arc<RaftRouter>,
 }
 
 impl RaftServerService {
-    pub fn new(raft: Arc<InnerRaft>, router: Arc<RaftRouter>, store: Arc<RaftStore>) -> Self {
+    pub fn new(raft: Arc<InnerRaft>, router: Arc<RaftRouter>, log_store: Arc<RaftStore>) -> Self {
         Self {
             raft,
             router,
-            store,
+            log_store,
         }
     }
 }
@@ -96,7 +96,7 @@ impl RaftService for RaftServerService {
             Some(addr) => {
                 let ConnectionRequest { id } = request.get_ref();
                 let _ = self.router.add_client(*id, addr).await;
-                response.data = serialize(&self.store.id).unwrap();
+                response.data = serialize(&self.log_store.id).unwrap();
                 response.set_status(raft_service::Status::Success);
             }
             None => {
@@ -104,6 +104,19 @@ impl RaftService for RaftServerService {
                 response.data = serialize(&"can't get peer addr".to_string()).unwrap();
             }
         }
+        Ok(Response::new(response))
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    async fn handshake(
+        &self,
+        request: Request<HandshakeRequest>,
+    ) -> Result<Response<HandshakeResponse>, Status> {
+        let id = request.get_ref().id;
+        let addr = request.remote_addr().ok_or_else(|| Status::aborted("No remote address"))?;
+        self.router.add_client(id, addr).await.map_err(|_| Status::internal("Error adding peer"))?;
+        let state = self.log_store.state().await.map_err(|_| Status::internal("Impossible to retrieve internal state"))? as i32;
+        let response = HandshakeResponse { state };
         Ok(Response::new(response))
     }
 }

@@ -1,20 +1,18 @@
-use madness::dns::PacketBuilder;
-use madness::packet::MdnsPacket;
-use madness::service::MdnsService;
-use std::io;
-use std::net::IpAddr;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use async_stream::stream;
 use futures_core::Stream;
+use madness::dns::PacketBuilder;
+use madness::packet::MdnsPacket;
+use madness::service::MdnsService;
 
 /// Returns a stream of dicovered peers
 pub fn discover_peers(
     service_name: &str,
     id: u64,
     port: u16,
-) -> impl Stream<Item = (SocketAddr, u64)> {
+) -> impl Stream<Item = (u64, SocketAddr)> {
     let service_name = service_name.to_owned();
     stream! {
         let mut service = MdnsService::new(false).unwrap();
@@ -39,7 +37,6 @@ pub fn discover_peers(
                                     if interface.is_loopback() {
                                         continue
                                     }
-
                                     match interface.ip() {
                                         IpAddr::V4(ip) => {
                                             resp.add_a(&node_target, ip, Duration::from_secs(3600));
@@ -61,7 +58,9 @@ pub fn discover_peers(
                             .map(|id| id.parse().ok())
                             .flatten();
                         match (socket_addr, id) {
-                            (Some(addr), Some(id)) => yield (addr, id),
+                            (Some(addr), Some(id)) => {
+                                yield (id, addr)
+                            },
                             _ => continue,
                         }
                     }

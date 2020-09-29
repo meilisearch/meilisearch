@@ -21,7 +21,7 @@ actix-cors = "0.2"
 actix-http = "1"
 actix-rt = "1"
 actix-service = "1.0.5"
-actix-web = { version = "2", features = ["rustls"] }
+actix-web = { version = "2.0", features = ["rustls"] }
 actix-web-macros = "0.1"
 async-stream = "0.3"
 anyhow = "1.0"
@@ -30,7 +30,6 @@ bincode = "1.3.1"
 bytes = "0.5"
 chrono = { version = "0.4.11", features = ["serde"] }
 crossbeam-channel = "0.4.2"
-dashmap = "3.11.10"
 env_logger = "0.7.1"
 flate2 = "1.0.16"
 futures = "0.3.4"
@@ -39,7 +38,7 @@ futures-util = "0.3.5"
 heed = "0.8.0"
 http = "0.1.19"
 indexmap = { version = "1.3.2", features = ["serde-1"] }
-madness = { path = "../../tokio-mdns" }
+madness = { git = "https://github.com/MarinPostma/madness.git", branch = "master" }
 log = "0.4.8"
 main_error = "0.1.0"
 meilisearch-core = { path = "../meilisearch-core", version = "0.14.0" }

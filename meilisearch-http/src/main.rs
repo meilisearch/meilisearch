@@ -80,9 +80,9 @@ async fn run_raft(opt: &Opt, raft_config_path: &PathBuf) -> Result<(), MainError
     file.read_to_string(&mut config).await?;
     let config: RaftConfig = toml::from_str(&config)?;
 
-    let raft = init_raft(config, data.clone()).await?;
+    let raft = init_raft(config, data.clone(), rand::random()).await?;
     let raft = Arc::new(raft);
-    raft.start(Duration::from_secs(10)).await;
+    let _ = raft.start(Duration::from_secs(10)).await?;
 
     if !opt.no_analytics {
         let analytics_data = data.clone();
