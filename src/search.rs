@@ -176,7 +176,7 @@ impl<'a> Search<'a> {
         &self,
         words: &[(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
         candidates: &RoaringBitmap,
-        parent_docids: Option<&RoaringBitmap>,
+        parent_docids: &RoaringBitmap,
         union_cache: &mut HashMap<(usize, u8), RoaringBitmap>,
     ) -> anyhow::Result<Option<RoaringBitmap>>
     {
@@ -202,15 +202,13 @@ impl<'a> Search<'a> {
                 }
             };
 
-            if let Some(parent_docids) = &parent_docids {
-                docids.intersect_with(parent_docids);
-            }
+            docids.intersect_with(parent_docids);
 
             if !docids.is_empty() {
                 let words = &words[1..];
                 // We are the last word.
                 if words.len() < 2 { return Ok(Some(docids)) }
-                if let Some(di) = self.depth_first_search(words, candidates, Some(&docids), union_cache)? {
+                if let Some(di) = self.depth_first_search(words, candidates, &docids, union_cache)? {
                     return Ok(Some(di))
                 }
             }
@@ -250,9 +248,24 @@ impl<'a> Search<'a> {
             return Ok(SearchResult { found_words, documents_ids });
         }
 
-        let mut union_cache = HashMap::new();
         let mut documents = Vec::new();
-        if let Some(answer) = answer {
+        let mut union_cache = HashMap::new();
+
+        // We execute the DFS until we find enough documents, we run it with the
+        // candidates list and remove the found documents from this list at each iteration.
+        while documents.iter().map(RoaringBitmap::len).sum::<u64>() < limit as u64 {
+            let answer = self.depth_first_search(&derived_words, &candidates, &candidates, &mut union_cache)?;
+
+            let answer = match answer {
+                Some(answer) if !answer.is_empty() => answer,
+                _ => break,
+            };
+
+            debug!("answer: {:?}", answer);
+
+            // We remove the answered documents from the list of
+            // candidates to be sure we don't search for them again.
+            candidates.difference_with(&answer);
             documents.push(answer);
         }
 

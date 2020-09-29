@@ -535,6 +535,7 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
 
 // TODO merge with the previous values
 // TODO store the documents in a compressed MTBL
+// TODO prefer using iter.append when possible, it is way faster (4x) to inject ordered entries.
 fn lmdb_writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) -> anyhow::Result<()> {
     if key == WORDS_FST_KEY {
         // Write the words fst
