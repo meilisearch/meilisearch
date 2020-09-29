@@ -23,7 +23,7 @@ use structopt::StructOpt;
 
 use milli::heed_codec::{CsvStringRecordCodec, ByteorderXRoaringBitmapCodec};
 use milli::tokenizer::{simple_tokenizer, only_token};
-use milli::{SmallVec32, Index, DocumentId, BEU32};
+use milli::{SmallVec32, Index, Position, DocumentId, BEU32};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
 const ONE_MILLION: usize = 1_000_000;
@@ -91,7 +91,7 @@ struct IndexerOpt {
 
     /// Size of the linked hash map cache when indexing.
     /// The bigger it is, the faster the indexing is but the more memory it takes.
-    #[structopt(long, default_value = "1048576")]
+    #[structopt(long, default_value = "524288")]
     linked_hash_map_size: usize,
 
     /// The name of the compression algorithm to use when compressing intermediate
@@ -130,35 +130,34 @@ fn create_writer(type_: CompressionType, level: Option<u32>, file: File) -> Writ
     builder.build(file)
 }
 
-/// Outputs a list of all pairs of words with the proximities between 1 and 7 inclusive.
+/// Outputs a list of all pairs of words with the shortest proximity between 1 and 7 inclusive.
 ///
-/// This list is used by the engine to calculate the documents containing the word that are
+/// This list is used by the engine to calculate the documents containing words that are
 /// close to each other.
-//
-// TODO we currently store both words pairs (a,b) and (b,a) but we can maybe optimize
-// that by only storing the lexicographically ordered pair and increment by one the pair
-// that is not in the right order. This way we would avoid storing pairs in both orders.
 fn compute_words_pair_proximities(
-    word_positions: &HashMap<String, RoaringBitmap>,
-) -> HashMap<(&str, &str), RoaringBitmap>
+    word_positions: &HashMap<String, SmallVec32<Position>>,
+) -> HashMap<(&str, &str), u8>
 {
     use itertools::Itertools;
 
     let mut words_pair_proximities = HashMap::new();
-    for (w1, w2) in word_positions.keys().cartesian_product(word_positions.keys()) {
-        let mut distances = RoaringBitmap::new();
-        let positions1: Vec<_> = word_positions[w1].iter().collect();
-        let positions2: Vec<_> = word_positions[w2].iter().collect();
-        for (ps1, ps2) in positions1.iter().cartesian_product(positions2.iter()) {
+    for ((w1, ps1), (w2, ps2)) in word_positions.iter().cartesian_product(word_positions) {
+        let mut min_prox = None;
+        for (ps1, ps2) in ps1.iter().cartesian_product(ps2) {
             let prox = milli::proximity::positions_proximity(*ps1, *ps2);
+            let prox = u8::try_from(prox).unwrap();
             // We don't care about a word that appear at the
             // same position or too far from the other.
-            if prox > 0 && prox < 8 { distances.insert(prox); }
+            if prox >= 1 && prox <= 7 {
+                match min_prox {
+                    None => min_prox = Some(prox),
+                    Some(mp) => if prox < mp { min_prox = Some(prox) },
+                }
+            }
         }
-        if !distances.is_empty() {
-            words_pair_proximities.entry((w1.as_str(), w2.as_str()))
-                .or_insert_with(RoaringBitmap::new)
-                .union_with(&distances);
+
+        if let Some(min_prox) = min_prox {
+            words_pair_proximities.insert((w1.as_str(), w2.as_str()), min_prox);
         }
     }
 
@@ -170,6 +169,8 @@ type MergeFn = fn(&[u8], &[Vec<u8>]) -> Result<Vec<u8>, ()>;
 struct Store {
     word_docids: LinkedHashMap<SmallVec32<u8>, RoaringBitmap>,
     word_docids_limit: usize,
+    words_pairs_proximities_docids: LinkedHashMap<(SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap>,
+    words_pairs_proximities_docids_limit: usize,
     documents_ids: RoaringBitmap,
     sorter: Sorter<MergeFn>,
     documents_writer: Writer<File>,
@@ -208,6 +209,8 @@ impl Store {
         Ok(Store {
             word_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
             word_docids_limit: linked_hash_map_size,
+            words_pairs_proximities_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
+            words_pairs_proximities_docids_limit: linked_hash_map_size,
             documents_ids: RoaringBitmap::new(),
             sorter: builder.build(),
             documents_writer,
@@ -237,6 +240,43 @@ impl Store {
         Ok(())
     }
 
+    // Save the documents ids under the words pairs proximities that it contains.
+    fn insert_words_pairs_proximities_docids<'a>(
+        &mut self,
+        words_pairs_proximities: impl IntoIterator<Item=((&'a str, &'a str), u8)>,
+        id: DocumentId,
+    ) -> anyhow::Result<()>
+    {
+        for ((w1, w2), prox) in words_pairs_proximities {
+            let w1 = SmallVec32::from(w1.as_bytes());
+            let w2 = SmallVec32::from(w2.as_bytes());
+            let key = (w1, w2, prox);
+            // if get_refresh finds the element it is assured
+            // to be at the end of the linked hash map.
+            match self.words_pairs_proximities_docids.get_refresh(&key) {
+                Some(old) => { old.insert(id); },
+                None => {
+                    // A newly inserted element is append at the end of the linked hash map.
+                    let ids = RoaringBitmap::from_iter(Some(id));
+                    self.words_pairs_proximities_docids.insert(key, ids);
+                }
+            }
+        }
+
+        // If the linked hashmap is over capacity we must remove the overflowing elements.
+        let len = self.words_pairs_proximities_docids.len();
+        let overflow = len.checked_sub(self.words_pairs_proximities_docids_limit);
+        if let Some(overflow) = overflow {
+            let mut lrus = Vec::with_capacity(overflow);
+            // Removing front elements is equivalent to removing the LRUs.
+            let iter = iter::from_fn(|| self.words_pairs_proximities_docids.pop_front());
+            iter.take(overflow).for_each(|x| lrus.push(x));
+            Self::write_words_pairs_proximities(&mut self.sorter, lrus)?;
+        }
+
+        Ok(())
+    }
+
     fn write_headers(&mut self, headers: &StringRecord) -> anyhow::Result<()> {
         let headers = CsvStringRecordCodec::bytes_encode(headers)
             .with_context(|| format!("could not encode csv record"))?;
@@ -246,13 +286,13 @@ impl Store {
     fn write_document(
         &mut self,
         document_id: DocumentId,
-        words_positions: &HashMap<String, RoaringBitmap>,
+        words_positions: &HashMap<String, SmallVec32<Position>>,
         record: &StringRecord,
     ) -> anyhow::Result<()>
     {
         // We compute the list of words pairs proximities (self-join) and write it directly to disk.
         let words_pair_proximities = compute_words_pair_proximities(&words_positions);
-        Self::write_words_pairs_proximities(&mut self.sorter, document_id, &words_pair_proximities)?;
+        self.insert_words_pairs_proximities_docids(words_pair_proximities, document_id)?;
 
         // We store document_id associated with all the words the record contains.
         for (word, _) in words_positions {
@@ -269,36 +309,29 @@ impl Store {
         Ok(())
     }
 
-    // FIXME We must store those pairs in a cache to reduce the number of I/O operations,
-    //       We must store the documents ids associated with the words pairs and proximities.
     fn write_words_pairs_proximities(
         sorter: &mut Sorter<MergeFn>,
-        document_id: DocumentId,
-        words_pair_proximities: &HashMap<(&str, &str), RoaringBitmap>,
+        iter: impl IntoIterator<Item=((SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap)>,
     ) -> anyhow::Result<()>
     {
         // words proximities keys are all prefixed
         let mut key = vec![WORDS_PROXIMITIES_BYTE];
         let mut buffer = Vec::new();
 
-        for ((w1, w2), proximities) in words_pair_proximities {
+        for ((w1, w2, min_prox), docids) in iter {
             key.truncate(1);
             key.extend_from_slice(w1.as_bytes());
             key.push(0);
             key.extend_from_slice(w2.as_bytes());
-            let pair_len = key.len();
-            for prox in proximities {
-                key.truncate(pair_len);
-                key.push(u8::try_from(prox).unwrap());
-                // We serialize the document ids into a buffer
-                buffer.clear();
-                let ids = RoaringBitmap::from_iter(Some(document_id));
-                buffer.reserve(ids.serialized_size());
-                ids.serialize_into(&mut buffer)?;
-                // that we write under the generated key into MTBL
-                if lmdb_key_valid_size(&key) {
-                    sorter.insert(&key, &buffer)?;
-                }
+            // Storing the minimun proximity found between those words
+            key.push(min_prox);
+            // We serialize the document ids into a buffer
+            buffer.clear();
+            buffer.reserve(docids.serialized_size());
+            docids.serialize_into(&mut buffer)?;
+            // that we write under the generated key into MTBL
+            if lmdb_key_valid_size(&key) {
+                sorter.insert(&key, &buffer)?;
             }
         }
 
@@ -308,7 +341,7 @@ impl Store {
     fn write_docid_word_positions(
         sorter: &mut Sorter<MergeFn>,
         id: DocumentId,
-        words_positions: &HashMap<String, RoaringBitmap>,
+        words_positions: &HashMap<String, SmallVec32<Position>>,
     ) -> anyhow::Result<()>
     {
         // postings positions ids keys are all prefixed
@@ -322,6 +355,7 @@ impl Store {
             key.truncate(base_size);
             key.extend_from_slice(word.as_bytes());
             // We serialize the positions into a buffer.
+            let positions = RoaringBitmap::from_iter(positions.iter().cloned());
             let bytes = ByteorderXRoaringBitmapCodec::bytes_encode(&positions)
                 .with_context(|| format!("could not serialize positions"))?;
             // that we write under the generated key into MTBL
@@ -345,6 +379,7 @@ impl Store {
             key.extend_from_slice(&word);
             // We serialize the document ids into a buffer
             buffer.clear();
+            let ids = RoaringBitmap::from_iter(ids);
             buffer.reserve(ids.serialized_size());
             ids.serialize_into(&mut buffer)?;
             // that we write under the generated key into MTBL
@@ -395,7 +430,7 @@ impl Store {
                     for (pos, token) in simple_tokenizer(&content).filter_map(only_token).enumerate().take(MAX_POSITION) {
                         let word = token.to_lowercase();
                         let position = (attr * MAX_POSITION + pos) as u32;
-                        words_positions.entry(word).or_insert_with(RoaringBitmap::new).insert(position);
+                        words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
                     }
                 }
 
@@ -419,6 +454,7 @@ impl Store {
 
         Self::write_word_docids(&mut self.sorter, self.word_docids)?;
         Self::write_documents_ids(&mut self.sorter, self.documents_ids)?;
+        Self::write_words_pairs_proximities(&mut self.sorter, self.words_pairs_proximities_docids)?;
 
         let wtr_file = tempfile::tempfile()?;
         let mut wtr = create_writer(compression_type, compression_level, wtr_file);

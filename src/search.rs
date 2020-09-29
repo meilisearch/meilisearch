@@ -8,9 +8,6 @@ use log::debug;
 use once_cell::sync::Lazy;
 use roaring::bitmap::{IntoIter, RoaringBitmap};
 
-use near_proximity::near_proximity;
-
-use crate::proximity::path_proximity;
 use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, DocumentId};
 
