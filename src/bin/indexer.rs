@@ -26,7 +26,6 @@ use milli::tokenizer::{simple_tokenizer, only_token};
 use milli::{SmallVec32, Index, Position, DocumentId, BEU32};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
-const ONE_MILLION: usize = 1_000_000;
 
 const MAX_POSITION: usize = 1000;
 const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
@@ -81,6 +80,11 @@ struct Opt {
 
 #[derive(Debug, StructOpt)]
 struct IndexerOpt {
+    /// The amount of documents to skip before printing
+    /// a log regarding the indexing advancement.
+    #[structopt(long, default_value = "1000000")] // 1m
+    log_every_n: usize,
+
     /// MTBL max number of chunks in bytes.
     #[structopt(long)]
     max_nb_chunks: Option<usize>,
@@ -115,6 +119,10 @@ fn compression_type_from_str(name: &str) -> CompressionType {
         "zstd" => CompressionType::Zstd,
         _ => panic!("invalid compression algorithm"),
     }
+}
+
+fn format_count(n: usize) -> String {
+    human_format::Formatter::new().with_decimals(1).with_separator("").format(n as f64)
 }
 
 fn lmdb_key_valid_size(key: &[u8]) -> bool {
@@ -403,6 +411,7 @@ impl Store {
         mut rdr: csv::Reader<Box<dyn Read + Send>>,
         thread_index: usize,
         num_threads: usize,
+        log_every_n: usize,
     ) -> anyhow::Result<(Reader<Mmap>, Reader<Mmap>)>
     {
         debug!("{:?}: Indexing in a Store...", thread_index);
@@ -419,9 +428,10 @@ impl Store {
         while rdr.read_record(&mut document)? {
             // We skip documents that must not be indexed by this thread.
             if document_id % num_threads == thread_index {
-                if document_id % ONE_MILLION == 0 {
-                    let count = document_id / ONE_MILLION;
-                    info!("We have seen {}m documents so far ({:.02?}).", count, before.elapsed());
+                // This is a log routine that we do every `log_every_n` documents.
+                if document_id % log_every_n == 0 {
+                    let count = format_count(document_id);
+                    info!("We have seen {} documents so far ({:.02?}).", count, before.elapsed());
                     before = Instant::now();
                 }
 
@@ -657,6 +667,7 @@ fn main() -> anyhow::Result<()> {
     let max_memory = opt.indexer.max_memory;
     let chunk_compression_type = compression_type_from_str(&opt.indexer.chunk_compression_type);
     let chunk_compression_level = opt.indexer.chunk_compression_level;
+    let log_every_n = opt.indexer.log_every_n;
 
     let readers = csv_readers(opt.csv_file, num_threads)?
         .into_par_iter()
@@ -669,7 +680,7 @@ fn main() -> anyhow::Result<()> {
                 chunk_compression_type,
                 chunk_compression_level,
             )?;
-            store.index_csv(rdr, i, num_threads)
+            store.index_csv(rdr, i, num_threads, log_every_n)
         })
         .collect::<Result<Vec<_>, _>>()?;
 

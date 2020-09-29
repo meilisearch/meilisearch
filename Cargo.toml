@@ -14,6 +14,7 @@ flate2 = "1.0.17"
 fst = "0.4.3"
 fxhash = "0.2.1"
 heed = { version = "0.8.1", default-features = false, features = ["lmdb"] }
+human_format = "1.0.3"
 jemallocator = "0.3.2"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
 linked-hash-map = "0.5.3"
