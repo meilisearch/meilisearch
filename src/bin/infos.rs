@@ -71,6 +71,8 @@ enum Command {
     /// Outputs the average number of positions for each document words.
     AverageNumberOfPositionsByWord,
 
+    /// Outputs the average number of documents for each words pair.
+    AverageNumberOfDocumentByWordPairProximity,
 
     /// Outputs a CSV with the proximities for the two specidied words and
     /// the documents ids where these relations appears.
@@ -128,6 +130,9 @@ fn main() -> anyhow::Result<()> {
         AverageNumberOfPositionsByWord => {
             average_number_of_positions_by_word(&index, &rtxn)
         },
+        AverageNumberOfDocumentByWordPairProximity => {
+            average_number_of_document_by_word_pair_proximity(&index, &rtxn)
+        }
         WordPairProximitiesDocids { full_display, word1, word2 } => {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
         },
@@ -327,6 +332,32 @@ fn average_number_of_positions_by_word(index: &Index, rtxn: &heed::RoTxn) -> any
     let count = count as f64;
 
     println!("average number of positions by word: {}", values_length_sum / count);
+
+    Ok(())
+}
+
+fn average_number_of_document_by_word_pair_proximity(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+) -> anyhow::Result<()>
+{
+    use heed::types::DecodeIgnore;
+    use milli::RoaringBitmapCodec;
+
+    let mut values_length = Vec::new();
+    let mut count = 0;
+
+    let db = index.word_pair_proximity_docids.as_polymorph();
+    for result in db.iter::<_, DecodeIgnore, RoaringBitmapCodec>(rtxn)? {
+        let ((), val) = result?;
+        values_length.push(val.len() as u32);
+        count += 1;
+    }
+
+    let values_length_sum = values_length.into_iter().map(|c| c as usize).sum::<usize>() as f64;
+    let count = count as f64;
+
+    println!("average number of documents by words pairs proximities: {}", values_length_sum / count);
 
     Ok(())
 }
