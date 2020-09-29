@@ -8,7 +8,7 @@ pub mod option;
 pub mod routes;
 pub mod analytics;
 pub mod snapshot;
-pub mod backup;
+pub mod dump;
 
 use actix_http::Error;
 use actix_service::ServiceFactory;
@@ -16,7 +16,7 @@ use actix_web::{dev, web, App};
 use chrono::Utc;
 use log::error;
 
-use meilisearch_core::ProcessedUpdateResult;
+use meilisearch_core::{Index, MainWriter, ProcessedUpdateResult};
 
 pub use option::Opt;
 pub use self::data::Data;
@@ -57,7 +57,23 @@ pub fn create_app(
         .configure(routes::health::services)
         .configure(routes::stats::services)
         .configure(routes::key::services)
-        .configure(routes::backup::services)
+        .configure(routes::dump::services)
+}
+
+pub fn index_update_callback_txn(index: Index, index_uid: &str, data: &Data, mut writer: &mut MainWriter) -> Result<(), String> {
+    if let Err(e) = data.db.compute_stats(&mut writer, index_uid) {
+        return Err(format!("Impossible to compute stats; {}", e));
+    }
+
+    if let Err(e) = data.db.set_last_update(&mut writer, &Utc::now()) {
+        return Err(format!("Impossible to update last_update; {}", e));
+    }
+
+    if let Err(e) = index.main.put_updated_at(&mut writer) {
+        return Err(format!("Impossible to update updated_at; {}", e));
+    }
+
+    Ok(())
 }
 
 pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpdateResult) {
@@ -65,20 +81,13 @@ pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpda
         return;
     }
 
-    if let Some(index) = data.db.open_index(&index_uid) {
+    if let Some(index) = data.db.open_index(index_uid) {
         let db = &data.db;
         let res = db.main_write::<_, _, ResponseError>(|mut writer| {
-            if let Err(e) = data.db.compute_stats(&mut writer, &index_uid) {
-                error!("Impossible to compute stats; {}", e)
+            if let Err(e) = index_update_callback_txn(index, index_uid, data, &mut writer) {
+                error!("{}", e);
             }
 
-            if let Err(e) = data.db.set_last_update(&mut writer, &Utc::now()) {
-                error!("Impossible to update last_update; {}", e)
-            }
-
-            if let Err(e) = index.main.put_updated_at(&mut writer) {
-                error!("Impossible to update updated_at; {}", e)
-            }
             Ok(())
         });
         match res {

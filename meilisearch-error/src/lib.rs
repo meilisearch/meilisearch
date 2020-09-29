@@ -77,8 +77,8 @@ pub enum Code {
     SearchDocuments,
     UnsupportedMediaType,
 
-    BackupAlreadyInProgress,
-    BackupProcessFailed,
+    DumpAlreadyInProgress,
+    DumpProcessFailed,
 }
 
 impl Code {
@@ -126,9 +126,9 @@ impl Code {
             SearchDocuments => ErrCode::internal("search_error", StatusCode::BAD_REQUEST),
             UnsupportedMediaType => ErrCode::invalid("unsupported_media_type", StatusCode::UNSUPPORTED_MEDIA_TYPE),
 
-            // error related to backup
-            BackupAlreadyInProgress => ErrCode::invalid("backup_already_in_progress", StatusCode::CONFLICT),
-            BackupProcessFailed => ErrCode::internal("backup_process_failed", StatusCode::INTERNAL_SERVER_ERROR),
+            // error related to dump
+            DumpAlreadyInProgress => ErrCode::invalid("dump_already_in_progress", StatusCode::CONFLICT),
+            DumpProcessFailed => ErrCode::internal("dump_process_failed", StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 

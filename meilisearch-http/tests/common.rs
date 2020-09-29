@@ -40,8 +40,8 @@ impl Server {
 
         let opt = Opt {
             db_path: tmp_dir.path().join("db").to_str().unwrap().to_string(),
-            backup_folder: tmp_dir.path().join("backup"),
-            backup_batch_size: 16,
+            dumps_folder: tmp_dir.path().join("dump"),
+            dump_batch_size: 16,
             http_addr: "127.0.0.1:7700".to_owned(),
             master_key: None,
             env: "development".to_owned(),
@@ -489,17 +489,17 @@ impl Server {
         self.get_request("/sys-info/pretty").await
     }
 
-    pub async fn trigger_backup(&self) -> (Value, StatusCode) {
-        self.post_request("/backups", Value::Null).await
+    pub async fn trigger_dump(&self) -> (Value, StatusCode) {
+        self.post_request("/dumps", Value::Null).await
     }
 
-    pub async fn get_backup_status(&mut self, backup_uid: &str) -> (Value, StatusCode) {
-        let url = format!("/backups/{}/status", backup_uid);
+    pub async fn get_dump_status(&mut self, dump_uid: &str) -> (Value, StatusCode) {
+        let url = format!("/dumps/{}/status", dump_uid);
         self.get_request(&url).await
     }
 
-    pub async fn trigger_backup_importation(&mut self, backup_uid: &str) -> (Value, StatusCode) {
-        let url = format!("/backups/{}/import", backup_uid);
+    pub async fn trigger_dump_importation(&mut self, dump_uid: &str) -> (Value, StatusCode) {
+        let url = format!("/dumps/{}/import", dump_uid);
         self.get_request(&url).await
     }
 }
