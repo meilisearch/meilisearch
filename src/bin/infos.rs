@@ -88,6 +88,10 @@ enum Command {
     /// Outputs the average number of documents for each words pair.
     AverageNumberOfDocumentByWordPairProximity,
 
+    /// Outputs some statistics about the words pairs proximities
+    /// (median, quartiles, percentiles, min, max).
+    WordPairProximityStats,
+
     /// Outputs the size in bytes of the specified database.
     SizeOfDatabase {
         #[structopt(possible_values = DATABASE_NAMES)]
@@ -153,7 +157,8 @@ fn main() -> anyhow::Result<()> {
         SizeOfDatabase { database } => size_of_database(&index, &rtxn, &database),
         AverageNumberOfDocumentByWordPairProximity => {
             average_number_of_document_by_word_pair_proximity(&index, &rtxn)
-        }
+        },
+        WordPairProximityStats => word_pair_proximity_stats(&index, &rtxn),
         WordPairProximitiesDocids { full_display, word1, word2 } => {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
         },
@@ -392,20 +397,57 @@ fn average_number_of_document_by_word_pair_proximity(
     use heed::types::DecodeIgnore;
     use milli::RoaringBitmapCodec;
 
-    let mut values_length = Vec::new();
+    let mut values_length_sum = 0;
     let mut count = 0;
 
     let db = index.word_pair_proximity_docids.as_polymorph();
     for result in db.iter::<_, DecodeIgnore, RoaringBitmapCodec>(rtxn)? {
         let ((), val) = result?;
-        values_length.push(val.len() as u32);
+        values_length_sum += val.len() as u64;
         count += 1;
     }
 
-    let values_length_sum = values_length.into_iter().map(|c| c as usize).sum::<usize>() as f64;
+    let values_length_sum = values_length_sum as f64;
     let count = count as f64;
-
     println!("average number of documents by words pairs proximities: {}", values_length_sum / count);
+
+    Ok(())
+}
+
+fn word_pair_proximity_stats(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+    use heed::types::DecodeIgnore;
+    use milli::RoaringBitmapCodec;
+
+    let mut values_length = Vec::new();
+
+    let db = index.word_pair_proximity_docids.as_polymorph();
+    for result in db.iter::<_, DecodeIgnore, RoaringBitmapCodec>(rtxn)? {
+        let ((), val) = result?;
+        values_length.push(val.len() as u32);
+    }
+
+    values_length.sort_unstable();
+
+    let median = values_length.get(values_length.len() / 2).unwrap_or(&0);
+    let first_quartile = values_length.get(values_length.len() / 4).unwrap_or(&0);
+    let third_quartile = values_length.get(values_length.len() / 4 * 3).unwrap_or(&0);
+    let ninety_percentile = values_length.get(values_length.len() / 100 * 90).unwrap_or(&0);
+    let ninety_five_percentile = values_length.get(values_length.len() / 100 * 95).unwrap_or(&0);
+    let ninety_nine_percentile = values_length.get(values_length.len() / 100 * 99).unwrap_or(&0);
+    let minimum = values_length.first().unwrap_or(&0);
+    let maximum = values_length.last().unwrap_or(&0);
+    let count = values_length.len();
+
+    println!("words pairs proximities stats");
+    println!("\tnumber of proximity pairs: {}", count);
+    println!("\tfirst quartile: {}", first_quartile);
+    println!("\tmedian: {}", median);
+    println!("\tthird quartile: {}", third_quartile);
+    println!("\t90th percentile: {}", ninety_percentile);
+    println!("\t95th percentile: {}", ninety_five_percentile);
+    println!("\t99th percentile: {}", ninety_nine_percentile);
+    println!("\tminimum: {}", minimum);
+    println!("\tmaximum: {}", maximum);
 
     Ok(())
 }
