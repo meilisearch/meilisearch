@@ -1,13 +1,16 @@
 use std::sync::Arc;
 
+use async_raft::error::ChangeConfigError;
+use async_raft::RaftStorage;
 use bincode::{deserialize, serialize};
 use tonic::{Code, Request, Response, Status};
 
 use super::raft_service::raft_service_server::RaftService;
 use super::raft_service::{
     self, AppendEntriesRequest, AppendEntriesResponse, ClientWriteRequest, ClientWriteResponse,
-    ConnectionRequest, ConnectionResponse, InstallSnapshotRequest, InstallSnapshotResponse,
-    VoteRequest, VoteResponse, HandshakeRequest, HandshakeResponse 
+    ConnectionRequest, ConnectionResponse, HandshakeRequest, HandshakeResponse,
+    InstallSnapshotRequest, InstallSnapshotResponse, JoinRequest, JoinResponse, VoteRequest,
+    VoteResponse,
 };
 use super::router::RaftRouter;
 use super::store::RaftStore;
@@ -113,10 +116,69 @@ impl RaftService for RaftServerService {
         request: Request<HandshakeRequest>,
     ) -> Result<Response<HandshakeResponse>, Status> {
         let id = request.get_ref().id;
-        let addr = request.remote_addr().ok_or_else(|| Status::aborted("No remote address"))?;
-        self.router.add_client(id, addr).await.map_err(|_| Status::internal("Error adding peer"))?;
-        let state = self.log_store.state().await.map_err(|_| Status::internal("Impossible to retrieve internal state"))? as i32;
+        let addr = request
+            .remote_addr()
+            .ok_or_else(|| Status::aborted("No remote address"))?;
+        self.router
+            .add_client(id, addr)
+            .await
+            .map_err(|_| Status::internal("Error adding peer"))?;
+        let state = self
+            .log_store
+            .state()
+            .await
+            .map_err(|_| Status::internal("Impossible to retrieve internal state"))?
+            as i32;
         let response = HandshakeResponse { state };
         Ok(Response::new(response))
+    }
+
+    #[tracing::instrument(level = "trace", skip(self))]
+    async fn join(&self, request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
+        let request = request.into_inner();
+        let id = request.id;
+        match self.raft.add_non_voter(id).await {
+            Ok(()) => (),
+            Err(ChangeConfigError::NodeNotLeader) => {
+                return Ok(Response::new(JoinResponse {
+                    status: raft_service::Status::WrongLeader as i32,
+                    data: serialize(&0u64).unwrap(),
+                }))
+            }
+            Err(e) => {
+                return Ok(Response::new(JoinResponse {
+                    status: raft_service::Status::Error as i32,
+                    data: serialize(&e.to_string()).unwrap(),
+                }))
+            }
+        }
+
+        let mut members =
+            self.log_store.get_membership_config().await.map_err(|e| {
+                Status::internal(format!("can't retrieve membership config: {}", e))
+            })?.members;
+
+        members.insert(id);
+
+        match self.raft.change_membership(members).await {
+            Ok(()) => {
+                Ok(Response::new(JoinResponse {
+                    status: raft_service::Status::Success as i32,
+                    data: vec![],
+                }))
+            },
+            Err(ChangeConfigError::NodeNotLeader) => {
+                Ok(Response::new(JoinResponse {
+                    status: raft_service::Status::WrongLeader as i32,
+                    data: serialize(&0u64).unwrap(),
+                }))
+            }
+            Err(e) => {
+                Ok(Response::new(JoinResponse {
+                    status: raft_service::Status::Error as i32,
+                    data: serialize(&e.to_string()).unwrap(),
+                }))
+            }
+        }
     }
 }

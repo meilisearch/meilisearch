@@ -3,6 +3,7 @@ mod router;
 mod server;
 mod snapshot;
 mod store;
+mod client;
 
 pub mod raft_service {
     tonic::include_proto!("raftservice");
@@ -36,7 +37,7 @@ use tokio::sync::mpsc::{self, error::SendError};
 use tokio::sync::RwLock;
 use tokio::time;
 use tonic::transport::Server;
-use router::Client;
+use client::Client;
 
 use crate::data::{IndexCreateRequest, IndexResponse, UpdateDocumentsQuery};
 use crate::routes::IndexUpdateResponse;
@@ -217,6 +218,11 @@ impl Raft {
     }
 
     async fn join_cluster(&self, members: impl Iterator<Item = Arc<RwLock<Client>>>) -> Result<()>{
+        for member in members {
+            match member.write().await.join(self.id).await {
+                _ => todo!()
+            }
+        }
         unimplemented!()
     }
 

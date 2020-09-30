@@ -8,6 +8,7 @@ service RaftService {
   rpc Forward(ClientWriteRequest) returns (ClientWriteResponse) {}
   rpc RequestConnection(ConnectionRequest) returns (ConnectionResponse) {}
   rpc Handshake(HandshakeRequest) returns (HandshakeResponse) {}
+  rpc Join(JoinRequest) returns (JoinResponse) {}
 }
 
 message ConnectionRequest {
@@ -68,4 +69,13 @@ message HandshakeRequest {
 
 message HandshakeResponse {
   NodeState state = 1;
+}
+
+message JoinRequest {
+  uint64 id = 1;
+}
+
+message JoinResponse {
+  Status status = 1;
+  bytes data = 2;
 }
