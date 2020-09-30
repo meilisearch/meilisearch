@@ -85,11 +85,8 @@ enum Command {
     /// Outputs the average number of positions for each document words.
     AverageNumberOfPositionsByWord,
 
-    /// Outputs the average number of documents for each words pair.
-    AverageNumberOfDocumentByWordPairProximity,
-
     /// Outputs some statistics about the words pairs proximities
-    /// (median, quartiles, percentiles, min, max).
+    /// (median, quartiles, percentiles, minimum, maximum, averge).
     WordPairProximityStats,
 
     /// Outputs the size in bytes of the specified database.
@@ -155,9 +152,6 @@ fn main() -> anyhow::Result<()> {
             average_number_of_positions_by_word(&index, &rtxn)
         },
         SizeOfDatabase { database } => size_of_database(&index, &rtxn, &database),
-        AverageNumberOfDocumentByWordPairProximity => {
-            average_number_of_document_by_word_pair_proximity(&index, &rtxn)
-        },
         WordPairProximityStats => word_pair_proximity_stats(&index, &rtxn),
         WordPairProximitiesDocids { full_display, word1, word2 } => {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
@@ -389,31 +383,6 @@ fn size_of_database(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Re
     Ok(())
 }
 
-fn average_number_of_document_by_word_pair_proximity(
-    index: &Index,
-    rtxn: &heed::RoTxn,
-) -> anyhow::Result<()>
-{
-    use heed::types::DecodeIgnore;
-    use milli::RoaringBitmapCodec;
-
-    let mut values_length_sum = 0;
-    let mut count = 0;
-
-    let db = index.word_pair_proximity_docids.as_polymorph();
-    for result in db.iter::<_, DecodeIgnore, RoaringBitmapCodec>(rtxn)? {
-        let ((), val) = result?;
-        values_length_sum += val.len() as u64;
-        count += 1;
-    }
-
-    let values_length_sum = values_length_sum as f64;
-    let count = count as f64;
-    println!("average number of documents by words pairs proximities: {}", values_length_sum / count);
-
-    Ok(())
-}
-
 fn word_pair_proximity_stats(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use heed::types::DecodeIgnore;
     use milli::RoaringBitmapCodec;
@@ -437,8 +406,9 @@ fn word_pair_proximity_stats(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Resul
     let minimum = values_length.first().unwrap_or(&0);
     let maximum = values_length.last().unwrap_or(&0);
     let count = values_length.len();
+    let sum = values_length.iter().map(|l| *l as u64).sum::<u64>();
 
-    println!("words pairs proximities stats");
+    println!("words pairs proximities stats on the lengths");
     println!("\tnumber of proximity pairs: {}", count);
     println!("\tfirst quartile: {}", first_quartile);
     println!("\tmedian: {}", median);
@@ -448,6 +418,7 @@ fn word_pair_proximity_stats(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Resul
     println!("\t99th percentile: {}", ninety_nine_percentile);
     println!("\tminimum: {}", minimum);
     println!("\tmaximum: {}", maximum);
+    println!("\taverage: {}", sum as f64 / count as f64);
 
     Ok(())
 }
