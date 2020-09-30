@@ -53,8 +53,8 @@ pub enum Error {
     SearchDocuments(String),
     PayloadTooLarge,
     UnsupportedMediaType,
-    BackupAlreadyInProgress,
-    BackupProcessFailed,
+    DumpAlreadyInProgress,
+    DumpProcessFailed,
 }
 
 impl error::Error for Error {}
@@ -80,8 +80,8 @@ impl ErrorCode for Error {
             SearchDocuments(_) => Code::SearchDocuments,
             PayloadTooLarge => Code::PayloadTooLarge,
             UnsupportedMediaType => Code::UnsupportedMediaType,
-            BackupAlreadyInProgress => Code::BackupAlreadyInProgress,
-            BackupProcessFailed => Code::BackupProcessFailed,
+            DumpAlreadyInProgress => Code::DumpAlreadyInProgress,
+            DumpProcessFailed => Code::DumpProcessFailed,
         }
     }
 }
@@ -185,12 +185,12 @@ impl Error {
         Error::SearchDocuments(err.to_string())
     }
 
-    pub fn backup_conflict() -> Error {
-        Error::BackupAlreadyInProgress
+    pub fn dump_conflict() -> Error {
+        Error::DumpAlreadyInProgress
     }
 
-    pub fn backup_failed() -> Error {
-        Error::BackupProcessFailed
+    pub fn dump_failed() -> Error {
+        Error::DumpProcessFailed
     }
 }
 
@@ -214,8 +214,8 @@ impl fmt::Display for Error {
             Self::SearchDocuments(err) => write!(f, "Impossible to search documents; {}", err),
             Self::PayloadTooLarge => f.write_str("Payload too large"),
             Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
-            Self::BackupAlreadyInProgress => f.write_str("Another backup is already in progress"),
-            Self::BackupProcessFailed => f.write_str("Backup process failed"),
+            Self::DumpAlreadyInProgress => f.write_str("Another dump is already in progress"),
+            Self::DumpProcessFailed => f.write_str("Dump process failed"),
         }
     }
 }

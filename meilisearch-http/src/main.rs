@@ -6,7 +6,7 @@ use main_error::MainError;
 use meilisearch_http::helpers::NormalizePath;
 use meilisearch_http::{create_app, index_update_callback, Data, Opt};
 use structopt::StructOpt;
-use meilisearch_http::{snapshot, backup};
+use meilisearch_http::{snapshot, dump};
 
 mod analytics;
 
@@ -70,8 +70,8 @@ async fn main() -> Result<(), MainError> {
     }));
 
 
-    if let Some(path) = &opt.import_backup {
-        backup::import_backup(&data, path, opt.backup_batch_size)?;
+    if let Some(path) = &opt.import_dump {
+        dump::import_dump(&data, path, opt.dump_batch_size)?;
     }
 
     if let Some(path) = &opt.snapshot_path {

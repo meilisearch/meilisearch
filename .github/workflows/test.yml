@@ -30,11 +30,11 @@ jobs:
       with:
         command: test
         args: --locked --release
-    - name: Run cargo test backup
+    - name: Run cargo test dump
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: backup --locked --release -- --ignored --test-threads 1
+        args: dump --locked --release -- --ignored --test-threads 1
     - name: Run cargo clippy
       uses: actions-rs/cargo@v1
       with:
