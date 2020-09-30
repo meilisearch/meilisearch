@@ -1,5 +1,6 @@
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
+use std::collections::HashSet;
 
 use async_stream::stream;
 use futures_core::Stream;
@@ -15,6 +16,7 @@ pub fn discover_peers(
 ) -> impl Stream<Item = (u64, SocketAddr)> {
     let service_name = service_name.to_owned();
     stream! {
+        let mut known_peers = HashSet::new();
         let mut service = MdnsService::new(false).unwrap();
         let node_fqdn = format!("{}.{}", id, service_name);
         let node_target = format!("{}.local", id);
@@ -59,7 +61,9 @@ pub fn discover_peers(
                             .flatten();
                         match (socket_addr, id) {
                             (Some(addr), Some(id)) => {
-                                yield (id, addr)
+                                if known_peers.insert(id) {
+                                    yield (id, addr)
+                                }
                             },
                             _ => continue,
                         }

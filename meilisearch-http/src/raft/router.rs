@@ -10,7 +10,7 @@ use async_raft::raft::{
     InstallSnapshotRequest, InstallSnapshotResponse, VoteRequest, VoteResponse 
 };
 use async_raft::NodeId;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, oneshot};
 
 use super::ClientRequest;
 use super::client::Client;
@@ -68,7 +68,19 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
         target: NodeId,
         rpc: AppendEntriesRequest<ClientRequest>,
     ) -> Result<AppendEntriesResponse> {
-        call_rpc!(self, target, rpc, append_entries)
+        let (tx, rx) = oneshot::channel();
+        let client = self.client(target)
+            .await
+            .ok_or_else(|| anyhow::Error::msg(format!("Client {} not found.", target)))?;
+        tokio::spawn(async move {
+            let resp = client
+                .write()
+                .await
+                .append_entries(rpc)
+                .await;
+            let _ = tx.send(resp);
+        });
+        rx.await?
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

@@ -290,6 +290,7 @@ impl RaftStore {
     /// Returns the current state of the node
     pub async fn state(&self) -> Result<NodeState> {
         let members = self.get_membership_config().await?.members;
+        println!("members: {:?}", members);
         if members.len() <= 1 {
             Ok(NodeState::Uninitialized)
         } else {

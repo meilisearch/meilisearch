@@ -24,7 +24,7 @@ use async_raft::raft::ClientWriteRequest;
 use async_raft::{AppData, AppDataResponse, InitializeError, NodeId};
 use futures_util::pin_mut;
 use futures_util::StreamExt;
-use log::info;
+use log::{info, warn};
 use meilisearch_core::settings::SettingsUpdate;
 use raft_service::raft_service_server::RaftServiceServer;
 use raft_service::NodeState;
@@ -196,6 +196,10 @@ impl Raft {
             }
         }
 
+        time::delay_for(Duration::from_secs(3)).await;
+
+        println!("peers: {:?}", peers);
+
         if peers
             .iter()
             .all(|(_, (_, state))| *state == NodeState::Uninitialized)
@@ -218,12 +222,28 @@ impl Raft {
     }
 
     async fn join_cluster(&self, members: impl Iterator<Item = Arc<RwLock<Client>>>) -> Result<()>{
+        use client::JoinResult;
+        info!("Joining cluster...");
+
         for member in members {
             match member.write().await.join(self.id).await {
-                _ => todo!()
+                Ok(JoinResult::Ok) => {
+                    info!("successfully joined cluster");
+                    return Ok(())
+                },
+                // ignore the errors for now.
+                Ok(JoinResult::WrongLeader(_)) => {
+                    warn!("not leader, continuing...");
+                    continue
+                }
+                other =>  {
+                    info!("error joining: {:?}", other);
+                    continue;
+                }
             }
         }
-        unimplemented!()
+
+        Err(anyhow::anyhow!("Could not join cluster"))
     }
 
     async fn join_uninitialized(&self, ids: HashSet<NodeId>) -> Result<()> {
