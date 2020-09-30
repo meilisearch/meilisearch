@@ -6,7 +6,7 @@ use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use log::debug;
 use once_cell::sync::Lazy;
-use roaring::bitmap::{IntoIter, RoaringBitmap};
+use roaring::bitmap::RoaringBitmap;
 
 use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, DocumentId};
@@ -130,30 +130,6 @@ impl<'a> Search<'a> {
         }
 
         candidates
-    }
-
-    fn fecth_keywords(
-        &self,
-        derived_words: &[(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
-        candidate: DocumentId,
-    ) -> anyhow::Result<Vec<IntoIter>>
-    {
-        let mut keywords = Vec::with_capacity(derived_words.len());
-
-        for (words, _) in derived_words {
-
-            let mut union_positions = RoaringBitmap::new();
-            for (word, (_distance, docids)) in words {
-
-                if !docids.contains(candidate) { continue; }
-                if let Some(positions) = self.index.docid_word_positions.get(self.rtxn, &(candidate, word))? {
-                    union_positions.union_with(&positions);
-                }
-            }
-            keywords.push(union_positions.into_iter());
-        }
-
-        Ok(keywords)
     }
 
     fn words_pair_combinations<'h>(
