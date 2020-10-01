@@ -132,61 +132,105 @@ impl<'a> Search<'a> {
         candidates
     }
 
-    fn words_pair_combinations<'h>(
-        w1: &'h HashMap<String, (u8, RoaringBitmap)>,
-        w2: &'h HashMap<String, (u8, RoaringBitmap)>,
-    ) -> Vec<(&'h str, &'h str)>
-    {
-        let mut pairs = Vec::new();
-        for (w1, (_typos, docids1)) in w1 {
-            for (w2, (_typos, docids2)) in w2 {
-                if !docids1.is_disjoint(&docids2) {
-                    pairs.push((w1.as_str(), w2.as_str()));
-                }
-            }
-        }
-        pairs
-    }
-
-    fn depth_first_search(
+    // TODO Move this elsewhere!
+    fn mana_depth_first_search(
         &self,
         words: &[(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
         candidates: &RoaringBitmap,
-        parent_docids: &RoaringBitmap,
         union_cache: &mut HashMap<(usize, u8), RoaringBitmap>,
     ) -> anyhow::Result<Option<RoaringBitmap>>
     {
-        let (words1, words2) = (&words[0].0, &words[1].0);
-        let pairs = Self::words_pair_combinations(words1, words2);
+        fn words_pair_combinations<'h>(
+            w1: &'h HashMap<String, (u8, RoaringBitmap)>,
+            w2: &'h HashMap<String, (u8, RoaringBitmap)>,
+        ) -> Vec<(&'h str, &'h str)>
+        {
+            let mut pairs = Vec::new();
+            for (w1, (_typos, docids1)) in w1 {
+                for (w2, (_typos, docids2)) in w2 {
+                    if !docids1.is_disjoint(&docids2) {
+                        pairs.push((w1.as_str(), w2.as_str()));
+                    }
+                }
+            }
+            pairs
+        }
 
-        for proximity in 1..=8 {
-            let mut docids = match union_cache.entry((words.len(), proximity)) {
-                Occupied(entry) => entry.get().clone(),
-                Vacant(entry) => {
-                    let mut docids = RoaringBitmap::new();
-                    if proximity == 8 {
-                        docids = candidates.clone();
-                    } else {
-                        for (w1, w2) in pairs.iter().cloned() {
-                            let key = (w1, w2, proximity);
-                            if let Some(di) = self.index.word_pair_proximity_docids.get(self.rtxn, &key)? {
-                                docids.union_with(&di);
+        fn mdfs(
+            index: &Index,
+            rtxn: &heed::RoTxn,
+            mana: u32,
+            words: &[(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
+            candidates: &RoaringBitmap,
+            parent_docids: &RoaringBitmap,
+            union_cache: &mut HashMap<(usize, u8), RoaringBitmap>,
+        ) -> anyhow::Result<Option<RoaringBitmap>>
+        {
+            use std::cmp::{min, max};
+
+            let (words1, words2) = (&words[0].0, &words[1].0);
+            let pairs = words_pair_combinations(words1, words2);
+            let tail = &words[1..];
+            let nb_children = tail.len() as u32 - 1;
+
+            // The minimum amount of mana that you must consume is at least 1 and the
+            // amount of mana that your children can consume. Because the last child must
+            // consume the remaining mana, it is mandatory that there not too much at the end.
+            let min_proximity = max(1, mana.saturating_sub(nb_children * 8)) as u8;
+
+            // The maximum amount of mana that you can use is 8 or the remaining amount of
+            // mana minus your children, as you can't just consume all the mana,
+            // your children must have at least 1 mana.
+            let max_proximity = min(8, mana - nb_children) as u8;
+
+            for proximity in min_proximity..=max_proximity {
+                let mut docids = match union_cache.entry((words.len(), proximity)) {
+                    Occupied(entry) => entry.get().clone(),
+                    Vacant(entry) => {
+                        let mut docids = RoaringBitmap::new();
+                        if proximity == 8 {
+                            docids = candidates.clone();
+                        } else {
+                            for (w1, w2) in pairs.iter().cloned() {
+                                let key = (w1, w2, proximity);
+                                if let Some(di) = index.word_pair_proximity_docids.get(rtxn, &key)? {
+                                    docids.union_with(&di);
+                                }
                             }
                         }
+                        entry.insert(docids).clone()
                     }
-                    entry.insert(docids).clone()
-                }
-            };
+                };
 
-            docids.intersect_with(parent_docids);
+                docids.intersect_with(parent_docids);
 
-            if !docids.is_empty() {
-                let words = &words[1..];
-                // We are the last word.
-                if words.len() < 2 { return Ok(Some(docids)) }
-                if let Some(di) = self.depth_first_search(words, candidates, &docids, union_cache)? {
-                    return Ok(Some(di))
+                if !docids.is_empty() {
+                    let mana = mana.checked_sub(proximity as u32).unwrap();
+                    // We are the last pair, we return without recursing as we don't have any child.
+                    if tail.len() < 2 { return Ok(Some(docids)) }
+                    if let Some(di) = mdfs(index, rtxn, mana, tail, candidates, &docids, union_cache)? {
+                        return Ok(Some(di))
+                    }
                 }
+            }
+
+            Ok(None)
+        }
+
+        // Compute the number of pairs (windows) we have for this list of words.
+        // If there only is one word therefore the only possible documents are the candidates.
+        let initial_mana = match words.len().checked_sub(1) {
+            Some(nb_windows) if nb_windows != 0 => nb_windows as u32,
+            _ => return Ok(Some(candidates.clone())),
+        };
+
+        // TODO We must keep track of where we are in terms of mana and that should either be
+        //      handled by an Iterator or by the caller. Keeping track of the amount of mana
+        //      is an optimization, it makes this mdfs to only be called with the next valid
+        //      mana and not called with all of the previous mana values.
+        for mana in initial_mana..=initial_mana * 8 {
+            if let Some(answer) = mdfs(&self.index, &self.rtxn, mana, words, candidates, candidates, union_cache)? {
+                return Ok(Some(answer));
             }
         }
 
@@ -217,20 +261,13 @@ impl<'a> Search<'a> {
 
         debug!("candidates: {:?}", candidates);
 
-        // If there is only one query word, no need to compute the best proximities.
-        if derived_words.len() == 1 || candidates.is_empty() {
-            let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
-            let documents_ids = candidates.iter().take(limit).collect();
-            return Ok(SearchResult { found_words, documents_ids });
-        }
-
         let mut documents = Vec::new();
         let mut union_cache = HashMap::new();
 
         // We execute the DFS until we find enough documents, we run it with the
         // candidates list and remove the found documents from this list at each iteration.
         while documents.iter().map(RoaringBitmap::len).sum::<u64>() < limit as u64 {
-            let answer = self.depth_first_search(&derived_words, &candidates, &candidates, &mut union_cache)?;
+            let answer = self.mana_depth_first_search(&derived_words, &candidates, &mut union_cache)?;
 
             let answer = match answer {
                 Some(answer) if !answer.is_empty() => answer,
