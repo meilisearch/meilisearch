@@ -3,6 +3,7 @@ use std::sync::Arc;
 use async_raft::error::ChangeConfigError;
 use async_raft::RaftStorage;
 use bincode::{deserialize, serialize};
+use log::info;
 use tonic::{Code, Request, Response, Status};
 
 use super::raft_service::raft_service_server::RaftService;
@@ -137,6 +138,7 @@ impl RaftService for RaftServerService {
     async fn join(&self, request: Request<JoinRequest>) -> Result<Response<JoinResponse>, Status> {
         let request = request.into_inner();
         let id = request.id;
+        info!("Adding peer {} to non voter", id);
         match self.raft.add_non_voter(id).await {
             Ok(()) => (),
             Err(ChangeConfigError::NodeNotLeader) => {
@@ -152,33 +154,33 @@ impl RaftService for RaftServerService {
                 }))
             }
         }
+        info!("Peer {} is up to date", id);
 
-        let mut members =
-            self.log_store.get_membership_config().await.map_err(|e| {
-                Status::internal(format!("can't retrieve membership config: {}", e))
-            })?.members;
+        let mut members = self
+            .log_store
+            .get_membership_config()
+            .await
+            .map_err(|e| Status::internal(format!("can't retrieve membership config: {}", e)))?
+            .members;
 
         members.insert(id);
 
+        info!("Adding peer {} to cluster...", id);
         match self.raft.change_membership(members).await {
             Ok(()) => {
+                info!("Peer {} added to cluster", id);
                 Ok(Response::new(JoinResponse {
-                    status: raft_service::Status::Success as i32,
-                    data: vec![],
-                }))
-            },
-            Err(ChangeConfigError::NodeNotLeader) => {
-                Ok(Response::new(JoinResponse {
-                    status: raft_service::Status::WrongLeader as i32,
-                    data: serialize(&0u64).unwrap(),
-                }))
-            }
-            Err(e) => {
-                Ok(Response::new(JoinResponse {
-                    status: raft_service::Status::Error as i32,
-                    data: serialize(&e.to_string()).unwrap(),
-                }))
-            }
+                status: raft_service::Status::Success as i32,
+                data: vec![],
+            })) },
+            Err(ChangeConfigError::NodeNotLeader) => Ok(Response::new(JoinResponse {
+                status: raft_service::Status::WrongLeader as i32,
+                data: serialize(&0u64).unwrap(),
+            })),
+            Err(e) => Ok(Response::new(JoinResponse {
+                status: raft_service::Status::Error as i32,
+                data: serialize(&e.to_string()).unwrap(),
+            })),
         }
     }
 }

@@ -11,6 +11,7 @@ use async_raft::raft::{
 };
 use async_raft::NodeId;
 use tokio::sync::{RwLock, oneshot};
+use log::error;
 
 use super::ClientRequest;
 use super::client::Client;
@@ -68,19 +69,23 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
         target: NodeId,
         rpc: AppendEntriesRequest<ClientRequest>,
     ) -> Result<AppendEntriesResponse> {
-        let (tx, rx) = oneshot::channel();
-        let client = self.client(target)
-            .await
-            .ok_or_else(|| anyhow::Error::msg(format!("Client {} not found.", target)))?;
-        tokio::spawn(async move {
-            let resp = client
-                .write()
-                .await
-                .append_entries(rpc)
-                .await;
-            let _ = tx.send(resp);
-        });
-        rx.await?
+        // append entries rpc can be big, so it is off loaded to another thread
+        //let (tx, rx) = oneshot::channel();
+        //let client = self.client(target)
+            //.await
+            //.ok_or_else(|| anyhow::Error::msg(format!("Client {} not found.", target)))?;
+        //tokio::spawn(async move {
+            //let resp = client
+                //.write()
+                //.await
+                //.append_entries(rpc)
+                //.await;
+            //if let Err(_) = tx.send(resp) {
+                //error!("error appending entries");
+            //}
+        //});
+        //rx.await?
+        call_rpc!(self, target, rpc, append_entries)
     }
 
     #[tracing::instrument(level = "trace", skip(self))]

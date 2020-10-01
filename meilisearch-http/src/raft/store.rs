@@ -8,7 +8,7 @@ use async_raft::storage::{CurrentSnapshotData, HardState, InitialState, RaftStor
 use async_raft::NodeId;
 use heed::types::{OwnedType, Str};
 use heed::{Database, Env, EnvOpenOptions, PolyDatabase};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use tokio::fs::File;
 
 use super::{snapshot::RaftSnapshot, ClientRequest, ClientResponse, Message};
@@ -186,12 +186,18 @@ impl RaftStore {
                 partial,
             } => {
                 let documents = serde_json::from_str(&documents)?;
-                let result = self
+                match self
                     .store
-                    .update_multiple_documents(&index_uid, update_query, documents, partial)
-                    .map_err(|e| e.to_string());
-                info!("Added documents to index: {}", index_uid);
-                Ok(ClientResponse::UpdateResponse(result))
+                    .update_multiple_documents(&index_uid, update_query, documents, partial) {
+                        Ok(r) => {
+                            info!("Added documents to index: {}", index_uid);
+                            Ok(ClientResponse::UpdateResponse(Ok(r)))
+                        },
+                        Err(r) => {
+                            warn!("Error adding documents: {}", r);
+                            Ok(ClientResponse::UpdateResponse(Err(r.to_string())))
+                        },
+                    }
             }
             Message::UpdateIndex { index_uid, update } => {
                 let result = self
@@ -420,6 +426,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
     async fn do_log_compaction(&self, through: u64) -> Result<CurrentSnapshotData<Self::Snapshot>> {
         // it is necessary to do all the heed transation in a standalone function because heed
         // transations are not thread safe.
+        info!("compacting log");
         let snapshot = self.create_snapshot_and_compact(through)?;
         let snapshot_file = File::open(&snapshot.path).await?;
 
