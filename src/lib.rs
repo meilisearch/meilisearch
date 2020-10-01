@@ -1,4 +1,5 @@
 mod criterion;
+mod mdfs;
 mod query_tokens;
 mod search;
 pub mod heed_codec;
