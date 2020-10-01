@@ -365,7 +365,7 @@ fn size_of_database(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Re
         DOCID_WORD_POSITIONS_DB_NAME => index.docid_word_positions.as_polymorph(),
         WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_pair_proximity_docids.as_polymorph(),
         DOCUMENTS_DB_NAME => index.documents.as_polymorph(),
-        otherwise => anyhow::bail!("unknown database {:?}", otherwise),
+        unknown => anyhow::bail!("unknown database {:?}", unknown),
     };
 
     let mut key_size: u64 = 0;
@@ -376,22 +376,29 @@ fn size_of_database(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Re
         val_size += v.len() as u64;
     }
 
-    eprintln!("The {} database weigh {} bytes in terms of keys and {} bytes in terms of values.",
-        name, key_size, val_size,
-    );
+    println!("The {} database weigh:", name);
+    println!("\ttotal key size: {} bytes", key_size);
+    println!("\ttotal val size: {} bytes", val_size);
+    println!("\ttotal size: {} bytes", key_size + val_size);
 
     Ok(())
 }
 
 fn word_pair_proximity_stats(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
-    use heed::types::DecodeIgnore;
+    use heed::types::ByteSlice;
+    use heed::{Error, BytesDecode};
     use milli::CboRoaringBitmapCodec;
 
+    let mut key_size = 0u64;
+    let mut val_size = 0u64;
     let mut values_length = Vec::new();
 
     let db = index.word_pair_proximity_docids.as_polymorph();
-    for result in db.iter::<_, DecodeIgnore, CboRoaringBitmapCodec>(rtxn)? {
-        let ((), val) = result?;
+    for result in db.iter::<_, ByteSlice, ByteSlice>(rtxn)? {
+        let (key, val) = result?;
+        key_size += key.len() as u64;
+        val_size += val.len() as u64;
+        let val = CboRoaringBitmapCodec::bytes_decode(val).ok_or(Error::Decoding)?;
         values_length.push(val.len() as u32);
     }
 
@@ -408,7 +415,7 @@ fn word_pair_proximity_stats(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Resul
     let count = values_length.len();
     let sum = values_length.iter().map(|l| *l as u64).sum::<u64>();
 
-    println!("words pairs proximities stats on the lengths");
+    println!("word-pair-proximity-docids stats on the lengths");
     println!("\tnumber of proximity pairs: {}", count);
     println!("\tfirst quartile: {}", first_quartile);
     println!("\tmedian: {}", median);
@@ -419,6 +426,10 @@ fn word_pair_proximity_stats(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Resul
     println!("\tminimum: {}", minimum);
     println!("\tmaximum: {}", maximum);
     println!("\taverage: {}", sum as f64 / count as f64);
+    println!();
+    println!("\ttotal key size: {} bytes", key_size);
+    println!("\ttotal val size: {} bytes", val_size);
+    println!("\ttotal size: {} bytes", key_size + val_size);
 
     Ok(())
 }
