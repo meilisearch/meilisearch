@@ -18,7 +18,7 @@ pub use self::search::{Search, SearchResult};
 pub use self::criterion::{Criterion, default_criteria};
 pub use self::heed_codec::{
     RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec,
-    CsvStringRecordCodec, BoRoaringBitmapCodec,
+    CsvStringRecordCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
 };
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
@@ -44,7 +44,7 @@ pub struct Index {
     /// Maps a word and a document id (u32) to all the positions where the given word appears.
     pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
-    pub word_pair_proximity_docids: Database<StrStrU8Codec, RoaringBitmapCodec>,
+    pub word_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
     /// Maps the document id to the document as a CSV line.
     pub documents: Database<OwnedType<BEU32>, ByteSlice>,
 }

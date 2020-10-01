@@ -21,7 +21,7 @@ use rayon::prelude::*;
 use roaring::RoaringBitmap;
 use structopt::StructOpt;
 
-use milli::heed_codec::{CsvStringRecordCodec, BoRoaringBitmapCodec};
+use milli::heed_codec::{CsvStringRecordCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use milli::tokenizer::{simple_tokenizer, only_token};
 use milli::{SmallVec32, Index, Position, DocumentId, BEU32};
 
@@ -335,8 +335,8 @@ impl Store {
             key.push(min_prox);
             // We serialize the document ids into a buffer
             buffer.clear();
-            buffer.reserve(docids.serialized_size());
-            docids.serialize_into(&mut buffer)?;
+            buffer.reserve(CboRoaringBitmapCodec::serialized_size(&docids));
+            CboRoaringBitmapCodec::serialize_into(&docids, &mut buffer)?;
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
                 sorter.insert(&key, &buffer)?;
@@ -365,7 +365,7 @@ impl Store {
             // We serialize the positions into a buffer.
             let positions = RoaringBitmap::from_iter(positions.iter().cloned());
             let bytes = BoRoaringBitmapCodec::bytes_encode(&positions)
-                .with_context(|| format!("could not serialize positions"))?;
+                .with_context(|| "could not serialize positions")?;
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
                 sorter.insert(&key, &bytes)?;
@@ -515,10 +515,10 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
                 assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
                 Ok(values[0].to_vec())
             },
-            DOCUMENTS_IDS_BYTE | WORD_DOCIDS_BYTE | WORDS_PROXIMITIES_BYTE => {
+            DOCUMENTS_IDS_BYTE | WORD_DOCIDS_BYTE => {
                 let (head, tail) = values.split_first().unwrap();
-
                 let mut head = RoaringBitmap::deserialize_from(head.as_slice()).unwrap();
+
                 for value in tail {
                     let bitmap = RoaringBitmap::deserialize_from(value.as_slice()).unwrap();
                     head.union_with(&bitmap);
@@ -526,6 +526,19 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
 
                 let mut vec = Vec::with_capacity(head.serialized_size());
                 head.serialize_into(&mut vec).unwrap();
+                Ok(vec)
+            },
+            WORDS_PROXIMITIES_BYTE => {
+                let (head, tail) = values.split_first().unwrap();
+                let mut head = CboRoaringBitmapCodec::deserialize_from(head.as_slice()).unwrap();
+
+                for value in tail {
+                    let bitmap = CboRoaringBitmapCodec::deserialize_from(value.as_slice()).unwrap();
+                    head.union_with(&bitmap);
+                }
+
+                let mut vec = Vec::new();
+                CboRoaringBitmapCodec::serialize_into(&head, &mut vec).unwrap();
                 Ok(vec)
             },
             otherwise => panic!("wut {:?}", otherwise),

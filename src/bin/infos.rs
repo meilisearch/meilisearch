@@ -385,12 +385,12 @@ fn size_of_database(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Re
 
 fn word_pair_proximity_stats(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use heed::types::DecodeIgnore;
-    use milli::RoaringBitmapCodec;
+    use milli::CboRoaringBitmapCodec;
 
     let mut values_length = Vec::new();
 
     let db = index.word_pair_proximity_docids.as_polymorph();
-    for result in db.iter::<_, DecodeIgnore, RoaringBitmapCodec>(rtxn)? {
+    for result in db.iter::<_, DecodeIgnore, CboRoaringBitmapCodec>(rtxn)? {
         let ((), val) = result?;
         values_length.push(val.len() as u32);
     }
