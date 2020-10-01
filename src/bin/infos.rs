@@ -18,12 +18,18 @@ const DOCID_WORD_POSITIONS_DB_NAME: &str = "docid-word-positions";
 const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
 const DOCUMENTS_DB_NAME: &str = "documents";
 
-const DATABASE_NAMES: &[&str] = &[
+const ALL_DATABASE_NAMES: &[&str] = &[
     MAIN_DB_NAME,
     WORD_DOCIDS_DB_NAME,
     DOCID_WORD_POSITIONS_DB_NAME,
     WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
     DOCUMENTS_DB_NAME,
+];
+
+const POSTINGS_DATABASE_NAMES: &[&str] = &[
+    WORD_DOCIDS_DB_NAME,
+    DOCID_WORD_POSITIONS_DB_NAME,
+    WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
 ];
 
 #[derive(Debug, StructOpt)]
@@ -85,13 +91,16 @@ enum Command {
     /// Outputs the average number of positions for each document words.
     AverageNumberOfPositionsByWord,
 
-    /// Outputs some statistics about the words pairs proximities
-    /// (median, quartiles, percentiles, minimum, maximum, averge).
-    WordPairProximityStats,
+    /// Outputs some statistics about the given database (e.g. median, quartiles,
+    /// percentiles, minimum, maximum, averge, key size, value size).
+    DatabaseStats {
+        #[structopt(possible_values = POSTINGS_DATABASE_NAMES)]
+        database: String,
+    },
 
     /// Outputs the size in bytes of the specified database.
     SizeOfDatabase {
-        #[structopt(possible_values = DATABASE_NAMES)]
+        #[structopt(possible_values = ALL_DATABASE_NAMES)]
         database: String,
     },
 
@@ -152,7 +161,7 @@ fn main() -> anyhow::Result<()> {
             average_number_of_positions_by_word(&index, &rtxn)
         },
         SizeOfDatabase { database } => size_of_database(&index, &rtxn, &database),
-        WordPairProximityStats => word_pair_proximity_stats(&index, &rtxn),
+        DatabaseStats { database } => database_stats(&index, &rtxn, &database),
         WordPairProximitiesDocids { full_display, word1, word2 } => {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
         },
@@ -384,54 +393,76 @@ fn size_of_database(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Re
     Ok(())
 }
 
-fn word_pair_proximity_stats(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Result<()> {
     use heed::types::ByteSlice;
     use heed::{Error, BytesDecode};
-    use milli::CboRoaringBitmapCodec;
+    use roaring::RoaringBitmap;
+    use milli::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, RoaringBitmapCodec};
 
-    let mut key_size = 0u64;
-    let mut val_size = 0u64;
-    let mut values_length = Vec::new();
+    fn compute_stats<'a, DC: BytesDecode<'a, DItem = RoaringBitmap>>(
+        db: heed::PolyDatabase,
+        rtxn: &'a heed::RoTxn,
+        name: &str,
+    ) -> anyhow::Result<()>
+    {
+        let mut key_size = 0u64;
+        let mut val_size = 0u64;
+        let mut values_length = Vec::new();
 
-    let db = index.word_pair_proximity_docids.as_polymorph();
-    for result in db.iter::<_, ByteSlice, ByteSlice>(rtxn)? {
-        let (key, val) = result?;
-        key_size += key.len() as u64;
-        val_size += val.len() as u64;
-        let val = CboRoaringBitmapCodec::bytes_decode(val).ok_or(Error::Decoding)?;
-        values_length.push(val.len() as u32);
+        for result in db.iter::<_, ByteSlice, ByteSlice>(rtxn)? {
+            let (key, val) = result?;
+            key_size += key.len() as u64;
+            val_size += val.len() as u64;
+            let val = DC::bytes_decode(val).ok_or(Error::Decoding)?;
+            values_length.push(val.len() as u32);
+        }
+
+        values_length.sort_unstable();
+
+        let median = values_length.get(values_length.len() / 2).unwrap_or(&0);
+        let first_quartile = values_length.get(values_length.len() / 4).unwrap_or(&0);
+        let third_quartile = values_length.get(values_length.len() / 4 * 3).unwrap_or(&0);
+        let ninety_percentile = values_length.get(values_length.len() / 100 * 90).unwrap_or(&0);
+        let ninety_five_percentile = values_length.get(values_length.len() / 100 * 95).unwrap_or(&0);
+        let ninety_nine_percentile = values_length.get(values_length.len() / 100 * 99).unwrap_or(&0);
+        let minimum = values_length.first().unwrap_or(&0);
+        let maximum = values_length.last().unwrap_or(&0);
+        let count = values_length.len();
+        let sum = values_length.iter().map(|l| *l as u64).sum::<u64>();
+
+        println!("The {} database stats on the lengths", name);
+        println!("\tnumber of proximity pairs: {}", count);
+        println!("\tfirst quartile: {}", first_quartile);
+        println!("\tmedian: {}", median);
+        println!("\tthird quartile: {}", third_quartile);
+        println!("\t90th percentile: {}", ninety_percentile);
+        println!("\t95th percentile: {}", ninety_five_percentile);
+        println!("\t99th percentile: {}", ninety_nine_percentile);
+        println!("\tminimum: {}", minimum);
+        println!("\tmaximum: {}", maximum);
+        println!("\taverage: {}", sum as f64 / count as f64);
+        println!("\ttotal key size: {} bytes", key_size);
+        println!("\ttotal val size: {} bytes", val_size);
+        println!("\ttotal size: {} bytes", key_size + val_size);
+
+        Ok(())
     }
 
-    values_length.sort_unstable();
-
-    let median = values_length.get(values_length.len() / 2).unwrap_or(&0);
-    let first_quartile = values_length.get(values_length.len() / 4).unwrap_or(&0);
-    let third_quartile = values_length.get(values_length.len() / 4 * 3).unwrap_or(&0);
-    let ninety_percentile = values_length.get(values_length.len() / 100 * 90).unwrap_or(&0);
-    let ninety_five_percentile = values_length.get(values_length.len() / 100 * 95).unwrap_or(&0);
-    let ninety_nine_percentile = values_length.get(values_length.len() / 100 * 99).unwrap_or(&0);
-    let minimum = values_length.first().unwrap_or(&0);
-    let maximum = values_length.last().unwrap_or(&0);
-    let count = values_length.len();
-    let sum = values_length.iter().map(|l| *l as u64).sum::<u64>();
-
-    println!("word-pair-proximity-docids stats on the lengths");
-    println!("\tnumber of proximity pairs: {}", count);
-    println!("\tfirst quartile: {}", first_quartile);
-    println!("\tmedian: {}", median);
-    println!("\tthird quartile: {}", third_quartile);
-    println!("\t90th percentile: {}", ninety_percentile);
-    println!("\t95th percentile: {}", ninety_five_percentile);
-    println!("\t99th percentile: {}", ninety_nine_percentile);
-    println!("\tminimum: {}", minimum);
-    println!("\tmaximum: {}", maximum);
-    println!("\taverage: {}", sum as f64 / count as f64);
-    println!();
-    println!("\ttotal key size: {} bytes", key_size);
-    println!("\ttotal val size: {} bytes", val_size);
-    println!("\ttotal size: {} bytes", key_size + val_size);
-
-    Ok(())
+    match name {
+        WORD_DOCIDS_DB_NAME => {
+            let db = index.word_docids.as_polymorph();
+            compute_stats::<RoaringBitmapCodec>(*db, rtxn, name)
+        },
+        DOCID_WORD_POSITIONS_DB_NAME => {
+            let db = index.docid_word_positions.as_polymorph();
+            compute_stats::<BoRoaringBitmapCodec>(*db, rtxn, name)
+        },
+        WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => {
+            let db = index.word_pair_proximity_docids.as_polymorph();
+            compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
+        },
+        unknown => anyhow::bail!("unknown database {:?}", unknown),
+    }
 }
 
 fn word_pair_proximities_docids(
