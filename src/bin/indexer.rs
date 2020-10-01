@@ -21,7 +21,7 @@ use rayon::prelude::*;
 use roaring::RoaringBitmap;
 use structopt::StructOpt;
 
-use milli::heed_codec::{CsvStringRecordCodec, ByteorderXRoaringBitmapCodec};
+use milli::heed_codec::{CsvStringRecordCodec, BoRoaringBitmapCodec};
 use milli::tokenizer::{simple_tokenizer, only_token};
 use milli::{SmallVec32, Index, Position, DocumentId, BEU32};
 
@@ -364,7 +364,7 @@ impl Store {
             key.extend_from_slice(word.as_bytes());
             // We serialize the positions into a buffer.
             let positions = RoaringBitmap::from_iter(positions.iter().cloned());
-            let bytes = ByteorderXRoaringBitmapCodec::bytes_encode(&positions)
+            let bytes = BoRoaringBitmapCodec::bytes_encode(&positions)
                 .with_context(|| format!("could not serialize positions"))?;
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {

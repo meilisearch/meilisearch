@@ -2,9 +2,9 @@ use std::borrow::Cow;
 use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use roaring::RoaringBitmap;
 
-pub struct ByteorderXRoaringBitmapCodec;
+pub struct BoRoaringBitmapCodec;
 
-impl heed::BytesDecode<'_> for ByteorderXRoaringBitmapCodec {
+impl heed::BytesDecode<'_> for BoRoaringBitmapCodec {
     type DItem = RoaringBitmap;
 
     fn bytes_decode(mut bytes: &[u8]) -> Option<Self::DItem> {
@@ -16,7 +16,7 @@ impl heed::BytesDecode<'_> for ByteorderXRoaringBitmapCodec {
     }
 }
 
-impl heed::BytesEncode<'_> for ByteorderXRoaringBitmapCodec {
+impl heed::BytesEncode<'_> for BoRoaringBitmapCodec {
     type EItem = RoaringBitmap;
 
     fn bytes_encode(item: &Self::EItem) -> Option<Cow<[u8]>> {
