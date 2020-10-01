@@ -419,12 +419,16 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
 
         values_length.sort_unstable();
 
-        let median = values_length.get(values_length.len() / 2).unwrap_or(&0);
-        let first_quartile = values_length.get(values_length.len() / 4).unwrap_or(&0);
-        let third_quartile = values_length.get(values_length.len() / 4 * 3).unwrap_or(&0);
-        let ninety_percentile = values_length.get(values_length.len() / 100 * 90).unwrap_or(&0);
-        let ninety_five_percentile = values_length.get(values_length.len() / 100 * 95).unwrap_or(&0);
-        let ninety_nine_percentile = values_length.get(values_length.len() / 100 * 99).unwrap_or(&0);
+        let median = values_length.len() / 2;
+        let quartile = values_length.len() / 4;
+        let percentile = values_length.len() / 100;
+
+        let twenty_five_percentile = values_length.get(quartile).unwrap_or(&0);
+        let fifty_percentile = values_length.get(median).unwrap_or(&0);
+        let seventy_five_percentile = values_length.get(quartile * 3).unwrap_or(&0);
+        let ninety_percentile = values_length.get(percentile * 90).unwrap_or(&0);
+        let ninety_five_percentile = values_length.get(percentile * 95).unwrap_or(&0);
+        let ninety_nine_percentile = values_length.get(percentile * 99).unwrap_or(&0);
         let minimum = values_length.first().unwrap_or(&0);
         let maximum = values_length.last().unwrap_or(&0);
         let count = values_length.len();
@@ -432,9 +436,9 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
 
         println!("The {} database stats on the lengths", name);
         println!("\tnumber of proximity pairs: {}", count);
-        println!("\tfirst quartile: {}", first_quartile);
-        println!("\tmedian: {}", median);
-        println!("\tthird quartile: {}", third_quartile);
+        println!("\t25th percentile (first quartile): {}", twenty_five_percentile);
+        println!("\t50th percentile (median): {}", fifty_percentile);
+        println!("\t75th percentile (third quartile): {}", seventy_five_percentile);
         println!("\t90th percentile: {}", ninety_percentile);
         println!("\t95th percentile: {}", ninety_five_percentile);
         println!("\t99th percentile: {}", ninety_nine_percentile);
