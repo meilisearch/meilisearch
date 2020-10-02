@@ -41,6 +41,7 @@ pub struct Database {
     indexes_store: heed::Database<Str, Unit>,
     indexes: RwLock<HashMap<String, (Index, thread::JoinHandle<MResult<()>>)>>,
     update_fn: Arc<ArcSwapFn>,
+    database_version: (u32, u32, u32),
 }
 
 pub struct DatabaseOptions {
@@ -166,7 +167,7 @@ fn update_awaiter(
 
 /// Ensures Meilisearch version is compatible with the database, returns an error versions mismatch.
 /// If create is set to true, a VERSION file is created with the current version.
-fn version_guard(path: &Path, create: bool) -> MResult<()> {
+fn version_guard(path: &Path, create: bool) -> MResult<(u32, u32, u32)> {
     let current_version_major = env!("CARGO_PKG_VERSION_MAJOR");
     let current_version_minor = env!("CARGO_PKG_VERSION_MINOR");
     let current_version_patch = env!("CARGO_PKG_VERSION_PATCH");
@@ -187,9 +188,16 @@ fn version_guard(path: &Path, create: bool) -> MResult<()> {
             // the first is always the complete match, safe to unwrap because we have a match
             let version_major = version.get(1).unwrap().as_str();
             let version_minor = version.get(2).unwrap().as_str();
+            let version_patch = version.get(3).unwrap().as_str();
 
             if version_major != current_version_major || version_minor != current_version_minor {
-                return Err(Error::VersionMismatch(format!("{}.{}.XX", version_major, version_minor)));
+                Err(Error::VersionMismatch(format!("{}.{}.XX", version_major, version_minor)))
+            } else {
+                Ok((
+                    version_major.parse().or_else(|e| Err(Error::VersionMismatch(format!("error parsing database version: {}", e))))?, 
+                    version_minor.parse().or_else(|e| Err(Error::VersionMismatch(format!("error parsing database version: {}", e))))?, 
+                    version_patch.parse().or_else(|e| Err(Error::VersionMismatch(format!("error parsing database version: {}", e))))?
+                ))
             }
         }
         Err(error) => {
@@ -203,17 +211,22 @@ fn version_guard(path: &Path, create: bool) -> MResult<()> {
                                 current_version_major,
                                 current_version_minor,
                                 current_version_patch).as_bytes())?;
+
+                        Ok((
+                            current_version_major.parse().or_else(|e| Err(Error::VersionMismatch(format!("error parsing database version: {}", e))))?, 
+                            current_version_minor.parse().or_else(|e| Err(Error::VersionMismatch(format!("error parsing database version: {}", e))))?, 
+                            current_version_patch.parse().or_else(|e| Err(Error::VersionMismatch(format!("error parsing database version: {}", e))))?
+                        ))
                     } else {
                         // when no version file is found and we were not told to create one, this
                         // means that the version is inferior to the one this feature was added in.
-                        return Err(Error::VersionMismatch("<0.12.0".to_string()));
+                        Err(Error::VersionMismatch("<0.12.0".to_string()))
                     }
                 }
-                _ => return Err(error.into())
+                _ => Err(error.into())
             }
         }
     }
-    Ok(())
 }
 
 impl Database {
@@ -225,7 +238,7 @@ impl Database {
         fs::create_dir_all(&path)?;
 
         // create file only if main db wasn't created before (first run)
-        version_guard(path.as_ref(), !main_path.exists() && !update_path.exists())?;
+        let database_version = version_guard(path.as_ref(), !main_path.exists() && !update_path.exists())?;
 
         fs::create_dir_all(&main_path)?;
         let env = heed::EnvOpenOptions::new()
@@ -303,6 +316,7 @@ impl Database {
             indexes_store,
             indexes: RwLock::new(indexes),
             update_fn,
+            database_version,
         })
     }
 
@@ -470,9 +484,18 @@ impl Database {
 
         let env_path = path.join("main");
         let env_update_path = path.join("update");
+        let env_version_path = path.join("VERSION");
 
         fs::create_dir(&env_path)?;
         fs::create_dir(&env_update_path)?;
+    
+        // write Database Version
+        let (current_version_major, current_version_minor, current_version_patch) = self.database_version;
+        let mut version_file = File::create(&env_version_path)?;
+        version_file.write_all(format!("{}.{}.{}",
+                current_version_major,
+                current_version_minor,
+                current_version_patch).as_bytes())?;
 
         let env_path = env_path.join("data.mdb");
         let env_file = self.env.copy_to_path(&env_path, CompactionOption::Enabled)?;
@@ -564,6 +587,8 @@ impl Database {
             .main
             .put_fields_distribution(writer, &frequency)
     }
+
+    pub fn version(&self) -> (u32, u32, u32) { self.database_version }
 }
 
 #[cfg(test)]

@@ -1,3 +1,13 @@
+## v0.15.0
+
+  - Backups (#887)
+  - Update actix-web dependency to 3.0.0 (#963)
+  - Consider an empty query to be a placeholder search (#916)
+
+## v0.14.1
+
+  - Fix version mismatch in snapshot importation (#959)
+
 ## v0.14.0
 
   - Sort displayedAttributes (#943)

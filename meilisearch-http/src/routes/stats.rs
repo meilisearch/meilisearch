@@ -2,7 +2,7 @@ use std::collections::{HashMap, BTreeMap};
 
 use actix_web::web;
 use actix_web::HttpResponse;
-use actix_web_macros::get;
+use actix_web::get;
 use chrono::{DateTime, Utc};
 use log::error;
 use serde::Serialize;

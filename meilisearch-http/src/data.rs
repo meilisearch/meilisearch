@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::ops::Deref;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use meilisearch_core::{Database, DatabaseOptions};
@@ -25,6 +26,8 @@ impl Deref for Data {
 pub struct DataInner {
     pub db: Arc<Database>,
     pub db_path: String,
+    pub backup_folder: PathBuf,
+    pub backup_batch_size: usize,
     pub api_keys: ApiKeys,
     pub server_pid: u32,
     pub http_payload_size_limit: usize,
@@ -57,6 +60,8 @@ impl ApiKeys {
 impl Data {
     pub fn new(opt: Opt) -> Result<Data, Box<dyn Error>> {
         let db_path = opt.db_path.clone();
+        let backup_folder = opt.backup_folder.clone();
+        let backup_batch_size = opt.backup_batch_size;
         let server_pid = std::process::id();
 
         let db_opt = DatabaseOptions {
@@ -79,6 +84,8 @@ impl Data {
         let inner_data = DataInner {
             db: db.clone(),
             db_path,
+            backup_folder,
+            backup_batch_size,
             api_keys,
             server_pid,
             http_payload_size_limit,
