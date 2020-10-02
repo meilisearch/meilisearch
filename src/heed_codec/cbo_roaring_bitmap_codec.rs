@@ -67,3 +67,18 @@ impl heed::BytesEncode<'_> for CboRoaringBitmapCodec {
         Some(Cow::Owned(vec))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::iter::FromIterator;
+    use heed::{BytesEncode, BytesDecode};
+    use super::*;
+
+    #[test]
+    fn limit_four() {
+        let input = RoaringBitmap::from_iter(vec![0, 1, 2, 3]);
+        let bytes = CboRoaringBitmapCodec::bytes_encode(&input).unwrap();
+        let output = CboRoaringBitmapCodec::bytes_decode(&bytes).unwrap();
+        assert_eq!(input, output);
+    }
+}
