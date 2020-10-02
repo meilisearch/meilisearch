@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 
 use actix_web::web;
 use actix_web::HttpResponse;
@@ -24,7 +24,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 struct IndexStatsResponse {
     number_of_documents: u64,
     is_indexing: bool,
-    fields_distribution: HashMap<String, usize>,
+    fields_distribution: BTreeMap<String, usize>,
 }
 
 #[get("/indexes/{index_uid}/stats", wrap = "Authentication::Private")]

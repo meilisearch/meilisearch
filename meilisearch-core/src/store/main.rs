@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 use heed::types::{ByteSlice, OwnedType, SerdeBincode, Str, CowSlice};
@@ -31,7 +31,7 @@ const SYNONYMS_KEY: &str = "synonyms";
 const UPDATED_AT_KEY: &str = "updated-at";
 const WORDS_KEY: &str = "words";
 
-pub type FreqsMap = HashMap<String, usize>;
+pub type FreqsMap = BTreeMap<String, usize>;
 type SerdeFreqsMap = SerdeBincode<FreqsMap>;
 type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
 
