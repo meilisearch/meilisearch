@@ -12,6 +12,20 @@ use Command::*;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+const MAIN_DB_NAME: &str = "main";
+const WORD_DOCIDS_DB_NAME: &str = "word-docids";
+const DOCID_WORD_POSITIONS_DB_NAME: &str = "docid-word-positions";
+const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
+const DOCUMENTS_DB_NAME: &str = "documents";
+
+const DATABASE_NAMES: &[&str] = &[
+    MAIN_DB_NAME,
+    WORD_DOCIDS_DB_NAME,
+    DOCID_WORD_POSITIONS_DB_NAME,
+    WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
+    DOCUMENTS_DB_NAME,
+];
+
 #[derive(Debug, StructOpt)]
 #[structopt(name = "milli-info", about = "A stats crawler for milli.")]
 struct Opt {
@@ -74,6 +88,12 @@ enum Command {
     /// Outputs the average number of documents for each words pair.
     AverageNumberOfDocumentByWordPairProximity,
 
+    /// Outputs the size in bytes of the specified database.
+    SizeOfDatabase {
+        #[structopt(possible_values = DATABASE_NAMES)]
+        database: String,
+    },
+
     /// Outputs a CSV with the proximities for the two specidied words and
     /// the documents ids where these relations appears.
     ///
@@ -130,6 +150,7 @@ fn main() -> anyhow::Result<()> {
         AverageNumberOfPositionsByWord => {
             average_number_of_positions_by_word(&index, &rtxn)
         },
+        SizeOfDatabase { database } => size_of_database(&index, &rtxn, &database),
         AverageNumberOfDocumentByWordPairProximity => {
             average_number_of_document_by_word_pair_proximity(&index, &rtxn)
         }
@@ -332,6 +353,33 @@ fn average_number_of_positions_by_word(index: &Index, rtxn: &heed::RoTxn) -> any
     let count = count as f64;
 
     println!("average number of positions by word: {}", values_length_sum / count);
+
+    Ok(())
+}
+
+fn size_of_database(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Result<()> {
+    use heed::types::ByteSlice;
+
+    let database = match name {
+        MAIN_DB_NAME => &index.main,
+        WORD_DOCIDS_DB_NAME => index.word_docids.as_polymorph(),
+        DOCID_WORD_POSITIONS_DB_NAME => index.docid_word_positions.as_polymorph(),
+        WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_pair_proximity_docids.as_polymorph(),
+        DOCUMENTS_DB_NAME => index.documents.as_polymorph(),
+        otherwise => anyhow::bail!("unknown database {:?}", otherwise),
+    };
+
+    let mut key_size: u64 = 0;
+    let mut val_size: u64 = 0;
+    for result in database.iter::<_, ByteSlice, ByteSlice>(rtxn)? {
+        let (k, v) = result?;
+        key_size += k.len() as u64;
+        val_size += v.len() as u64;
+    }
+
+    eprintln!("The {} database weigh {} bytes in terms of keys and {} bytes in terms of values.",
+        name, key_size, val_size,
+    );
 
     Ok(())
 }

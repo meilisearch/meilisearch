@@ -43,10 +43,10 @@ pub struct Index {
     pub word_docids: Database<Str, RoaringBitmapCodec>,
     /// Maps a word and a document id (u32) to all the positions where the given word appears.
     pub docid_word_positions: Database<BEU32StrCodec, ByteorderXRoaringBitmapCodec>,
-    /// Maps the document id to the document as a CSV line.
-    pub documents: Database<OwnedType<BEU32>, ByteSlice>,
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<StrStrU8Codec, RoaringBitmapCodec>,
+    /// Maps the document id to the document as a CSV line.
+    pub documents: Database<OwnedType<BEU32>, ByteSlice>,
 }
 
 impl Index {
@@ -55,8 +55,8 @@ impl Index {
             main: env.create_poly_database(None)?,
             word_docids: env.create_database(Some("word-docids"))?,
             docid_word_positions: env.create_database(Some("docid-word-positions"))?,
-            documents: env.create_database(Some("documents"))?,
             word_pair_proximity_docids: env.create_database(Some("word-pair-proximity-docids"))?,
+            documents: env.create_database(Some("documents"))?,
         })
     }
 
