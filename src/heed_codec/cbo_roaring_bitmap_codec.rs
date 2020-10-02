@@ -5,13 +5,18 @@ use std::mem::size_of;
 use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use roaring::RoaringBitmap;
 
+/// This is the limit where using a byteorder became less size efficient
+/// than using a direct roaring encoding, it is also the point where we are able
+/// to determine the encoding used only by using the array of bytes length.
+const THRESHOLD: usize = 7;
+
 /// A conditionnal codec that either use the RoaringBitmap
 /// or a lighter ByteOrder en/decoding method.
 pub struct CboRoaringBitmapCodec;
 
 impl CboRoaringBitmapCodec {
     pub fn serialized_size(roaring: &RoaringBitmap) -> usize {
-        if roaring.len() <= 4 {
+        if roaring.len() <= THRESHOLD as u64 {
             roaring.len() as usize * size_of::<u32>()
         } else {
             roaring.serialized_size()
@@ -19,8 +24,8 @@ impl CboRoaringBitmapCodec {
     }
 
     pub fn serialize_into(roaring: &RoaringBitmap, vec: &mut Vec<u8>) -> io::Result<()> {
-        if roaring.len() <= 4 {
-            // If the number of items (u32s) to encode is less than or equal to 4
+        if roaring.len() <= THRESHOLD as u64 {
+            // If the number of items (u32s) to encode is less than or equal to the threshold
             // it means that it would weigh the same or less than the RoaringBitmap
             // header, so we directly encode them using ByteOrder instead.
             for integer in roaring {
@@ -34,8 +39,8 @@ impl CboRoaringBitmapCodec {
     }
 
     pub fn deserialize_from(mut bytes: &[u8]) -> io::Result<RoaringBitmap> {
-        if bytes.len() <= 4 * size_of::<u32>() {
-            // If there is 4 or less than 4 integers that can fit into this array
+        if bytes.len() <= THRESHOLD * size_of::<u32>() {
+            // If there is threshold or less than threshold integers that can fit into this array
             // of bytes it means that we used the ByteOrder codec serializer.
             let mut bitmap = RoaringBitmap::new();
             while let Ok(integer) = bytes.read_u32::<NativeEndian>() {
@@ -44,7 +49,7 @@ impl CboRoaringBitmapCodec {
             Ok(bitmap)
         } else {
             // Otherwise, it means we used the classic RoaringBitmapCodec and
-            // that the header takes 4 integers.
+            // that the header takes threshold integers.
             RoaringBitmap::deserialize_from(bytes)
         }
     }
@@ -75,10 +80,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn limit_four() {
-        let input = RoaringBitmap::from_iter(vec![0, 1, 2, 3]);
+    fn verify_encoding_decoding() {
+        let input = RoaringBitmap::from_iter(0..THRESHOLD as u32);
         let bytes = CboRoaringBitmapCodec::bytes_encode(&input).unwrap();
         let output = CboRoaringBitmapCodec::bytes_decode(&bytes).unwrap();
         assert_eq!(input, output);
+    }
+
+    #[test]
+    fn verify_threshold() {
+        let input = RoaringBitmap::from_iter(0..THRESHOLD as u32);
+
+        // use roaring bitmap
+        let mut bytes = Vec::new();
+        input.serialize_into(&mut bytes).unwrap();
+        let roaring_size = bytes.len();
+
+        // use byteorder directly
+        let mut bytes = Vec::new();
+        for integer in input {
+            bytes.write_u32::<NativeEndian>(integer).unwrap();
+        }
+        let bo_size = bytes.len();
+
+        assert!(roaring_size > bo_size);
     }
 }
