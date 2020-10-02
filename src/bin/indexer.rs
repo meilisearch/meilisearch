@@ -90,7 +90,7 @@ struct IndexerOpt {
     max_nb_chunks: Option<usize>,
 
     /// MTBL max memory in bytes.
-    #[structopt(long, default_value = "1610612736")] // 1.5 GB
+    #[structopt(long, default_value = "1335885824")] // 1.25 GB
     max_memory: usize,
 
     /// Size of the linked hash map cache when indexing.
