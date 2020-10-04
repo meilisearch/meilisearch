@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -86,7 +86,7 @@ struct IndexerOpt {
     max_nb_chunks: Option<usize>,
 
     /// MTBL max memory in bytes.
-    #[structopt(long, default_value = "346030080")] // 330 MB
+    #[structopt(long, default_value = "440401920")] // 420 MB
     max_memory: usize,
 
     /// Size of the linked hash map cache when indexing.
@@ -198,6 +198,14 @@ fn compute_words_pair_proximities(
 
 type MergeFn = fn(&[u8], &[Vec<u8>]) -> Result<Vec<u8>, ()>;
 
+struct Readers {
+    main: Reader<Mmap>,
+    word_docids: Reader<Mmap>,
+    docid_word_positions: Reader<Mmap>,
+    words_pairs_proximities_docids: Reader<Mmap>,
+    documents: Reader<Mmap>,
+}
+
 struct Store {
     word_docids: LinkedHashMap<SmallVec32<u8>, RoaringBitmap>,
     word_docids_limit: usize,
@@ -210,18 +218,10 @@ struct Store {
     // MTBL sorters
     main_sorter: Sorter<MergeFn>,
     word_docids_sorter: Sorter<MergeFn>,
-    docid_word_positions_sorter: Sorter<MergeFn>,
     words_pairs_proximities_docids_sorter: Sorter<MergeFn>,
     // MTBL writers
+    docid_word_positions_writer: Writer<File>,
     documents_writer: Writer<File>,
-}
-
-struct Readers {
-    main: Reader<Mmap>,
-    word_docids: Reader<Mmap>,
-    docid_word_positions: Reader<Mmap>,
-    words_pairs_proximities_docids: Reader<Mmap>,
-    documents: Reader<Mmap>,
 }
 
 impl Store {
@@ -247,13 +247,6 @@ impl Store {
             max_nb_chunks,
             max_memory,
         );
-        let docid_word_positions_sorter = create_sorter(
-            docid_word_positions_merge,
-            chunk_compression_type,
-            chunk_compression_level,
-            max_nb_chunks,
-            max_memory,
-        );
         let words_pairs_proximities_docids_sorter = create_sorter(
             words_pairs_proximities_docids_merge,
             chunk_compression_type,
@@ -262,12 +255,12 @@ impl Store {
             max_memory,
         );
 
-        let mut documents_builder = Writer::builder();
-        documents_builder.compression_type(chunk_compression_type);
-        if let Some(level) = chunk_compression_level {
-            documents_builder.compression_level(level);
-        }
-        let documents_writer = tempfile().map(|f| documents_builder.build(f))?;
+        let documents_writer = tempfile().map(|f| {
+            create_writer(chunk_compression_type, chunk_compression_level, f)
+        })?;
+        let docid_word_positions_writer = tempfile().map(|f| {
+            create_writer(chunk_compression_type, chunk_compression_level, f)
+        })?;
 
         Ok(Store {
             word_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
@@ -280,9 +273,9 @@ impl Store {
 
             main_sorter,
             word_docids_sorter,
-            docid_word_positions_sorter,
             words_pairs_proximities_docids_sorter,
 
+            docid_word_positions_writer,
             documents_writer,
         })
     }
@@ -372,7 +365,7 @@ impl Store {
 
         self.documents_ids.insert(document_id);
         self.documents_writer.insert(document_id.to_be_bytes(), record)?;
-        Self::write_docid_word_positions(&mut self.docid_word_positions_sorter, document_id, words_positions)?;
+        Self::write_docid_word_positions(&mut self.docid_word_positions_writer, document_id, words_positions)?;
 
         Ok(())
     }
@@ -406,7 +399,7 @@ impl Store {
     }
 
     fn write_docid_word_positions(
-        sorter: &mut Sorter<MergeFn>,
+        writer: &mut Writer<File>,
         id: DocumentId,
         words_positions: &HashMap<String, SmallVec32<Position>>,
     ) -> anyhow::Result<()>
@@ -414,6 +407,9 @@ impl Store {
         // We prefix the words by the document id.
         let mut key = id.to_be_bytes().to_vec();
         let base_size = key.len();
+
+        // We order the words lexicographically, this way we avoid passing by a sorter.
+        let words_positions = BTreeMap::from_iter(words_positions);
 
         for (word, positions) in words_positions {
             key.truncate(base_size);
@@ -424,7 +420,7 @@ impl Store {
                 .with_context(|| "could not serialize positions")?;
             // that we write under the generated key into MTBL
             if lmdb_key_valid_size(&key) {
-                sorter.insert(&key, &bytes)?;
+                writer.insert(&key, &bytes)?;
             }
         }
 
@@ -542,16 +538,13 @@ impl Store {
         let mut main_wtr = tempfile().map(|f| create_writer(comp_type, comp_level, f))?;
         self.main_sorter.write_into(&mut main_wtr)?;
 
-        let mut docid_word_positions_wtr = tempfile().map(|f| create_writer(comp_type, comp_level, f))?;
-        self.docid_word_positions_sorter.write_into(&mut docid_word_positions_wtr)?;
-
         let mut words_pairs_proximities_docids_wtr = tempfile().map(|f| create_writer(comp_type, comp_level, f))?;
         self.words_pairs_proximities_docids_sorter.write_into(&mut words_pairs_proximities_docids_wtr)?;
 
         let main = writer_into_reader(main_wtr)?;
         let word_docids = writer_into_reader(word_docids_wtr)?;
-        let docid_word_positions = writer_into_reader(docid_word_positions_wtr)?;
         let words_pairs_proximities_docids = writer_into_reader(words_pairs_proximities_docids_wtr)?;
+        let docid_word_positions = writer_into_reader(self.docid_word_positions_writer)?;
         let documents = writer_into_reader(self.documents_writer)?;
 
         Ok(Readers {
@@ -602,7 +595,7 @@ fn word_docids_merge(_key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
 }
 
 fn docid_word_positions_merge(key: &[u8], _values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
-    panic!("merging word docid positions is an error ({:?})", key.as_bstr())
+    panic!("merging docid word positions is an error ({:?})", key.as_bstr())
 }
 
 fn words_pairs_proximities_docids_merge(_key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
