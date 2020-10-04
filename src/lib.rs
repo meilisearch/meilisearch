@@ -32,9 +32,9 @@ pub type DocumentId = u32;
 pub type Attribute = u32;
 pub type Position = u32;
 
-const WORDS_FST_KEY: &str = "words-fst";
-const HEADERS_KEY: &str = "headers";
-const DOCUMENTS_IDS_KEY: &str = "documents-ids";
+pub const WORDS_FST_KEY: &str = "words-fst";
+pub const HEADERS_KEY: &str = "headers";
+pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 
 #[derive(Clone)]
 pub struct Index {
@@ -53,7 +53,7 @@ pub struct Index {
 impl Index {
     pub fn new(env: &heed::Env) -> anyhow::Result<Index> {
         Ok(Index {
-            main: env.create_poly_database(None)?,
+            main: env.create_poly_database(Some("main"))?,
             word_docids: env.create_database(Some("word-docids"))?,
             docid_word_positions: env.create_database(Some("docid-word-positions"))?,
             word_pair_proximity_docids: env.create_database(Some("word-pair-proximity-docids"))?,

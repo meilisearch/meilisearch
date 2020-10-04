@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::iter::FromIterator;
@@ -7,12 +7,12 @@ use std::path::PathBuf;
 use std::{iter, thread};
 use std::time::Instant;
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 use bstr::ByteSlice as _;
 use csv::StringRecord;
 use flate2::read::GzDecoder;
 use fst::IntoStreamer;
-use heed::{EnvOpenOptions, BytesEncode, types::*};
+use heed::{EnvOpenOptions, BytesEncode, types::ByteSlice};
 use linked_hash_map::LinkedHashMap;
 use log::{debug, info};
 use memmap::Mmap;
@@ -20,24 +20,20 @@ use oxidized_mtbl::{Reader, Writer, Merger, Sorter, CompressionType};
 use rayon::prelude::*;
 use roaring::RoaringBitmap;
 use structopt::StructOpt;
+use tempfile::tempfile;
 
 use milli::heed_codec::{CsvStringRecordCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use milli::tokenizer::{simple_tokenizer, only_token};
-use milli::{SmallVec32, Index, Position, DocumentId, BEU32};
+use milli::{SmallVec32, Index, Position, DocumentId};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
 
 const MAX_POSITION: usize = 1000;
 const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 
-const HEADERS_KEY: &[u8] = b"\0headers";
-const DOCUMENTS_IDS_KEY: &[u8] = b"\x04documents-ids";
-const WORDS_FST_KEY: &[u8] = b"\x06words-fst";
-const HEADERS_BYTE: u8 = 0;
-const WORD_DOCID_POSITIONS_BYTE: u8 = 1;
-const WORD_DOCIDS_BYTE: u8 = 2;
-const WORDS_PROXIMITIES_BYTE: u8 = 5;
-const DOCUMENTS_IDS_BYTE: u8 = 4;
+const WORDS_FST_KEY: &[u8] = milli::WORDS_FST_KEY.as_bytes();
+const HEADERS_KEY: &[u8] = milli::HEADERS_KEY.as_bytes();
+const DOCUMENTS_IDS_KEY: &[u8] = milli::DOCUMENTS_IDS_KEY.as_bytes();
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -90,7 +86,7 @@ struct IndexerOpt {
     max_nb_chunks: Option<usize>,
 
     /// MTBL max memory in bytes.
-    #[structopt(long, default_value = "1335885824")] // 1.25 GB
+    #[structopt(long, default_value = "346030080")] // 330 MB
     max_memory: usize,
 
     /// Size of the linked hash map cache when indexing.
@@ -129,13 +125,41 @@ fn lmdb_key_valid_size(key: &[u8]) -> bool {
     !key.is_empty() && key.len() <= LMDB_MAX_KEY_LENGTH
 }
 
-fn create_writer(type_: CompressionType, level: Option<u32>, file: File) -> Writer<File> {
+fn create_writer(typ: CompressionType, level: Option<u32>, file: File) -> Writer<File> {
     let mut builder = Writer::builder();
-    builder.compression_type(type_);
+    builder.compression_type(typ);
     if let Some(level) = level {
         builder.compression_level(level);
     }
     builder.build(file)
+}
+
+fn writer_into_reader(writer: Writer<File>) -> anyhow::Result<Reader<Mmap>> {
+    let file = writer.into_inner()?;
+    let mmap = unsafe { Mmap::map(&file)? };
+    Reader::new(mmap).map_err(Into::into)
+}
+
+fn create_sorter(
+    merge: MergeFn,
+    chunk_compression_type: CompressionType,
+    chunk_compression_level: Option<u32>,
+    max_nb_chunks: Option<usize>,
+    max_memory: Option<usize>,
+) -> Sorter<MergeFn>
+{
+    let mut builder = Sorter::builder(merge);
+    builder.chunk_compression_type(chunk_compression_type);
+    if let Some(level) = chunk_compression_level {
+        builder.chunk_compression_level(level);
+    }
+    if let Some(nb_chunks) = max_nb_chunks {
+        builder.max_nb_chunks(nb_chunks);
+    }
+    if let Some(memory) = max_memory {
+        builder.max_memory(memory);
+    }
+    builder.build()
 }
 
 /// Outputs a list of all pairs of words with the shortest proximity between 1 and 7 inclusive.
@@ -180,10 +204,24 @@ struct Store {
     words_pairs_proximities_docids: LinkedHashMap<(SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap>,
     words_pairs_proximities_docids_limit: usize,
     documents_ids: RoaringBitmap,
-    sorter: Sorter<MergeFn>,
-    documents_writer: Writer<File>,
+    // MTBL parameters
     chunk_compression_type: CompressionType,
     chunk_compression_level: Option<u32>,
+    // MTBL sorters
+    main_sorter: Sorter<MergeFn>,
+    word_docids_sorter: Sorter<MergeFn>,
+    docid_word_positions_sorter: Sorter<MergeFn>,
+    words_pairs_proximities_docids_sorter: Sorter<MergeFn>,
+    // MTBL writers
+    documents_writer: Writer<File>,
+}
+
+struct Readers {
+    main: Reader<Mmap>,
+    word_docids: Reader<Mmap>,
+    docid_word_positions: Reader<Mmap>,
+    words_pairs_proximities_docids: Reader<Mmap>,
+    documents: Reader<Mmap>,
 }
 
 impl Store {
@@ -195,24 +233,41 @@ impl Store {
         chunk_compression_level: Option<u32>,
     ) -> anyhow::Result<Store>
     {
-        let mut builder = Sorter::builder(merge as MergeFn);
-        builder.chunk_compression_type(chunk_compression_type);
-        if let Some(level) = chunk_compression_level {
-            builder.chunk_compression_level(level);
-        }
-        if let Some(nb_chunks) = max_nb_chunks {
-            builder.max_nb_chunks(nb_chunks);
-        }
-        if let Some(memory) = max_memory {
-            builder.max_memory(memory);
-        }
+        let main_sorter = create_sorter(
+            main_merge,
+            chunk_compression_type,
+            chunk_compression_level,
+            max_nb_chunks,
+            max_memory,
+        );
+        let word_docids_sorter = create_sorter(
+            word_docids_merge,
+            chunk_compression_type,
+            chunk_compression_level,
+            max_nb_chunks,
+            max_memory,
+        );
+        let docid_word_positions_sorter = create_sorter(
+            docid_word_positions_merge,
+            chunk_compression_type,
+            chunk_compression_level,
+            max_nb_chunks,
+            max_memory,
+        );
+        let words_pairs_proximities_docids_sorter = create_sorter(
+            words_pairs_proximities_docids_merge,
+            chunk_compression_type,
+            chunk_compression_level,
+            max_nb_chunks,
+            max_memory,
+        );
 
         let mut documents_builder = Writer::builder();
         documents_builder.compression_type(chunk_compression_type);
         if let Some(level) = chunk_compression_level {
             documents_builder.compression_level(level);
         }
-        let documents_writer = tempfile::tempfile().map(|f| documents_builder.build(f))?;
+        let documents_writer = tempfile().map(|f| documents_builder.build(f))?;
 
         Ok(Store {
             word_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
@@ -220,10 +275,15 @@ impl Store {
             words_pairs_proximities_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
             words_pairs_proximities_docids_limit: linked_hash_map_size,
             documents_ids: RoaringBitmap::new(),
-            sorter: builder.build(),
-            documents_writer,
             chunk_compression_type,
             chunk_compression_level,
+
+            main_sorter,
+            word_docids_sorter,
+            docid_word_positions_sorter,
+            words_pairs_proximities_docids_sorter,
+
+            documents_writer,
         })
     }
 
@@ -241,7 +301,7 @@ impl Store {
                 if self.word_docids.len() == self.word_docids_limit {
                     // Removing the front element is equivalent to removing the LRU element.
                     let lru = self.word_docids.pop_front();
-                    Self::write_word_docids(&mut self.sorter, lru)?;
+                    Self::write_word_docids(&mut self.word_docids_sorter, lru)?;
                 }
             }
         }
@@ -279,7 +339,7 @@ impl Store {
             // Removing front elements is equivalent to removing the LRUs.
             let iter = iter::from_fn(|| self.words_pairs_proximities_docids.pop_front());
             iter.take(overflow).for_each(|x| lrus.push(x));
-            Self::write_words_pairs_proximities(&mut self.sorter, lrus)?;
+            Self::write_words_pairs_proximities(&mut self.words_pairs_proximities_docids_sorter, lrus)?;
         }
 
         Ok(())
@@ -288,7 +348,7 @@ impl Store {
     fn write_headers(&mut self, headers: &StringRecord) -> anyhow::Result<()> {
         let headers = CsvStringRecordCodec::bytes_encode(headers)
             .with_context(|| format!("could not encode csv record"))?;
-        Ok(self.sorter.insert(HEADERS_KEY, headers)?)
+        Ok(self.main_sorter.insert(HEADERS_KEY, headers)?)
     }
 
     fn write_document(
@@ -312,7 +372,7 @@ impl Store {
 
         self.documents_ids.insert(document_id);
         self.documents_writer.insert(document_id.to_be_bytes(), record)?;
-        Self::write_docid_word_positions(&mut self.sorter, document_id, words_positions)?;
+        Self::write_docid_word_positions(&mut self.docid_word_positions_sorter, document_id, words_positions)?;
 
         Ok(())
     }
@@ -322,12 +382,11 @@ impl Store {
         iter: impl IntoIterator<Item=((SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap)>,
     ) -> anyhow::Result<()>
     {
-        // words proximities keys are all prefixed
-        let mut key = vec![WORDS_PROXIMITIES_BYTE];
+        let mut key = Vec::new();
         let mut buffer = Vec::new();
 
         for ((w1, w2, min_prox), docids) in iter {
-            key.truncate(1);
+            key.clear();
             key.extend_from_slice(w1.as_bytes());
             key.push(0);
             key.extend_from_slice(w2.as_bytes());
@@ -352,11 +411,8 @@ impl Store {
         words_positions: &HashMap<String, SmallVec32<Position>>,
     ) -> anyhow::Result<()>
     {
-        // postings positions ids keys are all prefixed
-        let mut key = vec![WORD_DOCID_POSITIONS_BYTE];
-
         // We prefix the words by the document id.
-        key.extend_from_slice(&id.to_be_bytes());
+        let mut key = id.to_be_bytes().to_vec();
         let base_size = key.len();
 
         for (word, positions) in words_positions {
@@ -378,12 +434,11 @@ impl Store {
     fn write_word_docids<I>(sorter: &mut Sorter<MergeFn>, iter: I) -> anyhow::Result<()>
     where I: IntoIterator<Item=(SmallVec32<u8>, RoaringBitmap)>
     {
-        // postings positions ids keys are all prefixed
-        let mut key = vec![WORD_DOCIDS_BYTE];
+        let mut key = Vec::new();
         let mut buffer = Vec::new();
 
         for (word, ids) in iter {
-            key.truncate(1);
+            key.clear();
             key.extend_from_slice(&word);
             // We serialize the document ids into a buffer
             buffer.clear();
@@ -412,7 +467,7 @@ impl Store {
         thread_index: usize,
         num_threads: usize,
         log_every_n: usize,
-    ) -> anyhow::Result<(Reader<Mmap>, Reader<Mmap>)>
+    ) -> anyhow::Result<Readers>
     {
         debug!("{:?}: Indexing in a Store...", thread_index);
 
@@ -453,50 +508,63 @@ impl Store {
             document_id = document_id + 1;
         }
 
-        let (reader, docs_reader) = self.finish()?;
+        let readers = self.finish()?;
         debug!("{:?}: Store created!", thread_index);
-        Ok((reader, docs_reader))
+        Ok(readers)
     }
 
-    fn finish(mut self) -> anyhow::Result<(Reader<Mmap>, Reader<Mmap>)> {
-        let compression_type = self.chunk_compression_type;
-        let compression_level = self.chunk_compression_level;
+    fn finish(mut self) -> anyhow::Result<Readers> {
+        let comp_type = self.chunk_compression_type;
+        let comp_level = self.chunk_compression_level;
 
-        Self::write_word_docids(&mut self.sorter, self.word_docids)?;
-        Self::write_documents_ids(&mut self.sorter, self.documents_ids)?;
-        Self::write_words_pairs_proximities(&mut self.sorter, self.words_pairs_proximities_docids)?;
+        Self::write_word_docids(&mut self.word_docids_sorter, self.word_docids)?;
+        Self::write_documents_ids(&mut self.main_sorter, self.documents_ids)?;
+        Self::write_words_pairs_proximities(
+            &mut self.words_pairs_proximities_docids_sorter,
+            self.words_pairs_proximities_docids,
+        )?;
 
-        let wtr_file = tempfile::tempfile()?;
-        let mut wtr = create_writer(compression_type, compression_level, wtr_file);
+        let mut word_docids_wtr = tempfile().map(|f| create_writer(comp_type, comp_level, f))?;
         let mut builder = fst::SetBuilder::memory();
 
-        let mut iter = self.sorter.into_iter()?;
+        let mut iter = self.word_docids_sorter.into_iter()?;
         while let Some(result) = iter.next() {
-            let (key, val) = result?;
-            if let Some((&WORD_DOCIDS_BYTE, word)) = key.split_first() {
-                // This is a lexicographically ordered word position
-                // we use the key to construct the words fst.
-                builder.insert(word)?;
-            }
-            wtr.insert(key, val)?;
+            let (word, val) = result?;
+            // This is a lexicographically ordered word position
+            // we use the key to construct the words fst.
+            builder.insert(word)?;
+            word_docids_wtr.insert(word, val)?;
         }
 
         let fst = builder.into_set();
-        wtr.insert(WORDS_FST_KEY, fst.as_fst().as_bytes())?;
+        self.main_sorter.insert(WORDS_FST_KEY, fst.as_fst().as_bytes())?;
 
-        let docs_file = self.documents_writer.into_inner()?;
-        let docs_mmap = unsafe { Mmap::map(&docs_file)? };
-        let docs_reader = Reader::new(docs_mmap)?;
+        let mut main_wtr = tempfile().map(|f| create_writer(comp_type, comp_level, f))?;
+        self.main_sorter.write_into(&mut main_wtr)?;
 
-        let file = wtr.into_inner()?;
-        let mmap = unsafe { Mmap::map(&file)? };
-        let reader = Reader::new(mmap)?;
+        let mut docid_word_positions_wtr = tempfile().map(|f| create_writer(comp_type, comp_level, f))?;
+        self.docid_word_positions_sorter.write_into(&mut docid_word_positions_wtr)?;
 
-        Ok((reader, docs_reader))
+        let mut words_pairs_proximities_docids_wtr = tempfile().map(|f| create_writer(comp_type, comp_level, f))?;
+        self.words_pairs_proximities_docids_sorter.write_into(&mut words_pairs_proximities_docids_wtr)?;
+
+        let main = writer_into_reader(main_wtr)?;
+        let word_docids = writer_into_reader(word_docids_wtr)?;
+        let docid_word_positions = writer_into_reader(docid_word_positions_wtr)?;
+        let words_pairs_proximities_docids = writer_into_reader(words_pairs_proximities_docids_wtr)?;
+        let documents = writer_into_reader(self.documents_writer)?;
+
+        Ok(Readers {
+            main,
+            word_docids,
+            docid_word_positions,
+            words_pairs_proximities_docids,
+            documents,
+        })
     }
 }
 
-fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
+fn main_merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
     match key {
         WORDS_FST_KEY => {
             let fsts: Vec<_> = values.iter().map(|v| fst::Set::new(v).unwrap()).collect();
@@ -510,79 +578,58 @@ fn merge(key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
             build.extend_stream(op.into_stream()).unwrap();
             Ok(build.into_inner().unwrap())
         },
-        key => match key[0] {
-            HEADERS_BYTE | WORD_DOCID_POSITIONS_BYTE => {
-                assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
-                Ok(values[0].to_vec())
-            },
-            DOCUMENTS_IDS_BYTE | WORD_DOCIDS_BYTE => {
-                let (head, tail) = values.split_first().unwrap();
-                let mut head = RoaringBitmap::deserialize_from(head.as_slice()).unwrap();
-
-                for value in tail {
-                    let bitmap = RoaringBitmap::deserialize_from(value.as_slice()).unwrap();
-                    head.union_with(&bitmap);
-                }
-
-                let mut vec = Vec::with_capacity(head.serialized_size());
-                head.serialize_into(&mut vec).unwrap();
-                Ok(vec)
-            },
-            WORDS_PROXIMITIES_BYTE => {
-                let (head, tail) = values.split_first().unwrap();
-                let mut head = CboRoaringBitmapCodec::deserialize_from(head.as_slice()).unwrap();
-
-                for value in tail {
-                    let bitmap = CboRoaringBitmapCodec::deserialize_from(value.as_slice()).unwrap();
-                    head.union_with(&bitmap);
-                }
-
-                let mut vec = Vec::new();
-                CboRoaringBitmapCodec::serialize_into(&head, &mut vec).unwrap();
-                Ok(vec)
-            },
-            otherwise => panic!("wut {:?}", otherwise),
-        }
+        HEADERS_KEY => {
+            assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
+            Ok(values[0].to_vec())
+        },
+        DOCUMENTS_IDS_KEY => word_docids_merge(&[], values),
+        otherwise => panic!("wut {:?}", otherwise),
     }
 }
 
-// TODO merge with the previous values
-// TODO store the documents in a compressed MTBL
-// TODO prefer using iter.append when possible, it is way faster (4x) to inject ordered entries.
-fn lmdb_writer(wtxn: &mut heed::RwTxn, index: &Index, key: &[u8], val: &[u8]) -> anyhow::Result<()> {
-    if key == WORDS_FST_KEY {
-        // Write the words fst
-        index.main.put::<_, Str, ByteSlice>(wtxn, "words-fst", val)?;
-    }
-    else if key == HEADERS_KEY {
-        // Write the headers
-        index.main.put::<_, Str, ByteSlice>(wtxn, "headers", val)?;
-    }
-    else if key == DOCUMENTS_IDS_KEY {
-        // Write the documents ids list
-        index.main.put::<_, Str, ByteSlice>(wtxn, "documents-ids", val)?;
-    }
-    else if key.starts_with(&[WORD_DOCIDS_BYTE]) {
-        // Write the postings lists
-        index.word_docids.as_polymorph()
-            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
-    }
-    else if key.starts_with(&[WORD_DOCID_POSITIONS_BYTE]) {
-        // Write the postings lists
-        index.docid_word_positions.as_polymorph()
-            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
-    } else if key.starts_with(&[WORDS_PROXIMITIES_BYTE]) {
-        // Write the word pair proximity document ids
-        index.word_pair_proximity_docids.as_polymorph()
-            .put::<_, ByteSlice, ByteSlice>(wtxn, &key[1..], val)?;
+fn word_docids_merge(_key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
+    let (head, tail) = values.split_first().unwrap();
+    let mut head = RoaringBitmap::deserialize_from(head.as_slice()).unwrap();
+
+    for value in tail {
+        let bitmap = RoaringBitmap::deserialize_from(value.as_slice()).unwrap();
+        head.union_with(&bitmap);
     }
 
-    Ok(())
+    let mut vec = Vec::with_capacity(head.serialized_size());
+    head.serialize_into(&mut vec).unwrap();
+    Ok(vec)
 }
 
-fn merge_into_lmdb<F>(sources: Vec<Reader<Mmap>>, mut f: F) -> anyhow::Result<()>
-where F: FnMut(&[u8], &[u8]) -> anyhow::Result<()>
-{
+fn docid_word_positions_merge(_key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
+    assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
+    Ok(values[0].to_vec())
+}
+
+fn words_pairs_proximities_docids_merge(_key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
+    let (head, tail) = values.split_first().unwrap();
+    let mut head = CboRoaringBitmapCodec::deserialize_from(head.as_slice()).unwrap();
+
+    for value in tail {
+        let bitmap = CboRoaringBitmapCodec::deserialize_from(value.as_slice()).unwrap();
+        head.union_with(&bitmap);
+    }
+
+    let mut vec = Vec::new();
+    CboRoaringBitmapCodec::serialize_into(&head, &mut vec).unwrap();
+    Ok(vec)
+}
+
+fn documents_merge(key: &[u8], _values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
+    panic!("impossible to merge documents ({:?})", key.as_bstr())
+}
+
+fn merge_into_lmdb_database(
+    wtxn: &mut heed::RwTxn,
+    database: heed::PolyDatabase,
+    sources: Vec<Reader<Mmap>>,
+    merge: MergeFn,
+) -> anyhow::Result<()> {
     debug!("Merging {} MTBL stores...", sources.len());
     let before = Instant::now();
 
@@ -590,10 +637,11 @@ where F: FnMut(&[u8], &[u8]) -> anyhow::Result<()>
     builder.extend(sources);
     let merger = builder.build();
 
-    let mut iter = merger.into_merge_iter()?;
-    while let Some(result) = iter.next() {
+    let mut in_iter = merger.into_merge_iter()?;
+    let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
+    while let Some(result) = in_iter.next() {
         let (k, v) = result?;
-        (f)(&k, &v).with_context(|| format!("writing {:?} into LMDB", k.as_bstr()))?;
+        out_iter.append(k, v).with_context(|| format!("writing {:?} into LMDB", k.as_bstr()))?;
     }
 
     debug!("MTBL stores merged in {:.02?}!", before.elapsed());
@@ -666,6 +714,10 @@ fn main() -> anyhow::Result<()> {
         rayon::ThreadPoolBuilder::new().num_threads(jobs).build_global()?;
     }
 
+    if opt.database.exists() {
+        bail!("Database ({}) already exists, delete it to continue.", opt.database.display());
+    }
+
     std::fs::create_dir_all(&opt.database)?;
     let env = EnvOpenOptions::new()
         .map_size(opt.database_size)
@@ -698,27 +750,41 @@ fn main() -> anyhow::Result<()> {
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut stores = Vec::with_capacity(readers.len());
-    let mut docs_stores = Vec::with_capacity(readers.len());
-    readers.into_iter().for_each(|(s, d)| {
-        stores.push(s);
-        docs_stores.push(d);
+    let mut main_stores = Vec::with_capacity(readers.len());
+    let mut word_docids_stores = Vec::with_capacity(readers.len());
+    let mut docid_word_positions_stores = Vec::with_capacity(readers.len());
+    let mut words_pairs_proximities_docids_stores = Vec::with_capacity(readers.len());
+    let mut documents_stores = Vec::with_capacity(readers.len());
+    readers.into_iter().for_each(|readers| {
+        main_stores.push(readers.main);
+        word_docids_stores.push(readers.word_docids);
+        docid_word_positions_stores.push(readers.docid_word_positions);
+        words_pairs_proximities_docids_stores.push(readers.words_pairs_proximities_docids);
+        documents_stores.push(readers.documents);
     });
 
     let mut wtxn = env.write_txn()?;
 
-    // We merge the postings lists into LMDB.
-    debug!("We are writing the postings lists into LMDB on disk...");
-    merge_into_lmdb(stores, |k, v| lmdb_writer(&mut wtxn, &index, k, v))?;
+    debug!("Writing the main elements into LMDB on disk...");
+    merge_into_lmdb_database(&mut wtxn, index.main, main_stores, main_merge)?;
 
-    // We merge the documents into LMDB.
-    debug!("We are writing the documents into LMDB on disk...");
-    merge_into_lmdb(docs_stores, |k, v| {
-        let id = k.try_into().map(u32::from_be_bytes)?;
-        Ok(index.documents.put(&mut wtxn, &BEU32::new(id), v)?)
-    })?;
+    debug!("Writing the words docids into LMDB on disk...");
+    let db = *index.word_docids.as_polymorph();
+    merge_into_lmdb_database(&mut wtxn, db, word_docids_stores, word_docids_merge)?;
 
-    // Retrieve the number of documents.
+    debug!("Writing the docid word positions into LMDB on disk...");
+    let db = *index.docid_word_positions.as_polymorph();
+    merge_into_lmdb_database(&mut wtxn, db, docid_word_positions_stores, docid_word_positions_merge)?;
+
+    debug!("Writing the words pairs proximities docids into LMDB on disk...");
+    let db = *index.word_pair_proximity_docids.as_polymorph();
+    merge_into_lmdb_database(&mut wtxn, db, words_pairs_proximities_docids_stores, words_pairs_proximities_docids_merge)?;
+
+    debug!("Writing the documents into LMDB on disk...");
+    let db = *index.documents.as_polymorph();
+    merge_into_lmdb_database(&mut wtxn, db, documents_stores, documents_merge)?;
+
+    debug!("Retrieving the number of documents...");
     let count = index.number_of_documents(&wtxn)?;
 
     wtxn.commit()?;

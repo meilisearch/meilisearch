@@ -83,7 +83,6 @@ async fn main() -> anyhow::Result<()> {
         .timestamp(stderrlog::Timestamp::Off)
         .init()?;
 
-    std::fs::create_dir_all(&opt.database)?;
     let env = EnvOpenOptions::new()
         .map_size(opt.database_size)
         .max_dbs(10)
