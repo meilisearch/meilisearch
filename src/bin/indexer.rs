@@ -601,9 +601,8 @@ fn word_docids_merge(_key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
     Ok(vec)
 }
 
-fn docid_word_positions_merge(_key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
-    assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
-    Ok(values[0].to_vec())
+fn docid_word_positions_merge(key: &[u8], _values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
+    panic!("merging word docid positions is an error ({:?})", key.as_bstr())
 }
 
 fn words_pairs_proximities_docids_merge(_key: &[u8], values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
@@ -621,7 +620,7 @@ fn words_pairs_proximities_docids_merge(_key: &[u8], values: &[Vec<u8>]) -> Resu
 }
 
 fn documents_merge(key: &[u8], _values: &[Vec<u8>]) -> Result<Vec<u8>, ()> {
-    panic!("impossible to merge documents ({:?})", key.as_bstr())
+    panic!("merging documents is an error ({:?})", key.as_bstr())
 }
 
 fn merge_into_lmdb_database(
