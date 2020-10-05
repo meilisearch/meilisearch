@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_raft::error::ChangeConfigError;
 use async_raft::RaftStorage;
 use bincode::{deserialize, serialize};
-use log::info;
+use log::{info, warn, error};
 use tonic::{Code, Request, Response, Status};
 
 use super::raft_service::raft_service_server::RaftService;
@@ -170,17 +170,24 @@ impl RaftService for RaftServerService {
             Ok(()) => {
                 info!("Peer {} added to cluster", id);
                 Ok(Response::new(JoinResponse {
-                status: raft_service::Status::Success as i32,
-                data: vec![],
-            })) },
-            Err(ChangeConfigError::NodeNotLeader) => Ok(Response::new(JoinResponse {
-                status: raft_service::Status::WrongLeader as i32,
-                data: serialize(&0u64).unwrap(),
-            })),
-            Err(e) => Ok(Response::new(JoinResponse {
-                status: raft_service::Status::Error as i32,
-                data: serialize(&e.to_string()).unwrap(),
-            })),
+                    status: raft_service::Status::Success as i32,
+                    data: vec![],
+                }))
+            }
+            Err(ChangeConfigError::NodeNotLeader) => {
+                warn!("Node not leader");
+                Ok(Response::new(JoinResponse {
+                    status: raft_service::Status::WrongLeader as i32,
+                    data: serialize(&0u64).unwrap(),
+                }))
+            }
+            Err(e) => {
+                error!("error adding node to cluster: {}", e);
+                Ok(Response::new(JoinResponse {
+                    status: raft_service::Status::Error as i32,
+                    data: serialize(&e.to_string()).unwrap(),
+                }))
+            }
         }
     }
 }

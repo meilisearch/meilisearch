@@ -11,10 +11,12 @@ use heed::{Database, Env, EnvOpenOptions, PolyDatabase};
 use log::{debug, error, info, warn};
 use tokio::fs::File;
 
-use super::{snapshot::RaftSnapshot, ClientRequest, ClientResponse, Message};
 use super::raft_service::NodeState;
+use super::{snapshot::RaftSnapshot, ClientRequest, ClientResponse, Message};
 use crate::data::Data;
 
+use indexmap::IndexMap;
+use serde_json::Value;
 const ERR_INCONSISTENT_LOG: &str =
     "a query was received which was expecting data to be in place which does not exist in the log";
 
@@ -185,19 +187,23 @@ impl RaftStore {
                 documents,
                 partial,
             } => {
-                let documents = serde_json::from_str(&documents)?;
-                match self
-                    .store
-                    .update_multiple_documents(&index_uid, update_query, documents, partial) {
-                        Ok(r) => {
-                            info!("Added documents to index: {}", index_uid);
-                            Ok(ClientResponse::UpdateResponse(Ok(r)))
-                        },
-                        Err(r) => {
-                            warn!("Error adding documents: {}", r);
-                            Ok(ClientResponse::UpdateResponse(Err(r.to_string())))
-                        },
+                let documents: Vec<IndexMap<String, Value>> = serde_json::from_str(&documents)?;
+                println!("number of documents: {}", documents.len());
+                match self.store.update_multiple_documents(
+                    &index_uid,
+                    update_query,
+                    documents,
+                    partial,
+                ) {
+                    Ok(r) => {
+                        info!("Added documents to index: {}", index_uid);
+                        Ok(ClientResponse::UpdateResponse(Ok(r)))
                     }
+                    Err(r) => {
+                        warn!("Error adding documents: {}", r);
+                        Ok(ClientResponse::UpdateResponse(Err(r.to_string())))
+                    }
+                }
             }
             Message::UpdateIndex { index_uid, update } => {
                 let result = self
@@ -349,16 +355,25 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
     async fn save_hard_state(&self, hs: &HardState) -> Result<()> {
         let mut txn = self.env.write_txn()?;
         self.set_hard_state(&mut txn, hs)?;
+        txn.commit()?;
         Ok(())
     }
 
     async fn get_log_entries(&self, start: u64, stop: u64) -> Result<Vec<Entry<ClientRequest>>> {
         let txn = self.env.read_txn()?;
-        let entries = self
-            .logs
-            .range(&txn, &(start..stop))?
-            .filter_map(|e| e.ok().map(|(_, e)| e))
-            .collect();
+        let entries = if start == stop {
+            let entry = self.logs.get(&txn, &start)?;
+            let mut entries = vec![];
+            if let Some(entry) = entry {
+                entries.push(entry);
+            }
+            entries
+        } else {
+            self.logs
+                .range(&txn, &(start..=stop))?
+                .filter_map(|e| e.ok().map(|(_, e)| e))
+                .collect()
+        };
         Ok(entries)
     }
 
@@ -405,8 +420,8 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         self.next_serial.store(data.serial, Ordering::Release);
         let mut txn = self.env.write_txn()?;
         let last_applied_log = *index;
-        self.set_last_applied_log(&mut txn, last_applied_log)?;
         let response = self.apply_message(data.message.clone())?;
+        self.set_last_applied_log(&mut txn, last_applied_log)?;
         txn.commit()?;
         Ok(response)
     }

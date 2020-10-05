@@ -69,7 +69,7 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
         target: NodeId,
         rpc: AppendEntriesRequest<ClientRequest>,
     ) -> Result<AppendEntriesResponse> {
-        // append entries rpc can be big, so it is off loaded to another thread
+         //append entries rpc can be big, so it is off loaded to another thread
         //let (tx, rx) = oneshot::channel();
         //let client = self.client(target)
             //.await
