@@ -794,26 +794,23 @@ fn main() -> anyhow::Result<()> {
     // the readers merges potentially done on another thread.
     enum DatabaseType { Main, WordDocids, WordsPairsProximitiesDocids };
     let (sender, receiver) = sync_channel(3);
-    let main_sender = sender.clone();
-    let word_docids_sender = sender.clone();
-    let words_pairs_proximities_docids_sender = sender;
 
     debug!("Merging the main, word docids and words pairs proximity docids in parallel...");
     rayon::spawn(move || {
-        let result = merge_readers(main_readers, main_merge);
-        main_sender.send((DatabaseType::Main, result)).unwrap();
-    });
-    rayon::spawn(move || {
-        let result = merge_readers(word_docids_readers, word_docids_merge);
-        word_docids_sender.send((DatabaseType::WordDocids, result)).unwrap();
-    });
-    rayon::spawn(move || {
-        let result = merge_readers(
-            words_pairs_proximities_docids_readers,
-            words_pairs_proximities_docids_merge,
-        );
-        let message = (DatabaseType::WordsPairsProximitiesDocids, result);
-        words_pairs_proximities_docids_sender.send(message).unwrap();
+        vec![
+            (DatabaseType::Main, main_readers, main_merge as MergeFn),
+            (DatabaseType::WordDocids, word_docids_readers, word_docids_merge),
+            (
+                DatabaseType::WordsPairsProximitiesDocids,
+                words_pairs_proximities_docids_readers,
+                words_pairs_proximities_docids_merge,
+            ),
+        ]
+        .into_par_iter()
+        .for_each(|(dbtype, readers, merge)| {
+            let result = merge_readers(readers, merge);
+            sender.send((dbtype, result)).unwrap();
+        });
     });
 
     let mut wtxn = env.write_txn()?;
