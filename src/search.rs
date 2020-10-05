@@ -164,8 +164,8 @@ impl<'a> Search<'a> {
         // We execute the Mdfs iterator until we find enough documents.
         while documents.iter().map(RoaringBitmap::len).sum::<u64>() < limit as u64 {
             match mdfs.next().transpose()? {
-                Some(answer) => {
-                    debug!("answer: {:?}", answer);
+                Some((proximity, answer)) => {
+                    debug!("answer with a proximity of {}: {:?}", proximity, answer);
                     documents.push(answer);
                 },
                 None => break,

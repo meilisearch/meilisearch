@@ -90,7 +90,7 @@ fn is_chinese(c: char) -> bool {
 /// length of the found key. Otherwise `None` is returned.
 ///
 /// This can be used to e.g. build tokenizing functions.
-//
+// Copyright @llogiq
 // https://github.com/BurntSushi/fst/pull/104
 #[inline]
 fn find_longest_prefix(fst: &Fst<&[u8]>, value: &[u8]) -> Option<(u64, usize)> {

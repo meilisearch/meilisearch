@@ -32,18 +32,18 @@ impl<'a> Mdfs<'a> {
 }
 
 impl<'a> Iterator for Mdfs<'a> {
-    type Item = anyhow::Result<RoaringBitmap>;
+    type Item = anyhow::Result<(u32, RoaringBitmap)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // If there is less or only one word therefore the only
         // possible documents that we can return are the candidates.
         if self.words.len() <= 1 {
             if self.candidates.is_empty() { return None }
-            return Some(Ok(mem::take(&mut self.candidates)));
+            return Some(Ok((0, mem::take(&mut self.candidates))));
         }
 
-        let mut answer = RoaringBitmap::new();
         while self.mana <= self.max_mana {
+            let mut answer = RoaringBitmap::new();
             let result = mdfs_step(
                 &self.index,
                 &self.rtxn,
@@ -52,24 +52,25 @@ impl<'a> Iterator for Mdfs<'a> {
                 &self.candidates,
                 &self.candidates,
                 &mut self.union_cache,
+                &mut answer,
             );
 
             match result {
-                Ok(Some(a)) => {
-                    // We remove the answered documents from the list of
-                    // candidates to be sure we don't search for them again.
-                    self.candidates.difference_with(&a);
-                    answer.union_with(&a);
-                },
-                Ok(None) => {
-                    // We found the last iteration for this amount of mana that gives nothing,
-                    // we can now store that the next mana to use for the loop is incremented.
+                Ok(()) => {
+                    // We always increase the mana for the next loop.
+                    let proximity = self.mana;
                     self.mana = self.mana + 1;
-                    // If the answer is empty it means that we found nothing for this amount
-                    // of mana therefore we continue with a bigger mana.
+
+                    // If no documents were found we must not return and continue
+                    // the search with more mana.
                     if !answer.is_empty() {
-                        // Otherwise we return the answer.
-                        return Some(Ok(answer));
+
+                        // We remove the answered documents from the list of
+                        // candidates to be sure we don't search for them again.
+                        self.candidates.difference_with(&answer);
+
+                        // We return the answer.
+                        return Some(Ok((proximity, answer)));
                     }
                 },
                 Err(e) => return Some(Err(e)),
@@ -88,7 +89,8 @@ fn mdfs_step(
     candidates: &RoaringBitmap,
     parent_docids: &RoaringBitmap,
     union_cache: &mut HashMap<(usize, u8), RoaringBitmap>,
-) -> anyhow::Result<Option<RoaringBitmap>>
+    answer: &mut RoaringBitmap,
+) -> anyhow::Result<()>
 {
     use std::cmp::{min, max};
 
@@ -126,19 +128,22 @@ fn mdfs_step(
             }
         };
 
+        // We must be sure that we only return docids that are present in the candidates.
         docids.intersect_with(parent_docids);
 
         if !docids.is_empty() {
             let mana = mana.checked_sub(proximity as u32).unwrap();
-            // We are the last pair, we return without recursing as we don't have any child.
-            if tail.len() < 2 { return Ok(Some(docids)) }
-            if let Some(di) = mdfs_step(index, rtxn, mana, tail, candidates, &docids, union_cache)? {
-                return Ok(Some(di))
+            if tail.len() < 2 {
+                // We are the last pair, we return without recuring as we don't have any child.
+                answer.union_with(&docids);
+                return Ok(());
+            } else {
+                return mdfs_step(index, rtxn, mana, tail, candidates, &docids, union_cache, answer);
             }
         }
     }
 
-    Ok(None)
+    Ok(())
 }
 
 fn words_pair_combinations<'h>(
