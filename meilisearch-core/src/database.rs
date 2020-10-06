@@ -305,6 +305,10 @@ impl Database {
         })
     }
 
+    pub fn close(self) {
+        self.env.reader_list();
+    }
+
     pub fn open_index(&self, name: impl AsRef<str>) -> Option<Index> {
         let indexes_lock = self.indexes.read().unwrap();
         match indexes_lock.get(name.as_ref()) {

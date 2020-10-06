@@ -26,7 +26,7 @@ fn pack(src: &Path, dest: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn unpack(src: &Path, dest: &Path) -> Result<(), Error> {
+pub(crate) fn unpack(src: &Path, dest: &Path) -> Result<(), Error> {
     let f = File::open(src)?;
     let gz = GzDecoder::new(f);
     let mut ar = Archive::new(gz);

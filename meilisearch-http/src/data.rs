@@ -336,6 +336,7 @@ pub struct DataInner {
     pub api_keys: ApiKeys,
     pub server_pid: u32,
     pub http_payload_size_limit: usize,
+    pub opt: Opt,
 }
 
 #[derive(Clone)]
@@ -374,10 +375,10 @@ impl Data {
 
         let http_payload_size_limit = opt.http_payload_size_limit;
 
-        let db = ArcSwap::from(Arc::new(Database::open_or_create(opt.db_path, db_opt)?));
+        let db = ArcSwap::from(Arc::new(Database::open_or_create(opt.db_path.clone(), db_opt)?));
 
         let mut api_keys = ApiKeys {
-            master: opt.master_key,
+            master: opt.master_key.clone(),
             private: None,
             public: None,
         };
@@ -390,6 +391,7 @@ impl Data {
             api_keys,
             server_pid,
             http_payload_size_limit,
+            opt,
         };
 
         let data = Data {
