@@ -8,7 +8,7 @@ use async_raft::storage::{CurrentSnapshotData, HardState, InitialState, RaftStor
 use async_raft::NodeId;
 use heed::types::{OwnedType, Str};
 use heed::{Database, Env, EnvOpenOptions, PolyDatabase};
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use tokio::fs::File;
 
 use super::raft_service::NodeState;
@@ -188,7 +188,6 @@ impl RaftStore {
                 partial,
             } => {
                 let documents: Vec<IndexMap<String, Value>> = serde_json::from_str(&documents)?;
-                println!("number of documents: {}", documents.len());
                 match self.store.update_multiple_documents(
                     &index_uid,
                     update_query,
@@ -200,7 +199,7 @@ impl RaftStore {
                         Ok(ClientResponse::UpdateResponse(Ok(r)))
                     }
                     Err(r) => {
-                        warn!("Error adding documents: {}", r);
+                        error!("Error adding documents: {}", r);
                         Ok(ClientResponse::UpdateResponse(Err(r.to_string())))
                     }
                 }
@@ -302,7 +301,6 @@ impl RaftStore {
     /// Returns the current state of the node
     pub async fn state(&self) -> Result<NodeState> {
         let members = self.get_membership_config().await?.members;
-        println!("members: {:?}", members);
         if members.len() <= 1 {
             Ok(NodeState::Uninitialized)
         } else {

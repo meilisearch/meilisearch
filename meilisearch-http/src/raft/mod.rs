@@ -174,31 +174,34 @@ impl Raft {
         });
 
         let mut peers = HashMap::new();
-        let mut timeout = time::delay_for(cluster_formation_timeout);
 
-        loop {
-            tokio::select! {
-                _ = &mut timeout, if !timeout.is_elapsed() => {
-                    // purge the pending newly discovered clients if any.
-                    while let Ok((id, client)) = rx.try_recv() {
+        while peers.len() < 2 {
+            let mut timeout = time::delay_for(cluster_formation_timeout);
+            loop {
+                tokio::select! {
+                    _ = &mut timeout, if !timeout.is_elapsed() => {
+                        // purge the pending newly discovered clients if any.
+                        while let Ok((id, client)) = rx.try_recv() {
+                            if let Ok(state) = client.clone().write().await.handshake(self.id, self.log_store.state().await?).await {
+                                peers.insert(id, (client, state));
+                            }
+                        }
+                        break
+                    },
+                    Some((id, client)) = rx.recv() => {
                         if let Ok(state) = client.clone().write().await.handshake(self.id, self.log_store.state().await?).await {
                             peers.insert(id, (client, state));
                         }
                     }
-                    drop(rx);
-                    break
-                },
-                Some((id, client)) = rx.recv() => {
-                    if let Ok(state) = client.clone().write().await.handshake(self.id, self.log_store.state().await?).await {
-                        peers.insert(id, (client, state));
-                    }
                 }
+            }
+            if peers.len() < 2 {
+                info!("Could not for cluster: insuficient number of peers: {}/2", peers.len());
             }
         }
 
-        time::delay_for(Duration::from_secs(3)).await;
-
-        println!("peers: {:?}", peers);
+        // drop rx to initiate passive peer discovery
+        drop(rx);
 
         if peers
             .iter()
