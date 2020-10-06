@@ -6,10 +6,11 @@ use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_
 use meilisearch_schema::Schema;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+use crate::Data;
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::raft::{Message, Raft};
-use crate::Data;
+use crate::routes::IndexUpdateResponse;
 
 mod attributes_for_faceting;
 mod displayed_attributes;
@@ -177,10 +178,11 @@ async fn get_all(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(&index_uid.as_ref())
         .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
 
     let stop_words: BTreeSet<String> = index.main.stop_words(&reader)?.into_iter().collect();
 
@@ -235,10 +237,16 @@ async fn get_all(
 
 #[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn delete_all(
-    data: web::Data<Arc<Raft>>,
+    data: web::Data<Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let settings_update = SettingsUpdate {
+    let index = data
+        .db
+        .load()
+        .open_index(index_uid.as_ref())
+        .ok_or(Error::index_not_found(index_uid.as_ref()))?;
+
+    let settings = SettingsUpdate {
         ranking_rules: UpdateState::Clear,
         distinct_attribute: UpdateState::Clear,
         primary_key: UpdateState::Clear,
@@ -248,15 +256,10 @@ async fn delete_all(
         synonyms: UpdateState::Clear,
         attributes_for_faceting: UpdateState::Clear,
     };
-    let message = crate::raft::Message::SettingsUpdate {
-        index_uid: index_uid.into_inner(),
-        update: settings_update,
-    };
-    let response = data
-        .propose(message)
-        .await
-        .map_err(|e| Error::RaftError(e.to_string()))?;
-    Ok(HttpResponse::Accepted().json(response))
+
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
+
+    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
 
 #[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
