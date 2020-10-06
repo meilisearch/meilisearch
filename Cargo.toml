@@ -28,7 +28,7 @@ roaring = "0.6.1"
 slice-group-by = "0.2.6"
 smallstr = "0.2.0"
 smallvec = "1.4.0"
-structopt = { version = "0.3.14", default-features = false }
+structopt = { version = "0.3.14", default-features = false, features = ["wrap_help"] }
 tempfile = "3.1.0"
 
 # documents words self-join
