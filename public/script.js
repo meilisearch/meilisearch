@@ -74,3 +74,9 @@ $('#docs-count').text(function(index, text) {
 $('#db-size').text(function(index, text) {
   return filesize(parseInt(text))
 });
+
+// We trigger the input when we load the script, this way
+// we execute a placeholder search when the input is empty.
+$(window).on('load', function () {
+  $('#search').trigger('input');
+});

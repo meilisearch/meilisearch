@@ -141,15 +141,17 @@ impl<'a> Search<'a> {
         };
 
         // Construct the DFAs related to the query words.
-        // TODO do a placeholder search when query string isn't present.
-        let dfas = match &self.query {
-            Some(q) => Self::generate_query_dfas(q),
-            None => return Ok(Default::default()),
+        let dfas = match self.query.as_deref().map(Self::generate_query_dfas) {
+            Some(dfas) if !dfas.is_empty() => dfas,
+            _ => {
+                // If the query is not set or results in no DFAs we return a placeholder.
+                let documents_ids = match self.index.documents_ids(self.rtxn)? {
+                    Some(docids) => docids.iter().take(limit).collect(),
+                    None => Vec::new(),
+                };
+                return Ok(SearchResult { documents_ids, ..Default::default() })
+            },
         };
-
-        if dfas.is_empty() {
-            return Ok(Default::default());
-        }
 
         let derived_words = self.fetch_words_docids(&fst, dfas)?;
         let candidates = Self::compute_candidates(&derived_words);

@@ -14,6 +14,7 @@ use csv::StringRecord;
 use fxhash::{FxHasher32, FxHasher64};
 use heed::types::*;
 use heed::{PolyDatabase, Database};
+use roaring::RoaringBitmap;
 
 pub use self::search::{Search, SearchResult};
 pub use self::criterion::{Criterion, default_criteria};
@@ -59,6 +60,10 @@ impl Index {
             word_pair_proximity_docids: env.create_database(Some("word-pair-proximity-docids"))?,
             documents: env.create_database(Some("documents"))?,
         })
+    }
+
+    pub fn documents_ids(&self, rtxn: &heed::RoTxn) -> anyhow::Result<Option<RoaringBitmap>> {
+        Ok(self.main.get::<_, Str, RoaringBitmapCodec>(rtxn, DOCUMENTS_IDS_KEY)?)
     }
 
     pub fn put_headers(&self, wtxn: &mut heed::RwTxn, headers: &StringRecord) -> heed::Result<()> {
@@ -114,10 +119,11 @@ impl Index {
     }
 
     /// Returns the number of documents indexed in the database.
-    pub fn number_of_documents<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<usize> {
-        let docids = self.main.get::<_, Str, RoaringBitmapCodec>(rtxn, DOCUMENTS_IDS_KEY)?
-            .with_context(|| format!("Could not find the list of documents ids"))?;
-        Ok(docids.len() as usize)
+    pub fn number_of_documents(&self, rtxn: &heed::RoTxn) -> anyhow::Result<usize> {
+        match self.documents_ids(rtxn)? {
+            Some(docids) => Ok(docids.len() as usize),
+            None => Ok(0),
+        }
     }
 
     pub fn search<'a>(&'a self, rtxn: &'a heed::RoTxn) -> Search<'a> {

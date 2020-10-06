@@ -172,7 +172,7 @@ async fn main() -> anyhow::Result<()> {
 
     #[derive(Deserialize)]
     struct QueryBody {
-        query: String,
+        query: Option<String>,
     }
 
     let env_cloned = env.clone();
@@ -184,10 +184,12 @@ async fn main() -> anyhow::Result<()> {
             let before_search = Instant::now();
             let rtxn = env_cloned.read_txn().unwrap();
 
-            let SearchResult { found_words, documents_ids } = index.search(&rtxn)
-                .query(query.query)
-                .execute()
-                .unwrap();
+            let mut search = index.search(&rtxn);
+            if let Some(query) = query.query {
+                search.query(query);
+            }
+
+            let SearchResult { found_words, documents_ids } = search.execute().unwrap();
 
             let body = match index.headers(&rtxn).unwrap() {
                 Some(headers) => {
