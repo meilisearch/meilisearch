@@ -100,22 +100,11 @@ struct IndexerOpt {
     ///
     /// Choosing a fast algorithm will make the indexing faster but may consume more memory.
     #[structopt(long, default_value = "snappy", possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"])]
-    chunk_compression_type: String,
+    chunk_compression_type: CompressionType,
 
     /// The level of compression of the chosen algorithm.
     #[structopt(long, requires = "chunk-compression-type")]
     chunk_compression_level: Option<u32>,
-}
-
-fn compression_type_from_str(name: &str) -> CompressionType {
-    match name {
-        "snappy" => CompressionType::Snappy,
-        "zlib" => CompressionType::Zlib,
-        "lz4" => CompressionType::Lz4,
-        "lz4hc" => CompressionType::Lz4hc,
-        "zstd" => CompressionType::Zstd,
-        _ => panic!("invalid compression algorithm"),
-    }
 }
 
 fn format_count(n: usize) -> String {
@@ -747,7 +736,7 @@ fn main() -> anyhow::Result<()> {
     let linked_hash_map_size = opt.indexer.linked_hash_map_size;
     let max_nb_chunks = opt.indexer.max_nb_chunks;
     let max_memory = opt.indexer.max_memory;
-    let chunk_compression_type = compression_type_from_str(&opt.indexer.chunk_compression_type);
+    let chunk_compression_type = opt.indexer.chunk_compression_type;
     let chunk_compression_level = opt.indexer.chunk_compression_level;
     let log_every_n = opt.indexer.log_every_n;
 
