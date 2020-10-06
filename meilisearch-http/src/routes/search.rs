@@ -95,10 +95,11 @@ impl SearchQuery {
     fn search(&self, index_uid: &str, data: web::Data<Data>) -> Result<SearchResult, ResponseError> {
         let index = data
             .db
+            .load()
             .open_index(index_uid)
             .ok_or(Error::index_not_found(index_uid))?;
 
-        let reader = data.db.main_read_txn()?;
+        let reader = data.db.load().main_read_txn()?;
         let schema = index
             .main
             .schema(&reader)?

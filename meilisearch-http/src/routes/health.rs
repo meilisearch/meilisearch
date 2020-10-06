@@ -12,20 +12,20 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 
 #[get("/health")]
 async fn get_health(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    let reader = data.db.main_read_txn()?;
-    if let Ok(Some(_)) = data.db.get_health(&reader) {
+    let reader = data.db.load().main_read_txn()?;
+    if let Ok(Some(_)) = data.db.load().get_health(&reader) {
         return Err(Error::Maintenance.into());
     }
     Ok(HttpResponse::Ok().finish())
 }
 
 async fn set_healthy(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    data.db.main_write(|w| data.db.set_healthy(w))?;
+    data.db.load().main_write(|w| data.db.load().set_healthy(w))?;
     Ok(HttpResponse::Ok().finish())
 }
 
 async fn set_unhealthy(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    data.db.main_write(|w| data.db.set_unhealthy(w))?;
+    data.db.load().main_write(|w| data.db.load().set_unhealthy(w))?;
     Ok(HttpResponse::Ok().finish())
 }
 

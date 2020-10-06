@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use crate::Data;
 use anyhow::Result;
-use async_raft::config::Config;
+use async_raft::config::{Config, SnapshotPolicy};
 use async_raft::error::ClientWriteError;
 use async_raft::metrics::RaftMetrics;
 use async_raft::raft::ClientWriteRequest;
@@ -146,7 +146,7 @@ impl Raft {
 
     /// starts the raft cluster. Initally tries to form a cluster during the `cluster_formation_timeout` period.
     pub async fn start(&self, cluster_formation_timeout: Duration) -> Result<()> {
-        let name = self.cluster_name.clone();
+        let cluster_name = self.cluster_name.clone();
         let id = self.id;
         let port = self.port;
         let (tx, mut rx) = mpsc::unbounded_channel();
@@ -158,8 +158,7 @@ impl Raft {
         // service will continue to quietly initiate connection with new discover peers and add
         // them to the router.
         tokio::spawn(async move {
-            let service_name = format!("_raft_{}._tcp.local", name);
-            let stream = mdns::discover_peers(&service_name, id, port);
+            let stream = mdns::discover_peers(&cluster_name, id, port);
             pin_mut!(stream);
             loop {
                 if let Some((id, addr)) = stream.next().await {
@@ -304,6 +303,7 @@ async fn init_raft_cluster(raft_config: RaftConfig, store: Data, id: NodeId) -> 
         .heartbeat_interval(150)
         .election_timeout_min(1000)
         .election_timeout_max(1500)
+        .snapshot_policy(SnapshotPolicy::LogsSinceLast(10))
         .validate()?,
     );
 

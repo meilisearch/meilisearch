@@ -1,6 +1,7 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
 use meilisearch_core::settings::SettingsUpdate;
@@ -73,10 +74,11 @@ impl Data {
     ) -> Result<IndexUpdateResponse, ResponseError> {
         let index = self
             .db
+            .load()
             .open_index(index_uid)
             .ok_or(Error::index_not_found(index_uid))?;
 
-        let reader = self.db.main_read_txn()?;
+        let reader = self.db.load().main_read_txn()?;
 
         let mut schema = index
             .main
@@ -94,7 +96,7 @@ impl Data {
 
             schema.set_primary_key(&id).map_err(Error::bad_request)?;
 
-            self.db.main_write(|w| index.main.put_schema(w, &schema))?;
+            self.db.load().main_write(|w| index.main.put_schema(w, &schema))?;
         }
 
         let mut document_addition = if is_partial {
@@ -107,7 +109,7 @@ impl Data {
             document_addition.update_document(document);
         }
 
-        let update_id = self.db.update_write(|w| document_addition.finalize(w))?;
+        let update_id = self.db.load().update_write(|w| document_addition.finalize(w))?;
 
         Ok(IndexUpdateResponse::with_id(update_id))
     }
@@ -119,6 +121,7 @@ impl Data {
     ) -> Result<IndexUpdateResponse, ResponseError> {
         let index = self
             .db
+            .load()
             .open_index(index_uid)
             .ok_or(Error::index_not_found(index_uid))?;
 
@@ -129,7 +132,7 @@ impl Data {
             documents_deletion.delete_document_by_external_docid(document_id);
         }
 
-        let update_id = self.db.update_write(|w| documents_deletion.finalize(w))?;
+        let update_id = self.db.load().update_write(|w| documents_deletion.finalize(w))?;
 
         Ok(IndexUpdateResponse::with_id(update_id))
     }
@@ -140,10 +143,11 @@ impl Data {
     ) -> Result<IndexUpdateResponse, ResponseError> {
         let index = self
             .db
+            .load()
             .open_index(index_uid)
             .ok_or(Error::index_not_found(index_uid))?;
 
-        let update_id = self.db.update_write(|w| index.clear_all(w))?;
+        let update_id = self.db.load().update_write(|w| index.clear_all(w))?;
 
         Ok(IndexUpdateResponse::with_id(update_id))
     }
@@ -169,18 +173,18 @@ impl Data {
             }
             None => loop {
                 let uid = generate_uid();
-                if self.db.open_index(&uid).is_none() {
+                if self.db.load().open_index(&uid).is_none() {
                     break uid;
                 }
             },
         };
 
-        let created_index = self.db.create_index(&uid).map_err(|e| match e {
+        let created_index = self.db.load().create_index(&uid).map_err(|e| match e {
             meilisearch_core::Error::IndexAlreadyExists => e.into(),
             _ => ResponseError::from(Error::create_index(e)),
         })?;
 
-        let index_response = self.db.main_write::<_, _, ResponseError>(|mut writer| {
+        let index_response = self.db.load().main_write::<_, _, ResponseError>(|mut writer| {
             let name = index_info.name.as_ref().unwrap_or(&uid);
             created_index.main.put_name(&mut writer, name)?;
 
@@ -220,10 +224,11 @@ impl Data {
     ) -> Result<IndexResponse, ResponseError> {
         let index = self
             .db
+            .load()
             .open_index(index_uid)
             .ok_or(Error::index_not_found(index_uid))?;
 
-        self.db.main_write::<_, _, ResponseError>(|writer| {
+        self.db.load().main_write::<_, _, ResponseError>(|writer| {
             if let Some(name) = &body.name {
                 index.main.put_name(writer, name)?;
             }
@@ -238,7 +243,7 @@ impl Data {
             Ok(())
         })?;
 
-        let reader = self.db.main_read_txn()?;
+        let reader = self.db.load().main_read_txn()?;
         let name = index
             .main
             .name(&reader)?
@@ -270,7 +275,7 @@ impl Data {
     }
 
     pub fn delete_index(&self, index_uid: &str) -> Result<(), ResponseError> {
-        if self.db.delete_index(index_uid)? {
+        if self.db.load().delete_index(index_uid)? {
             Ok(())
         } else {
             Err(Error::index_not_found(index_uid).into())
@@ -285,10 +290,11 @@ impl Data {
     ) -> Result<IndexUpdateResponse, ResponseError> {
         let index = self
             .db
+            .load()
             .open_index(index_uid)
             .ok_or(Error::index_not_found(index_uid))?;
 
-        let update_id = self.db.update_write::<_, _, ResponseError>(|writer| {
+        let update_id = self.db.load().update_write::<_, _, ResponseError>(|writer| {
             let update_id = index.settings_update(writer, update)?;
             Ok(update_id)
         })?;
@@ -325,7 +331,7 @@ impl Deref for Data {
 
 #[derive(Clone)]
 pub struct DataInner {
-    pub db: Arc<Database>,
+    pub db: ArcSwap<Database>,
     pub db_path: String,
     pub api_keys: ApiKeys,
     pub server_pid: u32,
@@ -368,7 +374,7 @@ impl Data {
 
         let http_payload_size_limit = opt.http_payload_size_limit;
 
-        let db = Arc::new(Database::open_or_create(opt.db_path, db_opt)?);
+        let db = ArcSwap::from(Arc::new(Database::open_or_create(opt.db_path, db_opt)?));
 
         let mut api_keys = ApiKeys {
             master: opt.master_key,
@@ -391,7 +397,7 @@ impl Data {
         };
 
         let callback_context = data.clone();
-        db.set_update_callback(Box::new(move |index_uid, status| {
+        db.load().set_update_callback(Box::new(move |index_uid, status| {
             index_update_callback(&index_uid, &callback_context, status);
         }));
 

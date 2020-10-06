@@ -17,9 +17,10 @@ async fn get(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(&index_uid.as_ref())
         .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
     let schema = index.main.schema(&reader)?;
     let searchable_attributes: Option<Vec<String>> = schema.as_ref().map(get_indexed_attributes);
 

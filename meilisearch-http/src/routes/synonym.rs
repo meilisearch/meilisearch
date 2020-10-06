@@ -27,7 +27,7 @@ async fn get(
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
 
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
 
     let synonyms_list = index.main.synonyms(&reader)?;
 
@@ -60,7 +60,7 @@ async fn update(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -83,7 +83,7 @@ async fn delete(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

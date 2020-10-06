@@ -282,6 +282,9 @@ impl RaftStore {
             snapshot_id.clone(),
             membership_config.clone(),
         );
+
+        self.logs.delete_range(&mut txn, &(..=through))?;
+
         self.put_log(&mut txn, through, &entry)?;
 
         let raft_snapshot = RaftSnapshot {
@@ -494,8 +497,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         //TODO:
         // I can't find a way at the moment to apply the snapshot,
         // maybe clear all the dbs, and clone it from the downloaded db? IDK
-        error!("Can't install snapshot");
-        Ok(())
+        panic!("can't install snapshot");
     }
 
     async fn get_current_snapshot(

@@ -232,6 +232,7 @@ impl Server {
         eprintln!("delete_request_async: {}", url);
 
         let (response, status_code) = self.delete_request(url).await;
+        println!("reponse: {}", response);
         assert!(response["updateId"].as_u64().is_some());
         assert_eq!(status_code, 202);
         self.wait_update_id(response["updateId"].as_u64().unwrap())

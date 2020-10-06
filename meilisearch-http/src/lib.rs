@@ -105,14 +105,14 @@ pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpda
         return;
     }
 
-    if let Some(index) = data.db.open_index(&index_uid) {
+    if let Some(index) = data.db.load().open_index(&index_uid) {
         let db = &data.db;
-        let res = db.main_write::<_, _, ResponseError>(|mut writer| {
-            if let Err(e) = data.db.compute_stats(&mut writer, &index_uid) {
+        let res = db.load().main_write::<_, _, ResponseError>(|mut writer| {
+            if let Err(e) = data.db.load().compute_stats(&mut writer, &index_uid) {
                 error!("Impossible to compute stats; {}", e)
             }
 
-            if let Err(e) = data.db.set_last_update(&mut writer, &Utc::now()) {
+            if let Err(e) = data.db.load().set_last_update(&mut writer, &Utc::now()) {
                 error!("Impossible to update last_update; {}", e)
             }
 

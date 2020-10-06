@@ -41,7 +41,7 @@ async fn update_all(
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
 
-    let update_id = data.db.update_write::<_, _, ResponseError>(|writer| {
+    let update_id = data.db.load().update_write::<_, _, ResponseError>(|writer| {
         let settings = body
             .into_inner()
             .to_update()
@@ -63,7 +63,7 @@ async fn get_all(
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
 
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
 
     let stop_words: BTreeSet<String> = index
         .main
@@ -144,7 +144,7 @@ async fn delete_all(
         attributes_for_faceting: UpdateState::Clear,
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -161,7 +161,7 @@ async fn get_rules(
         .db
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
 
     let ranking_rules = index
         .main
@@ -194,7 +194,7 @@ async fn update_rules(
     };
 
     let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -217,7 +217,7 @@ async fn delete_rules(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -234,7 +234,7 @@ async fn get_distinct(
         .db
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
     let distinct_attribute_id = index.main.distinct_attribute(&reader)?;
     let schema = index.main.schema(&reader)?;
     let distinct_attribute = match (schema, distinct_attribute_id) {
@@ -265,7 +265,7 @@ async fn update_distinct(
     };
 
     let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -288,7 +288,7 @@ async fn delete_distinct(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -305,7 +305,7 @@ async fn get_searchable(
         .db
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
     let schema = index.main.schema(&reader)?;
     let searchable_attributes: Option<Vec<String>> =
         schema.as_ref().map(get_indexed_attributes);
@@ -334,7 +334,7 @@ async fn update_searchable(
 
     let settings = settings.to_update().map_err(Error::bad_request)?;
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -357,7 +357,7 @@ async fn delete_searchable(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -374,7 +374,7 @@ async fn get_displayed(
         .db
         .open_index(&path.index_uid)
         .ok_or(Error::index_not_found(&path.index_uid))?;
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
 
     let schema = index.main.schema(&reader)?;
 
@@ -403,7 +403,7 @@ async fn update_displayed(
     };
 
     let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -426,7 +426,7 @@ async fn delete_displayed(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -485,7 +485,7 @@ async fn update_attributes_for_faceting(
     };
 
     let settings = settings.to_update().map_err(Error::bad_request)?;
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -508,7 +508,7 @@ async fn delete_attributes_for_faceting(
         ..SettingsUpdate::default()
     };
 
-    let update_id = data.db.update_write(|w| index.settings_update(w, settings))?;
+    let update_id = data.db.load().update_write(|w| index.settings_update(w, settings))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }

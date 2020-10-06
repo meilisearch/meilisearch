@@ -16,9 +16,10 @@ async fn get(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(&index_uid.as_ref())
         .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
     let distinct_attribute_id = index.main.distinct_attribute(&reader)?;
     let schema = index.main.schema(&reader)?;
     let distinct_attribute = match (schema, distinct_attribute_id) {

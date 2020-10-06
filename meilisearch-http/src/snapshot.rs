@@ -59,7 +59,7 @@ pub fn load_snapshot(
 pub fn create_snapshot(data: &Data, snapshot_path: &Path) -> Result<(), Error> {
     let tmp_dir = TempDir::new()?;
 
-    data.db.copy_and_compact_to_path(tmp_dir.path())?;
+    data.db.load().copy_and_compact_to_path(tmp_dir.path())?;
 
     pack(tmp_dir.path(), snapshot_path).or_else(|e| Err(Error::Internal(format!("something went wrong during snapshot compression: {}", e))))
 }

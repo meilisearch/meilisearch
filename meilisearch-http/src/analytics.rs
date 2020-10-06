@@ -24,10 +24,10 @@ impl EventProperties {
     fn from(data: Data) -> Result<EventProperties, Box<dyn error::Error>> {
         let mut index_list = Vec::new();
 
-        let reader = data.db.main_read_txn()?;
+        let reader = data.db.load().main_read_txn()?;
 
-        for index_uid in data.db.indexes_uids() {
-            if let Some(index) = data.db.open_index(&index_uid) {
+        for index_uid in data.db.load().indexes_uids() {
+            if let Some(index) = data.db.load().open_index(&index_uid) {
                 let number_of_documents = index.main.number_of_documents(&reader)?;
                 index_list.push(number_of_documents);
             }
@@ -40,7 +40,7 @@ impl EventProperties {
             .filter(|metadata| metadata.is_file())
             .fold(0, |acc, m| acc + m.len());
 
-        let last_update_timestamp = data.db.last_update(&reader)?.map(|u| u.timestamp());
+        let last_update_timestamp = data.db.load().last_update(&reader)?.map(|u| u.timestamp());
 
         Ok(EventProperties {
             database_size,

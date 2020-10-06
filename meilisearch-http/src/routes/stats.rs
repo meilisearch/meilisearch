@@ -33,19 +33,21 @@ async fn index_stats(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(&index_uid.as_ref())
         .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
 
     let number_of_documents = index.main.number_of_documents(&reader)?;
 
     let fields_distribution = index.main.fields_distribution(&reader)?.unwrap_or_default();
 
-    let update_reader = data.db.update_read_txn()?;
+    let update_reader = data.db.load().update_read_txn()?;
 
     let is_indexing = data
         .db
+        .load()
         .is_indexing(&update_reader, &index_uid.as_ref())?
         .ok_or(Error::internal(
             "Impossible to know if the database is indexing",
@@ -70,19 +72,19 @@ struct StatsResult {
 async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let mut index_list = HashMap::new();
 
-    let reader = data.db.main_read_txn()?;
-    let update_reader = data.db.update_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
+    let update_reader = data.db.load().update_read_txn()?;
 
-    let indexes_set = data.db.indexes_uids();
+    let indexes_set = data.db.load().indexes_uids();
     for index_uid in indexes_set {
-        let index = data.db.open_index(&index_uid);
+        let index = data.db.load().open_index(&index_uid);
         match index {
             Some(index) => {
                 let number_of_documents = index.main.number_of_documents(&reader)?;
 
                 let fields_distribution = index.main.fields_distribution(&reader)?.unwrap_or_default();
 
-                let is_indexing = data.db.is_indexing(&update_reader, &index_uid)?.ok_or(
+                let is_indexing = data.db.load().is_indexing(&update_reader, &index_uid)?.ok_or(
                     Error::internal("Impossible to know if the database is indexing"),
                 )?;
 
@@ -107,7 +109,7 @@ async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError>
         .filter(|metadata| metadata.is_file())
         .fold(0, |acc, m| acc + m.len());
 
-    let last_update = data.db.last_update(&reader)?;
+    let last_update = data.db.load().last_update(&reader)?;
 
     Ok(HttpResponse::Ok().json(StatsResult {
         database_size,

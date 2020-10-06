@@ -48,10 +48,11 @@ async fn get_document(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(path.index_uid.as_str())
         .ok_or(Error::index_not_found(path.index_uid.as_str()))?;
 
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
 
     let internal_id = index.main
         .external_to_internal_docid(&reader, &path.document_id)?
@@ -74,13 +75,14 @@ async fn delete_document(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(path.index_uid.as_str())
         .ok_or(Error::index_not_found(path.index_uid.as_str()))?;
 
     let mut documents_deletion = index.documents_deletion();
     documents_deletion.delete_document_by_external_docid(path.document_id.clone());
 
-    let update_id = data.db.update_write(|w| documents_deletion.finalize(w))?;
+    let update_id = data.db.load().update_write(|w| documents_deletion.finalize(w))?;
 
     Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
 }
@@ -121,13 +123,14 @@ async fn get_all_documents(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(index_uid.as_ref())
         .ok_or(Error::index_not_found(index_uid.as_ref()))?;
 
     let offset = params.offset.unwrap_or(0);
     let limit = params.limit.unwrap_or(20);
 
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
     let documents_ids: Result<BTreeSet<_>, _> = index
         .documents_fields_counts
         .documents_ids(&reader)?

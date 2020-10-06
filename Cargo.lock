@@ -1850,6 +1850,7 @@ dependencies = [
  "actix-web",
  "actix-web-macros",
  "anyhow",
+ "arc-swap",
  "assert-json-diff",
  "async-raft",
  "async-stream 0.3.0",

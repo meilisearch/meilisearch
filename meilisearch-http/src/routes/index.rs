@@ -32,11 +32,11 @@ pub fn services_raft(cfg: &mut web::ServiceConfig) {
 
 #[get("/indexes", wrap = "Authentication::Private")]
 async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
     let mut indexes = Vec::new();
 
-    for index_uid in data.db.indexes_uids() {
-        let index = data.db.open_index(&index_uid);
+    for index_uid in data.db.load().indexes_uids() {
+        let index = data.db.load().open_index(&index_uid);
 
         match index {
             Some(index) => {
@@ -90,10 +90,11 @@ async fn get_index(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(&index_uid.as_ref())
         .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
-    let reader = data.db.main_read_txn()?;
+    let reader = data.db.load().main_read_txn()?;
     let name = index.main.name(&reader)?.ok_or(Error::internal(
             "Impossible to get the name of an index",
     ))?;
@@ -218,10 +219,11 @@ async fn get_update_status(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(path.index_uid.as_str())
         .ok_or(Error::index_not_found(path.index_uid.as_str()))?;
 
-    let reader = data.db.update_read_txn()?;
+    let reader = data.db.load().update_read_txn()?;
 
     let status = index.update_status(&reader, path.update_id)?;
 
@@ -241,10 +243,11 @@ async fn get_all_updates_status(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(&index_uid.as_ref())
         .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
-    let reader = data.db.update_read_txn()?;
+    let reader = data.db.load().update_read_txn()?;
 
     let response = index.all_updates_status(&reader)?;
 

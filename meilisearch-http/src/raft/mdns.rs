@@ -10,11 +10,11 @@ use madness::service::MdnsService;
 
 /// Returns a stream of dicovered peers
 pub fn discover_peers(
-    service_name: &str,
+    cluster_name: &str,
     id: u64,
     port: u16,
 ) -> impl Stream<Item = (u64, SocketAddr)> {
-    let service_name = service_name.to_owned();
+    let service_name = format!("_raft_{}._tcp.local", cluster_name);
     stream! {
         let mut known_peers = HashSet::new();
         let mut service = MdnsService::new(false).unwrap();

@@ -16,10 +16,11 @@ async fn get(
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
+        .load()
         .open_index(&index_uid.as_ref())
         .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
 
-    let attributes_for_faceting = data.db.main_read::<_, _, ResponseError>(|reader| {
+    let attributes_for_faceting = data.db.load().main_read::<_, _, ResponseError>(|reader| {
         let schema = index.main.schema(reader)?;
         let attrs = index.main.attributes_for_faceting(reader)?;
         let attr_names = match (&schema, &attrs) {

@@ -91,7 +91,7 @@ async fn run_raft(opt: &Opt, raft_config_path: &PathBuf) -> Result<(), MainError
     }
 
     let data_cloned = data.clone();
-    data.db.set_update_callback(Box::new(move |name, status| {
+    data.db.load().set_update_callback(Box::new(move |name, status| {
         index_update_callback(name, &data_cloned, status);
     }));
 
@@ -141,7 +141,7 @@ async fn run(opt: &Opt) -> Result<(), MainError> {
     }
 
     let data_cloned = data.clone();
-    data.db.set_update_callback(Box::new(move |name, status| {
+    data.db.load().set_update_callback(Box::new(move |name, status| {
         index_update_callback(name, &data_cloned, status);
     }));
 

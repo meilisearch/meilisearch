@@ -1,4 +1,4 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -43,10 +43,6 @@ impl RaftRouter {
             Entry::Occupied(client) => Ok(client.get().clone()),
         }
     }
-
-    pub async fn clients(&self) -> HashSet<NodeId> {
-        unimplemented!()
-    }
 }
 
 macro_rules! call_rpc {
@@ -85,7 +81,6 @@ impl RaftNetwork<ClientRequest> for RaftRouter {
             }
         });
         rx.await?
-        //call_rpc!(self, target, rpc, append_entries)
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
