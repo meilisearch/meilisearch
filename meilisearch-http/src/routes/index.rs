@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
-use actix_web::{web, HttpResponse};
-use actix_web_macros::{delete, get, post, put};
-use log::error;
+use actix_web::{web, HttpResponse, delete, get, post, put};
 use serde::Deserialize;
 
 use crate::data::{Data, IndexCreateRequest, IndexResponse};
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::raft::{Message, Raft};
+use crate::data::IndexParam;
+
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(list_indexes)
@@ -33,52 +33,7 @@ pub fn services_raft(cfg: &mut web::ServiceConfig) {
 #[get("/indexes", wrap = "Authentication::Private")]
 async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     let reader = data.db.load().main_read_txn()?;
-    let mut indexes = Vec::new();
-
-    for index_uid in data.db.load().indexes_uids() {
-        let index = data.db.load().open_index(&index_uid);
-
-        match index {
-            Some(index) => {
-                let name = index.main.name(&reader)?.ok_or(Error::internal(
-                        "Impossible to get the name of an index",
-                ))?;
-                let created_at = index
-                    .main
-                    .created_at(&reader)?
-                    .ok_or(Error::internal(
-                            "Impossible to get the create date of an index",
-                    ))?;
-                let updated_at = index
-                    .main
-                    .updated_at(&reader)?
-                    .ok_or(Error::internal(
-                            "Impossible to get the last update date of an index",
-                    ))?;
-
-                let primary_key = match index.main.schema(&reader) {
-                    Ok(Some(schema)) => match schema.primary_key() {
-                        Some(primary_key) => Some(primary_key.to_owned()),
-                        None => None,
-                    },
-                    _ => None,
-                };
-
-                let index_response = IndexResponse {
-                    name,
-                    uid: index_uid,
-                    created_at,
-                    updated_at,
-                    primary_key,
-                };
-                indexes.push(index_response);
-            }
-            None => error!(
-                "Index {} is referenced in the indexes list but cannot be found",
-                index_uid
-            ),
-        }
-    }
+    let indexes = data.list_indexes_sync(&reader)?;
 
     Ok(HttpResponse::Ok().json(indexes))
 }
@@ -239,17 +194,9 @@ async fn get_update_status(
 #[get("/indexes/{index_uid}/updates", wrap = "Authentication::Private")]
 async fn get_all_updates_status(
     data: web::Data<Data>,
-    index_uid: web::Path<String>,
+    path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .load()
-        .open_index(&index_uid.as_ref())
-        .ok_or(Error::index_not_found(&index_uid.as_ref()))?;
-
     let reader = data.db.load().update_read_txn()?;
-
-    let response = index.all_updates_status(&reader)?;
-
+    let response = data.get_all_updates_status_sync(&reader, &path.index_uid)?;
     Ok(HttpResponse::Ok().json(response))
 }

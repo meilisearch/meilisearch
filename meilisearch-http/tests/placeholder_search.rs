@@ -2,10 +2,11 @@ use std::convert::Into;
 
 use serde_json::json;
 use serde_json::Value;
-use std::sync::Mutex;
 use std::cell::RefCell;
+use std::sync::Mutex;
 
-#[macro_use] mod common;
+#[macro_use]
+mod common;
 
 #[actix_rt::test]
 async fn placeholder_search_with_limit() {
@@ -36,7 +37,12 @@ async fn placeholder_search_with_offset() {
         assert_eq!(status_code, 200);
         // take results at offset 3 as reference
         let lock = expected.lock().unwrap();
-        lock.replace(response["hits"].as_array().unwrap()[3..6].iter().cloned().collect());
+        lock.replace(
+            response["hits"].as_array().unwrap()[3..6]
+                .iter()
+                .cloned()
+                .collect(),
+        );
     });
 
     let expected = expected.into_inner().unwrap().into_inner();
@@ -64,11 +70,7 @@ async fn placeholder_search_with_attribute_to_highlight_wildcard() {
 
     test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 200);
-        let result = response["hits"]
-            .as_array()
-            .unwrap()[0]
-            .as_object()
-            .unwrap();
+        let result = response["hits"].as_array().unwrap()[0].as_object().unwrap();
         for value in result.values() {
             assert!(value.to_string().find("<em>").is_none());
         }
@@ -135,11 +137,7 @@ async fn placeholder_search_with_attributes_to_retrieve() {
     });
 
     test_post_get_search!(server, query, |response, _status_code| {
-        let hit = response["hits"]
-            .as_array()
-            .unwrap()[0]
-            .as_object()
-            .unwrap();
+        let hit = response["hits"].as_array().unwrap()[0].as_object().unwrap();
         assert_eq!(hit.values().count(), 2);
         let _ = hit["gender"];
         let _ = hit["about"];
@@ -166,7 +164,9 @@ async fn placeholder_search_with_filter() {
     test_post_get_search!(server, query, |response, _status_code| {
         let hits = response["hits"].as_array().unwrap();
         let value = Value::String(String::from("bug"));
-        assert!(hits.iter().all(|v| v["tags"].as_array().unwrap().contains(&value)));
+        assert!(hits
+            .iter()
+            .all(|v| v["tags"].as_array().unwrap().contains(&value)));
     });
 
     let query = json!({
@@ -176,10 +176,9 @@ async fn placeholder_search_with_filter() {
         let hits = response["hits"].as_array().unwrap();
         let bug = Value::String(String::from("bug"));
         let wontfix = Value::String(String::from("wontfix"));
-        assert!(hits.iter().all(|v|
-                v["color"].as_str().unwrap() == "Green" &&
-                v["tags"].as_array().unwrap().contains(&bug) ||
-                v["tags"].as_array().unwrap().contains(&wontfix)));
+        assert!(hits.iter().all(|v| v["color"].as_str().unwrap() == "Green"
+            && v["tags"].as_array().unwrap().contains(&bug)
+            || v["tags"].as_array().unwrap().contains(&wontfix)));
     });
 }
 
@@ -257,7 +256,12 @@ async fn placeholder_test_faceted_search_valid() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|value| value.get("tags").unwrap().as_array().unwrap().contains(&Value::String("bug".to_owned()))));
+            .all(|value| value
+                .get("tags")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .contains(&Value::String("bug".to_owned()))));
     });
 
     // test and: ["color:blue", "tags:bug"]
@@ -272,10 +276,13 @@ async fn placeholder_test_faceted_search_valid() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|value| value
-                .get("color")
-                .unwrap() == "blue"
-                && value.get("tags").unwrap().as_array().unwrap().contains(&Value::String("bug".to_owned()))));
+            .all(|value| value.get("color").unwrap() == "blue"
+                && value
+                    .get("tags")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .contains(&Value::String("bug".to_owned()))));
     });
 
     // test or: [["color:blue", "color:green"]]
@@ -290,13 +297,8 @@ async fn placeholder_test_faceted_search_valid() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|value|
-                value
-                .get("color")
-                .unwrap() == "blue"
-                || value
-                .get("color")
-                .unwrap() == "Green"));
+            .all(|value| value.get("color").unwrap() == "blue"
+                || value.get("color").unwrap() == "Green"));
     });
     // test and-or: ["tags:bug", ["color:blue", "color:green"]]
     let query = json!({
@@ -310,20 +312,14 @@ async fn placeholder_test_faceted_search_valid() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|value|
-                value
+            .all(|value| value
                 .get("tags")
                 .unwrap()
                 .as_array()
                 .unwrap()
                 .contains(&Value::String("bug".to_owned()))
-                && (value
-                    .get("color")
-                    .unwrap() == "blue"
-                    || value
-                    .get("color")
-                    .unwrap() == "Green")));
-
+                && (value.get("color").unwrap() == "blue"
+                    || value.get("color").unwrap() == "Green")));
     });
 }
 
@@ -335,7 +331,10 @@ async fn placeholder_test_faceted_search_invalid() {
     let query = json!({
         "facetFilters": ["color:blue"]
     });
-    test_post_get_search!(server, query, |_response, status_code| assert_ne!(status_code, 202));
+    test_post_get_search!(server, query, |_response, status_code| assert_ne!(
+        status_code,
+        202
+    ));
 
     let body = json!({
         "attributesForFaceting": ["color", "tags"]
@@ -346,34 +345,52 @@ async fn placeholder_test_faceted_search_invalid() {
     let query = json!({
         "facetFilters": []
     });
-    test_post_get_search!(server, query, |_response, status_code| assert_ne!(status_code, 202));
+    test_post_get_search!(server, query, |_response, status_code| assert_ne!(
+        status_code,
+        202
+    ));
     // [[]]
     let query = json!({
         "facetFilters": [[]]
     });
-    test_post_get_search!(server, query, |_response, status_code| assert_ne!(status_code, 202));
+    test_post_get_search!(server, query, |_response, status_code| assert_ne!(
+        status_code,
+        202
+    ));
     // ["color:green", []]
     let query = json!({
         "facetFilters": ["color:green", []]
     });
-    test_post_get_search!(server, query, |_response, status_code| assert_ne!(status_code, 202));
+    test_post_get_search!(server, query, |_response, status_code| assert_ne!(
+        status_code,
+        202
+    ));
 
     // too much depth
     // [[[]]]
     let query = json!({
         "facetFilters": [[[]]]
     });
-    test_post_get_search!(server, query, |_response, status_code| assert_ne!(status_code, 202));
+    test_post_get_search!(server, query, |_response, status_code| assert_ne!(
+        status_code,
+        202
+    ));
     // [["color:green", ["color:blue"]]]
     let query = json!({
         "facetFilters": [["color:green", ["color:blue"]]]
     });
-    test_post_get_search!(server, query, |_response, status_code| assert_ne!(status_code, 202));
+    test_post_get_search!(server, query, |_response, status_code| assert_ne!(
+        status_code,
+        202
+    ));
     // "color:green"
     let query = json!({
         "facetFilters": "color:green"
     });
-    test_post_get_search!(server, query, |_response, status_code| assert_ne!(status_code, 202));
+    test_post_get_search!(server, query, |_response, status_code| assert_ne!(
+        status_code,
+        202
+    ));
 }
 
 #[actix_rt::test]
@@ -381,9 +398,8 @@ async fn placeholder_test_facet_count() {
     let mut server = common::Server::test_server().await;
 
     // test without facet distribution
-    let query = json!({
-    });
-    test_post_get_search!(server, query, |response, _status_code|{
+    let query = json!({});
+    test_post_get_search!(server, query, |response, _status_code| {
         assert!(response.get("exhaustiveFacetsCount").is_none());
         assert!(response.get("facetsDistribution").is_none());
     });
@@ -392,7 +408,7 @@ async fn placeholder_test_facet_count() {
     let query = json!({
         "facetsDistribution": ["color"]
     });
-    test_post_get_search!(server, query.clone(), |_response, status_code|{
+    test_post_get_search!(server, query.clone(), |_response, status_code| {
         assert_eq!(status_code, 400);
     });
 
@@ -401,52 +417,109 @@ async fn placeholder_test_facet_count() {
     });
     server.update_all_settings(body).await;
     // same as before, but now facets are set:
-    test_post_get_search!(server, query, |response, _status_code|{
+    test_post_get_search!(server, query, |response, _status_code| {
         println!("{}", response);
         assert!(response.get("exhaustiveFacetsCount").is_some());
-        assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 1);
+        assert_eq!(
+            response
+                .get("facetsDistribution")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .values()
+                .count(),
+            1
+        );
     });
     // searching on color and tags
     let query = json!({
         "facetsDistribution": ["color", "tags"]
     });
-    test_post_get_search!(server, query, |response, _status_code|{
-        let facets = response.get("facetsDistribution").unwrap().as_object().unwrap();
+    test_post_get_search!(server, query, |response, _status_code| {
+        let facets = response
+            .get("facetsDistribution")
+            .unwrap()
+            .as_object()
+            .unwrap();
         assert_eq!(facets.values().count(), 2);
-        assert_ne!(!facets.get("color").unwrap().as_object().unwrap().values().count(), 0);
-        assert_ne!(!facets.get("tags").unwrap().as_object().unwrap().values().count(), 0);
+        assert_ne!(
+            !facets
+                .get("color")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .values()
+                .count(),
+            0
+        );
+        assert_ne!(
+            !facets
+                .get("tags")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .values()
+                .count(),
+            0
+        );
     });
     // wildcard
     let query = json!({
         "facetsDistribution": ["*"]
     });
-    test_post_get_search!(server, query, |response, _status_code|{
-        assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 2);
+    test_post_get_search!(server, query, |response, _status_code| {
+        assert_eq!(
+            response
+                .get("facetsDistribution")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .values()
+                .count(),
+            2
+        );
     });
     // wildcard with other attributes:
     let query = json!({
         "facetsDistribution": ["color", "*"]
     });
-    test_post_get_search!(server, query, |response, _status_code|{
-        assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 2);
+    test_post_get_search!(server, query, |response, _status_code| {
+        assert_eq!(
+            response
+                .get("facetsDistribution")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .values()
+                .count(),
+            2
+        );
     });
 
     // empty facet list
     let query = json!({
         "facetsDistribution": []
     });
-    test_post_get_search!(server, query, |response, _status_code|{
-        assert_eq!(response.get("facetsDistribution").unwrap().as_object().unwrap().values().count(), 0);
+    test_post_get_search!(server, query, |response, _status_code| {
+        assert_eq!(
+            response
+                .get("facetsDistribution")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .values()
+                .count(),
+            0
+        );
     });
 
     // attr not set as facet passed:
     let query = json!({
         "facetsDistribution": ["gender"]
     });
-    test_post_get_search!(server, query, |_response, status_code|{
+    test_post_get_search!(server, query, |_response, status_code| {
         assert_eq!(status_code, 400);
     });
-
 }
 
 #[actix_rt::test]
@@ -475,13 +548,15 @@ async fn placeholder_test_sort() {
         "attributesForFaceting": ["color"]
     });
     server.update_all_settings(body).await;
-    let query = json!({ });
+    let query = json!({});
     test_post_get_search!(server, query, |response, _status_code| {
         let hits = response["hits"].as_array().unwrap();
-        hits.iter().map(|v| v["age"].as_u64().unwrap()).fold(0, |prev, cur| {
-            assert!(cur >= prev);
-            cur
-        });
+        hits.iter()
+            .map(|v| v["age"].as_u64().unwrap())
+            .fold(0, |prev, cur| {
+                assert!(cur >= prev);
+                cur
+            });
     });
 
     let query = json!({
@@ -489,9 +564,27 @@ async fn placeholder_test_sort() {
     });
     test_post_get_search!(server, query, |response, _status_code| {
         let hits = response["hits"].as_array().unwrap();
-        hits.iter().map(|v| v["age"].as_u64().unwrap()).fold(0, |prev, cur| {
-            assert!(cur >= prev);
-            cur
-        });
+        hits.iter()
+            .map(|v| v["age"].as_u64().unwrap())
+            .fold(0, |prev, cur| {
+                assert!(cur >= prev);
+                cur
+            });
+    });
+}
+
+#[actix_rt::test]
+async fn placeholder_search_with_empty_query() {
+    let mut server = common::Server::test_server().await;
+
+    let query = json! ({
+        "q": "",
+        "limit": 3
+    });
+
+    test_post_get_search!(server, query, |response, status_code| {
+        eprintln!("{}", response);
+        assert_eq!(status_code, 200);
+        assert_eq!(response["hits"].as_array().unwrap().len(), 3);
     });
 }

@@ -9,6 +9,7 @@ pub mod raft;
 pub mod routes;
 pub mod analytics;
 pub mod snapshot;
+pub mod backup;
 
 #[macro_use]
 extern crate async_raft;
@@ -42,7 +43,7 @@ pub fn create_app(
     actix_http::body::Body,
 > {
     App::new()
-        .app_data(web::Data::new(data.clone()))
+        .data(data.clone())
         .app_data(
             web::JsonConfig::default()
                 .limit(data.http_payload_size_limit)
@@ -98,6 +99,7 @@ pub fn create_app_raft(
         .configure(routes::health::services)
         .configure(routes::stats::services)
         .configure(routes::key::services)
+        .configure(routes::backup::services)
 }
 
 pub fn index_update_callback(index_uid: &str, data: &Data, status: ProcessedUpdateResult) {

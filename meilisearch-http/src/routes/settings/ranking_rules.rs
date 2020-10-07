@@ -1,6 +1,5 @@
 use crate::make_update_delete_routes;
-use actix_web::{web, HttpResponse};
-use actix_web_macros::get;
+use actix_web::{web, HttpResponse, get};
 use meilisearch_core::settings::DEFAULT_RANKING_RULES;
 
 use crate::error::{Error, ResponseError};

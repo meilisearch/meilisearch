@@ -39,8 +39,7 @@ use tokio::time;
 use tonic::transport::Server;
 use client::Client;
 
-use crate::data::{IndexCreateRequest, IndexResponse, UpdateDocumentsQuery};
-use crate::routes::IndexUpdateResponse;
+use crate::data::{IndexCreateRequest, IndexResponse, UpdateDocumentsQuery, IndexUpdateResponse};
 
 type InnerRaft = async_raft::Raft<ClientRequest, ClientResponse, RaftRouter, RaftStore>;
 

@@ -9,7 +9,7 @@ use log::info;
 use main_error::MainError;
 use meilisearch_http::helpers::NormalizePath;
 use meilisearch_http::raft::{init_raft, RaftConfig};
-use meilisearch_http::{create_app, create_app_raft, index_update_callback, snapshot, Data, Opt};
+use meilisearch_http::{backup, create_app, create_app_raft, index_update_callback, snapshot, Data, Opt};
 use structopt::StructOpt;
 use tokio::fs::File;
 use tokio::prelude::*;
@@ -20,7 +20,7 @@ mod analytics;
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
-#[actix_rt::main]
+#[actix_web::main]
 async fn main() -> Result<(), MainError> {
     let opt = Opt::from_args();
 
@@ -144,6 +144,11 @@ async fn run(opt: &Opt) -> Result<(), MainError> {
     data.db.load().set_update_callback(Box::new(move |name, status| {
         index_update_callback(name, &data_cloned, status);
     }));
+
+
+    if let Some(path) = &opt.import_backup {
+        backup::import_backup(&data, path, opt.backup_batch_size)?;
+    }
 
     if let Some(path) = &opt.snapshot_path {
         snapshot::schedule_snapshot(data.clone(), &path, opt.snapshot_interval_sec.unwrap_or(86400))?;

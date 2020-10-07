@@ -141,10 +141,10 @@ impl RaftService for RaftServerService {
         info!("Adding peer {} to non voter", id);
         match self.raft.add_non_voter(id).await {
             Ok(()) => (),
-            Err(ChangeConfigError::NodeNotLeader) => {
+            Err(ChangeConfigError::NodeNotLeader(id)) => {
                 return Ok(Response::new(JoinResponse {
                     status: raft_service::Status::WrongLeader as i32,
-                    data: serialize(&0u64).unwrap(),
+                    data: serialize(&id).unwrap(),
                 }))
             }
             Err(e) => {
@@ -174,11 +174,11 @@ impl RaftService for RaftServerService {
                     data: vec![],
                 }))
             }
-            Err(ChangeConfigError::NodeNotLeader) => {
+            Err(ChangeConfigError::NodeNotLeader(id)) => {
                 warn!("Node not leader");
                 Ok(Response::new(JoinResponse {
                     status: raft_service::Status::WrongLeader as i32,
-                    data: serialize(&0u64).unwrap(),
+                    data: serialize(&id).unwrap(),
                 }))
             }
             Err(e) => {

@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse};
-use actix_web_macros::{get, put};
+use actix_web::{get, put};
 use serde::Deserialize;
 
 use crate::error::{Error, ResponseError};

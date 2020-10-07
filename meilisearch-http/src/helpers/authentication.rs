@@ -65,8 +65,8 @@ where
         let mut svc = self.service.clone();
         // This unwrap is left because this error should never appear. If that's the case, then
         // it means that actix-web has an issue or someone changes the type `Data`.
-        let data = match req.app_data::<Data>() {
-            Some(data) => data,
+        let data = match req.app_data::<web::Data<Data>>() {
+            Some(data) => data.clone(),
             None => web::Data::new(req.app_data::<Arc<Raft>>().unwrap().store.clone()),
         };
 

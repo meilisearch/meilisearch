@@ -1,11 +1,16 @@
 use std::ops::Deref;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::collections::{HashSet, BTreeSet, BTreeMap};
 
 use arc_swap::ArcSwap;
 use chrono::{DateTime, Utc};
 use indexmap::IndexMap;
-use meilisearch_core::settings::SettingsUpdate;
-use meilisearch_core::{update, Database, DatabaseOptions};
+use log::error;
+use meilisearch_core::settings::{SettingsUpdate, Settings, DEFAULT_RANKING_RULES};
+use meilisearch_core::update::UpdateStatus;
+use meilisearch_core::{update, Database, DatabaseOptions, MainReader, UpdateReader};
+use meilisearch_schema::Schema;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -14,7 +19,6 @@ use sha2::Digest;
 use crate::error::{Error, ResponseError};
 use crate::index_update_callback;
 use crate::option::Opt;
-use crate::routes::IndexUpdateResponse;
 
 pub type Document = IndexMap<String, Value>;
 
@@ -22,6 +26,23 @@ pub type Document = IndexMap<String, Value>;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateDocumentsQuery {
     primary_key: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexUpdateResponse {
+    pub update_id: u64,
+}
+
+impl IndexUpdateResponse {
+    pub fn with_id(update_id: u64) -> Self {
+        Self { update_id }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct IndexParam {
+    pub index_uid: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -152,6 +173,42 @@ impl Data {
         Ok(IndexUpdateResponse::with_id(update_id))
     }
 
+    pub fn get_all_documents_sync(
+        &self,
+        reader: &MainReader,
+        index_uid: &str,
+        offset: usize,
+        limit: usize,
+        attributes_to_retrieve: Option<&String>
+    ) -> Result<Vec<Document>, Error> {
+        let index = self
+            .db
+            .load()
+            .open_index(index_uid)
+            .ok_or(Error::index_not_found(index_uid))?;
+
+        let documents_ids: Result<BTreeSet<_>, _> = index
+            .documents_fields_counts
+            .documents_ids(reader)?
+            .skip(offset)
+            .take(limit)
+            .collect();
+
+        let attributes: Option<HashSet<&str>> = attributes_to_retrieve
+            .map(|a| a.split(',').collect());
+
+        let mut documents = Vec::new();
+        for document_id in documents_ids? {
+            if let Ok(Some(document)) =
+                index.document::<Document>(reader, attributes.as_ref(), document_id)
+            {
+                documents.push(document);
+            }
+        }
+
+        Ok(documents)
+    }
+
     pub fn create_index(
         &self,
         index_info: &IndexCreateRequest,
@@ -164,7 +221,7 @@ impl Data {
             Some(uid) => {
                 if uid
                     .chars()
-                    .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+                        .all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
                 {
                     uid.to_owned()
                 } else {
@@ -217,6 +274,58 @@ impl Data {
         Ok(index_response)
     }
 
+
+    pub fn list_indexes_sync(&self, reader: &MainReader) -> Result<Vec<IndexResponse>, ResponseError> {
+        let mut indexes = Vec::new();
+
+        for index_uid in self.db.load().indexes_uids() {
+            let index = self.db.load().open_index(&index_uid);
+
+            match index {
+                Some(index) => {
+                    let name = index.main.name(reader)?.ok_or(Error::internal(
+                            "Impossible to get the name of an index",
+                    ))?;
+                    let created_at = index
+                        .main
+                        .created_at(reader)?
+                        .ok_or(Error::internal(
+                                "Impossible to get the create date of an index",
+                        ))?;
+                    let updated_at = index
+                        .main
+                        .updated_at(reader)?
+                        .ok_or(Error::internal(
+                                "Impossible to get the last update date of an index",
+                        ))?;
+
+                    let primary_key = match index.main.schema(reader) {
+                        Ok(Some(schema)) => match schema.primary_key() {
+                            Some(primary_key) => Some(primary_key.to_owned()),
+                            None => None,
+                        },
+                        _ => None,
+                    };
+
+                    let index_response = IndexResponse {
+                        name,
+                        uid: index_uid,
+                        created_at,
+                        updated_at,
+                        primary_key,
+                    };
+                    indexes.push(index_response);
+                }
+                None => error!(
+                    "Index {} is referenced in the indexes list but cannot be found",
+                    index_uid
+                ),
+            }
+        }
+
+        Ok(indexes)
+    }
+
     pub fn update_index(
         &self,
         index_uid: &str,
@@ -249,10 +358,10 @@ impl Data {
             .name(&reader)?
             .ok_or(Error::internal("Impossible to get the name of an index"))?;
         let created_at = index.main.created_at(&reader)?.ok_or(Error::internal(
-            "Impossible to get the create date of an index",
+                "Impossible to get the create date of an index",
         ))?;
         let updated_at = index.main.updated_at(&reader)?.ok_or(Error::internal(
-            "Impossible to get the last update date of an index",
+                "Impossible to get the last update date of an index",
         ))?;
 
         let primary_key = match index.main.schema(&reader) {
@@ -301,6 +410,77 @@ impl Data {
 
         Ok(IndexUpdateResponse::with_id(update_id))
     }
+
+    pub fn get_all_settings_sync(&self, index_uid: &str, reader: &MainReader) -> Result<Settings, Error> {
+        let index = self
+            .db
+            .load()
+            .open_index(index_uid)
+            .ok_or(Error::index_not_found(index_uid))?;
+
+        let stop_words: BTreeSet<String> = index.main.stop_words(&reader)?.into_iter().collect();
+
+        let synonyms_list = index.main.synonyms(&reader)?;
+
+        let mut synonyms = BTreeMap::new();
+        let index_synonyms = &index.synonyms;
+        for synonym in synonyms_list {
+            let list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
+            synonyms.insert(synonym, list);
+        }
+
+        let ranking_rules = index
+            .main
+            .ranking_rules(&reader)?
+            .unwrap_or(DEFAULT_RANKING_RULES.to_vec())
+            .into_iter()
+            .map(|r| r.to_string())
+            .collect();
+
+        let schema = index.main.schema(&reader)?;
+
+        let distinct_attribute = match (index.main.distinct_attribute(&reader)?, &schema) {
+            (Some(id), Some(schema)) => schema.name(id).map(str::to_string),
+            _ => None,
+        };
+
+        let attributes_for_faceting = match (&schema, &index.main.attributes_for_faceting(&reader)?) {
+            (Some(schema), Some(attrs)) => attrs
+                .iter()
+                .filter_map(|&id| schema.name(id))
+                .map(str::to_string)
+                .collect(),
+            _ => vec![],
+        };
+
+        let searchable_attributes = schema.as_ref().map(get_indexed_attributes);
+        let displayed_attributes = schema.as_ref().map(get_displayed_attributes);
+
+        let settings = Settings {
+            ranking_rules: Some(Some(ranking_rules)),
+            distinct_attribute: Some(distinct_attribute),
+            searchable_attributes: Some(searchable_attributes),
+            displayed_attributes: Some(displayed_attributes),
+            stop_words: Some(Some(stop_words)),
+            synonyms: Some(Some(synonyms)),
+            attributes_for_faceting: Some(Some(attributes_for_faceting)),
+        };
+        Ok(settings)
+    }
+
+    pub fn get_all_updates_status_sync(
+        &self,
+        reader: &UpdateReader,
+        index_uid: &str,
+    ) -> Result<Vec<UpdateStatus>, Error> {
+        let index = self
+            .db
+            .load()
+            .open_index(index_uid)
+            .ok_or(Error::index_not_found(index_uid))?;
+
+        Ok(index.all_updates_status(reader)?)
+    }
 }
 
 fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
@@ -333,6 +513,8 @@ impl Deref for Data {
 pub struct DataInner {
     pub db: ArcSwap<Database>,
     pub db_path: String,
+    pub backup_folder: PathBuf,
+    pub backup_batch_size: usize,
     pub api_keys: ApiKeys,
     pub server_pid: u32,
     pub http_payload_size_limit: usize,
@@ -366,6 +548,8 @@ impl ApiKeys {
 impl Data {
     pub fn new(opt: Opt) -> Result<Data, Box<dyn std::error::Error>> {
         let db_path = opt.db_path.clone();
+        let backup_folder = opt.backup_folder.clone();
+        let backup_batch_size = opt.backup_batch_size;
         let server_pid = std::process::id();
 
         let db_opt = DatabaseOptions {
@@ -388,6 +572,8 @@ impl Data {
         let inner_data = DataInner {
             db: db.clone(),
             db_path,
+            backup_folder,
+            backup_batch_size,
             api_keys,
             server_pid,
             http_payload_size_limit,
@@ -404,5 +590,29 @@ impl Data {
         }));
 
         Ok(data)
+    }
+}
+
+pub fn get_displayed_attributes(schema: &Schema) -> HashSet<String> {
+    if schema.is_displayed_all() {
+        ["*"].iter().map(|s| s.to_string()).collect()
+    } else {
+        schema
+            .displayed_name()
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+}
+
+pub fn get_indexed_attributes(schema: &Schema) -> Vec<String> {
+    if schema.is_indexed_all() {
+        ["*"].iter().map(|s| s.to_string()).collect()
+    } else {
+        schema
+            .indexed_name()
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 }

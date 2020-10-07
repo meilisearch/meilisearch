@@ -1,16 +1,14 @@
-use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 
+use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
-use actix_web_macros::{delete, get, post, put};
-use serde::Deserialize;
 use serde_json::Value;
+use serde::Deserialize;
 
-use crate::data::{Data, Document, UpdateDocumentsQuery};
+use crate::data::{Data, Document, UpdateDocumentsQuery, IndexUpdateResponse, IndexParam};
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::raft::{Message, Raft};
-use crate::routes::IndexUpdateResponse;
 
 #[derive(Deserialize)]
 struct DocumentParam {
@@ -115,42 +113,25 @@ struct BrowseQuery {
     attributes_to_retrieve: Option<String>,
 }
 
+
 #[get("/indexes/{index_uid}/documents", wrap = "Authentication::Public")]
 async fn get_all_documents(
     data: web::Data<Data>,
-    index_uid: web::Path<String>,
+    path: web::Path<IndexParam>,
     params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .load()
-        .open_index(index_uid.as_ref())
-        .ok_or(Error::index_not_found(index_uid.as_ref()))?;
-
     let offset = params.offset.unwrap_or(0);
     let limit = params.limit.unwrap_or(20);
-
+    let index_uid = &path.index_uid;
     let reader = data.db.load().main_read_txn()?;
-    let documents_ids: Result<BTreeSet<_>, _> = index
-        .documents_fields_counts
-        .documents_ids(&reader)?
-        .skip(offset)
-        .take(limit)
-        .collect();
-
-    let attributes: Option<HashSet<&str>> = params
-        .attributes_to_retrieve
-        .as_ref()
-        .map(|a| a.split(',').collect());
-
-    let mut documents = Vec::new();
-    for document_id in documents_ids? {
-        if let Ok(Some(document)) =
-            index.document::<Document>(&reader, attributes.as_ref(), document_id)
-        {
-            documents.push(document);
-        }
-    }
+    
+    let documents = data.get_all_documents_sync(
+        &reader,
+        index_uid,
+        offset,
+        limit,
+        params.attributes_to_retrieve.as_ref()
+    )?;
 
     Ok(HttpResponse::Ok().json(documents))
 }

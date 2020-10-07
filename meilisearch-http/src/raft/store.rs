@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 
 use anyhow::Result;
 use async_raft::NodeId;
@@ -11,14 +10,12 @@ use heed::types::{OwnedType, Str};
 use heed::{Database, Env, EnvOpenOptions, PolyDatabase};
 use indexmap::IndexMap;
 use log::{debug, error, info};
-use meilisearch_core::{Database as Db, DatabaseOptions};
 use serde_json::Value;
 use tokio::fs::File;
 
 use super::raft_service::NodeState;
 use super::{snapshot::RaftSnapshot, ClientRequest, ClientResponse, Message};
-use crate::data::Data;
-use crate::snapshot::unpack;
+use crate::Data;
 
 const ERR_INCONSISTENT_LOG: &str =
     "a query was received which was expecting data to be in place which does not exist in the log";
@@ -496,22 +493,22 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
 
         self.set_current_snapshot(&mut txn, &raft_snapshot)?;
 
-        let new_db_path = PathBuf::from(format!("{}_new", self.store.db_path));
-        info!("unpacking snapshot in {:#?}...", new_db_path);
-        unpack(&self.snapshot_path_from_id(&id), &new_db_path)?;
-        info!("unpacking done.");
-        let db_opt = DatabaseOptions {
-            main_map_size: self.store.opt.max_mdb_size,
-            update_map_size: self.store.opt.max_udb_size,
-        };
-        let new_db = Db::open_or_create(new_db_path, db_opt)?;
-        let old_db = self.store.db.swap(Arc::new(new_db));
+        //let new_db_path = PathBuf::from(format!("{}_new", self.store.db_path));
+        //info!("unpacking snapshot in {:#?}...", new_db_path);
+        //unpack(&self.snapshot_path_from_id(&id), &new_db_path)?;
+        //info!("unpacking done.");
+        //let db_opt = DatabaseOptions {
+            //main_map_size: self.store.opt.max_mdb_size,
+            //update_map_size: self.store.opt.max_udb_size,
+        //};
+        //let new_db = Db::open_or_create(new_db_path, db_opt)?;
+        //let old_db = self.store.db.swap(Arc::new(new_db));
 
-        if let Err(_) = Arc::try_unwrap(old_db).map(|db| db.close()) {
-            panic!("can't unwrap arc");
-        }
+        //if let Err(_) = Arc::try_unwrap(old_db).map(|db| db.close()) {
+            //panic!("can't unwrap arc");
+        //}
 
-        txn.commit()?;
+        //txn.commit()?;
 
         panic!("can't install snapshot");
     }

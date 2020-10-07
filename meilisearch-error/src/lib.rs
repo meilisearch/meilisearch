@@ -76,6 +76,9 @@ pub enum Code {
     RetrieveDocument,
     SearchDocuments,
     UnsupportedMediaType,
+
+    BackupAlreadyInProgress,
+    BackupProcessFailed,
 }
 
 impl Code {
@@ -122,6 +125,10 @@ impl Code {
             RetrieveDocument => ErrCode::internal("unretrievable_document", StatusCode::BAD_REQUEST),
             SearchDocuments => ErrCode::internal("search_error", StatusCode::BAD_REQUEST),
             UnsupportedMediaType => ErrCode::invalid("unsupported_media_type", StatusCode::UNSUPPORTED_MEDIA_TYPE),
+
+            // error related to backup
+            BackupAlreadyInProgress => ErrCode::invalid("backup_already_in_progress", StatusCode::CONFLICT),
+            BackupProcessFailed => ErrCode::internal("backup_process_failed", StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 

@@ -43,11 +43,15 @@ async fn index_already_exists_error() {
     let (response, status_code) = server.create_index(body.clone()).await;
     println!("{}", response);
     assert_eq!(status_code, StatusCode::CREATED);
+
+    let (response, status_code) = server.create_index(body.clone()).await;
+    println!("{}", response);
+
     assert_error!(
         "index_already_exists",
         "invalid_request_error",
         StatusCode::BAD_REQUEST,
-        server.create_index(body).await);
+        (response, status_code));
 }
 
 #[actix_rt::test]

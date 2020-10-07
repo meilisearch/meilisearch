@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
-use actix_web::{web, HttpResponse};
-use actix_web_macros::get;
+use actix_web::{web, HttpResponse, get};
 use indexmap::IndexMap;
 
 use crate::error::{Error, ResponseError};

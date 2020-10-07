@@ -119,8 +119,17 @@ pub struct Opt {
     #[structopt(long)]
     pub raft_config: Option<PathBuf>,
 
-    #[structopt(long)]
-    pub raft_node_id: Option<u64>,
+    /// Folder where backups are created when the backup route is called.
+    #[structopt(long, env = "MEILI_backup_folder", default_value = "backups/")]
+    pub backup_folder: PathBuf,
+
+    /// Import a backup from the specified path, must be a `.tar.gz` file.
+    #[structopt(long, env = "MEILI_IMPORT_BACKUP", conflicts_with = "load-from-snapshot")]
+    pub import_backup: Option<PathBuf>,
+
+    /// The batch size used in the importation process, the bigger it is the faster the backup is created.
+    #[structopt(long, env = "MEILI_BACKUP_BATCH_SIZE", default_value = "1024")]
+    pub backup_batch_size: usize,
 }
 
 impl Opt {

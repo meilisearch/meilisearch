@@ -41,6 +41,7 @@ pub enum Error {
     CreateIndex(String),
     DocumentNotFound(String),
     IndexNotFound(String),
+    IndexAlreadyExists(String),
     Internal(String),
     InvalidIndexUid,
     InvalidToken(String),
@@ -53,6 +54,8 @@ pub enum Error {
     PayloadTooLarge,
     UnsupportedMediaType,
     RaftError(String),
+    BackupAlreadyInProgress,
+    BackupProcessFailed,
 }
 
 impl error::Error for Error {}
@@ -66,6 +69,7 @@ impl ErrorCode for Error {
             CreateIndex(_) => Code::CreateIndex,
             DocumentNotFound(_) => Code::DocumentNotFound,
             IndexNotFound(_) => Code::IndexNotFound,
+            IndexAlreadyExists(_) => Code::IndexAlreadyExists,
             Internal(_) => Code::Internal,
             InvalidIndexUid => Code::InvalidIndexUid,
             InvalidToken(_) => Code::InvalidToken,
@@ -78,6 +82,8 @@ impl ErrorCode for Error {
             PayloadTooLarge => Code::PayloadTooLarge,
             UnsupportedMediaType => Code::UnsupportedMediaType,
             RaftError(_) => Code::Internal,
+            BackupAlreadyInProgress => Code::BackupAlreadyInProgress,
+            BackupProcessFailed => Code::BackupProcessFailed,
         }
     }
 }
@@ -180,6 +186,14 @@ impl Error {
     pub fn search_documents(err: impl fmt::Display) -> Error {
         Error::SearchDocuments(err.to_string())
     }
+
+    pub fn backup_conflict() -> Error {
+        Error::BackupAlreadyInProgress
+    }
+
+    pub fn backup_failed() -> Error {
+        Error::BackupProcessFailed
+    }
 }
 
 impl fmt::Display for Error {
@@ -190,6 +204,7 @@ impl fmt::Display for Error {
             Self::CreateIndex(err) => write!(f, "Impossible to create index; {}", err),
             Self::DocumentNotFound(document_id) => write!(f, "Document with id {} not found", document_id),
             Self::IndexNotFound(index_uid) => write!(f, "Index {} not found", index_uid),
+            Self::IndexAlreadyExists(index_uid) => write!(f, "Index {} already exists", index_uid),
             Self::Internal(err) => f.write_str(err),
             Self::InvalidIndexUid => f.write_str("Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_)."),
             Self::InvalidToken(err) => write!(f, "Invalid API key: {}", err),
@@ -202,6 +217,8 @@ impl fmt::Display for Error {
             Self::PayloadTooLarge => f.write_str("Payload too large"),
             Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
             Self::RaftError(err) => write!(f, "Raft error: {}", err),
+            Self::BackupAlreadyInProgress => f.write_str("Another backup is already in progress"),
+            Self::BackupProcessFailed => f.write_str("Backup process failed"),
         }
     }
 }
@@ -218,6 +235,12 @@ impl aweb::error::ResponseError for ResponseError {
 
     fn status_code(&self) -> StatusCode {
         self.http_status()
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::Internal(err.to_string())
     }
 }
 
@@ -239,14 +262,14 @@ impl From<actix_http::Error> for Error {
     }
 }
 
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
+impl From<meilisearch_core::Error> for Error {
+    fn from(err: meilisearch_core::Error) -> Error {
         Error::Internal(err.to_string())
     }
 }
 
-impl From<meilisearch_core::Error> for Error {
-    fn from(err: meilisearch_core::Error) -> Error {
+impl From<serde_json::error::Error> for Error {
+    fn from(err: serde_json::error::Error) -> Error {
         Error::Internal(err.to_string())
     }
 }

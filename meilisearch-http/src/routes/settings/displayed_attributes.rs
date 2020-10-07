@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
-use actix_web::{web, HttpResponse};
-use actix_web_macros::get;
+use actix_web::{web, HttpResponse, get};
 
-use super::get_displayed_attributes;
+use crate::data::get_displayed_attributes;
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
 use crate::make_update_delete_routes;

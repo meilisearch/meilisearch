@@ -1,7 +1,7 @@
 [package]
 name = "meilisearch-http"
 description = "MeiliSearch HTTP server"
-version = "0.14.0"
+version = "0.15.0"
 license = "MIT"
 authors = [
     "Quentin de Quelen <quentin@dequelen.me>",
@@ -17,18 +17,17 @@ path = "src/main.rs"
 default = ["sentry"]
 
 [dependencies]
-actix-cors = "0.2"
-actix-http = "1"
+actix-cors = "0.3"
+actix-http = "2"
 actix-rt = "1"
-actix-service = "1.0.5"
-actix-web = { version = "2.0", features = ["rustls"] }
-actix-web-macros = "0.1"
+actix-service = "1.0.6"
+actix-web = { version = "3", features = ["rustls"] }
+bytes = "0.5.4"
 anyhow = "1.0"
 arc-swap = "0.4.7"
 async-raft = "0.5"
 async-stream = "0.3"
 bincode = "1.3.1"
-bytes = "0.5"
 chrono = { version = "0.4.11", features = ["serde"] }
 crossbeam-channel = "0.4.2"
 env_logger = "0.7.1"
@@ -41,18 +40,20 @@ heed = "0.8.0"
 http = "0.1.19"
 indexmap = { version = "1.3.2", features = ["serde-1"] }
 log = "0.4.8"
-madness = { git = "https://github.com/MarinPostma/madness.git", branch = "master" }
+#madness = { git = "https://github.com/MarinPostma/madness.git", branch = "master" }
+madness = "0.1"
 main_error = "0.1.0"
-meilisearch-core = { path = "../meilisearch-core", version = "0.14.0" }
-meilisearch-error = { path = "../meilisearch-error", version = "0.14.0" }
-meilisearch-schema = { path = "../meilisearch-schema", version = "0.14.0" }
-meilisearch-tokenizer = {path = "../meilisearch-tokenizer", version = "0.14.0"}
+meilisearch-core = { path = "../meilisearch-core", version = "0.15.0" }
+meilisearch-error = { path = "../meilisearch-error", version = "0.15.0" }
+meilisearch-schema = { path = "../meilisearch-schema", version = "0.15.0" }
+meilisearch-tokenizer = {path = "../meilisearch-tokenizer", version = "0.15.0"}
 mime = "0.3.16"
+reqwest = "0.10.8"
 prost = "0.6"
+once_cell = "1.4.1"
 rand = "0.7.3"
 regex = "1.3.6"
-reqwest = "0.10.8"
-rustls = "0.16.0"
+rustls = "0.18"
 serde = { version = "1.0.105", features = ["derive"] }
 serde_json = { version = "1.0.50", features = ["preserve_order"] }
 serde_qs = "0.5.2"

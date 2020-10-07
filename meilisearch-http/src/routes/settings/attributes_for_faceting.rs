@@ -1,5 +1,4 @@
-use actix_web::{web, HttpResponse};
-use actix_web_macros::get;
+use actix_web::{web, HttpResponse, get};
 
 use crate::error::{Error, ResponseError};
 use crate::helpers::Authentication;
