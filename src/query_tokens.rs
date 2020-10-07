@@ -1,6 +1,20 @@
-use std::{mem, str};
+use std::str;
+use crate::tokenizer::{simple_tokenizer, TokenType};
 
-use QueryToken::{Quoted, Free};
+#[derive(Debug)]
+enum State {
+    Free,
+    Quoted,
+}
+
+impl State {
+    fn swap(&mut self) {
+        match self {
+            State::Quoted => *self = State::Free,
+            State::Free => *self = State::Quoted,
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum QueryToken<'a> {
@@ -8,35 +22,16 @@ pub enum QueryToken<'a> {
     Quoted(&'a str),
 }
 
-#[derive(Debug)]
-enum State {
-    Free(usize),
-    Quoted(usize),
-    Fused,
-}
-
-impl State {
-    fn is_quoted(&self) -> bool {
-        match self { State::Quoted(_) => true, _ => false }
-    }
-
-    fn replace_by(&mut self, state: State) -> State {
-        mem::replace(self, state)
-    }
-}
-
 pub struct QueryTokens<'a> {
     state: State,
-    string: &'a str,
-    string_chars: str::CharIndices<'a>,
+    iter: Box<dyn Iterator<Item=(TokenType, &'a str)> + 'a>,
 }
 
-impl<'a> QueryTokens<'a> {
-    pub fn new(query: &'a str) -> QueryTokens<'a> {
+impl QueryTokens<'_> {
+    pub fn new(query: &str) -> QueryTokens {
         QueryTokens {
-            state: State::Free(0),
-            string: query,
-            string_chars: query.char_indices(),
+            state: State::Free,
+            iter: Box::new(simple_tokenizer(query)),
         }
     }
 }
@@ -46,33 +41,16 @@ impl<'a> Iterator for QueryTokens<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let (i, afteri, c) = match self.string_chars.next() {
-                Some((i, c)) => (i, i + c.len_utf8(), c),
-                None => return match self.state.replace_by(State::Fused) {
-                    State::Free(s) => if !self.string[s..].is_empty() {
-                        Some(Free(&self.string[s..]))
-                    } else {
-                        None
-                    },
-                    State::Quoted(s) => Some(Quoted(&self.string[s..])),
-                    State::Fused => None,
+            match self.iter.next()? {
+                (TokenType::Other, "\"") => self.state.swap(),
+                (TokenType::Word, token) => {
+                    let token = match self.state {
+                        State::Quoted => QueryToken::Quoted(token),
+                        State::Free => QueryToken::Free(token),
+                    };
+                    return Some(token);
                 },
-            };
-
-            if c == '"' {
-                match self.state.replace_by(State::Free(afteri)) {
-                    State::Quoted(s) => return Some(Quoted(&self.string[s..i])),
-                    State::Free(s) => {
-                        self.state = State::Quoted(afteri);
-                        if i > s { return Some(Free(&self.string[s..i])) }
-                    },
-                    State::Fused => return None,
-                }
-            } else if !self.state.is_quoted() && !c.is_alphanumeric() {
-                match self.state.replace_by(State::Free(afteri)) {
-                    State::Free(s) if i > s => return Some(Free(&self.string[s..i])),
-                    _ => self.state = State::Free(afteri),
-                }
+                (_, _) => (),
             }
         }
     }
@@ -158,19 +136,20 @@ mod tests {
     #[test]
     fn multi_quoted_strings() {
         let mut iter = QueryTokens::new("\"hello world\" coucou \"monde est beau\"");
-        assert_eq!(iter.next(), Some(Quoted("hello world")));
+        assert_eq!(iter.next(), Some(Quoted("hello")));
+        assert_eq!(iter.next(), Some(Quoted("world")));
         assert_eq!(iter.next(), Some(Free("coucou")));
-        assert_eq!(iter.next(), Some(Quoted("monde est beau")));
+        assert_eq!(iter.next(), Some(Quoted("monde")));
+        assert_eq!(iter.next(), Some(Quoted("est")));
+        assert_eq!(iter.next(), Some(Quoted("beau")));
         assert_eq!(iter.next(), None);
     }
 
     #[test]
     fn chinese() {
         let mut iter = QueryTokens::new("汽车男生");
-        assert_eq!(iter.next(), Some(Free("汽")));
-        assert_eq!(iter.next(), Some(Free("车")));
-        assert_eq!(iter.next(), Some(Free("男")));
-        assert_eq!(iter.next(), Some(Free("生")));
+        assert_eq!(iter.next(), Some(Free("汽车")));
+        assert_eq!(iter.next(), Some(Free("男生")));
         assert_eq!(iter.next(), None);
     }
 }

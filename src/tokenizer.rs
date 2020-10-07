@@ -13,6 +13,7 @@ static CHINESE_WORDS_FST: Lazy<Fst<&[u8]>> = Lazy::new(|| Fst::new(CHINESE_FST_B
 pub enum TokenType {
     Word,
     Space,
+    Other,
 }
 
 pub fn simple_tokenizer(text: &str) -> impl Iterator<Item=(TokenType, &str)> {
@@ -43,6 +44,7 @@ pub fn simple_tokenizer(text: &str) -> impl Iterator<Item=(TokenType, &str)> {
                     },
                     Alphanumeric => Some((TokenType::Word, mem::take(&mut string))),
                     Space => Some((TokenType::Space, mem::take(&mut string))),
+                    Other => Some((TokenType::Other, mem::take(&mut string))),
                 }
             })
         })
@@ -57,6 +59,7 @@ enum CharCategory {
     Chinese,
     Alphanumeric,
     Space,
+    Other,
 }
 
 impl CharCategory {
@@ -64,7 +67,7 @@ impl CharCategory {
         if c.is_alphanumeric() {
             if is_chinese(c) { Chinese } else { Alphanumeric }
         } else {
-            Space
+            if c.is_whitespace() { Space } else { Other }
         }
     }
 }
@@ -122,7 +125,7 @@ mod tests {
         assert_eq!(iter.next(), Some((TokenType::Word, "hello")));
         assert_eq!(iter.next(), Some((TokenType::Space, " ")));
         assert_eq!(iter.next(), Some((TokenType::Word, "world")));
-        assert_eq!(iter.next(), Some((TokenType::Space, "!")));
+        assert_eq!(iter.next(), Some((TokenType::Other, "!")));
         assert_eq!(iter.next(), None);
     }
 
