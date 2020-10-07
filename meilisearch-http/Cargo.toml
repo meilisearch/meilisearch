@@ -40,8 +40,8 @@ heed = "0.8.0"
 http = "0.1.19"
 indexmap = { version = "1.3.2", features = ["serde-1"] }
 log = "0.4.8"
-#madness = { git = "https://github.com/MarinPostma/madness.git", branch = "master" }
-madness = "0.1"
+madness = { git = "https://github.com/MarinPostma/madness.git", branch = "master" }
+#madness = "0.1"
 main_error = "0.1.0"
 meilisearch-core = { path = "../meilisearch-core", version = "0.15.0" }
 meilisearch-error = { path = "../meilisearch-error", version = "0.15.0" }

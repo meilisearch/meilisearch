@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use anyhow::Result;
 use async_raft::NodeId;
@@ -8,6 +9,7 @@ use async_raft::raft::{Entry, EntryPayload, MembershipConfig};
 use async_raft::storage::{CurrentSnapshotData, HardState, InitialState, RaftStorage};
 use heed::types::{OwnedType, Str};
 use heed::{Database, Env, EnvOpenOptions, PolyDatabase};
+use meilisearch_core::{Database as Db, DatabaseOptions};
 use indexmap::IndexMap;
 use log::{debug, error, info};
 use serde_json::Value;
@@ -493,24 +495,24 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
 
         self.set_current_snapshot(&mut txn, &raft_snapshot)?;
 
-        //let new_db_path = PathBuf::from(format!("{}_new", self.store.db_path));
-        //info!("unpacking snapshot in {:#?}...", new_db_path);
-        //unpack(&self.snapshot_path_from_id(&id), &new_db_path)?;
-        //info!("unpacking done.");
-        //let db_opt = DatabaseOptions {
-            //main_map_size: self.store.opt.max_mdb_size,
-            //update_map_size: self.store.opt.max_udb_size,
-        //};
-        //let new_db = Db::open_or_create(new_db_path, db_opt)?;
-        //let old_db = self.store.db.swap(Arc::new(new_db));
+        let new_db_path = PathBuf::from(format!("{}_new", self.store.db_path));
+        info!("unpacking snapshot in {:#?}...", new_db_path);
+        crate::helpers::compression::from_tar_gz(&self.snapshot_path_from_id(&id), &new_db_path)?;
+        info!("unpacking done.");
+        let db_opt = DatabaseOptions {
+            main_map_size: self.store.opt.max_mdb_size,
+            update_map_size: self.store.opt.max_udb_size,
+        };
+        let new_db = Db::open_or_create(new_db_path, db_opt)?;
+        let old_db = self.store.db.swap(Arc::new(new_db));
 
-        //if let Err(_) = Arc::try_unwrap(old_db).map(|db| db.close()) {
-            //panic!("can't unwrap arc");
-        //}
+        if let Err(_) = Arc::try_unwrap(old_db).map(|db| db.close()) {
+            panic!("can't unwrap arc");
+        }
 
-        //txn.commit()?;
+        txn.commit()?;
 
-        panic!("can't install snapshot");
+        Ok(())
     }
 
     async fn get_current_snapshot(

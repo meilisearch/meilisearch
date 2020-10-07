@@ -1009,6 +1009,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "err-derive"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22deed3a8124cff5fa835713fa105621e43bbdc46690c3a6b68328a012d350d4"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn",
+ "synstructure",
+]
+
+[[package]]
 name = "error-chain"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1776,13 +1790,13 @@ dependencies = [
 [[package]]
 name = "madness"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b29f51fc43f9a47f464c7a3c9a9af368e01d955fc630de19fadcac1963abfa54"
+source = "git+https://github.com/MarinPostma/madness.git#a3c8e65ea661b9fdf3c46cc67822da9015fc63b2"
 dependencies = [
  "dns-parser",
  "either",
  "futures 0.3.6",
  "lazy_static",
+ "mdns",
  "net2",
  "rand 0.7.3",
  "tokio 0.2.22",
@@ -1826,6 +1840,21 @@ name = "maybe-uninit"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
+
+[[package]]
+name = "mdns"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caccbabad4e71a1a261c872ac0bb94ce9958098a1ef4c637f2b4de4f6835ce7e"
+dependencies = [
+ "async-stream 0.2.1",
+ "dns-parser",
+ "err-derive",
+ "futures-core",
+ "futures-util",
+ "net2",
+ "tokio 0.2.22",
+]
 
 [[package]]
 name = "meilisearch-core"
@@ -2788,6 +2817,17 @@ dependencies = [
  "ring",
  "sct",
  "webpki",
+]
+
+[[package]]
+name = "rustversion"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9bdc5e856e51e685846fb6c13a1f5e5432946c2c90501bdc76a1319f19e29da"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
