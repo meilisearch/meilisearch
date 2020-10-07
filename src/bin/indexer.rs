@@ -86,13 +86,17 @@ struct IndexerOpt {
     #[structopt(long)]
     max_nb_chunks: Option<usize>,
 
-    /// MTBL max memory in bytes.
-    #[structopt(long, default_value = "440401920")] // 420 MB
+    /// The maximum amount of memory to use for the MTBL buffer. It is recommended
+    /// to use something like 80%-90% of the available memory.
+    ///
+    /// It is automatically split by the number of jobs e.g. if you use 7 jobs
+    /// and 7 GB of max memory, each thread will use a maximum of 1 GB.
+    #[structopt(long, default_value = "7516192768")] // 7 GB
     max_memory: usize,
 
     /// Size of the linked hash map cache when indexing.
     /// The bigger it is, the faster the indexing is but the more memory it takes.
-    #[structopt(long, default_value = "524288")]
+    #[structopt(long, default_value = "500")]
     linked_hash_map_size: usize,
 
     /// The name of the compression algorithm to use when compressing intermediate
@@ -735,7 +739,7 @@ fn main() -> anyhow::Result<()> {
     let num_threads = rayon::current_num_threads();
     let linked_hash_map_size = opt.indexer.linked_hash_map_size;
     let max_nb_chunks = opt.indexer.max_nb_chunks;
-    let max_memory = opt.indexer.max_memory;
+    let max_memory_by_job = opt.indexer.max_memory / num_threads;
     let chunk_compression_type = opt.indexer.chunk_compression_type;
     let chunk_compression_level = opt.indexer.chunk_compression_level;
     let log_every_n = opt.indexer.log_every_n;
@@ -747,7 +751,7 @@ fn main() -> anyhow::Result<()> {
             let store = Store::new(
                 linked_hash_map_size,
                 max_nb_chunks,
-                Some(max_memory),
+                Some(max_memory_by_job),
                 chunk_compression_type,
                 chunk_compression_level,
             )?;
