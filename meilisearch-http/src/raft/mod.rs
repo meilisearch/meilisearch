@@ -297,6 +297,7 @@ impl From<RaftMetrics> for Metrics {
 /// initial cluster formation, from seed host
 async fn init_raft_cluster(raft_config: RaftConfig, store: Data, id: NodeId) -> Result<Raft> {
     // the raft configuration used to initialize the node
+    info!("starting with node id: {}", id);
     let config = Arc::new(
         Config::build(raft_config.cluster_name.clone())
         .heartbeat_interval(150)

@@ -41,6 +41,8 @@ slice-group-by = "0.2.6"
 unicase = "2.6.0"
 zerocopy = "0.3.0"
 
+
+rand = "0.7.3"
 [dev-dependencies]
 assert_matches = "1.3.0"
 criterion = "0.3.1"

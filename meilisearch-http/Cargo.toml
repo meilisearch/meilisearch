@@ -25,13 +25,14 @@ actix-web = { version = "3", features = ["rustls"] }
 bytes = "0.5.4"
 anyhow = "1.0"
 arc-swap = "0.4.7"
-async-raft = "0.5"
+#async-raft = "0.5"
+async-raft = { path = "../../async-raft/async-raft" }
 async-stream = "0.3"
 bincode = "1.3.1"
 chrono = { version = "0.4.11", features = ["serde"] }
 crossbeam-channel = "0.4.2"
 env_logger = "0.7.1"
-flate2 = "1.0.16"
+flate2 = {version = "1.0.16", features = ["tokio"] }
 futures = "0.3.4"
 futures-core = "0.3.5"
 futures-util = "0.3.5"

@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+// TODO: make portable
+use std::fs::OpenOptions;
 
 use anyhow::Result;
 use async_raft::NodeId;
@@ -14,6 +16,7 @@ use indexmap::IndexMap;
 use log::{debug, error, info};
 use serde_json::Value;
 use tokio::fs::File;
+
 
 use super::raft_service::NodeState;
 use super::{snapshot::RaftSnapshot, ClientRequest, ClientResponse, Message};
@@ -81,7 +84,7 @@ impl RaftStore {
             Some(db) => db,
             None => env.create_database(Some("logs"))?,
         };
-        let next_id = AtomicU64::new(0);
+        let next_serial = AtomicU64::new(0);
 
         debug!("Opened database");
         Ok(Self {
@@ -89,7 +92,7 @@ impl RaftStore {
             env,
             db,
             logs,
-            next_serial: next_id,
+            next_serial,
             store,
             snapshot_dir,
         })
@@ -256,6 +259,10 @@ impl RaftStore {
     fn create_snapshot_and_compact(&self, through: u64) -> Result<RaftSnapshot> {
         let mut txn = self.env.write_txn()?;
 
+        let last_applied_log = self.last_applied_log(&txn)?.unwrap_or_default();
+        tracing::info!("Trying to compact trhough: {}, last applied: {}", through, last_applied_log);
+        let through = std::cmp::min(last_applied_log, through);
+
         // 1. get term
         let term = self
             .logs
@@ -288,6 +295,8 @@ impl RaftStore {
         self.logs.delete_range(&mut txn, &(..=through))?;
 
         self.put_log(&mut txn, through, &entry)?;
+
+        info!("created snapshot with id: {}", snapshot_id);
 
         let raft_snapshot = RaftSnapshot {
             path: snapshot_path,
@@ -420,7 +429,6 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         index: &u64,
         data: &ClientRequest,
     ) -> Result<ClientResponse> {
-        self.next_serial.store(data.serial, Ordering::Release);
         let mut txn = self.env.write_txn()?;
         let last_applied_log = *index;
         let response = self.apply_message(data.message.clone())?;
@@ -448,6 +456,8 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         let snapshot = self.create_snapshot_and_compact(through)?;
         let snapshot_file = File::open(&snapshot.path).await?;
 
+        info!("compaction done");
+
         Ok(CurrentSnapshotData {
             term: snapshot.term,
             index: snapshot.index,
@@ -459,7 +469,13 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
     async fn create_snapshot(&self) -> Result<(String, Box<Self::Snapshot>)> {
         let id = self.generate_snapshot_id();
         let path = self.snapshot_path_from_id(&id);
-        let file = File::open(path).await?;
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path)?;
+        let file = File::from_std(file);
+        info!("creating snapshot with id: {}.", id);
         Ok((id, Box::new(file)))
     }
 
@@ -471,7 +487,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         id: String,
         _snapshot: Box<Self::Snapshot>,
     ) -> Result<()> {
-        info!("Restoring snapshot.");
+        info!("Restoring snapshot with id: {}.", id);
         let mut txn = self.env.write_txn()?;
         match delete_through {
             Some(index) => {
@@ -495,22 +511,27 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
 
         self.set_current_snapshot(&mut txn, &raft_snapshot)?;
 
-        let new_db_path = PathBuf::from(format!("{}_new", self.store.db_path));
-        info!("unpacking snapshot in {:#?}...", new_db_path);
-        crate::helpers::compression::from_tar_gz(&self.snapshot_path_from_id(&id), &new_db_path)?;
+        let snap_file_name = self.snapshot_path_from_id(&id);
+        let db_path = PathBuf::from(format!("{}_new", self.store.db_path));
+        crate::helpers::compression::from_tar_gz(&snap_file_name, &db_path)?;
+
         info!("unpacking done.");
         let db_opt = DatabaseOptions {
             main_map_size: self.store.opt.max_mdb_size,
             update_map_size: self.store.opt.max_udb_size,
         };
-        let new_db = Db::open_or_create(new_db_path, db_opt)?;
+        let new_db = Db::open_or_create(db_path, db_opt)?;
         let old_db = self.store.db.swap(Arc::new(new_db));
 
-        if let Err(_) = Arc::try_unwrap(old_db).map(|db| db.close()) {
-            panic!("can't unwrap arc");
-        }
-
         txn.commit()?;
+
+        match Arc::try_unwrap(old_db) {
+            Ok(db) => db.close(),
+            Err(_) => {
+                // there shouldn't be other refs at this point
+                panic!("can't get db ownership");
+            }
+        }
 
         Ok(())
     }
@@ -527,6 +548,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
                 term,
                 ..
             }) => {
+                info!("got current snapshot: {}, path: {:?}", index, path);
                 let file = File::open(path).await?;
                 let snapshot_data = CurrentSnapshotData {
                     index,

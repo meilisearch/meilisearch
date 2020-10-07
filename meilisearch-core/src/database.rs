@@ -1,15 +1,16 @@
 use std::collections::hash_map::{Entry, HashMap};
 use std::fs::File;
+use std::io::{Read, Write, ErrorKind};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use std::{fs, thread};
-use std::io::{Read, Write, ErrorKind};
 
 use chrono::{DateTime, Utc};
 use crossbeam_channel::{Receiver, Sender};
 use heed::CompactionOption;
 use heed::types::{Str, Unit, SerdeBincode};
-use log::{debug, error};
+use log::{debug, error, info};
 use meilisearch_schema::Schema;
 use regex::Regex;
 
@@ -34,7 +35,8 @@ pub struct MainT;
 pub struct UpdateT;
 
 pub struct Database {
-    env: heed::Env,
+    id: u64,
+    pub env: heed::Env,
     update_env: heed::Env,
     common_store: heed::PolyDatabase,
     indexes_store: heed::Database<Str, Unit>,
@@ -69,6 +71,7 @@ macro_rules! r#break_try {
     };
 }
 
+#[derive(Debug)]
 pub enum UpdateEvent {
     NewUpdate,
     MustClear,
@@ -87,6 +90,8 @@ fn update_awaiter(
 ) -> MResult<()> {
     for event in receiver {
 
+        info!("received event: {:?}", event);
+
         // if we receive a *MustClear* event, clear the index and break the loop
         if let UpdateEvent::MustClear = event {
             let mut writer = env.typed_write_txn::<MainT>()?;
@@ -97,7 +102,7 @@ fn update_awaiter(
             writer.commit()?;
             update_writer.commit()?;
 
-            debug!("store {} cleared", index_uid);
+            info!("store {} cleared", index_uid);
 
             break
         }
@@ -105,6 +110,7 @@ fn update_awaiter(
         loop {
             // We instantiate a *write* transaction to *block* the thread
             // until the *other*, notifiying, thread commits
+            println!("here in loop");
             let result = update_env.typed_write_txn::<UpdateT>();
             let update_reader = break_try!(result, "LMDB read transaction (update) begin failed");
 
@@ -159,7 +165,7 @@ fn update_awaiter(
         }
     }
 
-    debug!("update loop system stopped");
+    info!("update loop system stopped");
 
     Ok(())
 }
@@ -229,6 +235,44 @@ fn version_guard(path: &Path, create: bool) -> MResult<(u32, u32, u32)> {
 }
 
 impl Database {
+
+    pub fn close(self) {
+        thread::spawn(move || {
+                // Get a write txn and do nothing with it
+            let mut indexes = self.indexes.write().unwrap();
+            info!("closing all update notifiers");
+            for (_ ,(index, handle)) in indexes.drain() {
+                let _ = index.updates_notifier.send(UpdateEvent::MustClear);
+                let _ = handle.join();
+            }
+            let _ = self.update_env.write_txn().map(|txn| { let _ = txn.abort(); });
+            let _ = self.env.write_txn().map(|txn| { let _ = txn.abort(); });
+            let dead_num = self.env.reader_check().expect("could not check error");
+            info!("cleaned: {}", dead_num);
+            let mut readers = self.env.reader_list().expect("can't get length");
+            info!("readers: {:?}", readers.len());
+            while readers.len() > 1 {
+                std::thread::sleep(Duration::from_secs(1));
+                readers = self.env.reader_list().expect("can't get length");
+                info!("readers: {:?}", readers.len());
+            }
+
+            let mut readers = self.update_env.reader_list().expect("can't get length");
+            while readers.len() > 1 {
+                std::thread::sleep(Duration::from_secs(1));
+                readers = self.update_env.reader_list().expect("can't get length");
+                info!("readers: {:?}", readers.len());
+            }
+            info!("can close env");
+            // The call to close is safe, because we took ownership on the env, and waited
+            // for all txn to terminate, no subsequent operation can occur on the
+            // environement.
+            unsafe { self.env.close() };
+            unsafe { self.update_env.close() };
+            info!("closed environement");
+        });
+    }
+
     pub fn open_or_create(path: impl AsRef<Path>, options: DatabaseOptions) -> MResult<Database> {
         let main_path = path.as_ref().join("main");
         let update_path = path.as_ref().join("update");
@@ -308,7 +352,11 @@ impl Database {
             );
         }
 
+        let id: u64 = rand::random();
+        info!("created db id {}", id);
+
         Ok(Database {
+            id,
             env,
             update_env,
             common_store,
@@ -317,10 +365,6 @@ impl Database {
             update_fn,
             database_version,
         })
-    }
-
-    pub fn close(self) {
-        self.env.reader_list();
     }
 
     pub fn open_index(&self, name: impl AsRef<str>) -> Option<Index> {
@@ -417,6 +461,7 @@ impl Database {
     }
 
     pub fn main_read_txn(&self) -> MResult<MainReader> {
+        info!("getting reader from {}", self.id);
         Ok(self.env.typed_read_txn::<MainT>()?)
     }
 
@@ -443,6 +488,7 @@ impl Database {
         F: FnOnce(&MainReader) -> Result<R, E>,
         E: From<Error>,
     {
+        info!("getting reader from {}", self.id);
         let reader = self.main_read_txn()?;
         let result = f(&reader)?;
         reader.abort().map_err(Error::Heed)?;
