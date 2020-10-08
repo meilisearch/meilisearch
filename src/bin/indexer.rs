@@ -6,7 +6,7 @@ use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::sync::mpsc::sync_channel;
 use std::time::Instant;
-use std::{iter, thread};
+use std::{cmp, iter, thread};
 
 use anyhow::{Context, bail};
 use bstr::ByteSlice as _;
@@ -28,6 +28,7 @@ use milli::tokenizer::{simple_tokenizer, only_token};
 use milli::{SmallVec32, Index, Position, DocumentId};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
+const ONE_KILOBYTE: usize = 1024 * 1024;
 
 const MAX_POSITION: usize = 1000;
 const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
@@ -227,6 +228,9 @@ impl Store {
         chunk_compression_level: Option<u32>,
     ) -> anyhow::Result<Store>
     {
+        // We divide the max memory by the number of sorter the Store have.
+        let max_memory = max_memory.map(|mm| cmp::max(ONE_KILOBYTE, mm / 3));
+
         let main_sorter = create_sorter(
             main_merge,
             chunk_compression_type,
