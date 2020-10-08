@@ -15,7 +15,7 @@ use meilisearch_core::settings::{Settings, SettingsUpdate};
 use meilisearch_schema::Schema;
 use serde_json::Value;
 
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 
 fn prepare_database(path: &Path) -> Database {
     let database = Database::open_or_create(path, DatabaseOptions::default()).unwrap();
@@ -98,7 +98,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let bench_name = BenchmarkId::from_parameter(format!("{:?}", query));
         group.bench_with_input(bench_name, &query, |b, query| b.iter(|| {
             let builder = index.query_builder();
-            builder.query(&reader, query, 0..20).unwrap();
+            builder.query(&reader, Some(*query), 0..20).unwrap();
         }));
     }
     group.finish();
