@@ -112,7 +112,7 @@ fn import_index_v1(
 
     // extract `settings.json` file and import content
     let settings = settings_from_path(&index_path)?;
-    let settings = settings.to_update().or_else(|_e| Err(Error::dump_failed()))?;
+    let settings = settings.to_update().or_else(|e| Err(Error::dump_failed(e)))?;
     apply_settings_update(write_txn, &index, settings)?;
 
     // create iterator over documents in `documents.jsonl` to make batch importation
@@ -395,7 +395,7 @@ fn dump_process(data: web::Data<Data>, dumps_folder: PathBuf, dump_info: DumpInf
 }
 
 pub fn init_dump_process(data: &web::Data<Data>, dumps_folder: &Path) -> Result<DumpInfo, Error> {
-    create_dir_all(dumps_folder).or(Err(Error::dump_failed()))?;
+    create_dir_all(dumps_folder).or_else(|e| Err(Error::dump_failed(e)))?;
 
     // check if a dump is already in progress
     if let Some(resume) = DumpInfo::get_current() {
