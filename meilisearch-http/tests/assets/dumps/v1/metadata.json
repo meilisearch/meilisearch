@@ -8,5 +8,5 @@
         }
     ],
     "dbVersion": "0.13.0",
-    "backupVersion": "1"
+    "dumpVersion": "1"
 }

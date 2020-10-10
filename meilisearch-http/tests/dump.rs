@@ -9,24 +9,24 @@ use tempfile::TempDir;
 
 #[macro_use] mod common;
 
-async fn trigger_and_wait_backup(server: &mut common::Server) -> String {
-    let (value, status_code) = server.trigger_backup().await;
+async fn trigger_and_wait_dump(server: &mut common::Server) -> String {
+    let (value, status_code) = server.trigger_dump().await;
 
     assert_eq!(status_code, 202);
 
-    let backup_uid = value["uid"].as_str().unwrap().to_string();
+    let dump_uid = value["uid"].as_str().unwrap().to_string();
 
     for _ in 0..20 as u8 {
-        let (value, status_code) = server.get_backup_status(&backup_uid).await;
+        let (value, status_code) = server.get_dump_status(&dump_uid).await;
     
         assert_eq!(status_code, 200);
-        assert_ne!(value["status"].as_str(), Some("backup_process_failed"));
+        assert_ne!(value["status"].as_str(), Some("dump_process_failed"));
         
-        if value["status"].as_str() == Some("done") { return backup_uid }
+        if value["status"].as_str() == Some("done") { return dump_uid }
         thread::sleep(Duration::from_millis(100));
     }
 
-    unreachable!("backup creation runned out of time")
+    unreachable!("dump creation runned out of time")
 }
 
 fn current_db_version() -> (String, String, String) {
@@ -37,7 +37,7 @@ fn current_db_version() -> (String, String, String) {
     (current_version_major, current_version_minor, current_version_patch)
 }
 
-fn current_backup_version() -> String {
+fn current_dump_version() -> String {
     "V1".into()
 }
 
@@ -50,31 +50,31 @@ fn read_all_jsonline<R: std::io::Read>(r: R) -> Value {
 
 #[actix_rt::test]
 #[ignore]
-async fn trigger_backup_should_return_ok() {
+async fn trigger_dump_should_return_ok() {
     let server = common::Server::test_server().await;
 
-    let (_, status_code) = server.trigger_backup().await;
+    let (_, status_code) = server.trigger_dump().await;
 
     assert_eq!(status_code, 202);
 }
 
 #[actix_rt::test]
 #[ignore]
-async fn trigger_backup_twice_should_return_conflict() {
+async fn trigger_dump_twice_should_return_conflict() {
     let server = common::Server::test_server().await;
 
     let expected = json!({
-        "message": "Another backup is already in progress",
-        "errorCode": "backup_already_in_progress",
+        "message": "Another dump is already in progress",
+        "errorCode": "dump_already_in_progress",
         "errorType": "invalid_request_error",
-        "errorLink": "https://docs.meilisearch.com/errors#backup_already_in_progress"
+        "errorLink": "https://docs.meilisearch.com/errors#dump_already_in_progress"
     });
 
-    let (_, status_code) = server.trigger_backup().await;
+    let (_, status_code) = server.trigger_dump().await;
 
     assert_eq!(status_code, 202);
 
-    let (value, status_code) = server.trigger_backup().await;
+    let (value, status_code) = server.trigger_dump().await;
 
     
     assert_json_eq!(expected.clone(), value.clone(), ordered: false);
@@ -83,17 +83,17 @@ async fn trigger_backup_twice_should_return_conflict() {
 
 #[actix_rt::test]
 #[ignore]
-async fn trigger_backup_concurently_should_return_conflict() {
+async fn trigger_dump_concurently_should_return_conflict() {
     let server = common::Server::test_server().await;
 
     let expected = json!({
-        "message": "Another backup is already in progress",
-        "errorCode": "backup_already_in_progress",
+        "message": "Another dump is already in progress",
+        "errorCode": "dump_already_in_progress",
         "errorType": "invalid_request_error",
-        "errorLink": "https://docs.meilisearch.com/errors#backup_already_in_progress"
+        "errorLink": "https://docs.meilisearch.com/errors#dump_already_in_progress"
     });
 
-    let ((_value_1, _status_code_1), (value_2, status_code_2)) = futures::join!(server.trigger_backup(), server.trigger_backup());
+    let ((_value_1, _status_code_1), (value_2, status_code_2)) = futures::join!(server.trigger_dump(), server.trigger_dump());
     
     assert_json_eq!(expected.clone(), value_2.clone(), ordered: false);
     assert_eq!(status_code_2, 409);
@@ -101,21 +101,21 @@ async fn trigger_backup_concurently_should_return_conflict() {
 
 #[actix_rt::test]
 #[ignore]
-async fn get_backup_status_early_should_return_processing() {
+async fn get_dump_status_early_should_return_processing() {
     let mut server = common::Server::test_server().await;
     
 
 
-    let (value, status_code) = server.trigger_backup().await;
+    let (value, status_code) = server.trigger_dump().await;
 
     assert_eq!(status_code, 202);
 
-    let backup_uid = value["uid"].as_str().unwrap().to_string();
+    let dump_uid = value["uid"].as_str().unwrap().to_string();
 
-    let (value, status_code) = server.get_backup_status(&backup_uid).await;
+    let (value, status_code) = server.get_dump_status(&dump_uid).await;
 
     let expected = json!({
-        "uid": backup_uid,
+        "uid": dump_uid,
         "status": "processing"
     });
 
@@ -126,25 +126,24 @@ async fn get_backup_status_early_should_return_processing() {
 
 #[actix_rt::test]
 #[ignore]
-async fn get_backup_status_should_return_done() {
+async fn get_dump_status_should_return_done() {
     let mut server = common::Server::test_server().await;
 
 
-    let (value, status_code) = server.trigger_backup().await;
+    let (value, status_code) = server.trigger_dump().await;
 
     assert_eq!(status_code, 202);
 
-    println!("{:?}", value);
-    let backup_uid = value["uid"].as_str().unwrap().to_string();
+    let dump_uid = value["uid"].as_str().unwrap().to_string();
     
     let expected = json!({
-        "uid": backup_uid.clone(),
+        "uid": dump_uid.clone(),
         "status": "done"
     });
 
-    thread::sleep(Duration::from_secs(1)); // wait backup until process end
+    thread::sleep(Duration::from_secs(1)); // wait dump until process end
 
-    let (value, status_code) = server.get_backup_status(&backup_uid).await;
+    let (value, status_code) = server.get_dump_status(&dump_uid).await;
 
     assert_eq!(status_code, 200);
 
@@ -153,7 +152,7 @@ async fn get_backup_status_should_return_done() {
 
 #[actix_rt::test]
 #[ignore]
-async fn backup_metadata_should_be_valid() {
+async fn dump_metadata_should_be_valid() {
     let mut server = common::Server::test_server().await;
     
     let body = json!({
@@ -163,13 +162,13 @@ async fn backup_metadata_should_be_valid() {
 
     server.create_index(body).await;
     
-    let uid = trigger_and_wait_backup(&mut server).await;
+    let uid = trigger_and_wait_dump(&mut server).await;
 
-    let backup_folder = Path::new(&server.data().backup_folder);
+    let dumps_folder = Path::new(&server.data().dumps_folder);
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&backup_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("metadata.json")).unwrap();
     let mut metadata: serde_json::Value = serde_json::from_reader(file).unwrap();
@@ -193,7 +192,7 @@ async fn backup_metadata_should_be_valid() {
             }
         ],
         "dbVersion": format!("{}.{}.{}", major, minor, patch),
-        "backupVersion": current_backup_version()
+        "dumpVersion": current_dump_version()
     });
 
     assert_json_include!(expected: expected.clone(), actual: metadata.clone());
@@ -201,20 +200,20 @@ async fn backup_metadata_should_be_valid() {
 
 #[actix_rt::test]
 #[ignore]
-async fn backup_gzip_should_have_been_created() {
+async fn dump_gzip_should_have_been_created() {
     let mut server = common::Server::test_server().await;
     
 
-    let backup_uid = trigger_and_wait_backup(&mut server).await;
-    let backup_folder = Path::new(&server.data().backup_folder);
+    let dump_uid = trigger_and_wait_dump(&mut server).await;
+    let dumps_folder = Path::new(&server.data().dumps_folder);
 
-    let compressed_path = backup_folder.join(format!("{}.tar.gz", backup_uid));
+    let compressed_path = dumps_folder.join(format!("{}.tar.gz", dump_uid));
     assert!(File::open(compressed_path).is_ok());
 }
 
 #[actix_rt::test]
 #[ignore]
-async fn backup_index_settings_should_be_valid() {
+async fn dump_index_settings_should_be_valid() {
     let mut server = common::Server::test_server().await;
 
     let expected = json!({
@@ -278,13 +277,13 @@ async fn backup_index_settings_should_be_valid() {
 
     server.update_all_settings(expected.clone()).await;
 
-    let uid = trigger_and_wait_backup(&mut server).await;
+    let uid = trigger_and_wait_dump(&mut server).await;
 
-    let backup_folder = Path::new(&server.data().backup_folder);
+    let dumps_folder = Path::new(&server.data().dumps_folder);
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&backup_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("test").join("settings.json")).unwrap();
     let settings: serde_json::Value = serde_json::from_reader(file).unwrap();
@@ -294,21 +293,21 @@ async fn backup_index_settings_should_be_valid() {
 
 #[actix_rt::test]
 #[ignore]
-async fn backup_index_documents_should_be_valid() {
+async fn dump_index_documents_should_be_valid() {
     let mut server = common::Server::test_server().await;
 
-    let dataset = include_bytes!("assets/backups/v1/test/documents.jsonl");
+    let dataset = include_bytes!("assets/dumps/v1/test/documents.jsonl");
     let mut slice: &[u8] = dataset;
 
     let expected: Value = read_all_jsonline(&mut slice);
 
-    let uid = trigger_and_wait_backup(&mut server).await;
+    let uid = trigger_and_wait_dump(&mut server).await;
 
-    let backup_folder = Path::new(&server.data().backup_folder);
+    let dumps_folder = Path::new(&server.data().dumps_folder);
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&backup_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("test").join("documents.jsonl")).unwrap();
     let documents = read_all_jsonline(file);
@@ -318,21 +317,21 @@ async fn backup_index_documents_should_be_valid() {
 
 #[actix_rt::test]
 #[ignore]
-async fn backup_index_updates_should_be_valid() {
+async fn dump_index_updates_should_be_valid() {
     let mut server = common::Server::test_server().await;
 
-    let dataset = include_bytes!("assets/backups/v1/test/updates.jsonl");
+    let dataset = include_bytes!("assets/dumps/v1/test/updates.jsonl");
     let mut slice: &[u8] = dataset;
 
     let expected: Value = read_all_jsonline(&mut slice);
 
-    let uid = trigger_and_wait_backup(&mut server).await;
+    let uid = trigger_and_wait_dump(&mut server).await;
 
-    let backup_folder = Path::new(&server.data().backup_folder);
+    let dumps_folder = Path::new(&server.data().dumps_folder);
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&backup_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("test").join("updates.jsonl")).unwrap();
     let mut updates = read_all_jsonline(file);
@@ -354,10 +353,10 @@ async fn backup_index_updates_should_be_valid() {
  
 #[actix_rt::test]
 #[ignore]
-async fn get_unexisting_backup_status_should_return_not_found() {
+async fn get_unexisting_dump_status_should_return_not_found() {
     let mut server = common::Server::test_server().await;
 
-    let (_, status_code) = server.get_backup_status("4242").await;
+    let (_, status_code) = server.get_dump_status("4242").await;
 
     assert_eq!(status_code, 404);
 }
