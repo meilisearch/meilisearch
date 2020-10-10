@@ -777,3 +777,17 @@ async fn update_existing_primary_key_is_error() {
     assert_eq!(response["errorCode"], "primary_key_already_present");
     assert_eq!(response["errorType"], "invalid_request_error");
 }
+
+#[actix_rt::test]
+async fn test_facets_distribution_attribute() {
+    let mut server = common::Server::test_server().await;
+
+    let (response, _status_code) = server.get_index_stats().await;
+
+    let expected = json!({
+        "isIndexing": false,
+        "fieldsDistribution":{},
+    });
+
+    assert_json_eq!(expected, response, ordered: true);
+}
