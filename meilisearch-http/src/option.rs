@@ -116,17 +116,17 @@ pub struct Opt {
     #[structopt(long, requires = "snapshot-path", env = "MEILI_SNAPSHOT_INTERVAL_SEC")]
     pub snapshot_interval_sec: Option<u64>,
 
-    /// Folder where backups are created when the backup route is called.
-    #[structopt(long, env = "MEILI_backup_folder", default_value = "backups/")]
-    pub backup_folder: PathBuf,
+    /// Folder where dumps are created when the dump route is called.
+    #[structopt(long, env = "MEILI_DUMPS_FOLDER", default_value = "dumps/")]
+    pub dumps_folder: PathBuf,
 
-    /// Import a backup from the specified path, must be a `.tar.gz` file.
-    #[structopt(long, env = "MEILI_IMPORT_BACKUP", conflicts_with = "load-from-snapshot")]
-    pub import_backup: Option<PathBuf>,
+    /// Import a dump from the specified path, must be a `.tar.gz` file.
+    #[structopt(long, env = "MEILI_IMPORT_DUMP", conflicts_with = "load-from-snapshot")]
+    pub import_dump: Option<PathBuf>,
 
-    /// The batch size used in the importation process, the bigger it is the faster the backup is created.
-    #[structopt(long, env = "MEILI_BACKUP_BATCH_SIZE", default_value = "1024")]
-    pub backup_batch_size: usize,
+    /// The batch size used in the importation process, the bigger it is the faster the dump is created.
+    #[structopt(long, env = "MEILI_DUMP_BATCH_SIZE", default_value = "1024")]
+    pub dump_batch_size: usize,
 }
 
 impl Opt {
