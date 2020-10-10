@@ -468,3 +468,56 @@ async fn settings_that_contains_wildcard_is_wildcard() {
     assert_eq!(response["searchableAttributes"].as_array().unwrap()[0], "*");
     assert_eq!(response["displayedAttributes"].as_array().unwrap()[0], "*");
 }
+
+#[actix_rt::test]
+async fn test_displayed_attributes_field() {
+    let mut server = common::Server::test_server().await;
+
+    let body = json!({
+        "rankingRules": [
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness",
+            "desc(registered)",
+            "desc(age)",
+        ],
+        "distinctAttribute": "id",
+        "searchableAttributes": [
+            "id",
+            "name",
+            "color",
+            "gender",
+            "email",
+            "phone",
+            "address",
+            "registered",
+            "about"
+        ],
+        "displayedAttributes": [
+            "age",
+            "email",
+            "gender",
+            "name",
+            "registered",
+        ],
+        "stopWords": [
+            "ad",
+            "in",
+            "ut",
+        ],
+        "synonyms": {
+            "road": ["avenue", "street"],
+            "street": ["avenue"],
+        },
+        "attributesForFaceting": ["name"],
+    });
+
+    server.update_all_settings(body.clone()).await;
+
+    let (response, _status_code) = server.get_all_settings().await;
+
+    assert_json_eq!(body, response, ordered: true);
+}
