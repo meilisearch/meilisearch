@@ -101,7 +101,7 @@ async fn trigger_dump_concurently_should_return_conflict() {
 
 #[actix_rt::test]
 #[ignore]
-async fn get_dump_status_early_should_return_processing() {
+async fn get_dump_status_early_should_return_in_progress() {
     let mut server = common::Server::test_server().await;
     
 
@@ -116,7 +116,7 @@ async fn get_dump_status_early_should_return_processing() {
 
     let expected = json!({
         "uid": dump_uid,
-        "status": "processing"
+        "status": "in_progress"
     });
 
     assert_eq!(status_code, 200);
@@ -139,6 +139,39 @@ async fn get_dump_status_should_return_done() {
     let expected = json!({
         "uid": dump_uid.clone(),
         "status": "done"
+    });
+
+    thread::sleep(Duration::from_secs(1)); // wait dump until process end
+
+    let (value, status_code) = server.get_dump_status(&dump_uid).await;
+
+    assert_eq!(status_code, 200);
+
+    assert_json_eq!(expected.clone(), value.clone(), ordered: false);
+}
+
+#[actix_rt::test]
+#[ignore]
+async fn get_dump_status_should_return_error_provoking_it() {
+    let mut server = common::Server::test_server().await;
+
+
+    let (value, status_code) = server.trigger_dump().await;
+
+    // removing destination directory provoking `No such file or directory` error
+    std::fs::remove_dir(server.data().dumps_folder.clone()).unwrap();
+
+    assert_eq!(status_code, 202);
+
+    let dump_uid = value["uid"].as_str().unwrap().to_string();
+    
+    let expected = json!({
+        "uid": dump_uid.clone(),
+        "status": "failed",
+        "message": "Dump process failed: compressing dump; No such file or directory (os error 2)",
+        "errorCode": "dump_process_failed",
+        "errorType": "internal_error",
+        "errorLink": "https://docs.meilisearch.com/errors#dump_process_failed"
     });
 
     thread::sleep(Duration::from_secs(1)); // wait dump until process end

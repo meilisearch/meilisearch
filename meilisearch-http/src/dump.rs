@@ -13,10 +13,11 @@ use meilisearch_core::settings::Settings;
 use meilisearch_core::update::{apply_settings_update, apply_documents_addition};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tempfile::TempDir;
 
 use crate::Data;
-use crate::error::Error;
+use crate::error::{Error, ResponseError};
 use crate::helpers::compression;
 use crate::routes::index;
 use crate::routes::index::IndexResponse;
@@ -112,7 +113,7 @@ fn import_index_v1(
 
     // extract `settings.json` file and import content
     let settings = settings_from_path(&index_path)?;
-    let settings = settings.to_update().map_err(|_e| Error::dump_failed())?;
+    let settings = settings.to_update().map_err(|e| Error::dump_failed(format!("importing settings for index {}; {}", index_uid, e)))?;
     apply_settings_update(write_txn, &index, settings)?;
 
     // create iterator over documents in `documents.jsonl` to make batch importation
@@ -199,17 +200,17 @@ pub fn import_dump(
 #[serde(rename_all = "snake_case")]
 pub enum DumpStatus {
     Done,
-    Processing,
-    DumpProcessFailed,
+    InProgress,
+    Failed,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DumpInfo {
     pub uid: String,
     pub status: DumpStatus,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", flatten)]
+    pub error: Option<serde_json::Value>,
 }
 
 impl DumpInfo {
@@ -217,15 +218,15 @@ impl DumpInfo {
         Self { uid, status, error: None }
     }
 
-    pub fn with_error(mut self, error: String) -> Self {
-        self.status = DumpStatus::DumpProcessFailed;
-        self.error = Some(error);
+    pub fn with_error(mut self, error: ResponseError) -> Self {
+        self.status = DumpStatus::Failed;
+        self.error = Some(json!(error));
 
         self
     }
 
     pub fn dump_already_in_progress(&self) -> bool {
-        self.status == DumpStatus::Processing
+        self.status == DumpStatus::InProgress
     }
 
     pub fn get_current() -> Option<Self> {
@@ -299,10 +300,10 @@ fn dump_index_documents(data: &web::Data<Data>, reader: &MainReader, folder_path
 
 /// Write error with a context.
 fn fail_dump_process<E: std::error::Error>(dump_info: DumpInfo, context: &str, error: E) {
-        let error = format!("Something went wrong during dump process: {}; {}", context, error);
+        let error_message = format!("{}; {}", context, error);
         
-        error!("{}", &error);
-        dump_info.with_error(error).set_current();
+        error!("Something went wrong during dump process: {}", &error_message);
+        dump_info.with_error(Error::dump_failed(error_message).into()).set_current();
 }
 
 /// Main function of dump.
@@ -395,7 +396,7 @@ fn dump_process(data: web::Data<Data>, dumps_folder: PathBuf, dump_info: DumpInf
 }
 
 pub fn init_dump_process(data: &web::Data<Data>, dumps_folder: &Path) -> Result<DumpInfo, Error> {
-    create_dir_all(dumps_folder).or(Err(Error::dump_failed()))?;
+    create_dir_all(dumps_folder).map_err(|e| Error::dump_failed(format!("creating temporary directory {}", e)))?;
 
     // check if a dump is already in progress
     if let Some(resume) = DumpInfo::get_current() {
@@ -407,7 +408,7 @@ pub fn init_dump_process(data: &web::Data<Data>, dumps_folder: &Path) -> Result<
     // generate a new dump info
     let info = DumpInfo::new(
         generate_uid(),
-        DumpStatus::Processing
+        DumpStatus::InProgress
     );
 
     info.set_current();

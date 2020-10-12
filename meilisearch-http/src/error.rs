@@ -5,7 +5,7 @@ use actix_http::ResponseBuilder;
 use actix_web as aweb;
 use actix_web::error::{JsonPayloadError, QueryPayloadError};
 use actix_web::http::StatusCode;
-use serde_json::json;
+use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 use meilisearch_error::{ErrorCode, Code};
 
@@ -54,7 +54,7 @@ pub enum Error {
     PayloadTooLarge,
     UnsupportedMediaType,
     DumpAlreadyInProgress,
-    DumpProcessFailed,
+    DumpProcessFailed(String),
 }
 
 impl error::Error for Error {}
@@ -81,7 +81,7 @@ impl ErrorCode for Error {
             PayloadTooLarge => Code::PayloadTooLarge,
             UnsupportedMediaType => Code::UnsupportedMediaType,
             DumpAlreadyInProgress => Code::DumpAlreadyInProgress,
-            DumpProcessFailed => Code::DumpProcessFailed,
+            DumpProcessFailed(_) => Code::DumpProcessFailed,
         }
     }
 }
@@ -189,8 +189,8 @@ impl Error {
         Error::DumpAlreadyInProgress
     }
 
-    pub fn dump_failed() -> Error {
-        Error::DumpProcessFailed
+    pub fn dump_failed(message: String) -> Error {
+        Error::DumpProcessFailed(message)
     }
 }
 
@@ -215,19 +215,31 @@ impl fmt::Display for Error {
             Self::PayloadTooLarge => f.write_str("Payload too large"),
             Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
             Self::DumpAlreadyInProgress => f.write_str("Another dump is already in progress"),
-            Self::DumpProcessFailed => f.write_str("Dump process failed"),
+            Self::DumpProcessFailed(message) => write!(f, "Dump process failed: {}", message),
         }
+    }
+}
+
+impl Serialize for ResponseError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let struct_name = "ResponseError";
+        let field_count = 4;
+
+        let mut state = serializer.serialize_struct(struct_name, field_count)?;
+        state.serialize_field("message", &self.to_string())?;
+        state.serialize_field("errorCode", &self.error_name())?;
+        state.serialize_field("errorType", &self.error_type())?;
+        state.serialize_field("errorLink", &self.error_url())?;
+        state.end()
     }
 }
 
 impl aweb::error::ResponseError for ResponseError {
     fn error_response(&self) -> aweb::HttpResponse {
-        ResponseBuilder::new(self.status_code()).json(json!({
-            "message": self.to_string(),
-            "errorCode": self.error_name(),
-            "errorType": self.error_type(),
-            "errorLink": self.error_url(),
-        }))
+        ResponseBuilder::new(self.status_code()).json(&self)
     }
 
     fn status_code(&self) -> StatusCode {
