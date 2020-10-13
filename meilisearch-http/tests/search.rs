@@ -7,6 +7,139 @@ use serde_json::Value;
 #[macro_use] mod common;
 
 #[actix_rt::test]
+async fn search() {
+    let mut server = common::Server::test_server().await;
+
+    let query = json! ({
+        "q": "exercitation"
+    });
+
+    let expected = json!([
+        {
+          "id": 1,
+          "balance": "$1,706.13",
+          "picture": "http://placehold.it/32x32",
+          "age": 27,
+          "color": "Green",
+          "name": "Cherry Orr",
+          "gender": "female",
+          "email": "cherryorr@chorizon.com",
+          "phone": "+1 (995) 479-3174",
+          "address": "442 Beverly Road, Ventress, New Mexico, 3361",
+          "about": "Exercitation officia mollit proident nostrud ea. Pariatur voluptate labore nostrud magna duis non elit et incididunt Lorem velit duis amet commodo. Irure in velit laboris pariatur. Do tempor ex deserunt duis minim amet.\r\n",
+          "registered": "2020-03-18T11:12:21 -01:00",
+          "latitude": -24.356932,
+          "longitude": 27.184808,
+          "tags": [
+            "new issue",
+            "bug"
+          ],
+          "isActive": true
+        },
+        {
+          "id": 59,
+          "balance": "$1,921.58",
+          "picture": "http://placehold.it/32x32",
+          "age": 31,
+          "color": "Green",
+          "name": "Harper Carson",
+          "gender": "male",
+          "email": "harpercarson@chorizon.com",
+          "phone": "+1 (912) 430-3243",
+          "address": "883 Dennett Place, Knowlton, New Mexico, 9219",
+          "about": "Exercitation minim esse proident cillum velit et deserunt incididunt adipisicing minim. Cillum Lorem consectetur laborum id consequat exercitation velit. Magna dolor excepteur sunt deserunt dolor ullamco non sint proident ipsum. Reprehenderit voluptate sit veniam consectetur ea sunt duis labore deserunt ipsum aute. Eiusmod aliqua anim voluptate id duis tempor aliqua commodo sunt. Do officia ea consectetur nostrud eiusmod laborum.\r\n",
+          "registered": "2019-12-07T07:33:15 -01:00",
+          "latitude": -60.812605,
+          "longitude": -27.129016,
+          "tags": [
+            "bug",
+            "new issue"
+          ],
+          "isActive": true
+        },
+        {
+          "id": 49,
+          "balance": "$1,476.39",
+          "picture": "http://placehold.it/32x32",
+          "age": 28,
+          "color": "brown",
+          "name": "Maureen Dale",
+          "gender": "female",
+          "email": "maureendale@chorizon.com",
+          "phone": "+1 (984) 538-3684",
+          "address": "817 Newton Street, Bannock, Wyoming, 1468",
+          "about": "Tempor mollit exercitation excepteur cupidatat reprehenderit ad ex. Nulla laborum proident incididunt quis. Esse laborum deserunt qui anim. Sunt incididunt pariatur cillum anim proident eu ullamco dolor excepteur. Ullamco amet culpa nostrud adipisicing duis aliqua consequat duis non eu id mollit velit. Deserunt ullamco amet in occaecat.\r\n",
+          "registered": "2018-04-26T06:04:40 -02:00",
+          "latitude": -64.196802,
+          "longitude": -117.396238,
+          "tags": [
+            "wontfix"
+          ],
+          "isActive": true
+        }
+    ]);
+
+    test_post_get_search!(server, query, |response, _status_code| {
+        let hits = response["hits"].as_array().unwrap();
+        let hits: Vec<Value> = hits.iter().cloned().take(3).collect();
+        assert_json_eq!(expected.clone(), serde_json::to_value(hits).unwrap(), ordered: false);
+    });
+}
+
+#[actix_rt::test]
+async fn search_no_params() {
+    let mut server = common::Server::test_server().await;
+
+    let query = json! ({});
+
+    // an empty search should return the 20 first indexed document
+    let dataset: Vec<Value> = serde_json::from_slice(include_bytes!("assets/test_set.json")).unwrap();
+    let expected: Vec<Value> = dataset.into_iter().take(20).collect();
+    let expected: Value = serde_json::to_value(expected).unwrap();
+
+    test_post_get_search!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
+}
+
+#[actix_rt::test]
+async fn search_in_unexisting_index() {
+    let mut server = common::Server::with_uid("test");
+
+    let query = json! ({
+        "q": "exercitation"
+    });
+
+    let expected = json! ({
+        "message": "Index test not found",
+        "errorCode": "index_not_found",
+        "errorType": "invalid_request_error",
+        "errorLink": "https://docs.meilisearch.com/errors#index_not_found"
+      });
+
+    test_post_get_search!(server, query, |response, status_code| {
+        assert_eq!(404, status_code);
+        assert_json_eq!(expected.clone(), response.clone(), ordered: false);
+    });
+}
+
+#[actix_rt::test]
+async fn search_unexpected_params() {
+
+    let query = json! ({"lol": "unexpected"});
+
+    let expected = "unknown field `lol`, expected one of `q`, `offset`, `limit`, `attributesToRetrieve`, `attributesToCrop`, `cropLength`, `attributesToHighlight`, `filters`, `matches`, `facetFilters`, `facetsDistribution` at line 1 column 6";
+
+    let post_query = serde_json::from_str::<meilisearch_http::routes::search::SearchQueryPost>(&query.clone().to_string());
+    assert!(post_query.is_err());
+    assert_eq!(expected.clone(), post_query.err().unwrap().to_string());
+
+    let get_query: Result<meilisearch_http::routes::search::SearchQuery, _> = serde_json::from_str(&query.clone().to_string());
+    assert!(get_query.is_err());
+    assert_eq!(expected.clone(), get_query.err().unwrap().to_string());
+}
+
+#[actix_rt::test]
 async fn search_with_limit() {
     let mut server = common::Server::test_server().await;
 
