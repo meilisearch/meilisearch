@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use actix_web::{delete, get, post};
 use actix_web::{web, HttpResponse};
@@ -405,7 +405,7 @@ async fn get_displayed(
 async fn update_displayed(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-    body: web::Json<Option<HashSet<String>>>,
+    body: web::Json<Option<BTreeSet<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
     let index = data
         .db
@@ -539,7 +539,7 @@ fn get_indexed_attributes(schema: &Schema) -> Vec<String> {
     }
 }
 
-fn get_displayed_attributes(schema: &Schema) -> HashSet<String> {
+fn get_displayed_attributes(schema: &Schema) -> BTreeSet<String> {
     if schema.is_displayed_all() {
         ["*"].iter().map(|s| s.to_string()).collect()
     } else {

@@ -777,3 +777,33 @@ async fn update_existing_primary_key_is_error() {
     assert_eq!(response["errorCode"], "primary_key_already_present");
     assert_eq!(response["errorType"], "invalid_request_error");
 }
+
+#[actix_rt::test]
+async fn test_facets_distribution_attribute() {
+    let mut server = common::Server::test_server().await;
+
+    let (response, _status_code) = server.get_index_stats().await;
+
+    let expected = json!({
+        "isIndexing": false,
+        "numberOfDocuments":77,
+        "fieldsDistribution":{
+            "age":77,
+            "gender":77,
+            "phone":77,
+            "name":77,
+            "registered":77,
+            "latitude":77,
+            "email":77,
+            "tags":77,
+            "longitude":77,
+            "color":77,
+            "address":77,
+            "balance":77,
+            "about":77,
+            "picture":77,
+        },
+    });
+
+    assert_json_eq!(expected, response, ordered: true);
+}

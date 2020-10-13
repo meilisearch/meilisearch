@@ -1,4 +1,5 @@
 use std::collections::hash_map::{Entry, HashMap};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -577,7 +578,7 @@ impl Database {
         }
 
         // convert attributes to their names
-        let frequency: HashMap<_, _> = fields_frequency
+        let frequency: BTreeMap<_, _> = fields_frequency
             .into_iter()
             .filter_map(|(a, c)| schema.name(a).map(|name| (name.to_string(), c)))
             .collect();
