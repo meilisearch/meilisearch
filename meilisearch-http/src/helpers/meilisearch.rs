@@ -293,10 +293,16 @@ impl<'a> SearchBuilder<'a> {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MatchPosition {
     pub start: usize,
     pub length: usize,
+}
+
+impl PartialOrd for MatchPosition {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Ord for MatchPosition {

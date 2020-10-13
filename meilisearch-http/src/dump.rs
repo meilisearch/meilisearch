@@ -112,7 +112,7 @@ fn import_index_v1(
 
     // extract `settings.json` file and import content
     let settings = settings_from_path(&index_path)?;
-    let settings = settings.to_update().or_else(|_e| Err(Error::dump_failed()))?;
+    let settings = settings.to_update().map_err(|_e| Error::dump_failed())?;
     apply_settings_update(write_txn, &index, settings)?;
 
     // create iterator over documents in `documents.jsonl` to make batch importation
@@ -286,7 +286,7 @@ fn dump_index_documents(data: &web::Data<Data>, reader: &MainReader, folder_path
     let mut offset = 0;
     loop {
         let documents = crate::routes::document::get_all_documents_sync(data, reader, index_uid, offset, dump_batch_size, None)?;
-        if documents.len() == 0 { break; } else { offset += dump_batch_size; }
+        if documents.is_empty() { break; } else { offset += dump_batch_size; }
 
         for document in documents {
             serde_json::to_writer(&file, &document)?;
