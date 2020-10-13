@@ -197,6 +197,7 @@ pub fn apply_addition<'a, 'b>(
                 documents_fields: index.documents_fields,
                 schema: &schema,
                 fields: None,
+                displayed: false,
             };
 
             let old_document = Option::<HashMap<String, Value>>::deserialize(&mut deserializer)?;

@@ -243,6 +243,7 @@ impl Index {
             documents_fields: self.documents_fields,
             schema: &schema,
             fields: attributes.as_ref(),
+            displayed: true,
         };
 
         Ok(Option::<T>::deserialize(&mut deserializer)?)

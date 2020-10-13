@@ -55,6 +55,7 @@ pub struct Deserializer<'a> {
     pub documents_fields: DocumentsFields,
     pub schema: &'a Schema,
     pub fields: Option<&'a HashSet<FieldId>>,
+    pub displayed: bool,
 }
 
 impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
@@ -93,7 +94,7 @@ impl<'de, 'a, 'b> de::Deserializer<'de> for &'b mut Deserializer<'a> {
                 };
 
                 let is_displayed = self.schema.is_displayed(attr);
-                if is_displayed && self.fields.map_or(true, |f| f.contains(&attr)) {
+                if !self.displayed || (is_displayed && self.fields.map_or(true, |f| f.contains(&attr))) {
                     if let Some(attribute_name) = self.schema.name(attr) {
                         let cursor = Cursor::new(value.to_owned());
                         let ioread = SerdeJsonIoRead::new(cursor);
