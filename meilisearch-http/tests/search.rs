@@ -1779,7 +1779,7 @@ async fn update_documents_with_facet_distribution() {
     server.create_index(body).await;
     let settings = json!({
         "attributesForFaceting": ["genre"],
-        "displayedAttributes": ["genre", "type"],
+        "displayedAttributes": ["genre"],
         "searchableAttributes": ["genre", "type"]
     });
     server.update_all_settings(settings).await;
@@ -1809,7 +1809,6 @@ async fn update_documents_with_facet_distribution() {
         "facetsDistribution": ["genre"]
     });
     let (response1, _) = server.search_post(search.clone()).await;
-    println!("response1: {}", response1);
     let expected_facet_distribution = json!({
         "genre": {
             "grunge": 1,
@@ -1828,6 +1827,5 @@ async fn update_documents_with_facet_distribution() {
     ]);
     server.add_or_update_multiple_documents(update2).await;
     let (response2, _) = server.search_post(search).await;
-    println!("response2: {}", response2);
     assert_json_eq!(expected_facet_distribution, response2["facetsDistribution"].clone());
 }

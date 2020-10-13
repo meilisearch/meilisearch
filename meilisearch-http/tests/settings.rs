@@ -486,15 +486,7 @@ async fn test_displayed_attributes_field() {
         ],
         "distinctAttribute": "id",
         "searchableAttributes": [
-            "id",
-            "name",
-            "color",
-            "gender",
-            "email",
-            "phone",
-            "address",
-            "registered",
-            "about"
+            "*"
         ],
         "displayedAttributes": [
             "age",

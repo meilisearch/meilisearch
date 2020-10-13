@@ -201,14 +201,12 @@ pub fn apply_addition<'a, 'b>(
             };
 
             let old_document = Option::<HashMap<String, Value>>::deserialize(&mut deserializer)?;
-        println!("old document: {:#?}", old_document);
             if let Some(old_document) = old_document {
                 for (key, value) in old_document {
                     document.entry(key).or_insert(value);
                 }
             }
         }
-        println!("new document: {:#?}", document);
         documents_additions.insert(internal_docid, document);
     }
 
@@ -231,7 +229,7 @@ pub fn apply_addition<'a, 'b>(
     for (document_id, document) in &documents_additions {
         // For each key-value pair in the document.
         for (attribute, value) in document {
-            let field_id = schema.insert_and_index(&attribute)?;
+            let field_id = schema.register_field(&attribute)?;
             index_document(
                 writer,
                 index.documents_fields,

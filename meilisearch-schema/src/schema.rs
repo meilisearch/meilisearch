@@ -16,14 +16,6 @@ impl<T> OptionAll<T> {
         std::mem::replace(self, OptionAll::None)
     }
 
-    fn map<U, F: FnOnce(T) -> U>(self, f: F) -> OptionAll<U> {
-        match self {
-            OptionAll::Some(x) => OptionAll::Some(f(x)),
-            OptionAll::All => OptionAll::All,
-            OptionAll::None => OptionAll::None,
-        }
-    }
-
     pub fn is_all(&self) -> bool {
         matches!(self, OptionAll::All)
     }
@@ -44,7 +36,7 @@ pub struct Schema {
     displayed: OptionAll<HashSet<FieldId>>,
 
     indexed: OptionAll<HashSet<FieldId>>,
-    indexed_map: HashMap<FieldId, IndexedPos>,
+    fields_position: HashMap<FieldId, IndexedPos>,
 }
 
 impl Schema {
@@ -68,7 +60,7 @@ impl Schema {
             ranked: HashSet::new(),
             displayed: OptionAll::All,
             indexed: OptionAll::All,
-            indexed_map,
+            fields_position: indexed_map,
         }
     }
 
@@ -109,15 +101,15 @@ impl Schema {
         self.fields_map.insert(name)
     }
 
-    pub fn insert_and_index(&mut self, name: &str) -> SResult<FieldId> {
+    pub fn register_field(&mut self, name: &str) -> SResult<FieldId> {
         match self.fields_map.id(name) {
             Some(id) => {
                 Ok(id)
             }
             None => {
                 let id = self.fields_map.insert(name)?;
-                let pos = self.indexed_map.len() as u16;
-                self.indexed_map.insert(id, pos.into());
+                let pos = self.fields_position.len() as u16;
+                self.fields_position.insert(id, pos.into());
                 Ok(id)
             }
         }
@@ -163,9 +155,9 @@ impl Schema {
             OptionAll::Some(ref v) => v.iter().cloned().collect(),
             OptionAll::All => {
                 let fields = self
-                    .indexed_map
-                    .iter()
-                    .map(|(&f, _)| f)
+                    .fields_position
+                    .keys()
+                    .cloned()
                     .collect();
                 fields
             },
@@ -202,18 +194,16 @@ impl Schema {
 
     pub fn set_indexed(&mut self, name: &str) -> SResult<(FieldId, IndexedPos)> {
         let id = self.fields_map.insert(name)?;
-        println!("setting {} indexed", name);
 
-        self.indexed = self.indexed.take().map(|mut v| {
+        if let OptionAll::Some(ref mut v) = self.indexed {
             v.insert(id);
-            v
-        });
+        }
 
-        if let Some(indexed_pos) = self.indexed_map.get(&id) {
+        if let Some(indexed_pos) = self.fields_position.get(&id) {
             return Ok((id, *indexed_pos))
         };
-        let pos = self.indexed_map.len() as u16;
-        self.indexed_map.insert(id, pos.into());
+        let pos = self.fields_position.len() as u16;
+        self.fields_position.insert(id, pos.into());
         Ok((id, pos.into()))
     }
 
@@ -224,56 +214,6 @@ impl Schema {
     pub fn remove_ranked(&mut self, name: &str) {
         if let Some(id) = self.fields_map.id(name) {
             self.ranked.remove(&id);
-        }
-    }
-
-    /// remove field from displayed attributes. If diplayed attributes is OptionAll::All,
-    /// dipslayed attributes is turned into OptionAll::Some(v) where v is all displayed attributes
-    /// except name.
-    pub fn remove_displayed(&mut self, name: &str) {
-        if let Some(id) = self.fields_map.id(name) {
-            self.displayed = match self.displayed.take() {
-                OptionAll::Some(mut v) => {
-                    v.remove(&id);
-                    OptionAll::Some(v)
-                }
-                OptionAll::All => {
-                    let displayed = self.fields_map
-                        .iter()
-                        .filter_map(|(key, &value)| {
-                            if key != name {
-                                Some(value)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<HashSet<_>>();
-                    OptionAll::Some(displayed)
-                }
-                OptionAll::None => OptionAll::None,
-            };
-        }
-    }
-
-    pub fn remove_indexed(&mut self, name: &str) {
-        if let Some(id) = self.fields_map.id(name) {
-            self.indexed_map.remove(&id);
-            self.indexed = match self.indexed.take() {
-                // valid because indexed is All and indexed() return the content of
-                // indexed_map that is already updated
-                OptionAll::All => {
-                    let indexed = self.indexed_map
-                        .iter()
-                        .filter_map(|(&i, _)| if i != id { Some(i) } else { None })
-                        .collect();
-                    OptionAll::Some(indexed)
-                },
-                OptionAll::Some(mut v) => {
-                    v.retain(|x| *x != id);
-                    OptionAll::Some(v)
-                }
-                OptionAll::None => OptionAll::None,
-            }
         }
     }
 
@@ -291,10 +231,10 @@ impl Schema {
 
     pub fn is_indexed(&self, id: FieldId) -> Option<&IndexedPos> {
         match self.indexed {
-            OptionAll::All => self.indexed_map.get(&id),
+            OptionAll::All => self.fields_position.get(&id),
             OptionAll::Some(ref v) => {
                 if v.contains(&id) {
-                    self.indexed_map.get(&id)
+                    self.fields_position.get(&id)
                 } else {
                     None
                 }
@@ -310,7 +250,7 @@ impl Schema {
     pub fn indexed_pos_to_field_id<I: Into<IndexedPos>>(&self, pos: I) -> Option<FieldId> {
         let indexed_pos = pos.into().0;
         self
-            .indexed_map
+            .fields_position
             .iter()
             .find(|(_, &v)| v.0 == indexed_pos)
             .map(|(&k, _)| k)
@@ -354,11 +294,11 @@ impl Schema {
 
     pub fn set_all_fields_as_indexed(&mut self) {
         self.indexed = OptionAll::All;
-        self.indexed_map.clear();
+        self.fields_position.clear();
 
         for (_name, id) in self.fields_map.iter() {
-            let pos = self.indexed_map.len() as u16;
-            self.indexed_map.insert(*id, pos.into());
+            let pos = self.fields_position.len() as u16;
+            self.fields_position.insert(*id, pos.into());
         }
     }
 

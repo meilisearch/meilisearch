@@ -20,7 +20,6 @@ pub fn index_value<A>(
 ) -> Option<usize>
 where A: AsRef<[u8]>,
 {
-    println!("indexing value: {}", value);
     match value {
         Value::Null => None,
         Value::Bool(boolean) => {
