@@ -25,10 +25,7 @@ impl<T> OptionAll<T> {
     }
 
     pub fn is_all(&self) -> bool {
-        match self {
-            OptionAll::All => true,
-            _ => false,
-        }
+        matches!(self, OptionAll::All)
     }
 }
 

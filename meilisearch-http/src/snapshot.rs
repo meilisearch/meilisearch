@@ -33,7 +33,7 @@ pub fn create_snapshot(data: &Data, snapshot_path: &Path) -> Result<(), Error> {
 
     data.db.copy_and_compact_to_path(tmp_dir.path())?;
 
-    compression::to_tar_gz(tmp_dir.path(), snapshot_path).or_else(|e| Err(Error::Internal(format!("something went wrong during snapshot compression: {}", e))))
+    compression::to_tar_gz(tmp_dir.path(), snapshot_path).map_err(|e| Error::Internal(format!("something went wrong during snapshot compression: {}", e)))
 }
 
 pub fn schedule_snapshot(data: Data, snapshot_dir: &Path, time_gap_s: u64) -> Result<(), Error> {
