@@ -27,7 +27,7 @@ impl Deref for Data {
 pub struct DataInner {
     pub db: Arc<Database>,
     pub db_path: String,
-    pub dumps_folder: PathBuf,
+    pub dumps_dir: PathBuf,
     pub dump_batch_size: usize,
     pub api_keys: ApiKeys,
     pub server_pid: u32,
@@ -61,7 +61,7 @@ impl ApiKeys {
 impl Data {
     pub fn new(opt: Opt) -> Result<Data, Box<dyn Error>> {
         let db_path = opt.db_path.clone();
-        let dumps_folder = opt.dumps_folder.clone();
+        let dumps_dir = opt.dumps_dir.clone();
         let dump_batch_size = opt.dump_batch_size;
         let server_pid = std::process::id();
 
@@ -85,7 +85,7 @@ impl Data {
         let inner_data = DataInner {
             db: db.clone(),
             db_path,
-            dumps_folder,
+            dumps_dir,
             dump_batch_size,
             api_keys,
             server_pid,

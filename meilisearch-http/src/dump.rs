@@ -52,9 +52,9 @@ impl DumpMetadata {
         }
     }
 
-    /// Extract DumpMetadata from `metadata.json` file present at provided `folder_path`
-    fn from_path(folder_path: &Path) -> Result<Self, Error> {
-        let path = folder_path.join("metadata.json");
+    /// Extract DumpMetadata from `metadata.json` file present at provided `dir_path`
+    fn from_path(dir_path: &Path) -> Result<Self, Error> {
+        let path = dir_path.join("metadata.json");
         let file = File::open(path)?;
         let reader = std::io::BufReader::new(file);
         let metadata = serde_json::from_reader(reader)?;
@@ -62,9 +62,9 @@ impl DumpMetadata {
         Ok(metadata)
     }
 
-    /// Write DumpMetadata in `metadata.json` file at provided `folder_path`
-    fn to_path(&self, folder_path: &Path) -> Result<(), Error> {
-        let path = folder_path.join("metadata.json");
+    /// Write DumpMetadata in `metadata.json` file at provided `dir_path`
+    fn to_path(&self, dir_path: &Path) -> Result<(), Error> {
+        let path = dir_path.join("metadata.json");
         let file = File::create(path)?;
 
         serde_json::to_writer(file, &self)?;
@@ -73,9 +73,9 @@ impl DumpMetadata {
     }
 }
 
-/// Extract Settings from `settings.json` file present at provided `folder_path`
-fn settings_from_path(folder_path: &Path) -> Result<Settings, Error> {
-    let path = folder_path.join("settings.json");
+/// Extract Settings from `settings.json` file present at provided `dir_path`
+fn settings_from_path(dir_path: &Path) -> Result<Settings, Error> {
+    let path = dir_path.join("settings.json");
     let file = File::open(path)?;
     let reader = std::io::BufReader::new(file);
     let metadata = serde_json::from_reader(reader)?;
@@ -83,9 +83,9 @@ fn settings_from_path(folder_path: &Path) -> Result<Settings, Error> {
     Ok(metadata)
 }
 
-/// Write Settings in `settings.json` file at provided `folder_path`
-fn settings_to_path(settings: &Settings, folder_path: &Path) -> Result<(), Error> {
-    let path = folder_path.join("settings.json");
+/// Write Settings in `settings.json` file at provided `dir_path`
+fn settings_to_path(settings: &Settings, dir_path: &Path) -> Result<(), Error> {
+    let path = dir_path.join("settings.json");
     let file = File::create(path)?;
 
     serde_json::to_writer(file, settings)?;
@@ -96,7 +96,7 @@ fn settings_to_path(settings: &Settings, folder_path: &Path) -> Result<(), Error
 /// Import settings and documents of a dump with version `DumpVersion::V1` in specified index.
 fn import_index_v1(
     data: &Data,
-    dumps_folder: &Path,
+    dumps_dir: &Path,
     index_uid: &str,
     document_batch_size: usize,
     write_txn: &mut MainWriter,
@@ -108,8 +108,8 @@ fn import_index_v1(
         .open_index(index_uid)
         .ok_or(Error::index_not_found(index_uid))?;
 
-    // index folder path in  dump folder
-    let index_path = &dumps_folder.join(index_uid);
+    // index dir path in  dump dir
+    let index_path = &dumps_dir.join(index_uid);
 
     // extract `settings.json` file and import content
     let settings = settings_from_path(&index_path)?;
@@ -243,29 +243,29 @@ fn generate_uid() -> String {
     Utc::now().format("%Y%m%d-%H%M%S%3f").to_string()
 }
 
-/// Infer dumps_folder from dump_uid
-pub fn compressed_dumps_folder(dumps_folder: &Path, dump_uid: &str) -> PathBuf {
-    dumps_folder.join(format!("{}.tar.gz", dump_uid))
+/// Infer dumps_dir from dump_uid
+pub fn compressed_dumps_dir(dumps_dir: &Path, dump_uid: &str) -> PathBuf {
+    dumps_dir.join(format!("{}.tar.gz", dump_uid))
 }
 
 /// Write metadata in dump
-fn dump_metadata(data: &web::Data<Data>, folder_path: &Path, indexes: Vec<IndexResponse>) -> Result<(), Error> {
+fn dump_metadata(data: &web::Data<Data>, dir_path: &Path, indexes: Vec<IndexResponse>) -> Result<(), Error> {
     let (db_major, db_minor, db_patch) = data.db.version();
     let metadata = DumpMetadata::new(indexes, format!("{}.{}.{}", db_major, db_minor, db_patch));
 
-    metadata.to_path(folder_path)
+    metadata.to_path(dir_path)
 }
 
 /// Export settings of provided index in dump
-fn dump_index_settings(data: &web::Data<Data>, reader: &MainReader, folder_path: &Path, index_uid: &str) -> Result<(), Error> {
+fn dump_index_settings(data: &web::Data<Data>, reader: &MainReader, dir_path: &Path, index_uid: &str) -> Result<(), Error> {
     let settings = crate::routes::setting::get_all_sync(data, reader, index_uid)?;
 
-    settings_to_path(&settings, folder_path)
+    settings_to_path(&settings, dir_path)
 }
 
 /// Export updates of provided index in dump
-fn dump_index_updates(data: &web::Data<Data>, reader: &UpdateReader, folder_path: &Path, index_uid: &str) -> Result<(), Error> {
-    let updates_path = folder_path.join("updates.jsonl");
+fn dump_index_updates(data: &web::Data<Data>, reader: &UpdateReader, dir_path: &Path, index_uid: &str) -> Result<(), Error> {
+    let updates_path = dir_path.join("updates.jsonl");
     let updates = crate::routes::index::get_all_updates_status_sync(data, reader, index_uid)?;
 
     let file = File::create(updates_path)?;
@@ -279,8 +279,8 @@ fn dump_index_updates(data: &web::Data<Data>, reader: &UpdateReader, folder_path
 }
 
 /// Export documents of provided index in dump
-fn dump_index_documents(data: &web::Data<Data>, reader: &MainReader, folder_path: &Path, index_uid: &str) -> Result<(), Error> {
-    let documents_path = folder_path.join("documents.jsonl");
+fn dump_index_documents(data: &web::Data<Data>, reader: &MainReader, dir_path: &Path, index_uid: &str) -> Result<(), Error> {
+    let documents_path = dir_path.join("documents.jsonl");
     let file = File::create(documents_path)?;
     let dump_batch_size = data.dump_batch_size;
 
@@ -307,7 +307,7 @@ fn fail_dump_process<E: std::error::Error>(dump_info: DumpInfo, context: &str, e
 }
 
 /// Main function of dump.
-fn dump_process(data: web::Data<Data>, dumps_folder: PathBuf, dump_info: DumpInfo) {
+fn dump_process(data: web::Data<Data>, dumps_dir: PathBuf, dump_info: DumpInfo) {
     // open read transaction on Update
     let update_reader = match data.db.update_read_txn() {
         Ok(r) => r,
@@ -380,8 +380,8 @@ fn dump_process(data: web::Data<Data>, dumps_folder: PathBuf, dump_info: DumpInf
         }
     }
 
-    // compress dump in a file named `{dump_uid}.tar.gz` in `dumps_folder`
-    if let Err(e) = crate::helpers::compression::to_tar_gz(&tmp_dir_path, &compressed_dumps_folder(&dumps_folder, &dump_info.uid)) {
+    // compress dump in a file named `{dump_uid}.tar.gz` in `dumps_dir`
+    if let Err(e) = crate::helpers::compression::to_tar_gz(&tmp_dir_path, &compressed_dumps_dir(&dumps_dir, &dump_info.uid)) {
         fail_dump_process(dump_info, "compressing dump", e);
         return ;
     }
@@ -395,8 +395,8 @@ fn dump_process(data: web::Data<Data>, dumps_folder: PathBuf, dump_info: DumpInf
     resume.set_current();
 }
 
-pub fn init_dump_process(data: &web::Data<Data>, dumps_folder: &Path) -> Result<DumpInfo, Error> {
-    create_dir_all(dumps_folder).map_err(|e| Error::dump_failed(format!("creating temporary directory {}", e)))?;
+pub fn init_dump_process(data: &web::Data<Data>, dumps_dir: &Path) -> Result<DumpInfo, Error> {
+    create_dir_all(dumps_dir).map_err(|e| Error::dump_failed(format!("creating temporary directory {}", e)))?;
 
     // check if a dump is already in progress
     if let Some(resume) = DumpInfo::get_current() {
@@ -414,11 +414,11 @@ pub fn init_dump_process(data: &web::Data<Data>, dumps_folder: &Path) -> Result<
     info.set_current();
 
     let data = data.clone();
-    let dumps_folder = dumps_folder.to_path_buf();
+    let dumps_dir = dumps_dir.to_path_buf();
     let info_cloned = info.clone();
     // run dump process in a new thread
     thread::spawn(move || 
-        dump_process(data, dumps_folder, info_cloned)
+        dump_process(data, dumps_dir, info_cloned)
     );
 
     Ok(info)

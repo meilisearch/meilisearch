@@ -74,8 +74,8 @@ async fn main() -> Result<(), MainError> {
         dump::import_dump(&data, path, opt.dump_batch_size)?;
     }
 
-    if let Some(path) = &opt.snapshot_path {
-        snapshot::schedule_snapshot(data.clone(), &path, opt.snapshot_interval_sec.unwrap_or(86400))?;
+    if let Some(dir) = &opt.snapshot_dir {
+        snapshot::schedule_snapshot(data.clone(), &dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
     }
 
     print_launch_resume(&opt, &data);

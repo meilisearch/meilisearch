@@ -109,16 +109,16 @@ pub struct Opt {
     pub ignore_snapshot_if_db_exists: bool,
 
     /// Defines the directory path where meilisearch will create snapshot each snapshot_time_gap.
-    #[structopt(long, env = "MEILI_SNAPSHOT_PATH")]
-    pub snapshot_path: Option<PathBuf>,
+    #[structopt(long, env = "MEILI_SNAPSHOT_DIR")]
+    pub snapshot_dir: Option<PathBuf>,
 
     /// Defines time interval, in seconds, between each snapshot creation.
     #[structopt(long, requires = "snapshot-path", env = "MEILI_SNAPSHOT_INTERVAL_SEC")]
     pub snapshot_interval_sec: Option<u64>,
 
     /// Folder where dumps are created when the dump route is called.
-    #[structopt(long, env = "MEILI_DUMPS_FOLDER", default_value = "dumps/")]
-    pub dumps_folder: PathBuf,
+    #[structopt(long, env = "MEILI_DUMPS_DIR", default_value = "dumps/")]
+    pub dumps_dir: PathBuf,
 
     /// Import a dump from the specified path, must be a `.tar.gz` file.
     #[structopt(long, env = "MEILI_IMPORT_DUMP", conflicts_with = "load-from-snapshot")]

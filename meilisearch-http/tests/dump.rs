@@ -159,7 +159,7 @@ async fn get_dump_status_should_return_error_provoking_it() {
     let (value, status_code) = server.trigger_dump().await;
 
     // removing destination directory provoking `No such file or directory` error
-    std::fs::remove_dir(server.data().dumps_folder.clone()).unwrap();
+    std::fs::remove_dir(server.data().dumps_dir.clone()).unwrap();
 
     assert_eq!(status_code, 202);
 
@@ -197,11 +197,11 @@ async fn dump_metadata_should_be_valid() {
     
     let uid = trigger_and_wait_dump(&mut server).await;
 
-    let dumps_folder = Path::new(&server.data().dumps_folder);
+    let dumps_dir = Path::new(&server.data().dumps_dir);
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&dumps_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_dir.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("metadata.json")).unwrap();
     let mut metadata: serde_json::Value = serde_json::from_reader(file).unwrap();
@@ -238,9 +238,9 @@ async fn dump_gzip_should_have_been_created() {
     
 
     let dump_uid = trigger_and_wait_dump(&mut server).await;
-    let dumps_folder = Path::new(&server.data().dumps_folder);
+    let dumps_dir = Path::new(&server.data().dumps_dir);
 
-    let compressed_path = dumps_folder.join(format!("{}.tar.gz", dump_uid));
+    let compressed_path = dumps_dir.join(format!("{}.tar.gz", dump_uid));
     assert!(File::open(compressed_path).is_ok());
 }
 
@@ -312,11 +312,11 @@ async fn dump_index_settings_should_be_valid() {
 
     let uid = trigger_and_wait_dump(&mut server).await;
 
-    let dumps_folder = Path::new(&server.data().dumps_folder);
+    let dumps_dir = Path::new(&server.data().dumps_dir);
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&dumps_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_dir.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("test").join("settings.json")).unwrap();
     let settings: serde_json::Value = serde_json::from_reader(file).unwrap();
@@ -336,11 +336,11 @@ async fn dump_index_documents_should_be_valid() {
 
     let uid = trigger_and_wait_dump(&mut server).await;
 
-    let dumps_folder = Path::new(&server.data().dumps_folder);
+    let dumps_dir = Path::new(&server.data().dumps_dir);
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&dumps_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_dir.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("test").join("documents.jsonl")).unwrap();
     let documents = read_all_jsonline(file);
@@ -360,11 +360,11 @@ async fn dump_index_updates_should_be_valid() {
 
     let uid = trigger_and_wait_dump(&mut server).await;
 
-    let dumps_folder = Path::new(&server.data().dumps_folder);
+    let dumps_dir = Path::new(&server.data().dumps_dir);
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&dumps_folder.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_dir.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("test").join("updates.jsonl")).unwrap();
     let mut updates = read_all_jsonline(file);

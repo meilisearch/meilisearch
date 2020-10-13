@@ -70,10 +70,10 @@ mod tests {
         let archive_path = test_dir.join("archive.tar.gz");
 
         let file_1_relative = Path::new("file1.txt");
-        let subfolder_relative = Path::new("subfolder/");
-        let file_2_relative = Path::new("subfolder/file2.txt");
+        let subdir_relative = Path::new("subdir/");
+        let file_2_relative = Path::new("subdir/file2.txt");
         
-        create_dir_all(src_dir.join(subfolder_relative)).unwrap();
+        create_dir_all(src_dir.join(subdir_relative)).unwrap();
         fs::File::create(src_dir.join(file_1_relative)).unwrap().write_all(b"Hello_file_1").unwrap();
         fs::File::create(src_dir.join(file_2_relative)).unwrap().write_all(b"Hello_file_2").unwrap();
 
@@ -84,7 +84,7 @@ mod tests {
 
         assert!(dest_dir.exists());
         assert!(dest_dir.join(file_1_relative).exists());
-        assert!(dest_dir.join(subfolder_relative).exists());
+        assert!(dest_dir.join(subdir_relative).exists());
         assert!(dest_dir.join(file_2_relative).exists());
 
         let contents = fs::read_to_string(dest_dir.join(file_1_relative)).unwrap();
