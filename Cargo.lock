@@ -577,7 +577,7 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 [[package]]
 name = "grenad"
 version = "0.1.0"
-source = "git+https://github.com/Kerollmops/grenad.git?rev=a884670#a8846703ddee1f1ed86efd3168561606c244e135"
+source = "git+https://github.com/Kerollmops/grenad.git?rev=1094409#1094409c59f41d3896d487f9869c33343f59c233"
 dependencies = [
  "byteorder",
  "flate2",
