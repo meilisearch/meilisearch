@@ -1,5 +1,9 @@
 use std::fs::File;
 use std::path::Path;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::io::{BufReader, Read};
+use bytes::Bytes;
 
 use actix_web::{get, post};
 use actix_web::{HttpResponse, web};
@@ -64,28 +68,18 @@ async fn get_dump_status(
     }
 }
 
-use bytes::Bytes;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::io::BufReader;
-use std::io::Read;
-use futures_util::ready;
-use futures_core::Future;
-
 struct StreamBody {
     reader: BufReader<File>,
     buffer: Vec<u8>,
-    delay: actix_rt::time::Delay,
 }
 
 impl StreamBody {
     fn new(file: File, chunk_size: usize) -> Self {
-        let mut reader = BufReader::new(file);
-        let mut buffer = vec![0u8; chunk_size];
+        let reader = BufReader::new(file);
+        let buffer = vec![0u8; chunk_size];
         StreamBody {
             reader,
             buffer,
-            delay: actix_rt::time::delay_for(std::time::Duration::from_millis(10)),
         }
     }
 }
@@ -94,19 +88,19 @@ impl futures_core::stream::Stream for StreamBody {
     type Item = Result<Bytes, ResponseError>;
     fn poll_next(
         mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        ready!(Pin::new(&mut self.delay).poll(cx));
-        self.delay = actix_rt::time::delay_for(std::time::Duration::from_millis(10));
-        match self.reader.read(&mut self.buffer) {
+        use std::ops::DerefMut;
+        let stream = self.deref_mut();
+        match stream.reader.read(&mut stream.buffer) {
             Ok(count) => {
                 if count > 0 {
-                    Poll::Ready(Some(Ok(Bytes::from(&self.buffer[..count]))))
+                    Poll::Ready(Some(Ok(Bytes::copy_from_slice(&self.buffer[..count]))))
                 } else {
                     Poll::Ready(None)
                 }
             },
-            Err(e) => Poll::Ready(None)
+            Err(e) => Poll::Ready(Some(Err(Error::dump_read_failed(e).into())))
         }
     }
 }
@@ -123,5 +117,4 @@ async fn stream_dump(
         Ok(file) => Ok(HttpResponse::Ok().streaming(StreamBody::new(file, 1024))),
         Err(e) => Err(Error::not_found("dump does not exist").into())
     }
-
 }

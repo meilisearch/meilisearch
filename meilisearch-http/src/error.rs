@@ -55,6 +55,7 @@ pub enum Error {
     UnsupportedMediaType,
     DumpAlreadyInProgress,
     DumpProcessFailed,
+    DumpReadFailed(String),
 }
 
 impl error::Error for Error {}
@@ -82,6 +83,7 @@ impl ErrorCode for Error {
             UnsupportedMediaType => Code::UnsupportedMediaType,
             DumpAlreadyInProgress => Code::DumpAlreadyInProgress,
             DumpProcessFailed => Code::DumpProcessFailed,
+            DumpReadFailed(_) => Code::DumpReadFailed,
         }
     }
 }
@@ -192,6 +194,11 @@ impl Error {
     pub fn dump_failed() -> Error {
         Error::DumpProcessFailed
     }
+
+    pub fn dump_read_failed(err: impl fmt::Display) -> Error {
+        Error::DumpReadFailed(err.to_string())
+    }
+
 }
 
 impl fmt::Display for Error {
@@ -216,6 +223,7 @@ impl fmt::Display for Error {
             Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
             Self::DumpAlreadyInProgress => f.write_str("Another dump is already in progress"),
             Self::DumpProcessFailed => f.write_str("Dump process failed"),
+            Self::DumpReadFailed(err) => write!(f, "Dump read failed; {}", err),
         }
     }
 }
