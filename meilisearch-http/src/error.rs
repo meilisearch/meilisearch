@@ -1,191 +1,302 @@
-use std::fmt::Display;
+use std::error;
+use std::fmt;
 
-use http::status::StatusCode;
-use log::{error, warn};
-use meilisearch_core::{FstError, HeedError};
-use serde::{Deserialize, Serialize};
-use tide::IntoResponse;
-use tide::Response;
+use actix_http::ResponseBuilder;
+use actix_web as aweb;
+use actix_web::error::{JsonPayloadError, QueryPayloadError};
+use actix_web::http::StatusCode;
+use serde_json::json;
 
-use crate::helpers::meilisearch::Error as SearchError;
+use meilisearch_error::{ErrorCode, Code};
 
-pub type SResult<T> = Result<T, ResponseError>;
+#[derive(Debug)]
+pub struct ResponseError {
+    inner: Box<dyn ErrorCode>,
+}
 
-pub enum ResponseError {
-    Internal(String),
-    BadRequest(String),
-    InvalidToken(String),
-    NotFound(String),
-    IndexNotFound(String),
-    DocumentNotFound(String),
-    MissingHeader(String),
-    FilterParsing(String),
+impl error::Error for ResponseError {}
+
+impl ErrorCode for ResponseError {
+    fn error_code(&self) -> Code {
+        self.inner.error_code()
+    }
+}
+
+impl fmt::Display for ResponseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl From<Error> for ResponseError {
+    fn from(error: Error) -> ResponseError {
+        ResponseError { inner: Box::new(error) }
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
     BadParameter(String, String),
-    OpenIndex(String),
+    BadRequest(String),
     CreateIndex(String),
+    DocumentNotFound(String),
+    IndexNotFound(String),
+    IndexAlreadyExists(String),
+    Internal(String),
     InvalidIndexUid,
+    InvalidToken(String),
     Maintenance,
+    MissingAuthorizationHeader,
+    NotFound(String),
+    OpenIndex(String),
+    RetrieveDocument(u32, String),
+    SearchDocuments(String),
+    PayloadTooLarge,
+    UnsupportedMediaType,
+    DumpAlreadyInProgress,
+    DumpProcessFailed,
 }
 
-impl ResponseError {
-    pub fn internal(message: impl Display) -> ResponseError {
-        ResponseError::Internal(message.to_string())
-    }
+impl error::Error for Error {}
 
-    pub fn bad_request(message: impl Display) -> ResponseError {
-        ResponseError::BadRequest(message.to_string())
-    }
-
-    pub fn invalid_token(message: impl Display) -> ResponseError {
-        ResponseError::InvalidToken(message.to_string())
-    }
-
-    pub fn not_found(message: impl Display) -> ResponseError {
-        ResponseError::NotFound(message.to_string())
-    }
-
-    pub fn index_not_found(message: impl Display) -> ResponseError {
-        ResponseError::IndexNotFound(message.to_string())
-    }
-
-    pub fn document_not_found(message: impl Display) -> ResponseError {
-        ResponseError::DocumentNotFound(message.to_string())
-    }
-
-    pub fn missing_header(message: impl Display) -> ResponseError {
-        ResponseError::MissingHeader(message.to_string())
-    }
-
-    pub fn bad_parameter(name: impl Display, message: impl Display) -> ResponseError {
-        ResponseError::BadParameter(name.to_string(), message.to_string())
-    }
-
-    pub fn open_index(message: impl Display) -> ResponseError {
-        ResponseError::OpenIndex(message.to_string())
-    }
-
-    pub fn create_index(message: impl Display) -> ResponseError {
-        ResponseError::CreateIndex(message.to_string())
-    }
-}
-
-impl IntoResponse for ResponseError {
-    fn into_response(self) -> Response {
+impl ErrorCode for Error {
+    fn error_code(&self) -> Code {
+        use Error::*;
         match self {
-            ResponseError::Internal(err) => {
-                error!("internal server error: {}", err);
-                error("Internal server error".to_string(),
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                )
-            }
-            ResponseError::FilterParsing(err) => {
-                warn!("error paring filter: {}", err);
-                error(format!("parsing error: {}", err),
-                StatusCode::BAD_REQUEST)
-            }
-            ResponseError::BadRequest(err) => {
-                warn!("bad request: {}", err);
-                error(err, StatusCode::BAD_REQUEST)
-            }
-            ResponseError::InvalidToken(err) => {
-                error(format!("Invalid API key: {}", err), StatusCode::FORBIDDEN)
-            }
-            ResponseError::NotFound(err) => error(err, StatusCode::NOT_FOUND),
-            ResponseError::IndexNotFound(index) => {
-                error(format!("Index {} not found", index), StatusCode::NOT_FOUND)
-            }
-            ResponseError::DocumentNotFound(id) => error(
-                format!("Document with id {} not found", id),
-                StatusCode::NOT_FOUND,
-            ),
-            ResponseError::MissingHeader(header) => error(
-                format!("Header {} is missing", header),
-                StatusCode::UNAUTHORIZED,
-            ),
-            ResponseError::BadParameter(param, e) => error(
-                format!("Url parameter {} error: {}", param, e),
-                StatusCode::BAD_REQUEST,
-            ),
-            ResponseError::CreateIndex(err) => error(
-                format!("Impossible to create index; {}", err),
-                StatusCode::BAD_REQUEST,
-            ),
-            ResponseError::OpenIndex(err) => error(
-                format!("Impossible to open index; {}", err),
-                StatusCode::BAD_REQUEST,
-            ),
-            ResponseError::InvalidIndexUid => error(
-                "Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_).".to_string(),
-                StatusCode::BAD_REQUEST,
-            ),
-            ResponseError::Maintenance => error(
-                String::from("Server is in maintenance, please try again later"),
-                StatusCode::SERVICE_UNAVAILABLE,
-            ),
+            BadParameter(_, _) => Code::BadParameter,
+            BadRequest(_) => Code::BadRequest,
+            CreateIndex(_) => Code::CreateIndex,
+            DocumentNotFound(_) => Code::DocumentNotFound,
+            IndexNotFound(_) => Code::IndexNotFound,
+            IndexAlreadyExists(_) => Code::IndexAlreadyExists,
+            Internal(_) => Code::Internal,
+            InvalidIndexUid => Code::InvalidIndexUid,
+            InvalidToken(_) => Code::InvalidToken,
+            Maintenance => Code::Maintenance,
+            MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
+            NotFound(_) => Code::NotFound,
+            OpenIndex(_) => Code::OpenIndex,
+            RetrieveDocument(_, _) => Code::RetrieveDocument,
+            SearchDocuments(_) => Code::SearchDocuments,
+            PayloadTooLarge => Code::PayloadTooLarge,
+            UnsupportedMediaType => Code::UnsupportedMediaType,
+            DumpAlreadyInProgress => Code::DumpAlreadyInProgress,
+            DumpProcessFailed => Code::DumpProcessFailed,
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct ErrorMessage {
-    message: String,
+#[derive(Debug)]
+pub enum FacetCountError {
+    AttributeNotSet(String),
+    SyntaxError(String),
+    UnexpectedToken { found: String, expected: &'static [&'static str] },
+    NoFacetSet,
 }
 
-fn error(message: String, status: StatusCode) -> Response {
-    let message = ErrorMessage { message };
-    tide::Response::new(status.as_u16())
-        .body_json(&message)
-        .unwrap()
+impl error::Error for FacetCountError {}
+
+impl ErrorCode for FacetCountError {
+    fn error_code(&self) -> Code {
+        Code::BadRequest
+    }
 }
 
-impl From<serde_json::Error> for ResponseError {
-    fn from(err: serde_json::Error) -> ResponseError {
-        ResponseError::internal(err)
+impl FacetCountError {
+    pub fn unexpected_token(found: impl ToString, expected: &'static [&'static str]) -> FacetCountError {
+        let found = found.to_string();
+        FacetCountError::UnexpectedToken { expected, found }
+    }
+}
+
+impl From<serde_json::error::Error> for FacetCountError {
+    fn from(other: serde_json::error::Error) -> FacetCountError {
+        FacetCountError::SyntaxError(other.to_string())
+    }
+}
+
+impl fmt::Display for FacetCountError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use FacetCountError::*;
+
+        match self {
+            AttributeNotSet(attr) => write!(f, "Attribute {} is not set as facet", attr),
+            SyntaxError(msg) => write!(f, "Syntax error: {}", msg),
+            UnexpectedToken { expected, found } => write!(f, "Unexpected {} found, expected {:?}", found, expected),
+            NoFacetSet => write!(f, "Can't perform facet count, as no facet is set"),
+        }
+    }
+}
+
+impl Error {
+    pub fn internal(err: impl fmt::Display) -> Error {
+        Error::Internal(err.to_string())
+    }
+
+    pub fn bad_request(err: impl fmt::Display) -> Error {
+        Error::BadRequest(err.to_string())
+    }
+
+    pub fn missing_authorization_header() -> Error {
+        Error::MissingAuthorizationHeader
+    }
+
+    pub fn invalid_token(err: impl fmt::Display) -> Error {
+        Error::InvalidToken(err.to_string())
+    }
+
+    pub fn not_found(err: impl fmt::Display) -> Error {
+        Error::NotFound(err.to_string())
+    }
+
+    pub fn index_not_found(err: impl fmt::Display) -> Error {
+        Error::IndexNotFound(err.to_string())
+    }
+
+    pub fn document_not_found(err: impl fmt::Display) -> Error {
+        Error::DocumentNotFound(err.to_string())
+    }
+
+    pub fn bad_parameter(param: impl fmt::Display, err: impl fmt::Display) -> Error {
+        Error::BadParameter(param.to_string(), err.to_string())
+    }
+
+    pub fn open_index(err: impl fmt::Display) -> Error {
+        Error::OpenIndex(err.to_string())
+    }
+
+    pub fn create_index(err: impl fmt::Display) -> Error {
+        Error::CreateIndex(err.to_string())
+    }
+
+    pub fn invalid_index_uid() -> Error {
+        Error::InvalidIndexUid
+    }
+
+    pub fn maintenance() -> Error {
+        Error::Maintenance
+    }
+
+    pub fn retrieve_document(doc_id: u32, err: impl fmt::Display) -> Error {
+        Error::RetrieveDocument(doc_id, err.to_string())
+    }
+
+    pub fn search_documents(err: impl fmt::Display) -> Error {
+        Error::SearchDocuments(err.to_string())
+    }
+
+    pub fn dump_conflict() -> Error {
+        Error::DumpAlreadyInProgress
+    }
+
+    pub fn dump_failed() -> Error {
+        Error::DumpProcessFailed
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BadParameter(param, err) => write!(f, "Url parameter {} error: {}", param, err),
+            Self::BadRequest(err) => f.write_str(err),
+            Self::CreateIndex(err) => write!(f, "Impossible to create index; {}", err),
+            Self::DocumentNotFound(document_id) => write!(f, "Document with id {} not found", document_id),
+            Self::IndexNotFound(index_uid) => write!(f, "Index {} not found", index_uid),
+            Self::IndexAlreadyExists(index_uid) => write!(f, "Index {} already exists", index_uid),
+            Self::Internal(err) => f.write_str(err),
+            Self::InvalidIndexUid => f.write_str("Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_)."),
+            Self::InvalidToken(err) => write!(f, "Invalid API key: {}", err),
+            Self::Maintenance => f.write_str("Server is in maintenance, please try again later"),
+            Self::MissingAuthorizationHeader => f.write_str("You must have an authorization token"),
+            Self::NotFound(err) => write!(f, "{} not found", err),
+            Self::OpenIndex(err) => write!(f, "Impossible to open index; {}", err),
+            Self::RetrieveDocument(id, err) => write!(f, "Impossible to retrieve the document with id: {}; {}", id, err),
+            Self::SearchDocuments(err) => write!(f, "Impossible to search documents; {}", err),
+            Self::PayloadTooLarge => f.write_str("Payload too large"),
+            Self::UnsupportedMediaType => f.write_str("Unsupported media type"),
+            Self::DumpAlreadyInProgress => f.write_str("Another dump is already in progress"),
+            Self::DumpProcessFailed => f.write_str("Dump process failed"),
+        }
+    }
+}
+
+impl aweb::error::ResponseError for ResponseError {
+    fn error_response(&self) -> aweb::HttpResponse {
+        ResponseBuilder::new(self.status_code()).json(json!({
+            "message": self.to_string(),
+            "errorCode": self.error_name(),
+            "errorType": self.error_type(),
+            "errorLink": self.error_url(),
+        }))
+    }
+
+    fn status_code(&self) -> StatusCode {
+        self.http_status()
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::Internal(err.to_string())
     }
 }
 
 impl From<meilisearch_core::Error> for ResponseError {
     fn from(err: meilisearch_core::Error) -> ResponseError {
-        ResponseError::internal(err)
+        ResponseError { inner: Box::new(err) }
     }
 }
 
-impl From<HeedError> for ResponseError {
-    fn from(err: HeedError) -> ResponseError {
-        ResponseError::internal(err)
+impl From<meilisearch_schema::Error> for ResponseError {
+    fn from(err: meilisearch_schema::Error) -> ResponseError {
+        ResponseError { inner: Box::new(err) }
     }
 }
 
-impl From<FstError> for ResponseError {
-    fn from(err: FstError) -> ResponseError {
-        ResponseError::internal(err)
+impl From<actix_http::Error> for Error {
+    fn from(err: actix_http::Error) -> Error {
+        Error::Internal(err.to_string())
     }
 }
 
-impl From<SearchError> for ResponseError {
-    fn from(err: SearchError) -> ResponseError {
+impl From<meilisearch_core::Error> for Error {
+    fn from(err: meilisearch_core::Error) -> Error {
+        Error::Internal(err.to_string())
+    }
+}
+
+impl From<serde_json::error::Error> for Error {
+    fn from(err: serde_json::error::Error) -> Error {
+        Error::Internal(err.to_string())
+    }
+}
+
+impl From<FacetCountError> for ResponseError {
+    fn from(err: FacetCountError) -> ResponseError {
+        ResponseError { inner: Box::new(err) }
+    }
+}
+
+impl From<JsonPayloadError> for Error {
+    fn from(err: JsonPayloadError) -> Error {
         match err {
-            SearchError::FilterParsing(s) => ResponseError::FilterParsing(s),
-            _ => ResponseError::internal(err),
+            JsonPayloadError::Deserialize(err) => Error::BadRequest(format!("Invalid JSON: {}", err)),
+            JsonPayloadError::Overflow => Error::PayloadTooLarge,
+            JsonPayloadError::ContentType => Error::UnsupportedMediaType,
+            JsonPayloadError::Payload(err) => Error::BadRequest(format!("Problem while decoding the request: {}", err)),
         }
     }
 }
 
-impl From<meilisearch_core::settings::RankingRuleConversionError> for ResponseError {
-    fn from(err: meilisearch_core::settings::RankingRuleConversionError) -> ResponseError {
-        ResponseError::internal(err)
-    }
-}
-
-pub trait IntoInternalError<T> {
-    fn into_internal_error(self) -> SResult<T>;
-}
-
-impl<T> IntoInternalError<T> for Option<T> {
-    fn into_internal_error(self) -> SResult<T> {
-        match self {
-            Some(value) => Ok(value),
-            None => Err(ResponseError::internal("Heed cannot find requested value")),
+impl From<QueryPayloadError> for Error {
+    fn from(err: QueryPayloadError) -> Error {
+        match err {
+            QueryPayloadError::Deserialize(err) => Error::BadRequest(format!("Invalid query parameters: {}", err)),
         }
     }
+}
+
+pub fn payload_error_handler<E: Into<Error>>(err: E) -> ResponseError {
+    let error: Error = err.into();
+    error.into()
 }

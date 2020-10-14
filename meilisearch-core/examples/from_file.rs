@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
-use meilisearch_core::{Database, Highlight, ProcessedUpdateResult};
+use meilisearch_core::{Database, DatabaseOptions, Highlight, ProcessedUpdateResult};
 use meilisearch_core::settings::Settings;
 use meilisearch_schema::FieldId;
 
-// #[cfg(target_os = "linux")]
+#[cfg(target_os = "linux")]
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
@@ -123,12 +123,10 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
     let settings = {
         let string = fs::read_to_string(&command.settings)?;
         let settings: Settings = serde_json::from_str(&string).unwrap();
-        settings.into_update().unwrap()
+        settings.to_update().unwrap()
     };
 
-    let mut update_writer = db.update_write_txn().unwrap();
-    index.settings_update(&mut update_writer, settings)?;
-    update_writer.commit().unwrap();
+    db.update_write(|w| index.settings_update(w, settings))?;
 
     let mut rdr = if command.csv_data_path.as_os_str() == "-" {
         csv::Reader::from_reader(Box::new(io::stdin()) as Box<dyn Read>)
@@ -175,10 +173,9 @@ fn index_command(command: IndexCommand, database: Database) -> Result<(), Box<dy
 
         println!();
 
-        let mut update_writer = db.update_write_txn().unwrap();
+        let update_id = db.update_write(|w| additions.finalize(w))?;
+
         println!("committing update...");
-        let update_id = additions.finalize(&mut update_writer)?;
-        update_writer.commit().unwrap();
         max_update_id = max_update_id.max(update_id);
         println!("committed update {}", update_id);
     }
@@ -325,7 +322,7 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
 
     let reader = db.main_read_txn().unwrap();
     let schema = index.main.schema(&reader)?;
-    reader.abort();
+    reader.abort().unwrap();
 
     let schema = schema.ok_or(meilisearch_core::Error::SchemaMissing)?;
 
@@ -371,12 +368,12 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
                     });
                 }
 
-                let (documents, _nb_hits) = builder.query(ref_reader, &query, 0..command.number_results)?;
+                let result = builder.query(ref_reader, Some(&query), 0..command.number_results)?;
 
                 let mut retrieve_duration = Duration::default();
 
-                let number_of_documents = documents.len();
-                for mut doc in documents {
+                let number_of_documents = result.documents.len();
+                for mut doc in result.documents {
                     doc.highlights
                         .sort_unstable_by_key(|m| (m.char_index, m.char_length));
 
@@ -454,7 +451,7 @@ fn show_updates_command(
     let reader = db.update_read_txn().unwrap();
     let updates = index.all_updates_status(&reader)?;
     println!("{:#?}", updates);
-    reader.abort();
+    reader.abort().unwrap();
 
     Ok(())
 }
@@ -463,7 +460,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let opt = Command::from_args();
-    let database = Database::open_or_create(opt.path())?;
+    let database = Database::open_or_create(opt.path(), DatabaseOptions::default())?;
 
     match opt {
         Command::Index(command) => index_command(command, database),

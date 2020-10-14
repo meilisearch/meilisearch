@@ -1,13 +1,15 @@
-use super::BEU64;
-use crate::database::MainT;
-use crate::DocumentId;
-use heed::types::{ByteSlice, OwnedType};
+use std::borrow::Cow;
+
 use heed::Result as ZResult;
-use std::sync::Arc;
+use heed::types::{ByteSlice, OwnedType};
+
+use crate::database::MainT;
+use crate::{DocumentId, FstSetCow};
+use super::BEU32;
 
 #[derive(Copy, Clone)]
 pub struct DocsWords {
-    pub(crate) docs_words: heed::Database<OwnedType<BEU64>, ByteSlice>,
+    pub(crate) docs_words: heed::Database<OwnedType<BEU32>, ByteSlice>,
 }
 
 impl DocsWords {
@@ -15,15 +17,15 @@ impl DocsWords {
         self,
         writer: &mut heed::RwTxn<MainT>,
         document_id: DocumentId,
-        words: &fst::Set,
+        words: &FstSetCow,
     ) -> ZResult<()> {
-        let document_id = BEU64::new(document_id.0);
+        let document_id = BEU32::new(document_id.0);
         let bytes = words.as_fst().as_bytes();
         self.docs_words.put(writer, &document_id, bytes)
     }
 
     pub fn del_doc_words(self, writer: &mut heed::RwTxn<MainT>, document_id: DocumentId) -> ZResult<bool> {
-        let document_id = BEU64::new(document_id.0);
+        let document_id = BEU32::new(document_id.0);
         self.docs_words.delete(writer, &document_id)
     }
 
@@ -31,20 +33,11 @@ impl DocsWords {
         self.docs_words.clear(writer)
     }
 
-    pub fn doc_words(
-        self,
-        reader: &heed::RoTxn<MainT>,
-        document_id: DocumentId,
-    ) -> ZResult<Option<fst::Set>> {
-        let document_id = BEU64::new(document_id.0);
+    pub fn doc_words(self, reader: &heed::RoTxn<MainT>, document_id: DocumentId) -> ZResult<FstSetCow> {
+        let document_id = BEU32::new(document_id.0);
         match self.docs_words.get(reader, &document_id)? {
-            Some(bytes) => {
-                let len = bytes.len();
-                let bytes = Arc::new(bytes.to_owned());
-                let fst = fst::raw::Fst::from_shared_bytes(bytes, 0, len).unwrap();
-                Ok(Some(fst::Set::from(fst)))
-            }
-            None => Ok(None),
+            Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
+            None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
         }
     }
 }

@@ -101,11 +101,14 @@ pub fn split_query_string(query: &str) -> impl Iterator<Item = &str> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Token<'a> {
     pub word: &'a str,
+    /// index of the token in the token sequence
+    pub index: usize,
     pub word_index: usize,
     pub char_index: usize,
 }
 
 pub struct Tokenizer<'a> {
+    count: usize,
     inner: &'a str,
     word_index: usize,
     char_index: usize,
@@ -121,6 +124,7 @@ impl<'a> Tokenizer<'a> {
             .fold((0, 0), chars_count_index);
 
         Tokenizer {
+            count: 0,
             inner: &string[index..],
             word_index: 0,
             char_index: count,
@@ -150,6 +154,7 @@ impl<'a> Iterator for Tokenizer<'a> {
 
             let token = Token {
                 word: string,
+                index: self.count,
                 word_index: self.word_index,
                 char_index: self.char_index,
             };
@@ -158,6 +163,7 @@ impl<'a> Iterator for Tokenizer<'a> {
                 self.word_index += 1;
             }
 
+            self.count += 1;
             self.char_index += count;
             self.inner = &self.inner[index..];
 
@@ -175,6 +181,7 @@ where
 {
     inner: I,
     current: Option<Peekable<Tokenizer<'a>>>,
+    count: usize,
     word_offset: usize,
     char_offset: usize,
 }
@@ -188,6 +195,7 @@ where
         SeqTokenizer {
             inner: iter,
             current,
+            count: 0,
             word_offset: 0,
             char_offset: 0,
         }
@@ -209,6 +217,7 @@ where
                         // to the token before returning it
                         let token = Token {
                             word: token.word,
+                            index: self.count,
                             word_index: token.word_index + self.word_offset,
                             char_index: token.char_index + self.char_offset,
                         };
@@ -249,6 +258,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "salut",
+                index: 0,
                 word_index: 0,
                 char_index: 0
             })
@@ -261,6 +271,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "yo",
+                index: 0,
                 word_index: 0,
                 char_index: 0
             })
@@ -276,6 +287,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "yo",
+                index: 0,
                 word_index: 0,
                 char_index: 4
             })
@@ -284,6 +296,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "lolo",
+                index: 1,
                 word_index: 1,
                 char_index: 7
             })
@@ -292,6 +305,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "aïe",
+                index: 2,
                 word_index: 9,
                 char_index: 13
             })
@@ -300,6 +314,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "ouch",
+                index: 3,
                 word_index: 17,
                 char_index: 18
             })
@@ -312,6 +327,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "yo",
+                index: 0,
                 word_index: 0,
                 char_index: 0
             })
@@ -320,6 +336,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "lolo",
+                index: 1,
                 word_index: 8,
                 char_index: 5
             })
@@ -328,6 +345,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "wtf",
+                index: 2,
                 word_index: 16,
                 char_index: 12
             })
@@ -336,6 +354,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "lol",
+                index: 3,
                 word_index: 17,
                 char_index: 18
             })
@@ -344,6 +363,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "aïe",
+                index: 4,
                 word_index: 25,
                 char_index: 24
             })
@@ -359,6 +379,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "yo",
+                index: 0,
                 word_index: 0,
                 char_index: 4
             })
@@ -367,6 +388,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "😂",
+                index: 1,
                 word_index: 1,
                 char_index: 7
             })
@@ -375,6 +397,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "aïe",
+                index: 2,
                 word_index: 9,
                 char_index: 10
             })
@@ -387,6 +410,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "yo",
+                index: 0,
                 word_index: 0,
                 char_index: 0
             })
@@ -395,6 +419,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "lolo",
+                index: 1,
                 word_index: 8,
                 char_index: 5
             })
@@ -403,6 +428,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "😱",
+                index: 2,
                 word_index: 16,
                 char_index: 12
             })
@@ -411,6 +437,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "lol",
+                index: 3,
                 word_index: 17,
                 char_index: 16
             })
@@ -419,6 +446,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "😣",
+                index: 4,
                 word_index: 25,
                 char_index: 22
             })
@@ -434,6 +462,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "\u{2ec4}",
+                index: 0,
                 word_index: 0,
                 char_index: 0
             })
@@ -442,6 +471,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "lolilol",
+                index: 1,
                 word_index: 1,
                 char_index: 1
             })
@@ -450,6 +480,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "\u{2ec7}",
+                index: 2,
                 word_index: 2,
                 char_index: 8
             })
@@ -462,6 +493,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "\u{2ec4}",
+                index: 0,
                 word_index: 0,
                 char_index: 0
             })
@@ -470,6 +502,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "\u{2ed3}",
+                index: 1,
                 word_index: 1,
                 char_index: 1
             })
@@ -478,6 +511,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "\u{2ef2}",
+                index: 2,
                 word_index: 2,
                 char_index: 2
             })
@@ -486,6 +520,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "lolilol",
+                index: 3,
                 word_index: 3,
                 char_index: 4
             })
@@ -494,6 +529,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "hello",
+                index: 4,
                 word_index: 4,
                 char_index: 14
             })
@@ -502,6 +538,7 @@ mod tests {
             tokenizer.next(),
             Some(Token {
                 word: "\u{2ec7}",
+                index: 5,
                 word_index: 5,
                 char_index: 23
             })

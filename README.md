@@ -5,12 +5,12 @@
 <h1 align="center">MeiliSearch</h1>
 
 <h4 align="center">
-  <a href="https://www.meilisearch.com">Website</a> | 
-  <a href="https://blog.meilisearch.com">Blog</a> | 
-  <a href="https://fr.linkedin.com/company/meilisearch">LinkedIn</a> | 
-  <a href="https://twitter.com/meilisearch">Twitter</a> | 
-  <a href="https://docs.meilisearch.com">Documentation</a> | 
-  <a href="https://docs.meilisearch.com/resources/faq.html">FAQ</a>
+  <a href="https://www.meilisearch.com">Website</a> |
+  <a href="https://blog.meilisearch.com">Blog</a> |
+  <a href="https://fr.linkedin.com/company/meilisearch">LinkedIn</a> |
+  <a href="https://twitter.com/meilisearch">Twitter</a> |
+  <a href="https://docs.meilisearch.com">Documentation</a> |
+  <a href="https://docs.meilisearch.com/faq/">FAQ</a>
 </h4>
 
 <p align="center">
@@ -18,6 +18,8 @@
   <a href="https://deps.rs/repo/github/meilisearch/MeiliSearch"><img src="https://deps.rs/repo/github/meilisearch/MeiliSearch/status.svg" alt="Dependency status"></a>
   <a href="https://github.com/meilisearch/MeiliSearch/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-informational" alt="License"></a>
   <a href="https://slack.meilisearch.com"><img src="https://img.shields.io/badge/slack-MeiliSearch-blue.svg?logo=slack" alt="Slack"></a>
+  <a href="https://github.com/meilisearch/MeiliSearch/discussions" alt="Discussions"><img src="https://img.shields.io/badge/github-discussions-red" /></a>
+  <a href="https://app.bors.tech/repositories/26457"><img src="https://bors.tech/images/badge_small.svg" alt="Bors enabled"></a>
 </p>
 
 <p align="center">⚡ Lightning Fast, Ultra Relevant, and Typo-Tolerant Search Engine 🔍</p>
@@ -26,15 +28,14 @@
 For more information about features go to [our documentation](https://docs.meilisearch.com/).
 
 <p align="center">
-  <a href="https://crates.meilisearch.com"><img src="assets/crates-io-demo.gif" alt="crates.io demo gif" /></a>
+  <img src="assets/movies-web-demo.gif" alt="Web interface gif" />
 </p>
 
-> MeiliSearch helps the Rust community find crates on [crates.meilisearch.com](https://crates.meilisearch.com)
-
-## Features
+## ✨ Features
 * Search as-you-type experience (answers < 50 milliseconds)
 * Full-text search
 * Typo tolerant (understands typos and miss-spelling)
+* Faceted search and filters
 * Supports Kanji characters
 * Supports Synonym
 * Easy to install, deploy, and maintain
@@ -42,24 +43,28 @@ For more information about features go to [our documentation](https://docs.meili
 * Highly customizable
 * RESTful API
 
-## Get started
+## Getting started
 
 ### Deploy the Server
 
-#### Run it using Docker
-
-```bash
-docker run -p 7700:7700 -v $(pwd)/data.ms:/data.ms getmeili/meilisearch
-```
-
-#### Installing with Homebrew
+#### Brew (Mac OS)
 
 ```bash
 brew update && brew install meilisearch
 meilisearch
 ```
 
-#### Installing with APT
+#### Docker
+
+```bash
+docker run -p 7700:7700 -v $(pwd)/data.ms:/data.ms getmeili/meilisearch
+```
+
+#### Run on Digital Ocean
+
+[![DigitalOcean Marketplace](assets/do-btn-blue.svg)](https://marketplace.digitalocean.com/apps/meilisearch?action=deploy&refcode=7c67bd97e101)
+
+#### APT (Debian & Ubuntu)
 
 ```bash
 echo "deb [trusted=yes] https://apt.fury.io/meilisearch/ /" > /etc/apt/sources.list.d/fury.list
@@ -67,7 +72,7 @@ apt update && apt install meilisearch-http
 meilisearch
 ```
 
-#### Download the binary
+#### Download the binary (Linux & Mac OS)
 
 ```bash
 curl -L https://install.meilisearch.com | sh
@@ -76,7 +81,7 @@ curl -L https://install.meilisearch.com | sh
 
 #### Compile and run it from sources
 
-If you have the Rust toolchain already installed on your local system, clone the repository and change it to your working directory.
+If you have the latest stable Rust toolchain installed on your local system, clone the repository and change it to your working directory.
 
 ```bash
 git clone https://github.com/meilisearch/MeiliSearch.git
@@ -86,6 +91,8 @@ cd MeiliSearch
 In the cloned repository, compile MeiliSearch.
 
 ```bash
+rustup override set stable
+rustup update stable
 cargo run --release
 ```
 
@@ -116,7 +123,7 @@ curl -i -X POST 'http://127.0.0.1:7700/indexes/movies/documents' \
 
 #### In command line
 
-The search engine is now aware of your documents and can serve those via an HTTP server. 
+The search engine is now aware of your documents and can serve those via an HTTP server.
 
 The [`jq` command-line tool](https://stedolan.github.io/jq/) can greatly help you read the server responses.
 
@@ -155,63 +162,31 @@ We also deliver an **out-of-the-box web interface** in which you can test MeiliS
 
 You can access the web interface in your web browser at the root of the server. The default URL is [http://127.0.0.1:7700](http://127.0.0.1:7700). All you need to do is open your web browser and enter MeiliSearch’s address to visit it. This will lead you to a web page with a search bar that will allow you to search in the selected index.
 
-<p align="center">
-  <img src="assets/movies-web-demo.gif" alt="Web interface gif" />
-</p>
+| [See the gif above](#demo)
 
-### Documentation
+## Documentation
 
 Now that your MeiliSearch server is up and running, you can learn more about how to tune your search engine in [the documentation](https://docs.meilisearch.com).
-
-### Technical features
-
-- Provides [6 default ranking criteria](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/criterion/mod.rs#L106-L111) used to [bucket sort](https://en.wikipedia.org/wiki/Bucket_sort) documents
-- Accepts [custom criteria](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/criterion/mod.rs#L20-L29) and can apply them in any custom order
-- Supports [ranged queries](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L342), useful for paginating results
-- Can [distinct](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L324-L329) and [filter](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L313-L318) returned documents based on context defined rules
-- Searches for [concatenated](https://github.com/meilisearch/MeiliSearch/pull/164) and [splitted query words](https://github.com/meilisearch/MeiliSearch/pull/232) to improve the search quality.
-- Can store complete documents or only [user schema specified fields](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/datasets/movies/schema.toml)
-- The [default tokenizer](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-tokenizer/src/lib.rs) can index Latin based languages and Kanji characters
-- Returns [the matching text areas](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-types/src/lib.rs#L49-L65), useful to highlight matched words in results
-- Accepts query time search config like the [searchable attributes](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/query_builder.rs#L331-L336)
-- Supports [runtime incremental indexing](https://github.com/meilisearch/MeiliSearch/blob/3ea5aa18a209b6973b921542d46a79e1c753c163/meilisearch-core/src/store/mod.rs#L143-L212)
-
-## Performance
-
-When processing a dataset composed of 5M books, each with their own titles and authors, MeiliSearch is able to carry out more than 553 req/sec with an average response time of 21 ms on an Intel i7-7700 (8) @ 4.2GHz.
-
-Requests are made using [wrk](https://github.com/wg/wrk) and scripted to simulate real users' queries.
-
-```
-Running 10s test @ http://1.2.3.4:7700
-  2 threads and 10 connections
-  Thread Stats   Avg      Stdev     Max   +/- Stdev
-    Latency    21.45ms   15.64ms 214.10ms   85.95%
-    Req/Sec   256.48     37.66   330.00     69.50%
-  5132 requests in 10.05s, 2.31MB read
-Requests/sec:    510.46
-Transfer/sec:    234.77KB
-```
-
-We also indexed a dataset containing about _12 millions_ cities names in _24 minutes_ on a _8 cores_, _64 GB of RAM_, and a _300 GB NMVe_ SSD machine.<br/>
-The size of the resulting database reached _16 GB_ and search results were presented between _30 ms_ and _4 seconds_ for short prefix queries.
 
 ## Contributing
 
 Hey! We're glad you're thinking about contributing to MeiliSearch! If you think something is missing or could be improved, please open issues and pull requests. If you'd like to help this project grow, we'd love to have you! To start contributing, checking [issues tagged as "good-first-issue"](https://github.com/meilisearch/MeiliSearch/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) is a good start!
 
-### Analytic Events
+## Telemetry
 
-Once a day, events are being sent to our Amplitude instance so we can know how many people are using MeiliSearch.<br/>
-Only information about the platform on which the server runs is stored. No other information is being sent.<br/>
-If this doesn't suit you, you can disable these analytics by using the `MEILI_NO_ANALYTICS` env variable.
+MeiliSearch collects anonymous data regarding general usage.
+This helps us better understand developers usage of MeiliSearch features.<br/>
+To see what information we're retrieving, please see the complete list [on the dedicated issue](https://github.com/meilisearch/MeiliSearch/issues/720).<br/>
+We also use Sentry to make us crash and error reports. If you want to know more about what Sentry collects, please visit their [privacy policy website](https://sentry.io/privacy/).<br/>
+This program is optional, you can disable these analytics by using the `MEILI_NO_ANALYTICS` env variable.
 
-## Contact
+## 💌 Contact
 
 Feel free to contact us about any questions you may have:
-* At [bonjour@meilisearch.com](mailto:bonjour@meilisearch.com): English or French is welcome! 🇬🇧 🇫🇷
+* At [bonjour@meilisearch.com](mailto:bonjour@meilisearch.com)
 * Via the chat box available on every page of [our documentation](https://docs.meilisearch.com/) and on [our landing page](https://www.meilisearch.com/).
+* 🆕 Join our [GitHub Discussions forum](https://github.com/meilisearch/MeiliSearch/discussions)
 * Join our [Slack community](https://slack.meilisearch.com/).
 * By opening an issue.
 
-Any suggestion or feedback is highly appreciated. Thank you for your support!
+MeiliSearch is developed by [Meili](https://www.meilisearch.com), a young company. To know more about us, you can [read our blog](https://blog.meilisearch.com). Any suggestion or feedback is highly appreciated. Thank you for your support!

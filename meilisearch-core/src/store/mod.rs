@@ -1,23 +1,27 @@
+mod cow_set;
 mod docs_words;
-mod prefix_documents_cache;
-mod prefix_postings_lists_cache;
+mod documents_ids;
 mod documents_fields;
 mod documents_fields_counts;
+mod facets;
 mod main;
 mod postings_lists;
+mod prefix_documents_cache;
+mod prefix_postings_lists_cache;
 mod synonyms;
 mod updates;
 mod updates_results;
 
+pub use self::cow_set::CowSet;
 pub use self::docs_words::DocsWords;
-pub use self::prefix_documents_cache::PrefixDocumentsCache;
-pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
 pub use self::documents_fields::{DocumentFieldsIter, DocumentsFields};
-pub use self::documents_fields_counts::{
-    DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter,
-};
+pub use self::documents_fields_counts::{DocumentFieldsCountsIter, DocumentsFieldsCounts, DocumentsIdsIter};
+pub use self::documents_ids::{DocumentsIds, DiscoverIds};
+pub use self::facets::Facets;
 pub use self::main::Main;
 pub use self::postings_lists::PostingsLists;
+pub use self::prefix_documents_cache::PrefixDocumentsCache;
+pub use self::prefix_postings_lists_cache::PrefixPostingsListsCache;
 pub use self::synonyms::Synonyms;
 pub use self::updates::Updates;
 pub use self::updates_results::UpdatesResults;
@@ -27,7 +31,6 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 use std::{mem, ptr};
 
-use heed::Result as ZResult;
 use heed::{BytesEncode, BytesDecode};
 use meilisearch_schema::{IndexedPos, FieldId};
 use sdset::{Set, SetBuf};
@@ -41,20 +44,21 @@ use crate::serde::Deserializer;
 use crate::settings::SettingsUpdate;
 use crate::{query_builder::QueryBuilder, update, DocIndex, DocumentId, Error, MResult};
 
+type BEU32 = zerocopy::U32<byteorder::BigEndian>;
 type BEU64 = zerocopy::U64<byteorder::BigEndian>;
-type BEU16 = zerocopy::U16<byteorder::BigEndian>;
+pub type BEU16 = zerocopy::U16<byteorder::BigEndian>;
 
 #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]
 pub struct DocumentFieldIndexedKey {
-    docid: BEU64,
+    docid: BEU32,
     indexed_pos: BEU16,
 }
 
 impl DocumentFieldIndexedKey {
     fn new(docid: DocumentId, indexed_pos: IndexedPos) -> DocumentFieldIndexedKey {
         DocumentFieldIndexedKey {
-            docid: BEU64::new(docid.0),
+            docid: BEU32::new(docid.0),
             indexed_pos: BEU16::new(indexed_pos.0),
         }
     }
@@ -63,14 +67,14 @@ impl DocumentFieldIndexedKey {
 #[derive(Debug, Copy, Clone, AsBytes, FromBytes)]
 #[repr(C)]
 pub struct DocumentFieldStoredKey {
-    docid: BEU64,
+    docid: BEU32,
     field_id: BEU16,
 }
 
 impl DocumentFieldStoredKey {
     fn new(docid: DocumentId, field_id: FieldId) -> DocumentFieldStoredKey {
         DocumentFieldStoredKey {
-            docid: BEU64::new(docid.0),
+            docid: BEU32::new(docid.0),
             field_id: BEU16::new(field_id.0),
         }
     }
@@ -94,7 +98,7 @@ impl<'a> BytesEncode<'a> for PostingsCodec {
 
         let mut buffer = Vec::with_capacity(u64_size + docids_size + matches_size);
 
-        let docids_len = item.docids.len();
+        let docids_len = item.docids.len() as u64;
         buffer.extend_from_slice(&docids_len.to_be_bytes());
         buffer.extend_from_slice(item.docids.as_bytes());
         buffer.extend_from_slice(item.matches.as_bytes());
@@ -197,12 +201,17 @@ fn updates_results_name(name: &str) -> String {
     format!("store-{}-updates-results", name)
 }
 
+fn facets_name(name: &str) -> String {
+    format!("store-{}-facets", name)
+}
+
 #[derive(Clone)]
 pub struct Index {
     pub main: Main,
     pub postings_lists: PostingsLists,
     pub documents_fields: DocumentsFields,
     pub documents_fields_counts: DocumentsFieldsCounts,
+    pub facets: Facets,
     pub synonyms: Synonyms,
     pub docs_words: DocsWords,
     pub prefix_documents_cache: PrefixDocumentsCache,
@@ -269,14 +278,14 @@ impl Index {
         }
     }
 
-    pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> ZResult<u64> {
+    pub fn customs_update(&self, writer: &mut heed::RwTxn<UpdateT>, customs: Vec<u8>) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
-        update::push_customs_update(writer, self.updates, self.updates_results, customs)
+        Ok(update::push_customs_update(writer, self.updates, self.updates_results, customs)?)
     }
 
-    pub fn settings_update(&self, writer: &mut heed::RwTxn<UpdateT>, update: SettingsUpdate) -> ZResult<u64> {
+    pub fn settings_update(&self, writer: &mut heed::RwTxn<UpdateT>, update: SettingsUpdate) -> MResult<u64> {
         let _ = self.updates_notifier.send(UpdateEvent::NewUpdate);
-        update::push_settings_update(writer, self.updates, self.updates_results, update)
+        Ok(update::push_settings_update(writer, self.updates, self.updates_results, update)?)
     }
 
     pub fn documents_addition<D>(&self) -> update::DocumentsAddition<D> {
@@ -352,29 +361,14 @@ impl Index {
     }
 
     pub fn query_builder(&self) -> QueryBuilder {
-        QueryBuilder::new(
-            self.main,
-            self.postings_lists,
-            self.documents_fields_counts,
-            self.synonyms,
-            self.prefix_documents_cache,
-            self.prefix_postings_lists_cache,
-        )
+        QueryBuilder::new(self)
     }
 
-    pub fn query_builder_with_criteria<'c, 'f, 'd>(
-        &self,
+    pub fn query_builder_with_criteria<'c, 'f, 'd, 'i>(
+        &'i self,
         criteria: Criteria<'c>,
-    ) -> QueryBuilder<'c, 'f, 'd> {
-        QueryBuilder::with_criteria(
-            self.main,
-            self.postings_lists,
-            self.documents_fields_counts,
-            self.synonyms,
-            self.prefix_documents_cache,
-            self.prefix_postings_lists_cache,
-            criteria,
-        )
+    ) -> QueryBuilder<'c, 'f, 'd, 'i> {
+        QueryBuilder::with_criteria(self, criteria)
     }
 }
 
@@ -395,12 +389,14 @@ pub fn create(
     let prefix_postings_lists_cache_name = prefix_postings_lists_cache_name(name);
     let updates_name = updates_name(name);
     let updates_results_name = updates_results_name(name);
+    let facets_name = facets_name(name);
 
     // open all the stores
     let main = env.create_poly_database(Some(&main_name))?;
     let postings_lists = env.create_database(Some(&postings_lists_name))?;
     let documents_fields = env.create_database(Some(&documents_fields_name))?;
     let documents_fields_counts = env.create_database(Some(&documents_fields_counts_name))?;
+    let facets = env.create_database(Some(&facets_name))?;
     let synonyms = env.create_database(Some(&synonyms_name))?;
     let docs_words = env.create_database(Some(&docs_words_name))?;
     let prefix_documents_cache = env.create_database(Some(&prefix_documents_cache_name))?;
@@ -417,6 +413,8 @@ pub fn create(
         docs_words: DocsWords { docs_words },
         prefix_postings_lists_cache: PrefixPostingsListsCache { prefix_postings_lists_cache },
         prefix_documents_cache: PrefixDocumentsCache { prefix_documents_cache },
+        facets: Facets { facets },
+
         updates: Updates { updates },
         updates_results: UpdatesResults { updates_results },
         updates_notifier,
@@ -437,6 +435,7 @@ pub fn open(
     let synonyms_name = synonyms_name(name);
     let docs_words_name = docs_words_name(name);
     let prefix_documents_cache_name = prefix_documents_cache_name(name);
+    let facets_name = facets_name(name);
     let prefix_postings_lists_cache_name = prefix_postings_lists_cache_name(name);
     let updates_name = updates_name(name);
     let updates_results_name = updates_results_name(name);
@@ -470,6 +469,10 @@ pub fn open(
         Some(prefix_documents_cache) => prefix_documents_cache,
         None => return Ok(None),
     };
+    let facets = match env.open_database(Some(&facets_name))? {
+        Some(facets) => facets,
+        None => return Ok(None),
+    };
     let prefix_postings_lists_cache = match env.open_database(Some(&prefix_postings_lists_cache_name))? {
         Some(prefix_postings_lists_cache) => prefix_postings_lists_cache,
         None => return Ok(None),
@@ -491,6 +494,7 @@ pub fn open(
         synonyms: Synonyms { synonyms },
         docs_words: DocsWords { docs_words },
         prefix_documents_cache: PrefixDocumentsCache { prefix_documents_cache },
+        facets: Facets { facets },
         prefix_postings_lists_cache: PrefixPostingsListsCache { prefix_postings_lists_cache },
         updates: Updates { updates },
         updates_results: UpdatesResults { updates_results },

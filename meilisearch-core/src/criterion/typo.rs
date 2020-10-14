@@ -22,6 +22,7 @@ impl Criterion for Typo {
         // It is safe to panic on input number higher than 3,
         // the number of typos is never bigger than that.
         #[inline]
+        #[allow(clippy::approx_constant)]
         fn custom_log10(n: u8) -> f32 {
             match n {
                 0 => 0.0,     // log(1)

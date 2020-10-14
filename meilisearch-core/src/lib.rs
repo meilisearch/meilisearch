@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 #[cfg(test)]
 #[macro_use]
 extern crate assert_matches;
@@ -18,15 +20,16 @@ mod query_words_mapper;
 mod ranked_map;
 mod raw_document;
 mod reordered_attrs;
-mod update;
-pub mod settings;
 pub mod criterion;
+pub mod facets;
 pub mod raw_indexer;
 pub mod serde;
+pub mod settings;
 pub mod store;
+pub mod update;
 
-pub use self::database::{BoxUpdateFn, Database, MainT, UpdateT};
-pub use self::error::{Error, HeedError, FstError, MResult, pest_error};
+pub use self::database::{BoxUpdateFn, Database, DatabaseOptions, MainT, UpdateT, MainWriter, MainReader, UpdateWriter, UpdateReader};
+pub use self::error::{Error, HeedError, FstError, MResult, pest_error, FacetError};
 pub use self::filters::Filter;
 pub use self::number::{Number, ParseNumberError};
 pub use self::ranked_map::RankedMap;
@@ -37,15 +40,19 @@ pub use meilisearch_types::{DocIndex, DocumentId, Highlight};
 pub use meilisearch_schema::Schema;
 pub use query_words_mapper::QueryWordsMapper;
 
-use std::convert::TryFrom;
-use std::collections::HashMap;
 use compact_arena::SmallArena;
 use log::{error, trace};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::convert::TryFrom;
 
 use crate::bucket_sort::PostingsListView;
 use crate::levenshtein::prefix_damerau_levenshtein;
 use crate::query_tree::{QueryId, QueryKind};
 use crate::reordered_attrs::ReorderedAttrs;
+
+type FstSetCow<'a> = fst::Set<Cow<'a, [u8]>>;
+type FstMapCow<'a> = fst::Map<Cow<'a, [u8]>>;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Document {
@@ -190,6 +197,6 @@ mod tests {
 
     #[test]
     fn docindex_mem_size() {
-        assert_eq!(mem::size_of::<DocIndex>(), 16);
+        assert_eq!(mem::size_of::<DocIndex>(), 12);
     }
 }

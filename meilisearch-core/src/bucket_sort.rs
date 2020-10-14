@@ -9,35 +9,42 @@ use std::time::Instant;
 use std::fmt;
 
 use compact_arena::{SmallArena, Idx32, mk_arena};
-use log::debug;
-use meilisearch_types::DocIndex;
-use sdset::{Set, SetBuf, exponential_search};
+use log::{debug, error};
+use sdset::{Set, SetBuf, exponential_search, SetOperation, Counter, duo::OpBuilder};
 use slice_group_by::{GroupBy, GroupByMut};
 
-use crate::error::Error;
+use meilisearch_types::DocIndex;
+
 use crate::criterion::{Criteria, Context, ContextMut};
 use crate::distinct_map::{BufferedDistinctMap, DistinctMap};
 use crate::raw_document::RawDocument;
 use crate::{database::MainT, reordered_attrs::ReorderedAttrs};
-use crate::{store, Document, DocumentId, MResult};
+use crate::{store, Document, DocumentId, MResult, Index, RankedMap, MainReader, Error};
 use crate::query_tree::{create_query_tree, traverse_query_tree};
 use crate::query_tree::{Operation, QueryResult, QueryKind, QueryId, PostingsKey};
 use crate::query_tree::Context as QTContext;
 
+#[derive(Debug, Default)]
+pub struct SortResult {
+    pub documents: Vec<Document>,
+    pub nb_hits: usize,
+    pub exhaustive_nb_hit: bool,
+    pub facets: Option<HashMap<String, HashMap<String, usize>>>,
+    pub exhaustive_facets_count: Option<bool>,
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn bucket_sort<'c, FI>(
     reader: &heed::RoTxn<MainT>,
     query: &str,
     range: Range<usize>,
+    facets_docids: Option<SetBuf<DocumentId>>,
+    facet_count_docids: Option<HashMap<String, HashMap<String, (&str, Cow<Set<DocumentId>>)>>>,
     filter: Option<FI>,
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    synonyms_store: store::Synonyms,
-    prefix_documents_cache_store: store::PrefixDocumentsCache,
-    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
-) -> MResult<(Vec<Document>, usize)>
+    index: &Index,
+) -> MResult<SortResult>
 where
     FI: Fn(DocumentId) -> bool,
 {
@@ -50,33 +57,28 @@ where
             reader,
             query,
             range,
+            facets_docids,
+            facet_count_docids,
             filter,
             distinct,
             distinct_size,
             criteria,
             searchable_attrs,
-            main_store,
-            postings_lists_store,
-            documents_fields_counts_store,
-            synonyms_store,
-            prefix_documents_cache_store,
-            prefix_postings_lists_cache_store,
+            index,
         );
     }
 
-    let words_set = match unsafe { main_store.static_words_fst(reader)? } {
-        Some(words) => words,
-        None => return Ok((Vec::new(), 0)),
-    };
+    let mut result = SortResult::default();
 
-    let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
+    let words_set = index.main.words_fst(reader)?;
+    let stop_words = index.main.stop_words_fst(reader)?;
 
     let context = QTContext {
         words_set,
         stop_words,
-        synonyms: synonyms_store,
-        postings_lists: postings_lists_store,
-        prefix_postings_lists: prefix_postings_lists_cache_store,
+        synonyms: index.synonyms,
+        postings_lists: index.postings_lists,
+        prefix_postings_lists: index.prefix_postings_lists_cache,
     };
 
     let (operation, mapping) = create_query_tree(reader, &context, query)?;
@@ -94,9 +96,22 @@ where
     let mut queries_kinds = HashMap::new();
     recurs_operation(&mut queries_kinds, &operation);
 
-    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation)?;
+    let QueryResult { mut docids, queries } = traverse_query_tree(reader, &context, &operation)?;
     debug!("found {} documents", docids.len());
     debug!("number of postings {:?}", queries.len());
+
+    if let Some(facets_docids) = facets_docids {
+        let intersection = sdset::duo::OpBuilder::new(docids.as_ref(), facets_docids.as_set())
+            .intersection()
+            .into_set_buf();
+        docids = Cow::Owned(intersection);
+    }
+
+    if let Some(f) = facet_count_docids {
+        // hardcoded value, until approximation optimization
+        result.exhaustive_facets_count = Some(true);
+        result.facets = Some(facet_count(f, &docids));
+    }
 
     let before = Instant::now();
     mk_arena!(arena);
@@ -132,7 +147,7 @@ where
                 reader,
                 postings_lists: &mut arena,
                 query_mapping: &mapping,
-                documents_fields_counts_store,
+                documents_fields_counts_store: index.documents_fields_counts,
             };
 
             criterion.prepare(ctx, &mut group)?;
@@ -165,49 +180,48 @@ where
     debug!("criterion loop took {:.02?}", before_criterion_loop.elapsed());
     debug!("proximity evaluation called {} times", proximity_count.load(Ordering::Relaxed));
 
-    let schema = main_store.schema(reader)?.ok_or(Error::SchemaMissing)?;
+    let schema = index.main.schema(reader)?.ok_or(Error::SchemaMissing)?;
     let iter = raw_documents.into_iter().skip(range.start).take(range.len());
     let iter = iter.map(|rd| Document::from_raw(rd, &queries_kinds, &arena, searchable_attrs.as_ref(), &schema));
     let documents = iter.collect();
 
     debug!("bucket sort took {:.02?}", before_bucket_sort.elapsed());
 
-    Ok((documents, docids.len()))
+    result.documents = documents;
+    result.nb_hits = docids.len();
+
+    Ok(result)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn bucket_sort_with_distinct<'c, FI, FD>(
     reader: &heed::RoTxn<MainT>,
     query: &str,
     range: Range<usize>,
+    facets_docids: Option<SetBuf<DocumentId>>,
+    facet_count_docids: Option<HashMap<String, HashMap<String, (&str, Cow<Set<DocumentId>>)>>>,
     filter: Option<FI>,
     distinct: FD,
     distinct_size: usize,
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
-    main_store: store::Main,
-    postings_lists_store: store::PostingsLists,
-    documents_fields_counts_store: store::DocumentsFieldsCounts,
-    synonyms_store: store::Synonyms,
-    _prefix_documents_cache_store: store::PrefixDocumentsCache,
-    prefix_postings_lists_cache_store: store::PrefixPostingsListsCache,
-) -> MResult<(Vec<Document>, usize)>
+    index: &Index,
+) -> MResult<SortResult>
 where
     FI: Fn(DocumentId) -> bool,
     FD: Fn(DocumentId) -> Option<u64>,
 {
-    let words_set = match unsafe { main_store.static_words_fst(reader)? } {
-        Some(words) => words,
-        None => return Ok((Vec::new(), 0)),
-    };
+    let mut result = SortResult::default();
 
-    let stop_words = main_store.stop_words_fst(reader)?.unwrap_or_default();
+    let words_set = index.main.words_fst(reader)?;
+    let stop_words = index.main.stop_words_fst(reader)?;
 
     let context = QTContext {
         words_set,
         stop_words,
-        synonyms: synonyms_store,
-        postings_lists: postings_lists_store,
-        prefix_postings_lists: prefix_postings_lists_cache_store,
+        synonyms: index.synonyms,
+        postings_lists: index.postings_lists,
+        prefix_postings_lists: index.prefix_postings_lists_cache,
     };
 
     let (operation, mapping) = create_query_tree(reader, &context, query)?;
@@ -225,9 +239,22 @@ where
     let mut queries_kinds = HashMap::new();
     recurs_operation(&mut queries_kinds, &operation);
 
-    let QueryResult { docids, queries } = traverse_query_tree(reader, &context, &operation)?;
+    let QueryResult { mut docids, queries } = traverse_query_tree(reader, &context, &operation)?;
     debug!("found {} documents", docids.len());
     debug!("number of postings {:?}", queries.len());
+
+    if let Some(facets_docids) = facets_docids {
+        let intersection = OpBuilder::new(docids.as_ref(), facets_docids.as_set())
+            .intersection()
+            .into_set_buf();
+        docids = Cow::Owned(intersection);
+    }
+
+    if let Some(f) = facet_count_docids {
+        // hardcoded value, until approximation optimization
+        result.exhaustive_facets_count = Some(true);
+        result.facets = Some(facet_count(f, &docids));
+    }
 
     let before = Instant::now();
     mk_arena!(arena);
@@ -273,7 +300,7 @@ where
                 reader,
                 postings_lists: &mut arena,
                 query_mapping: &mapping,
-                documents_fields_counts_store,
+                documents_fields_counts_store: index.documents_fields_counts,
             };
 
             let before_criterion_preparation = Instant::now();
@@ -338,17 +365,23 @@ where
     // once we classified the documents related to the current
     // automatons we save that as the next valid result
     let mut seen = BufferedDistinctMap::new(&mut distinct_map);
-    let schema = main_store.schema(reader)?.ok_or(Error::SchemaMissing)?;
+    let schema = index.main.schema(reader)?.ok_or(Error::SchemaMissing)?;
 
     let mut documents = Vec::with_capacity(range.len());
     for raw_document in raw_documents.into_iter().skip(distinct_raw_offset) {
         let filter_accepted = match &filter {
-            Some(_) => filter_map.remove(&raw_document.id).unwrap(),
+            Some(_) => filter_map.remove(&raw_document.id).unwrap_or_else(|| {
+                error!("error during filtering: expected value for document id {}", &raw_document.id.0);
+                Default::default()
+            }),
             None => true,
         };
 
         if filter_accepted {
-            let key = key_cache.remove(&raw_document.id).unwrap();
+            let key = key_cache.remove(&raw_document.id).unwrap_or_else(|| {
+                error!("error during distinct: expected value for document id {}", &raw_document.id.0);
+                Default::default()
+            });
             let distinct_accepted = match key {
                 Some(key) => seen.register(key),
                 None => seen.register_without_key(),
@@ -362,8 +395,10 @@ where
             }
         }
     }
+    result.documents = documents;
+    result.nb_hits = docids.len();
 
-    Ok((documents, docids.len()))
+    Ok(result)
 }
 
 fn cleanup_bare_matches<'tag, 'txn>(
@@ -557,4 +592,70 @@ impl Deref for PostingsListView<'_> {
             PostingsListView::Rewritten { ref postings_list, .. } => postings_list,
         }
     }
+}
+
+/// sorts documents ids according to user defined ranking rules.
+pub fn placeholder_document_sort(
+    document_ids: &mut [DocumentId],
+    index: &store::Index,
+    reader: &MainReader,
+    ranked_map: &RankedMap
+) -> MResult<()> {
+    use crate::settings::RankingRule;
+    use std::cmp::Ordering;
+
+    enum SortOrder {
+        Asc,
+        Desc,
+    }
+
+    if let Some(ranking_rules) = index.main.ranking_rules(reader)? {
+        let schema = index.main.schema(reader)?
+            .ok_or(Error::SchemaMissing)?;
+
+        // Select custom rules from ranking rules, and map them to custom rules
+        // containing a field_id
+        let ranking_rules = ranking_rules.iter().filter_map(|r|
+            match r {
+                RankingRule::Asc(name) => schema.id(name).map(|f| (f, SortOrder::Asc)),
+                RankingRule::Desc(name) => schema.id(name).map(|f| (f, SortOrder::Desc)),
+                _ => None,
+            }).collect::<Vec<_>>();
+
+        document_ids.sort_unstable_by(|a, b| {
+            for (field_id, order) in &ranking_rules {
+                let a_value = ranked_map.get(*a, *field_id);
+                let b_value = ranked_map.get(*b, *field_id);
+                let (a, b) = match order {
+                    SortOrder::Asc => (a_value, b_value),
+                    SortOrder::Desc => (b_value, a_value),
+                };
+                match a.cmp(&b) {
+                    Ordering::Equal => continue,
+                    ordering => return ordering,
+                }
+            }
+            Ordering::Equal
+        });
+    }
+    Ok(())
+}
+
+/// For each entry in facet_docids, calculates the number of documents in the intersection with candidate_docids.
+pub fn facet_count(
+    facet_docids: HashMap<String, HashMap<String, (&str, Cow<Set<DocumentId>>)>>,
+    candidate_docids: &Set<DocumentId>,
+) -> HashMap<String, HashMap<String, usize>> {
+    let mut facets_counts = HashMap::with_capacity(facet_docids.len());
+    for (key, doc_map) in facet_docids {
+        let mut count_map = HashMap::with_capacity(doc_map.len());
+        for (_, (value, docids)) in doc_map {
+            let mut counter = Counter::new();
+            let op = OpBuilder::new(docids.as_ref(), candidate_docids).intersection();
+            SetOperation::<DocumentId>::extend_collection(op, &mut counter);
+            count_map.insert(value.to_string(), counter.0);
+        }
+        facets_counts.insert(key, count_map);
+    }
+    facets_counts
 }

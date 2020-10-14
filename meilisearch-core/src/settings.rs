@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::iter::IntoIterator;
 
@@ -10,8 +10,7 @@ use self::RankingRule::*;
 pub const DEFAULT_RANKING_RULES: [RankingRule; 6] = [Typo, Words, Proximity, Attribute, WordsPosition, Exactness];
 
 static RANKING_RULE_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
-    let regex = regex::Regex::new(r"(asc|desc)\(([a-zA-Z0-9-_]*)\)").unwrap();
-    regex
+    regex::Regex::new(r"(asc|desc)\(([a-zA-Z0-9-_]*)\)").unwrap()
 });
 
 #[derive(Default, Clone, Serialize, Deserialize)]
@@ -24,13 +23,13 @@ pub struct Settings {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub searchable_attributes: Option<Option<Vec<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub displayed_attributes: Option<Option<HashSet<String>>>,
+    pub displayed_attributes: Option<Option<BTreeSet<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub stop_words: Option<Option<BTreeSet<String>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub synonyms: Option<Option<BTreeMap<String, Vec<String>>>>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub accept_new_fields: Option<Option<bool>>,
+    pub attributes_for_faceting: Option<Option<Vec<String>>>,
 }
 
 // Any value that is present is considered Some value, including null.
@@ -42,11 +41,11 @@ fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
 }
 
 impl Settings {
-    pub fn into_update(&self) -> Result<SettingsUpdate, RankingRuleConversionError> {
+    pub fn to_update(&self) -> Result<SettingsUpdate, RankingRuleConversionError> {
         let settings = self.clone();
 
         let ranking_rules = match settings.ranking_rules {
-            Some(Some(rules)) => UpdateState::Update(RankingRule::from_iter(rules.iter())?),
+            Some(Some(rules)) => UpdateState::Update(RankingRule::try_from_iter(rules.iter())?),
             Some(None) => UpdateState::Clear,
             None => UpdateState::Nothing,
         };
@@ -59,7 +58,7 @@ impl Settings {
             displayed_attributes: settings.displayed_attributes.into(),
             stop_words: settings.stop_words.into(),
             synonyms: settings.synonyms.into(),
-            accept_new_fields: settings.accept_new_fields.into(),
+            attributes_for_faceting: settings.attributes_for_faceting.into(),
         })
     }
 }
@@ -149,7 +148,7 @@ impl RankingRule {
         }
     }
 
-    pub fn from_iter(rules: impl IntoIterator<Item = impl AsRef<str>>) -> Result<Vec<RankingRule>, RankingRuleConversionError> {
+    pub fn try_from_iter(rules: impl IntoIterator<Item = impl AsRef<str>>) -> Result<Vec<RankingRule>, RankingRuleConversionError> {
         rules.into_iter()
             .map(|s| RankingRule::from_str(s.as_ref()))
             .collect()
@@ -162,10 +161,10 @@ pub struct SettingsUpdate {
     pub distinct_attribute: UpdateState<String>,
     pub primary_key: UpdateState<String>,
     pub searchable_attributes: UpdateState<Vec<String>>,
-    pub displayed_attributes: UpdateState<HashSet<String>>,
+    pub displayed_attributes: UpdateState<BTreeSet<String>>,
     pub stop_words: UpdateState<BTreeSet<String>>,
     pub synonyms: UpdateState<BTreeMap<String, Vec<String>>>,
-    pub accept_new_fields: UpdateState<bool>,
+    pub attributes_for_faceting: UpdateState<Vec<String>>,
 }
 
 impl Default for SettingsUpdate {
@@ -178,7 +177,7 @@ impl Default for SettingsUpdate {
             displayed_attributes: UpdateState::Nothing,
             stop_words: UpdateState::Nothing,
             synonyms: UpdateState::Nothing,
-            accept_new_fields: UpdateState::Nothing,
+            attributes_for_faceting: UpdateState::Nothing,
         }
     }
 }

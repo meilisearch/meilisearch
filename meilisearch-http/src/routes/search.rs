@@ -1,23 +1,27 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::time::Duration;
+use std::collections::{HashMap, HashSet};
 
+use actix_web::{get, post, web, HttpResponse};
 use log::warn;
-use meilisearch_core::Index;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
-use tide::{Request, Response};
+use serde_json::Value;
 
-use crate::error::{ResponseError, SResult};
-use crate::helpers::meilisearch::{Error, IndexSearchExt, SearchHit};
-use crate::helpers::tide::RequestExt;
-use crate::helpers::tide::ACL::*;
+use crate::error::{Error, FacetCountError, ResponseError};
+use crate::helpers::meilisearch::{IndexSearchExt, SearchResult};
+use crate::helpers::Authentication;
+use crate::routes::IndexParam;
 use crate::Data;
 
-#[derive(Deserialize)]
+use meilisearch_core::facets::FacetFilter;
+use meilisearch_schema::{FieldId, Schema};
+
+pub fn services(cfg: &mut web::ServiceConfig) {
+    cfg.service(search_with_post).service(search_with_url_query);
+}
+
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SearchQuery {
-    q: String,
+pub struct SearchQuery {
+    q: Option<String>,
     offset: Option<usize>,
     limit: Option<usize>,
     attributes_to_retrieve: Option<String>,
@@ -25,244 +29,241 @@ struct SearchQuery {
     crop_length: Option<usize>,
     attributes_to_highlight: Option<String>,
     filters: Option<String>,
-    timeout_ms: Option<u64>,
     matches: Option<bool>,
+    facet_filters: Option<String>,
+    facets_distribution: Option<String>,
 }
 
-pub async fn search_with_url_query(ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Public)?;
+#[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
+async fn search_with_url_query(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    params: web::Query<SearchQuery>,
+) -> Result<HttpResponse, ResponseError> {
+    let search_result = params.search(&path.index_uid, data)?;
+    Ok(HttpResponse::Ok().json(search_result))
+}
 
-    let index = ctx.index()?;
-    let db = &ctx.state().db;
-    let reader = db.main_read_txn()?;
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchQueryPost {
+    q: Option<String>,
+    offset: Option<usize>,
+    limit: Option<usize>,
+    attributes_to_retrieve: Option<Vec<String>>,
+    attributes_to_crop: Option<Vec<String>>,
+    crop_length: Option<usize>,
+    attributes_to_highlight: Option<Vec<String>>,
+    filters: Option<String>,
+    matches: Option<bool>,
+    facet_filters: Option<Value>,
+    facets_distribution: Option<Vec<String>>,
+}
 
-    let schema = index
-        .main
-        .schema(&reader)?
-        .ok_or(ResponseError::open_index("No Schema found"))?;
-
-    let query: SearchQuery = ctx
-        .query()
-        .map_err(|_| ResponseError::bad_request("invalid query parameter"))?;
-
-    let mut search_builder = index.new_search(query.q.clone());
-
-    if let Some(offset) = query.offset {
-        search_builder.offset(offset);
+impl From<SearchQueryPost> for SearchQuery {
+    fn from(other: SearchQueryPost) -> SearchQuery {
+        SearchQuery {
+            q: other.q,
+            offset: other.offset,
+            limit: other.limit,
+            attributes_to_retrieve: other.attributes_to_retrieve.map(|attrs| attrs.join(",")),
+            attributes_to_crop: other.attributes_to_crop.map(|attrs| attrs.join(",")),
+            crop_length: other.crop_length,
+            attributes_to_highlight: other.attributes_to_highlight.map(|attrs| attrs.join(",")),
+            filters: other.filters,
+            matches: other.matches,
+            facet_filters: other.facet_filters.map(|f| f.to_string()),
+            facets_distribution: other.facets_distribution.map(|f| format!("{:?}", f)),
+        }
     }
-    if let Some(limit) = query.limit {
-        search_builder.limit(limit);
-    }
+}
 
-    let available_attributes = schema.displayed_name();
-    let mut restricted_attributes: HashSet<&str>;
-    match &query.attributes_to_retrieve {
-        Some(attributes_to_retrieve) => {
-            let attributes_to_retrieve: HashSet<&str> = attributes_to_retrieve.split(',').collect();
-            if attributes_to_retrieve.contains("*") {
+#[post("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
+async fn search_with_post(
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    params: web::Json<SearchQueryPost>,
+) -> Result<HttpResponse, ResponseError> {
+    let query: SearchQuery = params.0.into();
+    let search_result = query.search(&path.index_uid, data)?;
+    Ok(HttpResponse::Ok().json(search_result))
+}
+
+impl SearchQuery {
+    fn search(
+        &self,
+        index_uid: &str,
+        data: web::Data<Data>,
+    ) -> Result<SearchResult, ResponseError> {
+        let index = data
+            .db
+            .open_index(index_uid)
+            .ok_or(Error::index_not_found(index_uid))?;
+
+        let reader = data.db.main_read_txn()?;
+        let schema = index
+            .main
+            .schema(&reader)?
+            .ok_or(Error::internal("Impossible to retrieve the schema"))?;
+
+        let query = self
+            .q
+            .clone()
+            .and_then(|q| if q.is_empty() { None } else { Some(q) });
+
+        let mut search_builder = index.new_search(query);
+
+        if let Some(offset) = self.offset {
+            search_builder.offset(offset);
+        }
+        if let Some(limit) = self.limit {
+            search_builder.limit(limit);
+        }
+
+        let available_attributes = schema.displayed_name();
+        let mut restricted_attributes: HashSet<&str>;
+        match &self.attributes_to_retrieve {
+            Some(attributes_to_retrieve) => {
+                let attributes_to_retrieve: HashSet<&str> =
+                    attributes_to_retrieve.split(',').collect();
+                if attributes_to_retrieve.contains("*") {
+                    restricted_attributes = available_attributes.clone();
+                } else {
+                    restricted_attributes = HashSet::new();
+                    for attr in attributes_to_retrieve {
+                        if available_attributes.contains(attr) {
+                            restricted_attributes.insert(attr);
+                            search_builder.add_retrievable_field(attr.to_string());
+                        } else {
+                            warn!("The attributes {:?} present in attributesToCrop parameter doesn't exist", attr);
+                        }
+                    }
+                }
+            }
+            None => {
                 restricted_attributes = available_attributes.clone();
-            } else {
-                restricted_attributes = HashSet::new();
-                for attr in attributes_to_retrieve {
-                    if available_attributes.contains(attr) {
-                        restricted_attributes.insert(attr);
-                        search_builder.add_retrievable_field(attr.to_string());
-                    } else {
-                        warn!("The attributes {:?} present in attributesToCrop parameter doesn't exist", attr);
+            }
+        }
+
+        if let Some(ref facet_filters) = self.facet_filters {
+            let attrs = index
+                .main
+                .attributes_for_faceting(&reader)?
+                .unwrap_or_default();
+            search_builder.add_facet_filters(FacetFilter::from_str(
+                facet_filters,
+                &schema,
+                &attrs,
+            )?);
+        }
+
+        if let Some(facets) = &self.facets_distribution {
+            match index.main.attributes_for_faceting(&reader)? {
+                Some(ref attrs) => {
+                    let field_ids = prepare_facet_list(&facets, &schema, attrs)?;
+                    search_builder.add_facets(field_ids);
+                }
+                None => return Err(FacetCountError::NoFacetSet.into()),
+            }
+        }
+
+        if let Some(attributes_to_crop) = &self.attributes_to_crop {
+            let default_length = self.crop_length.unwrap_or(200);
+            let mut final_attributes: HashMap<String, usize> = HashMap::new();
+
+            for attribute in attributes_to_crop.split(',') {
+                let mut attribute = attribute.split(':');
+                let attr = attribute.next();
+                let length = attribute
+                    .next()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(default_length);
+                match attr {
+                    Some("*") => {
+                        for attr in &restricted_attributes {
+                            final_attributes.insert(attr.to_string(), length);
+                        }
                     }
+                    Some(attr) => {
+                        if available_attributes.contains(attr) {
+                            final_attributes.insert(attr.to_string(), length);
+                        } else {
+                            warn!("The attributes {:?} present in attributesToCrop parameter doesn't exist", attr);
+                        }
+                    }
+                    None => (),
                 }
             }
-        },
-        None => {
-            restricted_attributes = available_attributes.clone();
+            search_builder.attributes_to_crop(final_attributes);
         }
-    }
 
-    if let Some(attributes_to_crop) = query.attributes_to_crop {
-        let default_length = query.crop_length.unwrap_or(200);
-        let mut final_attributes: HashMap<String, usize> = HashMap::new();
-
-        for attribute in attributes_to_crop.split(',') {
-            let mut attribute = attribute.split(':');
-            let attr = attribute.next();
-            let length = attribute.next().and_then(|s| s.parse().ok()).unwrap_or(default_length);
-            match attr {
-                Some("*") => {
+        if let Some(attributes_to_highlight) = &self.attributes_to_highlight {
+            let mut final_attributes: HashSet<String> = HashSet::new();
+            for attribute in attributes_to_highlight.split(',') {
+                if attribute == "*" {
                     for attr in &restricted_attributes {
-                        final_attributes.insert(attr.to_string(), length);
+                        final_attributes.insert(attr.to_string());
                     }
-                },
-                Some(attr) => {
-                    if available_attributes.contains(attr) {
-                        final_attributes.insert(attr.to_string(), length);
-                    } else {
-                        warn!("The attributes {:?} present in attributesToCrop parameter doesn't exist", attr);
-                    }
-                },
-                None => (),
-            }
-        }
-
-        search_builder.attributes_to_crop(final_attributes);
-    }
-
-    if let Some(attributes_to_highlight) = query.attributes_to_highlight {
-        let mut final_attributes: HashSet<String> = HashSet::new();
-        for attribute in attributes_to_highlight.split(',') {
-            if attribute == "*" {
-                for attr in &restricted_attributes {
-                    final_attributes.insert(attr.to_string());
-                }
-            } else {
-                if available_attributes.contains(attribute) {
+                } else if available_attributes.contains(attribute) {
                     final_attributes.insert(attribute.to_string());
                 } else {
                     warn!("The attributes {:?} present in attributesToHighlight parameter doesn't exist", attribute);
                 }
             }
+
+            search_builder.attributes_to_highlight(final_attributes);
         }
 
-        search_builder.attributes_to_highlight(final_attributes);
-    }
-
-    if let Some(filters) = query.filters {
-        search_builder.filters(filters);
-    }
-
-    if let Some(timeout_ms) = query.timeout_ms {
-        search_builder.timeout(Duration::from_millis(timeout_ms));
-    }
-
-    if let Some(matches) = query.matches {
-        if matches {
-            search_builder.get_matches();
+        if let Some(filters) = &self.filters {
+            search_builder.filters(filters.to_string());
         }
+
+        if let Some(matches) = self.matches {
+            if matches {
+                search_builder.get_matches();
+            }
+        }
+        search_builder.search(&reader)
     }
-
-    let response = match search_builder.search(&reader) {
-        Ok(response) => response,
-        Err(Error::Internal(message)) => return Err(ResponseError::Internal(message)),
-        Err(others) => return Err(ResponseError::bad_request(others)),
-    };
-
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }
 
-#[derive(Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SearchMultiBody {
-    indexes: HashSet<String>,
-    query: String,
-    offset: Option<usize>,
-    limit: Option<usize>,
-    attributes_to_retrieve: Option<HashSet<String>>,
-    searchable_attributes: Option<HashSet<String>>,
-    attributes_to_crop: Option<HashMap<String, usize>>,
-    attributes_to_highlight: Option<HashSet<String>>,
-    filters: Option<String>,
-    timeout_ms: Option<u64>,
-    matches: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SearchMultiBodyResponse {
-    hits: HashMap<String, Vec<SearchHit>>,
-    offset: usize,
-    hits_per_page: usize,
-    processing_time_ms: usize,
-    query: String,
-}
-
-pub async fn search_multi_index(mut ctx: Request<Data>) -> SResult<Response> {
-    ctx.is_allowed(Public)?;
-    let body = ctx
-        .body_json::<SearchMultiBody>()
-        .await
-        .map_err(ResponseError::bad_request)?;
-
-    let mut index_list = body.clone().indexes;
-
-    for index in index_list.clone() {
-        if index == "*" {
-            index_list = ctx.state().db.indexes_uids().into_iter().collect();
-            break;
-        }
-    }
-
-    let mut offset = 0;
-    let mut count = 20;
-
-    if let Some(body_offset) = body.offset {
-        if let Some(limit) = body.limit {
-            offset = body_offset;
-            count = limit;
-        }
-    }
-
-    let offset = offset;
-    let count = count;
-    let db = &ctx.state().db;
-    let par_body = body.clone();
-    let responses_per_index: Vec<SResult<_>> = index_list
-        .into_par_iter()
-        .map(move |index_uid| {
-            let index: Index = db
-                .open_index(&index_uid)
-                .ok_or(ResponseError::index_not_found(&index_uid))?;
-
-            let mut search_builder = index.new_search(par_body.query.clone());
-
-            search_builder.offset(offset);
-            search_builder.limit(count);
-
-            if let Some(attributes_to_retrieve) = par_body.attributes_to_retrieve.clone() {
-                search_builder.attributes_to_retrieve(attributes_to_retrieve);
+/// Parses the incoming string into an array of attributes for which to return a count. It returns
+/// a Vec of attribute names ascociated with their id.
+///
+/// An error is returned if the array is malformed, or if it contains attributes that are
+/// unexisting, or not set as facets.
+fn prepare_facet_list(
+    facets: &str,
+    schema: &Schema,
+    facet_attrs: &[FieldId],
+) -> Result<Vec<(FieldId, String)>, FacetCountError> {
+    let json_array = serde_json::from_str(facets)?;
+    match json_array {
+        Value::Array(vals) => {
+            let wildcard = Value::String("*".to_string());
+            if vals.iter().any(|f| f == &wildcard) {
+                let attrs = facet_attrs
+                    .iter()
+                    .filter_map(|&id| schema.name(id).map(|n| (id, n.to_string())))
+                    .collect();
+                return Ok(attrs);
             }
-            if let Some(attributes_to_crop) = par_body.attributes_to_crop.clone() {
-                search_builder.attributes_to_crop(attributes_to_crop);
-            }
-            if let Some(attributes_to_highlight) = par_body.attributes_to_highlight.clone() {
-                search_builder.attributes_to_highlight(attributes_to_highlight);
-            }
-            if let Some(filters) = par_body.filters.clone() {
-                search_builder.filters(filters);
-            }
-            if let Some(timeout_ms) = par_body.timeout_ms {
-                search_builder.timeout(Duration::from_millis(timeout_ms));
-            }
-            if let Some(matches) = par_body.matches {
-                if matches {
-                    search_builder.get_matches();
+            let mut field_ids = Vec::with_capacity(facet_attrs.len());
+            for facet in vals {
+                match facet {
+                    Value::String(facet) => {
+                        if let Some(id) = schema.id(&facet) {
+                            if !facet_attrs.contains(&id) {
+                                return Err(FacetCountError::AttributeNotSet(facet));
+                            }
+                            field_ids.push((id, facet));
+                        }
+                    }
+                    bad_val => return Err(FacetCountError::unexpected_token(bad_val, &["String"])),
                 }
             }
-
-            let reader = db.main_read_txn()?;
-            let response = search_builder.search(&reader)?;
-            Ok((index_uid, response))
-        })
-        .collect();
-
-    let mut hits_map = HashMap::new();
-
-    let mut max_query_time = 0;
-
-    for response in responses_per_index {
-        if let Ok((index_uid, response)) = response {
-            if response.processing_time_ms > max_query_time {
-                max_query_time = response.processing_time_ms;
-            }
-            hits_map.insert(index_uid, response.hits);
+            Ok(field_ids)
         }
+        bad_val => Err(FacetCountError::unexpected_token(bad_val, &["[String]"])),
     }
-
-    let response = SearchMultiBodyResponse {
-        hits: hits_map,
-        offset,
-        hits_per_page: count,
-        processing_time_ms: max_query_time,
-        query: body.query,
-    };
-
-    Ok(tide::Response::new(200).body_json(&response).unwrap())
 }

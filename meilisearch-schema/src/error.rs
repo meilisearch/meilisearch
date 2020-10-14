@@ -1,5 +1,6 @@
-
 use std::{error, fmt};
+
+use meilisearch_error::{ErrorCode, Code};
 
 pub type SResult<T> = Result<T, Error>;
 
@@ -15,10 +16,22 @@ impl fmt::Display for Error {
         use self::Error::*;
         match self {
             FieldNameNotFound(field) => write!(f, "The field {:?} doesn't exist", field),
-            PrimaryKeyAlreadyPresent => write!(f, "The schema already have an primary key. It's impossible to update it"),
+            PrimaryKeyAlreadyPresent => write!(f, "A primary key is already present. It's impossible to update it"),
             MaxFieldsLimitExceeded => write!(f, "The maximum of possible reattributed field id has been reached"),
         }
     }
 }
 
 impl error::Error for Error {}
+
+impl ErrorCode for Error {
+    fn error_code(&self) -> Code {
+        use Error::*;
+
+        match self {
+            FieldNameNotFound(_) => Code::Internal,
+            MaxFieldsLimitExceeded => Code::MaxFieldsLimitExceeded,
+            PrimaryKeyAlreadyPresent => Code::PrimaryKeyAlreadyPresent,
+        }
+    }
+}

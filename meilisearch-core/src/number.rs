@@ -6,7 +6,7 @@ use std::str::FromStr;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Copy, Clone, Hash)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum Number {
     Unsigned(u64),
     Signed(i64),

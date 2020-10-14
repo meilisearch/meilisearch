@@ -46,12 +46,6 @@ pub fn apply_settings_update(
         UpdateState::Update(v) => {
             let ranked_field: Vec<&str> = v.iter().filter_map(RankingRule::field).collect();
             schema.update_ranked(&ranked_field)?;
-            for name in ranked_field {
-                if schema.accept_new_fields() {
-                    schema.set_indexed(name.as_ref())?;
-                    schema.set_displayed(name.as_ref())?;
-                }
-            }
             index.main.put_ranking_rules(writer, &v)?;
             must_reindex = true;
         },
@@ -65,7 +59,8 @@ pub fn apply_settings_update(
 
     match settings.distinct_attribute {
         UpdateState::Update(v) => {
-            index.main.put_distinct_attribute(writer, &v)?;
+            let field_id = schema.insert(&v)?;
+            index.main.put_distinct_attribute(writer, field_id)?;
         },
         UpdateState::Clear => {
             index.main.delete_distinct_attribute(writer)?;
@@ -73,19 +68,13 @@ pub fn apply_settings_update(
         UpdateState::Nothing => (),
     }
 
-    match settings.accept_new_fields {
-        UpdateState::Update(v) => {
-            schema.set_accept_new_fields(v);
-        },
-        UpdateState::Clear => {
-            schema.set_accept_new_fields(true);
-        },
-        UpdateState::Nothing => (),
-    }
-
     match settings.searchable_attributes.clone() {
         UpdateState::Update(v) => {
-            schema.update_indexed(v)?;
+            if v.iter().any(|e| e == "*") || v.is_empty() {
+                schema.set_all_fields_as_indexed();
+            } else {
+                schema.update_indexed(v)?;
+            }
             must_reindex = true;
         },
         UpdateState::Clear => {
@@ -95,9 +84,27 @@ pub fn apply_settings_update(
         UpdateState::Nothing => (),
     }
     match settings.displayed_attributes.clone() {
-        UpdateState::Update(v) => schema.update_displayed(v)?,
+        UpdateState::Update(v) => {
+            if v.contains("*") || v.is_empty() {
+                schema.set_all_fields_as_displayed();
+            } else {
+                schema.update_displayed(v)?
+            }
+        },
         UpdateState::Clear => {
             schema.set_all_fields_as_displayed();
+        },
+        UpdateState::Nothing => (),
+    }
+
+    match settings.attributes_for_faceting {
+        UpdateState::Update(attrs) => {
+            apply_attributes_for_faceting_update(writer, index, &mut schema, &attrs)?;
+            must_reindex = true;
+        },
+        UpdateState::Clear => {
+            index.main.delete_attributes_for_faceting(writer)?;
+            index.facets.clear(writer)?;
         },
         UpdateState::Nothing => (),
     }
@@ -131,6 +138,21 @@ pub fn apply_settings_update(
     Ok(())
 }
 
+fn apply_attributes_for_faceting_update(
+    writer: &mut heed::RwTxn<MainT>,
+    index: &store::Index,
+    schema: &mut Schema,
+    attributes: &[String]
+    ) -> MResult<()> {
+    let mut attribute_ids = Vec::new();
+    for name in attributes {
+        attribute_ids.push(schema.insert(name)?);
+    }
+    let attributes_for_faceting = SetBuf::from_dirty(attribute_ids);
+    index.main.put_attributes_for_faceting(writer, &attributes_for_faceting)?;
+    Ok(())
+}
+
 pub fn apply_stop_words_update(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
@@ -141,7 +163,6 @@ pub fn apply_stop_words_update(
 
     let old_stop_words: BTreeSet<String> = index.main
         .stop_words_fst(writer)?
-        .unwrap_or_default()
         .stream()
         .into_strs()?
         .into_iter()
@@ -159,7 +180,8 @@ pub fn apply_stop_words_update(
         apply_stop_words_deletion(writer, index, deletion)?;
     }
 
-    if let Some(words_fst) = index.main.words_fst(writer)? {
+    let words_fst = index.main.words_fst(writer)?;
+    if !words_fst.is_empty() {
         let stop_words = fst::Set::from_iter(stop_words)?;
         let op = OpBuilder::new()
             .add(&words_fst)
@@ -168,7 +190,7 @@ pub fn apply_stop_words_update(
 
         let mut builder = fst::SetBuilder::memory();
         builder.extend_stream(op)?;
-        let words_fst = builder.into_inner().and_then(fst::Set::from_bytes)?;
+        let words_fst = builder.into_set();
 
         index.main.put_words_fst(writer, &words_fst)?;
         index.main.put_stop_words_fst(writer, &stop_words)?;
@@ -195,28 +217,25 @@ fn apply_stop_words_addition(
     }
 
     // create the new delta stop words fst
-    let delta_stop_words = stop_words_builder
-        .into_inner()
-        .and_then(fst::Set::from_bytes)?;
+    let delta_stop_words = stop_words_builder.into_set();
 
     // we also need to remove all the stop words from the main fst
-    if let Some(word_fst) = main_store.words_fst(writer)? {
+    let words_fst = main_store.words_fst(writer)?;
+    if !words_fst.is_empty() {
         let op = OpBuilder::new()
-            .add(&word_fst)
+            .add(&words_fst)
             .add(&delta_stop_words)
             .difference();
 
         let mut word_fst_builder = SetBuilder::memory();
         word_fst_builder.extend_stream(op)?;
-        let word_fst = word_fst_builder
-            .into_inner()
-            .and_then(fst::Set::from_bytes)?;
+        let word_fst = word_fst_builder.into_set();
 
         main_store.put_words_fst(writer, &word_fst)?;
     }
 
     // now we add all of these stop words from the main store
-    let stop_words_fst = main_store.stop_words_fst(writer)?.unwrap_or_default();
+    let stop_words_fst = main_store.stop_words_fst(writer)?;
 
     let op = OpBuilder::new()
         .add(&stop_words_fst)
@@ -225,9 +244,7 @@ fn apply_stop_words_addition(
 
     let mut stop_words_builder = SetBuilder::memory();
     stop_words_builder.extend_stream(op)?;
-    let stop_words_fst = stop_words_builder
-        .into_inner()
-        .and_then(fst::Set::from_bytes)?;
+    let stop_words_fst = stop_words_builder.into_set();
 
     main_store.put_stop_words_fst(writer, &stop_words_fst)?;
 
@@ -247,12 +264,10 @@ fn apply_stop_words_deletion(
     }
 
     // create the new delta stop words fst
-    let delta_stop_words = stop_words_builder
-        .into_inner()
-        .and_then(fst::Set::from_bytes)?;
+    let delta_stop_words = stop_words_builder.into_set();
 
     // now we delete all of these stop words from the main store
-    let stop_words_fst = index.main.stop_words_fst(writer)?.unwrap_or_default();
+    let stop_words_fst = index.main.stop_words_fst(writer)?;
 
     let op = OpBuilder::new()
         .add(&stop_words_fst)
@@ -261,7 +276,7 @@ fn apply_stop_words_deletion(
 
     let mut stop_words_builder = SetBuilder::memory();
     stop_words_builder.extend_stream(op)?;
-    let stop_words_fst = stop_words_builder.into_inner().and_then(fst::Set::from_bytes)?;
+    let stop_words_fst = stop_words_builder.into_set();
 
     Ok(index.main.put_stop_words_fst(writer, &stop_words_fst)?)
 }
@@ -284,16 +299,13 @@ pub fn apply_synonyms_update(
             let alternatives = SetBuf::from_dirty(alternatives);
             let mut alternatives_builder = SetBuilder::memory();
             alternatives_builder.extend_iter(alternatives)?;
-            let bytes = alternatives_builder.into_inner()?;
-            fst::Set::from_bytes(bytes)?
+            alternatives_builder.into_set()
         };
 
         synonyms_store.put_synonyms(writer, word.as_bytes(), &alternatives)?;
     }
 
-    let synonyms_set = synonyms_builder
-        .into_inner()
-        .and_then(fst::Set::from_bytes)?;
+    let synonyms_set = synonyms_builder.into_set();
 
     main_store.put_synonyms_fst(writer, &synonyms_set)?;
 

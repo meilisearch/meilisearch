@@ -1,8 +1,76 @@
-## v0.10.1 (unreleased)
+## v0.15.0
 
+  - Dumps (#887)
+  - Update actix-web dependency to 3.0.0 (#963)
+  - Consider an empty query to be a placeholder search (#916)
+
+## v0.14.1
+
+  - Fix version mismatch in snapshot importation (#959)
+
+## v0.14.0
+
+  - Sort displayedAttributes (#943)
+  - Fix facet distribution case (#797)
+  - Snapshotting (#839)
+  - Fix bucket-sort unwrap bug (#915)
+
+## v0.13.0
+
+  - placeholder search (#771)
+  - Add database version mismatch check (#794)
+  - Displayed and searchable attributes wildcard (#846)
+  - Remove sys-info route (#810)
+  - Check database version mismatch (#794)
+  - Fix unique docid bug (#841)
+  - Error codes in updates (#792)
+  - Sentry disable argument (#813)
+  - Log analytics if enabled (#825)
+  - Fix default values displayed on web interface (#874)
+
+## v0.12.0
+
+  - Fix long documents not being indexed completely bug (#816)
+  - Fix distinct attribute returning id instead of name (#800)
+  - error code rename (#805)
+
+## v0.11.1
+
+  - Fix facet cache on document update (#789) 
+  - Improvements on settings consistency (#778)
+
+## v0.11.0
+
+  - Change the HTTP framework, moving from tide to actix-web (#601)
+  - Bump sentry version to 0.18.1 (#690)
+  - Enable max payload size override (#684)
+  - Disable sentry in debug (#681)
+  - Better terminal greeting (#680)
+  - Fix highlight misalignment (#679)
+  - Add support for facet count (#676)
+  - Add support for faceted search (#631)
+  - Add support for configuring the lmdb map size (#646, #647)
+  - Add exposed port for Dockerfile (#654)
+  - Add sentry probe (#664)
+  - Fix url trailing slash and double slash issues (#659)
+  - Fix accept all Content-Type by default (#653)
+  - Return the error message from Serde when a deserialization error is encountered (#661)
+  - Fix NormalizePath middleware to make the dashboard accessible (#695)
+  - Update sentry features to remove openssl (#702)
+  - Add SSL support (#669)
+  - Rename fieldsFrequency into fieldsDistribution in stats (#719)
+  - Add support for error code reporting (#703)
+  - Allow the dashboard to query private servers (#732)
+  - Add telemetry (#720)
+  - Add post route for search (#735)
+
+## v0.10.1
+
+  - Add support for floating points in filters (#640)
   - Add '@' character as tokenizer separator (#607)
+  - Add support for filtering on arrays of strings (#611)
 
-## v0.10
+## v0.10.0
 
   - Refined filtering (#592)
   - Add the number of hits in search result (#541)

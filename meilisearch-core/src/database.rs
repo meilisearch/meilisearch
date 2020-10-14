@@ -1,19 +1,35 @@
 use std::collections::hash_map::{Entry, HashMap};
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::{fs, thread};
+use std::io::{Read, Write, ErrorKind};
 
+use chrono::{DateTime, Utc};
 use crossbeam_channel::{Receiver, Sender};
-use heed::types::{Str, Unit};
-use heed::{CompactionOption, Result as ZResult};
-use log::debug;
+use heed::CompactionOption;
+use heed::types::{Str, Unit, SerdeBincode};
+use log::{debug, error};
 use meilisearch_schema::Schema;
+use regex::Regex;
 
-use crate::{store, update, Index, MResult};
+use crate::{store, update, Index, MResult, Error};
 
 pub type BoxUpdateFn = Box<dyn Fn(&str, update::ProcessedUpdateResult) + Send + Sync + 'static>;
+
 type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
+
+type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
+
+pub type MainWriter<'a> = heed::RwTxn<'a, MainT>;
+pub type MainReader = heed::RoTxn<MainT>;
+
+pub type UpdateWriter<'a> = heed::RwTxn<'a, UpdateT>;
+pub type UpdateReader = heed::RoTxn<UpdateT>;
+
+const UNHEALTHY_KEY: &str = "_is_unhealthy";
+const LAST_UPDATE_KEY: &str = "last-update";
 
 pub struct MainT;
 pub struct UpdateT;
@@ -25,6 +41,21 @@ pub struct Database {
     indexes_store: heed::Database<Str, Unit>,
     indexes: RwLock<HashMap<String, (Index, thread::JoinHandle<MResult<()>>)>>,
     update_fn: Arc<ArcSwapFn>,
+    database_version: (u32, u32, u32),
+}
+
+pub struct DatabaseOptions {
+    pub main_map_size: usize,
+    pub update_map_size: usize,
+}
+
+impl Default for DatabaseOptions {
+    fn default() -> DatabaseOptions {
+        DatabaseOptions {
+            main_map_size: 100 * 1024 * 1024 * 1024, //100Gb
+            update_map_size: 100 * 1024 * 1024 * 1024, //100Gb
+        }
+    }
 }
 
 macro_rules! r#break_try {
@@ -55,8 +86,7 @@ fn update_awaiter(
     update_fn: Arc<ArcSwapFn>,
     index: Index,
 ) -> MResult<()> {
-    let mut receiver = receiver.into_iter();
-    while let Some(event) = receiver.next() {
+    for event in receiver {
 
         // if we receive a *MustClear* event, clear the index and break the loop
         if let UpdateEvent::MustClear = event {
@@ -90,7 +120,7 @@ fn update_awaiter(
             };
 
             // do not keep the reader for too long
-            update_reader.abort();
+            break_try!(update_reader.abort(), "aborting update transaction failed");
 
             // instantiate a transaction to touch to the main env
             let result = env.typed_write_txn::<MainT>();
@@ -104,7 +134,7 @@ fn update_awaiter(
             if status.error.is_none() {
                 break_try!(main_writer.commit(), "commit nested transaction failed");
             } else {
-                main_writer.abort()
+                break_try!(main_writer.abort(), "abborting nested transaction failed");
             }
 
             // now that the update has been processed we can instantiate
@@ -135,20 +165,90 @@ fn update_awaiter(
     Ok(())
 }
 
+/// Ensures Meilisearch version is compatible with the database, returns an error versions mismatch.
+/// If create is set to true, a VERSION file is created with the current version.
+fn version_guard(path: &Path, create: bool) -> MResult<(u32, u32, u32)> {
+    let current_version_major = env!("CARGO_PKG_VERSION_MAJOR");
+    let current_version_minor = env!("CARGO_PKG_VERSION_MINOR");
+    let current_version_patch = env!("CARGO_PKG_VERSION_PATCH");
+    let version_path = path.join("VERSION");
+
+    match File::open(&version_path) {
+        Ok(mut file) => {
+            let mut version = String::new();
+            file.read_to_string(&mut version)?;
+            // Matches strings like XX.XX.XX
+            let re = Regex::new(r"(\d+).(\d+).(\d+)").unwrap();
+
+            // Make sure there is a result
+            let version = re
+                .captures_iter(&version)
+                .next()
+                .ok_or_else(|| Error::VersionMismatch("bad VERSION file".to_string()))?;
+            // the first is always the complete match, safe to unwrap because we have a match
+            let version_major = version.get(1).unwrap().as_str();
+            let version_minor = version.get(2).unwrap().as_str();
+            let version_patch = version.get(3).unwrap().as_str();
+
+            if version_major != current_version_major || version_minor != current_version_minor {
+                Err(Error::VersionMismatch(format!("{}.{}.XX", version_major, version_minor)))
+            } else {
+                Ok((
+                    version_major.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?, 
+                    version_minor.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?, 
+                    version_patch.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?
+                ))
+            }
+        }
+        Err(error) => {
+            match error.kind() {
+                ErrorKind::NotFound => {
+                    if create {
+                        // when no version file is found, and we've been told to create one,
+                        // create a new file with the current version in it.
+                        let mut version_file = File::create(&version_path)?;
+                        version_file.write_all(format!("{}.{}.{}",
+                                current_version_major,
+                                current_version_minor,
+                                current_version_patch).as_bytes())?;
+
+                        Ok((
+                            current_version_major.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?, 
+                            current_version_minor.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?, 
+                            current_version_patch.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?
+                        ))
+                    } else {
+                        // when no version file is found and we were not told to create one, this
+                        // means that the version is inferior to the one this feature was added in.
+                        Err(Error::VersionMismatch("<0.12.0".to_string()))
+                    }
+                }
+                _ => Err(error.into())
+            }
+        }
+    }
+}
+
 impl Database {
-    pub fn open_or_create(path: impl AsRef<Path>) -> MResult<Database> {
+    pub fn open_or_create(path: impl AsRef<Path>, options: DatabaseOptions) -> MResult<Database> {
         let main_path = path.as_ref().join("main");
         let update_path = path.as_ref().join("update");
 
+        //create db directory
+        fs::create_dir_all(&path)?;
+
+        // create file only if main db wasn't created before (first run)
+        let database_version = version_guard(path.as_ref(), !main_path.exists() && !update_path.exists())?;
+
         fs::create_dir_all(&main_path)?;
         let env = heed::EnvOpenOptions::new()
-            .map_size(100 * 1024 * 1024 * 1024) // 100GB
+            .map_size(options.main_map_size)
             .max_dbs(3000)
             .open(main_path)?;
 
         fs::create_dir_all(&update_path)?;
         let update_env = heed::EnvOpenOptions::new()
-            .map_size(100 * 1024 * 1024 * 1024) // 100GB
+            .map_size(options.update_map_size)
             .max_dbs(3000)
             .open(update_path)?;
 
@@ -164,7 +264,7 @@ impl Database {
             must_open.push(index_uid.to_owned());
         }
 
-        reader.abort();
+        reader.abort()?;
 
         // open the previously aggregated indexes
         let mut indexes = HashMap::new();
@@ -216,6 +316,7 @@ impl Database {
             indexes_store,
             indexes: RwLock::new(indexes),
             update_fn,
+            database_version,
         })
     }
 
@@ -224,6 +325,13 @@ impl Database {
         match indexes_lock.get(name.as_ref()) {
             Some((index, ..)) => Some(index.clone()),
             None => None,
+        }
+    }
+
+    pub fn is_indexing(&self, reader: &UpdateReader, index: &str) -> MResult<Option<bool>> {
+        match self.open_index(&index) {
+            Some(index) => index.current_update_id(&reader).map(|u| Some(u.is_some())),
+            None => Ok(None),
         }
     }
 
@@ -305,30 +413,89 @@ impl Database {
         self.update_fn.swap(None);
     }
 
-    pub fn main_read_txn(&self) -> heed::Result<heed::RoTxn<MainT>> {
-        self.env.typed_read_txn::<MainT>()
+    pub fn main_read_txn(&self) -> MResult<MainReader> {
+        Ok(self.env.typed_read_txn::<MainT>()?)
     }
 
-    pub fn main_write_txn(&self) -> heed::Result<heed::RwTxn<MainT>> {
-        self.env.typed_write_txn::<MainT>()
+    pub(crate) fn main_write_txn(&self) -> MResult<MainWriter> {
+        Ok(self.env.typed_write_txn::<MainT>()?)
     }
 
-    pub fn update_read_txn(&self) -> heed::Result<heed::RoTxn<UpdateT>> {
-        self.update_env.typed_read_txn::<UpdateT>()
+    /// Calls f providing it with a writer to the main database. After f is called, makes sure the
+    /// transaction is commited. Returns whatever result f returns.
+    pub fn main_write<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&mut MainWriter) -> Result<R, E>,
+        E: From<Error>,
+    {
+        let mut writer = self.main_write_txn()?;
+        let result = f(&mut writer)?;
+        writer.commit().map_err(Error::Heed)?;
+        Ok(result)
     }
 
-    pub fn update_write_txn(&self) -> heed::Result<heed::RwTxn<UpdateT>> {
-        self.update_env.typed_write_txn::<UpdateT>()
+    /// provides a context with a reader to the main database. experimental.
+    pub fn main_read<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&MainReader) -> Result<R, E>,
+        E: From<Error>,
+    {
+        let reader = self.main_read_txn()?;
+        let result = f(&reader)?;
+        reader.abort().map_err(Error::Heed)?;
+        Ok(result)
     }
 
-    pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> ZResult<(File, File)> {
+    pub fn update_read_txn(&self) -> MResult<UpdateReader> {
+        Ok(self.update_env.typed_read_txn::<UpdateT>()?)
+    }
+
+    pub(crate) fn update_write_txn(&self) -> MResult<heed::RwTxn<UpdateT>> {
+        Ok(self.update_env.typed_write_txn::<UpdateT>()?)
+    }
+
+    /// Calls f providing it with a writer to the main database. After f is called, makes sure the
+    /// transaction is commited. Returns whatever result f returns.
+    pub fn update_write<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&mut UpdateWriter) -> Result<R, E>,
+        E: From<Error>,
+    {
+        let mut writer = self.update_write_txn()?;
+        let result = f(&mut writer)?;
+        writer.commit().map_err(Error::Heed)?;
+        Ok(result)
+    }
+
+    /// provides a context with a reader to the update database. experimental.
+    pub fn update_read<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&UpdateReader) -> Result<R, E>,
+        E: From<Error>,
+    {
+        let reader = self.update_read_txn()?;
+        let result = f(&reader)?;
+        reader.abort().map_err(Error::Heed)?;
+        Ok(result)
+    }
+
+    pub fn copy_and_compact_to_path<P: AsRef<Path>>(&self, path: P) -> MResult<(File, File)> {
         let path = path.as_ref();
 
         let env_path = path.join("main");
         let env_update_path = path.join("update");
+        let env_version_path = path.join("VERSION");
 
         fs::create_dir(&env_path)?;
         fs::create_dir(&env_update_path)?;
+    
+        // write Database Version
+        let (current_version_major, current_version_minor, current_version_patch) = self.database_version;
+        let mut version_file = File::create(&env_version_path)?;
+        version_file.write_all(format!("{}.{}.{}",
+                current_version_major,
+                current_version_minor,
+                current_version_patch).as_bytes())?;
 
         let env_path = env_path.join("data.mdb");
         let env_file = self.env.copy_to_path(&env_path, CompactionOption::Enabled)?;
@@ -338,7 +505,7 @@ impl Database {
             Ok(update_env_file) => Ok((env_file, update_env_file)),
             Err(e) => {
                 fs::remove_file(env_path)?;
-                Err(e)
+                Err(e.into())
             },
         }
     }
@@ -348,15 +515,87 @@ impl Database {
         indexes.keys().cloned().collect()
     }
 
-    pub fn common_store(&self) -> heed::PolyDatabase {
+    pub(crate) fn common_store(&self) -> heed::PolyDatabase {
         self.common_store
     }
+
+    pub fn last_update(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<DateTime<Utc>>> {
+        match self.common_store()
+            .get::<_, Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)? {
+                Some(datetime) => Ok(Some(datetime)),
+                None => Ok(None),
+            }
+    }
+
+    pub fn set_last_update(&self, writer: &mut heed::RwTxn<MainT>, time: &DateTime<Utc>) -> MResult<()> {
+        self.common_store()
+            .put::<_, Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, time)?;
+        Ok(())
+    }
+
+    pub fn set_healthy(&self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
+        let common_store = self.common_store();
+        common_store.delete::<_, Str>(writer, UNHEALTHY_KEY)?;
+        Ok(())
+    }
+
+    pub fn set_unhealthy(&self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
+        let common_store = self.common_store();
+        common_store.put::<_, Str, Unit>(writer, UNHEALTHY_KEY, &())?;
+        Ok(())
+    }
+
+    pub fn get_health(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<()>> {
+        let common_store = self.common_store();
+        Ok(common_store.get::<_, Str, Unit>(&reader, UNHEALTHY_KEY)?)
+    }
+
+    pub fn compute_stats(&self, writer: &mut MainWriter, index_uid: &str) -> MResult<()> {
+        let index = match self.open_index(&index_uid) {
+            Some(index) => index,
+            None => {
+                error!("Impossible to retrieve index {}", index_uid);
+                return Ok(());
+            }
+        };
+
+        let schema = match index.main.schema(&writer)? {
+            Some(schema) => schema,
+            None => return Ok(()),
+        };
+
+        let all_documents_fields = index
+            .documents_fields_counts
+            .all_documents_fields_counts(&writer)?;
+
+        // count fields frequencies
+        let mut fields_frequency = HashMap::<_, usize>::new();
+        for result in all_documents_fields {
+            let (_, attr, _) = result?;
+            if let Some(field_id) = schema.indexed_pos_to_field_id(attr) {
+                *fields_frequency.entry(field_id).or_default() += 1;
+            }
+        }
+
+        // convert attributes to their names
+        let frequency: BTreeMap<_, _> = fields_frequency
+            .into_iter()
+            .filter_map(|(a, c)| schema.name(a).map(|name| (name.to_string(), c)))
+            .collect();
+
+        index
+            .main
+            .put_fields_distribution(writer, &frequency)
+    }
+
+    pub fn version(&self) -> (u32, u32, u32) { self.database_version }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use crate::bucket_sort::SortResult;
     use crate::criterion::{self, CriteriaBuilder};
     use crate::update::{ProcessedUpdateResult, UpdateStatus};
     use crate::settings::Settings;
@@ -368,7 +607,7 @@ mod tests {
     fn valid_updates() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -393,7 +632,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -433,7 +672,7 @@ mod tests {
     fn invalid_updates() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -456,7 +695,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -495,7 +734,7 @@ mod tests {
     fn ignored_words_too_long() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -518,7 +757,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -550,7 +789,7 @@ mod tests {
     fn add_schema_attributes_at_end() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -573,7 +812,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut update_writer = db.update_write_txn().unwrap();
@@ -609,7 +848,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -623,7 +862,7 @@ mod tests {
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
         assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
-        update_reader.abort();
+        update_reader.abort().unwrap();
 
         let mut additions = index.documents_addition();
 
@@ -657,14 +896,14 @@ mod tests {
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
         assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
-        update_reader.abort();
+        update_reader.abort().unwrap();
 
         // even try to search for a document
         let reader = db.main_read_txn().unwrap();
-        let (results, _nb_hits) = index.query_builder().query(&reader, "21 ", 0..20).unwrap();
-        assert_matches!(results.len(), 1);
+        let SortResult {documents, .. } = index.query_builder().query(&reader, Some("21 "), 0..20).unwrap();
+        assert_matches!(documents.len(), 1);
 
-        reader.abort();
+        reader.abort().unwrap();
 
         // try to introduce attributes in the middle of the schema
         let settings = {
@@ -675,7 +914,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -694,7 +933,7 @@ mod tests {
     fn deserialize_documents() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -717,7 +956,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -753,19 +992,19 @@ mod tests {
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
         assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
-        update_reader.abort();
+        update_reader.abort().unwrap();
 
         let reader = db.main_read_txn().unwrap();
         let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
         assert!(document.is_none());
 
         let document: Option<IgnoredAny> = index
-            .document(&reader, None, DocumentId(7_900_334_843_754_999_545))
+            .document(&reader, None, DocumentId(0))
             .unwrap();
         assert!(document.is_some());
 
         let document: Option<IgnoredAny> = index
-            .document(&reader, None, DocumentId(8_367_468_610_878_465_872))
+            .document(&reader, None, DocumentId(1))
             .unwrap();
         assert!(document.is_some());
     }
@@ -774,7 +1013,7 @@ mod tests {
     fn partial_document_update() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -797,7 +1036,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -833,23 +1072,23 @@ mod tests {
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
         assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
-        update_reader.abort();
+        update_reader.abort().unwrap();
 
         let reader = db.main_read_txn().unwrap();
         let document: Option<IgnoredAny> = index.document(&reader, None, DocumentId(25)).unwrap();
         assert!(document.is_none());
 
         let document: Option<IgnoredAny> = index
-            .document(&reader, None, DocumentId(7_900_334_843_754_999_545))
+            .document(&reader, None, DocumentId(0))
             .unwrap();
         assert!(document.is_some());
 
         let document: Option<IgnoredAny> = index
-            .document(&reader, None, DocumentId(8_367_468_610_878_465_872))
+            .document(&reader, None, DocumentId(1))
             .unwrap();
         assert!(document.is_some());
 
-        reader.abort();
+        reader.abort().unwrap();
 
         let mut partial_additions = index.documents_partial_addition();
 
@@ -878,11 +1117,11 @@ mod tests {
         let update_reader = db.update_read_txn().unwrap();
         let result = index.update_status(&update_reader, update_id).unwrap();
         assert_matches!(result, Some(UpdateStatus::Processed { content }) if content.error.is_none());
-        update_reader.abort();
+        update_reader.abort().unwrap();
 
         let reader = db.main_read_txn().unwrap();
         let document: Option<serde_json::Value> = index
-            .document(&reader, None, DocumentId(7_900_334_843_754_999_545))
+            .document(&reader, None, DocumentId(0))
             .unwrap();
 
         let new_doc1 = serde_json::json!({
@@ -893,7 +1132,7 @@ mod tests {
         assert_eq!(document, Some(new_doc1));
 
         let document: Option<serde_json::Value> = index
-            .document(&reader, None, DocumentId(8_367_468_610_878_465_872))
+            .document(&reader, None, DocumentId(1))
             .unwrap();
 
         let new_doc2 = serde_json::json!({
@@ -908,7 +1147,7 @@ mod tests {
     fn delete_index() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Arc::new(Database::open_or_create(dir.path()).unwrap());
+        let database = Arc::new(Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap());
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -936,7 +1175,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -980,7 +1219,7 @@ mod tests {
     fn check_number_ordering() {
         let dir = tempfile::tempdir().unwrap();
 
-        let database = Database::open_or_create(dir.path()).unwrap();
+        let database = Database::open_or_create(dir.path(), DatabaseOptions::default()).unwrap();
         let db = &database;
 
         let (sender, receiver) = mpsc::sync_channel(100);
@@ -1012,7 +1251,7 @@ mod tests {
                 }
             "#;
             let settings: Settings = serde_json::from_str(data).unwrap();
-            settings.into_update().unwrap()
+            settings.to_update().unwrap()
         };
 
         let mut writer = db.update_write_txn().unwrap();
@@ -1059,20 +1298,20 @@ mod tests {
 
         let builder = index.query_builder_with_criteria(criteria);
 
-        let (results, _nb_hits) = builder.query(&reader, "Kevin", 0..20).unwrap();
-        let mut iter = results.into_iter();
+        let SortResult {documents, .. } = builder.query(&reader, Some("Kevin"), 0..20).unwrap();
+        let mut iter = documents.into_iter();
 
         assert_matches!(
             iter.next(),
             Some(Document {
-                id: DocumentId(7_900_334_843_754_999_545),
+                id: DocumentId(0),
                 ..
             })
         );
         assert_matches!(
             iter.next(),
             Some(Document {
-                id: DocumentId(8_367_468_610_878_465_872),
+                id: DocumentId(1),
                 ..
             })
         );

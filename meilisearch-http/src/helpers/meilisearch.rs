@@ -1,98 +1,30 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::convert::From;
-use std::error;
-use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use indexmap::IndexMap;
 use log::error;
-use meilisearch_core::Filter;
+use meilisearch_core::{Filter, MainReader};
+use meilisearch_core::facets::FacetFilter;
 use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
-use meilisearch_core::{Highlight, Index, MainT, RankedMap};
+use meilisearch_core::{Highlight, Index, RankedMap};
 use meilisearch_schema::{FieldId, Schema};
 use meilisearch_tokenizer::is_cjk;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use siphasher::sip::SipHasher;
+use slice_group_by::GroupBy;
 
-#[derive(Debug)]
-pub enum Error {
-    SearchDocuments(String),
-    RetrieveDocument(u64, String),
-    DocumentNotFound(u64),
-    CropFieldWrongType(String),
-    FilterParsing(String),
-    AttributeNotFoundOnDocument(String),
-    AttributeNotFoundOnSchema(String),
-    MissingFilterValue,
-    UnknownFilteredAttribute,
-    Internal(String),
-}
-
-impl error::Error for Error {}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Error::*;
-
-        match self {
-            SearchDocuments(err) => write!(f, "impossible to search documents; {}", err),
-            RetrieveDocument(id, err) => write!(
-                f,
-                "impossible to retrieve the document with id: {}; {}",
-                id, err
-            ),
-            DocumentNotFound(id) => write!(f, "document {} not found", id),
-            CropFieldWrongType(field) => {
-                write!(f, "the field {} cannot be cropped it's not a string", field)
-            }
-            AttributeNotFoundOnDocument(field) => {
-                write!(f, "field {} is not found on document", field)
-            }
-            AttributeNotFoundOnSchema(field) => write!(f, "field {} is not found on schema", field),
-            MissingFilterValue => f.write_str("a filter doesn't have a value to compare it with"),
-            UnknownFilteredAttribute => {
-                f.write_str("a filter is specifying an unknown schema attribute")
-            }
-            Internal(err) => write!(f, "internal error; {}", err),
-            FilterParsing(err) => write!(f, "filter parsing error: {}", err),
-        }
-    }
-}
-
-impl From<meilisearch_core::Error> for Error {
-    fn from(error: meilisearch_core::Error) -> Self {
-        use meilisearch_core::pest_error::LineColLocation::*;
-        match error {
-            meilisearch_core::Error::FilterParseError(e) => {
-                let (line, column) = match e.line_col {
-                    Span((line, _), (column, _)) => (line, column),
-                    Pos((line, column)) => (line, column),
-                };
-                let message = format!("parsing error on line {} at column {}: {}", line, column, e.variant.message());
-
-                Error::FilterParsing(message) 
-            },
-            _ => Error::Internal(error.to_string()),
-        }
-    }
-}
-
-impl From<heed::Error> for Error {
-    fn from(error: heed::Error) -> Self {
-        Error::Internal(error.to_string())
-    }
-}
+use crate::error::{Error, ResponseError};
 
 pub trait IndexSearchExt {
-    fn new_search(&self, query: String) -> SearchBuilder;
+    fn new_search(&self, query: Option<String>) -> SearchBuilder;
 }
 
 impl IndexSearchExt for Index {
-    fn new_search(&self, query: String) -> SearchBuilder {
+    fn new_search(&self, query: Option<String>) -> SearchBuilder {
         SearchBuilder {
             index: self,
             query,
@@ -102,23 +34,25 @@ impl IndexSearchExt for Index {
             attributes_to_retrieve: None,
             attributes_to_highlight: None,
             filters: None,
-            timeout: Duration::from_millis(30),
             matches: false,
+            facet_filters: None,
+            facets: None,
         }
     }
 }
 
 pub struct SearchBuilder<'a> {
     index: &'a Index,
-    query: String,
+    query: Option<String>,
     offset: usize,
     limit: usize,
     attributes_to_crop: Option<HashMap<String, usize>>,
     attributes_to_retrieve: Option<HashSet<String>>,
     attributes_to_highlight: Option<HashSet<String>>,
     filters: Option<String>,
-    timeout: Duration,
     matches: bool,
+    facet_filters: Option<FacetFilter>,
+    facets: Option<Vec<(FieldId, String)>>
 }
 
 impl<'a> SearchBuilder<'a> {
@@ -153,13 +87,13 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn filters(&mut self, value: String) -> &SearchBuilder {
-        self.filters = Some(value);
+    pub fn add_facet_filters(&mut self, filters: FacetFilter) -> &SearchBuilder {
+        self.facet_filters = Some(filters);
         self
     }
 
-    pub fn timeout(&mut self, value: Duration) -> &SearchBuilder {
-        self.timeout = value;
+    pub fn filters(&mut self, value: String) -> &SearchBuilder {
+        self.filters = Some(value);
         self
     }
 
@@ -168,17 +102,19 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn search(&self, reader: &heed::RoTxn<MainT>) -> Result<SearchResult, Error> {
-        let schema = self.index.main.schema(reader);
-        let schema = schema.map_err(|e| Error::Internal(e.to_string()))?;
-        let schema = match schema {
-            Some(schema) => schema,
-            None => return Err(Error::Internal(String::from("missing schema"))),
-        };
+    pub fn add_facets(&mut self, facets: Vec<(FieldId, String)>) -> &SearchBuilder {
+        self.facets = Some(facets);
+        self
+    }
 
-        let ranked_map = self.index.main.ranked_map(reader);
-        let ranked_map = ranked_map.map_err(|e| Error::Internal(e.to_string()))?;
-        let ranked_map = ranked_map.unwrap_or_default();
+    pub fn search(self, reader: &MainReader) -> Result<SearchResult, ResponseError> {
+        let schema = self
+            .index
+            .main
+            .schema(reader)?
+            .ok_or(Error::internal("missing schema"))?;
+
+        let ranked_map = self.index.main.ranked_map(reader)?.unwrap_or_default();
 
         // Change criteria
         let mut query_builder = match self.get_criteria(reader, &ranked_map, &schema)? {
@@ -188,8 +124,8 @@ impl<'a> SearchBuilder<'a> {
 
         if let Some(filter_expression) = &self.filters {
             let filter = Filter::parse(filter_expression, &schema)?;
+            let index = &self.index;
             query_builder.with_filter(move |id| {
-                let index = &self.index;
                 let reader = &reader;
                 let filter = &filter;
                 match filter.test(reader, index, id) {
@@ -202,27 +138,26 @@ impl<'a> SearchBuilder<'a> {
             });
         }
 
-        query_builder.with_fetch_timeout(self.timeout);
-
         if let Some(field) = self.index.main.distinct_attribute(reader)? {
-            if let Some(field_id) = schema.id(&field) {
-                query_builder.with_distinct(1, move |id| {
-                    match self.index.document_attribute_bytes(reader, id, field_id) {
-                        Ok(Some(bytes)) => {
-                            let mut s = SipHasher::new();
-                            bytes.hash(&mut s);
-                            Some(s.finish())
-                        }
-                        _ => None,
+            let index = &self.index;
+            query_builder.with_distinct(1, move |id| {
+                match index.document_attribute_bytes(reader, id, field) {
+                    Ok(Some(bytes)) => {
+                        let mut s = SipHasher::new();
+                        bytes.hash(&mut s);
+                        Some(s.finish())
                     }
-                });
-            }
+                    _ => None,
+                }
+            });
         }
 
+        query_builder.set_facet_filter(self.facet_filters);
+        query_builder.set_facets(self.facets);
+
         let start = Instant::now();
-        let result =
-            query_builder.query(reader, &self.query, self.offset..(self.offset + self.limit));
-        let (docs, nb_hits) = result.map_err(|e| Error::SearchDocuments(e.to_string()))?;
+        let result = query_builder.query(reader, self.query.as_deref(), self.offset..(self.offset + self.limit));
+        let search_result = result.map_err(Error::search_documents)?;
         let time_ms = start.elapsed().as_millis() as usize;
 
         let mut all_attributes: HashSet<&str> = HashSet::new();
@@ -253,12 +188,14 @@ impl<'a> SearchBuilder<'a> {
         }
 
         let mut hits = Vec::with_capacity(self.limit);
-        for doc in docs {
+        for doc in search_result.documents {
             let mut document: IndexMap<String, Value> = self
                 .index
                 .document(reader, Some(&all_attributes), doc.id)
-                .map_err(|e| Error::RetrieveDocument(doc.id.0, e.to_string()))?
-                .ok_or(Error::DocumentNotFound(doc.id.0))?;
+                .map_err(|e| Error::retrieve_document(doc.id.0, e))?
+                .ok_or(Error::internal(
+                    "Impossible to retrieve the document; Corrupted data",
+                ))?;
 
             let mut formatted = document.iter()
                 .filter(|(key, _)| all_formatted.contains(key.as_str()))
@@ -275,7 +212,7 @@ impl<'a> SearchBuilder<'a> {
             // Transform to readable matches
             if let Some(attributes_to_highlight) = &self.attributes_to_highlight {
                 let matches = calculate_matches(
-                    matches.clone(),
+                    &matches,
                     self.attributes_to_highlight.clone(),
                     &schema,
                 );
@@ -283,7 +220,7 @@ impl<'a> SearchBuilder<'a> {
             }
 
             let matches_info = if self.matches {
-                Some(calculate_matches(matches, self.attributes_to_retrieve.clone(), &schema))
+                Some(calculate_matches(&matches, self.attributes_to_retrieve.clone(), &schema))
             } else {
                 None
             };
@@ -305,10 +242,12 @@ impl<'a> SearchBuilder<'a> {
             hits,
             offset: self.offset,
             limit: self.limit,
-            nb_hits,
-            exhaustive_nb_hits: false,
+            nb_hits: search_result.nb_hits,
+            exhaustive_nb_hits: search_result.exhaustive_nb_hit,
             processing_time_ms: time_ms,
-            query: self.query.to_string(),
+            query: self.query.unwrap_or_default(),
+            facets_distribution: search_result.facets,
+            exhaustive_facets_count: search_result.exhaustive_facets_count,
         };
 
         Ok(results)
@@ -316,10 +255,10 @@ impl<'a> SearchBuilder<'a> {
 
     pub fn get_criteria(
         &self,
-        reader: &heed::RoTxn<MainT>,
+        reader: &MainReader,
         ranked_map: &'a RankedMap,
         schema: &Schema,
-    ) -> Result<Option<Criteria<'a>>, Error> {
+    ) -> Result<Option<Criteria<'a>>, ResponseError> {
         let ranking_rules = self.index.main.ranking_rules(reader)?;
 
         if let Some(ranking_rules) = ranking_rules {
@@ -354,10 +293,16 @@ impl<'a> SearchBuilder<'a> {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MatchPosition {
     pub start: usize,
     pub length: usize,
+}
+
+impl PartialOrd for MatchPosition {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Ord for MatchPosition {
@@ -393,6 +338,10 @@ pub struct SearchResult {
     pub exhaustive_nb_hits: bool,
     pub processing_time_ms: usize,
     pub query: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub facets_distribution: Option<HashMap<String, HashMap<String, usize>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exhaustive_facets_count: Option<bool>,
 }
 
 /// returns the start index and the length on the crop.
@@ -411,10 +360,14 @@ fn aligned_crop(text: &str, match_index: usize, context: usize) -> (usize, usize
         return (match_index, 1 + text.chars().skip(match_index).take_while(is_word_component).count());
     }
     let start = match match_index.saturating_sub(context) {
-        n if n == 0 => n,
-        n => word_end_index(n)
+        0 => 0,
+        n => {
+            let word_end_index = word_end_index(n);
+            // skip whitespaces if any
+            word_end_index + text.chars().skip(word_end_index).take_while(char::is_ascii_whitespace).count()
+        }
     };
-    let end = word_end_index(start + 2 * context);
+    let end = word_end_index(match_index + context);
 
     (start, end - start)
 }
@@ -429,15 +382,21 @@ fn crop_text(
     let char_index = matches.peek().map(|m| m.char_index as usize).unwrap_or(0);
     let (start, count) = aligned_crop(text, char_index, context);
 
-    //TODO do something about the double allocation
-    let text = text.chars().skip(start).take(count).collect::<String>().trim().to_string();
+    // TODO do something about double allocation
+    let text = text
+        .chars()
+        .skip(start)
+        .take(count)
+        .collect::<String>()
+        .trim()
+        .to_string();
 
     // update matches index to match the new cropped text
     let matches = matches
-        .take_while(|m| (m.char_index as usize) + (m.char_length as usize) <= start + (context * 2))
-        .map(|match_| Highlight {
-            char_index: match_.char_index - start as u16,
-            ..match_
+        .take_while(|m| (m.char_index as usize) + (m.char_length as usize) <= start + count)
+        .map(|m| Highlight {
+            char_index: m.char_index - start as u16,
+            ..m
         })
         .collect();
 
@@ -476,14 +435,14 @@ fn crop_document(
 }
 
 fn calculate_matches(
-    matches: Vec<Highlight>,
+    matches: &[Highlight],
     attributes_to_retrieve: Option<HashSet<String>>,
     schema: &Schema,
 ) -> MatchesInfos {
     let mut matches_result: HashMap<String, Vec<MatchPosition>> = HashMap::new();
     for m in matches.iter() {
         if let Some(attribute) = schema.name(FieldId::new(m.attribute)) {
-            if let Some(attributes_to_retrieve) = attributes_to_retrieve.clone() {
+            if let Some(ref attributes_to_retrieve) = attributes_to_retrieve {
                 if !attributes_to_retrieve.contains(attribute) {
                     continue;
                 }
@@ -526,19 +485,23 @@ fn calculate_highlights(
                 let value: Vec<_> = value.chars().collect();
                 let mut highlighted_value = String::new();
                 let mut index = 0;
-                for m in matches {
-                    if m.start >= index {
-                        let before = value.get(index..m.start);
-                        let highlighted = value.get(m.start..(m.start + m.length));
-                        if let (Some(before), Some(highlighted)) = (before, highlighted) {
-                            highlighted_value.extend(before);
-                            highlighted_value.push_str("<em>");
-                            highlighted_value.extend(highlighted);
-                            highlighted_value.push_str("</em>");
-                            index = m.start + m.length;
-                        } else {
-                            error!("value: {:?}; index: {:?}, match: {:?}", value, index, m);
-                        }
+
+                let longest_matches = matches
+                    .linear_group_by_key(|m| m.start)
+                    .map(|group| group.last().unwrap())
+                    .filter(move |m| m.start >= index);
+
+                for m in longest_matches {
+                    let before = value.get(index..m.start);
+                    let highlighted = value.get(m.start..(m.start + m.length));
+                    if let (Some(before), Some(highlighted)) = (before, highlighted) {
+                        highlighted_value.extend(before);
+                        highlighted_value.push_str("<em>");
+                        highlighted_value.extend(highlighted);
+                        highlighted_value.push_str("</em>");
+                        index = m.start + m.length;
+                    } else {
+                        error!("value: {:?}; index: {:?}, match: {:?}", value, index, m);
                     }
                 }
                 highlighted_value.extend(value[index..].iter());
@@ -546,7 +509,6 @@ fn calculate_highlights(
             };
         }
     }
-
     highlight_result
 }
 
@@ -578,13 +540,41 @@ mod tests {
         // mixed charset
         let (start, length) = aligned_crop(&text, 5, 3);
         let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
-        assert_eq!("isのス", cropped);
+        assert_eq!("isの", cropped);
 
         // split regular word / CJK word, no space
         let (start, length) = aligned_crop(&text, 7, 1);
         let cropped =  text.chars().skip(start).take(length).collect::<String>().trim().to_string();
-        assert_eq!("のス", cropped);
+        assert_eq!("の", cropped);
+    }
 
+    #[test]
+    fn calculate_matches() {
+        let mut matches = Vec::new();
+        matches.push(Highlight { attribute: 0, char_index: 0, char_length: 3});
+        matches.push(Highlight { attribute: 0, char_index: 0, char_length: 2});
+
+        let mut attributes_to_retrieve: HashSet<String> = HashSet::new();
+        attributes_to_retrieve.insert("title".to_string());
+
+        let schema = Schema::with_primary_key("title");
+
+        let matches_result = super::calculate_matches(&matches, Some(attributes_to_retrieve), &schema);
+
+        let mut matches_result_expected: HashMap<String, Vec<MatchPosition>> = HashMap::new();
+
+        let mut positions = Vec::new();
+        positions.push(MatchPosition {
+            start: 0,
+            length: 2,
+        });
+        positions.push(MatchPosition {
+            start: 0,
+            length: 3,
+        });
+        matches_result_expected.insert("title".to_string(), positions);
+
+        assert_eq!(matches_result, matches_result_expected);
     }
 
     #[test]
@@ -622,6 +612,40 @@ mod tests {
             Value::String("<em>Fondation</em> (Isaac ASIMOV)".to_string()),
         );
         result_expected.insert("description".to_string(), Value::String("En ce début de trentième millénaire, l'Empire n'a jamais été aussi puissant, aussi étendu à travers toute la galaxie. C'est dans sa capitale, Trantor, que l'éminent savant Hari Seldon invente la psychohistoire, une science toute nouvelle, à base de psychologie et de mathématiques, qui lui permet de prédire l'avenir... C'est-à-dire l'effondrement de l'Empire d'ici cinq siècles et au-delà, trente mille années de chaos et de ténèbres. Pour empêcher cette catastrophe et sauver la civilisation, Seldon crée la <em>Fondation</em>.".to_string()));
+
+        assert_eq!(result, result_expected);
+    }
+
+    #[test]
+    fn highlight_longest_match() {
+        let data = r#"{
+            "title": "Ice"
+        }"#;
+
+        let document: IndexMap<String, Value> = serde_json::from_str(data).unwrap();
+        let mut attributes_to_highlight = HashSet::new();
+        attributes_to_highlight.insert("title".to_string());
+
+        let mut matches = HashMap::new();
+
+        let mut m = Vec::new();
+        m.push(MatchPosition {
+            start: 0,
+            length: 2,
+        });
+        m.push(MatchPosition {
+            start: 0,
+            length: 3,
+        });
+        matches.insert("title".to_string(), m);
+
+        let result = super::calculate_highlights(&document, &matches, &attributes_to_highlight);
+
+        let mut result_expected = IndexMap::new();
+        result_expected.insert(
+            "title".to_string(),
+            Value::String("<em>Ice</em>".to_string()),
+        );
 
         assert_eq!(result, result_expected);
     }

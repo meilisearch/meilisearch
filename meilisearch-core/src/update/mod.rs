@@ -3,13 +3,13 @@ mod customs_update;
 mod documents_addition;
 mod documents_deletion;
 mod settings_update;
+mod helpers;
 
 pub use self::clear_all::{apply_clear_all, push_clear_all};
 pub use self::customs_update::{apply_customs_update, push_customs_update};
-pub use self::documents_addition::{
-    apply_documents_addition, apply_documents_partial_addition, DocumentsAddition,
-};
+pub use self::documents_addition::{apply_documents_addition, apply_documents_partial_addition, DocumentsAddition};
 pub use self::documents_deletion::{apply_documents_deletion, DocumentsDeletion};
+pub use self::helpers::{index_value, value_to_string, value_to_number, discover_document_id, extract_document_id};
 pub use self::settings_update::{apply_settings_update, push_settings_update};
 
 use std::cmp;
@@ -22,8 +22,12 @@ use indexmap::IndexMap;
 use log::debug;
 use sdset::Set;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::{store, DocumentId, MResult};
+use meilisearch_error::ErrorCode;
+use meilisearch_types::DocumentId;
+
+use crate::{store, MResult, RankedMap};
 use crate::database::{MainT, UpdateT};
 use crate::settings::SettingsUpdate;
 
@@ -48,21 +52,21 @@ impl Update {
         }
     }
 
-    fn documents_addition(data: Vec<IndexMap<String, serde_json::Value>>) -> Update {
+    fn documents_addition(documents: Vec<IndexMap<String, Value>>) -> Update {
         Update {
-            data: UpdateData::DocumentsAddition(data),
+            data: UpdateData::DocumentsAddition(documents),
             enqueued_at: Utc::now(),
         }
     }
 
-    fn documents_partial(data: Vec<IndexMap<String, serde_json::Value>>) -> Update {
+    fn documents_partial(documents: Vec<IndexMap<String, Value>>) -> Update {
         Update {
-            data: UpdateData::DocumentsPartial(data),
+            data: UpdateData::DocumentsPartial(documents),
             enqueued_at: Utc::now(),
         }
     }
 
-    fn documents_deletion(data: Vec<DocumentId>) -> Update {
+    fn documents_deletion(data: Vec<String>) -> Update {
         Update {
             data: UpdateData::DocumentsDeletion(data),
             enqueued_at: Utc::now(),
@@ -71,7 +75,7 @@ impl Update {
 
     fn settings(data: SettingsUpdate) -> Update {
         Update {
-            data: UpdateData::Settings(data),
+            data: UpdateData::Settings(Box::new(data)),
             enqueued_at: Utc::now(),
         }
     }
@@ -81,10 +85,10 @@ impl Update {
 pub enum UpdateData {
     ClearAll,
     Customs(Vec<u8>),
-    DocumentsAddition(Vec<IndexMap<String, serde_json::Value>>),
-    DocumentsPartial(Vec<IndexMap<String, serde_json::Value>>),
-    DocumentsDeletion(Vec<DocumentId>),
-    Settings(SettingsUpdate)
+    DocumentsAddition(Vec<IndexMap<String, Value>>),
+    DocumentsPartial(Vec<IndexMap<String, Value>>),
+    DocumentsDeletion(Vec<String>),
+    Settings(Box<SettingsUpdate>)
 }
 
 impl UpdateData {
@@ -116,7 +120,7 @@ pub enum UpdateType {
     DocumentsAddition { number: usize },
     DocumentsPartial { number: usize },
     DocumentsDeletion { number: usize },
-    Settings { settings: SettingsUpdate },
+    Settings { settings: Box<SettingsUpdate> },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +131,12 @@ pub struct ProcessedUpdateResult {
     pub update_type: UpdateType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_link: Option<String>,
     pub duration: f64, // in seconds
     pub enqueued_at: DateTime<Utc>,
     pub processed_at: DateTime<Utc>,
@@ -272,7 +282,7 @@ pub fn update_task<'a, 'b>(
             let result = apply_settings_update(
                 writer,
                 index,
-                settings,
+                *settings,
             );
 
             (update_type, result, start.elapsed())
@@ -287,7 +297,10 @@ pub fn update_task<'a, 'b>(
     let status = ProcessedUpdateResult {
         update_id,
         update_type,
-        error: result.map_err(|e| e.to_string()).err(),
+        error: result.as_ref().map_err(|e| e.to_string()).err(),
+        error_code: result.as_ref().map_err(|e| e.error_name()).err(),
+        error_type: result.as_ref().map_err(|e| e.error_type()).err(),
+        error_link: result.as_ref().map_err(|e| e.error_url()).err(),
         duration: duration.as_secs_f64(),
         enqueued_at,
         processed_at: Utc::now(),
@@ -296,13 +309,13 @@ pub fn update_task<'a, 'b>(
     Ok(status)
 }
 
-fn compute_short_prefixes(writer: &mut heed::RwTxn<MainT>, index: &store::Index) -> MResult<()> {
-    // retrieve the words fst to compute all those prefixes
-    let words_fst = match index.main.words_fst(writer)? {
-        Some(fst) => fst,
-        None => return Ok(()),
-    };
-
+fn compute_short_prefixes<A>(
+    writer: &mut heed::RwTxn<MainT>,
+    words_fst: &fst::Set<A>,
+    index: &store::Index,
+) -> MResult<()>
+where A: AsRef<[u8]>,
+{
     // clear the prefixes
     let pplc_store = index.prefix_postings_lists_cache;
     pplc_store.clear(writer)?;
@@ -358,4 +371,14 @@ fn compute_short_prefixes(writer: &mut heed::RwTxn<MainT>, index: &store::Index)
     }
 
     Ok(())
+}
+
+fn cache_document_ids_sorted(
+    writer: &mut heed::RwTxn<MainT>,
+    ranked_map: &RankedMap,
+    index: &store::Index,
+    document_ids: &mut [DocumentId],
+) -> MResult<()> {
+    crate::bucket_sort::placeholder_document_sort(document_ids, index, writer, ranked_map)?;
+    index.main.put_sorted_document_ids_cache(writer, &document_ids)
 }

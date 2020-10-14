@@ -1,20 +1,13 @@
-use std::collections::HashMap;
+use std::error::Error;
 use std::ops::Deref;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
-use heed::types::{SerdeBincode, Str};
-use log::error;
-use meilisearch_core::{Database, Error as MError, MResult, MainT, UpdateT};
+use meilisearch_core::{Database, DatabaseOptions};
 use sha2::Digest;
-use sysinfo::Pid;
 
+use crate::index_update_callback;
 use crate::option::Opt;
-use crate::routes::index::index_update_callback;
-
-const LAST_UPDATE_KEY: &str = "last-update";
-
-type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
 
 #[derive(Clone)]
 pub struct Data {
@@ -33,11 +26,14 @@ impl Deref for Data {
 pub struct DataInner {
     pub db: Arc<Database>,
     pub db_path: String,
+    pub dumps_folder: PathBuf,
+    pub dump_batch_size: usize,
     pub api_keys: ApiKeys,
-    pub server_pid: Pid,
+    pub server_pid: u32,
+    pub http_payload_size_limit: usize,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct ApiKeys {
     pub public: Option<String>,
     pub private: Option<String>,
@@ -61,81 +57,24 @@ impl ApiKeys {
     }
 }
 
-impl DataInner {
-    pub fn is_indexing(&self, reader: &heed::RoTxn<UpdateT>, index: &str) -> MResult<Option<bool>> {
-        match self.db.open_index(&index) {
-            Some(index) => index.current_update_id(&reader).map(|u| Some(u.is_some())),
-            None => Ok(None),
-        }
-    }
-
-    pub fn last_update(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<DateTime<Utc>>> {
-        match self
-            .db
-            .common_store()
-            .get::<_, Str, SerdeDatetime>(reader, LAST_UPDATE_KEY)?
-        {
-            Some(datetime) => Ok(Some(datetime)),
-            None => Ok(None),
-        }
-    }
-
-    pub fn set_last_update(&self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
-        self.db
-            .common_store()
-            .put::<_, Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, &Utc::now())
-            .map_err(Into::into)
-    }
-
-    pub fn compute_stats(&self, writer: &mut heed::RwTxn<MainT>, index_uid: &str) -> MResult<()> {
-        let index = match self.db.open_index(&index_uid) {
-            Some(index) => index,
-            None => {
-                error!("Impossible to retrieve index {}", index_uid);
-                return Ok(());
-            }
-        };
-
-        let schema = match index.main.schema(&writer)? {
-            Some(schema) => schema,
-            None => return Ok(()),
-        };
-
-        let all_documents_fields = index
-            .documents_fields_counts
-            .all_documents_fields_counts(&writer)?;
-
-        // count fields frequencies
-        let mut fields_frequency = HashMap::<_, usize>::new();
-        for result in all_documents_fields {
-            let (_, attr, _) = result?;
-            if let Some(field_id) = schema.indexed_pos_to_field_id(attr) {
-                *fields_frequency.entry(field_id).or_default() += 1;
-            }
-        }
-
-        // convert attributes to their names
-        let frequency: HashMap<_, _> = fields_frequency
-            .into_iter()
-            .filter_map(|(a, c)| schema.name(a).map(|name| (name.to_string(), c)))
-            .collect();
-
-        index
-            .main
-            .put_fields_frequency(writer, &frequency)
-            .map_err(MError::Zlmdb)
-    }
-}
-
 impl Data {
-    pub fn new(opt: Opt) -> Data {
+    pub fn new(opt: Opt) -> Result<Data, Box<dyn Error>> {
         let db_path = opt.db_path.clone();
-        let server_pid = sysinfo::get_current_pid().unwrap();
+        let dumps_folder = opt.dumps_folder.clone();
+        let dump_batch_size = opt.dump_batch_size;
+        let server_pid = std::process::id();
 
-        let db = Arc::new(Database::open_or_create(opt.db_path).unwrap());
+        let db_opt = DatabaseOptions {
+            main_map_size: opt.max_mdb_size,
+            update_map_size: opt.max_udb_size,
+        };
+
+        let http_payload_size_limit = opt.http_payload_size_limit;
+
+        let db = Arc::new(Database::open_or_create(opt.db_path, db_opt)?);
 
         let mut api_keys = ApiKeys {
-            master: opt.master_key.clone(),
+            master: opt.master_key,
             private: None,
             public: None,
         };
@@ -145,8 +84,11 @@ impl Data {
         let inner_data = DataInner {
             db: db.clone(),
             db_path,
+            dumps_folder,
+            dump_batch_size,
             api_keys,
             server_pid,
+            http_payload_size_limit,
         };
 
         let data = Data {
@@ -158,6 +100,6 @@ impl Data {
             index_update_callback(&index_uid, &callback_context, status);
         }));
 
-        data
+        Ok(data)
     }
 }

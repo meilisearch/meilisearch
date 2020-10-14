@@ -6,8 +6,10 @@ GREEN='\033[32m'
 DEFAULT='\033[0m'
 
 # GLOBALS
-GREP_SEMVER_REGEXP='\"v\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)\"' # i.e. "v[number].[number].[number]"
 BINARY_NAME='meilisearch'
+GREP_SEMVER_REGEXP='v\([0-9]*\)[.]\([0-9]*\)[.]\([0-9]*\)$' # i.e. v[number].[number].[number]
+
+# FUNCTIONS
 
 # semverParseInto and semverLT from https://github.com/cloudflare/semver_bash/blob/master/semver.sh
 
@@ -66,6 +68,88 @@ semverLT() {
     return 1
 }
 
+# Returns the tag of the latest stable release (in terms of semver and not of release date)
+get_latest() {
+    temp_file='temp_file' # temp_file needed because the grep would start before the download is over
+    curl -s 'https://api.github.com/repos/meilisearch/MeiliSearch/releases' > "$temp_file"
+    releases=$(cat "$temp_file" | \
+        grep -E "tag_name|draft|prerelease" \
+        | tr -d ',"' | cut -d ':' -f2 | tr -d ' ')
+        # Returns a list of [tag_name draft_boolean prerelease_boolean ...]
+        # Ex: v0.10.1 false false v0.9.1-rc.1 false true v0.9.0 false false...
+
+    i=0
+    latest=""
+    current_tag=""
+    for release_info in $releases; do
+        if [ $i -eq 0 ]; then # Cheking tag_name
+            if echo "$release_info" | grep -q "$GREP_SEMVER_REGEXP"; then # If it's not an alpha or beta release
+                current_tag=$release_info
+            else
+                current_tag=""
+            fi
+            i=1
+        elif [ $i -eq 1 ]; then # Checking draft boolean
+            if [ "$release_info" = "true" ]; then
+                current_tag=""
+            fi
+            i=2
+        elif [ $i -eq 2 ]; then # Checking prerelease boolean
+            if [ "$release_info" = "true" ]; then
+                current_tag=""
+            fi
+            i=0
+            if [ "$current_tag" != "" ]; then # If the current_tag is valid
+                if [ "$latest" = "" ]; then # If there is no latest yet
+                    latest="$current_tag"
+                else
+                    semverLT $current_tag $latest # Comparing latest and the current tag
+                    if [ $? -eq 1 ]; then
+                        latest="$current_tag"
+                    fi
+                fi
+            fi
+        fi
+    done
+
+    rm -f "$temp_file"
+    echo $latest
+}
+
+# Gets the OS by setting the $os variable
+# Returns 0 in case of success, 1 otherwise.
+get_os() {
+    os_name=$(uname -s)
+    case "$os_name" in
+    'Darwin')
+        os='macos'
+        ;;
+    'Linux')
+        os='linux'
+        ;;
+    *)
+        return 1
+    esac
+    return 0
+}
+
+# Gets the architecture by setting the $archi variable
+# Returns 0 in case of success, 1 otherwise.
+get_archi() {
+    architecture=$(uname -m)
+    case "$architecture" in
+    'x86_64' | 'amd64')
+        archi='amd64'
+        ;;
+    'aarch64')
+        archi='armv8'
+        ;;
+    *)
+        return 1
+    esac
+    return 0
+}
+
 success_usage() {
     printf "$GREEN%s\n$DEFAULT" "MeiliSearch binary successfully downloaded as '$BINARY_NAME' file."
     echo ''
@@ -76,53 +160,27 @@ success_usage() {
 }
 
 failure_usage() {
-    printf "$RED%s\n$DEFAULT" 'ERROR: MeiliSearch binary is not available for your OS distribution yet.'
+    printf "$RED%s\n$DEFAULT" 'ERROR: MeiliSearch binary is not available for your OS distribution or your architecture yet.'
     echo ''
     echo 'However, you can easily compile the binary from the source files.'
-    echo 'Follow the steps on the docs: https://docs.meilisearch.com/advanced_guides/binary.html#how-to-compile-meilisearch'
+    echo 'Follow the steps at the page ("Source" tab): https://docs.meilisearch.com/guides/advanced_guides/installation.html'
 }
 
-# OS DETECTION
-echo 'Detecting OS distribution...'
-os_name=$(uname -s)
-if [ "$os_name" != "Darwin" ]; then
-    os_name=$(cat /etc/os-release | grep '^ID=' | tr -d '"' | cut -d '=' -f 2)
-fi
-echo "OS distribution detected: $os_name"
-case "$os_name" in
-'Darwin')
-    os='macos'
-    ;;
-'ubuntu' | 'debian')
-    os='linux'
-    ;;
-*)
+# MAIN
+latest="$(get_latest)"
+get_os
+if [ "$?" -eq 1 ]; then
     failure_usage
     exit 1
-esac
-
-# GET LATEST VERSION
-tags=$(curl -s 'https://api.github.com/repos/meilisearch/MeiliSearch/tags' \
-    | grep "$GREP_SEMVER_REGEXP" \
-    | grep 'name' \
-    | tr -d '"' | tr -d ',' | cut -d 'v' -f 2)
-
-latest=""
-for tag in $tags; do
-    if [ "$latest" = "" ]; then
-        latest="$tag"
-    else
-        semverLT $tag $latest
-        if [ $? -eq 1 ]; then
-            latest="$tag"
-        fi
-    fi
-done
-
-# DOWNLOAD THE LATEST
-echo "Downloading MeiliSearch binary v$latest for $os..."
-release_file="meilisearch-$os-amd64"
-link="https://github.com/meilisearch/MeiliSearch/releases/download/v$latest/$release_file"
+fi
+get_archi
+if [ "$?" -eq 1 ]; then
+    failure_usage
+    exit 1
+fi
+echo "Downloading MeiliSearch binary $latest for $os, architecture $archi..."
+release_file="meilisearch-$os-$archi"
+link="https://github.com/meilisearch/MeiliSearch/releases/download/$latest/$release_file"
 curl -OL "$link"
 mv "$release_file" "$BINARY_NAME"
 chmod 744 "$BINARY_NAME"

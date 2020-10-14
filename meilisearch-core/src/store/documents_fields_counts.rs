@@ -4,6 +4,7 @@ use crate::DocumentId;
 use heed::types::OwnedType;
 use heed::Result as ZResult;
 use meilisearch_schema::IndexedPos;
+use crate::MResult;
 
 #[derive(Copy, Clone)]
 pub struct DocumentsFieldsCounts {
@@ -60,7 +61,7 @@ impl DocumentsFieldsCounts {
         Ok(DocumentFieldsCountsIter { iter })
     }
 
-    pub fn documents_ids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> ZResult<DocumentsIdsIter<'txn>> {
+    pub fn documents_ids<'txn>(self, reader: &'txn heed::RoTxn<MainT>) -> MResult<DocumentsIdsIter<'txn>> {
         let iter = self.documents_fields_counts.iter(reader)?;
         Ok(DocumentsIdsIter {
             last_seen_id: None,
@@ -102,7 +103,7 @@ pub struct DocumentsIdsIter<'txn> {
 }
 
 impl Iterator for DocumentsIdsIter<'_> {
-    type Item = ZResult<DocumentId>;
+    type Item = MResult<DocumentId>;
 
     fn next(&mut self) -> Option<Self::Item> {
         for result in &mut self.iter {
@@ -114,7 +115,7 @@ impl Iterator for DocumentsIdsIter<'_> {
                         return Some(Ok(document_id));
                     }
                 }
-                Err(e) => return Some(Err(e)),
+                Err(e) => return Some(Err(e.into())),
             }
         }
         None
