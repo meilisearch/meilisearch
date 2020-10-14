@@ -79,6 +79,7 @@ pub enum Code {
 
     DumpAlreadyInProgress,
     DumpProcessFailed,
+    DumpReadFailed,
 }
 
 impl Code {
@@ -129,6 +130,7 @@ impl Code {
             // error related to dump
             DumpAlreadyInProgress => ErrCode::invalid("dump_already_in_progress", StatusCode::CONFLICT),
             DumpProcessFailed => ErrCode::internal("dump_process_failed", StatusCode::INTERNAL_SERVER_ERROR),
+            DumpReadFailed => ErrCode::internal("dump_read_failed", StatusCode::INTERNAL_SERVER_ERROR),
         }
     }
 

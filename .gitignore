@@ -6,3 +6,4 @@ meilisearch-core/target
 /*.mdb
 /query-history.txt
 /data.ms
+/dumps

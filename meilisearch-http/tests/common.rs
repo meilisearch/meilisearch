@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use tempdir::TempDir;
 use tokio::time::delay_for;
+use bytes::Bytes;
 
 use meilisearch_core::DatabaseOptions;
 use meilisearch_http::data::Data;
@@ -242,6 +243,21 @@ impl Server {
         self.wait_update_id(response["updateId"].as_u64().unwrap())
             .await;
         (response, status_code)
+    }
+
+    // Data Http request
+
+    pub async fn get_bytes_request(&mut self, url: &str) -> (Bytes, StatusCode) {
+        eprintln!("get_bytes_request: {}", url);
+
+        let mut app = test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+
+        let req = test::TestRequest::get().uri(url).to_request();
+        let res = test::call_service(&mut app, req).await;
+        let status_code = res.status().clone();
+
+        let body = test::read_body(res).await;
+        (body, status_code)
     }
 
     // All Routes
@@ -502,4 +518,10 @@ impl Server {
         let url = format!("/dumps/{}/import", dump_uid);
         self.get_request(&url).await
     }
+
+    pub async fn fetch_dump(&mut self, dump_uid: &str) -> (Bytes, StatusCode) {
+        let url = format!("/dumps/{}", dump_uid);
+        self.get_bytes_request(&url).await
+    }
+
 }

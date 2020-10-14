@@ -1,5 +1,9 @@
 use std::fs::File;
 use std::path::Path;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::io::{BufReader, Read};
+use bytes::Bytes;
 
 use actix_web::{get, post};
 use actix_web::{HttpResponse, web};
@@ -12,7 +16,8 @@ use crate::helpers::Authentication;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(trigger_dump)
-        .service(get_dump_status);
+        .service(get_dump_status)
+        .service(stream_dump);
 }
 
 #[post("/dumps", wrap = "Authentication::Private")]
@@ -60,5 +65,56 @@ async fn get_dump_status(
         Ok(HttpResponse::Ok().json(resume))
     } else {
         Err(Error::not_found("dump does not exist").into())
+    }
+}
+
+struct StreamBody {
+    reader: BufReader<File>,
+    buffer: Vec<u8>,
+}
+
+impl StreamBody {
+    fn new(file: File, chunk_size: usize) -> Self {
+        let reader = BufReader::new(file);
+        let buffer = vec![0u8; chunk_size];
+        StreamBody {
+            reader,
+            buffer,
+        }
+    }
+}
+
+impl futures::stream::Stream for StreamBody {
+    type Item = Result<Bytes, ResponseError>;
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        use std::ops::DerefMut;
+        let stream = self.deref_mut();
+        match stream.reader.read(&mut stream.buffer) {
+            Ok(count) => {
+                if count > 0 {
+                    Poll::Ready(Some(Ok(Bytes::copy_from_slice(&self.buffer[..count]))))
+                } else {
+                    Poll::Ready(None)
+                }
+            },
+            Err(e) => Poll::Ready(Some(Err(Error::dump_read_failed(e).into())))
+        }
+    }
+}
+
+#[get("/dumps/{dump_uid}", wrap = "Authentication::Private")]
+async fn stream_dump(
+    data: web::Data<Data>,
+    path: web::Path<DumpParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let dumps_folder = Path::new(&data.dumps_folder);
+    let dump_uid = &path.dump_uid;
+
+    match File::open(compressed_dumps_folder(Path::new(dumps_folder), dump_uid)) {
+        Ok(file) => Ok(HttpResponse::Ok().streaming(StreamBody::new(file, 1024))),
+        Err(_) => Err(Error::not_found("dump does not exist").into())
     }
 }
