@@ -115,6 +115,6 @@ async fn stream_dump(
 
     match File::open(compressed_dumps_folder(Path::new(dumps_folder), dump_uid)) {
         Ok(file) => Ok(HttpResponse::Ok().streaming(StreamBody::new(file, 1024))),
-        Err(e) => Err(Error::not_found("dump does not exist").into())
+        Err(_) => Err(Error::not_found("dump does not exist").into())
     }
 }

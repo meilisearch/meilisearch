@@ -2,6 +2,7 @@ use assert_json_diff::{assert_json_eq, assert_json_include};
 use meilisearch_http::helpers::compression;
 use serde_json::{json, Value};
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use std::thread;
 use std::time::Duration;
@@ -359,4 +360,35 @@ async fn get_unexisting_dump_status_should_return_not_found() {
     let (_, status_code) = server.get_dump_status("4242").await;
 
     assert_eq!(status_code, 404);
+}
+
+#[actix_rt::test]
+#[ignore]
+async fn stream_dump_should_return_processed_file() {
+    let mut server = common::Server::test_server().await;
+
+    let dataset = include_bytes!("assets/dumps/v1/test/documents.jsonl");
+    let mut slice: &[u8] = dataset;
+
+    let expected: Value = read_all_jsonline(&mut slice);
+
+    let uid = trigger_and_wait_dump(&mut server).await;
+
+    let (bytes, status_code) = server.fetch_dump(&uid).await;
+
+    assert_eq!(status_code, 200);
+
+    let dumps_folder = Path::new(&server.data().dumps_folder);
+    let tmp_dir = TempDir::new().unwrap();
+    let tmp_dir_path = tmp_dir.path();
+
+    let tar_gz = dumps_folder.join(&format!("{}.tar.gz", uid));
+    let mut file = File::create(&tar_gz).unwrap();
+    file.write_all(&bytes).unwrap();
+    compression::from_tar_gz(&tar_gz, tmp_dir_path).unwrap();
+
+    let file = File::open(tmp_dir_path.join("test").join("documents.jsonl")).unwrap();
+    let documents = read_all_jsonline(file);
+
+    assert_json_eq!(expected.clone(), documents.clone(), ordered: false);
 }
