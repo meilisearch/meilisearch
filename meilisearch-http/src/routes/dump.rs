@@ -64,10 +64,52 @@ async fn get_dump_status(
     }
 }
 
-use bytes::BytesMut;
-use futures::{Future, Stream};
-use tokio_util::codec::{BytesCodec, FramedRead};
-use tokio::runtime::Runtime;
+use bytes::Bytes;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::io::BufReader;
+use std::io::Read;
+use futures_util::ready;
+use futures_core::Future;
+
+struct StreamBody {
+    reader: BufReader<File>,
+    buffer: Vec<u8>,
+    delay: actix_rt::time::Delay,
+}
+
+impl StreamBody {
+    fn new(file: File, chunk_size: usize) -> Self {
+        let mut reader = BufReader::new(file);
+        let mut buffer = vec![0u8; chunk_size];
+        StreamBody {
+            reader,
+            buffer,
+            delay: actix_rt::time::delay_for(std::time::Duration::from_millis(10)),
+        }
+    }
+}
+
+impl futures_core::stream::Stream for StreamBody {
+    type Item = Result<Bytes, ResponseError>;
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        ready!(Pin::new(&mut self.delay).poll(cx));
+        self.delay = actix_rt::time::delay_for(std::time::Duration::from_millis(10));
+        match self.reader.read(&mut self.buffer) {
+            Ok(count) => {
+                if count > 0 {
+                    Poll::Ready(Some(Ok(Bytes::from(&self.buffer[..count]))))
+                } else {
+                    Poll::Ready(None)
+                }
+            },
+            Err(e) => Poll::Ready(None)
+        }
+    }
+}
 
 #[get("/dumps/{dump_uid}", wrap = "Authentication::Private")]
 async fn stream_dump(
@@ -77,19 +119,9 @@ async fn stream_dump(
     let dumps_folder = Path::new(&data.dumps_folder);
     let dump_uid = &path.dump_uid;
 
-    let mut file = File::open(compressed_dumps_folder(Path::new(dumps_folder), dump_uid));
-
-    if file.is_ok() {
-
-        FramedRead::new(file, BytesCodec::new())
-            .map(BytesMut::freeze) // Map stream of `BytesMut` to stream of `Bytes`
-            .concat2()
-            .and_then(|bytes| {
-                Ok(HttpResponse::Ok().streaming(bytes))
-            })
-        
-    } else {
-        Err(Error::not_found("dump does not exist").into())
+    match File::open(compressed_dumps_folder(Path::new(dumps_folder), dump_uid)) {
+        Ok(file) => Ok(HttpResponse::Ok().streaming(StreamBody::new(file, 1024))),
+        Err(e) => Err(Error::not_found("dump does not exist").into())
     }
 
 }
