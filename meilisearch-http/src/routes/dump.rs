@@ -12,7 +12,8 @@ use crate::helpers::Authentication;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(trigger_dump)
-        .service(get_dump_status);
+        .service(get_dump_status)
+        .service(stream_dump);
 }
 
 #[post("/dumps", wrap = "Authentication::Private")]
@@ -61,4 +62,34 @@ async fn get_dump_status(
     } else {
         Err(Error::not_found("dump does not exist").into())
     }
+}
+
+use bytes::BytesMut;
+use futures::{Future, Stream};
+use tokio_util::codec::{BytesCodec, FramedRead};
+use tokio::runtime::Runtime;
+
+#[get("/dumps/{dump_uid}", wrap = "Authentication::Private")]
+async fn stream_dump(
+    data: web::Data<Data>,
+    path: web::Path<DumpParam>,
+) -> Result<HttpResponse, ResponseError> {
+    let dumps_folder = Path::new(&data.dumps_folder);
+    let dump_uid = &path.dump_uid;
+
+    let mut file = File::open(compressed_dumps_folder(Path::new(dumps_folder), dump_uid));
+
+    if file.is_ok() {
+
+        FramedRead::new(file, BytesCodec::new())
+            .map(BytesMut::freeze) // Map stream of `BytesMut` to stream of `Bytes`
+            .concat2()
+            .and_then(|bytes| {
+                Ok(HttpResponse::Ok().streaming(bytes))
+            })
+        
+    } else {
+        Err(Error::not_found("dump does not exist").into())
+    }
+
 }
