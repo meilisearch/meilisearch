@@ -45,10 +45,10 @@ pub fn schedule_snapshot(data: Data, snapshot_dir: &Path, time_gap_s: u64) -> Re
     let snapshot_path = snapshot_dir.join(format!("{}.snapshot", db_name.to_str().unwrap_or("data.ms")));
     
     thread::spawn(move || loop { 
-        thread::sleep(Duration::from_secs(time_gap_s));
         if let Err(e) = create_snapshot(&data, &snapshot_path) {
             error!("Unsuccessful snapshot creation: {}", e);
         }
+        thread::sleep(Duration::from_secs(time_gap_s));
     });
 
     Ok(())
