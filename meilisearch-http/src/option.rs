@@ -97,23 +97,27 @@ pub struct Opt {
     /// Defines the path of the snapshot file to import.
     /// This option will, by default, stop the process if a database already exist or if no snapshot exists at
     /// the given path. If this option is not specified no snapshot is imported.
-    #[structopt(long, env = "MEILI_LOAD_FROM_SNAPSHOT")]
-    pub load_from_snapshot: Option<PathBuf>,
+    #[structopt(long, env = "MEILI_IMPORT_SNAPSHOT")]
+    pub import_snapshot: Option<PathBuf>,
 
     /// The engine will ignore a missing snapshot and not return an error in such case.
-    #[structopt(long, requires = "load-from-snapshot", env = "MEILI_IGNORE_MISSING_SNAPSHOT")]
+    #[structopt(long, requires = "import-snapshot", env = "MEILI_IGNORE_MISSING_SNAPSHOT")]
     pub ignore_missing_snapshot: bool,
 
     /// The engine will skip snapshot importation and not return an error in such case.
-    #[structopt(long, requires = "load-from-snapshot", env = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS")]
+    #[structopt(long, requires = "import-snapshot", env = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS")]
     pub ignore_snapshot_if_db_exists: bool,
 
     /// Defines the directory path where meilisearch will create snapshot each snapshot_time_gap.
-    #[structopt(long, env = "MEILI_SNAPSHOT_DIR")]
-    pub snapshot_dir: Option<PathBuf>,
+    #[structopt(long, env = "MEILI_SNAPSHOT_DIR", default_value = "snapshots/")]
+    pub snapshot_dir: PathBuf,
+
+    /// Activate snapshot scheduling.
+    #[structopt(long, env = "MEILI_SCHEDULE_SNAPSHOT")]
+    pub schedule_snapshot: bool,
 
     /// Defines time interval, in seconds, between each snapshot creation.
-    #[structopt(long, requires = "snapshot-path", env = "MEILI_SNAPSHOT_INTERVAL_SEC")]
+    #[structopt(long, env = "MEILI_SNAPSHOT_INTERVAL_SEC")]
     pub snapshot_interval_sec: Option<u64>,
 
     /// Folder where dumps are created when the dump route is called.

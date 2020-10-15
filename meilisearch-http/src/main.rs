@@ -52,7 +52,7 @@ async fn main() -> Result<(), MainError> {
         _ => unreachable!(),
     }
 
-    if let Some(path) = &opt.load_from_snapshot {
+    if let Some(path) = &opt.import_snapshot {
         snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
     }
 
@@ -74,8 +74,8 @@ async fn main() -> Result<(), MainError> {
         dump::import_dump(&data, path, opt.dump_batch_size)?;
     }
 
-    if let Some(dir) = &opt.snapshot_dir {
-        snapshot::schedule_snapshot(data.clone(), &dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
+    if opt.schedule_snapshot {
+        snapshot::schedule_snapshot(data.clone(), &opt.snapshot_dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
     }
 
     print_launch_resume(&opt, &data);
