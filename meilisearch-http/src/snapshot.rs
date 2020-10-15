@@ -20,9 +20,9 @@ pub fn load_snapshot(
     if !db_path.exists() && snapshot_path.exists() {
         compression::from_tar_gz(snapshot_path, db_path)
     } else if db_path.exists() && !ignore_snapshot_if_db_exists {
-        Err(Error::Internal(format!("database already exists at {:?}, try to delete it or rename it", db_path)))
+        Err(Error::Internal(format!("database already exists at {:?}, try to delete it or rename it", db_path.canonicalize().unwrap_or(db_path.into()))))
     } else if !snapshot_path.exists() && !ignore_missing_snapshot {
-        Err(Error::Internal(format!("snapshot doesn't exist at {:?}", snapshot_path)))
+        Err(Error::Internal(format!("snapshot doesn't exist at {:?}", snapshot_path.canonicalize().unwrap_or(snapshot_path.into()))))
     } else {
         Ok(())
     }
