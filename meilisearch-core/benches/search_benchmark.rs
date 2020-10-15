@@ -15,7 +15,7 @@ use meilisearch_core::settings::{Settings, SettingsUpdate};
 use meilisearch_schema::Schema;
 use serde_json::Value;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 
 fn prepare_database(path: &Path) -> Database {
     let database = Database::open_or_create(path, DatabaseOptions::default()).unwrap();
