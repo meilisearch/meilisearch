@@ -364,7 +364,7 @@ async fn get_unexisting_dump_status_should_return_not_found() {
 
 #[actix_rt::test]
 #[ignore]
-async fn stream_dump_should_return_processed_file() {
+async fn download_dump_should_return_processed_file() {
     let mut server = common::Server::test_server().await;
 
     let dataset = include_bytes!("assets/dumps/v1/test/documents.jsonl");
@@ -374,7 +374,7 @@ async fn stream_dump_should_return_processed_file() {
 
     let uid = trigger_and_wait_dump(&mut server).await;
 
-    let (bytes, status_code) = server.fetch_dump(&uid).await;
+    let (bytes, status_code) = server.download_dump(&uid).await;
 
     assert_eq!(status_code, 200);
 

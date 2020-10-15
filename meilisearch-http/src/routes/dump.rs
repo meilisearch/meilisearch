@@ -75,6 +75,7 @@ struct StreamBody {
 }
 
 impl StreamBody {
+
     fn new(file: tokio::fs::File, chunk_size: usize) -> Self {
         let buffer = vec![0u8; chunk_size];
         StreamBody {
@@ -82,6 +83,9 @@ impl StreamBody {
             buffer,
         }
     }
+
+    
+
 }
 
 impl tokio::stream::Stream for StreamBody {
@@ -92,16 +96,16 @@ impl tokio::stream::Stream for StreamBody {
     ) -> Poll<Option<Self::Item>> {
         use std::ops::DerefMut;
         let stream = self.deref_mut();
-            match stream.file.read(&mut stream.buffer).await {
-                Ok(count) => {
-                    if count > 0 {
-                        Poll::Ready(Some(Ok(Bytes::copy_from_slice(&self.buffer[..count]))))
-                    } else {
-                        Poll::Ready(None)
-                    }
-                },
-                Err(e) => Poll::Ready(Some(Err(Error::dump_read_failed(e).into())))
-            }
+        match stream.file.read(&mut stream.buffer).await {
+            Ok(count) => {
+                if count > 0 {
+                    Poll::Ready(Some(Ok(Bytes::copy_from_slice(&self.buffer[..count]))))
+                } else {
+                    Poll::Ready(None)
+                }
+            },
+            Err(e) => Poll::Ready(Some(Err(Error::dump_read_failed(e).into())))
+        }
     }
 }
 

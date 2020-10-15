@@ -519,7 +519,7 @@ impl Server {
         self.get_request(&url).await
     }
 
-    pub async fn fetch_dump(&mut self, dump_uid: &str) -> (Bytes, StatusCode) {
+    pub async fn download_dump(&mut self, dump_uid: &str) -> (Bytes, StatusCode) {
         let url = format!("/dumps/{}", dump_uid);
         self.get_bytes_request(&url).await
     }
