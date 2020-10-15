@@ -98,7 +98,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let bench_name = BenchmarkId::from_parameter(format!("{:?}", query));
         group.bench_with_input(bench_name, &query, |b, query| b.iter(|| {
             let builder = index.query_builder();
-            builder.query(&reader, query, 0..20).unwrap();
+            builder.query(&reader, Some(*query), 0..20).unwrap();
         }));
     }
     group.finish();
