@@ -17,18 +17,18 @@ path = "src/main.rs"
 default = ["sentry"]
 
 [dependencies]
-actix-cors = "0.3"
+actix-cors = "0.4.1"
 actix-http = "2"
 actix-rt = "1"
 actix-service = "1.0.6"
-actix-web = { version = "3", features = ["rustls"] }
+actix-web = { version = "3.1.0", features = ["rustls"] }
 bytes = "0.5.4"
-chrono = { version = "0.4.11", features = ["serde"] }
-crossbeam-channel = "0.4.2"
+chrono = { version = "0.4.19", features = ["serde"] }
+crossbeam-channel = "0.5.0"
 env_logger = "0.7.1"
-flate2 = "1.0.16"
-futures = "0.3.4"
-http = "0.1.19"
+flate2 = "1.0.18"
+futures = "0.3.6"
+http = "0.2.1"
 indexmap = { version = "1.3.2", features = ["serde-1"] }
 log = "0.4.8"
 main_error = "0.1.0"
@@ -39,21 +39,21 @@ meilisearch-tokenizer = {path = "../meilisearch-tokenizer", version = "0.15.0"}
 mime = "0.3.16"
 once_cell = "1.4.1"
 rand = "0.7.3"
-regex = "1.3.6"
+regex = "1.4.1"
 rustls = "0.18"
 serde = { version = "1.0.105", features = ["derive"] }
-serde_json = { version = "1.0.50", features = ["preserve_order"] }
-serde_qs = "0.5.2"
-sha2 = "0.8.1"
+serde_json = { version = "1.0.59", features = ["preserve_order"] }
+serde_qs = "0.7.0"
+sha2 = "0.9.1"
 siphasher = "0.3.2"
 slice-group-by = "0.2.6"
-structopt = "0.3.12"
+structopt = "0.3.20"
 tar = "0.4.29"
 tempfile = "3.1.0"
 tokio = { version = "0.2.18", features = ["macros"] }
-ureq = { version = "0.12.0", features = ["tls"], default-features = false }
+ureq = { version = "1.5.1", features = ["tls"], default-features = false }
 walkdir = "2.3.1"
-whoami = "0.8.1"
+whoami = "0.9.0"
 
 [dependencies.sentry]
 version = "0.18.1"
