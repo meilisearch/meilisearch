@@ -245,7 +245,7 @@ fn generate_uid() -> String {
 
 /// Infer dumps_dir from dump_uid
 pub fn compressed_dumps_dir(dumps_dir: &Path, dump_uid: &str) -> PathBuf {
-    dumps_dir.join(format!("{}.tar.gz", dump_uid))
+    dumps_dir.join(format!("{}.dump", dump_uid))
 }
 
 /// Write metadata in dump
@@ -380,7 +380,7 @@ fn dump_process(data: web::Data<Data>, dumps_dir: PathBuf, dump_info: DumpInfo) 
         }
     }
 
-    // compress dump in a file named `{dump_uid}.tar.gz` in `dumps_dir`
+    // compress dump in a file named `{dump_uid}.dump` in `dumps_dir`
     if let Err(e) = crate::helpers::compression::to_tar_gz(&tmp_dir_path, &compressed_dumps_dir(&dumps_dir, &dump_info.uid)) {
         fail_dump_process(dump_info, "compressing dump", e);
         return ;
