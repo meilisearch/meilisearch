@@ -196,9 +196,8 @@ fn compute_words_pair_proximities(
             // We don't care about a word that appear at the
             // same position or too far from the other.
             if prox >= 1 && prox <= 7 {
-                match min_prox {
-                    None => min_prox = Some(prox),
-                    Some(mp) => if prox < mp { min_prox = Some(prox) },
+                if min_prox.map_or(true, |mp| prox < mp) {
+                    min_prox = Some(prox)
                 }
             }
         }
