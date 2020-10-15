@@ -22,6 +22,7 @@ actix-http = "2"
 actix-rt = "1"
 actix-service = "1.0.6"
 actix-web = { version = "3", features = ["rustls"] }
+async-stream = "0.3.0"
 bytes = "0.5.4"
 chrono = { version = "0.4.11", features = ["serde"] }
 crossbeam-channel = "0.4.2"
@@ -50,7 +51,7 @@ slice-group-by = "0.2.6"
 structopt = "0.3.12"
 tar = "0.4.29"
 tempfile = "3.1.0"
-tokio = { version = "0.2.18", features = ["macros"] }
+tokio = { version = "0.2.18", features = ["macros", "fs", "stream"] }
 ureq = { version = "0.12.0", features = ["tls"], default-features = false }
 walkdir = "2.3.1"
 whoami = "0.8.1"
