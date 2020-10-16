@@ -1780,7 +1780,7 @@ async fn update_documents_with_facet_distribution() {
     let settings = json!({
         "attributesForFaceting": ["genre"],
         "displayedAttributes": ["genre"],
-        "searchableAttributes": ["genre"]
+        "searchableAttributes": ["genre", "type"]
     });
     server.update_all_settings(settings).await;
     let update1 = json!([
