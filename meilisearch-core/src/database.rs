@@ -1,6 +1,7 @@
 use std::collections::hash_map::{Entry, HashMap};
 use std::fs::File;
 use std::io::{Read, Write, ErrorKind};
+use std::path::PathBuf;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -36,6 +37,7 @@ pub struct UpdateT;
 
 pub struct Database {
     id: u64,
+    db_path: PathBuf,
     pub env: heed::Env,
     update_env: heed::Env,
     common_store: heed::PolyDatabase,
@@ -75,6 +77,7 @@ macro_rules! r#break_try {
 pub enum UpdateEvent {
     NewUpdate,
     MustClear,
+    Shutdown,
 }
 
 pub type UpdateEvents = Receiver<UpdateEvent>;
@@ -234,42 +237,45 @@ fn version_guard(path: &Path, create: bool) -> MResult<(u32, u32, u32)> {
     }
 }
 
-impl Database {
+///TODO: make portable
+fn close_env(env: heed::Env, lock_path: impl AsRef<Path>) {
+    use std::os::unix::io::AsRawFd;
+    // try to acquire a write transaction
+    let _ = env.write_txn().map(|txn| { let _ = txn.abort(); });
+    // open lockfile and acquire a lockk on it's whole.
+    let file = std::fs::File::open(lock_path).expect("fatal: lock file must be present");
+    //TODO: could use nix and avoid unsafe
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
+        panic!("fatal: can't acquire lock on lockfile");
+    }
+    info!("acquired lock on file");
+    // clean stale readers
+    let _dead_num = env.reader_check().expect("could not check error");
+    let mut readers = env.reader_list().expect("can't get length");
+    while readers.len() > 1 {
+        std::thread::sleep(Duration::from_secs(1));
+        readers = env.reader_list().expect("can't get length");
+        info!("readers: {:?}", readers.len());
+    }
 
-    pub fn close(self) {
+    unsafe { env.close() };
+}
+
+impl Database {
+    /// spawn a thread that attempts to close all the environements
+    //TODO: error management.
+    pub fn close<F: FnOnce() + Send + Sync + 'static>(self, cb: F) {
         thread::spawn(move || {
-                // Get a write txn and do nothing with it
             let mut indexes = self.indexes.write().unwrap();
-            info!("closing all update notifiers");
+            // aborting all notifier loops
             for (_ ,(index, handle)) in indexes.drain() {
-                let _ = index.updates_notifier.send(UpdateEvent::MustClear);
+                let _ = index.updates_notifier.send(UpdateEvent::Shutdown);
                 let _ = handle.join();
             }
-            let _ = self.update_env.write_txn().map(|txn| { let _ = txn.abort(); });
-            let _ = self.env.write_txn().map(|txn| { let _ = txn.abort(); });
-            let dead_num = self.env.reader_check().expect("could not check error");
-            info!("cleaned: {}", dead_num);
-            let mut readers = self.env.reader_list().expect("can't get length");
-            info!("readers: {:?}", readers.len());
-            while readers.len() > 1 {
-                std::thread::sleep(Duration::from_secs(1));
-                readers = self.env.reader_list().expect("can't get length");
-                info!("readers: {:?}", readers.len());
-            }
 
-            let mut readers = self.update_env.reader_list().expect("can't get length");
-            while readers.len() > 1 {
-                std::thread::sleep(Duration::from_secs(1));
-                readers = self.update_env.reader_list().expect("can't get length");
-                info!("readers: {:?}", readers.len());
-            }
-            info!("can close env");
-            // The call to close is safe, because we took ownership on the env, and waited
-            // for all txn to terminate, no subsequent operation can occur on the
-            // environement.
-            unsafe { self.env.close() };
-            unsafe { self.update_env.close() };
-            info!("closed environement");
+            close_env(self.update_env, self.db_path.join("update/lock.mdb"));
+            close_env(self.env, self.db_path.join("main/lock.mdb"));
+            cb();
         });
     }
 
@@ -357,6 +363,7 @@ impl Database {
 
         Ok(Database {
             id,
+            db_path: path.as_ref().into(),
             env,
             update_env,
             common_store,

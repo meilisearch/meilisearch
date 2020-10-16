@@ -1372,7 +1372,7 @@ dependencies = [
 
 [[package]]
 name = "heed"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "byteorder",
  "heed-traits 0.7.0",
@@ -1875,12 +1875,13 @@ dependencies = [
  "env_logger",
  "fst",
  "hashbrown 0.7.2",
- "heed 0.8.0",
+ "heed 0.8.1",
  "indexmap",
  "intervaltree",
  "itertools 0.9.0",
  "jemallocator",
  "levenshtein_automata",
+ "libc",
  "log",
  "meilisearch-error",
  "meilisearch-schema",
@@ -1935,7 +1936,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "get_if_addrs",
- "heed 0.8.1",
+ "heed 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "http 0.1.21",
  "indexmap",
  "jemallocator",

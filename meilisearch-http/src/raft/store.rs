@@ -526,7 +526,7 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         txn.commit()?;
 
         match Arc::try_unwrap(old_db) {
-            Ok(db) => db.close(),
+            Ok(db) => db.close(|| println!("Hello, world")),
             Err(_) => {
                 // there shouldn't be other refs at this point
                 panic!("can't get db ownership");
