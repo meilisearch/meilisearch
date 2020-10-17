@@ -7,8 +7,7 @@ use bytes::Bytes;
 use actix_web::{get, post};
 use actix_web::{HttpResponse, web};
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncReadExt;
-use async_stream::stream;
+use tokio::io::AsyncRead;
 
 use crate::dump::{DumpInfo, DumpStatus, compressed_dumps_folder, init_dump_process};
 use crate::Data;
@@ -75,36 +74,43 @@ struct StreamBody {
 }
 
 impl StreamBody {
-
     fn new(file: tokio::fs::File, chunk_size: usize) -> Self {
         let buffer = vec![0u8; chunk_size];
+        println!("buffer!!!!");
         StreamBody {
             file,
             buffer,
         }
     }
-
-    
-
 }
 
 impl tokio::stream::Stream for StreamBody {
     type Item = Result<Bytes, ResponseError>;
     fn poll_next(
         mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        use std::ops::DerefMut;
-        let stream = self.deref_mut();
-        match stream.file.read(&mut stream.buffer).await {
-            Ok(count) => {
-                if count > 0 {
-                    Poll::Ready(Some(Ok(Bytes::copy_from_slice(&self.buffer[..count]))))
+        //  you can't hold to mut refs to self, need to take ownership on the buffer for some time
+        let mut buffer = std::mem::replace(&mut self.buffer, vec![]);
+        println!("std::mem::replace");
+        let file = &mut self.file;
+        pin_utils::pin_mut!(file);
+        println!("pin_mut");
+        match file.poll_read(cx, &mut buffer) {
+            Poll::Ready(Ok(size)) => {
+                if size > 0 {
+                    println!("poll_read {}", size);
+                    // place it back when done with it
+                    let _ = std::mem::replace(&mut self.buffer, buffer);
+                    println!("poll_read2 {}", size);
+                    Poll::Ready(Some(Ok(Bytes::copy_from_slice(&self.buffer[..size]))))
                 } else {
+                    println!("poll_read fail {}", size);
                     Poll::Ready(None)
                 }
-            },
-            Err(e) => Poll::Ready(Some(Err(Error::dump_read_failed(e).into())))
+            }
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Err(e)) => Poll::Ready(Some(Err(Error::Internal(e.to_string()).into()))),
         }
     }
 }
@@ -117,6 +123,8 @@ async fn download_dump(
     let dumps_folder = Path::new(&data.dumps_folder);
     let dump_uid = &path.dump_uid;
     let path = compressed_dumps_folder(Path::new(dumps_folder), dump_uid);
+
+    println!("download_dump");
 
     match tokio::fs::File::open(path).await {
         Ok(file) => Ok(HttpResponse::Ok().streaming(StreamBody::new(file, 1024))),
