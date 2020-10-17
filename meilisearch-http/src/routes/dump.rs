@@ -6,8 +6,11 @@ use bytes::Bytes;
 
 use actix_web::{get, post};
 use actix_web::{HttpResponse, web};
+use actix_multipart::Multipart;
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncRead;
+use tokio::io::{AsyncRead, AsyncWrite};
+use futures::{StreamExt, TryStreamExt};
+use futures::Stream;
 
 use crate::dump::{DumpInfo, DumpStatus, compressed_dumps_folder, init_dump_process};
 use crate::Data;
@@ -17,7 +20,8 @@ use crate::helpers::Authentication;
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(trigger_dump)
         .service(get_dump_status)
-        .service(download_dump);
+        .service(download_dump)
+        .service(upload_dump);
 }
 
 #[post("/dumps", wrap = "Authentication::Private")]
@@ -122,4 +126,78 @@ async fn download_dump(
         Ok(file) => Ok(HttpResponse::Ok().streaming(StreamBody::new(file, 1024))),
         Err(_) => Err(Error::not_found("dump does not exist").into())
     }
+}
+
+struct WriteDump {
+    file: tokio::fs::File,
+    field: actix_multipart::Field
+}
+
+impl WriteDump {
+    fn new(file: tokio::fs::File, field: actix_multipart::Field) -> Self {
+        WriteDump {
+            file,
+            field,
+        }
+    }
+}
+
+impl tokio::stream::Stream for WriteDump {
+    type Item = Result<(), ResponseError>;
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        let field = Pin::new(&mut self.field);
+        match field.poll_next(cx)  {
+            Poll::Ready(Some(data)) => {
+                match data {
+                    Ok(data) => {
+                        println!("WriteDump read data");
+                        let file = Pin::new(&mut self.file);
+                        match file.poll_write(cx, &data) {
+                            Poll::Ready(Ok(size)) => {
+                                println!("WriteDump write");
+                            },
+                            Poll::Pending => {}
+                            Poll::Ready(Err(e)) => {}
+                        }
+                    }
+                    Err(e) => {}
+                };
+                Poll::Pending
+            },
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(None) => Poll::Ready(None),
+        }
+
+    }
+}
+
+#[post("/dumps/upload", wrap = "Authentication::Private")]
+async fn upload_dump(
+    mut payload: Multipart
+) -> Result<HttpResponse, ResponseError> {
+
+    println!("upload_dump");
+
+    // iterate over multipart stream
+    while let Ok(Some(field)) = payload.try_next().await {
+
+        println!("upload_dump part");
+
+        let content_type = field.content_disposition().unwrap();
+        let filename = content_type.get_filename().unwrap();
+        let path = format!("./tmp/{}", sanitize_filename::sanitize(&filename));
+
+        match tokio::fs::File::create(path).await {
+            Ok(file) => {
+                WriteDump::new(file, field);
+            },
+            Err(_) => {}
+        }
+
+    }
+    println!("upload_dump completed");
+    Ok(HttpResponse::Ok().into())
 }
