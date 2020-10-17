@@ -76,7 +76,6 @@ struct StreamBody {
 impl StreamBody {
     fn new(file: tokio::fs::File, chunk_size: usize) -> Self {
         let buffer = vec![0u8; chunk_size];
-        println!("buffer!!!!");
         StreamBody {
             file,
             buffer,
@@ -118,8 +117,6 @@ async fn download_dump(
     let dumps_folder = Path::new(&data.dumps_folder);
     let dump_uid = &path.dump_uid;
     let path = compressed_dumps_folder(Path::new(dumps_folder), dump_uid);
-
-    println!("download_dump");
 
     match tokio::fs::File::open(path).await {
         Ok(file) => Ok(HttpResponse::Ok().streaming(StreamBody::new(file, 1024))),
