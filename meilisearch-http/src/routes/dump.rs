@@ -90,9 +90,9 @@ impl tokio::stream::Stream for StreamBody {
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         //  you can't hold to mut refs to self, need to take ownership on the buffer for some time
-        let mut buffer = std::mem::replace(&mut self.buffer, vec![]);
-        let file = &mut self.file;
-        pin_utils::pin_mut!(file);
+        let chunk_size = self.buffer.len();
+        let mut buffer = std::mem::replace(&mut self.buffer, vec![0u8; chunk_size]);
+        let file = Pin::new(&mut self.file);
         match file.poll_read(cx, &mut buffer) {
             Poll::Ready(Ok(size)) => {
                 if size > 0 {
