@@ -1,7 +1,10 @@
 use std::path::Path;
+use std::sync::Arc;
 
+use crossbeam_channel::{bounded, Sender, Receiver};
 use heed::types::{OwnedType, DecodeIgnore, SerdeJson, ByteSlice};
 use heed::{EnvOpenOptions, Env, Database};
+use once_cell::sync::OnceCell;
 use serde::{Serialize, Deserialize};
 
 use crate::BEU64;
@@ -12,15 +15,49 @@ pub struct UpdateStore<M> {
     pending_meta: Database<OwnedType<BEU64>, SerdeJson<M>>,
     pending: Database<OwnedType<BEU64>, ByteSlice>,
     processed_meta: Database<OwnedType<BEU64>, SerdeJson<M>>,
+    notification_sender: Sender<()>,
 }
 
-impl<M: 'static> UpdateStore<M> {
-    pub fn open<P: AsRef<Path>>(options: EnvOpenOptions, path: P) -> heed::Result<UpdateStore<M>> {
+impl<M: 'static + Send + Sync> UpdateStore<M> {
+    pub fn open<P, F>(
+        options: EnvOpenOptions,
+        path: P,
+        mut update_function: F,
+    ) -> heed::Result<Arc<UpdateStore<M>>>
+    where
+        P: AsRef<Path>,
+        F: FnMut(u64, M, &[u8]) -> heed::Result<M> + Send + 'static,
+        M: for<'a> Deserialize<'a> + Serialize,
+    {
         let env = options.open(path)?;
         let pending_meta = env.create_database(Some("pending-meta"))?;
         let pending = env.create_database(Some("pending"))?;
         let processed_meta = env.create_database(Some("processed-meta"))?;
-        Ok(UpdateStore { env, pending, pending_meta, processed_meta })
+
+        let (notification_sender, notification_receiver) = bounded(1);
+        let update_store = Arc::new(UpdateStore {
+            env,
+            pending,
+            pending_meta,
+            processed_meta,
+            notification_sender,
+        });
+
+        let update_store_cloned = update_store.clone();
+        std::thread::spawn(move || {
+            // Block and wait for something to process.
+            for () in notification_receiver {
+                loop {
+                    match update_store_cloned.process_pending_update(&mut update_function) {
+                        Ok(Some(_)) => (),
+                        Ok(None) => break,
+                        Err(e) => eprintln!("error while processing update: {}", e),
+                    }
+                }
+            }
+        });
+
+        Ok(update_store)
     }
 
     /// Returns the new biggest id to use to store the new update.
@@ -64,13 +101,17 @@ impl<M: 'static> UpdateStore<M> {
 
         wtxn.commit()?;
 
+        if let Err(e) = self.notification_sender.try_send(()) {
+            assert!(!e.is_disconnected(), "update notification channel is disconnected");
+        }
+
         Ok(update_id)
     }
 
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    pub fn process_pending_update<F>(&self, mut f: F) -> heed::Result<Option<(u64, M)>>
+    fn process_pending_update<F>(&self, mut f: F) -> heed::Result<Option<(u64, M)>>
     where
         F: FnMut(u64, M, &[u8]) -> heed::Result<M>,
         M: for<'a> Deserialize<'a> + Serialize,
