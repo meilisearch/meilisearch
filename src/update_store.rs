@@ -170,4 +170,21 @@ impl<M: 'static + Send + Sync> UpdateStore<M> {
 
         Ok(())
     }
+
+    /// Returns the update associated meta or `None` if the update deosn't exist.
+    pub fn update_meta(&self, update_id: u64) -> heed::Result<Option<M>>
+    where M: for<'a> Deserialize<'a>,
+    {
+        let rtxn = self.env.read_txn()?;
+        let key = BEU64::new(update_id);
+
+        if let Some(meta) = self.pending_meta.get(&rtxn, &key)? {
+            return Ok(Some(meta));
+        }
+
+        match self.processed_meta.get(&rtxn, &key)? {
+            Some(meta) => Ok(Some(meta)),
+            None => Ok(None),
+        }
+    }
 }
