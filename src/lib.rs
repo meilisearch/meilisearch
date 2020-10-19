@@ -5,6 +5,7 @@ mod search;
 mod update_store;
 pub mod heed_codec;
 pub mod proximity;
+pub mod subcommand;
 pub mod tokenizer;
 
 use std::collections::HashMap;

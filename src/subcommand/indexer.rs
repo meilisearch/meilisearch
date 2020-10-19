@@ -22,9 +22,9 @@ use roaring::RoaringBitmap;
 use structopt::StructOpt;
 use tempfile::tempfile;
 
-use milli::heed_codec::{CsvStringRecordCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
-use milli::tokenizer::{simple_tokenizer, only_token};
-use milli::{SmallVec32, Index, Position, DocumentId};
+use crate::heed_codec::{CsvStringRecordCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
+use crate::tokenizer::{simple_tokenizer, only_token};
+use crate::{SmallVec32, Index, Position, DocumentId};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
 const ONE_KILOBYTE: usize = 1024 * 1024;
@@ -32,18 +32,14 @@ const ONE_KILOBYTE: usize = 1024 * 1024;
 const MAX_POSITION: usize = 1000;
 const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 
-const WORDS_FST_KEY: &[u8] = milli::WORDS_FST_KEY.as_bytes();
-const HEADERS_KEY: &[u8] = milli::HEADERS_KEY.as_bytes();
-const DOCUMENTS_IDS_KEY: &[u8] = milli::DOCUMENTS_IDS_KEY.as_bytes();
-
-#[cfg(target_os = "linux")]
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+const WORDS_FST_KEY: &[u8] = crate::WORDS_FST_KEY.as_bytes();
+const HEADERS_KEY: &[u8] = crate::HEADERS_KEY.as_bytes();
+const DOCUMENTS_IDS_KEY: &[u8] = crate::DOCUMENTS_IDS_KEY.as_bytes();
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "milli-indexer")]
 /// The indexer binary of the milli project.
-struct Opt {
+pub struct Opt {
     /// The database path where the database is located.
     /// It is created if it doesn't already exist.
     #[structopt(long = "db", parse(from_os_str))]
@@ -191,7 +187,7 @@ fn compute_words_pair_proximities(
     for ((w1, ps1), (w2, ps2)) in word_positions.iter().cartesian_product(word_positions) {
         let mut min_prox = None;
         for (ps1, ps2) in ps1.iter().cartesian_product(ps2) {
-            let prox = milli::proximity::positions_proximity(*ps1, *ps2);
+            let prox = crate::proximity::positions_proximity(*ps1, *ps2);
             let prox = u8::try_from(prox).unwrap();
             // We don't care about a word that appear at the
             // same position or too far from the other.
@@ -736,9 +732,7 @@ fn csv_readers(
     }
 }
 
-fn main() -> anyhow::Result<()> {
-    let opt = Opt::from_args();
-
+pub fn run(opt: Opt) -> anyhow::Result<()> {
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)

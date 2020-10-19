@@ -3,7 +3,6 @@ name = "milli"
 version = "0.1.0"
 authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
-default-run = "indexer"
 
 [dependencies]
 anyhow = "1.0.28"
@@ -43,7 +42,7 @@ stderrlog = "0.5.0"
 askama = "0.10.1"
 askama_warp = "0.10.0"
 serde = { version = "1.0", features = ["derive"] }
-tokio = { version = "0.2.15", features = ["full"] }
+tokio = { version = "0.3.0", features = ["full"] }
 warp = "0.2.2"
 
 [dev-dependencies]

@@ -11,16 +11,12 @@ use serde::Deserialize;
 use structopt::StructOpt;
 use warp::{Filter, http::Response};
 
-use milli::tokenizer::{simple_tokenizer, TokenType};
-use milli::{Index, SearchResult};
-
-#[cfg(target_os = "linux")]
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+use crate::tokenizer::{simple_tokenizer, TokenType};
+use crate::{Index, SearchResult};
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "milli", about = "The server binary of the milli project.")]
-struct Opt {
+/// The HTTP main server of the milli project.
+pub struct Opt {
     /// The database path where the LMDB database is located.
     /// It is created if it doesn't already exist.
     #[structopt(long = "db", parse(from_os_str))]
@@ -73,10 +69,7 @@ struct IndexTemplate {
     docs_count: usize,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let opt = Opt::from_args();
-
+pub fn run(opt: Opt) -> anyhow::Result<()> {
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)
@@ -231,8 +224,13 @@ async fn main() -> anyhow::Result<()> {
         .or(dash_logo_black_route)
         .or(query_route);
 
-    let addr = SocketAddr::from_str(&opt.http_listen_addr).unwrap();
-    warp::serve(routes).run(addr).await;
+    let addr = SocketAddr::from_str(&opt.http_listen_addr)?;
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(async {
+            warp::serve(routes).run(addr).await
+        });
 
     Ok(())
 }

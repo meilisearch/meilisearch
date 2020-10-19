@@ -5,16 +5,13 @@ use std::time::Instant;
 
 use heed::EnvOpenOptions;
 use log::debug;
-use milli::Index;
 use structopt::StructOpt;
 
-#[cfg(target_os = "linux")]
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+use crate::Index;
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "milli-search", about = "A simple search binary for milli project.")]
-struct Opt {
+/// A simple search helper binary for the milli project.
+pub struct Opt {
     /// The database path where the database is located.
     /// It is created if it doesn't already exist.
     #[structopt(long = "db", parse(from_os_str))]
@@ -33,9 +30,7 @@ struct Opt {
     query: Option<String>,
 }
 
-fn main() -> anyhow::Result<()> {
-    let opt = Opt::from_args();
-
+pub fn run(opt: Opt) -> anyhow::Result<()> {
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)

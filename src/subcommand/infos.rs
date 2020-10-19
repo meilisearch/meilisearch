@@ -2,15 +2,11 @@ use std::path::PathBuf;
 use std::{str, io};
 
 use anyhow::Context;
+use crate::Index;
 use heed::EnvOpenOptions;
-use milli::Index;
 use structopt::StructOpt;
 
 use Command::*;
-
-#[cfg(target_os = "linux")]
-#[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 const MAIN_DB_NAME: &str = "main";
 const WORD_DOCIDS_DB_NAME: &str = "word-docids";
@@ -33,8 +29,8 @@ const POSTINGS_DATABASE_NAMES: &[&str] = &[
 ];
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "milli-info", about = "A stats crawler for milli.")]
-struct Opt {
+/// A stats fetcher for milli.
+pub struct Opt {
     /// The database path where the database is located.
     /// It is created if it doesn't already exist.
     #[structopt(long = "db", parse(from_os_str))]
@@ -133,19 +129,17 @@ enum Command {
     },
 }
 
-fn main() -> anyhow::Result<()> {
-    let opt = Opt::from_args();
+pub fn run(opt: Opt) -> anyhow::Result<()> {
+    let env = EnvOpenOptions::new()
+        .map_size(opt.database_size)
+        .max_dbs(10)
+        .open(&opt.database)?;
 
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)
         .timestamp(stderrlog::Timestamp::Off)
         .init()?;
-
-    let env = EnvOpenOptions::new()
-        .map_size(opt.database_size)
-        .max_dbs(10)
-        .open(&opt.database)?;
 
     // Open the LMDB database.
     let index = Index::new(&env)?;
@@ -196,7 +190,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     use std::cmp::Reverse;
     use std::collections::BinaryHeap;
     use heed::types::{Str, ByteSlice};
-    use milli::heed_codec::BEU32StrCodec;
+    use crate::heed_codec::BEU32StrCodec;
 
     let main_name = "main";
     let word_docids_name = "word_docids";
@@ -306,7 +300,7 @@ fn total_docid_word_positions_size(index: &Index, rtxn: &heed::RoTxn) -> anyhow:
 
 fn average_number_of_words_by_doc(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use heed::types::DecodeIgnore;
-    use milli::{DocumentId, BEU32StrCodec};
+    use crate::{DocumentId, BEU32StrCodec};
 
     let mut words_counts = Vec::new();
     let mut count = 0;
@@ -345,7 +339,7 @@ fn average_number_of_words_by_doc(index: &Index, rtxn: &heed::RoTxn) -> anyhow::
 
 fn average_number_of_positions_by_word(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use heed::types::DecodeIgnore;
-    use milli::BoRoaringBitmapCodec;
+    use crate::BoRoaringBitmapCodec;
 
     let mut values_length = Vec::new();
     let mut count = 0;
@@ -397,7 +391,7 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
     use heed::types::ByteSlice;
     use heed::{Error, BytesDecode};
     use roaring::RoaringBitmap;
-    use milli::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, RoaringBitmapCodec};
+    use crate::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, RoaringBitmapCodec};
 
     fn compute_stats<'a, DC: BytesDecode<'a, DItem = RoaringBitmap>>(
         db: heed::PolyDatabase,
@@ -478,7 +472,7 @@ fn word_pair_proximities_docids(
 ) -> anyhow::Result<()>
 {
     use heed::types::ByteSlice;
-    use milli::RoaringBitmapCodec;
+    use crate::RoaringBitmapCodec;
 
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
