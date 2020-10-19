@@ -168,7 +168,7 @@ impl<M: 'static> UpdateStore<M> {
     }
 
     /// Returns the update associated meta or `None` if the update deosn't exist.
-    pub fn update_meta(&self, update_id: u64) -> heed::Result<Option<M>>
+    pub fn meta(&self, update_id: u64) -> heed::Result<Option<M>>
     where M: for<'a> Deserialize<'a>,
     {
         let rtxn = self.env.read_txn()?;
@@ -204,7 +204,7 @@ mod tests {
 
         thread::sleep(Duration::from_millis(100));
 
-        let meta = update_store.update_meta(update_id).unwrap().unwrap();
+        let meta = update_store.meta(update_id).unwrap().unwrap();
         assert_eq!(meta, "kiki processed");
     }
 
@@ -233,13 +233,13 @@ mod tests {
 
         thread::sleep(Duration::from_millis(400 * 3 + 100));
 
-        let meta = update_store.update_meta(update_id_kiki).unwrap().unwrap();
+        let meta = update_store.meta(update_id_kiki).unwrap().unwrap();
         assert_eq!(meta, "kiki processed");
 
-        let meta = update_store.update_meta(update_id_coco).unwrap().unwrap();
+        let meta = update_store.meta(update_id_coco).unwrap().unwrap();
         assert_eq!(meta, "coco processed");
 
-        let meta = update_store.update_meta(update_id_cucu).unwrap().unwrap();
+        let meta = update_store.meta(update_id_cucu).unwrap().unwrap();
         assert_eq!(meta, "cucu processed");
     }
 }
