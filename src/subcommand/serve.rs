@@ -81,6 +81,13 @@ struct IndexTemplate {
     docs_count: usize,
 }
 
+#[derive(Template)]
+#[template(path = "updates.html")]
+struct UpdatesTemplate {
+    db_name: String,
+    updates: Vec<String>,
+}
+
 pub fn run(opt: Opt) -> anyhow::Result<()> {
     stderrlog::new()
         .verbosity(opt.verbose)
@@ -108,10 +115,10 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
     let update_store = UpdateStore::open(
         update_store_options,
         update_store_path,
-        move |_uid, meta: String, _content| {
-            let _ = update_status_sender_cloned.try_send("processing update");
+        move |uid, meta: String, _content| {
+            let _ = update_status_sender_cloned.try_send(format!("processing update {}", uid));
             std::thread::sleep(Duration::from_secs(3));
-            let _ = update_status_sender_cloned.try_send("update processed");
+            let _ = update_status_sender_cloned.try_send(format!("update {} processed", uid));
             Ok(meta)
         })?;
 
@@ -127,9 +134,38 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
     // We run and wait on the HTTP server
 
     // Expose an HTML page to debug the search in a browser
+    let db_name_cloned = db_name.clone();
     let dash_html_route = warp::filters::method::get()
         .and(warp::filters::path::end())
-        .map(move || IndexTemplate { db_name: db_name.clone(), db_size, docs_count });
+        .map(move || IndexTemplate { db_name: db_name_cloned.clone(), db_size, docs_count });
+
+    let update_store_cloned = update_store.clone();
+    let updates_list_or_html_route = warp::filters::method::get()
+        .and(warp::header("Accept"))
+        .and(warp::path!("updates"))
+        .map(move |header: String| {
+            let update_store = update_store_cloned.clone();
+            let mut updates = update_store.iter_metas(|processed, pending| {
+                let mut updates = Vec::new();
+                for result in processed {
+                    let (id, _) = result?;
+                    updates.push(format!("update {} processed", id.get()));
+                }
+                for result in pending {
+                    let (id, _) = result?;
+                    updates.push(format!("update {} pending", id.get()));
+                }
+                Ok(updates)
+            }).unwrap();
+
+            if header.contains("text/html") {
+                updates.reverse();
+                let template = UpdatesTemplate { db_name: db_name.clone(), updates };
+                Box::new(template) as Box<dyn warp::Reply>
+            } else {
+                Box::new(warp::reply::json(&updates))
+            }
+        });
 
     let dash_bulma_route = warp::filters::method::get()
         .and(warp::path!("bulma.min.css"))
@@ -178,6 +214,13 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .map(|| Response::builder()
             .header("content-type", "application/javascript; charset=utf-8")
             .body(include_str!("../../public/script.js"))
+        );
+
+    let updates_script_route = warp::filters::method::get()
+        .and(warp::path!("updates-script.js"))
+        .map(|| Response::builder()
+            .header("content-type", "application/javascript; charset=utf-8")
+            .body(include_str!("../../public/updates-script.js"))
         );
 
     let dash_logo_white_route = warp::filters::method::get()
@@ -245,7 +288,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     async fn buf_stream(
         update_store: Arc<UpdateStore<String>>,
-        update_status_sender: async_channel::Sender<&'static str>,
+        update_status_sender: async_channel::Sender<String>,
         mut stream: impl futures::Stream<Item=Result<impl bytes::Buf, warp::Error>> + Unpin,
     ) -> Result<impl warp::Reply, warp::Rejection>
     {
@@ -262,7 +305,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
         let meta = String::from("I am the metadata");
         let uid = update_store.register_update(&meta, &mmap[..]).unwrap();
-        update_status_sender.try_send("registering update").unwrap();
+        update_status_sender.try_send(format!("update {} pending", uid)).unwrap();
         eprintln!("Registering update {}", uid);
 
         Ok(warp::reply())
@@ -294,27 +337,8 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             })
         });
 
-    let update_store_cloned = update_store.clone();
-    let list_updates_route = warp::filters::method::get()
-        .and(warp::path!("updates"))
-        .map(move || {
-            let update_store = update_store_cloned.clone();
-            let updates = update_store.iter_metas(|processed, pending| {
-                let mut updates = Vec::new();
-                for result in processed {
-                    let (id, _) = result?;
-                    updates.push(format!("update {} processed", id.get()));
-                }
-                for result in pending {
-                    let (id, _) = result?;
-                    updates.push(format!("update {} pending", id.get()));
-                }
-                Ok(updates)
-            }).unwrap();
-            Ok(warp::reply::json(&updates))
-        });
-
     let routes = dash_html_route
+        .or(updates_list_or_html_route)
         .or(dash_bulma_route)
         .or(dash_bulma_dark_route)
         .or(dash_style_route)
@@ -322,12 +346,12 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .or(dash_papaparse_route)
         .or(dash_filesize_route)
         .or(dash_script_route)
+        .or(updates_script_route)
         .or(dash_logo_white_route)
         .or(dash_logo_black_route)
         .or(query_route)
         .or(indexing_route)
-        .or(update_ws_route)
-        .or(list_updates_route);
+        .or(update_ws_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;
     tokio::runtime::Builder::new()

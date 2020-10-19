@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/bulma.min.css">
+  <link rel="stylesheet" href="/bulma-prefers-dark.min.css">
+  <link rel="stylesheet" href="/style.css">
+  <script type="text/javascript" src="/jquery-3.4.1.min.js"></script>
+  <title>{{ db_name }} | Updates</title>
+</head>
+<body>
+
+  <section class="hero is-light">
+    <div class="hero-body">
+      <div class="container">
+
+        <div class="columns is-flex is-centered mb-6">
+            <figure class="image is-128x128">
+                <img id="logo-white" src="logo-white.svg" alt="milli logo in white">
+                <img id="logo-black" src="logo-black.svg" alt="milli logo in black">
+            </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <ol id="results" class="content">
+
+      {% for update in updates %}
+        <li class="document">
+          <ol>
+            <li class="field">
+              <div class="attribute">text</div><div class="content">{{ update }}</div>
+            </li>
+          </ol>
+        </li>
+      {% endfor %}
+
+    </ol>
+  </section>
+
+</body>
+
+<script type="text/javascript" src="/updates-script.js"></script>
+
+</html>

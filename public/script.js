@@ -51,7 +51,7 @@ $('#search').on('input', function () {
           }
 
           elem.appendChild(ol);
-          results.appendChild(elem)
+          results.appendChild(elem);
         }
 
       },
