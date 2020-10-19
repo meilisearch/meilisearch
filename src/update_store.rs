@@ -1,10 +1,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use crossbeam_channel::{Sender, Receiver};
+use crossbeam_channel::Sender;
 use heed::types::{OwnedType, DecodeIgnore, SerdeJson, ByteSlice};
 use heed::{EnvOpenOptions, Env, Database};
-use once_cell::sync::OnceCell;
 use serde::{Serialize, Deserialize};
 
 use crate::BEU64;
@@ -18,7 +17,7 @@ pub struct UpdateStore<M> {
     notification_sender: Sender<()>,
 }
 
-impl<M: 'static + Send + Sync> UpdateStore<M> {
+impl<M: 'static> UpdateStore<M> {
     pub fn open<P, F>(
         mut options: EnvOpenOptions,
         path: P,
