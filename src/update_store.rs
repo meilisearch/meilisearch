@@ -147,28 +147,24 @@ impl<M: 'static> UpdateStore<M> {
         }
     }
 
-    /// Iterate over the pending and the processed metas one after the other,
-    /// calling the user defined callback for each meta.
-    pub fn iter_meta<F>(&self, mut f: F) -> heed::Result<()>
+    /// Execute the user defined function with both meta-store iterators, the first
+    /// iterator is the *pending* meta one and the secind is the *processed* meta one.
+    pub fn iter_metas<F, T>(&self, mut f: F) -> heed::Result<T>
     where
         M: for<'a> Deserialize<'a>,
-        F: FnMut(u64, M),
+        F: for<'a> FnMut(
+            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<M>>,
+            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<M>>,
+        ) -> heed::Result<T>,
     {
         let rtxn = self.env.read_txn()?;
 
-        // We iterate over the pending updates.
-        for result in self.pending_meta.iter(&rtxn)? {
-            let (key, meta) = result?;
-            (f)(key.get(), meta);
-        }
+        // We get both the pending and processed meta iterators.
+        let pending_iter = self.pending_meta.iter(&rtxn)?;
+        let processed_iter = self.processed_meta.iter(&rtxn)?;
 
-        // We iterate over the processed updates.
-        for result in self.processed_meta.iter(&rtxn)? {
-            let (key, meta) = result?;
-            (f)(key.get(), meta);
-        }
-
-        Ok(())
+        // We execute the user defined function with both iterators.
+        (f)(pending_iter, processed_iter)
     }
 
     /// Returns the update associated meta or `None` if the update deosn't exist.
