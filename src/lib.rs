@@ -18,6 +18,7 @@ use heed::types::*;
 use heed::{PolyDatabase, Database};
 use roaring::RoaringBitmap;
 
+pub use self::update_store::UpdateStore;
 pub use self::search::{Search, SearchResult};
 pub use self::criterion::{Criterion, default_criteria};
 pub use self::heed_codec::{
