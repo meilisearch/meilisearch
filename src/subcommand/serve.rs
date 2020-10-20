@@ -96,6 +96,7 @@ struct UpdatesTemplate<M: Serialize + Send> {
 enum UpdateStatus<M> {
     Pending { update_id: u64, meta: M },
     Processing { update_id: u64, meta: M },
+    Progressing { update_id: u64, meta: M },
     Processed { update_id: u64, meta: M },
 }
 
@@ -129,6 +130,16 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         move |update_id, meta: String, _content| {
             let processing = UpdateStatus::Processing { update_id, meta: meta.clone() };
             let _ = update_status_sender_cloned.send(processing);
+
+            std::thread::sleep(Duration::from_secs(3));
+
+            let progress = UpdateStatus::Progressing { update_id, meta: meta.clone() };
+            let _ = update_status_sender_cloned.send(progress);
+
+            std::thread::sleep(Duration::from_secs(3));
+
+            let progress = UpdateStatus::Progressing { update_id, meta: meta.clone() };
+            let _ = update_status_sender_cloned.send(progress);
 
             std::thread::sleep(Duration::from_secs(3));
 

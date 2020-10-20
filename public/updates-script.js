@@ -52,7 +52,13 @@ $(window).on('load', function () {
     if (status.type == "Processing") {
       const id = 'update-' + status.update_id;
       const content = $(`#${id} .updateStatus.content`);
-      content.html('processing');
+      content.html('processing...');
+    }
+
+    if (status.type == "Progressing") {
+      const id = 'update-' + status.update_id;
+      const content = $(`#${id} .updateStatus.content`);
+      content.html('progressing...');
     }
 
     if (status.type == "Processed") {
