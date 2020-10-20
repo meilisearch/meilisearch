@@ -4,7 +4,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Duration;
 use std::time::Instant;
 
 use askama_warp::Template;
@@ -19,7 +18,7 @@ use tokio::sync::broadcast;
 use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
 
-use crate::indexing::IndexerOpt;
+use crate::indexing::{self, IndexerOpt};
 use crate::tokenizer::{simple_tokenizer, TokenType};
 use crate::{Index, UpdateStore, SearchResult};
 
@@ -111,6 +110,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .timestamp(stderrlog::Timestamp::Off)
         .init()?;
 
+    create_dir_all(&opt.database)?;
     let env = EnvOpenOptions::new()
         .map_size(opt.database_size)
         .max_dbs(10)
@@ -128,48 +128,73 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let (update_status_sender, _) = broadcast::channel(100);
     let update_status_sender_cloned = update_status_sender.clone();
+    let env_cloned = env.clone();
+    let index_cloned = index.clone();
+    let indexer_opt_cloned = opt.indexer.clone();
     let update_store = UpdateStore::open(
         update_store_options,
         update_store_path,
-        move |update_id, meta: String, _content| {
+        move |update_id, meta: String, content| {
             let processing = UpdateStatus::Processing { update_id, meta: meta.clone() };
             let _ = update_status_sender_cloned.send(processing);
 
-            std::thread::sleep(Duration::from_secs(3));
+            let _progress = UpdateStatus::Progressing { update_id, meta: meta.clone() };
+            // let _ = update_status_sender_cloned.send(progress);
 
-            let progress = UpdateStatus::Progressing { update_id, meta: meta.clone() };
-            let _ = update_status_sender_cloned.send(progress);
+            let gzipped = false;
+            let result = indexing::run(
+                &env_cloned,
+                &index_cloned,
+                &indexer_opt_cloned,
+                content,
+                gzipped,
+            );
 
-            std::thread::sleep(Duration::from_secs(3));
-
-            let progress = UpdateStatus::Progressing { update_id, meta: meta.clone() };
-            let _ = update_status_sender_cloned.send(progress);
-
-            std::thread::sleep(Duration::from_secs(3));
+            let meta = match result {
+                Ok(()) => format!("valid update content"),
+                Err(e) => {
+                    format!("error while processing update content: {}", e)
+                }
+            };
 
             let processed = UpdateStatus::Processed { update_id, meta: meta.clone() };
             let _ = update_status_sender_cloned.send(processed);
+
             Ok(meta)
         })?;
 
-    // Retrieve the database the file stem (w/o the extension),
-    // the disk file size and the number of documents in the database.
+    // The database name will not change.
     let db_name = opt.database.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
-    let db_size = File::open(opt.database.join("data.mdb"))?.metadata()?.len() as usize;
-
-    let rtxn = env.read_txn()?;
-    let docs_count = index.number_of_documents(&rtxn)? as usize;
-    drop(rtxn);
+    let lmdb_path = opt.database.join("data.mdb");
 
     // We run and wait on the HTTP server
 
     // Expose an HTML page to debug the search in a browser
     let db_name_cloned = db_name.clone();
+    let lmdb_path_cloned = lmdb_path.clone();
+    let env_cloned = env.clone();
+    let index_cloned = index.clone();
     let dash_html_route = warp::filters::method::get()
         .and(warp::filters::path::end())
-        .map(move || IndexTemplate { db_name: db_name_cloned.clone(), db_size, docs_count });
+        .map(move || {
+            // We retrieve the database size.
+            let db_size = File::open(lmdb_path_cloned.clone())
+                .unwrap()
+                .metadata()
+                .unwrap()
+                .len() as usize;
+
+            // And the number of documents in the database.
+            let rtxn = env_cloned.clone().read_txn().unwrap();
+            let docs_count = index_cloned.clone().number_of_documents(&rtxn).unwrap() as usize;
+
+            IndexTemplate { db_name: db_name_cloned.clone(), db_size, docs_count }
+        });
 
     let update_store_cloned = update_store.clone();
+    let lmdb_path_cloned = lmdb_path.clone();
+    let env_cloned = env.clone();
+    let index_cloned = index.clone();
     let updates_list_or_html_route = warp::filters::method::get()
         .and(warp::header("Accept"))
         .and(warp::path!("updates"))
@@ -190,6 +215,18 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
             if header.contains("text/html") {
                 updates.reverse();
+
+                // We retrieve the database size.
+                let db_size = File::open(lmdb_path_cloned.clone())
+                    .unwrap()
+                    .metadata()
+                    .unwrap()
+                    .len() as usize;
+
+                // And the number of documents in the database.
+                let rtxn = env_cloned.clone().read_txn().unwrap();
+                let docs_count = index_cloned.clone().number_of_documents(&rtxn).unwrap() as usize;
+
                 let template = UpdatesTemplate {
                     db_name: db_name.clone(),
                     db_size,

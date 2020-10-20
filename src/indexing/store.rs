@@ -304,6 +304,7 @@ impl Store {
     pub fn index_csv<'a>(
         mut self,
         mut rdr: csv::Reader<Box<dyn Read + Send + 'a>>,
+        base_document_id: usize,
         thread_index: usize,
         num_threads: usize,
         log_every_n: usize,
@@ -316,7 +317,7 @@ impl Store {
         self.write_headers(&headers)?;
 
         let mut before = Instant::now();
-        let mut document_id: usize = 0;
+        let mut document_id: usize = base_document_id;
         let mut document = csv::StringRecord::new();
         let mut words_positions = HashMap::new();
 

@@ -8,7 +8,7 @@ use bstr::ByteSlice as _;
 use flate2::read::GzDecoder;
 use grenad::{Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
 use heed::types::ByteSlice;
-use log::{debug, info};
+use log::{debug, info, error};
 use rayon::prelude::*;
 use structopt::StructOpt;
 use tempfile::tempfile;
@@ -23,7 +23,7 @@ use self::merge_function::{
 mod store;
 mod merge_function;
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Clone, StructOpt)]
 pub struct IndexerOpt {
     /// The amount of documents to skip before printing
     /// a log regarding the indexing advancement.
@@ -73,6 +73,12 @@ pub struct IndexerOpt {
     /// Number of parallel jobs for indexing, defaults to # of CPUs.
     #[structopt(long)]
     indexing_jobs: Option<usize>,
+}
+
+#[derive(Debug, Copy, Clone)]
+enum WriteMethod {
+    Append,
+    GetMergePut,
 }
 
 type MergeFn = fn(&[u8], &[Vec<u8>]) -> Result<Vec<u8>, ()>;
@@ -134,6 +140,7 @@ fn merge_into_lmdb_database(
     database: heed::PolyDatabase,
     sources: Vec<Reader<FileFuse>>,
     merge: MergeFn,
+    method: WriteMethod,
 ) -> anyhow::Result<()> {
     debug!("Merging {} MTBL stores...", sources.len());
     let before = Instant::now();
@@ -141,9 +148,26 @@ fn merge_into_lmdb_database(
     let merger = merge_readers(sources, merge);
     let mut in_iter = merger.into_merge_iter()?;
 
-    let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-    while let Some((k, v)) = in_iter.next()? {
-        out_iter.append(k, v).with_context(|| format!("writing {:?} into LMDB", k.as_bstr()))?;
+    match method {
+        WriteMethod::Append => {
+            let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
+            while let Some((k, v)) = in_iter.next()? {
+                out_iter.append(k, v).with_context(|| format!("writing {:?} into LMDB", k.as_bstr()))?;
+            }
+        },
+        WriteMethod::GetMergePut => {
+            while let Some((k, v)) = in_iter.next()? {
+                match database.get::<_, ByteSlice, ByteSlice>(wtxn, k)? {
+                    Some(old_val) => {
+                        // TODO improve the function signature and avoid alocating here!
+                        let vals = vec![old_val.to_vec(), v.to_vec()];
+                        let val = merge(k, &vals).expect("merge failed");
+                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, &val)?
+                    },
+                    None => database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?,
+                }
+            }
+        },
     }
 
     debug!("MTBL stores merged in {:.02?}!", before.elapsed());
@@ -154,13 +178,32 @@ fn write_into_lmdb_database(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
     mut reader: Reader<FileFuse>,
+    merge: MergeFn,
+    method: WriteMethod,
 ) -> anyhow::Result<()> {
     debug!("Writing MTBL stores...");
     let before = Instant::now();
 
-    let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-    while let Some((k, v)) = reader.next()? {
-        out_iter.append(k, v).with_context(|| format!("writing {:?} into LMDB", k.as_bstr()))?;
+    match method {
+        WriteMethod::Append => {
+            let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
+            while let Some((k, v)) = reader.next()? {
+                out_iter.append(k, v).with_context(|| format!("writing {:?} into LMDB", k.as_bstr()))?;
+            }
+        },
+        WriteMethod::GetMergePut => {
+            while let Some((k, v)) = reader.next()? {
+                match database.get::<_, ByteSlice, ByteSlice>(wtxn, k)? {
+                    Some(old_val) => {
+                        // TODO improve the function signature and avoid alocating here!
+                        let vals = vec![old_val.to_vec(), v.to_vec()];
+                        let val = merge(k, &vals).expect("merge failed");
+                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, &val)?
+                    },
+                    None => database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?,
+                }
+            }
+        }
     }
 
     debug!("MTBL stores merged in {:.02?}!", before.elapsed());
@@ -191,7 +234,7 @@ fn csv_bytes_readers<'a>(
 pub fn run<'a>(
     env: &heed::Env,
     index: &Index,
-    opt: IndexerOpt,
+    opt: &IndexerOpt,
     content: &'a [u8],
     gzipped: bool,
 ) -> anyhow::Result<()>
@@ -204,7 +247,7 @@ pub fn run<'a>(
 fn run_intern<'a>(
     env: &heed::Env,
     index: &Index,
-    opt: IndexerOpt,
+    opt: &IndexerOpt,
     content: &'a [u8],
     gzipped: bool,
 ) -> anyhow::Result<()>
@@ -224,6 +267,10 @@ fn run_intern<'a>(
         None
     };
 
+    let rtxn = env.read_txn()?;
+    let number_of_documents = index.number_of_documents(&rtxn)?;
+    drop(rtxn);
+
     let readers = csv_bytes_readers(content, gzipped, num_threads)
         .into_par_iter()
         .enumerate()
@@ -236,7 +283,8 @@ fn run_intern<'a>(
                 chunk_compression_level,
                 chunk_fusing_shrink_size,
             )?;
-            store.index_csv(rdr, i, num_threads, log_every_n)
+            let base_document_id = number_of_documents;
+            store.index_csv(rdr, base_document_id, i, num_threads, log_every_n)
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -283,11 +331,16 @@ fn run_intern<'a>(
         .into_par_iter()
         .for_each(|(dbtype, readers, merge)| {
             let result = merge_readers(readers, merge);
-            sender.send((dbtype, result)).unwrap();
+            if let Err(e) = sender.send((dbtype, result)) {
+                error!("sender error: {}", e);
+            }
         });
     });
 
     let mut wtxn = env.write_txn()?;
+
+    let contains_documents = number_of_documents != 0;
+    let write_method = if contains_documents { WriteMethod::GetMergePut } else { WriteMethod::Append };
 
     debug!("Writing the docid word positions into LMDB on disk...");
     merge_into_lmdb_database(
@@ -295,6 +348,7 @@ fn run_intern<'a>(
         *index.docid_word_positions.as_polymorph(),
         docid_word_positions_readers,
         docid_word_positions_merge,
+        write_method
     )?;
 
     debug!("Writing the documents into LMDB on disk...");
@@ -303,6 +357,7 @@ fn run_intern<'a>(
         *index.documents.as_polymorph(),
         documents_readers,
         documents_merge,
+        write_method
     )?;
 
     for (db_type, result) in receiver {
@@ -310,17 +365,23 @@ fn run_intern<'a>(
         match db_type {
             DatabaseType::Main => {
                 debug!("Writing the main elements into LMDB on disk...");
-                write_into_lmdb_database(&mut wtxn, index.main, content)?;
+                write_into_lmdb_database(&mut wtxn, index.main, content, main_merge, write_method)?;
             },
             DatabaseType::WordDocids => {
                 debug!("Writing the words docids into LMDB on disk...");
                 let db = *index.word_docids.as_polymorph();
-                write_into_lmdb_database(&mut wtxn, db, content)?;
+                write_into_lmdb_database(&mut wtxn, db, content, word_docids_merge, write_method)?;
             },
             DatabaseType::WordsPairsProximitiesDocids => {
                 debug!("Writing the words pairs proximities docids into LMDB on disk...");
                 let db = *index.word_pair_proximity_docids.as_polymorph();
-                write_into_lmdb_database(&mut wtxn, db, content)?;
+                write_into_lmdb_database(
+                    &mut wtxn,
+                    db,
+                    content,
+                    words_pairs_proximities_docids_merge,
+                    write_method,
+                )?;
             },
         }
     }
