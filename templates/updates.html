@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="/bulma-prefers-dark.min.css">
   <link rel="stylesheet" href="/style.css">
   <script type="text/javascript" src="/jquery-3.4.1.min.js"></script>
+  <script type="text/javascript" src="/papaparse.min.js"></script>
+  <script type="text/javascript" src="/filesize.min.js"></script>
   <title>{{ db_name }} | Updates</title>
 </head>
 <body>
@@ -15,12 +17,14 @@
     <div class="hero-body">
       <div class="container">
 
-        <div class="columns is-flex is-centered mb-6">
-            <figure class="image is-128x128">
-                <img id="logo-white" src="logo-white.svg" alt="milli logo in white">
-                <img id="logo-black" src="logo-black.svg" alt="milli logo in black">
-            </figure>
-        </div>
+        <a href="/">
+          <div class="columns is-flex is-centered mb-6">
+              <figure class="image is-128x128">
+                  <img id="logo-white" src="logo-white.svg" alt="milli logo in white">
+                  <img id="logo-black" src="logo-black.svg" alt="milli logo in black">
+              </figure>
+          </div>
+        </a>
 
         <nav class="level">
           <div class="level-item has-text-centered">
@@ -55,7 +59,8 @@
           <li id="update-{{ update_id }}" class="document">
             <ol>
               <li class="field">
-                <div class="attribute">text</div><div class="content">Pending {{ update_id }}</div>
+                <div class="attribute">update id</div><div class="updateId content">{{ update_id }}</div>
+                <div class="attribute">update status</div><div class="updateStatus content">pending</div>
               </li>
             </ol>
           </li>
@@ -63,7 +68,8 @@
           <li id="update-{{ update_id }}" class="document">
             <ol>
               <li class="field">
-                <div class="attribute">text</div><div class="content">Processed {{ update_id }}</div>
+                <div class="attribute">update id</div><div class="updateId content">{{ update_id }}</div>
+                <div class="attribute">update status</div><div class="updateStatus content">processed</div>
               </li>
             </ol>
           </li>

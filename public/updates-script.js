@@ -19,16 +19,29 @@ $(window).on('load', function () {
       const field = document.createElement('li');
       field.classList.add("field");
 
-      const attribute = document.createElement('div');
-      attribute.classList.add("attribute");
-      attribute.innerHTML = "TEXT";
+      const attributeUpdateId = document.createElement('div');
+      attributeUpdateId.classList.add("attribute");
+      attributeUpdateId.innerHTML = "update id";
 
-      const content = document.createElement('div');
-      content.classList.add("content");
-      content.innerHTML = 'Pending ' + status.update_id;
+      const contentUpdateId = document.createElement('div');
+      contentUpdateId.classList.add("updateId");
+      contentUpdateId.classList.add("content");
+      contentUpdateId.innerHTML = status.update_id;
 
-      field.appendChild(attribute);
-      field.appendChild(content);
+      field.appendChild(attributeUpdateId);
+      field.appendChild(contentUpdateId);
+
+      const attributeUpdateStatus = document.createElement('div');
+      attributeUpdateStatus.classList.add("attribute");
+      attributeUpdateStatus.innerHTML = "update status";
+
+      const contentUpdateStatus = document.createElement('div');
+      contentUpdateStatus.classList.add("updateStatus");
+      contentUpdateStatus.classList.add("content");
+      contentUpdateStatus.innerHTML = 'pending';
+
+      field.appendChild(attributeUpdateStatus);
+      field.appendChild(contentUpdateStatus);
 
       ol.appendChild(field);
       elem.appendChild(ol);
@@ -38,14 +51,14 @@ $(window).on('load', function () {
 
     if (status.type == "Processing") {
       const id = 'update-' + status.update_id;
-      const content = $(`#${id} .content`);
-      content.html('Processing ' + status.update_id);
+      const content = $(`#${id} .updateStatus.content`);
+      content.html('processing');
     }
 
     if (status.type == "Processed") {
       const id = 'update-' + status.update_id;
-      const content = $(`#${id} .content`);
-      content.html('Processed ' + status.update_id);
+      const content = $(`#${id} .updateStatus.content`);
+      content.html('processed');
     }
   }
 });
@@ -53,3 +66,13 @@ $(window).on('load', function () {
 function prependChild(parent, newFirstChild) {
   parent.insertBefore(newFirstChild, parent.firstChild)
 }
+
+// Make the number of document a little bit prettier
+$('#docs-count').text(function(index, text) {
+  return parseInt(text).toLocaleString()
+});
+
+// Make the database a little bit easier to read
+$('#db-size').text(function(index, text) {
+  return filesize(parseInt(text))
+});
