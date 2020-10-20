@@ -19,6 +19,7 @@ use tokio::sync::broadcast;
 use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
 
+use crate::indexing::IndexerOpt;
 use crate::tokenizer::{simple_tokenizer, TokenType};
 use crate::{Index, UpdateStore, SearchResult};
 
@@ -51,6 +52,9 @@ pub struct Opt {
     /// The ip and port on which the database will listen for HTTP requests.
     #[structopt(short = "l", long, default_value = "127.0.0.1:9700")]
     http_listen_addr: String,
+
+    #[structopt(flatten)]
+    indexer: IndexerOpt,
 }
 
 fn highlight_record(record: &csv::StringRecord, words: &HashSet<String>) -> csv::StringRecord {

@@ -1,4 +1,5 @@
 mod criterion;
+mod indexing;
 mod mdfs;
 mod query_tokens;
 mod search;
