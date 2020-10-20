@@ -11,7 +11,7 @@
 </head>
 <body>
 
-  <section class="hero is-light">
+    <section class="hero is-light">
     <div class="hero-body">
       <div class="container">
 
@@ -21,6 +21,27 @@
                 <img id="logo-black" src="logo-black.svg" alt="milli logo in black">
             </figure>
         </div>
+
+        <nav class="level">
+          <div class="level-item has-text-centered">
+            <div>
+              <p class="heading">Database Name</p>
+              <p class="title">{{ db_name }}</p>
+            </div>
+          </div>
+          <div class="level-item has-text-centered">
+            <div>
+              <p class="heading">Database Size</p>
+              <p class="title" id="db-size">{{ db_size }}</p>
+            </div>
+          </div>
+          <div class="level-item has-text-centered">
+            <div>
+              <p class="heading">Number of Documents</p>
+              <p class="title" id="docs-count">{{ docs_count }}</p>
+            </div>
+          </div>
+        </nav>
       </div>
     </div>
   </section>
@@ -29,13 +50,25 @@
     <ol id="results" class="content">
 
       {% for update in updates %}
-        <li class="document">
-          <ol>
-            <li class="field">
-              <div class="attribute">text</div><div class="content">{{ update }}</div>
-            </li>
-          </ol>
-        </li>
+        {% match update %}
+        {% when UpdateStatus::Pending with { update_id , meta } %}
+          <li id="update-{{ update_id }}" class="document">
+            <ol>
+              <li class="field">
+                <div class="attribute">text</div><div class="content">Pending {{ update_id }}</div>
+              </li>
+            </ol>
+          </li>
+        {% when UpdateStatus::Processed with { update_id , meta } %}
+          <li id="update-{{ update_id }}" class="document">
+            <ol>
+              <li class="field">
+                <div class="attribute">text</div><div class="content">Processed {{ update_id }}</div>
+              </li>
+            </ol>
+          </li>
+        {% else %}
+        {% endmatch %}
       {% endfor %}
 
     </ol>

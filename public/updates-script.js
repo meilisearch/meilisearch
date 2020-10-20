@@ -1,13 +1,19 @@
 $(window).on('load', function () {
-  let url = 'ws://' + window.location.hostname + ':' + window.location.port + '/updates/ws';
+  let wsProtcol = "ws";
+  if (window.location.protocol === 'https') {
+    wsProtcol = 'wss';
+  }
+
+  let url = wsProtcol + '://' + window.location.hostname + ':' + window.location.port + '/updates/ws';
   var socket = new WebSocket(url);
 
   socket.onmessage = function (event) {
-    console.log(event.data);
+    let status = JSON.parse(event.data);
 
-    if (event.data.endsWith("processed")) {
+    if (status.type == 'Pending') {
       const elem = document.createElement('li');
       elem.classList.add("document");
+      elem.setAttribute("id", 'update-' + status.update_id);
 
       const ol = document.createElement('ol');
       const field = document.createElement('li');
@@ -19,7 +25,7 @@ $(window).on('load', function () {
 
       const content = document.createElement('div');
       content.classList.add("content");
-      content.innerHTML = event.data;
+      content.innerHTML = 'Pending ' + status.update_id;
 
       field.appendChild(attribute);
       field.appendChild(content);
@@ -28,6 +34,18 @@ $(window).on('load', function () {
       elem.appendChild(ol);
 
       prependChild(results, elem);
+    }
+
+    if (status.type == "Processing") {
+      const id = 'update-' + status.update_id;
+      const content = $(`#${id} .content`);
+      content.html('Processing ' + status.update_id);
+    }
+
+    if (status.type == "Processed") {
+      const id = 'update-' + status.update_id;
+      const content = $(`#${id} .content`);
+      content.html('Processed ' + status.update_id);
     }
   }
 });
