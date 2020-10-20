@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::sync::mpsc::sync_channel;
@@ -81,7 +82,7 @@ enum WriteMethod {
     GetMergePut,
 }
 
-type MergeFn = fn(&[u8], &[Vec<u8>]) -> anyhow::Result<Vec<u8>>;
+type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> anyhow::Result<Vec<u8>>;
 
 fn create_writer(typ: CompressionType, level: Option<u32>, file: File) -> io::Result<Writer<File>> {
     let mut builder = Writer::builder();
@@ -159,8 +160,7 @@ fn merge_into_lmdb_database(
             while let Some((k, v)) = in_iter.next()? {
                 match database.get::<_, ByteSlice, ByteSlice>(wtxn, k)? {
                     Some(old_val) => {
-                        // TODO improve the function signature and avoid allocating here!
-                        let vals = vec![old_val.to_vec(), v.to_vec()];
+                        let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
                         let val = merge(k, &vals).expect("merge failed");
                         database.put::<_, ByteSlice, ByteSlice>(wtxn, k, &val)?
                     },
@@ -195,8 +195,7 @@ fn write_into_lmdb_database(
             while let Some((k, v)) = reader.next()? {
                 match database.get::<_, ByteSlice, ByteSlice>(wtxn, k)? {
                     Some(old_val) => {
-                        // TODO improve the function signature and avoid alocating here!
-                        let vals = vec![old_val.to_vec(), v.to_vec()];
+                        let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
                         let val = merge(k, &vals).expect("merge failed");
                         database.put::<_, ByteSlice, ByteSlice>(wtxn, k, &val)?
                     },
