@@ -8,13 +8,14 @@ use std::time::Duration;
 use std::time::Instant;
 
 use askama_warp::Template;
-use futures::FutureExt;
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
+use futures::stream;
 use heed::EnvOpenOptions;
 use serde::Deserialize;
 use structopt::StructOpt;
 use tokio::fs::File as TFile;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::broadcast;
 use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
 
@@ -110,15 +111,15 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
     let update_store_path = opt.database.join("updates.mdb");
     create_dir_all(&update_store_path)?;
 
-    let (update_status_sender, update_status_receiver) = async_channel::unbounded();
+    let (update_status_sender, _) = broadcast::channel(100);
     let update_status_sender_cloned = update_status_sender.clone();
     let update_store = UpdateStore::open(
         update_store_options,
         update_store_path,
         move |uid, meta: String, _content| {
-            let _ = update_status_sender_cloned.try_send(format!("processing update {}", uid));
+            let _ = update_status_sender_cloned.send(format!("processing update {}", uid));
             std::thread::sleep(Duration::from_secs(3));
-            let _ = update_status_sender_cloned.try_send(format!("update {} processed", uid));
+            let _ = update_status_sender_cloned.send(format!("update {} processed", uid));
             Ok(meta)
         })?;
 
@@ -288,7 +289,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     async fn buf_stream(
         update_store: Arc<UpdateStore<String>>,
-        update_status_sender: async_channel::Sender<String>,
+        update_status_sender: broadcast::Sender<String>,
         mut stream: impl futures::Stream<Item=Result<impl bytes::Buf, warp::Error>> + Unpin,
     ) -> Result<impl warp::Reply, warp::Rejection>
     {
@@ -305,29 +306,39 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
         let meta = String::from("I am the metadata");
         let uid = update_store.register_update(&meta, &mmap[..]).unwrap();
-        update_status_sender.try_send(format!("update {} pending", uid)).unwrap();
+        update_status_sender.send(format!("update {} pending", uid)).unwrap();
         eprintln!("Registering update {}", uid);
 
         Ok(warp::reply())
     }
 
     let update_store_cloned = update_store.clone();
+    let update_status_sender_cloned = update_status_sender.clone();
     let indexing_route = warp::filters::method::post()
         .and(warp::path!("documents"))
         .and(warp::body::stream())
         .and_then(move |stream| {
-            buf_stream(update_store_cloned.clone(), update_status_sender.clone(), stream)
+            buf_stream(update_store_cloned.clone(), update_status_sender_cloned.clone(), stream)
         });
 
     let update_ws_route = warp::ws()
         .and(warp::path!("updates" / "ws"))
         .map(move |ws: warp::ws::Ws| {
             // And then our closure will be called when it completes...
-            let update_status_receiver_cloned = update_status_receiver.clone();
+            let update_status_receiver = update_status_sender.subscribe();
             ws.on_upgrade(|websocket| {
                 // Just echo all updates messages...
-                update_status_receiver_cloned
-                    .map(|msg| Ok(Message::text(msg)))
+                update_status_receiver
+                    .into_stream()
+                    .flat_map(|result| {
+                        match result{
+                            Ok(msg) => stream::iter(Some(Ok(Message::text(msg)))),
+                            Err(e) => {
+                                eprintln!("channel error: {:?}", e);
+                                stream::iter(None)
+                            },
+                        }
+                    })
                     .forward(websocket)
                     .map(|result| {
                         if let Err(e) = result {
