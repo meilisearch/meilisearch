@@ -201,7 +201,7 @@ async fn dump_metadata_should_be_valid() {
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&dumps_dir.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_dir.join(&format!("{}.dump", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("metadata.json")).unwrap();
     let mut metadata: serde_json::Value = serde_json::from_reader(file).unwrap();
@@ -240,7 +240,7 @@ async fn dump_gzip_should_have_been_created() {
     let dump_uid = trigger_and_wait_dump(&mut server).await;
     let dumps_dir = Path::new(&server.data().dumps_dir);
 
-    let compressed_path = dumps_dir.join(format!("{}.tar.gz", dump_uid));
+    let compressed_path = dumps_dir.join(format!("{}.dump", dump_uid));
     assert!(File::open(compressed_path).is_ok());
 }
 
@@ -316,7 +316,7 @@ async fn dump_index_settings_should_be_valid() {
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&dumps_dir.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_dir.join(&format!("{}.dump", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("test").join("settings.json")).unwrap();
     let settings: serde_json::Value = serde_json::from_reader(file).unwrap();
@@ -340,7 +340,7 @@ async fn dump_index_documents_should_be_valid() {
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&dumps_dir.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_dir.join(&format!("{}.dump", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("test").join("documents.jsonl")).unwrap();
     let documents = read_all_jsonline(file);
@@ -364,7 +364,7 @@ async fn dump_index_updates_should_be_valid() {
     let tmp_dir = TempDir::new().unwrap();
     let tmp_dir_path = tmp_dir.path();
 
-    compression::from_tar_gz(&dumps_dir.join(&format!("{}.tar.gz", uid)), tmp_dir_path).unwrap();
+    compression::from_tar_gz(&dumps_dir.join(&format!("{}.dump", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("test").join("updates.jsonl")).unwrap();
     let mut updates = read_all_jsonline(file);

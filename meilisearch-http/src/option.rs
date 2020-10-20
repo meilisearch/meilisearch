@@ -97,15 +97,15 @@ pub struct Opt {
     /// Defines the path of the snapshot file to import.
     /// This option will, by default, stop the process if a database already exist or if no snapshot exists at
     /// the given path. If this option is not specified no snapshot is imported.
-    #[structopt(long, env = "MEILI_IMPORT_SNAPSHOT")]
+    #[structopt(long)]
     pub import_snapshot: Option<PathBuf>,
 
     /// The engine will ignore a missing snapshot and not return an error in such case.
-    #[structopt(long, requires = "import-snapshot", env = "MEILI_IGNORE_MISSING_SNAPSHOT")]
+    #[structopt(long, requires = "import-snapshot")]
     pub ignore_missing_snapshot: bool,
 
     /// The engine will skip snapshot importation and not return an error in such case.
-    #[structopt(long, requires = "import-snapshot", env = "MEILI_IGNORE_SNAPSHOT_IF_DB_EXISTS")]
+    #[structopt(long, requires = "import-snapshot")]
     pub ignore_snapshot_if_db_exists: bool,
 
     /// Defines the directory path where meilisearch will create snapshot each snapshot_time_gap.
@@ -125,7 +125,7 @@ pub struct Opt {
     pub dumps_dir: PathBuf,
 
     /// Import a dump from the specified path, must be a `.tar.gz` file.
-    #[structopt(long, env = "MEILI_IMPORT_DUMP", conflicts_with = "load-from-snapshot")]
+    #[structopt(long, conflicts_with = "import-snapshot")]
     pub import_dump: Option<PathBuf>,
 
     /// The batch size used in the importation process, the bigger it is the faster the dump is created.
