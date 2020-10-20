@@ -13,7 +13,7 @@ csv = "1.1.3"
 flate2 = "1.0.17"
 fst = "0.4.4"
 fxhash = "0.2.1"
-grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "1094409" }
+grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "00099b5" }
 heed = { version = "0.8.1", default-features = false, features = ["lmdb"] }
 human_format = "1.0.3"
 jemallocator = "0.3.2"

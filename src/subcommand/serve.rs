@@ -377,7 +377,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
         let meta = String::from("I am the metadata");
         let update_id = update_store.register_update(&meta, &mmap[..]).unwrap();
-        update_status_sender.send(UpdateStatus::Pending { update_id, meta }).unwrap();
+        let _ = update_status_sender.send(UpdateStatus::Pending { update_id, meta });
         eprintln!("update {} registered", update_id);
 
         Ok(warp::reply())

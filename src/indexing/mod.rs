@@ -81,7 +81,7 @@ enum WriteMethod {
     GetMergePut,
 }
 
-type MergeFn = fn(&[u8], &[Vec<u8>]) -> Result<Vec<u8>, ()>;
+type MergeFn = fn(&[u8], &[Vec<u8>]) -> anyhow::Result<Vec<u8>>;
 
 fn create_writer(typ: CompressionType, level: Option<u32>, file: File) -> io::Result<Writer<File>> {
     let mut builder = Writer::builder();
@@ -159,7 +159,7 @@ fn merge_into_lmdb_database(
             while let Some((k, v)) = in_iter.next()? {
                 match database.get::<_, ByteSlice, ByteSlice>(wtxn, k)? {
                     Some(old_val) => {
-                        // TODO improve the function signature and avoid alocating here!
+                        // TODO improve the function signature and avoid allocating here!
                         let vals = vec![old_val.to_vec(), v.to_vec()];
                         let val = merge(k, &vals).expect("merge failed");
                         database.put::<_, ByteSlice, ByteSlice>(wtxn, k, &val)?
@@ -386,12 +386,9 @@ fn run_intern<'a>(
         }
     }
 
-    debug!("Retrieving the number of documents...");
-    let count = index.number_of_documents(&wtxn)?;
-
     wtxn.commit()?;
 
-    info!("Wrote {} documents in {:.02?}", count, before_indexing.elapsed());
+    info!("Update processed in {:.02?}", before_indexing.elapsed());
 
     Ok(())
 }
