@@ -1021,6 +1021,7 @@ dependencies = [
  "log 0.4.11",
  "memmap",
  "near-proximity",
+ "obkv",
  "once_cell",
  "rayon",
  "ringtail",
@@ -1240,6 +1241,12 @@ name = "numtoa"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8f8bdf33df195859076e54ab11ee78a1b208382d3a26ec40d142ffc1ecc49ef"
+
+[[package]]
+name = "obkv"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce30a214135d83e7250f2e8fad781f7cb987e3a3f1b4529712d891594bda311c"
 
 [[package]]
 name = "once_cell"
