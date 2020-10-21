@@ -29,9 +29,9 @@ const ONE_KILOBYTE: usize = 1024 * 1024;
 const MAX_POSITION: usize = 1000;
 const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 
-const WORDS_FST_KEY: &[u8] = crate::WORDS_FST_KEY.as_bytes();
-const HEADERS_KEY: &[u8] = crate::HEADERS_KEY.as_bytes();
-const DOCUMENTS_IDS_KEY: &[u8] = crate::DOCUMENTS_IDS_KEY.as_bytes();
+const WORDS_FST_KEY: &[u8] = crate::index::WORDS_FST_KEY.as_bytes();
+const HEADERS_KEY: &[u8] = crate::index::HEADERS_KEY.as_bytes();
+const DOCUMENTS_IDS_KEY: &[u8] = crate::index::DOCUMENTS_IDS_KEY.as_bytes();
 
 pub struct Readers {
     pub main: Reader<FileFuse>,

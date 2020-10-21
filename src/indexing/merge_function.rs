@@ -7,9 +7,9 @@ use roaring::RoaringBitmap;
 
 use crate::heed_codec::CboRoaringBitmapCodec;
 
-const WORDS_FST_KEY: &[u8] = crate::WORDS_FST_KEY.as_bytes();
-const HEADERS_KEY: &[u8] = crate::HEADERS_KEY.as_bytes();
-const DOCUMENTS_IDS_KEY: &[u8] = crate::DOCUMENTS_IDS_KEY.as_bytes();
+const WORDS_FST_KEY: &[u8] = crate::index::WORDS_FST_KEY.as_bytes();
+const HEADERS_KEY: &[u8] = crate::index::HEADERS_KEY.as_bytes();
+const DOCUMENTS_IDS_KEY: &[u8] = crate::index::DOCUMENTS_IDS_KEY.as_bytes();
 
 pub fn main_merge(key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
     match key {
