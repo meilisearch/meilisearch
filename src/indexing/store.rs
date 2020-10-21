@@ -301,14 +301,16 @@ impl Store {
         Ok(())
     }
 
-    pub fn index_csv<'a>(
+    pub fn index_csv<'a, F>(
         mut self,
         mut rdr: csv::Reader<Box<dyn Read + Send + 'a>>,
         base_document_id: usize,
         thread_index: usize,
         num_threads: usize,
         log_every_n: usize,
+        mut progress_callback: F,
     ) -> anyhow::Result<Readers>
+    where F: FnMut(u32),
     {
         debug!("{:?}: Indexing in a Store...", thread_index);
 
@@ -328,6 +330,7 @@ impl Store {
                 if document_id % log_every_n == 0 {
                     let count = format_count(document_id);
                     info!("We have seen {} documents so far ({:.02?}).", count, before.elapsed());
+                    progress_callback((document_id - base_document_id) as u32);
                     before = Instant::now();
                 }
 
@@ -348,6 +351,8 @@ impl Store {
             // Compute the document id of the next document.
             document_id = document_id + 1;
         }
+
+        progress_callback((document_id - base_document_id) as u32);
 
         let readers = self.finish()?;
         debug!("{:?}: Store created!", thread_index);

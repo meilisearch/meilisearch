@@ -63,5 +63,5 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
     let file = File::open(file_path)?;
     let content = unsafe { memmap::Mmap::map(&file)? };
 
-    indexing::run(&env, &index, &opt.indexer, &content, gzipped)
+    indexing::run(&env, &index, &opt.indexer, &content, gzipped, |_docid| { })
 }

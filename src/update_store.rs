@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crossbeam_channel::Sender;
-use heed::types::{OwnedType, DecodeIgnore, SerdeBincode, ByteSlice};
+use heed::types::{OwnedType, DecodeIgnore, SerdeJson, ByteSlice};
 use heed::{EnvOpenOptions, Env, Database};
 use serde::{Serialize, Deserialize};
 
@@ -11,9 +11,9 @@ use crate::BEU64;
 #[derive(Clone)]
 pub struct UpdateStore<M, N> {
     env: Env,
-    pending_meta: Database<OwnedType<BEU64>, SerdeBincode<M>>,
+    pending_meta: Database<OwnedType<BEU64>, SerdeJson<M>>,
     pending: Database<OwnedType<BEU64>, ByteSlice>,
-    processed_meta: Database<OwnedType<BEU64>, SerdeBincode<N>>,
+    processed_meta: Database<OwnedType<BEU64>, SerdeJson<N>>,
     notification_sender: Sender<()>,
 }
 
@@ -156,8 +156,8 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
         M: for<'a> Deserialize<'a>,
         N: for<'a> Deserialize<'a>,
         F: for<'a> FnMut(
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeBincode<N>>,
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeBincode<M>>,
+            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<N>>,
+            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<M>>,
         ) -> heed::Result<T>,
     {
         let rtxn = self.env.read_txn()?;

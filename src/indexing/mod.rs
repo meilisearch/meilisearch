@@ -230,26 +230,30 @@ fn csv_bytes_readers<'a>(
     readers
 }
 
-pub fn run<'a>(
+pub fn run<'a, F>(
     env: &heed::Env,
     index: &Index,
     opt: &IndexerOpt,
     content: &'a [u8],
     gzipped: bool,
+    progress_callback: F,
 ) -> anyhow::Result<()>
+where F: Fn(u32) + Sync + Send,
 {
     let jobs = opt.indexing_jobs.unwrap_or(0);
     let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs).build()?;
-    pool.install(|| run_intern(env, index, opt, content, gzipped))
+    pool.install(|| run_intern(env, index, opt, content, gzipped, progress_callback))
 }
 
-fn run_intern<'a>(
+fn run_intern<'a, F>(
     env: &heed::Env,
     index: &Index,
     opt: &IndexerOpt,
     content: &'a [u8],
     gzipped: bool,
+    progress_callback: F,
 ) -> anyhow::Result<()>
+where F: Fn(u32) + Sync + Send,
 {
     let before_indexing = Instant::now();
     let num_threads = rayon::current_num_threads();
@@ -283,7 +287,7 @@ fn run_intern<'a>(
                 chunk_fusing_shrink_size,
             )?;
             let base_document_id = number_of_documents;
-            store.index_csv(rdr, base_document_id, i, num_threads, log_every_n)
+            store.index_csv(rdr, base_document_id, i, num_threads, log_every_n, &progress_callback)
         })
         .collect::<Result<Vec<_>, _>>()?;
 

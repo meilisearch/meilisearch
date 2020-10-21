@@ -49,22 +49,16 @@ $(window).on('load', function () {
       prependChild(results, elem);
     }
 
-    if (status.type == "Processing") {
-      const id = 'update-' + status.update_id;
-      const content = $(`#${id} .updateStatus.content`);
-      content.html('processing...');
-    }
-
     if (status.type == "Progressing") {
       const id = 'update-' + status.update_id;
       const content = $(`#${id} .updateStatus.content`);
-      content.html('progressing...');
+      content.html('progressing... ' + JSON.stringify(status.meta));
     }
 
     if (status.type == "Processed") {
       const id = 'update-' + status.update_id;
       const content = $(`#${id} .updateStatus.content`);
-      content.html('processed');
+      content.html('processed ' + JSON.stringify(status.meta));
     }
   }
 });

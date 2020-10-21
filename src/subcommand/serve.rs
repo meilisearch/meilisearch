@@ -87,20 +87,39 @@ struct IndexTemplate {
 
 #[derive(Template)]
 #[template(path = "updates.html")]
-struct UpdatesTemplate<M: Serialize + Send> {
+struct UpdatesTemplate<M: Serialize + Send, P: Serialize + Send, N: Serialize + Send> {
     db_name: String,
     db_size: usize,
     docs_count: usize,
-    updates: Vec<UpdateStatus<M>>,
+    updates: Vec<UpdateStatus<M, P, N>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
-enum UpdateStatus<M> {
+enum UpdateStatus<M, P, N> {
     Pending { update_id: u64, meta: M },
-    Processing { update_id: u64, meta: M },
-    Progressing { update_id: u64, meta: M },
-    Processed { update_id: u64, meta: M },
+    Progressing { update_id: u64, meta: P },
+    Processed { update_id: u64, meta: N },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+enum UpdateMeta {
+    DocumentsAddition {
+        total_number_of_documents: Option<usize>,
+    },
+    DocumentsAdditionFromPath {
+        path: PathBuf,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+enum UpdateMetaProgress {
+    DocumentsAddition {
+        processed_number_of_documents: usize,
+        total_number_of_documents: Option<usize>,
+    },
 }
 
 pub fn run(opt: Opt) -> anyhow::Result<()> {
@@ -134,21 +153,62 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
     let update_store = UpdateStore::open(
         update_store_options,
         update_store_path,
-        move |update_id, meta: String, content| {
-            let processing = UpdateStatus::Processing { update_id, meta: meta.clone() };
-            let _ = update_status_sender_cloned.send(processing);
+        move |update_id, meta, content| {
+            let result = match meta {
+                UpdateMeta::DocumentsAddition { total_number_of_documents } => {
+                    let gzipped = false;
+                    indexing::run(
+                        &env_cloned,
+                        &index_cloned,
+                        &indexer_opt_cloned,
+                        content,
+                        gzipped,
+                        |count| {
+                            // We send progress status...
+                            let meta = UpdateMetaProgress::DocumentsAddition {
+                                processed_number_of_documents: count as usize,
+                                total_number_of_documents,
+                            };
+                            let progress = UpdateStatus::Progressing { update_id, meta };
+                            let _ = update_status_sender_cloned.send(progress);
+                        },
+                    )
+                },
+                UpdateMeta::DocumentsAdditionFromPath { path } => {
+                    let file = match File::open(&path) {
+                        Ok(file) => file,
+                        Err(e) => {
+                            let meta = format!("documents addition file ({}) error: {}", path.display(), e);
+                            return Ok(meta);
+                        }
+                    };
+                    let content = match unsafe { memmap::Mmap::map(&file) } {
+                        Ok(mmap) => mmap,
+                        Err(e) => {
+                            let meta = format!("documents addition file ({}) mmap error: {}", path.display(), e);
+                            return Ok(meta);
+                        },
+                    };
 
-            let _progress = UpdateStatus::Progressing { update_id, meta: meta.clone() };
-            // let _ = update_status_sender_cloned.send(progress);
-
-            let gzipped = false;
-            let result = indexing::run(
-                &env_cloned,
-                &index_cloned,
-                &indexer_opt_cloned,
-                content,
-                gzipped,
-            );
+                    let gzipped = path.extension().map_or(false, |e| e == "gz" || e == "gzip");
+                    indexing::run(
+                        &env_cloned,
+                        &index_cloned,
+                        &indexer_opt_cloned,
+                        &content,
+                        gzipped,
+                        |count| {
+                            // We send progress status...
+                            let meta = UpdateMetaProgress::DocumentsAddition {
+                                processed_number_of_documents: count as usize,
+                                total_number_of_documents: None,
+                            };
+                            let progress = UpdateStatus::Progressing { update_id, meta };
+                            let _ = update_status_sender_cloned.send(progress);
+                        },
+                    )
+                }
+            };
 
             let meta = match result {
                 Ok(()) => format!("valid update content"),
@@ -201,7 +261,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .map(move |header: String| {
             let update_store = update_store_cloned.clone();
             let mut updates = update_store.iter_metas(|processed, pending| {
-                let mut updates = Vec::new();
+                let mut updates = Vec::<UpdateStatus<_, UpdateMetaProgress, _>>::new();
                 for result in processed {
                     let (uid, meta) = result?;
                     updates.push(UpdateStatus::Processed { update_id: uid.get(), meta });
@@ -359,8 +419,8 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         });
 
     async fn buf_stream(
-        update_store: Arc<UpdateStore<String, String>>,
-        update_status_sender: broadcast::Sender<UpdateStatus<String>>,
+        update_store: Arc<UpdateStore<UpdateMeta, String>>,
+        update_status_sender: broadcast::Sender<UpdateStatus<UpdateMeta, UpdateMetaProgress, String>>,
         mut stream: impl futures::Stream<Item=Result<impl bytes::Buf, warp::Error>> + Unpin,
     ) -> Result<impl warp::Reply, warp::Rejection>
     {
@@ -375,7 +435,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         let file = file.into_std().await;
         let mmap = unsafe { memmap::Mmap::map(&file).unwrap() };
 
-        let meta = String::from("I am the metadata");
+        let meta = UpdateMeta::DocumentsAddition { total_number_of_documents: None };
         let update_id = update_store.register_update(&meta, &mmap[..]).unwrap();
         let _ = update_status_sender.send(UpdateStatus::Pending { update_id, meta });
         eprintln!("update {} registered", update_id);
@@ -385,11 +445,27 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_route = warp::filters::method::post()
+    let indexing_route_csv = warp::filters::method::post()
         .and(warp::path!("documents"))
+        .and(warp::header::exact_ignore_case("content-type", "text/csv"))
         .and(warp::body::stream())
         .and_then(move |stream| {
             buf_stream(update_store_cloned.clone(), update_status_sender_cloned.clone(), stream)
+        });
+
+    let update_store_cloned = update_store.clone();
+    let update_status_sender_cloned = update_status_sender.clone();
+    let indexing_route_filepath = warp::filters::method::post()
+        .and(warp::path!("documents"))
+        .and(warp::header::exact_ignore_case("content-type", "text/x-filepath"))
+        .and(warp::body::bytes())
+        .map(move |bytes: bytes::Bytes| {
+            let string = std::str::from_utf8(&bytes).unwrap().trim();
+            let meta = UpdateMeta::DocumentsAdditionFromPath { path: PathBuf::from(string) };
+            let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
+            let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
+            eprintln!("update {} registered", update_id);
+            Ok(warp::reply())
         });
 
     let update_ws_route = warp::ws()
@@ -435,7 +511,8 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .or(dash_logo_white_route)
         .or(dash_logo_black_route)
         .or(query_route)
-        .or(indexing_route)
+        .or(indexing_route_csv)
+        .or(indexing_route_filepath)
         .or(update_ws_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;

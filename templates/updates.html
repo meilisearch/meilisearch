@@ -55,7 +55,7 @@
 
       {% for update in updates %}
         {% match update %}
-        {% when UpdateStatus::Pending with { update_id , meta } %}
+        {% when UpdateStatus::Pending with { update_id, meta } %}
           <li id="update-{{ update_id }}" class="document">
             <ol>
               <li class="field">
@@ -64,7 +64,7 @@
               </li>
             </ol>
           </li>
-        {% when UpdateStatus::Processed with { update_id , meta } %}
+        {% when UpdateStatus::Processed with { update_id, meta } %}
           <li id="update-{{ update_id }}" class="document">
             <ol>
               <li class="field">
