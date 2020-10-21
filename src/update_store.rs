@@ -9,24 +9,25 @@ use serde::{Serialize, Deserialize};
 use crate::BEU64;
 
 #[derive(Clone)]
-pub struct UpdateStore<M> {
+pub struct UpdateStore<M, N> {
     env: Env,
     pending_meta: Database<OwnedType<BEU64>, SerdeBincode<M>>,
     pending: Database<OwnedType<BEU64>, ByteSlice>,
-    processed_meta: Database<OwnedType<BEU64>, SerdeBincode<M>>,
+    processed_meta: Database<OwnedType<BEU64>, SerdeBincode<N>>,
     notification_sender: Sender<()>,
 }
 
-impl<M: 'static> UpdateStore<M> {
+impl<M: 'static, N: 'static> UpdateStore<M, N> {
     pub fn open<P, F>(
         mut options: EnvOpenOptions,
         path: P,
         mut update_function: F,
-    ) -> heed::Result<Arc<UpdateStore<M>>>
+    ) -> heed::Result<Arc<UpdateStore<M, N>>>
     where
         P: AsRef<Path>,
-        F: FnMut(u64, M, &[u8]) -> heed::Result<M> + Send + 'static,
-        M: for<'a> Deserialize<'a> + Serialize,
+        F: FnMut(u64, M, &[u8]) -> heed::Result<N> + Send + 'static,
+        M: for<'a> Deserialize<'a>,
+        N: Serialize,
     {
         options.max_dbs(3);
         let env = options.open(path)?;
@@ -111,10 +112,11 @@ impl<M: 'static> UpdateStore<M> {
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    fn process_pending_update<F>(&self, mut f: F) -> heed::Result<Option<(u64, M)>>
+    fn process_pending_update<F>(&self, mut f: F) -> heed::Result<Option<(u64, N)>>
     where
-        F: FnMut(u64, M, &[u8]) -> heed::Result<M>,
-        M: for<'a> Deserialize<'a> + Serialize,
+        F: FnMut(u64, M, &[u8]) -> heed::Result<N>,
+        M: for<'a> Deserialize<'a>,
+        N: Serialize,
     {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
@@ -152,8 +154,9 @@ impl<M: 'static> UpdateStore<M> {
     pub fn iter_metas<F, T>(&self, mut f: F) -> heed::Result<T>
     where
         M: for<'a> Deserialize<'a>,
+        N: for<'a> Deserialize<'a>,
         F: for<'a> FnMut(
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeBincode<M>>,
+            heed::RoIter<'a, OwnedType<BEU64>, SerdeBincode<N>>,
             heed::RoIter<'a, OwnedType<BEU64>, SerdeBincode<M>>,
         ) -> heed::Result<T>,
     {
@@ -168,21 +171,29 @@ impl<M: 'static> UpdateStore<M> {
     }
 
     /// Returns the update associated meta or `None` if the update deosn't exist.
-    pub fn meta(&self, update_id: u64) -> heed::Result<Option<M>>
-    where M: for<'a> Deserialize<'a>,
+    pub fn meta(&self, update_id: u64) -> heed::Result<Option<UpdateStatusMeta<M, N>>>
+    where
+        M: for<'a> Deserialize<'a>,
+        N: for<'a> Deserialize<'a>,
     {
         let rtxn = self.env.read_txn()?;
         let key = BEU64::new(update_id);
 
         if let Some(meta) = self.pending_meta.get(&rtxn, &key)? {
-            return Ok(Some(meta));
+            return Ok(Some(UpdateStatusMeta::Pending(meta)));
         }
 
         match self.processed_meta.get(&rtxn, &key)? {
-            Some(meta) => Ok(Some(meta)),
+            Some(meta) => Ok(Some(UpdateStatusMeta::Processed(meta))),
             None => Ok(None),
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum UpdateStatusMeta<M, N> {
+    Pending(M),
+    Processed(N),
 }
 
 #[cfg(test)]
@@ -195,7 +206,7 @@ mod tests {
     fn simple() {
         let dir = tempfile::tempdir().unwrap();
         let options = EnvOpenOptions::new();
-        let update_store = UpdateStore::open(options, dir, |id, meta: String, content| {
+        let update_store = UpdateStore::open(options, dir, |_id, meta: String, _content| {
             Ok(meta + " processed")
         }).unwrap();
 
@@ -205,14 +216,14 @@ mod tests {
         thread::sleep(Duration::from_millis(100));
 
         let meta = update_store.meta(update_id).unwrap().unwrap();
-        assert_eq!(meta, "kiki processed");
+        assert_eq!(meta, UpdateStatusMeta::Processed(format!("kiki processed")));
     }
 
     #[test]
     fn long_running_update() {
         let dir = tempfile::tempdir().unwrap();
         let options = EnvOpenOptions::new();
-        let update_store = UpdateStore::open(options, dir, |id, meta: String, content| {
+        let update_store = UpdateStore::open(options, dir, |_id, meta: String, _content| {
             thread::sleep(Duration::from_millis(400));
             Ok(meta + " processed")
         }).unwrap();
@@ -234,12 +245,12 @@ mod tests {
         thread::sleep(Duration::from_millis(400 * 3 + 100));
 
         let meta = update_store.meta(update_id_kiki).unwrap().unwrap();
-        assert_eq!(meta, "kiki processed");
+        assert_eq!(meta, UpdateStatusMeta::Processed(format!("kiki processed")));
 
         let meta = update_store.meta(update_id_coco).unwrap().unwrap();
-        assert_eq!(meta, "coco processed");
+        assert_eq!(meta, UpdateStatusMeta::Processed(format!("coco processed")));
 
         let meta = update_store.meta(update_id_cucu).unwrap().unwrap();
-        assert_eq!(meta, "cucu processed");
+        assert_eq!(meta, UpdateStatusMeta::Processed(format!("cucu processed")));
     }
 }

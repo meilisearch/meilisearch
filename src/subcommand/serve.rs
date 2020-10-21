@@ -359,7 +359,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         });
 
     async fn buf_stream(
-        update_store: Arc<UpdateStore<String>>,
+        update_store: Arc<UpdateStore<String, String>>,
         update_status_sender: broadcast::Sender<UpdateStatus<String>>,
         mut stream: impl futures::Stream<Item=Result<impl bytes::Buf, warp::Error>> + Unpin,
     ) -> Result<impl warp::Reply, warp::Rejection>
