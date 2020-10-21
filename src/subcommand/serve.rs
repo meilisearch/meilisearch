@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fs::{File, create_dir_all};
+use std::mem;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -7,9 +8,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use askama_warp::Template;
-use futures::{FutureExt, StreamExt};
 use futures::stream;
+use futures::{FutureExt, StreamExt};
 use heed::EnvOpenOptions;
+use indexmap::IndexMap;
 use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
 use tokio::fs::File as TFile;
@@ -56,25 +58,21 @@ pub struct Opt {
     indexer: IndexerOpt,
 }
 
-fn highlight_record(record: &csv::StringRecord, words: &HashSet<String>) -> csv::StringRecord {
-    let mut output_record = csv::StringRecord::new();
-    let mut buffer = String::new();
-    for field in record {
-        buffer.clear();
-        for (token_type, token) in simple_tokenizer(field) {
+fn highlight_record(record: &mut IndexMap<String, String>, words: &HashSet<String>) {
+    for (_key, value) in record.iter_mut() {
+        let old_value = mem::take(value);
+        for (token_type, token) in simple_tokenizer(&old_value) {
             if token_type == TokenType::Word {
                 let lowercase_token = token.to_lowercase();
                 let to_highlight = words.contains(&lowercase_token);
-                if to_highlight { buffer.push_str("<mark>") }
-                buffer.push_str(token);
-                if to_highlight { buffer.push_str("</mark>") }
+                if to_highlight { value.push_str("<mark>") }
+                value.push_str(token);
+                if to_highlight { value.push_str("</mark>") }
             } else {
-                buffer.push_str(token);
+                value.push_str(token);
             }
         }
-        output_record.push_field(&buffer);
     }
-    output_record
 }
 
 #[derive(Template)]
@@ -327,13 +325,6 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             .body(include_str!("../../public/jquery-3.4.1.min.js"))
         );
 
-    let dash_papaparse_route = warp::filters::method::get()
-        .and(warp::path!("papaparse.min.js"))
-        .map(|| Response::builder()
-            .header("content-type", "application/javascript; charset=utf-8")
-            .body(include_str!("../../public/papaparse.min.js"))
-        );
-
     let dash_filesize_route = warp::filters::method::get()
         .and(warp::path!("filesize.min.js"))
         .map(|| Response::builder()
@@ -390,32 +381,29 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
             let SearchResult { found_words, documents_ids } = search.execute().unwrap();
 
-            let body = match index.headers(&rtxn).unwrap() {
-                Some(headers) => {
-                    let mut wtr = csv::Writer::from_writer(Vec::new());
+            let mut documents = Vec::new();
+            if let Some(headers) = index.headers(&rtxn).unwrap() {
+                for (_id, record) in index.documents(&rtxn, documents_ids).unwrap() {
+                    let mut record = record.iter()
+                        .map(|(key_id, value)| {
+                            let key = headers[key_id as usize].to_owned();
+                            let value = std::str::from_utf8(value).unwrap().to_owned();
+                            (key, value)
+                        })
+                        .collect();
 
-                    // We write the headers
-                    wtr.write_record(&headers).unwrap();
-
-                    let documents = index.documents(&rtxn, documents_ids).unwrap();
-                    for (_id, record) in documents {
-                        let record = if disable_highlighting {
-                            record
-                        } else {
-                            highlight_record(&record, &found_words)
-                        };
-                        wtr.write_record(&record).unwrap();
+                    if !disable_highlighting {
+                        highlight_record(&mut record, &found_words);
                     }
 
-                    wtr.into_inner().unwrap()
-                },
-                None => Vec::new(),
-            };
+                    documents.push(record);
+                }
+            }
 
             Response::builder()
-                .header("Content-Type", "text/csv")
+                .header("Content-Type", "application/json")
                 .header("Time-Ms", before_search.elapsed().as_millis().to_string())
-                .body(String::from_utf8(body).unwrap())
+                .body(serde_json::to_string(&documents).unwrap())
         });
 
     async fn buf_stream(
@@ -504,7 +492,6 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .or(dash_bulma_dark_route)
         .or(dash_style_route)
         .or(dash_jquery_route)
-        .or(dash_papaparse_route)
         .or(dash_filesize_route)
         .or(dash_script_route)
         .or(updates_script_route)

@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
-use std::convert::TryFrom;
+use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::io::Read;
 use std::iter::FromIterator;
@@ -204,11 +204,15 @@ impl Store {
             self.insert_word_docid(word, document_id)?;
         }
 
-        let record = CsvStringRecordCodec::bytes_encode(record)
-            .with_context(|| format!("could not encode CSV record"))?;
+        let mut writer = obkv::KvWriter::memory();
+        record.iter().enumerate().for_each(|(i, v)| {
+            let key = i.try_into().unwrap();
+            writer.insert(key, v.as_bytes()).unwrap();
+        });
+        let bytes = writer.into_inner().unwrap();
 
         self.documents_ids.insert(document_id);
-        self.documents_writer.insert(document_id.to_be_bytes(), record)?;
+        self.documents_writer.insert(document_id.to_be_bytes(), bytes)?;
         Self::write_docid_word_positions(&mut self.docid_word_positions_writer, document_id, words_positions)?;
 
         Ok(())

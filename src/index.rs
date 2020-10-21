@@ -26,7 +26,7 @@ pub struct Index {
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
     /// Maps the document id to the document as a CSV line.
-    pub documents: Database<OwnedType<BEU32>, ByteSlice>,
+    pub documents: Database<OwnedType<BEU32>, ObkvCodec>,
 }
 
 impl Index {
@@ -74,23 +74,15 @@ impl Index {
     pub fn documents<'t>(
         &self,
         rtxn: &'t heed::RoTxn,
-        iter: impl IntoIterator<Item=DocumentId>,
-    ) -> anyhow::Result<Vec<(DocumentId, StringRecord)>>
+        ids: impl IntoIterator<Item=DocumentId>,
+    ) -> anyhow::Result<Vec<(DocumentId, obkv::KvReader<'t>)>>
     {
-        let ids: Vec<_> = iter.into_iter().collect();
-        let mut content = Vec::new();
+        let mut documents = Vec::new();
 
-        for id in ids.iter().cloned() {
-            let document_content = self.documents.get(rtxn, &BEU32::new(id))?
+        for id in ids {
+            let kv = self.documents.get(rtxn, &BEU32::new(id))?
                 .with_context(|| format!("Could not find document {}", id))?;
-            content.extend_from_slice(document_content);
-        }
-
-        let mut rdr = csv::ReaderBuilder::new().has_headers(false).from_reader(&content[..]);
-
-        let mut documents = Vec::with_capacity(ids.len());
-        for (id, result) in ids.into_iter().zip(rdr.records()) {
-            documents.push((id, result?));
+            documents.push((id, kv));
         }
 
         Ok(documents)

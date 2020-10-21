@@ -16,6 +16,7 @@ fxhash = "0.2.1"
 grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "c390cfe" }
 heed = { version = "0.8.1", default-features = false, features = ["lmdb"] }
 human_format = "1.0.3"
+indexmap = { version = "1.6.0", features = ["serde-1"] }
 jemallocator = "0.3.2"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
 linked-hash-map = "0.5.3"

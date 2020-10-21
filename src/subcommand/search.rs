@@ -68,7 +68,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         let mut wtr = csv::Writer::from_writer(io::stdout());
         wtr.write_record(&headers)?;
         for (_id, record) in documents {
-            wtr.write_record(&record)?;
+            wtr.write_record(record.iter().map(|(_, v)| v))?;
         }
         wtr.flush()?;
 

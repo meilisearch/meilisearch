@@ -17,16 +17,15 @@ $('#search').on('input', function () {
       data: JSON.stringify({ 'query': query }),
       contentType: 'application/json',
       success: function (data, textStatus, request) {
-        let httpResults = Papa.parse(data, { delimiter: ",", header: true, skipEmptyLines: true });
         results.innerHTML = '';
 
         let timeSpent = request.getResponseHeader('Time-Ms');
-        let numberOfDocuments = httpResults.data.length;
+        let numberOfDocuments = data.length;
         count.innerHTML = `${numberOfDocuments}`;
         time.innerHTML = `${timeSpent}ms`;
         time.classList.remove('fade-in-out');
 
-        for (element of httpResults.data) {
+        for (element of data) {
           const elem = document.createElement('li');
           elem.classList.add("document");
 
