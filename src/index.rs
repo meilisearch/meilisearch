@@ -14,6 +14,7 @@ use crate::{
 pub const WORDS_FST_KEY: &str = "words-fst";
 pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
+pub const USER_IDS_DOCUMENTS_IDS_KEY: &str = "user-ids-documents-ids";
 
 #[derive(Clone)]
 pub struct Index {
@@ -40,29 +41,49 @@ impl Index {
         })
     }
 
-    pub fn documents_ids(&self, rtxn: &heed::RoTxn) -> anyhow::Result<Option<RoaringBitmap>> {
-        Ok(self.main.get::<_, Str, RoaringBitmapCodec>(rtxn, DOCUMENTS_IDS_KEY)?)
+    /// Writes the documents ids that corresponds to the user-ids-documents-ids FST.
+    pub fn put_documents_ids(&self, wtxn: &mut heed::RwTxn, docids: &RoaringBitmap) -> heed::Result<()> {
+        self.main.put::<_, Str, RoaringBitmapCodec>(wtxn, DOCUMENTS_IDS_KEY, docids)
     }
 
-    pub fn put_fields_ids_map(&self, wtxn: &mut heed::RwTxn, map: &FieldsIdsMap) -> heed::Result<()> {
-        self.main.put::<_, Str, SerdeJson<FieldsIdsMap>>(wtxn, FIELDS_IDS_MAP_KEY, map)
+    /// Returns the internal documents ids.
+    pub fn documents_ids(&self, rtxn: &heed::RoTxn) -> heed::Result<Option<RoaringBitmap>> {
+        self.main.get::<_, Str, RoaringBitmapCodec>(rtxn, DOCUMENTS_IDS_KEY)
     }
 
-    pub fn fields_ids_map(&self, rtxn: &heed::RoTxn) -> heed::Result<Option<FieldsIdsMap>> {
-        self.main.get::<_, Str, SerdeJson<FieldsIdsMap>>(rtxn, FIELDS_IDS_MAP_KEY)
+    /// Writes the user ids documents ids, a user id is a byte slice (i.e. `[u8]`)
+    /// and refers to an internal id (i.e. `u32`).
+    pub fn put_user_ids_documents_ids<A: AsRef<[u8]>>(&self, wtxn: &mut heed::RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
+        self.main.put::<_, Str, ByteSlice>(wtxn, USER_IDS_DOCUMENTS_IDS_KEY, fst.as_fst().as_bytes())
     }
 
-    pub fn number_of_fields(&self, rtxn: &heed::RoTxn) -> anyhow::Result<Option<usize>> {
-        match self.fields_ids_map(rtxn)? {
-            Some(map) => Ok(Some(map.len())),
+    /// Returns the user ids documents ids map which associate the user ids (i.e. `[u8]`)
+    /// with the internal ids (i.e. `u32`).
+    pub fn user_ids_documents_ids<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<Option<fst::Map<&'t [u8]>>> {
+        match self.main.get::<_, Str, ByteSlice>(rtxn, USER_IDS_DOCUMENTS_IDS_KEY)? {
+            Some(bytes) => Ok(Some(fst::Map::new(bytes)?)),
             None => Ok(None),
         }
     }
 
-    pub fn put_fst<A: AsRef<[u8]>>(&self, wtxn: &mut heed::RwTxn, fst: &fst::Set<A>) -> anyhow::Result<()> {
-        Ok(self.main.put::<_, Str, ByteSlice>(wtxn, WORDS_FST_KEY, fst.as_fst().as_bytes())?)
+    /// Writes the fields ids map which associate the documents keys with an internal field id
+    /// (i.e. `u8`), this field id is used to identify fields in the obkv documents.
+    pub fn put_fields_ids_map(&self, wtxn: &mut heed::RwTxn, map: &FieldsIdsMap) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<FieldsIdsMap>>(wtxn, FIELDS_IDS_MAP_KEY, map)
     }
 
+    /// Returns the fields ids map which associate the documents keys with an internal field id
+    /// (i.e. `u8`), this field id is used to identify fields in the obkv documents.
+    pub fn fields_ids_map(&self, rtxn: &heed::RoTxn) -> heed::Result<Option<FieldsIdsMap>> {
+        self.main.get::<_, Str, SerdeJson<FieldsIdsMap>>(rtxn, FIELDS_IDS_MAP_KEY)
+    }
+
+    /// Writes the FST which is the words dictionnary of the engine.
+    pub fn put_fst<A: AsRef<[u8]>>(&self, wtxn: &mut heed::RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
+        self.main.put::<_, Str, ByteSlice>(wtxn, WORDS_FST_KEY, fst.as_fst().as_bytes())
+    }
+
+    /// Returns the FST which is the words dictionnary of the engine.
     pub fn fst<'t>(&self, rtxn: &'t heed::RoTxn) -> anyhow::Result<Option<fst::Set<&'t [u8]>>> {
         match self.main.get::<_, Str, ByteSlice>(rtxn, WORDS_FST_KEY)? {
             Some(bytes) => Ok(Some(fst::Set::new(bytes)?)),
