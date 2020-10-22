@@ -34,6 +34,51 @@ impl From<Error> for ResponseError {
     }
 }
 
+impl From<meilisearch_core::Error> for ResponseError {
+    fn from(err: meilisearch_core::Error) -> ResponseError {
+        ResponseError { inner: Box::new(err) }
+    }
+}
+
+impl From<meilisearch_schema::Error> for ResponseError {
+    fn from(err: meilisearch_schema::Error) -> ResponseError {
+        ResponseError { inner: Box::new(err) }
+    }
+}
+
+impl From<FacetCountError> for ResponseError {
+    fn from(err: FacetCountError) -> ResponseError {
+        ResponseError { inner: Box::new(err) }
+    }
+}
+
+impl Serialize for ResponseError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let struct_name = "ResponseError";
+        let field_count = 4;
+
+        let mut state = serializer.serialize_struct(struct_name, field_count)?;
+        state.serialize_field("message", &self.to_string())?;
+        state.serialize_field("errorCode", &self.error_name())?;
+        state.serialize_field("errorType", &self.error_type())?;
+        state.serialize_field("errorLink", &self.error_url())?;
+        state.end()
+    }
+}
+
+impl aweb::error::ResponseError for ResponseError {
+    fn error_response(&self) -> aweb::HttpResponse {
+        ResponseBuilder::new(self.status_code()).json(&self)
+    }
+
+    fn status_code(&self) -> StatusCode {
+        self.http_status()
+    }
+}
+
 #[derive(Debug)]
 pub enum Error {
     BadParameter(String, String),
@@ -220,48 +265,9 @@ impl fmt::Display for Error {
     }
 }
 
-impl Serialize for ResponseError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let struct_name = "ResponseError";
-        let field_count = 4;
-
-        let mut state = serializer.serialize_struct(struct_name, field_count)?;
-        state.serialize_field("message", &self.to_string())?;
-        state.serialize_field("errorCode", &self.error_name())?;
-        state.serialize_field("errorType", &self.error_type())?;
-        state.serialize_field("errorLink", &self.error_url())?;
-        state.end()
-    }
-}
-
-impl aweb::error::ResponseError for ResponseError {
-    fn error_response(&self) -> aweb::HttpResponse {
-        ResponseBuilder::new(self.status_code()).json(&self)
-    }
-
-    fn status_code(&self) -> StatusCode {
-        self.http_status()
-    }
-}
-
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Error {
         Error::Internal(err.to_string())
-    }
-}
-
-impl From<meilisearch_core::Error> for ResponseError {
-    fn from(err: meilisearch_core::Error) -> ResponseError {
-        ResponseError { inner: Box::new(err) }
-    }
-}
-
-impl From<meilisearch_schema::Error> for ResponseError {
-    fn from(err: meilisearch_schema::Error) -> ResponseError {
-        ResponseError { inner: Box::new(err) }
     }
 }
 
@@ -280,12 +286,6 @@ impl From<meilisearch_core::Error> for Error {
 impl From<serde_json::error::Error> for Error {
     fn from(err: serde_json::error::Error) -> Error {
         Error::Internal(err.to_string())
-    }
-}
-
-impl From<FacetCountError> for ResponseError {
-    fn from(err: FacetCountError) -> ResponseError {
-        ResponseError { inner: Box::new(err) }
     }
 }
 
