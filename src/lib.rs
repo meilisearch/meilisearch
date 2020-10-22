@@ -1,4 +1,5 @@
 mod criterion;
+mod fields_ids_map;
 mod index;
 mod indexing;
 mod mdfs;
