@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::bail;
+use anyhow::{bail, ensure};
 use bstr::ByteSlice as _;
 use fst::IntoStreamer;
 use roaring::RoaringBitmap;
@@ -8,7 +8,7 @@ use roaring::RoaringBitmap;
 use crate::heed_codec::CboRoaringBitmapCodec;
 
 const WORDS_FST_KEY: &[u8] = crate::index::WORDS_FST_KEY.as_bytes();
-const HEADERS_KEY: &[u8] = crate::index::HEADERS_KEY.as_bytes();
+const FIELDS_IDS_MAP_KEY: &[u8] = crate::index::FIELDS_IDS_MAP_KEY.as_bytes();
 const DOCUMENTS_IDS_KEY: &[u8] = crate::index::DOCUMENTS_IDS_KEY.as_bytes();
 
 pub fn main_merge(key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
@@ -25,8 +25,8 @@ pub fn main_merge(key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
             build.extend_stream(op.into_stream()).unwrap();
             Ok(build.into_inner().unwrap())
         },
-        HEADERS_KEY => {
-            assert!(values.windows(2).all(|vs| vs[0] == vs[1]));
+        FIELDS_IDS_MAP_KEY => {
+            ensure!(values.windows(2).all(|vs| vs[0] == vs[1]), "fields ids map doesn't match");
             Ok(values[0].to_vec())
         },
         DOCUMENTS_IDS_KEY => word_docids_merge(&[], values),

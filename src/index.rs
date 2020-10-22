@@ -1,23 +1,23 @@
 use anyhow::Context;
-use csv::StringRecord;
 use heed::types::*;
 use heed::{PolyDatabase, Database};
 use roaring::RoaringBitmap;
 
 use crate::Search;
 use crate::{BEU32, DocumentId};
+use crate::fields_ids_map::FieldsIdsMap;
 use crate::{
     RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec, ObkvCodec,
-    CsvStringRecordCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
+    BoRoaringBitmapCodec, CboRoaringBitmapCodec,
 };
 
 pub const WORDS_FST_KEY: &str = "words-fst";
-pub const HEADERS_KEY: &str = "headers";
+pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 
 #[derive(Clone)]
 pub struct Index {
-    /// Contains many different types (e.g. the documents CSV headers).
+    /// Contains many different types (e.g. the fields ids map).
     pub main: PolyDatabase,
     /// A word and all the documents ids containing the word.
     pub word_docids: Database<Str, RoaringBitmapCodec>,
@@ -25,7 +25,7 @@ pub struct Index {
     pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
-    /// Maps the document id to the document as a CSV line.
+    /// Maps the document id to the document as an obkv store.
     pub documents: Database<OwnedType<BEU32>, ObkvCodec>,
 }
 
@@ -44,17 +44,17 @@ impl Index {
         Ok(self.main.get::<_, Str, RoaringBitmapCodec>(rtxn, DOCUMENTS_IDS_KEY)?)
     }
 
-    pub fn put_headers(&self, wtxn: &mut heed::RwTxn, headers: &StringRecord) -> heed::Result<()> {
-        self.main.put::<_, Str, CsvStringRecordCodec>(wtxn, HEADERS_KEY, headers)
+    pub fn put_fields_ids_map(&self, wtxn: &mut heed::RwTxn, map: &FieldsIdsMap) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<FieldsIdsMap>>(wtxn, FIELDS_IDS_MAP_KEY, map)
     }
 
-    pub fn headers(&self, rtxn: &heed::RoTxn) -> heed::Result<Option<StringRecord>> {
-        self.main.get::<_, Str, CsvStringRecordCodec>(rtxn, HEADERS_KEY)
+    pub fn fields_ids_map(&self, rtxn: &heed::RoTxn) -> heed::Result<Option<FieldsIdsMap>> {
+        self.main.get::<_, Str, SerdeJson<FieldsIdsMap>>(rtxn, FIELDS_IDS_MAP_KEY)
     }
 
-    pub fn number_of_attributes(&self, rtxn: &heed::RoTxn) -> anyhow::Result<Option<usize>> {
-        match self.headers(rtxn)? {
-            Some(headers) => Ok(Some(headers.len())),
+    pub fn number_of_fields(&self, rtxn: &heed::RoTxn) -> anyhow::Result<Option<usize>> {
+        match self.fields_ids_map(rtxn)? {
+            Some(map) => Ok(Some(map.len())),
             None => Ok(None),
         }
     }

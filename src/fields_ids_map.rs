@@ -1,9 +1,9 @@
-use std::collections::{HashMap, BTreeMap};
+use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldsIdsMap {
-    names_ids: HashMap<String, u8>,
+    names_ids: BTreeMap<String, u8>,
     ids_names: BTreeMap<u8, String>,
     next_id: Option<u8>,
 }
@@ -11,7 +11,7 @@ pub struct FieldsIdsMap {
 impl FieldsIdsMap {
     pub fn new() -> FieldsIdsMap {
         FieldsIdsMap {
-            names_ids: HashMap::new(),
+            names_ids: BTreeMap::new(),
             ids_names: BTreeMap::new(),
             next_id: Some(0),
         }
@@ -63,6 +63,12 @@ impl FieldsIdsMap {
     /// Iterate over the ids and names in the ids order.
     pub fn iter(&self) -> impl Iterator<Item=(u8, &str)> {
         self.ids_names.iter().map(|(id, name)| (*id, name.as_str()))
+    }
+}
+
+impl Default for FieldsIdsMap {
+    fn default() -> FieldsIdsMap {
+        FieldsIdsMap::new()
     }
 }
 

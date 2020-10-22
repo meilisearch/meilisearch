@@ -382,22 +382,22 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             let SearchResult { found_words, documents_ids } = search.execute().unwrap();
 
             let mut documents = Vec::new();
-            if let Some(headers) = index.headers(&rtxn).unwrap() {
-                for (_id, record) in index.documents(&rtxn, documents_ids).unwrap() {
-                    let mut record = record.iter()
-                        .map(|(key_id, value)| {
-                            let key = headers[key_id as usize].to_owned();
-                            let value = std::str::from_utf8(value).unwrap().to_owned();
-                            (key, value)
-                        })
-                        .collect();
+            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap().unwrap_or_default();
 
-                    if !disable_highlighting {
-                        highlight_record(&mut record, &found_words);
-                    }
+            for (_id, record) in index.documents(&rtxn, documents_ids).unwrap() {
+                let mut record = record.iter()
+                    .map(|(key_id, value)| {
+                        let key = fields_ids_map.name(key_id).unwrap().to_owned();
+                        let value = std::str::from_utf8(value).unwrap().to_owned();
+                        (key, value)
+                    })
+                    .collect();
 
-                    documents.push(record);
+                if !disable_highlighting {
+                    highlight_record(&mut record, &found_words);
                 }
+
+                documents.push(record);
             }
 
             Response::builder()

@@ -16,7 +16,8 @@ use grenad::{Reader, FileFuse, Writer, Sorter, CompressionType};
 use roaring::RoaringBitmap;
 use tempfile::tempfile;
 
-use crate::heed_codec::{CsvStringRecordCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
+use crate::fields_ids_map::FieldsIdsMap;
+use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::tokenizer::{simple_tokenizer, only_token};
 use crate::{SmallVec32, Position, DocumentId};
 
@@ -30,7 +31,7 @@ const MAX_POSITION: usize = 1000;
 const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
 
 const WORDS_FST_KEY: &[u8] = crate::index::WORDS_FST_KEY.as_bytes();
-const HEADERS_KEY: &[u8] = crate::index::HEADERS_KEY.as_bytes();
+const FIELDS_IDS_MAP_KEY: &[u8] = crate::index::FIELDS_IDS_MAP_KEY.as_bytes();
 const DOCUMENTS_IDS_KEY: &[u8] = crate::index::DOCUMENTS_IDS_KEY.as_bytes();
 
 pub struct Readers {
@@ -182,10 +183,10 @@ impl Store {
         Ok(())
     }
 
-    fn write_headers(&mut self, headers: &StringRecord) -> anyhow::Result<()> {
-        let headers = CsvStringRecordCodec::bytes_encode(headers)
-            .with_context(|| format!("could not encode csv record"))?;
-        Ok(self.main_sorter.insert(HEADERS_KEY, headers)?)
+    fn write_fields_ids_map(&mut self, map: &FieldsIdsMap) -> anyhow::Result<()> {
+        let bytes = serde_json::to_vec(&map)?;
+        self.main_sorter.insert(FIELDS_IDS_MAP_KEY, bytes)?;
+        Ok(())
     }
 
     fn write_document(
@@ -320,7 +321,12 @@ impl Store {
 
         // Write the headers into the store.
         let headers = rdr.headers()?;
-        self.write_headers(&headers)?;
+
+        let mut fields_ids_map = FieldsIdsMap::new();
+        for header in headers.iter() {
+            fields_ids_map.insert(header).context("no more field id available")?;
+        }
+        self.write_fields_ids_map(&fields_ids_map)?;
 
         let mut before = Instant::now();
         let mut document_id: usize = base_document_id;

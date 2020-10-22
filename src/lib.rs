@@ -20,8 +20,8 @@ pub use self::index::Index;
 pub use self::search::{Search, SearchResult};
 pub use self::update_store::UpdateStore;
 pub use self::heed_codec::{
-    RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec, ObkvCodec,
-    CsvStringRecordCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
+    RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec,
+    ObkvCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
 };
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;

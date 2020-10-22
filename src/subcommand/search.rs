@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use std::io::{self, BufRead};
 use std::iter::once;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use anyhow::Context;
 use heed::EnvOpenOptions;
 use log::debug;
 use structopt::StructOpt;
@@ -59,18 +61,22 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         let query = result?;
         let result = index.search(&rtxn).query(query).execute().unwrap();
 
-        let headers = match index.headers(&rtxn)? {
-            Some(headers) => headers,
-            None => return Ok(()),
-        };
+        let mut stdout = io::stdout();
+        let fields_ids_map = index.fields_ids_map(&rtxn)?.unwrap_or_default();
         let documents = index.documents(&rtxn, result.documents_ids.iter().cloned())?;
 
-        let mut wtr = csv::Writer::from_writer(io::stdout());
-        wtr.write_record(&headers)?;
         for (_id, record) in documents {
-            wtr.write_record(record.iter().map(|(_, v)| v))?;
+            let document: anyhow::Result<HashMap<_, _>> = record.iter()
+                .map(|(k, v)| {
+                    let key = fields_ids_map.name(k).context("field id not found")?;
+                    let val = std::str::from_utf8(v)?;
+                    Ok((key, val))
+                })
+                .collect();
+
+            let document = document?;
+            serde_json::to_writer(&mut stdout, &document)?;
         }
-        wtr.flush()?;
 
         debug!("Took {:.02?} to find {} documents", before.elapsed(), result.documents_ids.len());
     }
