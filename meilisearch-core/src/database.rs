@@ -28,7 +28,6 @@ pub type MainReader = heed::RoTxn<MainT>;
 pub type UpdateWriter<'a> = heed::RwTxn<'a, UpdateT>;
 pub type UpdateReader = heed::RoTxn<UpdateT>;
 
-const UNHEALTHY_KEY: &str = "_is_unhealthy";
 const LAST_UPDATE_KEY: &str = "last-update";
 
 pub struct MainT;
@@ -531,23 +530,6 @@ impl Database {
         self.common_store()
             .put::<_, Str, SerdeDatetime>(writer, LAST_UPDATE_KEY, time)?;
         Ok(())
-    }
-
-    pub fn set_healthy(&self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
-        let common_store = self.common_store();
-        common_store.delete::<_, Str>(writer, UNHEALTHY_KEY)?;
-        Ok(())
-    }
-
-    pub fn set_unhealthy(&self, writer: &mut heed::RwTxn<MainT>) -> MResult<()> {
-        let common_store = self.common_store();
-        common_store.put::<_, Str, Unit>(writer, UNHEALTHY_KEY, &())?;
-        Ok(())
-    }
-
-    pub fn get_health(&self, reader: &heed::RoTxn<MainT>) -> MResult<Option<()>> {
-        let common_store = self.common_store();
-        Ok(common_store.get::<_, Str, Unit>(&reader, UNHEALTHY_KEY)?)
     }
 
     pub fn compute_stats(&self, writer: &mut MainWriter, index_uid: &str) -> MResult<()> {

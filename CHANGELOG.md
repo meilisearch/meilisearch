@@ -1,6 +1,5 @@
 ## v0.15.0
 
-  - Dumps (#887)
   - Update actix-web dependency to 3.0.0 (#963)
   - Consider an empty query to be a placeholder search (#916)
 
