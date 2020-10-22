@@ -1,3 +1,4 @@
+mod available_documents_ids;
 mod criterion;
 mod fields_ids_map;
 mod index;
@@ -34,4 +35,3 @@ pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 pub type DocumentId = u32;
 pub type Attribute = u32;
 pub type Position = u32;
-
