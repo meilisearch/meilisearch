@@ -20,9 +20,9 @@ pub fn load_snapshot(
     if !db_path.exists() && snapshot_path.exists() {
         compression::from_tar_gz(snapshot_path, db_path)
     } else if db_path.exists() && !ignore_snapshot_if_db_exists {
-        Err(Error::Internal(format!("database already exists at {:?}", db_path)))
+        Err(Error::Internal(format!("database already exists at {:?}, try to delete it or rename it", db_path.canonicalize().unwrap_or(db_path.into()))))
     } else if !snapshot_path.exists() && !ignore_missing_snapshot {
-        Err(Error::Internal(format!("snapshot doesn't exist at {:?}", snapshot_path)))
+        Err(Error::Internal(format!("snapshot doesn't exist at {:?}", snapshot_path.canonicalize().unwrap_or(snapshot_path.into()))))
     } else {
         Ok(())
     }
@@ -42,13 +42,13 @@ pub fn schedule_snapshot(data: Data, snapshot_dir: &Path, time_gap_s: u64) -> Re
     }
     let db_name = Path::new(&data.db_path).file_name().ok_or_else(|| Error::Internal("invalid database name".to_string()))?;
     create_dir_all(snapshot_dir)?;
-    let snapshot_path = snapshot_dir.join(format!("{}.tar.gz", db_name.to_str().unwrap_or("data.ms")));
+    let snapshot_path = snapshot_dir.join(format!("{}.snapshot", db_name.to_str().unwrap_or("data.ms")));
     
     thread::spawn(move || loop { 
-        thread::sleep(Duration::from_secs(time_gap_s));
         if let Err(e) = create_snapshot(&data, &snapshot_path) {
             error!("Unsuccessful snapshot creation: {}", e);
         }
+        thread::sleep(Duration::from_secs(time_gap_s));
     });
 
     Ok(())
@@ -67,13 +67,13 @@ mod tests {
         let test_dir = tempdir.path();
         let src_dir = test_dir.join("src");
         let dest_dir = test_dir.join("complex/destination/path/");
-        let archive_path = test_dir.join("archive.tar.gz");
+        let archive_path = test_dir.join("archive.snapshot");
 
         let file_1_relative = Path::new("file1.txt");
-        let subfolder_relative = Path::new("subfolder/");
-        let file_2_relative = Path::new("subfolder/file2.txt");
+        let subdir_relative = Path::new("subdir/");
+        let file_2_relative = Path::new("subdir/file2.txt");
         
-        create_dir_all(src_dir.join(subfolder_relative)).unwrap();
+        create_dir_all(src_dir.join(subdir_relative)).unwrap();
         fs::File::create(src_dir.join(file_1_relative)).unwrap().write_all(b"Hello_file_1").unwrap();
         fs::File::create(src_dir.join(file_2_relative)).unwrap().write_all(b"Hello_file_2").unwrap();
 
@@ -84,7 +84,7 @@ mod tests {
 
         assert!(dest_dir.exists());
         assert!(dest_dir.join(file_1_relative).exists());
-        assert!(dest_dir.join(subfolder_relative).exists());
+        assert!(dest_dir.join(subdir_relative).exists());
         assert!(dest_dir.join(file_2_relative).exists());
 
         let contents = fs::read_to_string(dest_dir.join(file_1_relative)).unwrap();

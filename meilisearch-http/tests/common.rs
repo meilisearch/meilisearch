@@ -49,7 +49,7 @@ impl Server {
 
         let opt = Opt {
             db_path: tmp_dir.path().join("db").to_str().unwrap().to_string(),
-            dumps_folder: tmp_dir.path().join("dump"),
+            dumps_dir: tmp_dir.path().join("dump"),
             dump_batch_size: 16,
             http_addr: "127.0.0.1:7700".to_owned(),
             master_key: None,
