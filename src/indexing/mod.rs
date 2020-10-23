@@ -21,8 +21,9 @@ use self::merge_function::{
     docid_word_positions_merge, documents_merge,
 };
 
-mod store;
 mod merge_function;
+mod store;
+mod transform;
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct IndexerOpt {
