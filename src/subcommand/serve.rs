@@ -1,6 +1,7 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs::{File, create_dir_all};
-use std::mem;
+use std::{mem, io};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -8,6 +9,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use askama_warp::Template;
+use flate2::read::GzDecoder;
 use futures::stream;
 use futures::{FutureExt, StreamExt};
 use heed::EnvOpenOptions;
@@ -20,9 +22,9 @@ use tokio::sync::broadcast;
 use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
 
-use crate::indexing::{self, IndexerOpt};
+use crate::indexing::{self, IndexerOpt, Transform, TransformOutput};
 use crate::tokenizer::{simple_tokenizer, TokenType};
-use crate::{Index, UpdateStore, SearchResult};
+use crate::{Index, UpdateStore, SearchResult, AvailableDocumentsIds};
 
 #[derive(Debug, StructOpt)]
 /// The HTTP main server of the milli project.
@@ -103,9 +105,7 @@ enum UpdateStatus<M, P, N> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 enum UpdateMeta {
-    DocumentsAddition {
-        total_number_of_documents: Option<usize>,
-    },
+    DocumentsAddition,
     DocumentsAdditionFromPath {
         path: PathBuf,
     },
@@ -153,19 +153,63 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         update_store_path,
         move |update_id, meta, content| {
             let result = match meta {
-                UpdateMeta::DocumentsAddition { total_number_of_documents } => {
+                UpdateMeta::DocumentsAddition => {
+                    // We must use the write transaction of the update here.
+                    let rtxn = env_cloned.read_txn()?;
+                    let fields_ids_map = index_cloned.fields_ids_map(&rtxn)?.unwrap_or_default();
+                    let documents_ids = index_cloned.documents_ids(&rtxn)?.unwrap_or_default();
+                    let available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
+                    let users_ids_documents_ids = match index_cloned.users_ids_documents_ids(&rtxn).unwrap() {
+                        Some(map) => map.map_data(Cow::Borrowed).unwrap(),
+                        None => fst::Map::default().map_data(Cow::Owned).unwrap(),
+                    };
+
+                    let transform = Transform {
+                        fields_ids_map,
+                        available_documents_ids,
+                        users_ids_documents_ids,
+                        chunk_compression_type: indexer_opt_cloned.chunk_compression_type,
+                        chunk_compression_level: indexer_opt_cloned.chunk_compression_level,
+                        chunk_fusing_shrink_size: Some(indexer_opt_cloned.chunk_fusing_shrink_size),
+                        max_nb_chunks: indexer_opt_cloned.max_nb_chunks,
+                        max_memory: Some(indexer_opt_cloned.max_memory),
+                    };
+
                     let gzipped = false;
+                    let reader = if gzipped {
+                        Box::new(GzDecoder::new(content))
+                    } else {
+                        Box::new(content) as Box<dyn io::Read>
+                    };
+
+                    let TransformOutput {
+                        fields_ids_map,
+                        users_ids_documents_ids,
+                        new_documents_ids,
+                        replaced_documents_ids,
+                        documents_count,
+                        documents_file,
+                    } = transform.from_csv(reader).unwrap();
+
+                    drop(rtxn);
+
+                    let mmap = unsafe { memmap::Mmap::map(&documents_file)? };
+                    let documents = grenad::Reader::new(mmap.as_ref()).unwrap();
+
                     indexing::run(
                         &env_cloned,
                         &index_cloned,
                         &indexer_opt_cloned,
-                        content,
-                        gzipped,
-                        |count| {
+                        fields_ids_map,
+                        users_ids_documents_ids,
+                        new_documents_ids,
+                        documents,
+                        documents_count as u32,
+                        |count, total| {
                             // We send progress status...
                             let meta = UpdateMetaProgress::DocumentsAddition {
                                 processed_number_of_documents: count as usize,
-                                total_number_of_documents,
+                                total_number_of_documents: Some(total as usize),
                             };
                             let progress = UpdateStatus::Progressing { update_id, meta };
                             let _ = update_status_sender_cloned.send(progress);
@@ -173,38 +217,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                     )
                 },
                 UpdateMeta::DocumentsAdditionFromPath { path } => {
-                    let file = match File::open(&path) {
-                        Ok(file) => file,
-                        Err(e) => {
-                            let meta = format!("documents addition file ({}) error: {}", path.display(), e);
-                            return Ok(meta);
-                        }
-                    };
-                    let content = match unsafe { memmap::Mmap::map(&file) } {
-                        Ok(mmap) => mmap,
-                        Err(e) => {
-                            let meta = format!("documents addition file ({}) mmap error: {}", path.display(), e);
-                            return Ok(meta);
-                        },
-                    };
-
-                    let gzipped = path.extension().map_or(false, |e| e == "gz" || e == "gzip");
-                    indexing::run(
-                        &env_cloned,
-                        &index_cloned,
-                        &indexer_opt_cloned,
-                        &content,
-                        gzipped,
-                        |count| {
-                            // We send progress status...
-                            let meta = UpdateMetaProgress::DocumentsAddition {
-                                processed_number_of_documents: count as usize,
-                                total_number_of_documents: None,
-                            };
-                            let progress = UpdateStatus::Progressing { update_id, meta };
-                            let _ = update_status_sender_cloned.send(progress);
-                        },
-                    )
+                    todo!()
                 }
             };
 
@@ -388,7 +401,8 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                 let mut record = record.iter()
                     .map(|(key_id, value)| {
                         let key = fields_ids_map.name(key_id).unwrap().to_owned();
-                        let value = std::str::from_utf8(value).unwrap().to_owned();
+                        // TODO we must deserialize a Json Value and highlight it.
+                        let value = serde_json::from_slice(value).unwrap();
                         (key, value)
                     })
                     .collect();
@@ -423,7 +437,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         let file = file.into_std().await;
         let mmap = unsafe { memmap::Mmap::map(&file).unwrap() };
 
-        let meta = UpdateMeta::DocumentsAddition { total_number_of_documents: None };
+        let meta = UpdateMeta::DocumentsAddition;
         let update_id = update_store.register_update(&meta, &mmap[..]).unwrap();
         let _ = update_status_sender.send(UpdateStatus::Pending { update_id, meta });
         eprintln!("update {} registered", update_id);

@@ -6,8 +6,10 @@ use std::io::{Read, Seek, SeekFrom};
 use anyhow::Context;
 use crate::{FieldsIdsMap, AvailableDocumentsIds};
 use fst::{IntoStreamer, Streamer};
-use grenad::{Writer, Sorter, CompressionType};
+use grenad::CompressionType;
 use roaring::RoaringBitmap;
+
+use super::{create_writer, create_sorter};
 
 pub struct TransformOutput {
     pub fields_ids_map: FieldsIdsMap,
@@ -22,9 +24,11 @@ pub struct Transform<A> {
     pub fields_ids_map: FieldsIdsMap,
     pub available_documents_ids: AvailableDocumentsIds,
     pub users_ids_documents_ids: fst::Map<A>,
-    pub compression_type: CompressionType,
-    pub compression_level: u32,
-    pub enable_file_fuzing: bool,
+    pub chunk_compression_type: CompressionType,
+    pub chunk_compression_level: Option<u32>,
+    pub chunk_fusing_shrink_size: Option<u64>,
+    pub max_nb_chunks: Option<usize>,
+    pub max_memory: Option<usize>,
 }
 
 impl<A: AsRef<[u8]>> Transform<A> {
@@ -53,16 +57,17 @@ impl<A: AsRef<[u8]>> Transform<A> {
         }
 
         // We initialize the sorter with the user indexing settings.
-        let mut sorter_builder = Sorter::builder(merge_last_win);
-        sorter_builder.chunk_compression_type(self.compression_type);
-        sorter_builder.chunk_compression_level(self.compression_level);
-        if self.enable_file_fuzing {
-            sorter_builder.enable_fusing();
-        }
+        let mut sorter = create_sorter(
+            merge_last_win,
+            self.chunk_compression_type,
+            self.chunk_compression_level,
+            self.chunk_fusing_shrink_size,
+            self.max_nb_chunks,
+            self.max_memory,
+        );
 
         // We write into the sorter to merge and deduplicate the documents
         // based on the users ids.
-        let mut sorter = sorter_builder.build();
         let mut json_buffer = Vec::new();
         let mut obkv_buffer = Vec::new();
         let mut record = csv::StringRecord::new();
@@ -88,11 +93,7 @@ impl<A: AsRef<[u8]>> Transform<A> {
 
         // Once we have sort and deduplicated the documents we write them into a final file.
         let file = tempfile::tempfile()?;
-        let mut writer_builder = Writer::builder();
-        writer_builder.compression_type(self.compression_type);
-        writer_builder.compression_level(self.compression_level);
-
-        let mut writer = writer_builder.build(file)?;
+        let mut writer = create_writer(self.chunk_compression_type, self.chunk_compression_level, file)?;
         let mut new_users_ids_documents_ids_builder = fst::MapBuilder::memory();
         let mut replaced_documents_ids = RoaringBitmap::new();
         let mut new_documents_ids = RoaringBitmap::new();

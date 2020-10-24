@@ -1,14 +1,13 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
-use std::io::Read;
 use std::iter::FromIterator;
 use std::time::Instant;
 use std::{cmp, iter};
 
 use anyhow::Context;
 use bstr::ByteSlice as _;
-use csv::StringRecord;
 use heed::BytesEncode;
 use linked_hash_map::LinkedHashMap;
 use log::{debug, info};
@@ -16,7 +15,6 @@ use grenad::{Reader, FileFuse, Writer, Sorter, CompressionType};
 use roaring::RoaringBitmap;
 use tempfile::tempfile;
 
-use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::tokenizer::{simple_tokenizer, only_token};
 use crate::{SmallVec32, Position, DocumentId};
@@ -28,11 +26,7 @@ const LMDB_MAX_KEY_LENGTH: usize = 511;
 const ONE_KILOBYTE: usize = 1024 * 1024;
 
 const MAX_POSITION: usize = 1000;
-const MAX_ATTRIBUTES: usize = u32::max_value() as usize / MAX_POSITION;
-
 const WORDS_FST_KEY: &[u8] = crate::index::WORDS_FST_KEY.as_bytes();
-const FIELDS_IDS_MAP_KEY: &[u8] = crate::index::FIELDS_IDS_MAP_KEY.as_bytes();
-const DOCUMENTS_IDS_KEY: &[u8] = crate::index::DOCUMENTS_IDS_KEY.as_bytes();
 
 pub struct Readers {
     pub main: Reader<FileFuse>,
@@ -47,7 +41,6 @@ pub struct Store {
     word_docids_limit: usize,
     words_pairs_proximities_docids: LinkedHashMap<(SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap>,
     words_pairs_proximities_docids_limit: usize,
-    documents_ids: RoaringBitmap,
     // MTBL parameters
     chunk_compression_type: CompressionType,
     chunk_compression_level: Option<u32>,
@@ -111,7 +104,6 @@ impl Store {
             word_docids_limit: linked_hash_map_size,
             words_pairs_proximities_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
             words_pairs_proximities_docids_limit: linked_hash_map_size,
-            documents_ids: RoaringBitmap::new(),
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
@@ -183,17 +175,11 @@ impl Store {
         Ok(())
     }
 
-    fn write_fields_ids_map(&mut self, map: &FieldsIdsMap) -> anyhow::Result<()> {
-        let bytes = serde_json::to_vec(&map)?;
-        self.main_sorter.insert(FIELDS_IDS_MAP_KEY, bytes)?;
-        Ok(())
-    }
-
     fn write_document(
         &mut self,
         document_id: DocumentId,
         words_positions: &HashMap<String, SmallVec32<Position>>,
-        record: &StringRecord,
+        record: &[u8],
     ) -> anyhow::Result<()>
     {
         // We compute the list of words pairs proximities (self-join) and write it directly to disk.
@@ -205,15 +191,7 @@ impl Store {
             self.insert_word_docid(word, document_id)?;
         }
 
-        let mut writer = obkv::KvWriter::memory();
-        record.iter().enumerate().for_each(|(i, v)| {
-            let key = i.try_into().unwrap();
-            writer.insert(key, v.as_bytes()).unwrap();
-        });
-        let bytes = writer.into_inner().unwrap();
-
-        self.documents_ids.insert(document_id);
-        self.documents_writer.insert(document_id.to_be_bytes(), bytes)?;
+        self.documents_writer.insert(document_id.to_be_bytes(), record)?;
         Self::write_docid_word_positions(&mut self.docid_word_positions_writer, document_id, words_positions)?;
 
         Ok(())
@@ -299,70 +277,55 @@ impl Store {
         Ok(())
     }
 
-    fn write_documents_ids(sorter: &mut Sorter<MergeFn>, ids: RoaringBitmap) -> anyhow::Result<()> {
-        let mut buffer = Vec::with_capacity(ids.serialized_size());
-        ids.serialize_into(&mut buffer)?;
-        sorter.insert(DOCUMENTS_IDS_KEY, &buffer)?;
-        Ok(())
-    }
-
-    pub fn index_csv<'a, F>(
+    pub fn index<F>(
         mut self,
-        mut rdr: csv::Reader<Box<dyn Read + Send + 'a>>,
-        base_document_id: usize,
+        mut documents: grenad::Reader<&[u8]>,
+        documents_count: u32,
         thread_index: usize,
         num_threads: usize,
         log_every_n: usize,
         mut progress_callback: F,
     ) -> anyhow::Result<Readers>
-    where F: FnMut(u32),
+    where F: FnMut(u32, u32),
     {
         debug!("{:?}: Indexing in a Store...", thread_index);
 
-        // Write the headers into the store.
-        let headers = rdr.headers()?;
-
-        let mut fields_ids_map = FieldsIdsMap::new();
-        for header in headers.iter() {
-            fields_ids_map.insert(header).context("no more field id available")?;
-        }
-        self.write_fields_ids_map(&fields_ids_map)?;
-
         let mut before = Instant::now();
-        let mut document_id: usize = base_document_id;
-        let mut document = csv::StringRecord::new();
         let mut words_positions = HashMap::new();
 
-        while rdr.read_record(&mut document)? {
+        let mut count: usize = 0;
+        while let Some((key, value)) = documents.next()? {
+            let document_id = key.try_into().map(u32::from_be_bytes).unwrap();
+            let document = obkv::KvReader::new(value);
+
             // We skip documents that must not be indexed by this thread.
-            if document_id % num_threads == thread_index {
+            if count % num_threads == thread_index {
                 // This is a log routine that we do every `log_every_n` documents.
-                if document_id % log_every_n == 0 {
-                    let count = format_count(document_id);
-                    info!("We have seen {} documents so far ({:.02?}).", count, before.elapsed());
-                    progress_callback((document_id - base_document_id) as u32);
+                if count % log_every_n == 0 {
+                    info!("We have seen {} documents so far ({:.02?}).", format_count(count), before.elapsed());
+                    progress_callback(count as u32, documents_count);
                     before = Instant::now();
                 }
 
-                let document_id = DocumentId::try_from(document_id).context("generated id is too big")?;
-                for (attr, content) in document.iter().enumerate().take(MAX_ATTRIBUTES) {
+                for (attr, content) in document.iter() {
+                    let content: Cow<str> = serde_json::from_slice(content).unwrap();
                     for (pos, token) in simple_tokenizer(&content).filter_map(only_token).enumerate().take(MAX_POSITION) {
                         let word = token.to_lowercase();
-                        let position = (attr * MAX_POSITION + pos) as u32;
+                        let position = (attr as usize * MAX_POSITION + pos) as u32;
                         words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
                     }
                 }
 
                 // We write the document in the documents store.
-                self.write_document(document_id, &words_positions, &document)?;
+                self.write_document(document_id, &words_positions, value)?;
                 words_positions.clear();
             }
 
             // Compute the document id of the next document.
-            document_id = document_id + 1;
+            count = count + 1;
         }
 
-        progress_callback((document_id - base_document_id) as u32);
+        progress_callback(count as u32, documents_count);
 
         let readers = self.finish()?;
         debug!("{:?}: Store created!", thread_index);
@@ -375,7 +338,6 @@ impl Store {
         let shrink_size = self.chunk_fusing_shrink_size;
 
         Self::write_word_docids(&mut self.word_docids_sorter, self.word_docids)?;
-        Self::write_documents_ids(&mut self.main_sorter, self.documents_ids)?;
         Self::write_words_pairs_proximities(
             &mut self.words_pairs_proximities_docids_sorter,
             self.words_pairs_proximities_docids,
