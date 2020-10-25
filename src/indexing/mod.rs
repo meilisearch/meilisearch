@@ -340,7 +340,8 @@ where F: Fn(u32, u32) + Sync + Send,
     //      to first delete the replaced documents for example.
     let mut wtxn = env.write_txn()?;
 
-    let contains_documents = index.documents_ids(&wtxn)?.map_or(false, |docids| !docids.is_empty());
+    let mut documents_ids = index.documents_ids(&wtxn)?;
+    let contains_documents = !documents_ids.is_empty();
     let write_method = if contains_documents {
         WriteMethod::GetMergePut
     } else {
@@ -354,13 +355,8 @@ where F: Fn(u32, u32) + Sync + Send,
     index.put_users_ids_documents_ids(&mut wtxn, &users_ids_documents_ids)?;
 
     // We merge the new documents ids with the existing ones.
-    match index.documents_ids(&wtxn)? {
-        Some(mut documents_ids) => {
-            documents_ids.union_with(&new_documents_ids);
-            index.put_documents_ids(&mut wtxn, &documents_ids)?;
-        },
-        None => index.put_documents_ids(&mut wtxn, &new_documents_ids)?,
-    }
+    documents_ids.union_with(&new_documents_ids);
+    index.put_documents_ids(&mut wtxn, &documents_ids)?;
 
     debug!("Writing the docid word positions into LMDB on disk...");
     merge_into_lmdb_database(

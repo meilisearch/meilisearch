@@ -62,7 +62,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         let result = index.search(&rtxn).query(query).execute().unwrap();
 
         let mut stdout = io::stdout();
-        let fields_ids_map = index.fields_ids_map(&rtxn)?.unwrap_or_default();
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
         let documents = index.documents(&rtxn, result.documents_ids.iter().cloned())?;
 
         for (_id, record) in documents {

@@ -199,10 +199,10 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     let mut heap = BinaryHeap::with_capacity(limit + 1);
 
     if limit > 0 {
-        if let Some(fst) = index.fst(rtxn)? {
-            heap.push(Reverse((fst.as_fst().as_bytes().len(), format!("words-fst"), main_name)));
-            if heap.len() > limit { heap.pop(); }
-        }
+        let words_fst = index.words_fst(rtxn)?;
+
+        heap.push(Reverse((words_fst.as_fst().as_bytes().len(), format!("words-fst"), main_name)));
+        if heap.len() > limit { heap.pop(); }
 
         if let Some(documents) = index.main.get::<_, Str, ByteSlice>(rtxn, "documents")? {
             heap.push(Reverse((documents.len(), format!("documents"), main_name)));
@@ -265,13 +265,8 @@ fn export_words_fst(index: &Index, rtxn: &heed::RoTxn, output: PathBuf) -> anyho
     let mut output = File::create(&output)
         .with_context(|| format!("failed to create {} file", output.display()))?;
 
-    match index.fst(rtxn)? {
-        Some(fst) =>  output.write_all(fst.as_fst().as_bytes())?,
-        None => {
-            let fst = fst::Set::default();
-            output.write_all(fst.as_fst().as_bytes())?;
-        },
-    }
+    let words_fst = index.words_fst(rtxn)?;
+    output.write_all(words_fst.as_fst().as_bytes())?;
 
     Ok(())
 }

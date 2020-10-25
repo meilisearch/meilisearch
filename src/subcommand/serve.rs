@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs::{File, create_dir_all};
 use std::{mem, io};
@@ -156,13 +155,10 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                 UpdateMeta::DocumentsAddition => {
                     // We must use the write transaction of the update here.
                     let rtxn = env_cloned.read_txn()?;
-                    let fields_ids_map = index_cloned.fields_ids_map(&rtxn)?.unwrap_or_default();
-                    let documents_ids = index_cloned.documents_ids(&rtxn)?.unwrap_or_default();
+                    let fields_ids_map = index_cloned.fields_ids_map(&rtxn)?;
+                    let documents_ids = index_cloned.documents_ids(&rtxn)?;
                     let available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
-                    let users_ids_documents_ids = match index_cloned.users_ids_documents_ids(&rtxn).unwrap() {
-                        Some(map) => map.map_data(Cow::Borrowed).unwrap(),
-                        None => fst::Map::default().map_data(Cow::Owned).unwrap(),
-                    };
+                    let users_ids_documents_ids = index_cloned.users_ids_documents_ids(&rtxn).unwrap();
 
                     let transform = Transform {
                         fields_ids_map,
@@ -395,7 +391,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             let SearchResult { found_words, documents_ids } = search.execute().unwrap();
 
             let mut documents = Vec::new();
-            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap().unwrap_or_default();
+            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
             for (_id, record) in index.documents(&rtxn, documents_ids).unwrap() {
                 let mut record = record.iter()

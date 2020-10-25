@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use fst::{IntoStreamer, Streamer};
@@ -81,7 +82,7 @@ impl<'a> Search<'a> {
     /// the associated documents ids.
     fn fetch_words_docids(
         &self,
-        fst: &fst::Set<&[u8]>,
+        fst: &fst::Set<Cow<[u8]>>,
         dfas: Vec<(String, bool, DFA)>,
     ) -> anyhow::Result<Vec<(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)>>
     {
@@ -135,20 +136,14 @@ impl<'a> Search<'a> {
     pub fn execute(&self) -> anyhow::Result<SearchResult> {
         let limit = self.limit;
 
-        let fst = match self.index.fst(self.rtxn)? {
-            Some(fst) => fst,
-            None => return Ok(Default::default()),
-        };
+        let fst = self.index.words_fst(self.rtxn)?;
 
         // Construct the DFAs related to the query words.
         let dfas = match self.query.as_deref().map(Self::generate_query_dfas) {
             Some(dfas) if !dfas.is_empty() => dfas,
             _ => {
                 // If the query is not set or results in no DFAs we return a placeholder.
-                let documents_ids = match self.index.documents_ids(self.rtxn)? {
-                    Some(docids) => docids.iter().take(limit).collect(),
-                    None => Vec::new(),
-                };
+                let documents_ids = self.index.documents_ids(self.rtxn)?.iter().take(limit).collect();
                 return Ok(SearchResult { documents_ids, ..Default::default() })
             },
         };
