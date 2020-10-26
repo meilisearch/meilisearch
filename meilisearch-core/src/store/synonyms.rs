@@ -19,10 +19,6 @@ impl Synonyms {
         self.synonyms.put(writer, word, bytes)
     }
 
-    pub fn del_synonyms(self, writer: &mut heed::RwTxn<MainT>, word: &[u8]) -> ZResult<bool> {
-        self.synonyms.delete(writer, word)
-    }
-
     pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
         self.synonyms.clear(writer)
     }
