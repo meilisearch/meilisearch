@@ -23,7 +23,8 @@ use warp::{Filter, http::Response};
 
 use crate::indexing::{self, IndexerOpt, Transform, TransformOutput};
 use crate::tokenizer::{simple_tokenizer, TokenType};
-use crate::{Index, UpdateStore, SearchResult, AvailableDocumentsIds};
+use crate::update::AvailableDocumentsIds;
+use crate::{Index, UpdateStore, SearchResult};
 
 #[derive(Debug, StructOpt)]
 /// The HTTP main server of the milli project.

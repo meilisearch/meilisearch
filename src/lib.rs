@@ -1,4 +1,3 @@
-mod available_documents_ids;
 mod criterion;
 mod fields_ids_map;
 mod index;
@@ -16,7 +15,6 @@ use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use fxhash::{FxHasher32, FxHasher64};
 
-pub use self::available_documents_ids::AvailableDocumentsIds;
 pub use self::criterion::{Criterion, default_criteria};
 pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::index::Index;
