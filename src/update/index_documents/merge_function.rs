@@ -69,3 +69,19 @@ pub fn words_pairs_proximities_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -
 pub fn documents_merge(key: &[u8], _values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
     bail!("merging documents is an error ({:?})", key.as_bstr())
 }
+
+pub fn merge_two_obkv(base: obkv::KvReader, update: obkv::KvReader, buffer: &mut Vec<u8>) {
+    use itertools::merge_join_by;
+    use itertools::EitherOrBoth::{Both, Left, Right};
+
+    buffer.clear();
+
+    let mut writer = obkv::KvWriter::new(buffer);
+    for eob in merge_join_by(base.iter(), update.iter(), |(b, _), (u, _)| b.cmp(u)) {
+        match eob {
+            Both(_, (k, v)) | Left((k, v)) | Right((k, v)) => writer.insert(k, v).unwrap(),
+        }
+    }
+
+    writer.finish().unwrap();
+}

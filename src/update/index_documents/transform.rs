@@ -8,9 +8,10 @@ use fst::{IntoStreamer, Streamer};
 use grenad::CompressionType;
 use roaring::RoaringBitmap;
 
-use crate::FieldsIdsMap;
+use crate::{BEU32, Index, FieldsIdsMap};
 use crate::update::AvailableDocumentsIds;
-use super::{create_writer, create_sorter};
+use super::merge_function::merge_two_obkv;
+use super::{create_writer, create_sorter, IndexDocumentsMethod};
 
 pub struct TransformOutput {
     pub fields_ids_map: FieldsIdsMap,
@@ -21,41 +22,30 @@ pub struct TransformOutput {
     pub documents_file: File,
 }
 
-pub struct Transform<A> {
-    pub fields_ids_map: FieldsIdsMap,
-    pub available_documents_ids: AvailableDocumentsIds,
-    pub users_ids_documents_ids: fst::Map<A>,
+pub struct Transform<'t, 'i> {
+    pub rtxn: &'t heed::RoTxn,
+    pub index: &'i Index,
     pub chunk_compression_type: CompressionType,
     pub chunk_compression_level: Option<u32>,
     pub chunk_fusing_shrink_size: Option<u64>,
     pub max_nb_chunks: Option<usize>,
     pub max_memory: Option<usize>,
+    pub index_documents_method: IndexDocumentsMethod,
 }
 
-fn merge_two_obkv(base: obkv::KvReader, update: obkv::KvReader, buffer: &mut Vec<u8>) {
-    use itertools::merge_join_by;
-    use itertools::EitherOrBoth::{Both, Left, Right};
-
-    buffer.clear();
-
-    let mut writer = obkv::KvWriter::new(buffer);
-    for eob in merge_join_by(base.iter(), update.iter(), |(b, _), (u, _)| b.cmp(u)) {
-        match eob {
-            Both(_, (k, v)) | Left((k, v)) | Right((k, v)) => writer.insert(k, v).unwrap(),
-        }
-    }
-
-    writer.finish().unwrap();
-}
-
-impl<A: AsRef<[u8]>> Transform<A> {
+impl Transform<'_, '_> {
     /// Extract the users ids, deduplicate and compute the new internal documents ids
     /// and fields ids, writing all the documents under their internal ids into a final file.
     ///
     /// Outputs the new `FieldsIdsMap`, the new `UsersIdsDocumentsIds` map, the new documents ids,
     /// the replaced documents ids, the number of documents in this update and the file
     /// containing all those documents.
-    pub fn from_csv<R: Read>(mut self, reader: R) -> anyhow::Result<TransformOutput> {
+    pub fn from_csv<R: Read>(self, reader: R) -> anyhow::Result<TransformOutput> {
+        let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
+        let documents_ids = self.index.documents_ids(self.rtxn)?;
+        let mut available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
+        let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn).unwrap();
+
         let mut csv = csv::Reader::from_reader(reader);
         let headers = csv.headers()?.clone();
         let user_id_pos = headers.iter().position(|h| h == "id").context(r#"missing "id" header"#)?;
@@ -63,7 +53,7 @@ impl<A: AsRef<[u8]>> Transform<A> {
         // Generate the new fields ids based on the current fields ids and this CSV headers.
         let mut fields_ids = Vec::new();
         for header in headers.iter() {
-            let id = self.fields_ids_map.insert(header)
+            let id = fields_ids_map.insert(header)
                 .context("impossible to generate a field id (limit reached)")?;
             fields_ids.push(id);
         }
@@ -120,7 +110,7 @@ impl<A: AsRef<[u8]>> Transform<A> {
         let mut iter = sorter.into_iter()?;
         while let Some((user_id, update_obkv)) = iter.next()? {
 
-            let (docid, obkv) = match self.users_ids_documents_ids.get(user_id) {
+            let (docid, obkv) = match users_ids_documents_ids.get(user_id) {
                 Some(docid) => {
                     // If we find the user id in the current users ids documents ids map
                     // we use it and insert it in the list of replaced documents.
@@ -129,20 +119,22 @@ impl<A: AsRef<[u8]>> Transform<A> {
 
                     // Depending on the update indexing method we will merge
                     // the document update with the current document or not.
-                    let must_merge_documents = false;
-                    if must_merge_documents {
-                        let base_obkv = todo!();
-                        let update_obkv = obkv::KvReader::new(update_obkv);
-                        merge_two_obkv(base_obkv, update_obkv, &mut obkv_buffer);
-                        (docid, obkv_buffer.as_slice())
-                    } else {
-                        (docid, update_obkv)
+                    match self.index_documents_method {
+                        IndexDocumentsMethod::ReplaceDocuments => (docid, update_obkv),
+                        IndexDocumentsMethod::UpdateDocuments => {
+                            let key = BEU32::new(docid);
+                            let base_obkv = self.index.documents.get(&self.rtxn, &key)?
+                                .context("document not found")?;
+                            let update_obkv = obkv::KvReader::new(update_obkv);
+                            merge_two_obkv(base_obkv, update_obkv, &mut obkv_buffer);
+                            (docid, obkv_buffer.as_slice())
+                        }
                     }
                 },
                 None => {
                     // If this user id is new we add it to the users ids documents ids map
                     // for new ids and into the list of new documents.
-                    let new_docid = self.available_documents_ids.next()
+                    let new_docid = available_documents_ids.next()
                         .context("no more available documents ids")?;
                     new_users_ids_documents_ids_builder.insert(user_id, new_docid as u64)?;
                     new_documents_ids.insert(new_docid);
@@ -163,7 +155,7 @@ impl<A: AsRef<[u8]>> Transform<A> {
         // We create the union between the existing users ids documents ids with the new ones.
         let new_users_ids_documents_ids = new_users_ids_documents_ids_builder.into_map();
         let union_ = fst::map::OpBuilder::new()
-            .add(&self.users_ids_documents_ids)
+            .add(&users_ids_documents_ids)
             .add(&new_users_ids_documents_ids)
             .r#union();
 
@@ -176,7 +168,7 @@ impl<A: AsRef<[u8]>> Transform<A> {
         }
 
         Ok(TransformOutput {
-            fields_ids_map: self.fields_ids_map,
+            fields_ids_map,
             users_ids_documents_ids: users_ids_documents_ids_builder.into_map(),
             new_documents_ids,
             replaced_documents_ids,

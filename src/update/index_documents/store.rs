@@ -56,7 +56,7 @@ pub struct Store {
 
 impl Store {
     pub fn new(
-        linked_hash_map_size: usize,
+        linked_hash_map_size: Option<usize>,
         max_nb_chunks: Option<usize>,
         max_memory: Option<usize>,
         chunk_compression_type: CompressionType,
@@ -66,6 +66,7 @@ impl Store {
     {
         // We divide the max memory by the number of sorter the Store have.
         let max_memory = max_memory.map(|mm| cmp::max(ONE_KILOBYTE, mm / 3));
+        let linked_hash_map_size = linked_hash_map_size.unwrap_or(500);
 
         let main_sorter = create_sorter(
             main_merge,
@@ -280,13 +281,13 @@ impl Store {
     pub fn index<F>(
         mut self,
         mut documents: grenad::Reader<&[u8]>,
-        documents_count: u32,
+        documents_count: usize,
         thread_index: usize,
         num_threads: usize,
-        log_every_n: usize,
+        log_every_n: Option<usize>,
         mut progress_callback: F,
     ) -> anyhow::Result<Readers>
-    where F: FnMut(u32, u32),
+    where F: FnMut(usize, usize),
     {
         debug!("{:?}: Indexing in a Store...", thread_index);
 
@@ -301,9 +302,9 @@ impl Store {
             // We skip documents that must not be indexed by this thread.
             if count % num_threads == thread_index {
                 // This is a log routine that we do every `log_every_n` documents.
-                if count % log_every_n == 0 {
+                if log_every_n.map_or(false, |len| count % len == 0) {
                     info!("We have seen {} documents so far ({:.02?}).", format_count(count), before.elapsed());
-                    progress_callback(count as u32, documents_count);
+                    progress_callback(count, documents_count);
                     before = Instant::now();
                 }
 
@@ -325,7 +326,7 @@ impl Store {
             count = count + 1;
         }
 
-        progress_callback(count as u32, documents_count);
+        progress_callback(count, documents_count);
 
         let readers = self.finish()?;
         debug!("{:?}: Store created!", thread_index);

@@ -11,6 +11,7 @@ use askama_warp::Template;
 use flate2::read::GzDecoder;
 use futures::stream;
 use futures::{FutureExt, StreamExt};
+use grenad::CompressionType;
 use heed::EnvOpenOptions;
 use indexmap::IndexMap;
 use serde::{Serialize, Deserialize};
@@ -21,9 +22,8 @@ use tokio::sync::broadcast;
 use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
 
-use crate::indexing::{self, IndexerOpt, Transform, TransformOutput};
 use crate::tokenizer::{simple_tokenizer, TokenType};
-use crate::update::AvailableDocumentsIds;
+use crate::update::{UpdateBuilder, IndexDocumentsMethod};
 use crate::{Index, UpdateStore, SearchResult};
 
 #[derive(Debug, StructOpt)]
@@ -58,6 +58,58 @@ pub struct Opt {
 
     #[structopt(flatten)]
     indexer: IndexerOpt,
+}
+
+#[derive(Debug, Clone, StructOpt)]
+pub struct IndexerOpt {
+    /// The amount of documents to skip before printing
+    /// a log regarding the indexing advancement.
+    #[structopt(long, default_value = "1000000")] // 1m
+    pub log_every_n: usize,
+
+    /// MTBL max number of chunks in bytes.
+    #[structopt(long)]
+    pub max_nb_chunks: Option<usize>,
+
+    /// The maximum amount of memory to use for the MTBL buffer. It is recommended
+    /// to use something like 80%-90% of the available memory.
+    ///
+    /// It is automatically split by the number of jobs e.g. if you use 7 jobs
+    /// and 7 GB of max memory, each thread will use a maximum of 1 GB.
+    #[structopt(long, default_value = "7516192768")] // 7 GB
+    pub max_memory: usize,
+
+    /// Size of the linked hash map cache when indexing.
+    /// The bigger it is, the faster the indexing is but the more memory it takes.
+    #[structopt(long, default_value = "500")]
+    pub linked_hash_map_size: usize,
+
+    /// The name of the compression algorithm to use when compressing intermediate
+    /// chunks during indexing documents.
+    ///
+    /// Choosing a fast algorithm will make the indexing faster but may consume more memory.
+    #[structopt(long, default_value = "snappy", possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"])]
+    pub chunk_compression_type: CompressionType,
+
+    /// The level of compression of the chosen algorithm.
+    #[structopt(long, requires = "chunk-compression-type")]
+    pub chunk_compression_level: Option<u32>,
+
+    /// The number of bytes to remove from the begining of the chunks while reading/sorting
+    /// or merging them.
+    ///
+    /// File fusing must only be enable on file systems that support the `FALLOC_FL_COLLAPSE_RANGE`,
+    /// (i.e. ext4 and XFS). File fusing will only work if the `enable-chunk-fusing` is set.
+    #[structopt(long, default_value = "4294967296")] // 4 GB
+    pub chunk_fusing_shrink_size: u64,
+
+    /// Enable the chunk fusing or not, this reduces the amount of disk used by a factor of 2.
+    #[structopt(long)]
+    pub enable_chunk_fusing: bool,
+
+    /// Number of parallel jobs for indexing, defaults to # of CPUs.
+    #[structopt(long)]
+    pub indexing_jobs: Option<usize>,
 }
 
 fn highlight_record(record: &mut IndexMap<String, String>, words: &HashSet<String>) {
@@ -152,25 +204,36 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         update_store_options,
         update_store_path,
         move |update_id, meta, content| {
-            let result = match meta {
+            // We prepare the update by using the update builder.
+            let mut update_builder = UpdateBuilder::new();
+            if let Some(max_nb_chunks) = indexer_opt_cloned.max_nb_chunks {
+                update_builder.max_nb_chunks(max_nb_chunks);
+            }
+            if let Some(chunk_compression_level) = indexer_opt_cloned.chunk_compression_level {
+                update_builder.chunk_compression_level(chunk_compression_level);
+            }
+            if let Some(indexing_jobs) = indexer_opt_cloned.indexing_jobs {
+                update_builder.indexing_jobs(indexing_jobs);
+            }
+            update_builder.log_every_n(indexer_opt_cloned.log_every_n);
+            update_builder.max_memory(indexer_opt_cloned.max_memory);
+            update_builder.linked_hash_map_size(indexer_opt_cloned.linked_hash_map_size);
+            update_builder.chunk_compression_type(indexer_opt_cloned.chunk_compression_type);
+            update_builder.chunk_fusing_shrink_size(indexer_opt_cloned.chunk_fusing_shrink_size);
+
+            // we extract the update type and execute the update itself.
+            let result: anyhow::Result<()> = match meta {
                 UpdateMeta::DocumentsAddition => {
                     // We must use the write transaction of the update here.
-                    let rtxn = env_cloned.read_txn()?;
-                    let fields_ids_map = index_cloned.fields_ids_map(&rtxn)?;
-                    let documents_ids = index_cloned.documents_ids(&rtxn)?;
-                    let available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
-                    let users_ids_documents_ids = index_cloned.users_ids_documents_ids(&rtxn).unwrap();
+                    let mut wtxn = env_cloned.write_txn()?;
+                    let mut builder = update_builder.index_documents(&mut wtxn, &index_cloned);
 
-                    let transform = Transform {
-                        fields_ids_map,
-                        available_documents_ids,
-                        users_ids_documents_ids,
-                        chunk_compression_type: indexer_opt_cloned.chunk_compression_type,
-                        chunk_compression_level: indexer_opt_cloned.chunk_compression_level,
-                        chunk_fusing_shrink_size: Some(indexer_opt_cloned.chunk_fusing_shrink_size),
-                        max_nb_chunks: indexer_opt_cloned.max_nb_chunks,
-                        max_memory: Some(indexer_opt_cloned.max_memory),
-                    };
+                    let replace_documents = true;
+                    if replace_documents {
+                        builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments);
+                    } else {
+                        builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments);
+                    }
 
                     let gzipped = false;
                     let reader = if gzipped {
@@ -179,41 +242,22 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                         Box::new(content) as Box<dyn io::Read>
                     };
 
-                    let TransformOutput {
-                        fields_ids_map,
-                        users_ids_documents_ids,
-                        new_documents_ids,
-                        replaced_documents_ids,
-                        documents_count,
-                        documents_file,
-                    } = transform.from_csv(reader).unwrap();
+                    let result = builder.execute(reader, |count, total| {
+                        let _ = update_status_sender_cloned.send(UpdateStatus::Progressing {
+                            update_id,
+                            meta: UpdateMetaProgress::DocumentsAddition {
+                                processed_number_of_documents: count,
+                                total_number_of_documents: Some(total),
+                            }
+                        });
+                    });
 
-                    drop(rtxn);
-
-                    let mmap = unsafe { memmap::Mmap::map(&documents_file)? };
-                    let documents = grenad::Reader::new(mmap.as_ref()).unwrap();
-
-                    indexing::run(
-                        &env_cloned,
-                        &index_cloned,
-                        &indexer_opt_cloned,
-                        fields_ids_map,
-                        users_ids_documents_ids,
-                        new_documents_ids,
-                        documents,
-                        documents_count as u32,
-                        |count, total| {
-                            // We send progress status...
-                            let meta = UpdateMetaProgress::DocumentsAddition {
-                                processed_number_of_documents: count as usize,
-                                total_number_of_documents: Some(total as usize),
-                            };
-                            let progress = UpdateStatus::Progressing { update_id, meta };
-                            let _ = update_status_sender_cloned.send(progress);
-                        },
-                    )
+                    match result {
+                        Ok(()) => wtxn.commit().map_err(Into::into),
+                        Err(e) => Err(e.into())
+                    }
                 },
-                UpdateMeta::DocumentsAdditionFromPath { path } => {
+                UpdateMeta::DocumentsAdditionFromPath { path: _ } => {
                     todo!()
                 }
             };
