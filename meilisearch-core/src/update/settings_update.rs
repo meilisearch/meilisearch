@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 use heed::Result as ZResult;
 use fst::{set::OpBuilder, SetBuilder};
@@ -126,7 +126,7 @@ pub fn apply_settings_update(
     }
 
     match settings.synonyms {
-        UpdateState::Update(synonyms) => apply_synonyms_update(writer, index, synonyms)?,
+        UpdateState::Update(synonyms) => apply_synonyms_update(writer, index, transform_synonyms(synonyms))? ,
         UpdateState::Clear => apply_synonyms_update(writer, index, BTreeMap::new())?,
         UpdateState::Nothing => (),
     }
@@ -136,6 +136,23 @@ pub fn apply_settings_update(
     }
 
     Ok(())
+}
+
+fn transform_synonyms(synonyms: BTreeMap<String, Vec<String>>) -> BTreeMap<String, Vec<String>> {
+    synonyms
+        .into_iter()
+        .fold(BTreeMap::new(), |mut map, (key, values)| {
+            let deunicoded = deunicode::deunicode(&key);
+            match map.entry(deunicoded) {
+                Entry::Vacant(entry) => {
+                    entry.insert(values);
+                }
+                Entry::Occupied(mut entry) => {
+                    entry.get_mut().extend_from_slice(&values);
+                }
+            }
+            map
+        })
 }
 
 fn apply_attributes_for_faceting_update(
