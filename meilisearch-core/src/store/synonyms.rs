@@ -12,14 +12,18 @@ pub struct Synonyms {
 }
 
 impl Synonyms {
-    pub(crate) fn put_synonyms<A>(self, writer: &mut heed::RwTxn<MainT>, word: &[u8], synonyms: &fst::Set<A>) -> ZResult<()>
+    pub fn put_synonyms<A>(self, writer: &mut heed::RwTxn<MainT>, word: &[u8], synonyms: &fst::Set<A>) -> ZResult<()>
     where A: AsRef<[u8]>,
     {
         let bytes = synonyms.as_fst().as_bytes();
         self.synonyms.put(writer, word, bytes)
     }
 
-    pub(crate) fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
+    pub fn del_synonyms(self, writer: &mut heed::RwTxn<MainT>, word: &[u8]) -> ZResult<bool> {
+        self.synonyms.delete(writer, word)
+    }
+
+    pub fn clear(self, writer: &mut heed::RwTxn<MainT>) -> ZResult<()> {
         self.synonyms.clear(writer)
     }
 

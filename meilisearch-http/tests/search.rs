@@ -1829,38 +1829,3 @@ async fn update_documents_with_facet_distribution() {
     let (response2, _) = server.search_post(search).await;
     assert_json_eq!(expected_facet_distribution, response2["facetsDistribution"].clone());
 }
-
-#[actix_rt::test]
-async fn test_search_synonyms_unicased() {
-    let mut server = common::Server::with_uid("test");
-    let body = json!({ "uid": "test" });
-    server.create_index(body).await;
-    let settings = json!({
-        "synonyms": {
-            "cáse": ["truc"],
-            "case": ["machin"]
-        }
-    });
-    server.update_all_settings(settings).await;
-
-    let (response, _) = server.get_synonyms().await;
-    assert_json_eq!(response, json!({"case":["machin", "truc"]}));
-
-    let update = json!([
-        {
-            "id": "1",
-            "title": "truc"
-        },
-    ]);
-    server.add_or_update_multiple_documents(update).await;
-
-    let search = json!({
-        "q": "case",
-    });
-    let (response, _) = server.search_post(search).await;
-    assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-
-    server.delete_synonyms().await;
-    let (response, _) = server.get_synonyms().await;
-    assert_json_eq!(response, json!({}));
-}
