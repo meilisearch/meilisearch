@@ -1844,7 +1844,6 @@ async fn test_search_synonyms_unicased() {
     server.update_all_settings(settings).await;
 
     let (response, _) = server.get_synonyms().await;
-    println!("response: {}", response);
     assert_json_eq!(response, json!({"case":["machin", "truc"]}));
 
     let update = json!([
@@ -1860,4 +1859,8 @@ async fn test_search_synonyms_unicased() {
     });
     let (response, _) = server.search_post(search).await;
     assert_eq!(response["hits"].as_array().unwrap().len(), 1);
+
+    server.delete_synonyms().await;
+    let (response, _) = server.get_synonyms().await;
+    assert_json_eq!(response, json!({}));
 }
