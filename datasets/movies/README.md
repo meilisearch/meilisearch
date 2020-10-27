@@ -1,1 +1,1 @@
-_datas in movies.csv are from https://www.themoviedb.org/_
+_datas in movies.json are from https://www.themoviedb.org/_
