@@ -126,7 +126,7 @@ pub fn apply_settings_update(
     }
 
     match settings.synonyms {
-        UpdateState::Update(synonyms) => apply_synonyms_update(writer, index, synonyms)?,
+        UpdateState::Update(synonyms) => apply_synonyms_update(writer, index, canonicalize_synonyms(synonyms))? ,
         UpdateState::Clear => apply_synonyms_update(writer, index, BTreeMap::new())?,
         UpdateState::Nothing => (),
     }
@@ -136,6 +136,18 @@ pub fn apply_settings_update(
     }
 
     Ok(())
+}
+
+fn canonicalize_synonyms(synonyms: BTreeMap<String, Vec<String>>) -> BTreeMap<String, Vec<String>> {
+    let mut canonicalized = BTreeMap::new();
+    for (key, values) in synonyms {
+        let deunicoded = deunicode::deunicode(&key);
+        canonicalized
+            .entry(deunicoded)
+            .or_insert_with(Vec::new)
+            .extend_from_slice(&values);
+    }
+    canonicalized
 }
 
 fn apply_attributes_for_faceting_update(
