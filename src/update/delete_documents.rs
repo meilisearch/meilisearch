@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 
 use fst::{IntoStreamer, Streamer};
-use itertools::Itertools;
 use roaring::RoaringBitmap;
 
 use crate::{Index, BEU32};
@@ -168,21 +167,17 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // We write the new words FST into the main database.
         self.index.put_words_fst(self.wtxn, &new_words_fst)?;
 
-        // We delete the documents ids that are under the pairs of words we found.
-        // TODO We can maybe improve this by using the `compute_words_pair_proximities`
-        //      function instead of iterating over all the possible word pairs.
-        for ((w1, _), (w2, _)) in words.iter().cartesian_product(&words) {
-            let start = &(w1.as_str(), w2.as_str(), 0);
-            let end = &(w1.as_str(), w2.as_str(), 7);
-            let mut iter = word_pair_proximity_docids.range_mut(self.wtxn, &(start..=end))?;
-            while let Some(result) = iter.next() {
-                let ((w1, w2, prox), mut docids) = result?;
-                docids.difference_with(&documents_ids);
-                if docids.is_empty() {
-                    iter.del_current()?;
-                } else {
-                    iter.put_current(&(w1, w2, prox), &docids)?;
-                }
+        // We delete the documents ids that are under the pairs of words,
+        // it is faster and use no memory to iterate over all the words pairs than
+        // to compute the cartesian product of every words of the deleted documents.
+        let mut iter = word_pair_proximity_docids.iter_mut(self.wtxn)?;
+        while let Some(result) = iter.next() {
+            let ((w1, w2, prox), mut docids) = result?;
+            docids.difference_with(&documents_ids);
+            if docids.is_empty() {
+                iter.del_current()?;
+            } else {
+                iter.put_current(&(w1, w2, prox), &docids)?;
             }
         }
 
