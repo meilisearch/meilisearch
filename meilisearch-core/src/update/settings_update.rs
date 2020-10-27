@@ -141,9 +141,9 @@ pub fn apply_settings_update(
 fn canonicalize_synonyms(synonyms: BTreeMap<String, Vec<String>>) -> BTreeMap<String, Vec<String>> {
     let mut canonicalized = BTreeMap::new();
     for (key, values) in synonyms {
-        let deunicoded = deunicode::deunicode(&key);
+        let canonical_key = deunicode::deunicode(&key).to_lowercase();
         canonicalized
-            .entry(deunicoded)
+            .entry(canonical_key)
             .or_insert_with(Vec::new)
             .extend_from_slice(&values);
     }
