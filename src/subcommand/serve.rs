@@ -264,9 +264,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
             let meta = match result {
                 Ok(()) => format!("valid update content"),
-                Err(e) => {
-                    format!("error while processing update content: {}", e)
-                }
+                Err(e) => format!("error while processing update content: {:?}", e),
             };
 
             let processed = UpdateStatus::Processed { update_id, meta: meta.clone() };

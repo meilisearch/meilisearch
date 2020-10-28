@@ -398,6 +398,8 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
             WriteMethod::Append
         };
 
+        debug!("Writing using the write method: {:?}", write_method);
+
         // We write the fields ids map into the main database
         self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
 

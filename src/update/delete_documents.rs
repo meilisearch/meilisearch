@@ -57,6 +57,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         documents_ids.intersect_with(&self.documents_ids);
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
+        // TODO we should be able to execute a ClearDocuments operation when the number of documents
+        //      to delete is exactly the number of documents in the database, however it seems that
+        //      clearing a database in LMDB requires a commit for it to be effective, we can't clear
+        //      and assume that the database is empty in the same wtxn or something.
+
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         let id_field = fields_ids_map.id("id").expect(r#"the field "id" to be present"#);
 
