@@ -689,9 +689,9 @@ dependencies = [
 
 [[package]]
 name = "heed"
-version = "0.8.1"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1c9d6f92f402a1452d658038a279d882c77fc5c1f50f29eb491b5fac537f479"
+checksum = "1cbfcd936aa75c7cb1a8485dd2506ea0ae204e2131bf614d8aa4e5f4177455b1"
 dependencies = [
  "byteorder",
  "heed-traits",

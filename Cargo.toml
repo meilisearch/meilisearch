@@ -14,7 +14,7 @@ flate2 = "1.0.17"
 fst = "0.4.4"
 fxhash = "0.2.1"
 grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "ce3517f" }
-heed = { version = "0.8.1", default-features = false, features = ["lmdb"] }
+heed = { version = "0.9.0", default-features = false, features = ["lmdb"] }
 human_format = "1.0.3"
 indexmap = { version = "1.6.0", features = ["serde-1"] }
 jemallocator = "0.3.2"
