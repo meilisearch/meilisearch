@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use fst::{IntoStreamer, Streamer};
 use grenad::CompressionType;
 use roaring::RoaringBitmap;
@@ -99,8 +99,14 @@ impl Transform<'_, '_> {
         }
 
         // Once we have sort and deduplicated the documents we write them into a final file.
-        let file = tempfile::tempfile()?;
-        let mut writer = create_writer(self.chunk_compression_type, self.chunk_compression_level, file)?;
+        let mut final_sorter = create_sorter(
+            |_docid, _obkvs| Err(anyhow!("cannot merge two documents")),
+            self.chunk_compression_type,
+            self.chunk_compression_level,
+            self.chunk_fusing_shrink_size,
+            self.max_nb_chunks,
+            self.max_memory,
+        );
         let mut new_users_ids_documents_ids_builder = fst::MapBuilder::memory();
         let mut replaced_documents_ids = RoaringBitmap::new();
         let mut new_documents_ids = RoaringBitmap::new();
@@ -143,12 +149,17 @@ impl Transform<'_, '_> {
             };
 
             // We insert the document under the documents ids map into the final file.
-            writer.insert(docid.to_be_bytes(), obkv)?;
+            final_sorter.insert(docid.to_be_bytes(), obkv)?;
             documents_count += 1;
         }
 
-        // Once we have written all the documents into the final file, we extract it
-        // from the writer and reset the seek to be able to read it again.
+        // We create a final writer to write the new documents in order from the sorter.
+        let file = tempfile::tempfile()?;
+        let mut writer = create_writer(self.chunk_compression_type, self.chunk_compression_level, file)?;
+
+        // Once we have written all the documents into the final sorter, we write the documents
+        // into this writer, extract the file and reset the seek to be able to read it again.
+        final_sorter.write_into(&mut writer)?;
         let mut documents_file = writer.into_inner()?;
         documents_file.seek(SeekFrom::Start(0))?;
 
