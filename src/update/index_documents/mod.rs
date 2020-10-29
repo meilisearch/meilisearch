@@ -101,7 +101,9 @@ fn merge_into_lmdb_database(
         WriteMethod::Append => {
             let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
             while let Some((k, v)) = in_iter.next()? {
-                out_iter.append(k, v).with_context(|| format!("writing {:?} into LMDB", k.as_bstr()))?;
+                out_iter.append(k, v).with_context(|| {
+                    format!("writing {:?} into LMDB", k.as_bstr())
+                })?;
             }
         },
         WriteMethod::GetMergePut => {
@@ -136,7 +138,9 @@ fn write_into_lmdb_database(
         WriteMethod::Append => {
             let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
             while let Some((k, v)) = reader.next()? {
-                out_iter.append(k, v).with_context(|| format!("writing {:?} into LMDB", k.as_bstr()))?;
+                out_iter.append(k, v).with_context(|| {
+                    format!("writing {:?} into LMDB", k.as_bstr())
+                })?;
             }
         },
         WriteMethod::GetMergePut => {
@@ -408,6 +412,7 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
 
         // We merge the new documents ids with the existing ones.
         documents_ids.union_with(&new_documents_ids);
+        documents_ids.union_with(&replaced_documents_ids);
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
         debug!("Writing the docid word positions into LMDB on disk...");
@@ -438,7 +443,7 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
                         self.index.main,
                         content,
                         main_merge,
-                        write_method,
+                        WriteMethod::GetMergePut,
                     )?;
                 },
                 DatabaseType::WordDocids => {

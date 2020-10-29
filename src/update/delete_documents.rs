@@ -5,6 +5,7 @@ use fst::{IntoStreamer, Streamer};
 use roaring::RoaringBitmap;
 
 use crate::{Index, BEU32};
+use super::ClearDocuments;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'u>,
@@ -54,13 +55,15 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             return Ok(0);
         }
 
+        let current_documents_ids_len = documents_ids.len();
         documents_ids.intersect_with(&self.documents_ids);
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
-        // TODO we should be able to execute a ClearDocuments operation when the number of documents
-        //      to delete is exactly the number of documents in the database, however it seems that
-        //      clearing a database in LMDB requires a commit for it to be effective, we can't clear
-        //      and assume that the database is empty in the same wtxn or something.
+        // We can execute a ClearDocuments operation when the number of documents
+        // to delete is exactly the number of documents in the database.
+        if current_documents_ids_len == self.documents_ids.len() {
+            return ClearDocuments::new(self.wtxn, self.index).execute();
+        }
 
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
         let id_field = fields_ids_map.id("id").expect(r#"the field "id" to be present"#);

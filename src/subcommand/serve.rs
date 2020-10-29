@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 
+use anyhow::anyhow;
 use askama_warp::Template;
 use flate2::read::GzDecoder;
 use futures::stream;
@@ -258,7 +259,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                     }
                 },
                 UpdateMeta::DocumentsAdditionFromPath { path: _ } => {
-                    todo!()
+                    Err(anyhow!("indexing from a file is not supported yet"))
                 }
             };
 
