@@ -29,7 +29,7 @@ ringtail = "0.3.0"
 roaring = "0.6.1"
 serde_json = "1.0.59"
 slice-group-by = "0.2.6"
-smallstr = "0.2.0"
+smallstr =  { version = "0.2.0", features = ["serde"] }
 smallvec = "1.4.0"
 structopt = { version = "0.3.14", default-features = false, features = ["wrap_help"] }
 tempfile = "3.1.0"

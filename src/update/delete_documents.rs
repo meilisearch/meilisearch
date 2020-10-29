@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use fst::{IntoStreamer, Streamer};
 use roaring::RoaringBitmap;
 
-use crate::{Index, BEU32};
+use crate::{Index, BEU32, SmallString32};
 use super::ClearDocuments;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
@@ -77,7 +77,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         } = self.index;
 
         // Retrieve the words and the users ids contained in the documents.
-        // TODO we must use a smallword instead of a string.
         let mut words = Vec::new();
         let mut users_ids = Vec::new();
         for docid in &documents_ids {
@@ -88,7 +87,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let mut iter = documents.range_mut(self.wtxn, &(key..=key))?;
             if let Some((_key, obkv)) = iter.next().transpose()? {
                 if let Some(content) = obkv.get(id_field) {
-                    let user_id: String = serde_json::from_slice(content).unwrap();
+                    let user_id: SmallString32 = serde_json::from_slice(content).unwrap();
                     users_ids.push(user_id);
                 }
                 iter.del_current()?;
@@ -101,14 +100,14 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             while let Some(result) = iter.next() {
                 let ((_docid, word), _positions) = result?;
                 // This boolean will indicate if we must remove this word from the words FST.
-                words.push((String::from(word), false));
+                words.push((SmallString32::from(word), false));
                 iter.del_current()?;
             }
         }
 
         // We create the FST map of the users ids that we must delete.
         users_ids.sort_unstable();
-        let users_ids_to_delete = fst::Set::from_iter(users_ids)?;
+        let users_ids_to_delete = fst::Set::from_iter(users_ids.iter().map(AsRef::as_ref))?;
         let users_ids_to_delete = fst::Map::from(users_ids_to_delete.into_fst());
 
         let new_users_ids_documents_ids = {
@@ -143,7 +142,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             // the LMDB B-Tree two times but only once.
             let mut iter = word_docids.prefix_iter_mut(self.wtxn, &word)?;
             if let Some((key, mut docids)) = iter.next().transpose()? {
-                if key == word {
+                if key == word.as_ref() {
                     docids.difference_with(&mut documents_ids);
                     if docids.is_empty() {
                         iter.del_current()?;
@@ -156,7 +155,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         }
 
         // We construct an FST set that contains the words to delete from the words FST.
-        let words_to_delete = words.iter().filter_map(|(w, d)| if *d { Some(w) } else { None });
+        let words_to_delete = words.iter().filter_map(|(w, d)| if *d { Some(w.as_ref()) } else { None });
         let words_to_delete = fst::Set::from_iter(words_to_delete)?;
 
         let new_words_fst = {
