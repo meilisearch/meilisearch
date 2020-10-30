@@ -59,6 +59,11 @@ impl Index {
         self.env.read_txn()
     }
 
+    /// Returns the canonicalized path where the heed `Env` of this `Index` lives.
+    pub fn path(&self) -> &Path {
+        self.env.path()
+    }
+
     /// Writes the documents ids that corresponds to the user-ids-documents-ids FST.
     pub fn put_documents_ids(&self, wtxn: &mut heed::RwTxn, docids: &RoaringBitmap) -> heed::Result<()> {
         self.main.put::<_, Str, RoaringBitmapCodec>(wtxn, DOCUMENTS_IDS_KEY, docids)
