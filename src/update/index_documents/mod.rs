@@ -491,7 +491,7 @@ mod tests {
     use heed::EnvOpenOptions;
 
     #[test]
-    fn simple_replacement() {
+    fn simple_document_replacement() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
@@ -516,7 +516,7 @@ mod tests {
         IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
-        // Check that there is **always*** 3 documents.
+        // Check that there is **always** 3 documents.
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
@@ -528,10 +528,73 @@ mod tests {
         IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
-        // Check that there is **always*** 3 documents.
+        // Check that there is **always** 3 documents.
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn simple_document_merge() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with duplicate ids and
+        // change the index method to merge documents.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"id,name\n1,kevin\n1,kevina\n1,benoit\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is only 1 document now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 1);
+
+        // Check that we get only one document from the database.
+        let docs = index.documents(&rtxn, Some(0)).unwrap();
+        assert_eq!(docs.len(), 1);
+        let (id, doc) = docs[0];
+        assert_eq!(id, 0);
+
+        // Check that this document is equal to the last one sent.
+        let mut doc_iter = doc.iter();
+        assert_eq!(doc_iter.next(), Some((0, &br#""1""#[..])));
+        assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
+        assert_eq!(doc_iter.next(), None);
+        drop(rtxn);
+
+        // Second we send 1 document with id 1, to force it to be merged with the previous one.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"id,age\n1,25\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is **always** 1 document.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 1);
+
+        // Check that we get only one document from the database.
+        let docs = index.documents(&rtxn, Some(0)).unwrap();
+        assert_eq!(docs.len(), 1);
+        let (id, doc) = docs[0];
+        assert_eq!(id, 0);
+
+        // Check that this document is equal to the last one sent.
+        let mut doc_iter = doc.iter();
+        assert_eq!(doc_iter.next(), Some((0, &br#""1""#[..])));
+        assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
+        assert_eq!(doc_iter.next(), Some((2, &br#""25""#[..])));
+        assert_eq!(doc_iter.next(), None);
         drop(rtxn);
     }
 }

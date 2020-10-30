@@ -70,7 +70,7 @@ pub fn documents_merge(key: &[u8], _values: &[Cow<[u8]>]) -> anyhow::Result<Vec<
     bail!("merging documents is an error ({:?})", key.as_bstr())
 }
 
-pub fn merge_two_obkv(base: obkv::KvReader, update: obkv::KvReader, buffer: &mut Vec<u8>) {
+pub fn merge_two_obkvs(base: obkv::KvReader, update: obkv::KvReader, buffer: &mut Vec<u8>) {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
 

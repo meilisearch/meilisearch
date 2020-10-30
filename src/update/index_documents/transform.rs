@@ -10,7 +10,7 @@ use roaring::RoaringBitmap;
 
 use crate::{BEU32, Index, FieldsIdsMap};
 use crate::update::AvailableDocumentsIds;
-use super::merge_function::merge_two_obkv;
+use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
 
 pub struct TransformOutput {
@@ -58,14 +58,14 @@ impl Transform<'_, '_> {
             fields_ids.push(id);
         }
 
-        /// The last value associated with an id is kept.
-        fn merge_last_win(_key: &[u8], vals: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
-            vals.last().context("no last value").map(|last| last.clone().into_owned())
+        /// Only the last value associated with an id is kept.
+        fn keep_latest_obkv(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+            obkvs.last().context("no last value").map(|last| last.clone().into_owned())
         }
 
         // We initialize the sorter with the user indexing settings.
         let mut sorter = create_sorter(
-            merge_last_win,
+            keep_latest_obkv,
             self.chunk_compression_type,
             self.chunk_compression_level,
             self.chunk_fusing_shrink_size,
@@ -132,7 +132,7 @@ impl Transform<'_, '_> {
                             let base_obkv = self.index.documents.get(&self.rtxn, &key)?
                                 .context("document not found")?;
                             let update_obkv = obkv::KvReader::new(update_obkv);
-                            merge_two_obkv(base_obkv, update_obkv, &mut obkv_buffer);
+                            merge_two_obkvs(base_obkv, update_obkv, &mut obkv_buffer);
                             (docid, obkv_buffer.as_slice())
                         }
                     }
