@@ -7,7 +7,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::anyhow;
 use askama_warp::Template;
 use flate2::read::GzDecoder;
 use futures::stream;
@@ -159,9 +158,7 @@ enum UpdateStatus<M, P, N> {
 #[serde(tag = "type")]
 enum UpdateMeta {
     DocumentsAddition,
-    DocumentsAdditionFromPath {
-        path: PathBuf,
-    },
+    ClearDocuments,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,8 +252,15 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                         Err(e) => Err(e.into())
                     }
                 },
-                UpdateMeta::DocumentsAdditionFromPath { path: _ } => {
-                    Err(anyhow!("indexing from a file is not supported yet"))
+                UpdateMeta::ClearDocuments => {
+                    // We must use the write transaction of the update here.
+                    let mut wtxn = index_cloned.write_txn()?;
+                    let builder = update_builder.clear_documents(&mut wtxn, &index_cloned);
+
+                    match builder.execute() {
+                        Ok(_count) => wtxn.commit().map_err(Into::into),
+                        Err(e) => Err(e.into())
+                    }
                 }
             };
 
@@ -489,16 +493,12 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             buf_stream(update_store_cloned.clone(), update_status_sender_cloned.clone(), stream)
         });
 
-    let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_route_filepath = warp::filters::method::post()
-        .and(warp::path!("documents"))
-        .and(warp::header::exact_ignore_case("content-type", "text/x-filepath"))
-        .and(warp::body::bytes())
-        .map(move |bytes: bytes::Bytes| {
-            let string = std::str::from_utf8(&bytes).unwrap().trim();
-            let meta = UpdateMeta::DocumentsAdditionFromPath { path: PathBuf::from(string) };
-            let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
+    let clearing_route = warp::filters::method::post()
+        .and(warp::path!("clear-documents"))
+        .map(move || {
+            let meta = UpdateMeta::ClearDocuments;
+            let update_id = update_store.register_update(&meta, &[]).unwrap();
             let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
             eprintln!("update {} registered", update_id);
             Ok(warp::reply())
@@ -547,7 +547,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .or(dash_logo_black_route)
         .or(query_route)
         .or(indexing_route_csv)
-        .or(indexing_route_filepath)
+        .or(clearing_route)
         .or(update_ws_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;
