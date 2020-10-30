@@ -484,3 +484,54 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use heed::EnvOpenOptions;
+
+    #[test]
+    fn simple_replacement() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with ids from 1 to 3.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"id,name\n1,kevin\n2,kevina\n3,benoit\n"[..];
+        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 3 documents now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 3);
+        drop(rtxn);
+
+        // Second we send 1 document with id 1, to erase the previous ones.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"id,name\n1,updated kevin\n"[..];
+        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is **always*** 3 documents.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 3);
+        drop(rtxn);
+
+        // Third we send 3 documents again to replace the existing ones.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"id,name\n1,updated second kevin\n2,updated kevina\n3,updated benoit\n"[..];
+        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is **always*** 3 documents.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 3);
+        drop(rtxn);
+    }
+}

@@ -47,7 +47,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
     }
 
     pub fn execute(self) -> anyhow::Result<usize> {
-        // We retrieve remove the deleted documents ids and write them into the database.
+        // We retrieve the current documents ids that are in the database.
         let mut documents_ids = self.index.documents_ids(self.wtxn)?;
 
         // We can and must stop removing documents in a database that is empty.
@@ -55,8 +55,10 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             return Ok(0);
         }
 
+        // We remove the documents ids that we want to delete
+        // from the documents in the database and write them back.
         let current_documents_ids_len = documents_ids.len();
-        documents_ids.intersect_with(&self.documents_ids);
+        documents_ids.difference_with(&self.documents_ids);
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
         // We can execute a ClearDocuments operation when the number of documents
@@ -80,7 +82,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // Retrieve the words and the users ids contained in the documents.
         let mut words = Vec::new();
         let mut users_ids = Vec::new();
-        for docid in &documents_ids {
+        for docid in &self.documents_ids {
             // We create an iterator to be able to get the content and delete the document
             // content itself. It's faster to acquire a cursor to get and delete,
             // as we avoid traversing the LMDB B-Tree two times but only once.
@@ -144,7 +146,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let mut iter = word_docids.prefix_iter_mut(self.wtxn, &word)?;
             if let Some((key, mut docids)) = iter.next().transpose()? {
                 if key == word.as_ref() {
-                    docids.difference_with(&mut documents_ids);
+                    docids.difference_with(&self.documents_ids);
                     if docids.is_empty() {
                         iter.del_current()?;
                         *must_remove = true;
@@ -181,7 +183,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         let mut iter = word_pair_proximity_docids.iter_mut(self.wtxn)?;
         while let Some(result) = iter.next() {
             let ((w1, w2, prox), mut docids) = result?;
-            docids.difference_with(&documents_ids);
+            docids.difference_with(&self.documents_ids);
             if docids.is_empty() {
                 iter.del_current()?;
             } else {
@@ -189,6 +191,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             }
         }
 
-        Ok(documents_ids.len() as usize)
+        Ok(self.documents_ids.len() as usize)
     }
 }
