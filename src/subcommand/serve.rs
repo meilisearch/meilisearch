@@ -181,13 +181,11 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .init()?;
 
     create_dir_all(&opt.database)?;
-    let env = EnvOpenOptions::new()
-        .map_size(opt.database_size)
-        .max_dbs(10)
-        .open(&opt.database)?;
+    let mut options = EnvOpenOptions::new();
+    options.map_size(opt.database_size);
 
     // Open the LMDB database.
-    let index = Index::new(&env)?;
+    let index = Index::new(options, &opt.database)?;
 
     // Setup the LMDB based update database.
     let mut update_store_options = EnvOpenOptions::new();
@@ -198,7 +196,6 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let (update_status_sender, _) = broadcast::channel(100);
     let update_status_sender_cloned = update_status_sender.clone();
-    let env_cloned = env.clone();
     let index_cloned = index.clone();
     let indexer_opt_cloned = opt.indexer.clone();
     let update_store = UpdateStore::open(
@@ -226,7 +223,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             let result: anyhow::Result<()> = match meta {
                 UpdateMeta::DocumentsAddition => {
                     // We must use the write transaction of the update here.
-                    let mut wtxn = env_cloned.write_txn()?;
+                    let mut wtxn = index_cloned.write_txn()?;
                     let mut builder = update_builder.index_documents(&mut wtxn, &index_cloned);
 
                     let replace_documents = true;
@@ -283,7 +280,6 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
     // Expose an HTML page to debug the search in a browser
     let db_name_cloned = db_name.clone();
     let lmdb_path_cloned = lmdb_path.clone();
-    let env_cloned = env.clone();
     let index_cloned = index.clone();
     let dash_html_route = warp::filters::method::get()
         .and(warp::filters::path::end())
@@ -296,7 +292,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                 .len() as usize;
 
             // And the number of documents in the database.
-            let rtxn = env_cloned.clone().read_txn().unwrap();
+            let rtxn = index_cloned.clone().read_txn().unwrap();
             let docs_count = index_cloned.clone().number_of_documents(&rtxn).unwrap() as usize;
 
             IndexTemplate { db_name: db_name_cloned.clone(), db_size, docs_count }
@@ -304,7 +300,6 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let update_store_cloned = update_store.clone();
     let lmdb_path_cloned = lmdb_path.clone();
-    let env_cloned = env.clone();
     let index_cloned = index.clone();
     let updates_list_or_html_route = warp::filters::method::get()
         .and(warp::header("Accept"))
@@ -335,7 +330,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                     .len() as usize;
 
                 // And the number of documents in the database.
-                let rtxn = env_cloned.clone().read_txn().unwrap();
+                let rtxn = index_cloned.clone().read_txn().unwrap();
                 let docs_count = index_cloned.clone().number_of_documents(&rtxn).unwrap() as usize;
 
                 let template = UpdatesTemplate {
@@ -418,14 +413,13 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         query: Option<String>,
     }
 
-    let env_cloned = env.clone();
     let disable_highlighting = opt.disable_highlighting;
     let query_route = warp::filters::method::post()
         .and(warp::path!("query"))
         .and(warp::body::json())
         .map(move |query: QueryBody| {
             let before_search = Instant::now();
-            let rtxn = env_cloned.read_txn().unwrap();
+            let rtxn = index.read_txn().unwrap();
 
             let mut search = index.search(&rtxn);
             if let Some(query) = query.query {

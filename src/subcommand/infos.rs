@@ -130,20 +130,18 @@ enum Command {
 }
 
 pub fn run(opt: Opt) -> anyhow::Result<()> {
-    let env = EnvOpenOptions::new()
-        .map_size(opt.database_size)
-        .max_dbs(10)
-        .open(&opt.database)?;
-
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)
         .timestamp(stderrlog::Timestamp::Off)
         .init()?;
 
+    let mut options = EnvOpenOptions::new();
+    options.map_size(opt.database_size);
+
     // Open the LMDB database.
-    let index = Index::new(&env)?;
-    let rtxn = env.read_txn()?;
+    let index = Index::new(options, opt.database)?;
+    let rtxn = index.read_txn()?;
 
     match opt.command {
         MostCommonWords { limit } => most_common_words(&index, &rtxn, limit),

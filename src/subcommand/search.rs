@@ -40,14 +40,12 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .init()?;
 
     std::fs::create_dir_all(&opt.database)?;
-    let env = EnvOpenOptions::new()
-        .map_size(opt.database_size)
-        .max_dbs(10)
-        .open(&opt.database)?;
+    let mut options = EnvOpenOptions::new();
+    options.map_size(opt.database_size);
 
     // Open the LMDB database.
-    let index = Index::new(&env)?;
-    let rtxn = env.read_txn()?;
+    let index = Index::new(options, &opt.database)?;
+    let rtxn = index.read_txn()?;
 
     let stdin = io::stdin();
     let lines = match opt.query {

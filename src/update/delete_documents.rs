@@ -69,6 +69,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         let id_field = fields_ids_map.id("id").expect(r#"the field "id" to be present"#);
 
         let Index {
+            env: _env,
             main: _main,
             word_docids,
             docid_word_positions,

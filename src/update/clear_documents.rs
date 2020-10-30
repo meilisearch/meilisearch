@@ -13,6 +13,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
 
     pub fn execute(self) -> anyhow::Result<usize> {
         let Index {
+            env: _env,
             main: _main,
             word_docids,
             docid_word_positions,

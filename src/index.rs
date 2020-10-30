@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::path::Path;
 
 use anyhow::Context;
 use heed::types::*;
@@ -20,6 +21,8 @@ pub const USERS_IDS_DOCUMENTS_IDS_KEY: &str = "users-ids-documents-ids";
 
 #[derive(Clone)]
 pub struct Index {
+    /// The LMDB environment which this index is associated with.
+    pub env: heed::Env,
     /// Contains many different types (e.g. the fields ids map).
     pub main: PolyDatabase,
     /// A word and all the documents ids containing the word.
@@ -33,14 +36,27 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn new(env: &heed::Env) -> anyhow::Result<Index> {
-        Ok(Index {
-            main: env.create_poly_database(Some("main"))?,
-            word_docids: env.create_database(Some("word-docids"))?,
-            docid_word_positions: env.create_database(Some("docid-word-positions"))?,
-            word_pair_proximity_docids: env.create_database(Some("word-pair-proximity-docids"))?,
-            documents: env.create_database(Some("documents"))?,
-        })
+    pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> anyhow::Result<Index> {
+        options.max_dbs(5);
+
+        let env = options.open(path)?;
+        let main = env.create_poly_database(Some("main"))?;
+        let word_docids = env.create_database(Some("word-docids"))?;
+        let docid_word_positions = env.create_database(Some("docid-word-positions"))?;
+        let word_pair_proximity_docids = env.create_database(Some("word-pair-proximity-docids"))?;
+        let documents = env.create_database(Some("documents"))?;
+
+        Ok(Index { env, main, word_docids, docid_word_positions, word_pair_proximity_docids, documents })
+    }
+
+    /// Create a write transaction to be able to write into the index.
+    pub fn write_txn(&self) -> heed::Result<heed::RwTxn> {
+        self.env.write_txn()
+    }
+
+    /// Create a read transaction to be able to read the index.
+    pub fn read_txn(&self) -> heed::Result<heed::RoTxn> {
+        self.env.read_txn()
     }
 
     /// Writes the documents ids that corresponds to the user-ids-documents-ids FST.
