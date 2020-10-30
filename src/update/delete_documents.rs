@@ -8,7 +8,7 @@ use crate::{Index, BEU32, SmallString32};
 use super::ClearDocuments;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'u>,
+    wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
     users_ids_documents_ids: fst::Map<Vec<u8>>,
     documents_ids: RoaringBitmap,
@@ -16,7 +16,7 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
 
 impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
     pub fn new(
-        wtxn: &'t mut heed::RwTxn<'u>,
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
     ) -> anyhow::Result<DeleteDocuments<'t, 'u, 'i>>
     {

@@ -72,7 +72,7 @@ impl UpdateBuilder {
 
     pub fn clear_documents<'t, 'u, 'i>(
         self,
-        wtxn: &'t mut heed::RwTxn<'u>,
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
     ) -> ClearDocuments<'t, 'u, 'i>
     {
@@ -81,7 +81,7 @@ impl UpdateBuilder {
 
     pub fn delete_documents<'t, 'u, 'i>(
         self,
-        wtxn: &'t mut heed::RwTxn<'u>,
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
     ) -> anyhow::Result<DeleteDocuments<'t, 'u, 'i>>
     {
@@ -90,7 +90,7 @@ impl UpdateBuilder {
 
     pub fn index_documents<'t, 'u, 'i>(
         self,
-        wtxn: &'t mut heed::RwTxn<'u>,
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
     ) -> IndexDocuments<'t, 'u, 'i>
     {

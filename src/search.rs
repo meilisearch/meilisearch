@@ -21,7 +21,7 @@ pub struct Search<'a> {
     query: Option<String>,
     offset: usize,
     limit: usize,
-    rtxn: &'a heed::RoTxn,
+    rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
 

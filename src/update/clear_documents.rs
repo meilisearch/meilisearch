@@ -2,12 +2,12 @@ use roaring::RoaringBitmap;
 use crate::Index;
 
 pub struct ClearDocuments<'t, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'u>,
+    wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
 }
 
 impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'u>, index: &'i Index) -> ClearDocuments<'t, 'u, 'i> {
+    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> ClearDocuments<'t, 'u, 'i> {
         ClearDocuments { wtxn, index }
     }
 

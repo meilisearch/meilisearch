@@ -23,7 +23,7 @@ pub struct TransformOutput {
 }
 
 pub struct Transform<'t, 'i> {
-    pub rtxn: &'t heed::RoTxn,
+    pub rtxn: &'t heed::RoTxn<'t>,
     pub index: &'i Index,
     pub chunk_compression_type: CompressionType,
     pub chunk_compression_level: Option<u32>,

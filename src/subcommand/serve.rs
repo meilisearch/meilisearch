@@ -292,7 +292,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                 .len() as usize;
 
             // And the number of documents in the database.
-            let rtxn = index_cloned.clone().read_txn().unwrap();
+            let rtxn = index_cloned.read_txn().unwrap();
             let docs_count = index_cloned.clone().number_of_documents(&rtxn).unwrap() as usize;
 
             IndexTemplate { db_name: db_name_cloned.clone(), db_size, docs_count }
@@ -330,7 +330,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                     .len() as usize;
 
                 // And the number of documents in the database.
-                let rtxn = index_cloned.clone().read_txn().unwrap();
+                let rtxn = index_cloned.read_txn().unwrap();
                 let docs_count = index_cloned.clone().number_of_documents(&rtxn).unwrap() as usize;
 
                 let template = UpdatesTemplate {

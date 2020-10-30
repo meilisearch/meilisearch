@@ -8,7 +8,7 @@ use crate::Index;
 /// A mana depth first search implementation.
 pub struct Mdfs<'a> {
     index: &'a Index,
-    rtxn: &'a heed::RoTxn,
+    rtxn: &'a heed::RoTxn<'a>,
     words: &'a [(HashMap<String, (u8, RoaringBitmap)>, RoaringBitmap)],
     union_cache: HashMap<(usize, u8), RoaringBitmap>,
     candidates: RoaringBitmap,

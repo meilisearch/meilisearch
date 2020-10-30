@@ -181,7 +181,7 @@ pub enum IndexDocumentsMethod {
 }
 
 pub struct IndexDocuments<'t, 'u, 'i> {
-    wtxn: &'t mut heed::RwTxn<'u>,
+    wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
     log_every_n: Option<usize>,
     max_nb_chunks: Option<usize>,
@@ -195,7 +195,7 @@ pub struct IndexDocuments<'t, 'u, 'i> {
 }
 
 impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'u>, index: &'i Index) -> IndexDocuments<'t, 'u, 'i> {
+    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> IndexDocuments<'t, 'u, 'i> {
         IndexDocuments {
             wtxn,
             index,
