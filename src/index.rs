@@ -64,6 +64,15 @@ impl Index {
         self.env.path()
     }
 
+    /// Returns an `EnvClosingEvent` that can be used to wait for the closing event,
+    /// multiple threads can wait on this event.
+    ///
+    /// Make sure that you drop all the copies of `Index`es you have, env closing are triggered
+    /// when all references are dropped, the last one will eventually close the environment.
+    pub fn prepare_for_closing(self) -> heed::EnvClosingEvent {
+        self.env.prepare_for_closing()
+    }
+
     /// Writes the documents ids that corresponds to the user-ids-documents-ids FST.
     pub fn put_documents_ids(&self, wtxn: &mut heed::RwTxn, docids: &RoaringBitmap) -> heed::Result<()> {
         self.main.put::<_, Str, RoaringBitmapCodec>(wtxn, DOCUMENTS_IDS_KEY, docids)
