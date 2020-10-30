@@ -108,13 +108,17 @@ fn merge_into_lmdb_database(
         },
         WriteMethod::GetMergePut => {
             while let Some((k, v)) = in_iter.next()? {
-                match database.get::<_, ByteSlice, ByteSlice>(wtxn, k)? {
-                    Some(old_val) => {
+                let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
+                match iter.next().transpose()? {
+                    Some((key, old_val)) if key == k => {
                         let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
                         let val = merge(k, &vals).expect("merge failed");
-                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, &val)?
+                        iter.put_current(k, &val)?;
                     },
-                    None => database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?,
+                    _ => {
+                        drop(iter);
+                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
+                    },
                 }
             }
         },
@@ -145,13 +149,17 @@ fn write_into_lmdb_database(
         },
         WriteMethod::GetMergePut => {
             while let Some((k, v)) = reader.next()? {
-                match database.get::<_, ByteSlice, ByteSlice>(wtxn, k)? {
-                    Some(old_val) => {
+                let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
+                match iter.next().transpose()? {
+                    Some((key, old_val)) if key == k => {
                         let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
                         let val = merge(k, &vals).expect("merge failed");
-                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, &val)?
+                        iter.put_current(k, &val)?;
                     },
-                    None => database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?,
+                    _ => {
+                        drop(iter);
+                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
+                    },
                 }
             }
         }
