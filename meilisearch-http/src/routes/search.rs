@@ -32,6 +32,7 @@ pub struct SearchQuery {
     matches: Option<bool>,
     facet_filters: Option<String>,
     facets_distribution: Option<String>,
+    ignore_if_zero: Option<bool>,
 }
 
 #[get("/indexes/{index_uid}/search", wrap = "Authentication::Public")]
@@ -58,6 +59,7 @@ pub struct SearchQueryPost {
     matches: Option<bool>,
     facet_filters: Option<Value>,
     facets_distribution: Option<Vec<String>>,
+    ignore_if_zero: Option<bool>,
 }
 
 impl From<SearchQueryPost> for SearchQuery {
@@ -74,6 +76,7 @@ impl From<SearchQueryPost> for SearchQuery {
             matches: other.matches,
             facet_filters: other.facet_filters.map(|f| f.to_string()),
             facets_distribution: other.facets_distribution.map(|f| format!("{:?}", f)),
+            ignore_if_zero: other.ignore_if_zero,
         }
     }
 }
@@ -223,6 +226,13 @@ impl SearchQuery {
                 search_builder.get_matches();
             }
         }
+
+        if let Some(discard_zero) = self.ignore_if_zero{
+            if discard_zero {
+                search_builder.get_zero_val();
+            }
+        }
+
         search_builder.search(&reader)
     }
 }

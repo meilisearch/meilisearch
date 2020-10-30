@@ -7,7 +7,6 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 use std::fmt;
-
 use compact_arena::{SmallArena, Idx32, mk_arena};
 use log::{debug, error};
 use sdset::{Set, SetBuf, exponential_search, SetOperation, Counter, duo::OpBuilder};
@@ -44,6 +43,7 @@ pub fn bucket_sort<'c, FI>(
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
     index: &Index,
+    ignore_if_zero: bool,
 ) -> MResult<SortResult>
 where
     FI: Fn(DocumentId) -> bool,
@@ -65,6 +65,7 @@ where
             criteria,
             searchable_attrs,
             index,
+            ignore_if_zero
         );
     }
 
@@ -110,7 +111,7 @@ where
     if let Some(f) = facet_count_docids {
         // hardcoded value, until approximation optimization
         result.exhaustive_facets_count = Some(true);
-        result.facets = Some(facet_count(f, &docids));
+        result.facets = Some(facet_count(f, &docids, ignore_if_zero));
     }
 
     let before = Instant::now();
@@ -206,6 +207,7 @@ pub fn bucket_sort_with_distinct<'c, FI, FD>(
     criteria: Criteria<'c>,
     searchable_attrs: Option<ReorderedAttrs>,
     index: &Index,
+    ignore_if_zero: bool
 ) -> MResult<SortResult>
 where
     FI: Fn(DocumentId) -> bool,
@@ -253,7 +255,7 @@ where
     if let Some(f) = facet_count_docids {
         // hardcoded value, until approximation optimization
         result.exhaustive_facets_count = Some(true);
-        result.facets = Some(facet_count(f, &docids));
+        result.facets = Some(facet_count(f, &docids, ignore_if_zero));
     }
 
     let before = Instant::now();
@@ -645,6 +647,7 @@ pub fn placeholder_document_sort(
 pub fn facet_count(
     facet_docids: HashMap<String, HashMap<String, (&str, Cow<Set<DocumentId>>)>>,
     candidate_docids: &Set<DocumentId>,
+    ignore_if_zero: bool
 ) -> HashMap<String, HashMap<String, usize>> {
     let mut facets_counts = HashMap::with_capacity(facet_docids.len());
     for (key, doc_map) in facet_docids {
@@ -653,7 +656,13 @@ pub fn facet_count(
             let mut counter = Counter::new();
             let op = OpBuilder::new(docids.as_ref(), candidate_docids).intersection();
             SetOperation::<DocumentId>::extend_collection(op, &mut counter);
-            count_map.insert(value.to_string(), counter.0);
+            if ignore_if_zero {
+                if counter.0 > 0 {
+                    count_map.insert(value.to_string(), counter.0);
+                }
+            } else {
+                count_map.insert(value.to_string(), counter.0);
+            }
         }
         facets_counts.insert(key, count_map);
     }

@@ -25,6 +25,7 @@ pub struct QueryBuilder<'c, 'f, 'd, 'i> {
     index: &'i store::Index,
     facet_filter: Option<FacetFilter>,
     facets: Option<Vec<(FieldId, String)>>,
+    ignore_if_zero: bool,
 }
 
 impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
@@ -35,6 +36,11 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
     /// sets facet attributes to filter on
     pub fn set_facet_filter(&mut self, facets: Option<FacetFilter>) {
         self.facet_filter = facets;
+    }
+
+    /// sets facet attributes to filter on
+    pub fn set_zero_value_discarder(&mut self, val: bool) {
+        self.ignore_if_zero = val;
     }
 
     /// sets facet attributes for which to return the count
@@ -52,6 +58,7 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
             index,
             facet_filter: None,
             facets: None,
+            ignore_if_zero: false
         }
     }
 
@@ -146,6 +153,7 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
                 self.criteria,
                 self.searchable_attrs,
                 self.index,
+                self.ignore_if_zero
             ),
             None => bucket_sort(
                 reader,
@@ -157,6 +165,7 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
                 self.criteria,
                 self.searchable_attrs,
                 self.index,
+                self.ignore_if_zero
             ),
         }
     }
@@ -177,7 +186,7 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
 
                 if let Some(f) = self.facet_count_docids(reader)? {
                     sort_result.exhaustive_facets_count = Some(true);
-                    sort_result.facets = Some(facet_count(f, &docids));
+                    sort_result.facets = Some(facet_count(f, &docids, self.ignore_if_zero));
                 }
 
                 Ok(sort_result)
@@ -192,7 +201,7 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
                             sort_result.exhaustive_facets_count = Some(true);
                             // document ids are not sorted in natural order, we need to construct a new set
                             let document_set = SetBuf::from_dirty(Vec::from(docids));
-                            sort_result.facets = Some(facet_count(f, &document_set));
+                            sort_result.facets = Some(facet_count(f, &document_set, self.ignore_if_zero));
                         }
 
                         Ok(sort_result)

@@ -37,6 +37,7 @@ impl IndexSearchExt for Index {
             matches: false,
             facet_filters: None,
             facets: None,
+            ignore_if_zero: false,
         }
     }
 }
@@ -52,7 +53,8 @@ pub struct SearchBuilder<'a> {
     filters: Option<String>,
     matches: bool,
     facet_filters: Option<FacetFilter>,
-    facets: Option<Vec<(FieldId, String)>>
+    facets: Option<Vec<(FieldId, String)>>,
+    ignore_if_zero: bool
 }
 
 impl<'a> SearchBuilder<'a> {
@@ -99,6 +101,11 @@ impl<'a> SearchBuilder<'a> {
 
     pub fn get_matches(&mut self) -> &SearchBuilder {
         self.matches = true;
+        self
+    }
+
+    pub fn get_zero_val(&mut self) -> &SearchBuilder {
+        self.ignore_if_zero = true;
         self
     }
 
@@ -154,6 +161,7 @@ impl<'a> SearchBuilder<'a> {
 
         query_builder.set_facet_filter(self.facet_filters);
         query_builder.set_facets(self.facets);
+        query_builder.set_zero_value_discarder(self.ignore_if_zero);
 
         let start = Instant::now();
         let result = query_builder.query(reader, self.query.as_deref(), self.offset..(self.offset + self.limit));
