@@ -14,10 +14,11 @@ use crate::{
     BoRoaringBitmapCodec, CboRoaringBitmapCodec,
 };
 
-pub const WORDS_FST_KEY: &str = "words-fst";
-pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
+pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
+pub const PRIMARY_KEY_KEY: &str = "primary-key";
 pub const USERS_IDS_DOCUMENTS_IDS_KEY: &str = "users-ids-documents-ids";
+pub const WORDS_FST_KEY: &str = "words-fst";
 
 #[derive(Clone)]
 pub struct Index {
@@ -81,6 +82,21 @@ impl Index {
     /// Returns the internal documents ids.
     pub fn documents_ids(&self, rtxn: &heed::RoTxn) -> heed::Result<RoaringBitmap> {
         Ok(self.main.get::<_, Str, RoaringBitmapCodec>(rtxn, DOCUMENTS_IDS_KEY)?.unwrap_or_default())
+    }
+
+    /// Writes the documents primary key, this is the field name that is used to store the id.
+    pub fn put_primary_key(&self, wtxn: &mut heed::RwTxn, primary_key: u8) -> heed::Result<()> {
+        self.main.put::<_, Str, OwnedType<u8>>(wtxn, PRIMARY_KEY_KEY, &primary_key)
+    }
+
+    /// Delete the primary key of the documents, this can be done to reset indexes settings.
+    pub fn delete_primary_key(&self, wtxn: &mut heed::RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, PRIMARY_KEY_KEY)
+    }
+
+    /// Returns the documents primary key, `None` if it hasn't been defined.
+    pub fn primary_key(&self, rtxn: &heed::RoTxn) -> heed::Result<Option<u8>> {
+        self.main.get::<_, Str, OwnedType<u8>>(rtxn, PRIMARY_KEY_KEY)
     }
 
     /// Writes the users ids documents ids, a user id is a byte slice (i.e. `[u8]`)
