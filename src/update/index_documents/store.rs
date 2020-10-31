@@ -309,7 +309,19 @@ impl Store {
                 }
 
                 for (attr, content) in document.iter() {
-                    let content: Cow<str> = serde_json::from_slice(content).unwrap();
+                    use serde_json::Value;
+                    let content: Cow<str> = match serde_json::from_slice(content) {
+                        Ok(string) => string,
+                        Err(_) => match serde_json::from_slice(content)? {
+                            Value::Null => continue,
+                            Value::Bool(boolean) => Cow::Owned(boolean.to_string()),
+                            Value::Number(number) => Cow::Owned(number.to_string()),
+                            Value::String(string) => Cow::Owned(string),
+                            Value::Array(_array) => continue,
+                            Value::Object(_object) => continue,
+                        }
+                    };
+
                     for (pos, token) in simple_tokenizer(&content).filter_map(only_token).enumerate().take(MAX_POSITION) {
                         let word = token.to_lowercase();
                         let position = (attr as usize * MAX_POSITION + pos) as u32;

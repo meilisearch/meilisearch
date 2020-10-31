@@ -745,7 +745,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &br#"[
             { "name": "kevin" },
-            { "name": "kevina", "id": "21" },
+            { "name": "kevina", "id": 21 },
             { "name": "benoit" }
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
