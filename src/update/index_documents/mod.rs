@@ -18,6 +18,7 @@ use self::merge_function::{
 };
 pub use self::transform::{Transform, TransformOutput};
 
+use crate::MergeFn;
 use super::UpdateBuilder;
 
 mod merge_function;
@@ -29,8 +30,6 @@ enum WriteMethod {
     Append,
     GetMergePut,
 }
-
-type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> anyhow::Result<Vec<u8>>;
 
 fn create_writer(typ: CompressionType, level: Option<u32>, file: File) -> io::Result<Writer<File>> {
     let mut builder = Writer::builder();
@@ -170,6 +169,7 @@ fn write_into_lmdb_database(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum IndexDocumentsMethod {
     /// Replace the previous document with the new one,
     /// removing all the already known attributes.
@@ -178,6 +178,15 @@ pub enum IndexDocumentsMethod {
     /// Merge the previous version of the document with the new version,
     /// replacing old attributes values with the new ones and add the new attributes.
     UpdateDocuments,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum UpdateFormat {
+    /// The given update is a real **comma seperated** CSV with headers on the first line.
+    Csv,
+    /// The given update is a JSON array with documents inside.
+    Json,
 }
 
 pub struct IndexDocuments<'t, 'u, 'i> {
@@ -192,6 +201,7 @@ pub struct IndexDocuments<'t, 'u, 'i> {
     chunk_fusing_shrink_size: Option<u64>,
     indexing_jobs: Option<usize>,
     update_method: IndexDocumentsMethod,
+    update_format: UpdateFormat,
 }
 
 impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
@@ -207,7 +217,8 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
             chunk_compression_level: None,
             chunk_fusing_shrink_size: None,
             indexing_jobs: None,
-            update_method: IndexDocumentsMethod::ReplaceDocuments
+            update_method: IndexDocumentsMethod::ReplaceDocuments,
+            update_format: UpdateFormat::Json,
         }
     }
 
@@ -256,6 +267,11 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
         self
     }
 
+    pub fn update_format(&mut self, format: UpdateFormat) -> &mut Self {
+        self.update_format = format;
+        self
+    }
+
     pub fn execute<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<()>
     where
         R: io::Read,
@@ -274,6 +290,11 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
             index_documents_method: self.update_method,
         };
 
+        let output = match self.update_format {
+            UpdateFormat::Csv => transform.from_csv(reader)?,
+            UpdateFormat::Json => transform.from_json(reader)?,
+        };
+
         let TransformOutput {
             primary_key,
             fields_ids_map,
@@ -282,7 +303,7 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
             replaced_documents_ids,
             documents_count,
             documents_file,
-        } = transform.from_csv(reader)?;
+        } = output;
 
         // We delete the documents that this document addition replaces. This way we are
         // able to simply insert all the documents even if they already exist in the database.
@@ -302,10 +323,17 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
             let _deleted_documents_count = deletion_builder.execute()?;
         }
 
-        let mmap = unsafe {
-            memmap::Mmap::map(&documents_file).context("mmaping the transform documents file")?
+        let mmap = if documents_count == 0 {
+            None
+        } else {
+            let mmap = unsafe {
+                memmap::Mmap::map(&documents_file).context("mmaping the transform documents file")?
+            };
+            Some(mmap)
         };
-        let documents = grenad::Reader::new(mmap.as_ref())?;
+
+        let bytes = mmap.as_ref().map(AsRef::as_ref).unwrap_or_default();
+        let documents = grenad::Reader::new(bytes).unwrap();
 
         // The enum which indicates the type of the readers
         // merges that are potentially done on different threads.
@@ -499,13 +527,14 @@ mod tests {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
-
         let index = Index::new(options, &path).unwrap();
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n1,kevin\n2,kevina\n3,benoit\n"[..];
-        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -517,7 +546,9 @@ mod tests {
         // Second we send 1 document with id 1, to erase the previous ones.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n1,updated kevin\n"[..];
-        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 3 documents.
@@ -529,7 +560,9 @@ mod tests {
         // Third we send 3 documents again to replace the existing ones.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n1,updated second kevin\n2,updated kevina\n3,updated benoit\n"[..];
-        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 3 documents.
@@ -544,7 +577,6 @@ mod tests {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
-
         let index = Index::new(options, &path).unwrap();
 
         // First we send 3 documents with duplicate ids and
@@ -552,6 +584,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n1,kevin\n1,kevina\n1,benoit\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
         builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -578,6 +611,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,age\n1,25\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
         builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments);
         builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
@@ -607,13 +641,14 @@ mod tests {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
-
         let index = Index::new(options, &path).unwrap();
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name\nkevin\nkevina\nbenoit\n"[..];
-        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -629,7 +664,9 @@ mod tests {
         // Second we send 1 document with the generated uuid, to erase the previous ones.
         let mut wtxn = index.write_txn().unwrap();
         let content = format!("id,name\n{},updated kevin", kevin_uuid);
-        IndexDocuments::new(&mut wtxn, &index).execute(content.as_bytes(), |_, _| ()).unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content.as_bytes(), |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 3 documents.
@@ -644,13 +681,14 @@ mod tests {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
         options.map_size(10 * 1024 * 1024); // 10 MB
-
         let index = Index::new(options, &path).unwrap();
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n1,kevin\n2,kevina\n3,benoit\n"[..];
-        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -662,13 +700,85 @@ mod tests {
         // Second we send 1 document without specifying the id.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name\nnew kevin"[..];
-        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 4 documents now.
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 4);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn empty_csv_update() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 0 documents and only headers.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"id,name\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is no documents.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 0);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn json_documents() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with an id for only one of them.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &br#"[
+            { "name": "kevin" },
+            { "name": "kevina", "id": "21" },
+            { "name": "benoit" }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 3 documents now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 3);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn empty_json_update() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 0 documents.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"[]"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is no documents.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 0);
         drop(rtxn);
     }
 }

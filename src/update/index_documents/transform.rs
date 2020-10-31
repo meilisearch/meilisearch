@@ -7,8 +7,9 @@ use anyhow::{anyhow, Context};
 use fst::{IntoStreamer, Streamer};
 use grenad::CompressionType;
 use roaring::RoaringBitmap;
+use serde_json::{Map, Value};
 
-use crate::{BEU32, Index, FieldsIdsMap};
+use crate::{BEU32, MergeFn, Index, FieldsIdsMap};
 use crate::update::AvailableDocumentsIds;
 use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
@@ -41,10 +42,116 @@ impl Transform<'_, '_> {
     /// Outputs the new `FieldsIdsMap`, the new `UsersIdsDocumentsIds` map, the new documents ids,
     /// the replaced documents ids, the number of documents in this update and the file
     /// containing all those documents.
+    pub fn from_json<R: Read>(self, reader: R) -> anyhow::Result<TransformOutput> {
+        let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
+        let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn).unwrap();
+        let primary_key = self.index.primary_key(self.rtxn)?;
+
+        // Deserialize the whole batch of documents in memory.
+        let documents: Vec<Map<String, Value>> = serde_json::from_reader(reader)?;
+
+        // We extract the primary key from the first document in
+        // the batch if it hasn't already been defined in the index.
+        let primary_key = match primary_key {
+            Some(primary_key) => primary_key,
+            None => {
+                match documents.get(0).and_then(|doc| doc.keys().find(|k| k.contains("id"))) {
+                    Some(key) => fields_ids_map.insert(&key).context("field id limit reached")?,
+                    None => fields_ids_map.insert("id").context("field id limit reached")?,
+                }
+            },
+        };
+
+        if documents.is_empty() {
+            return Ok(TransformOutput {
+                primary_key,
+                fields_ids_map,
+                users_ids_documents_ids: fst::Map::default(),
+                new_documents_ids: RoaringBitmap::new(),
+                replaced_documents_ids: RoaringBitmap::new(),
+                documents_count: 0,
+                documents_file: tempfile::tempfile()?,
+            });
+        }
+
+        // Get the primary key field name now, this way we will
+        // be able to get the value in the JSON Map document.
+        let primary_key_name = fields_ids_map
+            .name(primary_key)
+            .expect("found the primary key name")
+            .to_owned();
+
+        // We must choose the appropriate merge function for when two or more documents
+        // with the same user id must be merged or fully replaced in the same batch.
+        let merge_function = match self.index_documents_method {
+            IndexDocumentsMethod::ReplaceDocuments => keep_latest_obkv,
+            IndexDocumentsMethod::UpdateDocuments => merge_obkvs,
+        };
+
+        // We initialize the sorter with the user indexing settings.
+        let mut sorter = create_sorter(
+            merge_function,
+            self.chunk_compression_type,
+            self.chunk_compression_level,
+            self.chunk_fusing_shrink_size,
+            self.max_nb_chunks,
+            self.max_memory,
+        );
+
+        let mut json_buffer = Vec::new();
+        let mut obkv_buffer = Vec::new();
+        let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
+
+        for mut document in documents {
+            obkv_buffer.clear();
+            let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
+
+            // We prepare the fields ids map with the documents keys.
+            for (key, _value) in &document {
+                fields_ids_map.insert(&key).context("field id limit reached")?;
+            }
+
+            // We iterate in the fields ids ordered.
+            for (field_id, name) in fields_ids_map.iter() {
+                if let Some(value) = document.get(name) {
+                    // We serialize the attribute values.
+                    json_buffer.clear();
+                    serde_json::to_writer(&mut json_buffer, value)?;
+                    writer.insert(field_id, &json_buffer)?;
+                }
+            }
+
+            // We retrieve the user id from the document based on the primary key name,
+            // if the document id isn't present we generate a uuid.
+            let user_id = match document.remove(&primary_key_name) {
+                Some(value) => match value {
+                    Value::String(string) => Cow::Owned(string),
+                    Value::Number(number) => Cow::Owned(number.to_string()),
+                    _ => return Err(anyhow!("documents ids must be either strings or numbers")),
+                },
+                None => {
+                    let uuid = uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer);
+                    Cow::Borrowed(uuid)
+                },
+            };
+
+            // We use the extracted/generated user id as the key for this document.
+            sorter.insert(user_id.as_bytes(), &obkv_buffer)?;
+        }
+
+        // Now that we have a valid sorter that contains the user id and the obkv we
+        // give it to the last transforming function which returns the TransformOutput.
+        self.from_sorter(sorter, primary_key, fields_ids_map, users_ids_documents_ids)
+    }
+
+    /// Extract the users ids, deduplicate and compute the new internal documents ids
+    /// and fields ids, writing all the documents under their internal ids into a final file.
+    ///
+    /// Outputs the new `FieldsIdsMap`, the new `UsersIdsDocumentsIds` map, the new documents ids,
+    /// the replaced documents ids, the number of documents in this update and the file
+    /// containing all those documents.
     pub fn from_csv<R: Read>(self, reader: R) -> anyhow::Result<TransformOutput> {
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let documents_ids = self.index.documents_ids(self.rtxn)?;
-        let mut available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
         let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn).unwrap();
 
         let mut csv = csv::Reader::from_reader(reader);
@@ -85,11 +192,6 @@ impl Transform<'_, '_> {
         // the records fields in the fields ids map order and correctly generate the obkv.
         fields_ids.sort_unstable_by_key(|(field_id, _)| *field_id);
 
-        /// Only the last value associated with an id is kept.
-        fn keep_latest_obkv(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
-            obkvs.last().context("no last value").map(|last| last.clone().into_owned())
-        }
-
         // We initialize the sorter with the user indexing settings.
         let mut sorter = create_sorter(
             keep_latest_obkv,
@@ -105,9 +207,9 @@ impl Transform<'_, '_> {
         let mut json_buffer = Vec::new();
         let mut obkv_buffer = Vec::new();
         let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
+
         let mut record = csv::StringRecord::new();
         while csv.read_record(&mut record)? {
-
             obkv_buffer.clear();
             let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
 
@@ -138,6 +240,25 @@ impl Transform<'_, '_> {
             sorter.insert(user_id, &obkv_buffer)?;
         }
 
+        // Now that we have a valid sorter that contains the user id and the obkv we
+        // give it to the last transforming function which returns the TransformOutput.
+        self.from_sorter(sorter, primary_key_field_id, fields_ids_map, users_ids_documents_ids)
+    }
+
+    /// Generate the TransformOutput based on the given sorter that can be generated from any
+    /// format like CSV, JSON or JSON lines. This sorter must contain a key that is the document
+    /// id for the user side and the value must be an obkv where keys are valid fields ids.
+    fn from_sorter(
+        self,
+        sorter: grenad::Sorter<MergeFn>,
+        primary_key: u8,
+        fields_ids_map: FieldsIdsMap,
+        users_ids_documents_ids: fst::Map<Cow<'_, [u8]>>,
+    ) -> anyhow::Result<TransformOutput>
+    {
+        let documents_ids = self.index.documents_ids(self.rtxn)?;
+        let mut available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
+
         // Once we have sort and deduplicated the documents we write them into a final file.
         let mut final_sorter = create_sorter(
             |_docid, _obkvs| Err(anyhow!("cannot merge two documents")),
@@ -150,6 +271,7 @@ impl Transform<'_, '_> {
         let mut new_users_ids_documents_ids_builder = fst::MapBuilder::memory();
         let mut replaced_documents_ids = RoaringBitmap::new();
         let mut new_documents_ids = RoaringBitmap::new();
+        let mut obkv_buffer = Vec::new();
 
         // While we write into final file we get or generate the internal documents ids.
         let mut documents_count = 0;
@@ -219,7 +341,7 @@ impl Transform<'_, '_> {
         }
 
         Ok(TransformOutput {
-            primary_key: primary_key_field_id,
+            primary_key,
             fields_ids_map,
             users_ids_documents_ids: users_ids_documents_ids_builder.into_map(),
             new_documents_ids,
@@ -228,4 +350,22 @@ impl Transform<'_, '_> {
             documents_file,
         })
     }
+}
+
+/// Only the last value associated with an id is kept.
+fn keep_latest_obkv(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+    obkvs.last().context("no last value").map(|last| last.clone().into_owned())
+}
+
+/// Merge all the obks in the order we see them.
+fn merge_obkvs(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+    let mut iter = obkvs.iter();
+    let first = iter.next().map(|b| b.clone().into_owned()).context("no first value")?;
+    Ok(iter.fold(first, |acc, current| {
+        let first = obkv::KvReader::new(&acc);
+        let second = obkv::KvReader::new(current);
+        let mut buffer = Vec::new();
+        merge_two_obkvs(first, second, &mut buffer);
+        buffer
+    }))
 }

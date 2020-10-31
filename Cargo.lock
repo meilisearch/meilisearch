@@ -435,9 +435,9 @@ checksum = "4358a9e11b9a09cf52383b451b49a169e8d797b68aa02301ff586d70d9661ea3"
 
 [[package]]
 name = "either"
-version = "1.5.3"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb1f6b1ce1c140482ea30ddd3335fc0024ac7ee112895426e0a629a6c20adfe3"
+checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "fake-simd"
@@ -630,7 +630,7 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 [[package]]
 name = "grenad"
 version = "0.1.0"
-source = "git+https://github.com/Kerollmops/grenad.git?rev=ce3517f#ce3517fdbcf7ff0e1e703a4abbc623f69f29d8e0"
+source = "git+https://github.com/Kerollmops/grenad.git?rev=3eb7ad9#3eb7ad9fff06c7b4d3286a3e37e40eea12d695de"
 dependencies = [
  "byteorder",
  "flate2",
@@ -1796,6 +1796,7 @@ version = "1.0.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcac07dbffa1c65e7f816ab9eba78eb142c6d44410f4eeba1e26e4f5dfa56b95"
 dependencies = [
+ "indexmap",
  "itoa",
  "ryu",
  "serde",

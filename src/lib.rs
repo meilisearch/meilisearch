@@ -10,8 +10,10 @@ pub mod subcommand;
 pub mod tokenizer;
 pub mod update;
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+
 use fxhash::{FxHasher32, FxHasher64};
 
 pub use self::criterion::{Criterion, default_criteria};
@@ -34,3 +36,5 @@ pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 pub type DocumentId = u32;
 pub type Attribute = u32;
 pub type Position = u32;
+
+type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> anyhow::Result<Vec<u8>>;
