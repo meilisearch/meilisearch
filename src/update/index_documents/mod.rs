@@ -275,6 +275,7 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
         };
 
         let TransformOutput {
+            primary_key,
             fields_ids_map,
             users_ids_documents_ids,
             new_documents_ids,
@@ -414,6 +415,9 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
 
         // We write the fields ids map into the main database
         self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
+
+        // We write the primary key field id into the main database
+        self.index.put_primary_key(self.wtxn, primary_key)?;
 
         // We write the users_ids_documents_ids into the main database.
         self.index.put_users_ids_documents_ids(self.wtxn, &users_ids_documents_ids)?;
@@ -595,6 +599,76 @@ mod tests {
         assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
         assert_eq!(doc_iter.next(), Some((2, &br#""25""#[..])));
         assert_eq!(doc_iter.next(), None);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn simple_auto_generated_documents_ids() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with ids from 1 to 3.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"name\nkevin\nkevina\nbenoit\n"[..];
+        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 3 documents now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 3);
+
+        let docs = index.documents(&rtxn, vec![0, 1, 2]).unwrap();
+        let (_id, obkv) = docs.iter().find(|(_id, kv)| kv.get(0) == Some(br#""kevin""#)).unwrap();
+        let kevin_uuid: String = serde_json::from_slice(&obkv.get(1).unwrap()).unwrap();
+        drop(rtxn);
+
+        // Second we send 1 document with the generated uuid, to erase the previous ones.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = format!("id,name\n{},updated kevin", kevin_uuid);
+        IndexDocuments::new(&mut wtxn, &index).execute(content.as_bytes(), |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is **always** 3 documents.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 3);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn reordered_auto_generated_documents_ids() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with ids from 1 to 3.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"id,name\n1,kevin\n2,kevina\n3,benoit\n"[..];
+        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 3 documents now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 3);
+        drop(rtxn);
+
+        // Second we send 1 document without specifying the id.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"name\nnew kevin"[..];
+        IndexDocuments::new(&mut wtxn, &index).execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 4 documents now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 4);
         drop(rtxn);
     }
 }

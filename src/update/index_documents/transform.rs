@@ -14,6 +14,7 @@ use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
 
 pub struct TransformOutput {
+    pub primary_key: u8,
     pub fields_ids_map: FieldsIdsMap,
     pub users_ids_documents_ids: fst::Map<Vec<u8>>,
     pub new_documents_ids: RoaringBitmap,
@@ -23,7 +24,7 @@ pub struct TransformOutput {
 }
 
 pub struct Transform<'t, 'i> {
-    pub rtxn: &'t heed::RoTxn<'t>,
+    pub rtxn: &'t heed::RoTxn<'i>,
     pub index: &'i Index,
     pub chunk_compression_type: CompressionType,
     pub chunk_compression_level: Option<u32>,
@@ -47,16 +48,42 @@ impl Transform<'_, '_> {
         let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn).unwrap();
 
         let mut csv = csv::Reader::from_reader(reader);
-        let headers = csv.headers()?.clone();
-        let user_id_pos = headers.iter().position(|h| h == "id").context(r#"missing "id" header"#)?;
+        let headers = csv.headers()?;
+        let primary_key = self.index.primary_key(self.rtxn)?;
 
         // Generate the new fields ids based on the current fields ids and this CSV headers.
         let mut fields_ids = Vec::new();
-        for header in headers.iter() {
-            let id = fields_ids_map.insert(header)
-                .context("impossible to generate a field id (limit reached)")?;
-            fields_ids.push(id);
+        for (i, header) in headers.iter().enumerate() {
+            let id = fields_ids_map.insert(header).context("field id limit reached)")?;
+            fields_ids.push((id, i));
         }
+
+        // Extract the position of the primary key in the current headers, None if not found.
+        let user_id_pos = match primary_key {
+            Some(primary_key) => {
+                // Te primary key have is known so we must find the position in the CSV headers.
+                let name = fields_ids_map.name(primary_key).expect("found the primary key name");
+                headers.iter().position(|h| h == name)
+            },
+            None => headers.iter().position(|h| h.contains("id")),
+        };
+
+        // Returns the field id in the fileds ids map, create an "id" field
+        // in case it is not in the current headers.
+        let primary_key_field_id = match user_id_pos {
+            Some(pos) => fields_ids_map.id(&headers[pos]).expect("found the primary key"),
+            None => {
+                let id = fields_ids_map.insert("id").context("field id limit reached")?;
+                // We make sure to add the primary key field id to the fields ids,
+                // this way it is added to the obks.
+                fields_ids.push((id, usize::max_value()));
+                id
+            },
+        };
+
+        // We sort the fields ids by the fields ids map id, this way we are sure to iterate over
+        // the records fields in the fields ids map order and correctly generate the obkv.
+        fields_ids.sort_unstable_by_key(|(field_id, _)| *field_id);
 
         /// Only the last value associated with an id is kept.
         fn keep_latest_obkv(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
@@ -77,24 +104,37 @@ impl Transform<'_, '_> {
         // based on the users ids.
         let mut json_buffer = Vec::new();
         let mut obkv_buffer = Vec::new();
+        let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
         let mut record = csv::StringRecord::new();
         while csv.read_record(&mut record)? {
 
             obkv_buffer.clear();
             let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
 
-            // We retrieve the field id based on the CSV header position
-            // and zip it with the record value.
-            for (key, field) in fields_ids.iter().copied().zip(&record) {
+            // We extract the user id if we know where it is or generate an UUID V4 otherwise.
+            // TODO we must validate the user id (i.e. [a-zA-Z0-9\-_]).
+            let user_id = match user_id_pos {
+                Some(pos) => &record[pos],
+                None => uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer),
+            };
+
+            // When the primary_key_field_id is found in the fields ids list
+            // we return the generated document id instead of the record field.
+            let iter = fields_ids.iter()
+                .map(|(fi, i)| {
+                    let field = if *fi == primary_key_field_id { user_id } else { &record[*i] };
+                    (fi, field)
+                });
+
+            // We retrieve the field id based on the fields ids map fields ids order.
+            for (field_id, field) in iter {
                 // We serialize the attribute values as JSON strings.
                 json_buffer.clear();
                 serde_json::to_writer(&mut json_buffer, &field)?;
-                writer.insert(key, &json_buffer)?;
+                writer.insert(*field_id, &json_buffer)?;
             }
 
-            // We extract the user id and use it as the key for this document.
-            // TODO we must validate the user id (i.e. [a-zA-Z0-9\-_]).
-            let user_id = &record[user_id_pos];
+            // We use the extracted/generated user id as the key for this document.
             sorter.insert(user_id, &obkv_buffer)?;
         }
 
@@ -179,6 +219,7 @@ impl Transform<'_, '_> {
         }
 
         Ok(TransformOutput {
+            primary_key: primary_key_field_id,
             fields_ids_map,
             users_ids_documents_ids: users_ids_documents_ids_builder.into_map(),
             new_documents_ids,
