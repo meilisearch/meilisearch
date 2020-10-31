@@ -33,6 +33,7 @@ pub struct Transform<'t, 'i> {
     pub max_nb_chunks: Option<usize>,
     pub max_memory: Option<usize>,
     pub index_documents_method: IndexDocumentsMethod,
+    pub autogenerate_docids: bool,
 }
 
 impl Transform<'_, '_> {
@@ -57,7 +58,14 @@ impl Transform<'_, '_> {
             None => {
                 match documents.get(0).and_then(|doc| doc.keys().find(|k| k.contains("id"))) {
                     Some(key) => fields_ids_map.insert(&key).context("field id limit reached")?,
-                    None => fields_ids_map.insert("id").context("field id limit reached")?,
+                    None => {
+                        if !self.autogenerate_docids {
+                            // If there is no primary key in the current document batch, we must
+                            // return an error and not automatically generate any document id.
+                            return Err(anyhow!("missing primary key"))
+                        }
+                        fields_ids_map.insert("id").context("field id limit reached")?
+                    },
                 }
             },
         };
@@ -130,6 +138,9 @@ impl Transform<'_, '_> {
                     _ => return Err(anyhow!("documents ids must be either strings or numbers")),
                 },
                 None => {
+                    if !self.autogenerate_docids {
+                        return Err(anyhow!("missing primary key"));
+                    }
                     let uuid = uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer);
                     Cow::Borrowed(uuid)
                 },
@@ -180,11 +191,16 @@ impl Transform<'_, '_> {
         let primary_key_field_id = match user_id_pos {
             Some(pos) => fields_ids_map.id(&headers[pos]).expect("found the primary key"),
             None => {
-                let id = fields_ids_map.insert("id").context("field id limit reached")?;
+                if !self.autogenerate_docids {
+                    // If there is no primary key in the current document batch, we must
+                    // return an error and not automatically generate any document id.
+                    return Err(anyhow!("missing primary key"))
+                }
+                let field_id = fields_ids_map.insert("id").context("field id limit reached")?;
                 // We make sure to add the primary key field id to the fields ids,
                 // this way it is added to the obks.
-                fields_ids.push((id, usize::max_value()));
-                id
+                fields_ids.push((field_id, usize::max_value()));
+                field_id
             },
         };
 

@@ -202,6 +202,7 @@ pub struct IndexDocuments<'t, 'u, 'i> {
     indexing_jobs: Option<usize>,
     update_method: IndexDocumentsMethod,
     update_format: UpdateFormat,
+    autogenerate_docids: bool,
 }
 
 impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
@@ -219,6 +220,7 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
             indexing_jobs: None,
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             update_format: UpdateFormat::Json,
+            autogenerate_docids: true,
         }
     }
 
@@ -272,6 +274,16 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
         self
     }
 
+    pub fn enable_autogenerate_docids(&mut self) -> &mut Self {
+        self.autogenerate_docids = true;
+        self
+    }
+
+    pub fn disable_autogenerate_docids(&mut self) -> &mut Self {
+        self.autogenerate_docids = false;
+        self
+    }
+
     pub fn execute<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<()>
     where
         R: io::Read,
@@ -288,6 +300,7 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
             max_nb_chunks: self.max_nb_chunks,
             max_memory: self.max_memory,
             index_documents_method: self.update_method,
+            autogenerate_docids: self.autogenerate_docids,
         };
 
         let output = match self.update_format {
@@ -633,6 +646,56 @@ mod tests {
         assert_eq!(doc_iter.next(), Some((1, &br#""benoit""#[..])));
         assert_eq!(doc_iter.next(), Some((2, &br#""25""#[..])));
         assert_eq!(doc_iter.next(), None);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn not_auto_generated_csv_documents_ids() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with ids from 1 to 3.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"name\nkevin\nkevina\nbenoit\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.disable_autogenerate_docids();
+        builder.update_format(UpdateFormat::Csv);
+        assert!(builder.execute(content, |_, _| ()).is_err());
+        wtxn.commit().unwrap();
+
+        // Check that there is no document.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 0);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn not_auto_generated_json_documents_ids() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents and 2 without ids.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &br#"[
+            { "name": "kevina", "id": 21 },
+            { "name": "kevin" },
+            { "name": "benoit" }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.disable_autogenerate_docids();
+        builder.update_format(UpdateFormat::Json);
+        assert!(builder.execute(content, |_, _| ()).is_err());
+        wtxn.commit().unwrap();
+
+        // Check that there is no document.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 0);
         drop(rtxn);
     }
 
