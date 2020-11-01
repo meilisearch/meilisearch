@@ -187,6 +187,8 @@ pub enum UpdateFormat {
     Csv,
     /// The given update is a JSON array with documents inside.
     Json,
+    /// The given update is a JSON stream with a document on each line.
+    JsonStream,
 }
 
 pub struct IndexDocuments<'t, 'u, 'i> {
@@ -306,6 +308,7 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
         let output = match self.update_format {
             UpdateFormat::Csv => transform.from_csv(reader)?,
             UpdateFormat::Json => transform.from_json(reader)?,
+            UpdateFormat::JsonStream => transform.from_json_stream(reader)?,
         };
 
         let TransformOutput {
@@ -842,6 +845,32 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 0);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn json_stream_documents() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with an id for only one of them.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &br#"
+        { "name": "kevin" }
+        { "name": "kevina", "id": 21 }
+        { "name": "benoit" }
+        "#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::JsonStream);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 3 documents now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 3);
         drop(rtxn);
     }
 }

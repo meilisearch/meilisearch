@@ -224,8 +224,9 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                     let mut builder = update_builder.index_documents(&mut wtxn, &index_cloned);
 
                     match format.as_str() {
-                        "json" => builder.update_format(UpdateFormat::Json),
                         "csv" => builder.update_format(UpdateFormat::Csv),
+                        "json" => builder.update_format(UpdateFormat::Json),
+                        "json-stream" => builder.update_format(UpdateFormat::JsonStream),
                         otherwise => panic!("invalid update format {:?}", otherwise),
                     };
 
@@ -491,6 +492,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         let format = match update_format {
             UpdateFormat::Csv => String::from("csv"),
             UpdateFormat::Json => String::from("json"),
+            UpdateFormat::JsonStream => String::from("json-stream"),
         };
 
         let meta = UpdateMeta::DocumentsAddition { method, format };
@@ -536,6 +538,23 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                 update_status_sender_cloned.clone(),
                 params.method,
                 UpdateFormat::Json,
+                stream,
+            )
+        });
+
+    let update_store_cloned = update_store.clone();
+    let update_status_sender_cloned = update_status_sender.clone();
+    let indexing_route_json_stream = warp::filters::method::post()
+        .and(warp::path!("documents"))
+        .and(warp::header::exact_ignore_case("content-type", "application/x-ndjson"))
+        .and(warp::filters::query::query())
+        .and(warp::body::stream())
+        .and_then(move |params: QueryUpdate, stream| {
+            buf_stream(
+                update_store_cloned.clone(),
+                update_status_sender_cloned.clone(),
+                params.method,
+                UpdateFormat::JsonStream,
                 stream,
             )
         });
@@ -595,6 +614,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .or(query_route)
         .or(indexing_route_csv)
         .or(indexing_route_json)
+        .or(indexing_route_json_stream)
         .or(clearing_route)
         .or(update_ws_route);
 

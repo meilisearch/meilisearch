@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::iter::Peekable;
 
 use anyhow::{anyhow, Context};
 use fst::{IntoStreamer, Streamer};
@@ -24,6 +25,12 @@ pub struct TransformOutput {
     pub documents_file: File,
 }
 
+/// Extract the users ids, deduplicate and compute the new internal documents ids
+/// and fields ids, writing all the documents under their internal ids into a final file.
+///
+/// Outputs the new `FieldsIdsMap`, the new `UsersIdsDocumentsIds` map, the new documents ids,
+/// the replaced documents ids, the number of documents in this update and the file
+/// containing all those documents.
 pub struct Transform<'t, 'i> {
     pub rtxn: &'t heed::RoTxn<'i>,
     pub index: &'i Index,
@@ -37,26 +44,41 @@ pub struct Transform<'t, 'i> {
 }
 
 impl Transform<'_, '_> {
-    /// Extract the users ids, deduplicate and compute the new internal documents ids
-    /// and fields ids, writing all the documents under their internal ids into a final file.
-    ///
-    /// Outputs the new `FieldsIdsMap`, the new `UsersIdsDocumentsIds` map, the new documents ids,
-    /// the replaced documents ids, the number of documents in this update and the file
-    /// containing all those documents.
     pub fn from_json<R: Read>(self, reader: R) -> anyhow::Result<TransformOutput> {
+        self.from_generic_json(reader, false)
+    }
+
+    pub fn from_json_stream<R: Read>(self, reader: R) -> anyhow::Result<TransformOutput> {
+        self.from_generic_json(reader, true)
+    }
+
+    fn from_generic_json<R: Read>(self, reader: R, is_stream: bool) -> anyhow::Result<TransformOutput> {
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn).unwrap();
         let primary_key = self.index.primary_key(self.rtxn)?;
 
         // Deserialize the whole batch of documents in memory.
-        let documents: Vec<Map<String, Value>> = serde_json::from_reader(reader)?;
+        let mut documents: Peekable<Box<dyn Iterator<Item=serde_json::Result<Map<String, Value>>>>> = if is_stream {
+            let iter = serde_json::Deserializer::from_reader(reader).into_iter();
+            let iter = Box::new(iter) as Box<dyn Iterator<Item=_>>;
+            iter.peekable()
+        } else {
+            let vec: Vec<_> = serde_json::from_reader(reader)?;
+            let iter = vec.into_iter().map(Ok);
+            let iter = Box::new(iter) as Box<dyn Iterator<Item=_>>;
+            iter.peekable()
+        };
 
         // We extract the primary key from the first document in
         // the batch if it hasn't already been defined in the index.
         let primary_key = match primary_key {
             Some(primary_key) => primary_key,
             None => {
-                match documents.get(0).and_then(|doc| doc.keys().find(|k| k.contains("id"))) {
+                // We ignore a potential error here as we can't early return it now,
+                // the peek method gives us only a reference on the next item,
+                // we will eventually return it in the iteration just after.
+                let first = documents.peek().and_then(|r| r.as_ref().ok());
+                match first.and_then(|doc| doc.keys().find(|k| k.contains("id"))) {
                     Some(key) => fields_ids_map.insert(&key).context("field id limit reached")?,
                     None => {
                         if !self.autogenerate_docids {
@@ -70,7 +92,7 @@ impl Transform<'_, '_> {
             },
         };
 
-        if documents.is_empty() {
+        if documents.peek().is_none() {
             return Ok(TransformOutput {
                 primary_key,
                 fields_ids_map,
@@ -110,7 +132,9 @@ impl Transform<'_, '_> {
         let mut obkv_buffer = Vec::new();
         let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
 
-        for mut document in documents {
+        for result in documents {
+            let mut document = result?;
+
             obkv_buffer.clear();
             let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
 
@@ -155,12 +179,6 @@ impl Transform<'_, '_> {
         self.from_sorter(sorter, primary_key, fields_ids_map, users_ids_documents_ids)
     }
 
-    /// Extract the users ids, deduplicate and compute the new internal documents ids
-    /// and fields ids, writing all the documents under their internal ids into a final file.
-    ///
-    /// Outputs the new `FieldsIdsMap`, the new `UsersIdsDocumentsIds` map, the new documents ids,
-    /// the replaced documents ids, the number of documents in this update and the file
-    /// containing all those documents.
     pub fn from_csv<R: Read>(self, reader: R) -> anyhow::Result<TransformOutput> {
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn).unwrap();
@@ -261,8 +279,8 @@ impl Transform<'_, '_> {
         self.from_sorter(sorter, primary_key_field_id, fields_ids_map, users_ids_documents_ids)
     }
 
-    /// Generate the TransformOutput based on the given sorter that can be generated from any
-    /// format like CSV, JSON or JSON lines. This sorter must contain a key that is the document
+    /// Generate the `TransformOutput` based on the given sorter that can be generated from any
+    /// format like CSV, JSON or JSON stream. This sorter must contain a key that is the document
     /// id for the user side and the value must be an obkv where keys are valid fields ids.
     fn from_sorter(
         self,
