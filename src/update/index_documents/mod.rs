@@ -697,17 +697,17 @@ mod tests {
         assert_eq!(count, 3);
 
         let docs = index.documents(&rtxn, vec![0, 1, 2]).unwrap();
-        let (kevin_id, _) = docs.iter().find(|(_, d)| d.get(1).unwrap() == br#""kevin""#).unwrap();
+        let (kevin_id, _) = docs.iter().find(|(_, d)| {
+            d.get(0).unwrap() == br#""updated kevin""#
+        }).unwrap();
         let (id, doc) = docs[*kevin_id as usize];
         assert_eq!(id, *kevin_id);
 
         // Check that this document is equal to the last
         // one sent and that an UUID has been generated.
-        let mut doc_iter = doc.iter();
+        assert_eq!(doc.get(0), Some(&br#""updated kevin""#[..]));
         // This is an UUID, it must be 36 bytes long plus the 2 surrounding string quotes (").
-        doc_iter.next().filter(|(_, id)| id.len() == 36 + 2).unwrap();
-        assert_eq!(doc_iter.next(), Some((1, &br#""kevin""#[..])));
-        assert_eq!(doc_iter.next(), None);
+        assert!(doc.get(1).unwrap().len() == 36 + 2);
         drop(rtxn);
     }
 
@@ -840,6 +840,38 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn invalid_documents_ids() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 1 document with an invalid id.
+        let mut wtxn = index.write_txn().unwrap();
+        // There is a space in the document id.
+        let content = &b"id,name\nbrume bleue,kevin\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        assert!(builder.execute(content, |_, _| ()).is_err());
+        wtxn.commit().unwrap();
+
+        // First we send 1 document with a valid id.
+        let mut wtxn = index.write_txn().unwrap();
+        // There is a space in the document id.
+        let content = &b"id,name\n32,kevin\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 1 document now.
+        let rtxn = index.read_txn().unwrap();
+        let count = index.number_of_documents(&rtxn).unwrap();
+        assert_eq!(count, 1);
         drop(rtxn);
     }
 }

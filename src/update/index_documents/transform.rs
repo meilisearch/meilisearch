@@ -172,6 +172,12 @@ impl Transform<'_, '_> {
                     writer.insert(field_id, &json_buffer)?;
                 }
                 else if field_id == primary_key {
+                    // We validate the document id [a-zA-Z0-9\-_].
+                    let user_id = match validate_document_id(&user_id) {
+                        Some(valid) => valid,
+                        None => return Err(anyhow!("invalid document id: {:?}", user_id)),
+                    };
+
                     // We serialize the document id.
                     serde_json::to_writer(&mut json_buffer, &user_id)?;
                     writer.insert(field_id, &json_buffer)?;
@@ -256,9 +262,15 @@ impl Transform<'_, '_> {
             let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
 
             // We extract the user id if we know where it is or generate an UUID V4 otherwise.
-            // TODO we must validate the user id (i.e. [a-zA-Z0-9\-_]).
             let user_id = match user_id_pos {
-                Some(pos) => &record[pos],
+                Some(pos) => {
+                    let user_id = &record[pos];
+                    // We validate the document id [a-zA-Z0-9\-_].
+                    match validate_document_id(&user_id) {
+                        Some(valid) => valid,
+                        None => return Err(anyhow!("invalid document id: {:?}", user_id)),
+                    }
+                },
                 None => uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer),
             };
 
@@ -410,4 +422,13 @@ fn merge_obkvs(_key: &[u8], obkvs: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
         merge_two_obkvs(first, second, &mut buffer);
         buffer
     }))
+}
+
+fn validate_document_id(document_id: &str) -> Option<&str> {
+    let document_id = document_id.trim();
+    Some(document_id).filter(|id| {
+        !id.is_empty() && id.chars().all(|c| {
+            matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_')
+        })
+    })
 }
