@@ -194,14 +194,14 @@ pub enum UpdateFormat {
 pub struct IndexDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
-    log_every_n: Option<usize>,
-    max_nb_chunks: Option<usize>,
-    max_memory: Option<usize>,
-    linked_hash_map_size: Option<usize>,
-    chunk_compression_type: CompressionType,
-    chunk_compression_level: Option<u32>,
-    chunk_fusing_shrink_size: Option<u64>,
-    indexing_jobs: Option<usize>,
+    pub(crate) log_every_n: Option<usize>,
+    pub(crate) max_nb_chunks: Option<usize>,
+    pub(crate) max_memory: Option<usize>,
+    pub(crate) linked_hash_map_size: Option<usize>,
+    pub(crate) chunk_compression_type: CompressionType,
+    pub(crate) chunk_compression_level: Option<u32>,
+    pub(crate) chunk_fusing_shrink_size: Option<u64>,
+    pub(crate) indexing_jobs: Option<usize>,
     update_method: IndexDocumentsMethod,
     update_format: UpdateFormat,
     autogenerate_docids: bool,
@@ -226,64 +226,20 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
         }
     }
 
-    pub(crate) fn log_every_n(&mut self, log_every_n: usize) -> &mut Self {
-        self.log_every_n = Some(log_every_n);
-        self
-    }
-
-    pub(crate) fn max_nb_chunks(&mut self, max_nb_chunks: usize) -> &mut Self {
-        self.max_nb_chunks = Some(max_nb_chunks);
-        self
-    }
-
-    pub(crate) fn max_memory(&mut self, max_memory: usize) -> &mut Self {
-        self.max_memory = Some(max_memory);
-        self
-    }
-
-    pub(crate) fn linked_hash_map_size(&mut self, linked_hash_map_size: usize) -> &mut Self {
-        self.linked_hash_map_size = Some(linked_hash_map_size);
-        self
-    }
-
-    pub(crate) fn chunk_compression_type(&mut self, chunk_compression_type: CompressionType) -> &mut Self {
-        self.chunk_compression_type = chunk_compression_type;
-        self
-    }
-
-    pub(crate) fn chunk_compression_level(&mut self, chunk_compression_level: u32) -> &mut Self {
-        self.chunk_compression_level = Some(chunk_compression_level);
-        self
-    }
-
-    pub(crate) fn chunk_fusing_shrink_size(&mut self, chunk_fusing_shrink_size: u64) -> &mut Self {
-        self.chunk_fusing_shrink_size = Some(chunk_fusing_shrink_size);
-        self
-    }
-
-    pub(crate) fn indexing_jobs(&mut self, indexing_jobs: usize) -> &mut Self {
-        self.indexing_jobs = Some(indexing_jobs);
-        self
-    }
-
-    pub fn index_documents_method(&mut self, method: IndexDocumentsMethod) -> &mut Self {
+    pub fn index_documents_method(&mut self, method: IndexDocumentsMethod) {
         self.update_method = method;
-        self
     }
 
-    pub fn update_format(&mut self, format: UpdateFormat) -> &mut Self {
+    pub fn update_format(&mut self, format: UpdateFormat) {
         self.update_format = format;
-        self
     }
 
-    pub fn enable_autogenerate_docids(&mut self) -> &mut Self {
+    pub fn enable_autogenerate_docids(&mut self) {
         self.autogenerate_docids = true;
-        self
     }
 
-    pub fn disable_autogenerate_docids(&mut self) -> &mut Self {
+    pub fn disable_autogenerate_docids(&mut self) {
         self.autogenerate_docids = false;
-        self
     }
 
     pub fn execute<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<()>
