@@ -750,6 +750,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-queue"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c979cd6cfe72335896575c6b5688da489e420d36a27a0b9eb0c73db574b4a4b"
+dependencies = [
+ "crossbeam-utils 0.6.6",
+]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04973fa96e96579258a5091af6003abde64af786b860f18622b82e026cca60e6"
+dependencies = [
+ "cfg-if 0.1.10",
+ "lazy_static",
+]
+
+[[package]]
 name = "crossbeam-utils"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1175,9 +1194,9 @@ dependencies = [
 
 [[package]]
 name = "heed"
-version = "0.8.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1c9d6f92f402a1452d658038a279d882c77fc5c1f50f29eb491b5fac537f479"
+checksum = "68e5fb45cfad5bc754aeeac84a1e963aed4b34e577e388524e0d8ed6b50fbab0"
 dependencies = [
  "byteorder",
  "heed-traits",
@@ -1186,6 +1205,7 @@ dependencies = [
  "lmdb-rkv-sys",
  "once_cell",
  "page_size",
+ "synchronoise",
  "url",
  "zerocopy",
 ]
@@ -1198,9 +1218,9 @@ checksum = "b328f6260a7e51bdb0ca6b68e6ea27ee3d11fba5dee930896ee7ff6ad5fc072c"
 
 [[package]]
 name = "heed-types"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e100387815256b00dbb4f48db990f7fa03e9b88b4a89c2a1661b7d9d77b77c46"
+checksum = "72fc61caee13e85ea330eabf0c6c7098c511ff173bcb57a760b1eda3bba9f6eb"
 dependencies = [
  "bincode",
  "heed-traits",
@@ -1898,7 +1918,8 @@ checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 [[package]]
 name = "pest"
 version = "2.1.3"
-source = "git+https://github.com/pest-parser/pest.git?rev=51fd1d49f1041f7839975664ef71fe15c7dcaf67#51fd1d49f1041f7839975664ef71fe15c7dcaf67"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10f4872ae94d7b90ae48754df22fd42ad52ce740b8f370b03da4835417403e53"
 dependencies = [
  "ucd-trie",
 ]
@@ -1906,8 +1927,7 @@ dependencies = [
 [[package]]
 name = "pest"
 version = "2.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10f4872ae94d7b90ae48754df22fd42ad52ce740b8f370b03da4835417403e53"
+source = "git+https://github.com/pest-parser/pest.git?rev=51fd1d49f1041f7839975664ef71fe15c7dcaf67#51fd1d49f1041f7839975664ef71fe15c7dcaf67"
 dependencies = [
  "ucd-trie",
 ]
@@ -2703,6 +2723,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-xid",
+]
+
+[[package]]
+name = "synchronoise"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d717ed0efc9d39ab3b642a096bc369a3e02a38a51c41845d7fe31bdad1d6eaeb"
+dependencies = [
+ "crossbeam-queue",
 ]
 
 [[package]]
