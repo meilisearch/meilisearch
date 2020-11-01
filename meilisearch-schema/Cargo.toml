@@ -8,6 +8,6 @@ edition = "2018"
 [dependencies]
 indexmap = { version = "1.3.2", features = ["serde-1"] }
 meilisearch-error = { path = "../meilisearch-error", version = "0.16.0" }
-serde = { version = "1.0.105", features = ["derive"] }
+serde = { version = "1.0.117", features = ["derive"] }
 serde_json = { version = "1.0.59", features = ["preserve_order"] }
 zerocopy = "0.3.0"

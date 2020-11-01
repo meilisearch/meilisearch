@@ -34,7 +34,7 @@ pest = { git = "https://github.com/pest-parser/pest.git", rev = "51fd1d49f1041f7
 pest_derive = "2.0"
 regex = "1.4.1"
 sdset = "0.4.0"
-serde = { version = "1.0.105", features = ["derive"] }
+serde = { version = "1.0.117", features = ["derive"] }
 serde_json = { version = "1.0.59", features = ["preserve_order"] }
 slice-group-by = "0.2.6"
 unicase = "2.6.0"

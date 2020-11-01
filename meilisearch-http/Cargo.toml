@@ -41,7 +41,7 @@ once_cell = "1.4.1"
 rand = "0.7.3"
 regex = "1.4.1"
 rustls = "0.18"
-serde = { version = "1.0.105", features = ["derive"] }
+serde = { version = "1.0.117", features = ["derive"] }
 serde_json = { version = "1.0.59", features = ["preserve_order"] }
 serde_qs = "0.7.0"
 sha2 = "0.9.1"
