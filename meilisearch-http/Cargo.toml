@@ -50,7 +50,7 @@ slice-group-by = "0.2.6"
 structopt = "0.3.20"
 tar = "0.4.29"
 tempfile = "3.1.0"
-tokio = { version = "0.2.18", features = ["macros"] }
+tokio = { version = "0.3.2", features = ["macros"] }
 ureq = { version = "1.5.1", features = ["tls"], default-features = false }
 walkdir = "2.3.1"
 whoami = "0.9.0"
@@ -73,7 +73,7 @@ optional = true
 [dev-dependencies]
 serde_url_params = "0.2.0"
 tempdir = "0.3.7"
-tokio = { version = "0.2.18", features = ["macros", "time"] }
+tokio = { version = "0.3.2", features = ["macros", "time"] }
 
 [dev-dependencies.assert-json-diff]
 git = "https://github.com/qdequele/assert-json-diff"
