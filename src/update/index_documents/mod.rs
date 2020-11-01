@@ -739,6 +739,19 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let count = index.number_of_documents(&rtxn).unwrap();
         assert_eq!(count, 3);
+
+        let docs = index.documents(&rtxn, vec![0, 1, 2]).unwrap();
+        let (kevin_id, _) = docs.iter().find(|(_, d)| d.get(1).unwrap() == br#""kevin""#).unwrap();
+        let (id, doc) = docs[*kevin_id as usize];
+        assert_eq!(id, *kevin_id);
+
+        // Check that this document is equal to the last
+        // one sent and that an UUID has been generated.
+        let mut doc_iter = doc.iter();
+        // This is an UUID, it must be 36 bytes long plus the 2 surrounding string quotes (").
+        doc_iter.next().filter(|(_, id)| id.len() == 36 + 2).unwrap();
+        assert_eq!(doc_iter.next(), Some((1, &br#""kevin""#[..])));
+        assert_eq!(doc_iter.next(), None);
         drop(rtxn);
     }
 

@@ -133,7 +133,7 @@ impl Transform<'_, '_> {
         let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
 
         for result in documents {
-            let mut document = result?;
+            let document = result?;
 
             obkv_buffer.clear();
             let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
@@ -143,21 +143,11 @@ impl Transform<'_, '_> {
                 fields_ids_map.insert(&key).context("field id limit reached")?;
             }
 
-            // We iterate in the fields ids ordered.
-            for (field_id, name) in fields_ids_map.iter() {
-                if let Some(value) = document.get(name) {
-                    // We serialize the attribute values.
-                    json_buffer.clear();
-                    serde_json::to_writer(&mut json_buffer, value)?;
-                    writer.insert(field_id, &json_buffer)?;
-                }
-            }
-
             // We retrieve the user id from the document based on the primary key name,
             // if the document id isn't present we generate a uuid.
-            let user_id = match document.remove(&primary_key_name) {
+            let user_id = match document.get(&primary_key_name) {
                 Some(value) => match value {
-                    Value::String(string) => Cow::Owned(string),
+                    Value::String(string) => Cow::Borrowed(string.as_str()),
                     Value::Number(number) => Cow::Owned(number.to_string()),
                     _ => return Err(anyhow!("documents ids must be either strings or numbers")),
                 },
@@ -169,6 +159,24 @@ impl Transform<'_, '_> {
                     Cow::Borrowed(uuid)
                 },
             };
+
+            // We iterate in the fields ids ordered.
+            for (field_id, name) in fields_ids_map.iter() {
+                json_buffer.clear();
+
+                // We try to extract the value from the document and if we don't find anything
+                // and this should be the document id we return the one we generated.
+                if let Some(value) = document.get(name) {
+                    // We serialize the attribute values.
+                    serde_json::to_writer(&mut json_buffer, value)?;
+                    writer.insert(field_id, &json_buffer)?;
+                }
+                else if field_id == primary_key {
+                    // We serialize the document id.
+                    serde_json::to_writer(&mut json_buffer, &user_id)?;
+                    writer.insert(field_id, &json_buffer)?;
+                }
+            }
 
             // We use the extracted/generated user id as the key for this document.
             sorter.insert(user_id.as_bytes(), &obkv_buffer)?;
