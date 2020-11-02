@@ -15,7 +15,7 @@ use futures::{FutureExt, StreamExt};
 use grenad::CompressionType;
 use heed::EnvOpenOptions;
 use indexmap::IndexMap;
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, Deserializer};
 use structopt::StructOpt;
 use tokio::fs::File as TFile;
 use tokio::io::AsyncWriteExt;
@@ -160,7 +160,7 @@ enum UpdateStatus<M, P, N> {
 enum UpdateMeta {
     DocumentsAddition { method: String, format: String },
     ClearDocuments,
-    Settings,
+    Settings(Settings),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,6 +170,24 @@ enum UpdateMetaProgress {
         processed_number_of_documents: usize,
         total_number_of_documents: Option<usize>,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Settings {
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none",
+    )]
+    displayed_attributes: Option<Option<Vec<String>>>,
+}
+
+// Any value that is present is considered Some value, including null.
+fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where T: Deserialize<'de>,
+      D: Deserializer<'de>
+{
+    Deserialize::deserialize(deserializer).map(Some)
 }
 
 pub fn run(opt: Opt) -> anyhow::Result<()> {
@@ -270,8 +288,23 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                         Err(e) => Err(e.into())
                     }
                 },
-                UpdateMeta::Settings => {
-                    todo!()
+                UpdateMeta::Settings(settings) => {
+                    // We must use the write transaction of the update here.
+                    let mut wtxn = index_cloned.write_txn()?;
+                    let mut builder = update_builder.settings(&mut wtxn, &index_cloned);
+
+                    // We transpose the settings JSON struct into a real setting update.
+                    if let Some(names) = settings.displayed_attributes {
+                        match names {
+                            Some(names) => builder.set_displayed_fields(names),
+                            None => builder.reset_displayed_fields(),
+                        }
+                    }
+
+                    match builder.execute() {
+                        Ok(_count) => wtxn.commit().map_err(Into::into),
+                        Err(e) => Err(e.into())
+                    }
                 }
             };
 
@@ -575,7 +608,20 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .and(warp::path!("clear-documents"))
         .map(move || {
             let meta = UpdateMeta::ClearDocuments;
-            let update_id = update_store.register_update(&meta, &[]).unwrap();
+            let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
+            let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
+            eprintln!("update {} registered", update_id);
+            Ok(warp::reply())
+        });
+
+    let update_store_cloned = update_store.clone();
+    let update_status_sender_cloned = update_status_sender.clone();
+    let change_settings_route = warp::filters::method::post()
+        .and(warp::path!("settings"))
+        .and(warp::body::json())
+        .map(move |settings: Settings| {
+            let meta = UpdateMeta::Settings(settings);
+            let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
             let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
             eprintln!("update {} registered", update_id);
             Ok(warp::reply())
