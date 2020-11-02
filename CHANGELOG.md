@@ -1,6 +1,5 @@
 ## v0.16.0
 
-  - Fix settings bug that caused setting to be overwitten (#1001)
   - Automatically create index on document push if index doesn't exist (#914)
   - Sort displayedAttributes and facetDistribution (#946)
 
