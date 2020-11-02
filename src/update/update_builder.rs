@@ -1,9 +1,7 @@
 use grenad::CompressionType;
 
 use crate::Index;
-use super::clear_documents::ClearDocuments;
-use super::delete_documents::DeleteDocuments;
-use super::index_documents::IndexDocuments;
+use super::{ClearDocuments, DeleteDocuments, IndexDocuments, Settings};
 
 pub struct UpdateBuilder {
     pub(crate) log_every_n: Option<usize>,
@@ -98,5 +96,14 @@ impl UpdateBuilder {
         builder.indexing_jobs = self.indexing_jobs;
 
         builder
+    }
+
+    pub fn settings<'t, 'u, 'i>(
+        self,
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        index: &'i Index,
+    ) -> Settings<'t, 'u, 'i>
+    {
+        Settings::new(wtxn, index)
     }
 }

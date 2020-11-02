@@ -160,6 +160,7 @@ enum UpdateStatus<M, P, N> {
 enum UpdateMeta {
     DocumentsAddition { method: String, format: String },
     ClearDocuments,
+    Settings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -268,6 +269,9 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                         Ok(_count) => wtxn.commit().map_err(Into::into),
                         Err(e) => Err(e.into())
                     }
+                },
+                UpdateMeta::Settings => {
+                    todo!()
                 }
             };
 
