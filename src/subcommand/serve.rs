@@ -1,11 +1,12 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs::{File, create_dir_all};
-use std::{mem, io};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
+use std::{mem, io};
 
 use askama_warp::Template;
 use flate2::read::GzDecoder;
@@ -440,9 +441,14 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
             let mut documents = Vec::new();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let displayed_fields = match index.displayed_fields(&rtxn).unwrap() {
+                Some(fields) => Cow::Borrowed(fields),
+                None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
+            };
 
             for (_id, record) in index.documents(&rtxn, documents_ids).unwrap() {
-                let mut record = record.iter()
+                let mut record = displayed_fields.iter()
+                    .flat_map(|&id| record.get(id).map(|val| (id, val)))
                     .map(|(key_id, value)| {
                         let key = fields_ids_map.name(key_id).unwrap().to_owned();
                         // TODO we must deserialize a Json Value and highlight it.
