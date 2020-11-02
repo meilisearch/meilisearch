@@ -1,11 +1,12 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs::{File, create_dir_all};
-use std::{mem, io};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
+use std::{mem, io};
 
 use askama_warp::Template;
 use flate2::read::GzDecoder;
@@ -14,7 +15,7 @@ use futures::{FutureExt, StreamExt};
 use grenad::CompressionType;
 use heed::EnvOpenOptions;
 use indexmap::IndexMap;
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, Deserializer};
 use structopt::StructOpt;
 use tokio::fs::File as TFile;
 use tokio::io::AsyncWriteExt;
@@ -159,6 +160,7 @@ enum UpdateStatus<M, P, N> {
 enum UpdateMeta {
     DocumentsAddition { method: String, format: String },
     ClearDocuments,
+    Settings(Settings),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +170,24 @@ enum UpdateMetaProgress {
         processed_number_of_documents: usize,
         total_number_of_documents: Option<usize>,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Settings {
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none",
+    )]
+    displayed_attributes: Option<Option<Vec<String>>>,
+}
+
+// Any value that is present is considered Some value, including null.
+fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where T: Deserialize<'de>,
+      D: Deserializer<'de>
+{
+    Deserialize::deserialize(deserializer).map(Some)
 }
 
 pub fn run(opt: Opt) -> anyhow::Result<()> {
@@ -262,6 +282,24 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                     // We must use the write transaction of the update here.
                     let mut wtxn = index_cloned.write_txn()?;
                     let builder = update_builder.clear_documents(&mut wtxn, &index_cloned);
+
+                    match builder.execute() {
+                        Ok(_count) => wtxn.commit().map_err(Into::into),
+                        Err(e) => Err(e.into())
+                    }
+                },
+                UpdateMeta::Settings(settings) => {
+                    // We must use the write transaction of the update here.
+                    let mut wtxn = index_cloned.write_txn()?;
+                    let mut builder = update_builder.settings(&mut wtxn, &index_cloned);
+
+                    // We transpose the settings JSON struct into a real setting update.
+                    if let Some(names) = settings.displayed_attributes {
+                        match names {
+                            Some(names) => builder.set_displayed_fields(names),
+                            None => builder.reset_displayed_fields(),
+                        }
+                    }
 
                     match builder.execute() {
                         Ok(_count) => wtxn.commit().map_err(Into::into),
@@ -440,9 +478,14 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
             let mut documents = Vec::new();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let displayed_fields = match index.displayed_fields(&rtxn).unwrap() {
+                Some(fields) => Cow::Borrowed(fields),
+                None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
+            };
 
             for (_id, record) in index.documents(&rtxn, documents_ids).unwrap() {
-                let mut record = record.iter()
+                let mut record = displayed_fields.iter()
+                    .flat_map(|&id| record.get(id).map(|val| (id, val)))
                     .map(|(key_id, value)| {
                         let key = fields_ids_map.name(key_id).unwrap().to_owned();
                         // TODO we must deserialize a Json Value and highlight it.
@@ -510,7 +553,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_route_csv = warp::filters::method::post()
+    let indexing_csv_route = warp::filters::method::post()
         .and(warp::path!("documents"))
         .and(warp::header::exact_ignore_case("content-type", "text/csv"))
         .and(warp::filters::query::query())
@@ -527,7 +570,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_route_json = warp::filters::method::post()
+    let indexing_json_route = warp::filters::method::post()
         .and(warp::path!("documents"))
         .and(warp::header::exact_ignore_case("content-type", "application/json"))
         .and(warp::filters::query::query())
@@ -544,7 +587,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_route_json_stream = warp::filters::method::post()
+    let indexing_json_stream_route = warp::filters::method::post()
         .and(warp::path!("documents"))
         .and(warp::header::exact_ignore_case("content-type", "application/x-ndjson"))
         .and(warp::filters::query::query())
@@ -559,12 +602,26 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             )
         });
 
+    let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
     let clearing_route = warp::filters::method::post()
         .and(warp::path!("clear-documents"))
         .map(move || {
             let meta = UpdateMeta::ClearDocuments;
-            let update_id = update_store.register_update(&meta, &[]).unwrap();
+            let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
+            let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
+            eprintln!("update {} registered", update_id);
+            Ok(warp::reply())
+        });
+
+    let update_store_cloned = update_store.clone();
+    let update_status_sender_cloned = update_status_sender.clone();
+    let change_settings_route = warp::filters::method::post()
+        .and(warp::path!("settings"))
+        .and(warp::body::json())
+        .map(move |settings: Settings| {
+            let meta = UpdateMeta::Settings(settings);
+            let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
             let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
             eprintln!("update {} registered", update_id);
             Ok(warp::reply())
@@ -612,10 +669,11 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .or(dash_logo_white_route)
         .or(dash_logo_black_route)
         .or(query_route)
-        .or(indexing_route_csv)
-        .or(indexing_route_json)
-        .or(indexing_route_json_stream)
+        .or(indexing_csv_route)
+        .or(indexing_json_route)
+        .or(indexing_json_stream_route)
         .or(clearing_route)
+        .or(change_settings_route)
         .or(update_ws_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;
