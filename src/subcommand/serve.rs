@@ -516,7 +516,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_route_csv = warp::filters::method::post()
+    let indexing_csv_route = warp::filters::method::post()
         .and(warp::path!("documents"))
         .and(warp::header::exact_ignore_case("content-type", "text/csv"))
         .and(warp::filters::query::query())
@@ -533,7 +533,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_route_json = warp::filters::method::post()
+    let indexing_json_route = warp::filters::method::post()
         .and(warp::path!("documents"))
         .and(warp::header::exact_ignore_case("content-type", "application/json"))
         .and(warp::filters::query::query())
@@ -550,7 +550,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_route_json_stream = warp::filters::method::post()
+    let indexing_json_stream_route = warp::filters::method::post()
         .and(warp::path!("documents"))
         .and(warp::header::exact_ignore_case("content-type", "application/x-ndjson"))
         .and(warp::filters::query::query())
@@ -565,6 +565,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             )
         });
 
+    let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
     let clearing_route = warp::filters::method::post()
         .and(warp::path!("clear-documents"))
@@ -618,10 +619,11 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .or(dash_logo_white_route)
         .or(dash_logo_black_route)
         .or(query_route)
-        .or(indexing_route_csv)
-        .or(indexing_route_json)
-        .or(indexing_route_json_stream)
+        .or(indexing_csv_route)
+        .or(indexing_json_route)
+        .or(indexing_json_stream_route)
         .or(clearing_route)
+        .or(change_settings_route)
         .or(update_ws_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;
