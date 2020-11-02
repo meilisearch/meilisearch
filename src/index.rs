@@ -14,6 +14,7 @@ use crate::{
     BoRoaringBitmapCodec, CboRoaringBitmapCodec,
 };
 
+pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const PRIMARY_KEY_KEY: &str = "primary-key";
@@ -124,6 +125,24 @@ impl Index {
     /// (i.e. `u8`), this field id is used to identify fields in the obkv documents.
     pub fn fields_ids_map(&self, rtxn: &heed::RoTxn) -> heed::Result<FieldsIdsMap> {
         Ok(self.main.get::<_, Str, SerdeJson<FieldsIdsMap>>(rtxn, FIELDS_IDS_MAP_KEY)?.unwrap_or_default())
+    }
+
+    /// Writes the fields ids that must be displayed in the defined order.
+    /// There must be not be any duplicate field id.
+    pub fn put_displayed_fields(&self, wtxn: &mut heed::RwTxn, fields: &[u8]) -> heed::Result<()> {
+        self.main.put::<_, Str, ByteSlice>(wtxn, DISPLAYED_FIELDS_KEY, fields)
+    }
+
+    /// Deletes the displayed fields ids, this will make the engine to display
+    /// all the documents attributes in the order of the `FieldsIdsMap`.
+    pub fn delete_displayed_fields(&self, wtxn: &mut heed::RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, DISPLAYED_FIELDS_KEY)
+    }
+
+    /// Returns the displayed fields ids in the order they must be returned. If it returns
+    /// `None` it means that all the attributes are displayed in the order of the `FieldsIdsMap`.
+    pub fn displayed_fields<'t>(&self, rtxn: &'t heed::RoTxn) -> heed::Result<Option<&'t [u8]>> {
+        self.main.get::<_, Str, ByteSlice>(rtxn, DISPLAYED_FIELDS_KEY)
     }
 
     /// Writes the FST which is the words dictionnary of the engine.
