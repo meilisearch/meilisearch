@@ -15,6 +15,8 @@ use futures::{FutureExt, StreamExt};
 use grenad::CompressionType;
 use heed::EnvOpenOptions;
 use indexmap::IndexMap;
+use once_cell::sync::OnceCell;
+use rayon::ThreadPool;
 use serde::{Serialize, Deserialize, Deserializer};
 use structopt::StructOpt;
 use tokio::fs::File as TFile;
@@ -26,6 +28,8 @@ use warp::{Filter, http::Response};
 use crate::tokenizer::{simple_tokenizer, TokenType};
 use crate::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
 use crate::{Index, UpdateStore, SearchResult};
+
+static GLOBAL_THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
 #[derive(Debug, StructOpt)]
 /// The HTTP main server of the milli project.
@@ -201,6 +205,11 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
     let mut options = EnvOpenOptions::new();
     options.map_size(opt.database_size);
 
+    // Setup the global thread pool
+    let jobs = opt.indexer.indexing_jobs.unwrap_or(0);
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs).build()?;
+    GLOBAL_THREAD_POOL.set(pool).unwrap();
+
     // Open the LMDB database.
     let index = Index::new(options, &opt.database)?;
 
@@ -227,9 +236,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             if let Some(chunk_compression_level) = indexer_opt_cloned.chunk_compression_level {
                 update_builder.chunk_compression_level(chunk_compression_level);
             }
-            if let Some(indexing_jobs) = indexer_opt_cloned.indexing_jobs {
-                update_builder.indexing_jobs(indexing_jobs);
-            }
+            update_builder.thread_pool(GLOBAL_THREAD_POOL.get().unwrap());
             update_builder.log_every_n(indexer_opt_cloned.log_every_n);
             update_builder.max_memory(indexer_opt_cloned.max_memory);
             update_builder.linked_hash_map_size(indexer_opt_cloned.linked_hash_map_size);

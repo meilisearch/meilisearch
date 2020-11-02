@@ -10,6 +10,7 @@ use grenad::{Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
 use heed::types::ByteSlice;
 use log::{debug, info, error};
 use rayon::prelude::*;
+use rayon::ThreadPool;
 use crate::index::Index;
 use self::store::Store;
 use self::merge_function::{
@@ -191,7 +192,7 @@ pub enum UpdateFormat {
     JsonStream,
 }
 
-pub struct IndexDocuments<'t, 'u, 'i> {
+pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
     pub(crate) log_every_n: Option<usize>,
@@ -201,14 +202,14 @@ pub struct IndexDocuments<'t, 'u, 'i> {
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) chunk_fusing_shrink_size: Option<u64>,
-    pub(crate) indexing_jobs: Option<usize>,
+    pub(crate) thread_pool: Option<&'a ThreadPool>,
     update_method: IndexDocumentsMethod,
     update_format: UpdateFormat,
     autogenerate_docids: bool,
 }
 
-impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> IndexDocuments<'t, 'u, 'i> {
+impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
+    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> IndexDocuments<'t, 'u, 'i, 'a> {
         IndexDocuments {
             wtxn,
             index,
@@ -219,7 +220,7 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             chunk_fusing_shrink_size: None,
-            indexing_jobs: None,
+            thread_pool: None,
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             update_format: UpdateFormat::Json,
             autogenerate_docids: true,
@@ -288,7 +289,7 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
                 chunk_compression_type: self.chunk_compression_type,
                 chunk_compression_level: self.chunk_compression_level,
                 chunk_fusing_shrink_size: self.chunk_fusing_shrink_size,
-                indexing_jobs: self.indexing_jobs,
+                thread_pool: self.thread_pool,
             };
             let mut deletion_builder = update_builder.delete_documents(self.wtxn, self.index)?;
             deletion_builder.delete_documents(&replaced_documents_ids);
@@ -323,8 +324,16 @@ impl<'t, 'u, 'i> IndexDocuments<'t, 'u, 'i> {
         let log_every_n = self.log_every_n;
         let chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
 
-        let jobs = self.indexing_jobs.unwrap_or(0);
-        let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs).build()?;
+        let backup_pool;
+        let pool = match self.thread_pool {
+            Some(pool) => pool,
+            None => {
+                // We initialize a bakcup pool with the default
+                // settings if none have already been set.
+                backup_pool = rayon::ThreadPoolBuilder::new().build()?;
+                &backup_pool
+            },
+        };
 
         let (receiver, docid_word_positions_readers, documents_readers) = pool.install(|| {
             let num_threads = rayon::current_num_threads();

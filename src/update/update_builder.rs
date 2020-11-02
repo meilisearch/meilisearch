@@ -1,9 +1,10 @@
 use grenad::CompressionType;
+use rayon::ThreadPool;
 
 use crate::Index;
 use super::{ClearDocuments, DeleteDocuments, IndexDocuments, Settings};
 
-pub struct UpdateBuilder {
+pub struct UpdateBuilder<'a> {
     pub(crate) log_every_n: Option<usize>,
     pub(crate) max_nb_chunks: Option<usize>,
     pub(crate) max_memory: Option<usize>,
@@ -11,11 +12,11 @@ pub struct UpdateBuilder {
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) chunk_fusing_shrink_size: Option<u64>,
-    pub(crate) indexing_jobs: Option<usize>,
+    pub(crate) thread_pool: Option<&'a ThreadPool>,
 }
 
-impl UpdateBuilder {
-    pub fn new() -> UpdateBuilder {
+impl<'a> UpdateBuilder<'a> {
+    pub fn new() -> UpdateBuilder<'a> {
         UpdateBuilder {
             log_every_n: None,
             max_nb_chunks: None,
@@ -24,7 +25,7 @@ impl UpdateBuilder {
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             chunk_fusing_shrink_size: None,
-            indexing_jobs: None,
+            thread_pool: None,
         }
     }
 
@@ -56,8 +57,8 @@ impl UpdateBuilder {
         self.chunk_fusing_shrink_size = Some(chunk_fusing_shrink_size);
     }
 
-    pub fn indexing_jobs(&mut self, indexing_jobs: usize) {
-        self.indexing_jobs = Some(indexing_jobs);
+    pub fn thread_pool(&mut self, thread_pool: &'a ThreadPool) {
+        self.thread_pool = Some(thread_pool);
     }
 
     pub fn clear_documents<'t, 'u, 'i>(
@@ -82,7 +83,7 @@ impl UpdateBuilder {
         self,
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
-    ) -> IndexDocuments<'t, 'u, 'i>
+    ) -> IndexDocuments<'t, 'u, 'i, 'a>
     {
         let mut builder = IndexDocuments::new(wtxn, index);
 
@@ -93,7 +94,7 @@ impl UpdateBuilder {
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
-        builder.indexing_jobs = self.indexing_jobs;
+        builder.thread_pool = self.thread_pool;
 
         builder
     }
