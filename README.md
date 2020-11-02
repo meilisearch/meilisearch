@@ -2,7 +2,7 @@
   <img alt="the milli logo" src="public/logo-black.svg">
 </p>
 
-<p align="center">A concurrent indexer combined with fast and relevant search algorithms.</p>
+<p align="center">a concurrent indexer combined with fast and relevant search algorithms</p>
 
 ## Introduction
 
@@ -10,46 +10,33 @@ This engine is a prototype, do not use it in production.
 This is one of the most advanced search engine I have worked on.
 It currently only supports the proximity criterion.
 
-### Compile all the binaries
+### Compile and Run the server
+
+You can specify the number of threads to use to index documents and many other settings too.
 
 ```bash
-cargo build --release --bins
+cargo run --release -- serve --db my-database.mdb -vvv --indexing-jobs 8
 ```
-
-## Indexing
-
-It can index mass documents in no much time, I already achieved to index:
- - 109m songs (song and artist name) in 21min and take 29GB on disk.
- - 12m cities (name, timezone and country ID) in 3min13s and take 3.3GB on disk.
-
-All of that on a 39$/month machine with 4cores.
 
 ### Index your documents
 
-You can feed the engine with your CSV data:
+It can index a massive amount of documents in not much time, I already achieved to index:
+ - 115m songs (song and artist name) in ~1h and take 107GB on disk.
+ - 12m cities (name, timezone and country ID) in 15min and take 10GB on disk.
+
+All of that on a 39$/month machine with 4cores.
+
+You can feed the engine with your CSV (comma-seperated, yes) data like this:
 
 ```bash
-./target/release/indexer --db my-data.mmdb ../my-data.csv
+cat "name,age\nhello,32\nkiki,24\n" | http POST 127.0.0.1:9700/documents content-type:text/csv
 ```
 
-## Querying
+Here ids will be automatically generated as UUID v4 if they doesn't exist in some or every documents.
 
-The engine is designed to handle very frequent words like any other word frequency.
-This is why you can search for "asia dubai" (the most common timezone) in the countries datasets in no time (59ms) even with 12m documents.
+Note that it also support JSON and JSON streaming, you can send them to the engine by using
+the `content-type:application/json` and `content-type:application/x-ndjson` headers respectively.
 
-We haven't modified the algorithm to handle queries that are scattered over multiple attributes, this is an open issue (#4).
+### Querying the engine via the website
 
-### Exposing a website to request the database
-
-Once you've indexed the dataset you will be able to access it with your brwoser.
-
-```bash
-./target/release/serve -l 0.0.0.0:8700 --db my-data.mmdb
-```
-
-## Gaps
-
-There is many ways to make the engine search for too long and consume too much CPU.
-This can for example be achieved by querying the engine for "the best of the do" on the songs and subreddits datasets.
-
-There is plenty of way to improve the algorithms and there is and will be new issues explaining potential improvements.
+You can query the engine by going to [the HTML page itself](http://127.0.0.1:9700).
