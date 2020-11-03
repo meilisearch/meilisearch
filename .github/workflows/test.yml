@@ -1,10 +1,10 @@
+name: Continuous integration
+
 on:
   push:
-    branches:
-      - staging
-      - trying
-
-name: Continuous integration
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
 jobs:
   ci:
