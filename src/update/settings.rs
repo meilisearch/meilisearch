@@ -69,34 +69,50 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
             let result = match value {
                 Some(fields_names) => {
-                    // We create or generate the fields ids corresponding to those names.
-                    let mut fields_ids_map = FieldsIdsMap::new();
-                    let mut searchable_fields = Vec::new();
-                    for name in fields_names {
-                        let id = fields_ids_map.insert(&name).context("field id limit reached")?;
-                        searchable_fields.push(id);
+                    let mut fields_ids_map = current_fields_ids_map.clone();
+                    let searchable_fields: Vec<_> =
+                        fields_names.iter()
+                            .map(|name| fields_ids_map.insert(name))
+                            .collect::<Option<Vec<_>>>()
+                            .context("field id limit reached")?;
+
+                    // If the searchable fields are ordered we don't have to generate a new `FieldsIdsMap`.
+                    if searchable_fields.windows(2).all(|win| win[0] < win[1]) {
+                        (
+                            fields_ids_map,
+                            Some(searchable_fields),
+                            current_displayed_fields.map(ToOwned::to_owned),
+                        )
+                    } else {
+                        // We create or generate the fields ids corresponding to those names.
+                        let mut fields_ids_map = FieldsIdsMap::new();
+                        let mut searchable_fields = Vec::new();
+                        for name in fields_names {
+                            let id = fields_ids_map.insert(&name).context("field id limit reached")?;
+                            searchable_fields.push(id);
+                        }
+
+                        // We complete the new FieldsIdsMap with the previous names.
+                        for (_id, name) in current_fields_ids_map.iter() {
+                            fields_ids_map.insert(name).context("field id limit reached")?;
+                        }
+
+                        // We must also update the displayed fields according to the new `FieldsIdsMap`.
+                        let displayed_fields = match current_displayed_fields {
+                            Some(fields) => {
+                                let mut displayed_fields = Vec::new();
+                                for id in fields {
+                                    let name = current_fields_ids_map.name(*id).unwrap();
+                                    let id = fields_ids_map.id(name).context("field id limit reached")?;
+                                    displayed_fields.push(id);
+                                }
+                                Some(displayed_fields)
+                            },
+                            None => None,
+                        };
+
+                        (fields_ids_map, Some(searchable_fields), displayed_fields)
                     }
-
-                    // We complete the new FieldsIdsMap with the previous names.
-                    for (_id, name) in current_fields_ids_map.iter() {
-                        fields_ids_map.insert(name).context("field id limit reached")?;
-                    }
-
-                    // We must also update the displayed fields according to the new `FieldsIdsMap`.
-                    let displayed_fields = match current_displayed_fields {
-                        Some(fields) => {
-                            let mut displayed_fields = Vec::new();
-                            for id in fields {
-                                let name = current_fields_ids_map.name(*id).unwrap();
-                                let id = fields_ids_map.id(name).context("field id limit reached")?;
-                                displayed_fields.push(id);
-                            }
-                            Some(displayed_fields)
-                        },
-                        None => None,
-                    };
-
-                    (fields_ids_map, Some(searchable_fields), displayed_fields)
                 },
                 None => (
                     current_fields_ids_map.clone(),
