@@ -204,6 +204,109 @@ mod tests {
     use heed::EnvOpenOptions;
 
     #[test]
+    fn set_and_reset_searchable_fields() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with ids from 1 to 3.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // We change the searchable fields to be the "name" field only.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.set_searchable_fields(vec!["name".into()]);
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that the searchable field is correctly set to "name" only.
+        let rtxn = index.read_txn().unwrap();
+        // When we search for something that is not in
+        // the searchable fields it must not return any document.
+        let result = index.search(&rtxn).query("23").execute().unwrap();
+        assert!(result.documents_ids.is_empty());
+
+        // When we search for something that is in the searchable fields
+        // we must find the appropriate document.
+        let result = index.search(&rtxn).query(r#""kevin""#).execute().unwrap();
+        let documents = index.documents(&rtxn, result.documents_ids).unwrap();
+        assert_eq!(documents.len(), 1);
+        assert_eq!(documents[0].1.get(0), Some(&br#""kevin""#[..]));
+        drop(rtxn);
+
+        // We change the searchable fields to be the "name" field only.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.reset_searchable_fields();
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that the searchable field have been reset and documents are found now.
+        let rtxn = index.read_txn().unwrap();
+        let searchable_fields = index.searchable_fields(&rtxn).unwrap();
+        assert_eq!(searchable_fields, None);
+        let result = index.search(&rtxn).query("23").execute().unwrap();
+        assert_eq!(result.documents_ids.len(), 1);
+        let documents = index.documents(&rtxn, result.documents_ids).unwrap();
+        assert_eq!(documents[0].1.get(0), Some(&br#""kevin""#[..]));
+        drop(rtxn);
+    }
+
+    #[test]
+    fn mixup_searchable_with_displayed_fields() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with ids from 1 to 3.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // In the same transaction we change the displayed fields to be only the "age".
+        // We also change the searchable fields to be the "name" field only.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.set_displayed_fields(vec!["age".into()]);
+        builder.set_searchable_fields(vec!["name".into()]);
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that the displayed fields are correctly set to `None` (default value).
+        let rtxn = index.read_txn().unwrap();
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let fields_ids = index.displayed_fields(&rtxn).unwrap();
+        let age_id = fields_ids_map.id("age").unwrap();
+        assert_eq!(fields_ids, Some(&[age_id][..]));
+        drop(rtxn);
+
+        // We change the searchable fields to be the "name" field only.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.reset_searchable_fields();
+        builder.execute(|_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that the displayed fields always contains only the "age" field.
+        let rtxn = index.read_txn().unwrap();
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let fields_ids = index.displayed_fields(&rtxn).unwrap();
+        let age_id = fields_ids_map.id("age").unwrap();
+        assert_eq!(fields_ids, Some(&[age_id][..]));
+        drop(rtxn);
+    }
+
+    #[test]
     fn default_displayed_fields() {
         let path = tempfile::tempdir().unwrap();
         let mut options = EnvOpenOptions::new();
