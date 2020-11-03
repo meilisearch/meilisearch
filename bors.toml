@@ -1,3 +1,0 @@
-status = ["ci (stable)"]
-# 4 hours timeout
-timeout-sec = 14400
