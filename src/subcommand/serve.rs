@@ -184,6 +184,13 @@ struct Settings {
         skip_serializing_if = "Option::is_none",
     )]
     displayed_attributes: Option<Option<Vec<String>>>,
+
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none",
+    )]
+    searchable_attributes: Option<Option<Vec<String>>>,
 }
 
 // Any value that is present is considered Some value, including null.
@@ -299,6 +306,14 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                     // We must use the write transaction of the update here.
                     let mut wtxn = index_cloned.write_txn()?;
                     let mut builder = update_builder.settings(&mut wtxn, &index_cloned);
+
+                    // We transpose the settings JSON struct into a real setting update.
+                    if let Some(names) = settings.searchable_attributes {
+                        match names {
+                            Some(names) => builder.set_searchable_fields(names),
+                            None => builder.reset_searchable_fields(),
+                        }
+                    }
 
                     // We transpose the settings JSON struct into a real setting update.
                     if let Some(names) = settings.displayed_attributes {
