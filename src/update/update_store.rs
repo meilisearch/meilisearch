@@ -220,6 +220,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn long_running_update() {
         let dir = tempfile::tempdir().unwrap();
         let options = EnvOpenOptions::new();
