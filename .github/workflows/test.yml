@@ -39,12 +39,12 @@ jobs:
           command: bench
           args: --no-run
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+      # - uses: actions-rs/cargo@v1
+      #   with:
+      #     command: fmt
+      #     args: -- --check
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets -- -D warnings
+      # - uses: actions-rs/cargo@v1
+      #   with:
+      #     command: clippy
+      #     args: --all-targets -- -D warnings
