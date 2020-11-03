@@ -308,7 +308,17 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                         }
                     }
 
-                    match builder.execute() {
+                    let result = builder.execute(|count, total| {
+                        let _ = update_status_sender_cloned.send(UpdateStatus::Progressing {
+                            update_id,
+                            meta: UpdateMetaProgress::DocumentsAddition {
+                                processed_number_of_documents: count,
+                                total_number_of_documents: Some(total),
+                            }
+                        });
+                    });
+
+                    match result {
                         Ok(_count) => wtxn.commit().map_err(Into::into),
                         Err(e) => Err(e.into())
                     }

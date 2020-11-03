@@ -9,8 +9,10 @@ use bstr::ByteSlice as _;
 use grenad::{Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
 use heed::types::ByteSlice;
 use log::{debug, info, error};
+use memmap::Mmap;
 use rayon::prelude::*;
 use rayon::ThreadPool;
+
 use crate::index::Index;
 use self::store::Store;
 use self::merge_function::{
@@ -248,7 +250,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         R: io::Read,
         F: Fn(usize, usize) + Sync,
     {
-        let before_indexing = Instant::now();
+        let before_transform = Instant::now();
 
         let transform = Transform {
             rtxn: &self.wtxn,
@@ -267,6 +269,17 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             UpdateFormat::Json => transform.from_json(reader)?,
             UpdateFormat::JsonStream => transform.from_json_stream(reader)?,
         };
+
+        info!("Update transformed in {:.02?}", before_transform.elapsed());
+
+        self.execute_raw(output, progress_callback)
+    }
+
+    pub fn execute_raw<F>(self, output: TransformOutput, progress_callback: F) -> anyhow::Result<()>
+    where
+        F: Fn(usize, usize) + Sync
+    {
+        let before_indexing = Instant::now();
 
         let TransformOutput {
             primary_key,
@@ -296,16 +309,14 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             let _deleted_documents_count = deletion_builder.execute()?;
         }
 
-        let mmap = if documents_count == 0 {
-            None
+        let mmap;
+        let bytes = if documents_count == 0 {
+            &[][..]
         } else {
-            let mmap = unsafe {
-                memmap::Mmap::map(&documents_file).context("mmaping the transform documents file")?
-            };
-            Some(mmap)
+            mmap = unsafe { Mmap::map(&documents_file).context("mmaping the transform documents file")? };
+            &mmap
         };
 
-        let bytes = mmap.as_ref().map(AsRef::as_ref).unwrap_or_default();
         let documents = grenad::Reader::new(bytes).unwrap();
 
         // The enum which indicates the type of the readers
@@ -492,7 +503,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             }
         }
 
-        info!("Update processed in {:.02?}", before_indexing.elapsed());
+        info!("Transform output indexed in {:.02?}", before_indexing.elapsed());
 
         Ok(())
     }

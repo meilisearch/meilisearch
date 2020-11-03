@@ -404,6 +404,59 @@ impl Transform<'_, '_> {
             documents_file,
         })
     }
+
+    /// Returns a `TransformOutput` with a file that contains the documents of the index
+    /// with the attributes reordered accordingly to the `FieldsIdsMap` given as argument.
+    // TODO this can be done in parallel by using the rayon `ThreadPool`.
+    pub fn remap_index_documents(
+        self,
+        primary_key: u8,
+        fields_ids_map: FieldsIdsMap,
+    ) -> anyhow::Result<TransformOutput>
+    {
+        let current_fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
+        let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn)?;
+        let documents_ids = self.index.documents_ids(self.rtxn)?;
+        let documents_count = documents_ids.len() as usize;
+
+        // We create a final writer to write the new documents in order from the sorter.
+        let file = tempfile::tempfile()?;
+        let mut writer = create_writer(self.chunk_compression_type, self.chunk_compression_level, file)?;
+
+        let mut obkv_buffer = Vec::new();
+        for result in self.index.documents.iter(self.rtxn)? {
+            let (docid, obkv) = result?;
+            let docid = docid.get();
+
+            obkv_buffer.clear();
+            let mut obkv_writer = obkv::KvWriter::new(&mut obkv_buffer);
+
+            // We iterate over the new `FieldsIdsMap` ids in order and construct the new obkv.
+            for (id, name) in fields_ids_map.iter() {
+                if let Some(val) = current_fields_ids_map.id(name).and_then(|id| obkv.get(id)) {
+                    obkv_writer.insert(id, val)?;
+                }
+            }
+
+            let buffer = obkv_writer.into_inner()?;
+            writer.insert(docid.to_be_bytes(), buffer)?;
+        }
+
+        // Once we have written all the documents, we extract
+        // the file and reset the seek to be able to read it again.
+        let mut documents_file = writer.into_inner()?;
+        documents_file.seek(SeekFrom::Start(0))?;
+
+        Ok(TransformOutput {
+            primary_key,
+            fields_ids_map,
+            users_ids_documents_ids: users_ids_documents_ids.map_data(Cow::into_owned)?,
+            new_documents_ids: documents_ids,
+            replaced_documents_ids: RoaringBitmap::default(),
+            documents_count,
+            documents_file,
+        })
+    }
 }
 
 /// Only the last value associated with an id is kept.
