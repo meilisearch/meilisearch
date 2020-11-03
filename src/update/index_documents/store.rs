@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
 use std::iter::FromIterator;
@@ -37,6 +37,9 @@ pub struct Readers {
 }
 
 pub struct Store {
+    // Indexing parameters
+    searchable_fields: HashSet<u8>,
+    // Caches
     word_docids: LinkedHashMap<SmallVec32<u8>, RoaringBitmap>,
     word_docids_limit: usize,
     words_pairs_proximities_docids: LinkedHashMap<(SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap>,
@@ -56,6 +59,7 @@ pub struct Store {
 
 impl Store {
     pub fn new(
+        searchable_fields: HashSet<u8>,
         linked_hash_map_size: Option<usize>,
         max_nb_chunks: Option<usize>,
         max_memory: Option<usize>,
@@ -101,18 +105,22 @@ impl Store {
         })?;
 
         Ok(Store {
+            // Indexing parameters.
+            searchable_fields,
+            // Caches
             word_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
             word_docids_limit: linked_hash_map_size,
             words_pairs_proximities_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
             words_pairs_proximities_docids_limit: linked_hash_map_size,
+            // MTBL parameters
             chunk_compression_type,
             chunk_compression_level,
             chunk_fusing_shrink_size,
-
+            // MTBL sorters
             main_sorter,
             word_docids_sorter,
             words_pairs_proximities_docids_sorter,
-
+            // MTBL writers
             docid_word_positions_writer,
             documents_writer,
         })
@@ -309,23 +317,25 @@ impl Store {
                 }
 
                 for (attr, content) in document.iter() {
-                    use serde_json::Value;
-                    let content: Cow<str> = match serde_json::from_slice(content) {
-                        Ok(string) => string,
-                        Err(_) => match serde_json::from_slice(content)? {
-                            Value::Null => continue,
-                            Value::Bool(boolean) => Cow::Owned(boolean.to_string()),
-                            Value::Number(number) => Cow::Owned(number.to_string()),
-                            Value::String(string) => Cow::Owned(string),
-                            Value::Array(_array) => continue,
-                            Value::Object(_object) => continue,
-                        }
-                    };
+                    if self.searchable_fields.contains(&attr) {
+                        use serde_json::Value;
+                        let content: Cow<str> = match serde_json::from_slice(content) {
+                            Ok(string) => string,
+                            Err(_) => match serde_json::from_slice(content)? {
+                                Value::Null => continue,
+                                Value::Bool(boolean) => Cow::Owned(boolean.to_string()),
+                                Value::Number(number) => Cow::Owned(number.to_string()),
+                                Value::String(string) => Cow::Owned(string),
+                                Value::Array(_array) => continue,
+                                Value::Object(_object) => continue,
+                            }
+                        };
 
-                    for (pos, token) in simple_tokenizer(&content).filter_map(only_token).enumerate().take(MAX_POSITION) {
-                        let word = token.to_lowercase();
-                        let position = (attr as usize * MAX_POSITION + pos) as u32;
-                        words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
+                        for (pos, token) in simple_tokenizer(&content).filter_map(only_token).enumerate().take(MAX_POSITION) {
+                            let word = token.to_lowercase();
+                            let position = (attr as usize * MAX_POSITION + pos) as u32;
+                            words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
+                        }
                     }
                 }
 

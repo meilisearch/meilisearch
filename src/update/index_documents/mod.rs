@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Seek, SeekFrom};
 use std::sync::mpsc::sync_channel;
@@ -327,6 +328,11 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             WordsPairsProximitiesDocids,
         }
 
+        let searchable_fields: HashSet<_> = match self.index.searchable_fields(self.wtxn)? {
+            Some(fields) => fields.iter().copied().collect(),
+            None => fields_ids_map.iter().map(|(id, _name)| id).collect(),
+        };
+
         let linked_hash_map_size = self.linked_hash_map_size;
         let max_nb_chunks = self.max_nb_chunks;
         let max_memory = self.max_memory;
@@ -354,6 +360,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 .enumerate()
                 .map(|(i, documents)| {
                     let store = Store::new(
+                        searchable_fields.clone(),
                         linked_hash_map_size,
                         max_nb_chunks,
                         max_memory_by_job,

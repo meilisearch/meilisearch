@@ -42,6 +42,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
     }
 
+    pub fn reset_searchable_fields(&mut self) {
+        self.searchable_fields = Some(None);
+    }
+
+    pub fn set_searchable_fields(&mut self, names: Vec<String>) {
+        self.searchable_fields = Some(Some(names));
+    }
+
     pub fn reset_displayed_fields(&mut self) {
         self.displayed_fields = Some(None);
     }
@@ -56,7 +64,6 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
     {
         // Check that the searchable attributes have been specified.
         if let Some(value) = self.searchable_fields {
-            let current_searchable_fields = self.index.searchable_fields(self.wtxn)?;
             let current_displayed_fields = self.index.displayed_fields(self.wtxn)?;
             let current_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
 
@@ -93,7 +100,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 },
                 None => (
                     current_fields_ids_map.clone(),
-                    current_searchable_fields.map(ToOwned::to_owned),
+                    None,
                     current_displayed_fields.map(ToOwned::to_owned),
                 ),
             };
