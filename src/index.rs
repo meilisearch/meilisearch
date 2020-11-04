@@ -18,6 +18,7 @@ pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const PRIMARY_KEY_KEY: &str = "primary-key";
+pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
 pub const USERS_IDS_DOCUMENTS_IDS_KEY: &str = "users-ids-documents-ids";
 pub const WORDS_FST_KEY: &str = "words-fst";
 
@@ -94,7 +95,7 @@ impl Index {
         self.main.put::<_, Str, OwnedType<u8>>(wtxn, PRIMARY_KEY_KEY, &primary_key)
     }
 
-    /// Delete the primary key of the documents, this can be done to reset indexes settings.
+    /// Deletes the primary key of the documents, this can be done to reset indexes settings.
     pub fn delete_primary_key(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
         self.main.delete::<_, Str>(wtxn, PRIMARY_KEY_KEY)
     }
@@ -153,6 +154,25 @@ impl Index {
     /// `None` it means that all the attributes are displayed in the order of the `FieldsIdsMap`.
     pub fn displayed_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t [u8]>> {
         self.main.get::<_, Str, ByteSlice>(rtxn, DISPLAYED_FIELDS_KEY)
+    }
+
+    /* searchable fields */
+
+    /// Writes the searchable fields, when this list is specified, only these are indexed.
+    pub fn put_searchable_fields(&self, wtxn: &mut RwTxn, fields: &[u8]) -> heed::Result<()> {
+        assert!(fields.windows(2).all(|win| win[0] < win[1])); // is sorted
+        self.main.put::<_, Str, ByteSlice>(wtxn, SEARCHABLE_FIELDS_KEY, fields)
+    }
+
+    /// Deletes the searchable fields, when no fields are specified, all fields are indexed.
+    pub fn delete_searchable_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, SEARCHABLE_FIELDS_KEY)
+    }
+
+    /// Returns the searchable fields ids, those are the fields that are indexed,
+    /// if the searchable fields aren't there it means that **all** the fields are indexed.
+    pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t [u8]>> {
+        self.main.get::<_, Str, ByteSlice>(rtxn, SEARCHABLE_FIELDS_KEY)
     }
 
     /* words fst */

@@ -184,6 +184,13 @@ struct Settings {
         skip_serializing_if = "Option::is_none",
     )]
     displayed_attributes: Option<Option<Vec<String>>>,
+
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none",
+    )]
+    searchable_attributes: Option<Option<Vec<String>>>,
 }
 
 // Any value that is present is considered Some value, including null.
@@ -301,6 +308,14 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                     let mut builder = update_builder.settings(&mut wtxn, &index_cloned);
 
                     // We transpose the settings JSON struct into a real setting update.
+                    if let Some(names) = settings.searchable_attributes {
+                        match names {
+                            Some(names) => builder.set_searchable_fields(names),
+                            None => builder.reset_searchable_fields(),
+                        }
+                    }
+
+                    // We transpose the settings JSON struct into a real setting update.
                     if let Some(names) = settings.displayed_attributes {
                         match names {
                             Some(names) => builder.set_displayed_fields(names),
@@ -308,7 +323,17 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
                         }
                     }
 
-                    match builder.execute() {
+                    let result = builder.execute(|count, total| {
+                        let _ = update_status_sender_cloned.send(UpdateStatus::Progressing {
+                            update_id,
+                            meta: UpdateMetaProgress::DocumentsAddition {
+                                processed_number_of_documents: count,
+                                total_number_of_documents: Some(total),
+                            }
+                        });
+                    });
+
+                    match result {
                         Ok(_count) => wtxn.commit().map_err(Into::into),
                         Err(e) => Err(e.into())
                     }

@@ -103,8 +103,19 @@ impl<'a> UpdateBuilder<'a> {
         self,
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
-    ) -> Settings<'t, 'u, 'i>
+    ) -> Settings<'a, 't, 'u, 'i>
     {
-        Settings::new(wtxn, index)
+        let mut builder = Settings::new(wtxn, index);
+
+        builder.log_every_n = self.log_every_n;
+        builder.max_nb_chunks = self.max_nb_chunks;
+        builder.max_memory = self.max_memory;
+        builder.linked_hash_map_size = self.linked_hash_map_size;
+        builder.chunk_compression_type = self.chunk_compression_type;
+        builder.chunk_compression_level = self.chunk_compression_level;
+        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+        builder.thread_pool = self.thread_pool;
+
+        builder
     }
 }
