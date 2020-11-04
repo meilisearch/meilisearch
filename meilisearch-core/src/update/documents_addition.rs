@@ -197,7 +197,6 @@ pub fn apply_addition<'a, 'b>(
                 documents_fields: index.documents_fields,
                 schema: &schema,
                 fields: None,
-                displayed: false,
             };
 
             let old_document = Option::<HashMap<String, Value>>::deserialize(&mut deserializer)?;
@@ -229,7 +228,7 @@ pub fn apply_addition<'a, 'b>(
     for (document_id, document) in &documents_additions {
         // For each key-value pair in the document.
         for (attribute, value) in document {
-            let field_id = schema.register_field(&attribute)?;
+            let field_id = schema.insert_and_index(&attribute)?;
             index_document(
                 writer,
                 index.documents_fields,
