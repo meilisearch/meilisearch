@@ -14,7 +14,9 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 
+use anyhow::Context;
 use fxhash::{FxHasher32, FxHasher64};
+use serde_json::{Map, Value};
 
 pub use self::criterion::{Criterion, default_criteria};
 pub use self::fields_ids_map::FieldsIdsMap;
@@ -38,3 +40,21 @@ pub type Attribute = u32;
 pub type Position = u32;
 
 type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> anyhow::Result<Vec<u8>>;
+
+/// Transform a raw obkv store into a JSON Object.
+pub fn obkv_to_json(
+    displayed_fields: &[u8],
+    fields_ids_map: &FieldsIdsMap,
+    obkv: obkv::KvReader,
+) -> anyhow::Result<Map<String, Value>>
+{
+    displayed_fields.iter()
+        .copied()
+        .flat_map(|id| obkv.get(id).map(|value| (id, value)))
+        .map(|(id, value)| {
+            let name = fields_ids_map.name(id).context("unknown obkv field id")?;
+            let value = serde_json::from_slice(value)?;
+            Ok((name.to_owned(), value))
+        })
+        .collect()
+}
