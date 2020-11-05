@@ -1,4 +1,11 @@
+# the milli project is a library
 /target
+/Cargo.lock
+
+# the sub target folder
+http-ui/target
+
+# datasets
 *.csv
 *.mmdb
 *.svg

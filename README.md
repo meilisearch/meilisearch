@@ -15,6 +15,7 @@ It currently only supports the proximity criterion.
 You can specify the number of threads to use to index documents and many other settings too.
 
 ```bash
+cd http-ui
 cargo run --release -- serve --db my-database.mdb -vvv --indexing-jobs 8
 ```
 

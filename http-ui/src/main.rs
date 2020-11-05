@@ -25,9 +25,9 @@ use tokio::sync::broadcast;
 use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
 
-use crate::tokenizer::{simple_tokenizer, TokenType};
-use crate::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
-use crate::{Index, UpdateStore, SearchResult};
+use milli::tokenizer::{simple_tokenizer, TokenType};
+use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
+use milli::{Index, UpdateStore, SearchResult};
 
 static GLOBAL_THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
@@ -201,7 +201,10 @@ where T: Deserialize<'de>,
     Deserialize::deserialize(deserializer).map(Some)
 }
 
-pub fn run(opt: Opt) -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let opt = Opt::from_args();
+
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)
@@ -429,63 +432,63 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .and(warp::path!("bulma.min.css"))
         .map(|| Response::builder()
             .header("content-type", "text/css; charset=utf-8")
-            .body(include_str!("../../public/bulma.min.css"))
+            .body(include_str!("../public/bulma.min.css"))
         );
 
     let dash_bulma_dark_route = warp::filters::method::get()
         .and(warp::path!("bulma-prefers-dark.min.css"))
         .map(|| Response::builder()
             .header("content-type", "text/css; charset=utf-8")
-            .body(include_str!("../../public/bulma-prefers-dark.min.css"))
+            .body(include_str!("../public/bulma-prefers-dark.min.css"))
         );
 
     let dash_style_route = warp::filters::method::get()
         .and(warp::path!("style.css"))
         .map(|| Response::builder()
             .header("content-type", "text/css; charset=utf-8")
-            .body(include_str!("../../public/style.css"))
+            .body(include_str!("../public/style.css"))
         );
 
     let dash_jquery_route = warp::filters::method::get()
         .and(warp::path!("jquery-3.4.1.min.js"))
         .map(|| Response::builder()
             .header("content-type", "application/javascript; charset=utf-8")
-            .body(include_str!("../../public/jquery-3.4.1.min.js"))
+            .body(include_str!("../public/jquery-3.4.1.min.js"))
         );
 
     let dash_filesize_route = warp::filters::method::get()
         .and(warp::path!("filesize.min.js"))
         .map(|| Response::builder()
             .header("content-type", "application/javascript; charset=utf-8")
-            .body(include_str!("../../public/filesize.min.js"))
+            .body(include_str!("../public/filesize.min.js"))
         );
 
     let dash_script_route = warp::filters::method::get()
         .and(warp::path!("script.js"))
         .map(|| Response::builder()
             .header("content-type", "application/javascript; charset=utf-8")
-            .body(include_str!("../../public/script.js"))
+            .body(include_str!("../public/script.js"))
         );
 
     let updates_script_route = warp::filters::method::get()
         .and(warp::path!("updates-script.js"))
         .map(|| Response::builder()
             .header("content-type", "application/javascript; charset=utf-8")
-            .body(include_str!("../../public/updates-script.js"))
+            .body(include_str!("../public/updates-script.js"))
         );
 
     let dash_logo_white_route = warp::filters::method::get()
         .and(warp::path!("logo-white.svg"))
         .map(|| Response::builder()
             .header("content-type", "image/svg+xml")
-            .body(include_str!("../../public/logo-white.svg"))
+            .body(include_str!("../public/logo-white.svg"))
         );
 
     let dash_logo_black_route = warp::filters::method::get()
         .and(warp::path!("logo-black.svg"))
         .map(|| Response::builder()
             .header("content-type", "image/svg+xml")
-            .body(include_str!("../../public/logo-black.svg"))
+            .body(include_str!("../public/logo-black.svg"))
         );
 
     #[derive(Deserialize)]
@@ -568,6 +571,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             UpdateFormat::Csv => String::from("csv"),
             UpdateFormat::Json => String::from("json"),
             UpdateFormat::JsonStream => String::from("json-stream"),
+            _ => panic!("Unknown update format"),
         };
 
         let meta = UpdateMeta::DocumentsAddition { method, format };
@@ -709,13 +713,5 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         .or(update_ws_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;
-    tokio::runtime::Builder::new()
-        .threaded_scheduler()
-        .enable_all()
-        .build()?
-        .block_on(async {
-            warp::serve(routes).run(addr).await
-        });
-
-    Ok(())
+    Ok(warp::serve(routes).run(addr).await)
 }
