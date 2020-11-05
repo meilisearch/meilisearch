@@ -731,7 +731,6 @@ dependencies = [
  "futures",
  "grenad",
  "heed",
- "indexmap",
  "log",
  "memmap",
  "milli",
