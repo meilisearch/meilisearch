@@ -901,4 +901,41 @@ mod tests {
         assert_eq!(count, 1);
         drop(rtxn);
     }
+
+    #[test]
+    fn complex_json_documents() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with an id for only one of them.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &br#"[
+            { "id": 0, "name": "kevin", "object": { "key1": "value1", "key2": "value2" } },
+            { "id": 1, "name": "kevina", "array": ["I", "am", "fine"] },
+            { "id": 2, "name": "benoit", "array_of_object": [{ "wow": "amazing" }] }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that there is 1 documents now.
+        let rtxn = index.read_txn().unwrap();
+
+        // Search for a sub object value
+        let result = index.search(&rtxn).query(r#""value2""#).execute().unwrap();
+        assert_eq!(result.documents_ids, vec![0]);
+
+        // Search for a sub array value
+        let result = index.search(&rtxn).query(r#""fine""#).execute().unwrap();
+        assert_eq!(result.documents_ids, vec![1]);
+
+        // Search for a sub array sub object key
+        let result = index.search(&rtxn).query(r#""wow""#).execute().unwrap();
+        assert_eq!(result.documents_ids, vec![2]);
+
+        drop(rtxn);
+    }
 }
