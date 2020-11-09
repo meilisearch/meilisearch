@@ -52,7 +52,16 @@ $(window).on('load', function () {
     if (status.type == "Progressing") {
       const id = 'update-' + status.update_id;
       const content = $(`#${id} .updateStatus.content`);
-      content.html('progressing... ' + JSON.stringify(status.meta));
+
+      let html;
+      let { type, processed_number_of_documents, total_number_of_documents } = status.meta;
+      if (type === 'DocumentsAddition' && processed_number_of_documents && total_number_of_documents) {
+        let progress = Math.round(processed_number_of_documents / total_number_of_documents * 100);
+        html = `<progress class="progress" title="${progress}%" value="${progress}" max="100"></progress>`;
+      } else {
+        html = `<progress class="progress" max="100"></progress>`;
+      }
+      content.html(html);
     }
 
     if (status.type == "Processed") {
