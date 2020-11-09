@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
@@ -17,7 +16,7 @@ use tempfile::tempfile;
 
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::tokenizer::{simple_tokenizer, only_token};
-use crate::{SmallVec32, Position, DocumentId};
+use crate::{json_to_string, SmallVec32, Position, DocumentId};
 
 use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
 use super::merge_function::{main_merge, word_docids_merge, words_pairs_proximities_docids_merge};
@@ -317,25 +316,21 @@ impl Store {
                 }
 
                 for (attr, content) in document.iter() {
-                    if self.searchable_fields.contains(&attr) {
-                        use serde_json::Value;
-                        let content: Cow<str> = match serde_json::from_slice(content) {
-                            Ok(string) => string,
-                            Err(_) => match serde_json::from_slice(content)? {
-                                Value::Null => continue,
-                                Value::Bool(boolean) => Cow::Owned(boolean.to_string()),
-                                Value::Number(number) => Cow::Owned(number.to_string()),
-                                Value::String(string) => Cow::Owned(string),
-                                Value::Array(_array) => continue,
-                                Value::Object(_object) => continue,
-                            }
-                        };
+                    if !self.searchable_fields.contains(&attr) {
+                        continue;
+                    }
 
-                        for (pos, token) in simple_tokenizer(&content).filter_map(only_token).enumerate().take(MAX_POSITION) {
-                            let word = token.to_lowercase();
-                            let position = (attr as usize * MAX_POSITION + pos) as u32;
-                            words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
-                        }
+                    let value = serde_json::from_slice(content)?;
+                    let content = match json_to_string(value) {
+                        Some(content) => content,
+                        None => continue,
+                    };
+
+                    let tokens = simple_tokenizer(&content).filter_map(only_token);
+                    for (pos, token) in tokens.enumerate().take(MAX_POSITION) {
+                        let word = token.to_lowercase();
+                        let position = (attr as usize * MAX_POSITION + pos) as u32;
+                        words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
                     }
                 }
 

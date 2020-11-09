@@ -14,10 +14,10 @@ use futures::stream;
 use futures::{FutureExt, StreamExt};
 use grenad::CompressionType;
 use heed::EnvOpenOptions;
-use indexmap::IndexMap;
 use once_cell::sync::OnceCell;
 use rayon::ThreadPool;
 use serde::{Serialize, Deserialize, Deserializer};
+use serde_json::{Map, Value};
 use structopt::StructOpt;
 use tokio::fs::File as TFile;
 use tokio::io::AsyncWriteExt;
@@ -27,7 +27,7 @@ use warp::{Filter, http::Response};
 
 use milli::tokenizer::{simple_tokenizer, TokenType};
 use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
-use milli::{Index, UpdateStore, SearchResult};
+use milli::{obkv_to_json, Index, UpdateStore, SearchResult};
 
 static GLOBAL_THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
@@ -117,19 +117,49 @@ pub struct IndexerOpt {
     pub indexing_jobs: Option<usize>,
 }
 
-fn highlight_record(record: &mut IndexMap<String, String>, words: &HashSet<String>) {
-    for (_key, value) in record.iter_mut() {
-        let old_value = mem::take(value);
-        for (token_type, token) in simple_tokenizer(&old_value) {
-            if token_type == TokenType::Word {
-                let lowercase_token = token.to_lowercase();
-                let to_highlight = words.contains(&lowercase_token);
-                if to_highlight { value.push_str("<mark>") }
-                value.push_str(token);
-                if to_highlight { value.push_str("</mark>") }
-            } else {
-                value.push_str(token);
-            }
+fn highlight_record(
+    object: &mut Map<String, Value>,
+    words_to_highlight: &HashSet<String>,
+    attributes_to_highlight: &HashSet<String>,
+) {
+    // TODO do we need to create a string for element that are not and needs to be highlight?
+    fn highlight_value(value: Value, words_to_highlight: &HashSet<String>) -> Value {
+        match value {
+            Value::Null => Value::Null,
+            Value::Bool(boolean) => Value::Bool(boolean),
+            Value::Number(number) => Value::Number(number),
+            Value::String(old_string) => {
+                let mut string = String::new();
+                for (token_type, token) in simple_tokenizer(&old_string) {
+                    if token_type == TokenType::Word {
+                        let lowercase_token = token.to_lowercase();
+                        let to_highlight = words_to_highlight.contains(&lowercase_token);
+                        if to_highlight { string.push_str("<mark>") }
+                        string.push_str(token);
+                        if to_highlight { string.push_str("</mark>") }
+                    } else {
+                        string.push_str(token);
+                    }
+                }
+                Value::String(string)
+            },
+            Value::Array(values) => {
+                Value::Array(values.into_iter()
+                    .map(|v| highlight_value(v, words_to_highlight))
+                    .collect())
+            },
+            Value::Object(object) => {
+                Value::Object(object.into_iter()
+                    .map(|(k, v)| (k, highlight_value(v, words_to_highlight)))
+                    .collect())
+            },
+        }
+    }
+
+    for (key, value) in object.iter_mut() {
+        if attributes_to_highlight.contains(key) {
+            let old_value = mem::take(value);
+            *value = highlight_value(old_value, words_to_highlight);
         }
     }
 }
@@ -517,23 +547,18 @@ async fn main() -> anyhow::Result<()> {
                 Some(fields) => Cow::Borrowed(fields),
                 None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
             };
+            let attributes_to_highlight = match index.searchable_fields(&rtxn).unwrap() {
+                Some(fields) => fields.iter().flat_map(|id| fields_ids_map.name(*id)).map(ToOwned::to_owned).collect(),
+                None => fields_ids_map.iter().map(|(_, name)| name).map(ToOwned::to_owned).collect(),
+            };
 
-            for (_id, record) in index.documents(&rtxn, documents_ids).unwrap() {
-                let mut record = displayed_fields.iter()
-                    .flat_map(|&id| record.get(id).map(|val| (id, val)))
-                    .map(|(key_id, value)| {
-                        let key = fields_ids_map.name(key_id).unwrap().to_owned();
-                        // TODO we must deserialize a Json Value and highlight it.
-                        let value = serde_json::from_slice(value).unwrap();
-                        (key, value)
-                    })
-                    .collect();
-
+            for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
+                let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
                 if !disable_highlighting {
-                    highlight_record(&mut record, &found_words);
+                    highlight_record(&mut object, &found_words, &attributes_to_highlight);
                 }
 
-                documents.push(record);
+                documents.push(object);
             }
 
             Response::builder()
