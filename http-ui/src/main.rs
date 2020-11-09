@@ -69,7 +69,7 @@ pub struct Opt {
 pub struct IndexerOpt {
     /// The amount of documents to skip before printing
     /// a log regarding the indexing advancement.
-    #[structopt(long, default_value = "1000000")] // 1m
+    #[structopt(long, default_value = "100000")] // 100k
     pub log_every_n: usize,
 
     /// MTBL max number of chunks in bytes.
