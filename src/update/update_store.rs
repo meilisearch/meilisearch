@@ -36,6 +36,9 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
         let processed_meta = env.create_database(Some("processed-meta"))?;
 
         let (notification_sender, notification_receiver) = crossbeam_channel::bounded(1);
+        // Send a first notification to trigger the process.
+        let _ = notification_sender.send(());
+
         let update_store = Arc::new(UpdateStore {
             env,
             pending,
