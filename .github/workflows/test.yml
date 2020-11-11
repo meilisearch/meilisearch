@@ -34,10 +34,10 @@ jobs:
         with:
           command: test
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: bench
-          args: --no-run
+      # - uses: actions-rs/cargo@v1
+      #   with:
+      #     command: bench
+      #     args: --no-run
 
       # - uses: actions-rs/cargo@v1
       #   with:
