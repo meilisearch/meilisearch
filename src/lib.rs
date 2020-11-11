@@ -4,6 +4,7 @@ mod index;
 mod mdfs;
 mod query_tokens;
 mod search;
+pub mod facet;
 pub mod heed_codec;
 pub mod proximity;
 pub mod subcommand;
