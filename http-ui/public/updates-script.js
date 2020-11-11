@@ -54,13 +54,22 @@ $(window).on('load', function () {
       const content = $(`#${id} .updateStatus.content`);
 
       let html;
-      let { type, processed_number_of_documents, total_number_of_documents } = status.meta;
-      if (type === 'DocumentsAddition' && processed_number_of_documents && total_number_of_documents) {
-        let progress = Math.round(processed_number_of_documents / total_number_of_documents * 100);
+
+      let { type, step, total_steps, current, total } = status.meta;
+
+      if (type === 'DocumentsAddition') {
+        // If the total is null or undefined then the progress results is infinity.
+        let progress = Math.round(current / total * 100);
+        // We must divide the progress by the total number of indexing steps.
+        progress = progress / total_steps;
+        // And mark the previous steps as processed.
+        progress = progress + (step * 100 / total_steps);
+        // Generate the appropriate html bulma progress bar.
         html = `<progress class="progress" title="${progress}%" value="${progress}" max="100"></progress>`;
       } else {
         html = `<progress class="progress" max="100"></progress>`;
       }
+
       content.html(html);
     }
 
