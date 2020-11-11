@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Context;
@@ -6,9 +7,10 @@ use heed::types::*;
 use heed::{PolyDatabase, Database, RwTxn, RoTxn};
 use roaring::RoaringBitmap;
 
+use crate::facet::FacetType;
+use crate::fields_ids_map::FieldsIdsMap;
 use crate::Search;
 use crate::{BEU32, DocumentId};
-use crate::fields_ids_map::FieldsIdsMap;
 use crate::{
     RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec, ObkvCodec,
     BoRoaringBitmapCodec, CboRoaringBitmapCodec,
@@ -16,6 +18,7 @@ use crate::{
 
 pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
+pub const FACETED_FIELDS_KEY: &str = "faceted-fields";
 pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const PRIMARY_KEY_KEY: &str = "primary-key";
 pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
@@ -184,6 +187,24 @@ impl Index {
     /// if the searchable fields aren't there it means that **all** the fields are indexed.
     pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t [u8]>> {
         self.main.get::<_, Str, ByteSlice>(rtxn, SEARCHABLE_FIELDS_KEY)
+    }
+
+    /* faceted fields */
+
+    /// Writes the facet fields ids associated with their facet type or `None` if
+    /// the facet type is currently unknown.
+    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields_types: &HashMap<u8, Option<FacetType>>) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY, fields_types)
+    }
+
+    /// Deletes the facet fields ids associated with their facet type.
+    pub fn delete_faceted_fields(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, FACETED_FIELDS_KEY)
+    }
+
+    /// Returns the facet fields ids associated with their facet type.
+    pub fn faceted_fields(&self, wtxn: &RoTxn) -> heed::Result<HashMap<u8, Option<FacetType>>> {
+        Ok(self.main.get::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY)?.unwrap_or_default())
     }
 
     /* words fst */

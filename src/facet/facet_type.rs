@@ -1,6 +1,8 @@
 use std::cmp;
+use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize)]
 pub enum FacetType {
     String,
     F64,
