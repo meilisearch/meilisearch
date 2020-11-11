@@ -193,7 +193,7 @@ impl Index {
 
     /// Writes the facet fields ids associated with their facet type or `None` if
     /// the facet type is currently unknown.
-    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields_types: &HashMap<u8, Option<FacetType>>) -> heed::Result<()> {
+    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields_types: &HashMap<u8, FacetType>) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY, fields_types)
     }
 
@@ -203,7 +203,7 @@ impl Index {
     }
 
     /// Returns the facet fields ids associated with their facet type.
-    pub fn faceted_fields(&self, wtxn: &RoTxn) -> heed::Result<HashMap<u8, Option<FacetType>>> {
+    pub fn faceted_fields(&self, wtxn: &RoTxn) -> heed::Result<HashMap<u8, FacetType>> {
         Ok(self.main.get::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY)?.unwrap_or_default())
     }
 

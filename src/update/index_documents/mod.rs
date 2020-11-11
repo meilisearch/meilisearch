@@ -329,6 +329,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             WordDocids,
         }
 
+        let faceted_fields = self.index.faceted_fields(self.wtxn)?;
         let searchable_fields: HashSet<_> = match self.index.searchable_fields(self.wtxn)? {
             Some(fields) => fields.iter().copied().collect(),
             None => fields_ids_map.iter().map(|(id, _name)| id).collect(),
@@ -362,6 +363,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 .map(|(i, documents)| {
                     let store = Store::new(
                         searchable_fields.clone(),
+                        faceted_fields.clone(),
                         linked_hash_map_size,
                         max_nb_chunks,
                         max_memory_by_job,

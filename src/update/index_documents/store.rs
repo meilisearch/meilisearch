@@ -14,6 +14,7 @@ use grenad::{Reader, FileFuse, Writer, Sorter, CompressionType};
 use roaring::RoaringBitmap;
 use tempfile::tempfile;
 
+use crate::facet::FacetType;
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::tokenizer::{simple_tokenizer, only_token};
 use crate::update::UpdateIndexingStep;
@@ -39,6 +40,7 @@ pub struct Readers {
 pub struct Store {
     // Indexing parameters
     searchable_fields: HashSet<u8>,
+    faceted_fields: HashMap<u8, FacetType>,
     // Caches
     word_docids: LinkedHashMap<SmallVec32<u8>, RoaringBitmap>,
     word_docids_limit: usize,
@@ -60,6 +62,7 @@ pub struct Store {
 impl Store {
     pub fn new(
         searchable_fields: HashSet<u8>,
+        faceted_fields: HashMap<u8, FacetType>,
         linked_hash_map_size: Option<usize>,
         max_nb_chunks: Option<usize>,
         max_memory: Option<usize>,
@@ -107,6 +110,7 @@ impl Store {
         Ok(Store {
             // Indexing parameters.
             searchable_fields,
+            faceted_fields,
             // Caches
             word_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
             word_docids_limit: linked_hash_map_size,
@@ -320,21 +324,26 @@ impl Store {
                 }
 
                 for (attr, content) in document.iter() {
-                    if !self.searchable_fields.contains(&attr) {
-                        continue;
-                    }
+                    if self.faceted_fields.contains_key(&attr) || self.searchable_fields.contains(&attr) {
+                        let value = serde_json::from_slice(content)?;
 
-                    let value = serde_json::from_slice(content)?;
-                    let content = match json_to_string(value) {
-                        Some(content) => content,
-                        None => continue,
-                    };
+                        if let Some(ftype) = self.faceted_fields.get(&attr) {
+                            todo!("parse facet field value")
+                        }
 
-                    let tokens = simple_tokenizer(&content).filter_map(only_token);
-                    for (pos, token) in tokens.enumerate().take(MAX_POSITION) {
-                        let word = token.to_lowercase();
-                        let position = (attr as usize * MAX_POSITION + pos) as u32;
-                        words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
+                        if self.searchable_fields.contains(&attr) {
+                            let content = match json_to_string(&value) {
+                                Some(content) => content,
+                                None => continue,
+                            };
+
+                            let tokens = simple_tokenizer(&content).filter_map(only_token);
+                            for (pos, token) in tokens.enumerate().take(MAX_POSITION) {
+                                let word = token.to_lowercase();
+                                let position = (attr as usize * MAX_POSITION + pos) as u32;
+                                words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
+                            }
+                        }
                     }
                 }
 

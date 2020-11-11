@@ -1,11 +1,13 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use grenad::CompressionType;
 use rayon::ThreadPool;
 
 use crate::update::index_documents::{Transform, IndexDocumentsMethod};
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
+use crate::facet::FacetType;
 use crate::{Index, FieldsIdsMap};
 
 pub struct Settings<'a, 't, 'u, 'i> {
@@ -24,7 +26,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     // however if it is `Some(None)` it means that the user forced a reset of the setting.
     searchable_fields: Option<Option<Vec<String>>>,
     displayed_fields: Option<Option<Vec<String>>>,
-    faceted_fields: Option<Vec<String>>,
+    faceted_fields: Option<HashMap<String, String>>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -62,25 +64,29 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.displayed_fields = Some(Some(names));
     }
 
-    pub fn set_faceted_fields(&mut self, names: Vec<String>) {
-        self.faceted_fields = Some(names);
+    pub fn set_faceted_fields(&mut self, names_facet_types: HashMap<String, String>) {
+        self.faceted_fields = Some(names_facet_types);
     }
 
     pub fn execute<F>(self, progress_callback: F) -> anyhow::Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync
     {
-        if let Some(fields_names) = self.faceted_fields {
+        if let Some(fields_names_facet_types) = self.faceted_fields {
             let current_faceted_fields = self.index.faceted_fields(self.wtxn)?;
             let current_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
 
             let mut fields_ids_map = current_fields_ids_map.clone();
             let mut faceted_fields = HashMap::new();
-            for name in fields_names {
+            for (name, sftype) in fields_names_facet_types {
+                let ftype = FacetType::from_str(&sftype).with_context(|| format!("parsing facet type {:?}", sftype))?;
                 let id = fields_ids_map.insert(&name).context("field id limit reached")?;
                 match current_faceted_fields.get(&id) {
-                    Some(ftype) => faceted_fields.insert(id, ftype.clone()),
-                    None => faceted_fields.insert(id, None),
+                    Some(pftype) => {
+                        ensure!(ftype == *pftype, "{} facet type changed from {} to {}", name, ftype, pftype);
+                        faceted_fields.insert(id, ftype)
+                    },
+                    None => faceted_fields.insert(id, ftype),
                 };
             }
 
