@@ -76,6 +76,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             word_docids,
             docid_word_positions,
             word_pair_proximity_docids,
+            facet_field_id_value_docids,
             documents,
         } = self.index;
 
@@ -158,7 +159,9 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         }
 
         // We construct an FST set that contains the words to delete from the words FST.
-        let words_to_delete = words.iter().filter_map(|(w, d)| if *d { Some(w.as_ref()) } else { None });
+        let words_to_delete = words.iter().filter_map(|(word, must_remove)| {
+            if *must_remove { Some(word.as_ref()) } else { None }
+        });
         let words_to_delete = fst::Set::from_iter(words_to_delete)?;
 
         let new_words_fst = {
@@ -188,6 +191,20 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 iter.del_current()?;
             } else {
                 iter.put_current(&(w1, w2, prox), &docids)?;
+            }
+        }
+
+        drop(iter);
+
+        // We delete the documents ids that are under the facet field id values.
+        let mut iter = facet_field_id_value_docids.iter_mut(self.wtxn)?;
+        while let Some(result) = iter.next() {
+            let (bytes, mut docids) = result?;
+            docids.difference_with(&self.documents_ids);
+            if docids.is_empty() {
+                iter.del_current()?;
+            } else {
+                iter.put_current(bytes, &docids)?;
             }
         }
 

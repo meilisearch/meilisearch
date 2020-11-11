@@ -18,33 +18,25 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
             word_docids,
             docid_word_positions,
             word_pair_proximity_docids,
+            facet_field_id_value_docids,
             documents,
         } = self.index;
 
-        // We clear the word fst.
+        // We retrieve the number of documents ids that we are deleting.
+        let number_of_documents = self.index.number_of_documents(self.wtxn)?;
+
+        // We clean some of the main engine datastructures.
         self.index.put_words_fst(self.wtxn, &fst::Set::default())?;
-
-        // We clear the users ids documents ids.
         self.index.put_users_ids_documents_ids(self.wtxn, &fst::Map::default())?;
-
-        // We retrieve the documents ids.
-        let documents_ids = self.index.documents_ids(self.wtxn)?;
-
-        // We clear the internal documents ids.
         self.index.put_documents_ids(self.wtxn, &RoaringBitmap::default())?;
 
-        // We clear the word docids.
+        // Clear the other databases.
         word_docids.clear(self.wtxn)?;
-
-        // We clear the docid word positions.
         docid_word_positions.clear(self.wtxn)?;
-
-        // We clear the word pair proximity docids.
         word_pair_proximity_docids.clear(self.wtxn)?;
-
-        // We clear the documents themselves.
+        facet_field_id_value_docids.clear(self.wtxn)?;
         documents.clear(self.wtxn)?;
 
-        Ok(documents_ids.len() as usize)
+        Ok(number_of_documents)
     }
 }

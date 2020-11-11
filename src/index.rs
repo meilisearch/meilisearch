@@ -34,22 +34,33 @@ pub struct Index {
     pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
+    /// Maps the facet field id and the globally ordered value with the docids that corresponds to it.
+    pub facet_field_id_value_docids: Database<ByteSlice, CboRoaringBitmapCodec>,
     /// Maps the document id to the document as an obkv store.
     pub documents: Database<OwnedType<BEU32>, ObkvCodec>,
 }
 
 impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> anyhow::Result<Index> {
-        options.max_dbs(5);
+        options.max_dbs(6);
 
         let env = options.open(path)?;
         let main = env.create_poly_database(Some("main"))?;
         let word_docids = env.create_database(Some("word-docids"))?;
         let docid_word_positions = env.create_database(Some("docid-word-positions"))?;
         let word_pair_proximity_docids = env.create_database(Some("word-pair-proximity-docids"))?;
+        let facet_field_id_value_docids = env.create_database(Some("facet-field-id-value-docids"))?;
         let documents = env.create_database(Some("documents"))?;
 
-        Ok(Index { env, main, word_docids, docid_word_positions, word_pair_proximity_docids, documents })
+        Ok(Index {
+            env,
+            main,
+            word_docids,
+            docid_word_positions,
+            word_pair_proximity_docids,
+            facet_field_id_value_docids,
+            documents,
+        })
     }
 
     /// Create a write transaction to be able to write into the index.
