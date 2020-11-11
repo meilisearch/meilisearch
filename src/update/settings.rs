@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::Context;
 use grenad::CompressionType;
 use rayon::ThreadPool;
@@ -22,6 +24,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     // however if it is `Some(None)` it means that the user forced a reset of the setting.
     searchable_fields: Option<Option<Vec<String>>>,
     displayed_fields: Option<Option<Vec<String>>>,
+    faceted_fields: Option<Vec<String>>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -39,6 +42,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             thread_pool: None,
             searchable_fields: None,
             displayed_fields: None,
+            faceted_fields: None,
         }
     }
 
@@ -58,13 +62,77 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.displayed_fields = Some(Some(names));
     }
 
+    pub fn set_faceted_fields(&mut self, names: Vec<String>) {
+        self.faceted_fields = Some(names);
+    }
+
     pub fn execute<F>(self, progress_callback: F) -> anyhow::Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync
     {
+        if let Some(fields_names) = self.faceted_fields {
+            let current_faceted_fields = self.index.faceted_fields(self.wtxn)?;
+            let current_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
+
+            let mut fields_ids_map = current_fields_ids_map.clone();
+            let mut faceted_fields = HashMap::new();
+            for name in fields_names {
+                let id = fields_ids_map.insert(&name).context("field id limit reached")?;
+                match current_faceted_fields.get(&id) {
+                    Some(ftype) => faceted_fields.insert(id, ftype.clone()),
+                    None => faceted_fields.insert(id, None),
+                };
+            }
+
+            let transform = Transform {
+                rtxn: &self.wtxn,
+                index: self.index,
+                log_every_n: self.log_every_n,
+                chunk_compression_type: self.chunk_compression_type,
+                chunk_compression_level: self.chunk_compression_level,
+                chunk_fusing_shrink_size: self.chunk_fusing_shrink_size,
+                max_nb_chunks: self.max_nb_chunks,
+                max_memory: self.max_memory,
+                index_documents_method: IndexDocumentsMethod::ReplaceDocuments,
+                autogenerate_docids: false,
+            };
+
+            // We compute or generate the new primary key field id.
+            let primary_key = match self.index.primary_key(&self.wtxn)? {
+                Some(id) => {
+                    let name = current_fields_ids_map.name(id).unwrap();
+                    fields_ids_map.insert(name).context("field id limit reached")?
+                },
+                None => fields_ids_map.insert("id").context("field id limit reached")?,
+            };
+
+            // We remap the documents fields based on the new `FieldsIdsMap`.
+            let output = transform.remap_index_documents(primary_key, fields_ids_map.clone())?;
+
+            // We write the faceted_fields fields into the database here.
+            self.index.put_faceted_fields(self.wtxn, &faceted_fields)?;
+
+            // We clear the full database (words-fst, documents ids and documents content).
+            ClearDocuments::new(self.wtxn, self.index).execute()?;
+
+            // We index the generated `TransformOutput` which must contain
+            // all the documents with fields in the newly defined searchable order.
+            let mut indexing_builder = IndexDocuments::new(self.wtxn, self.index);
+            indexing_builder.log_every_n = self.log_every_n;
+            indexing_builder.max_nb_chunks = self.max_nb_chunks;
+            indexing_builder.max_memory = self.max_memory;
+            indexing_builder.linked_hash_map_size = self.linked_hash_map_size;
+            indexing_builder.chunk_compression_type = self.chunk_compression_type;
+            indexing_builder.chunk_compression_level = self.chunk_compression_level;
+            indexing_builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+            indexing_builder.thread_pool = self.thread_pool;
+            indexing_builder.execute_raw(output, &progress_callback)?;
+        }
+
         // Check that the searchable attributes have been specified.
         if let Some(value) = self.searchable_fields {
             let current_displayed_fields = self.index.displayed_fields(self.wtxn)?;
+            let current_faceted_fields = self.index.faceted_fields(self.wtxn)?;
             let current_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
 
             let result = match value {
@@ -82,6 +150,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                             fields_ids_map,
                             Some(searchable_fields),
                             current_displayed_fields.map(ToOwned::to_owned),
+                            current_faceted_fields,
                         )
                     } else {
                         // We create or generate the fields ids corresponding to those names.
@@ -97,7 +166,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                             fields_ids_map.insert(name).context("field id limit reached")?;
                         }
 
-                        // We must also update the displayed fields according to the new `FieldsIdsMap`.
+                        // We must update the displayed fields according to the new `FieldsIdsMap`.
                         let displayed_fields = match current_displayed_fields {
                             Some(fields) => {
                                 let mut displayed_fields = Vec::new();
@@ -111,17 +180,26 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                             None => None,
                         };
 
-                        (fields_ids_map, Some(searchable_fields), displayed_fields)
+                        // We must update the faceted fields according to the new `FieldsIdsMap`.
+                        let mut faceted_fields = HashMap::new();
+                        for (id, ftype) in current_faceted_fields {
+                            let name = current_fields_ids_map.name(id).unwrap();
+                            let id = fields_ids_map.id(name).context("field id limit reached")?;
+                            faceted_fields.insert(id, ftype);
+                        }
+
+                        (fields_ids_map, Some(searchable_fields), displayed_fields, faceted_fields)
                     }
                 },
                 None => (
                     current_fields_ids_map.clone(),
                     None,
                     current_displayed_fields.map(ToOwned::to_owned),
+                    current_faceted_fields,
                 ),
             };
 
-            let (mut fields_ids_map, searchable_fields, displayed_fields) = result;
+            let (mut fields_ids_map, searchable_fields, displayed_fields, faceted_fields) = result;
 
             let transform = Transform {
                 rtxn: &self.wtxn,
@@ -166,6 +244,9 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 None => self.index.delete_displayed_fields(self.wtxn).map(drop)?,
             }
 
+            // We write the faceted_fields fields into the database here.
+            self.index.put_faceted_fields(self.wtxn, &faceted_fields)?;
+
             // We clear the full database (words-fst, documents ids and documents content).
             ClearDocuments::new(self.wtxn, self.index).execute()?;
 
@@ -180,7 +261,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             indexing_builder.chunk_compression_level = self.chunk_compression_level;
             indexing_builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
             indexing_builder.thread_pool = self.thread_pool;
-            indexing_builder.execute_raw(output, progress_callback)?;
+            indexing_builder.execute_raw(output, &progress_callback)?;
         }
 
         // Check that the displayed attributes have been specified.
