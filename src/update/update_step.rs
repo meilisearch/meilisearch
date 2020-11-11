@@ -21,7 +21,7 @@ pub enum UpdateIndexingStep {
 }
 
 impl UpdateIndexingStep {
-    pub const fn step_index(&self) -> usize {
+    pub const fn step(&self) -> usize {
         match self {
             TransformFromUserIntoGenericFormat { .. } => 0,
             ComputeIdsAndMergeDocuments { .. } => 1,

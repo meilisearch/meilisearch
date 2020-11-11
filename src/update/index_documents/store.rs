@@ -16,6 +16,7 @@ use tempfile::tempfile;
 
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::tokenizer::{simple_tokenizer, only_token};
+use crate::update::UpdateIndexingStep;
 use crate::{json_to_string, SmallVec32, Position, DocumentId};
 
 use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
@@ -294,7 +295,7 @@ impl Store {
         log_every_n: Option<usize>,
         mut progress_callback: F,
     ) -> anyhow::Result<Readers>
-    where F: FnMut(usize, usize),
+    where F: FnMut(UpdateIndexingStep),
     {
         debug!("{:?}: Indexing in a Store...", thread_index);
 
@@ -311,7 +312,10 @@ impl Store {
                 // This is a log routine that we do every `log_every_n` documents.
                 if log_every_n.map_or(false, |len| count % len == 0) {
                     info!("We have seen {} documents so far ({:.02?}).", format_count(count), before.elapsed());
-                    progress_callback(count, documents_count);
+                    progress_callback(UpdateIndexingStep::IndexDocuments {
+                        documents_seen: count,
+                        total_documents: documents_count,
+                    });
                     before = Instant::now();
                 }
 
@@ -343,7 +347,10 @@ impl Store {
             count = count + 1;
         }
 
-        progress_callback(count, documents_count);
+        progress_callback(UpdateIndexingStep::IndexDocuments {
+            documents_seen: count,
+            total_documents: documents_count,
+        });
 
         let readers = self.finish()?;
         debug!("{:?}: Store created!", thread_index);
