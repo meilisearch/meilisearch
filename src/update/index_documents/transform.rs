@@ -11,7 +11,7 @@ use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
 use crate::{BEU32, MergeFn, Index, FieldsIdsMap};
-use crate::update::AvailableDocumentsIds;
+use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
 
@@ -34,6 +34,7 @@ pub struct TransformOutput {
 pub struct Transform<'t, 'i> {
     pub rtxn: &'t heed::RoTxn<'i>,
     pub index: &'i Index,
+    pub log_every_n: Option<usize>,
     pub chunk_compression_type: CompressionType,
     pub chunk_compression_level: Option<u32>,
     pub chunk_fusing_shrink_size: Option<u64>,
@@ -44,15 +45,32 @@ pub struct Transform<'t, 'i> {
 }
 
 impl Transform<'_, '_> {
-    pub fn from_json<R: Read>(self, reader: R) -> anyhow::Result<TransformOutput> {
-        self.from_generic_json(reader, false)
+    pub fn from_json<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<TransformOutput>
+    where
+        R: Read,
+        F: Fn(UpdateIndexingStep) + Sync,
+    {
+        self.from_generic_json(reader, false, progress_callback)
     }
 
-    pub fn from_json_stream<R: Read>(self, reader: R) -> anyhow::Result<TransformOutput> {
-        self.from_generic_json(reader, true)
+    pub fn from_json_stream<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<TransformOutput>
+    where
+        R: Read,
+        F: Fn(UpdateIndexingStep) + Sync,
+    {
+        self.from_generic_json(reader, true, progress_callback)
     }
 
-    fn from_generic_json<R: Read>(self, reader: R, is_stream: bool) -> anyhow::Result<TransformOutput> {
+    fn from_generic_json<R, F>(
+        self,
+        reader: R,
+        is_stream: bool,
+        progress_callback: F,
+    ) -> anyhow::Result<TransformOutput>
+    where
+        R: Read,
+        F: Fn(UpdateIndexingStep) + Sync,
+    {
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn).unwrap();
         let primary_key = self.index.primary_key(self.rtxn)?;
@@ -131,9 +149,16 @@ impl Transform<'_, '_> {
         let mut json_buffer = Vec::new();
         let mut obkv_buffer = Vec::new();
         let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
+        let mut documents_count = 0;
 
         for result in documents {
             let document = result?;
+
+            if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
+                progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
+                    documents_seen: documents_count,
+                });
+            }
 
             obkv_buffer.clear();
             let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
@@ -186,14 +211,30 @@ impl Transform<'_, '_> {
 
             // We use the extracted/generated user id as the key for this document.
             sorter.insert(user_id.as_bytes(), &obkv_buffer)?;
+            documents_count += 1;
         }
+
+        progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
+            documents_seen: documents_count,
+        });
 
         // Now that we have a valid sorter that contains the user id and the obkv we
         // give it to the last transforming function which returns the TransformOutput.
-        self.from_sorter(sorter, primary_key, fields_ids_map, users_ids_documents_ids)
+        self.from_sorter(
+            sorter,
+            primary_key,
+            fields_ids_map,
+            documents_count,
+            users_ids_documents_ids,
+            progress_callback,
+        )
     }
 
-    pub fn from_csv<R: Read>(self, reader: R) -> anyhow::Result<TransformOutput> {
+    pub fn from_csv<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<TransformOutput>
+    where
+        R: Read,
+        F: Fn(UpdateIndexingStep) + Sync,
+    {
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn).unwrap();
 
@@ -255,11 +296,18 @@ impl Transform<'_, '_> {
         let mut json_buffer = Vec::new();
         let mut obkv_buffer = Vec::new();
         let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
+        let mut documents_count = 0;
 
         let mut record = csv::StringRecord::new();
         while csv.read_record(&mut record)? {
             obkv_buffer.clear();
             let mut writer = obkv::KvWriter::new(&mut obkv_buffer);
+
+            if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
+                progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
+                    documents_seen: documents_count,
+                });
+            }
 
             // We extract the user id if we know where it is or generate an UUID V4 otherwise.
             let user_id = match user_id_pos {
@@ -292,23 +340,39 @@ impl Transform<'_, '_> {
 
             // We use the extracted/generated user id as the key for this document.
             sorter.insert(user_id, &obkv_buffer)?;
+            documents_count += 1;
         }
+
+        progress_callback(UpdateIndexingStep::TransformFromUserIntoGenericFormat {
+            documents_seen: documents_count,
+        });
 
         // Now that we have a valid sorter that contains the user id and the obkv we
         // give it to the last transforming function which returns the TransformOutput.
-        self.from_sorter(sorter, primary_key_field_id, fields_ids_map, users_ids_documents_ids)
+        self.from_sorter(
+            sorter,
+            primary_key_field_id,
+            fields_ids_map,
+            documents_count,
+            users_ids_documents_ids,
+            progress_callback,
+        )
     }
 
     /// Generate the `TransformOutput` based on the given sorter that can be generated from any
     /// format like CSV, JSON or JSON stream. This sorter must contain a key that is the document
     /// id for the user side and the value must be an obkv where keys are valid fields ids.
-    fn from_sorter(
+    fn from_sorter<F>(
         self,
         sorter: grenad::Sorter<MergeFn>,
         primary_key: u8,
         fields_ids_map: FieldsIdsMap,
+        approximate_number_of_documents: usize,
         users_ids_documents_ids: fst::Map<Cow<'_, [u8]>>,
+        progress_callback: F,
     ) -> anyhow::Result<TransformOutput>
+    where
+        F: Fn(UpdateIndexingStep) + Sync,
     {
         let documents_ids = self.index.documents_ids(self.rtxn)?;
         let mut available_documents_ids = AvailableDocumentsIds::from_documents_ids(&documents_ids);
@@ -331,6 +395,13 @@ impl Transform<'_, '_> {
         let mut documents_count = 0;
         let mut iter = sorter.into_iter()?;
         while let Some((user_id, update_obkv)) = iter.next()? {
+
+            if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
+                progress_callback(UpdateIndexingStep::ComputeIdsAndMergeDocuments {
+                    documents_seen: documents_count,
+                    total_documents: approximate_number_of_documents,
+                });
+            }
 
             let (docid, obkv) = match users_ids_documents_ids.get(user_id) {
                 Some(docid) => {
@@ -368,6 +439,11 @@ impl Transform<'_, '_> {
             final_sorter.insert(docid.to_be_bytes(), obkv)?;
             documents_count += 1;
         }
+
+        progress_callback(UpdateIndexingStep::ComputeIdsAndMergeDocuments {
+            documents_seen: documents_count,
+            total_documents: documents_count,
+        });
 
         // We create a final writer to write the new documents in order from the sorter.
         let file = tempfile::tempfile()?;

@@ -26,6 +26,7 @@ use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
 
 use milli::tokenizer::{simple_tokenizer, TokenType};
+use milli::update::UpdateIndexingStep::*;
 use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
 use milli::{obkv_to_json, Index, UpdateStore, SearchResult};
 
@@ -201,8 +202,10 @@ enum UpdateMeta {
 #[serde(tag = "type")]
 enum UpdateMetaProgress {
     DocumentsAddition {
-        processed_number_of_documents: usize,
-        total_number_of_documents: Option<usize>,
+        step: usize,
+        total_steps: usize,
+        current: usize,
+        total: Option<usize>,
     },
 }
 
@@ -310,12 +313,20 @@ async fn main() -> anyhow::Result<()> {
                         Box::new(content) as Box<dyn io::Read>
                     };
 
-                    let result = builder.execute(reader, |count, total| {
+                    let result = builder.execute(reader, |indexing_step| {
+                        let (current, total) = match indexing_step {
+                            TransformFromUserIntoGenericFormat { documents_seen } => (documents_seen, None),
+                            ComputeIdsAndMergeDocuments { documents_seen, total_documents } => (documents_seen, Some(total_documents)),
+                            IndexDocuments { documents_seen, total_documents } => (documents_seen, Some(total_documents)),
+                            MergeDataIntoFinalDatabase { databases_seen, total_databases } => (databases_seen, Some(total_databases)),
+                        };
                         let _ = update_status_sender_cloned.send(UpdateStatus::Progressing {
                             update_id,
                             meta: UpdateMetaProgress::DocumentsAddition {
-                                processed_number_of_documents: count,
-                                total_number_of_documents: Some(total),
+                                step: indexing_step.step(),
+                                total_steps: indexing_step.number_of_steps(),
+                                current,
+                                total,
                             }
                         });
                     });
@@ -356,12 +367,20 @@ async fn main() -> anyhow::Result<()> {
                         }
                     }
 
-                    let result = builder.execute(|count, total| {
+                    let result = builder.execute(|indexing_step| {
+                        let (current, total) = match indexing_step {
+                            TransformFromUserIntoGenericFormat { documents_seen } => (documents_seen, None),
+                            ComputeIdsAndMergeDocuments { documents_seen, total_documents } => (documents_seen, Some(total_documents)),
+                            IndexDocuments { documents_seen, total_documents } => (documents_seen, Some(total_documents)),
+                            MergeDataIntoFinalDatabase { databases_seen, total_databases } => (databases_seen, Some(total_databases)),
+                        };
                         let _ = update_status_sender_cloned.send(UpdateStatus::Progressing {
                             update_id,
                             meta: UpdateMetaProgress::DocumentsAddition {
-                                processed_number_of_documents: count,
-                                total_number_of_documents: Some(total),
+                                step: indexing_step.step(),
+                                total_steps: indexing_step.number_of_steps(),
+                                current,
+                                total,
                             }
                         });
                     });

@@ -15,6 +15,7 @@ use rayon::prelude::*;
 use rayon::ThreadPool;
 
 use crate::index::Index;
+use crate::update::UpdateIndexingStep;
 use self::store::Store;
 use self::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
@@ -249,13 +250,14 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
     pub fn execute<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<()>
     where
         R: io::Read,
-        F: Fn(usize, usize) + Sync,
+        F: Fn(UpdateIndexingStep) + Sync,
     {
         let before_transform = Instant::now();
 
         let transform = Transform {
             rtxn: &self.wtxn,
             index: self.index,
+            log_every_n: self.log_every_n,
             chunk_compression_type: self.chunk_compression_type,
             chunk_compression_level: self.chunk_compression_level,
             chunk_fusing_shrink_size: self.chunk_fusing_shrink_size,
@@ -266,9 +268,9 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         };
 
         let output = match self.update_format {
-            UpdateFormat::Csv => transform.from_csv(reader)?,
-            UpdateFormat::Json => transform.from_json(reader)?,
-            UpdateFormat::JsonStream => transform.from_json_stream(reader)?,
+            UpdateFormat::Csv => transform.from_csv(reader, &progress_callback)?,
+            UpdateFormat::Json => transform.from_json(reader, &progress_callback)?,
+            UpdateFormat::JsonStream => transform.from_json_stream(reader, &progress_callback)?,
         };
 
         info!("Update transformed in {:.02?}", before_transform.elapsed());
@@ -278,7 +280,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
 
     pub fn execute_raw<F>(self, output: TransformOutput, progress_callback: F) -> anyhow::Result<()>
     where
-        F: Fn(usize, usize) + Sync
+        F: Fn(UpdateIndexingStep) + Sync
     {
         let before_indexing = Instant::now();
 
@@ -460,6 +462,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         documents_ids.union_with(&replaced_documents_ids);
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
+        let mut database_count = 0;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: 0,
+            total_databases: 5,
+        });
+
         debug!("Writing the docid word positions into LMDB on disk...");
         merge_into_lmdb_database(
             self.wtxn,
@@ -468,6 +476,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             docid_word_positions_merge,
             write_method
         )?;
+
+        database_count += 1;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: database_count,
+            total_databases: 5,
+        });
 
         debug!("Writing the documents into LMDB on disk...");
         merge_into_lmdb_database(
@@ -478,6 +492,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             write_method
         )?;
 
+        database_count += 1;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: database_count,
+            total_databases: 5,
+        });
+
         debug!("Writing the words pairs proximities docids into LMDB on disk...");
         merge_into_lmdb_database(
             self.wtxn,
@@ -486,6 +506,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             words_pairs_proximities_docids_merge,
             write_method,
         )?;
+
+        database_count += 1;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: database_count,
+            total_databases: 5,
+        });
 
         for (db_type, result) in receiver {
             let content = result?;
@@ -512,7 +538,15 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                     )?;
                 },
             }
+
+            database_count += 1;
+            progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+                databases_seen: database_count,
+                total_databases: 5,
+            });
         }
+
+        debug_assert_eq!(database_count, 5);
 
         info!("Transform output indexed in {:.02?}", before_indexing.elapsed());
 
@@ -537,7 +571,7 @@ mod tests {
         let content = &b"id,name\n1,kevin\n2,kevina\n3,benoit\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -551,7 +585,7 @@ mod tests {
         let content = &b"id,name\n1,updated kevin\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 3 documents.
@@ -565,7 +599,7 @@ mod tests {
         let content = &b"id,name\n1,updated second kevin\n2,updated kevina\n3,updated benoit\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 3 documents.
@@ -589,7 +623,7 @@ mod tests {
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
         builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is only 1 document now.
@@ -616,7 +650,7 @@ mod tests {
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
         builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 1 document.
@@ -652,7 +686,7 @@ mod tests {
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.disable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
-        assert!(builder.execute(content, |_, _| ()).is_err());
+        assert!(builder.execute(content, |_| ()).is_err());
         wtxn.commit().unwrap();
 
         // Check that there is no document.
@@ -679,7 +713,7 @@ mod tests {
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.disable_autogenerate_docids();
         builder.update_format(UpdateFormat::Json);
-        assert!(builder.execute(content, |_, _| ()).is_err());
+        assert!(builder.execute(content, |_| ()).is_err());
         wtxn.commit().unwrap();
 
         // Check that there is no document.
@@ -701,7 +735,7 @@ mod tests {
         let content = &b"name\nkevin\nkevina\nbenoit\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -719,7 +753,7 @@ mod tests {
         let content = format!("id,name\n{},updated kevin", kevin_uuid);
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content.as_bytes(), |_, _| ()).unwrap();
+        builder.execute(content.as_bytes(), |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 3 documents.
@@ -754,7 +788,7 @@ mod tests {
         let content = &b"id,name\n1,kevin\n2,kevina\n3,benoit\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -768,7 +802,7 @@ mod tests {
         let content = &b"name\nnew kevin"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 4 documents now.
@@ -790,7 +824,7 @@ mod tests {
         let content = &b"id,name\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is no documents.
@@ -816,7 +850,7 @@ mod tests {
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Json);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -838,7 +872,7 @@ mod tests {
         let content = &b"[]"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Json);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is no documents.
@@ -864,7 +898,7 @@ mod tests {
         "#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::JsonStream);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -887,7 +921,7 @@ mod tests {
         let content = &b"id,name\nbrume bleue,kevin\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        assert!(builder.execute(content, |_, _| ()).is_err());
+        assert!(builder.execute(content, |_| ()).is_err());
         wtxn.commit().unwrap();
 
         // First we send 1 document with a valid id.
@@ -896,7 +930,7 @@ mod tests {
         let content = &b"id,name\n32,kevin\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 1 document now.
@@ -922,7 +956,7 @@ mod tests {
         ]"#[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Json);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 1 documents now.

@@ -3,7 +3,7 @@ use grenad::CompressionType;
 use rayon::ThreadPool;
 
 use crate::update::index_documents::{Transform, IndexDocumentsMethod};
-use crate::update::{ClearDocuments, IndexDocuments};
+use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::{Index, FieldsIdsMap};
 
 pub struct Settings<'a, 't, 'u, 'i> {
@@ -60,7 +60,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn execute<F>(self, progress_callback: F) -> anyhow::Result<()>
     where
-        F: Fn(usize, usize) + Sync
+        F: Fn(UpdateIndexingStep) + Sync
     {
         // Check that the searchable attributes have been specified.
         if let Some(value) = self.searchable_fields {
@@ -126,6 +126,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             let transform = Transform {
                 rtxn: &self.wtxn,
                 index: self.index,
+                log_every_n: self.log_every_n,
                 chunk_compression_type: self.chunk_compression_type,
                 chunk_compression_level: self.chunk_compression_level,
                 chunk_fusing_shrink_size: self.chunk_fusing_shrink_size,
@@ -231,14 +232,14 @@ mod tests {
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // We change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_searchable_fields(vec!["name".into()]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the searchable field is correctly set to "name" only.
@@ -260,7 +261,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index);
         builder.reset_searchable_fields();
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the searchable field have been reset and documents are found now.
@@ -286,7 +287,7 @@ mod tests {
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // In the same transaction we change the displayed fields to be only the "age".
@@ -295,7 +296,7 @@ mod tests {
         let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_displayed_fields(vec!["age".into()]);
         builder.set_searchable_fields(vec!["name".into()]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to `None` (default value).
@@ -310,7 +311,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index);
         builder.reset_searchable_fields();
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields always contains only the "age" field.
@@ -334,7 +335,7 @@ mod tests {
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to `None` (default value).
@@ -356,12 +357,12 @@ mod tests {
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_, _| ()).unwrap();
+        builder.execute(content, |_| ()).unwrap();
 
         // In the same transaction we change the displayed fields to be only the age.
         let mut builder = Settings::new(&mut wtxn, &index);
         builder.set_displayed_fields(vec!["age".into()]);
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to only the "age" field.
@@ -376,7 +377,7 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index);
         builder.reset_displayed_fields();
-        builder.execute(|_, _| ()).unwrap();
+        builder.execute(|_| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to `None` (default value).
