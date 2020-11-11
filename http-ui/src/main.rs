@@ -527,11 +527,13 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let disable_highlighting = opt.disable_highlighting;
+    let index_cloned = index.clone();
     let query_route = warp::filters::method::post()
         .and(warp::path!("query"))
         .and(warp::body::json())
         .map(move |query: QueryBody| {
             let before_search = Instant::now();
+            let index = index_cloned.clone();
             let rtxn = index.read_txn().unwrap();
 
             let mut search = index.search(&rtxn);
@@ -565,6 +567,38 @@ async fn main() -> anyhow::Result<()> {
                 .header("Content-Type", "application/json")
                 .header("Time-Ms", before_search.elapsed().as_millis().to_string())
                 .body(serde_json::to_string(&documents).unwrap())
+        });
+
+    let index_cloned = index.clone();
+    let document_route = warp::filters::method::get()
+        .and(warp::path!("document" / String))
+        .map(move |id: String| {
+            let index = index_cloned.clone();
+            let rtxn = index.read_txn().unwrap();
+
+            let users_ids_documents_ids = index.users_ids_documents_ids(&rtxn).unwrap();
+            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+            let displayed_fields = match index.displayed_fields(&rtxn).unwrap() {
+                Some(fields) => Cow::Borrowed(fields),
+                None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
+            };
+
+            match users_ids_documents_ids.get(&id) {
+                Some(document_id) => {
+                    let document_id = document_id as u32;
+                    let (_, obkv) = index.documents(&rtxn, Some(document_id)).unwrap().pop().unwrap();
+                    let document = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
+
+                    Response::builder()
+                        .header("Content-Type", "application/json")
+                        .body(serde_json::to_string(&document).unwrap())
+                },
+                None => {
+                    Response::builder()
+                        .status(404)
+                        .body(format!("Document with id {:?} not found.", id))
+                },
+            }
         });
 
     async fn buf_stream(
@@ -730,6 +764,7 @@ async fn main() -> anyhow::Result<()> {
         .or(dash_logo_white_route)
         .or(dash_logo_black_route)
         .or(query_route)
+        .or(document_route)
         .or(indexing_csv_route)
         .or(indexing_json_route)
         .or(indexing_json_stream_route)
