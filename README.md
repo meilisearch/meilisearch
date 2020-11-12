@@ -28,7 +28,7 @@
 For more information about features go to [our documentation](https://docs.meilisearch.com/).
 
 <p align="center">
-  <img src="assets/movies-web-demo.gif" alt="Web interface gif" />
+  <img src="assets/trumen_quick.gif" alt="Web interface gif" />
 </p>
 
 ## ✨ Features
