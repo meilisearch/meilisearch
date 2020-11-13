@@ -586,9 +586,11 @@ fn parse_facet_value(ftype: FacetType, value: &Value) -> anyhow::Result<SmallVec
                 },
             },
             Value::String(string) => {
+                let string = string.trim();
+                if string.is_empty() { return Ok(()) }
                 match ftype {
                     FacetType::String => {
-                        let string = SmallString32::from(string.as_str());
+                        let string = SmallString32::from(string);
                         Ok(output.push(String(string)))
                     },
                     FacetType::Float => match string.parse() {
