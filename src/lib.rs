@@ -34,6 +34,7 @@ pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
 pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
 pub type SmallVec32<T> = smallvec::SmallVec<[T; 32]>;
 pub type SmallVec16<T> = smallvec::SmallVec<[T; 16]>;
+pub type SmallVec8<T> = smallvec::SmallVec<[T; 8]>;
 pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
 pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 pub type DocumentId = u32;

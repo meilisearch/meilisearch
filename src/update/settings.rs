@@ -306,6 +306,7 @@ mod tests {
     use super::*;
     use crate::update::{IndexDocuments, UpdateFormat};
     use heed::EnvOpenOptions;
+    use maplit::hashmap;
 
     #[test]
     fn set_and_reset_searchable_fields() {
@@ -471,6 +472,33 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.displayed_fields(&rtxn).unwrap();
         assert_eq!(fields_ids, None);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn set_faceted_fields() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the faceted fields to be the age.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.set_faceted_fields(hashmap!{ "age".into() => "integer".into() });
+        builder.execute(|_| ()).unwrap();
+
+        // Then index some documents.
+        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that the displayed fields are correctly set.
+        let rtxn = index.read_txn().unwrap();
+        let fields_ids = index.faceted_fields(&rtxn).unwrap();
+        assert_eq!(fields_ids, hashmap!{ 0 => FacetType::Integer });
         drop(rtxn);
     }
 }
