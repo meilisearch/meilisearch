@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::{File, create_dir_all};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -210,6 +210,8 @@ enum UpdateMetaProgress {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct Settings {
     #[serde(
         default,
@@ -224,6 +226,9 @@ struct Settings {
         skip_serializing_if = "Option::is_none",
     )]
     searchable_attributes: Option<Option<Vec<String>>>,
+
+    #[serde(default)]
+    faceted_attributes: Option<HashMap<String, String>>,
 }
 
 // Any value that is present is considered Some value, including null.
@@ -365,6 +370,11 @@ async fn main() -> anyhow::Result<()> {
                             Some(names) => builder.set_displayed_fields(names),
                             None => builder.reset_displayed_fields(),
                         }
+                    }
+
+                    // We transpose the settings JSON struct into a real setting update.
+                    if let Some(facet_types) = settings.faceted_attributes {
+                        builder.set_faceted_fields(facet_types);
                     }
 
                     let result = builder.execute(|indexing_step| {
