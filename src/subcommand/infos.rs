@@ -78,6 +78,16 @@ enum Command {
         words: Vec<String>,
     },
 
+    /// Outputs a CSV with the documents ids along with the facet values where it appears.
+    FacetValuesDocids {
+        /// Display the whole documents ids in details.
+        #[structopt(long)]
+        full_display: bool,
+
+        /// The field name in the document.
+        field_name: String,
+    },
+
     /// Outputs the total size of all the docid-word-positions keys and values.
     TotalDocidWordPositionsSize,
 
@@ -147,6 +157,9 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         MostCommonWords { limit } => most_common_words(&index, &rtxn, limit),
         BiggestValues { limit } => biggest_value_sizes(&index, &rtxn, limit),
         WordsDocids { full_display, words } => words_docids(&index, &rtxn, !full_display, words),
+        FacetValuesDocids { full_display, field_name } => {
+            facet_values_docids(&index, &rtxn, !full_display, field_name)
+        },
         TotalDocidWordPositionsSize => total_docid_word_positions_size(&index, &rtxn),
         AverageNumberOfWordsByDoc => average_number_of_words_by_doc(&index, &rtxn),
         AverageNumberOfPositionsByWord => {
@@ -251,6 +264,64 @@ fn words_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: Vec<Strin
             };
             wtr.write_record(&[word, docids])?;
         }
+    }
+
+    Ok(wtr.flush()?)
+}
+
+fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_name: String) -> anyhow::Result<()> {
+    use crate::facet::FacetType;
+    use crate::heed_codec::facet::{FacetValueStringCodec, FacetValueF64Codec, FacetValueI64Codec};
+    use heed::{BytesDecode, Error::Decoding};
+
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
+    let faceted_fields = index.faceted_fields(&rtxn)?;
+
+    let field_id = fields_ids_map.id(&field_name)
+        .with_context(|| format!("field {} not found", field_name))?;
+    let field_type = faceted_fields.get(&field_id)
+        .with_context(|| format!("field {} is not faceted", field_name))?;
+
+    let iter = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[field_id])?;
+    let iter = match field_type {
+        FacetType::String => {
+            let iter = iter
+                .map(|result| result.and_then(|(key, value)| {
+                    let (_, key) = FacetValueStringCodec::bytes_decode(key).ok_or(Decoding)?;
+                    Ok((key.to_string(), value))
+                }));
+            Box::new(iter) as Box<dyn Iterator<Item=_>>
+        },
+        FacetType::Float => {
+            let iter = iter
+                .map(|result| result.and_then(|(key, value)| {
+                    let (_, key) = FacetValueF64Codec::bytes_decode(key).ok_or(Decoding)?;
+                    Ok((key.to_string(), value))
+                }));
+            Box::new(iter)
+        },
+        FacetType::Integer => {
+            let iter = iter
+                .map(|result| result.and_then(|(key, value)| {
+                    let (_, key) = FacetValueI64Codec::bytes_decode(key).ok_or(Decoding)?;
+                    Ok((key.to_string(), value))
+                }));
+            Box::new(iter)
+        },
+    };
+
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["facet_value", "documents_ids"])?;
+
+    for result in iter {
+        let (value, docids) = result?;
+        let docids = if debug {
+            format!("{:?}", docids)
+        } else {
+            format!("{:?}", docids.iter().collect::<Vec<_>>())
+        };
+        wtr.write_record(&[value, docids])?;
     }
 
     Ok(wtr.flush()?)
