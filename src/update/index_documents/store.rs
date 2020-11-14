@@ -399,7 +399,7 @@ impl Store {
             // We skip documents that must not be indexed by this thread.
             if count % num_threads == thread_index {
                 // This is a log routine that we do every `log_every_n` documents.
-                if log_every_n.map_or(false, |len| count % len == 0) {
+                if thread_index == 0 && log_every_n.map_or(false, |len| count % len == 0) {
                     info!("We have seen {} documents so far ({:.02?}).", format_count(count), before.elapsed());
                     progress_callback(UpdateIndexingStep::IndexDocuments {
                         documents_seen: count,
