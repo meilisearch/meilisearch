@@ -1,8 +1,9 @@
 var request = null;
 var timeoutID = null;
 
-$('#search').on('input', function () {
-  var query = $(this).val();
+$('#query, #facet').on('input', function () {
+  var query = $('#query').val();
+  var facet = $('#facet').val();
   var timeoutMs = 100;
 
   if (timeoutID !== null) {
@@ -14,7 +15,7 @@ $('#search').on('input', function () {
       type: "POST",
       url: "query",
       contentType: 'application/json',
-      data: JSON.stringify({ 'query': query }),
+      data: JSON.stringify({ 'query': query, 'facetCondition': facet }),
       contentType: 'application/json',
       success: function (data, textStatus, request) {
         results.innerHTML = '';
@@ -77,5 +78,5 @@ $('#db-size').text(function(index, text) {
 // We trigger the input when we load the script, this way
 // we execute a placeholder search when the input is empty.
 $(window).on('load', function () {
-  $('#search').trigger('input');
+  $('#query').trigger('input');
 });

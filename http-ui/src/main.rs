@@ -573,8 +573,9 @@ async fn main() -> anyhow::Result<()> {
                 search.query(query);
             }
             if let Some(condition) = query.facet_condition {
-                let condition = FacetCondition::from_str(&rtxn, &index, &condition).unwrap();
-                search.facet_condition(condition);
+                if let Some(condition) = FacetCondition::from_str(&rtxn, &index, &condition).unwrap() {
+                    search.facet_condition(condition);
+                }
             }
 
             let SearchResult { found_words, documents_ids } = search.execute().unwrap();
