@@ -4,6 +4,7 @@ mod cbo_roaring_bitmap_codec;
 mod obkv_codec;
 mod roaring_bitmap_codec;
 mod str_str_u8_codec;
+pub mod facet;
 
 pub use self::beu32_str_codec::BEU32StrCodec;
 pub use self::bo_roaring_bitmap_codec::BoRoaringBitmapCodec;

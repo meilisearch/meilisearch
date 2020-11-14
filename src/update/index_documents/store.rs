@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::fs::File;
@@ -5,22 +6,29 @@ use std::iter::FromIterator;
 use std::time::Instant;
 use std::{cmp, iter};
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use bstr::ByteSlice as _;
+use grenad::{Reader, FileFuse, Writer, Sorter, CompressionType};
 use heed::BytesEncode;
 use linked_hash_map::LinkedHashMap;
 use log::{debug, info};
-use grenad::{Reader, FileFuse, Writer, Sorter, CompressionType};
+use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
+use serde_json::Value;
 use tempfile::tempfile;
 
+use crate::facet::FacetType;
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
+use crate::heed_codec::facet::{FacetValueStringCodec, FacetValueF64Codec, FacetValueI64Codec};
 use crate::tokenizer::{simple_tokenizer, only_token};
 use crate::update::UpdateIndexingStep;
-use crate::{json_to_string, SmallVec32, Position, DocumentId};
+use crate::{json_to_string, SmallVec8, SmallVec32, SmallString32, Position, DocumentId};
 
 use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
-use super::merge_function::{main_merge, word_docids_merge, words_pairs_proximities_docids_merge};
+use super::merge_function::{
+    main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
+    facet_field_value_docids_merge,
+};
 
 const LMDB_MAX_KEY_LENGTH: usize = 511;
 const ONE_KILOBYTE: usize = 1024 * 1024;
@@ -33,17 +41,21 @@ pub struct Readers {
     pub word_docids: Reader<FileFuse>,
     pub docid_word_positions: Reader<FileFuse>,
     pub words_pairs_proximities_docids: Reader<FileFuse>,
+    pub facet_field_value_docids: Reader<FileFuse>,
     pub documents: Reader<FileFuse>,
 }
 
 pub struct Store {
     // Indexing parameters
     searchable_fields: HashSet<u8>,
+    faceted_fields: HashMap<u8, FacetType>,
     // Caches
     word_docids: LinkedHashMap<SmallVec32<u8>, RoaringBitmap>,
     word_docids_limit: usize,
     words_pairs_proximities_docids: LinkedHashMap<(SmallVec32<u8>, SmallVec32<u8>, u8), RoaringBitmap>,
     words_pairs_proximities_docids_limit: usize,
+    facet_field_value_docids: LinkedHashMap<(u8, FacetValue), RoaringBitmap>,
+    facet_field_value_docids_limit: usize,
     // MTBL parameters
     chunk_compression_type: CompressionType,
     chunk_compression_level: Option<u32>,
@@ -52,6 +64,7 @@ pub struct Store {
     main_sorter: Sorter<MergeFn>,
     word_docids_sorter: Sorter<MergeFn>,
     words_pairs_proximities_docids_sorter: Sorter<MergeFn>,
+    facet_field_value_docids_sorter: Sorter<MergeFn>,
     // MTBL writers
     docid_word_positions_writer: Writer<File>,
     documents_writer: Writer<File>,
@@ -60,6 +73,7 @@ pub struct Store {
 impl Store {
     pub fn new(
         searchable_fields: HashSet<u8>,
+        faceted_fields: HashMap<u8, FacetType>,
         linked_hash_map_size: Option<usize>,
         max_nb_chunks: Option<usize>,
         max_memory: Option<usize>,
@@ -69,7 +83,7 @@ impl Store {
     ) -> anyhow::Result<Store>
     {
         // We divide the max memory by the number of sorter the Store have.
-        let max_memory = max_memory.map(|mm| cmp::max(ONE_KILOBYTE, mm / 3));
+        let max_memory = max_memory.map(|mm| cmp::max(ONE_KILOBYTE, mm / 4));
         let linked_hash_map_size = linked_hash_map_size.unwrap_or(500);
 
         let main_sorter = create_sorter(
@@ -96,6 +110,14 @@ impl Store {
             max_nb_chunks,
             max_memory,
         );
+        let facet_field_value_docids_sorter = create_sorter(
+            facet_field_value_docids_merge,
+            chunk_compression_type,
+            chunk_compression_level,
+            chunk_fusing_shrink_size,
+            max_nb_chunks,
+            max_memory,
+        );
 
         let documents_writer = tempfile().and_then(|f| {
             create_writer(chunk_compression_type, chunk_compression_level, f)
@@ -107,11 +129,14 @@ impl Store {
         Ok(Store {
             // Indexing parameters.
             searchable_fields,
+            faceted_fields,
             // Caches
             word_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
             word_docids_limit: linked_hash_map_size,
             words_pairs_proximities_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
             words_pairs_proximities_docids_limit: linked_hash_map_size,
+            facet_field_value_docids: LinkedHashMap::with_capacity(linked_hash_map_size),
+            facet_field_value_docids_limit: linked_hash_map_size,
             // MTBL parameters
             chunk_compression_type,
             chunk_compression_level,
@@ -120,6 +145,7 @@ impl Store {
             main_sorter,
             word_docids_sorter,
             words_pairs_proximities_docids_sorter,
+            facet_field_value_docids_sorter,
             // MTBL writers
             docid_word_positions_writer,
             documents_writer,
@@ -141,6 +167,35 @@ impl Store {
                     // Removing the front element is equivalent to removing the LRU element.
                     let lru = self.word_docids.pop_front();
                     Self::write_word_docids(&mut self.word_docids_sorter, lru)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // Save the documents ids under the facet field id and value we have seen it.
+    fn insert_facet_values_docid(
+        &mut self,
+        field_id: u8,
+        field_value: FacetValue,
+        id: DocumentId,
+    ) -> anyhow::Result<()>
+    {
+        let key = (field_id, field_value);
+        // if get_refresh finds the element it is assured to be at the end of the linked hash map.
+        match self.facet_field_value_docids.get_refresh(&key) {
+            Some(old) => { old.insert(id); },
+            None => {
+                // A newly inserted element is append at the end of the linked hash map.
+                self.facet_field_value_docids.insert(key, RoaringBitmap::from_iter(Some(id)));
+                // If the word docids just reached it's capacity we must make sure to remove
+                // one element, this way next time we insert we doesn't grow the capacity.
+                if self.facet_field_value_docids.len() == self.facet_field_value_docids_limit {
+                    // Removing the front element is equivalent to removing the LRU element.
+                    Self::write_docid_facet_field_values(
+                        &mut self.facet_field_value_docids_sorter,
+                        self.facet_field_value_docids.pop_front(),
+                    )?;
                 }
             }
         }
@@ -187,7 +242,8 @@ impl Store {
     fn write_document(
         &mut self,
         document_id: DocumentId,
-        words_positions: &HashMap<String, SmallVec32<Position>>,
+        words_positions: &mut HashMap<String, SmallVec32<Position>>,
+        facet_values: &mut HashMap<u8, SmallVec8<FacetValue>>,
         record: &[u8],
     ) -> anyhow::Result<()>
     {
@@ -196,12 +252,19 @@ impl Store {
         self.insert_words_pairs_proximities_docids(words_pair_proximities, document_id)?;
 
         // We store document_id associated with all the words the record contains.
-        for (word, _) in words_positions {
-            self.insert_word_docid(word, document_id)?;
+        for (word, _) in words_positions.drain() {
+            self.insert_word_docid(&word, document_id)?;
         }
 
         self.documents_writer.insert(document_id.to_be_bytes(), record)?;
         Self::write_docid_word_positions(&mut self.docid_word_positions_writer, document_id, words_positions)?;
+
+        // We store document_id associated with all the field id and values.
+        for (field, values) in facet_values.drain() {
+            for value in values {
+                self.insert_facet_values_docid(field, value, document_id)?;
+            }
+        }
 
         Ok(())
     }
@@ -263,6 +326,31 @@ impl Store {
         Ok(())
     }
 
+    fn write_docid_facet_field_values<I>(
+        sorter: &mut Sorter<MergeFn>,
+        iter: I,
+    ) -> anyhow::Result<()>
+    where I: IntoIterator<Item=((u8, FacetValue), RoaringBitmap)>
+    {
+        use FacetValue::*;
+
+        for ((field_id, value), docids) in iter {
+            let result = match value {
+                String(s) => FacetValueStringCodec::bytes_encode(&(field_id, &s)).map(Cow::into_owned),
+                Float(f) => FacetValueF64Codec::bytes_encode(&(field_id, *f)).map(Cow::into_owned),
+                Integer(i) => FacetValueI64Codec::bytes_encode(&(field_id, i)).map(Cow::into_owned),
+            };
+            let key = result.context("could not serialize facet key")?;
+            let bytes = CboRoaringBitmapCodec::bytes_encode(&docids)
+                .context("could not serialize docids")?;
+            if lmdb_key_valid_size(&key) {
+                sorter.insert(&key, &bytes)?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn write_word_docids<I>(sorter: &mut Sorter<MergeFn>, iter: I) -> anyhow::Result<()>
     where I: IntoIterator<Item=(SmallVec32<u8>, RoaringBitmap)>
     {
@@ -301,6 +389,7 @@ impl Store {
 
         let mut before = Instant::now();
         let mut words_positions = HashMap::new();
+        let mut facet_values = HashMap::new();
 
         let mut count: usize = 0;
         while let Some((key, value)) = documents.next()? {
@@ -320,27 +409,34 @@ impl Store {
                 }
 
                 for (attr, content) in document.iter() {
-                    if !self.searchable_fields.contains(&attr) {
-                        continue;
-                    }
+                    if self.faceted_fields.contains_key(&attr) || self.searchable_fields.contains(&attr) {
+                        let value = serde_json::from_slice(content)?;
 
-                    let value = serde_json::from_slice(content)?;
-                    let content = match json_to_string(value) {
-                        Some(content) => content,
-                        None => continue,
-                    };
+                        if let Some(ftype) = self.faceted_fields.get(&attr) {
+                            let mut values = parse_facet_value(*ftype, &value).with_context(|| {
+                                format!("extracting facets from the value {}", value)
+                            })?;
+                            facet_values.entry(attr).or_insert_with(SmallVec8::new).extend(values.drain(..));
+                        }
 
-                    let tokens = simple_tokenizer(&content).filter_map(only_token);
-                    for (pos, token) in tokens.enumerate().take(MAX_POSITION) {
-                        let word = token.to_lowercase();
-                        let position = (attr as usize * MAX_POSITION + pos) as u32;
-                        words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
+                        if self.searchable_fields.contains(&attr) {
+                            let content = match json_to_string(&value) {
+                                Some(content) => content,
+                                None => continue,
+                            };
+
+                            let tokens = simple_tokenizer(&content).filter_map(only_token);
+                            for (pos, token) in tokens.enumerate().take(MAX_POSITION) {
+                                let word = token.to_lowercase();
+                                let position = (attr as usize * MAX_POSITION + pos) as u32;
+                                words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
+                            }
+                        }
                     }
                 }
 
                 // We write the document in the documents store.
-                self.write_document(document_id, &words_positions, value)?;
-                words_positions.clear();
+                self.write_document(document_id, &mut words_positions, &mut facet_values, value)?;
             }
 
             // Compute the document id of the next document.
@@ -367,6 +463,10 @@ impl Store {
             &mut self.words_pairs_proximities_docids_sorter,
             self.words_pairs_proximities_docids,
         )?;
+        Self::write_docid_facet_field_values(
+            &mut self.facet_field_value_docids_sorter,
+            self.facet_field_value_docids,
+        )?;
 
         let mut word_docids_wtr = tempfile().and_then(|f| create_writer(comp_type, comp_level, f))?;
         let mut builder = fst::SetBuilder::memory();
@@ -388,9 +488,13 @@ impl Store {
         let mut words_pairs_proximities_docids_wtr = tempfile().and_then(|f| create_writer(comp_type, comp_level, f))?;
         self.words_pairs_proximities_docids_sorter.write_into(&mut words_pairs_proximities_docids_wtr)?;
 
+        let mut facet_field_value_docids_wtr = tempfile().and_then(|f| create_writer(comp_type, comp_level, f))?;
+        self.facet_field_value_docids_sorter.write_into(&mut facet_field_value_docids_wtr)?;
+
         let main = writer_into_reader(main_wtr, shrink_size)?;
         let word_docids = writer_into_reader(word_docids_wtr, shrink_size)?;
         let words_pairs_proximities_docids = writer_into_reader(words_pairs_proximities_docids_wtr, shrink_size)?;
+        let facet_field_value_docids = writer_into_reader(facet_field_value_docids_wtr, shrink_size)?;
         let docid_word_positions = writer_into_reader(self.docid_word_positions_writer, shrink_size)?;
         let documents = writer_into_reader(self.documents_writer, shrink_size)?;
 
@@ -399,6 +503,7 @@ impl Store {
             word_docids,
             docid_word_positions,
             words_pairs_proximities_docids,
+            facet_field_value_docids,
             documents,
         })
     }
@@ -443,4 +548,71 @@ fn format_count(n: usize) -> String {
 
 fn lmdb_key_valid_size(key: &[u8]) -> bool {
     !key.is_empty() && key.len() <= LMDB_MAX_KEY_LENGTH
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum FacetValue {
+    String(SmallString32),
+    Float(OrderedFloat<f64>),
+    Integer(i64),
+}
+
+fn parse_facet_value(ftype: FacetType, value: &Value) -> anyhow::Result<SmallVec8<FacetValue>> {
+    use FacetValue::*;
+
+    fn inner_parse_facet_value(
+        ftype: FacetType,
+        value: &Value,
+        can_recurse: bool,
+        output: &mut SmallVec8<FacetValue>,
+    ) -> anyhow::Result<()>
+    {
+        match value {
+            Value::Null => Ok(()),
+            Value::Bool(b) => Ok(output.push(Integer(*b as i64))),
+            Value::Number(number) => match ftype {
+                FacetType::String => bail!("invalid facet type, expecting {} found number", ftype),
+                FacetType::Float => match number.as_f64() {
+                    Some(float) => Ok(output.push(Float(OrderedFloat(float)))),
+                    None => bail!("invalid facet type, expecting {} found integer", ftype),
+                },
+                FacetType::Integer => match number.as_i64() {
+                    Some(integer) => Ok(output.push(Integer(integer))),
+                    None => if number.is_f64() {
+                        bail!("invalid facet type, expecting {} found float", ftype)
+                    } else {
+                        bail!("invalid facet type, expecting {} found out-of-bound integer (64bit)", ftype)
+                    },
+                },
+            },
+            Value::String(string) => {
+                let string = string.trim();
+                if string.is_empty() { return Ok(()) }
+                match ftype {
+                    FacetType::String => {
+                        let string = SmallString32::from(string);
+                        Ok(output.push(String(string)))
+                    },
+                    FacetType::Float => match string.parse() {
+                        Ok(float) => Ok(output.push(Float(OrderedFloat(float)))),
+                        Err(_err) => bail!("invalid facet type, expecting {} found string", ftype),
+                    },
+                    FacetType::Integer => match string.parse() {
+                        Ok(integer) => Ok(output.push(Integer(integer))),
+                        Err(_err) => bail!("invalid facet type, expecting {} found string", ftype),
+                    },
+                }
+            },
+            Value::Array(values) => if can_recurse {
+                values.iter().map(|v| inner_parse_facet_value(ftype, v, false, output)).collect()
+            } else {
+                bail!("invalid facet type, expecting {} found sub-array ()", ftype)
+            },
+            Value::Object(_) => bail!("invalid facet type, expecting {} found object", ftype),
+        }
+    }
+
+    let mut facet_values = SmallVec8::new();
+    inner_parse_facet_value(ftype, value, true, &mut facet_values)?;
+    Ok(facet_values)
 }

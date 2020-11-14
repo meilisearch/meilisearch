@@ -16,10 +16,10 @@ use rayon::ThreadPool;
 
 use crate::index::Index;
 use crate::update::UpdateIndexingStep;
-use self::store::Store;
+use self::store::{Store, Readers};
 use self::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
-    docid_word_positions_merge, documents_merge,
+    docid_word_positions_merge, documents_merge, facet_field_value_docids_merge,
 };
 pub use self::transform::{Transform, TransformOutput};
 
@@ -327,8 +327,10 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         enum DatabaseType {
             Main,
             WordDocids,
+            FacetValuesDocids,
         }
 
+        let faceted_fields = self.index.faceted_fields(self.wtxn)?;
         let searchable_fields: HashSet<_> = match self.index.searchable_fields(self.wtxn)? {
             Some(fields) => fields.iter().copied().collect(),
             None => fields_ids_map.iter().map(|(id, _name)| id).collect(),
@@ -362,6 +364,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 .map(|(i, documents)| {
                     let store = Store::new(
                         searchable_fields.clone(),
+                        faceted_fields.clone(),
                         linked_hash_map_size,
                         max_nb_chunks,
                         max_memory_by_job,
@@ -384,13 +387,23 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             let mut word_docids_readers = Vec::with_capacity(readers.len());
             let mut docid_word_positions_readers = Vec::with_capacity(readers.len());
             let mut words_pairs_proximities_docids_readers = Vec::with_capacity(readers.len());
+            let mut facet_field_value_docids_readers = Vec::with_capacity(readers.len());
             let mut documents_readers = Vec::with_capacity(readers.len());
             readers.into_iter().for_each(|readers| {
-                main_readers.push(readers.main);
-                word_docids_readers.push(readers.word_docids);
-                docid_word_positions_readers.push(readers.docid_word_positions);
-                words_pairs_proximities_docids_readers.push(readers.words_pairs_proximities_docids);
-                documents_readers.push(readers.documents);
+                let Readers {
+                    main,
+                    word_docids,
+                    docid_word_positions,
+                    words_pairs_proximities_docids,
+                    facet_field_value_docids,
+                    documents
+                } = readers;
+                main_readers.push(main);
+                word_docids_readers.push(word_docids);
+                docid_word_positions_readers.push(docid_word_positions);
+                words_pairs_proximities_docids_readers.push(words_pairs_proximities_docids);
+                facet_field_value_docids_readers.push(facet_field_value_docids);
+                documents_readers.push(documents);
             });
 
             // This is the function that merge the readers
@@ -413,6 +426,11 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 vec![
                     (DatabaseType::Main, main_readers, main_merge as MergeFn),
                     (DatabaseType::WordDocids, word_docids_readers, word_docids_merge),
+                    (
+                        DatabaseType::FacetValuesDocids,
+                        facet_field_value_docids_readers,
+                        facet_field_value_docids_merge,
+                    ),
                 ]
                 .into_par_iter()
                 .for_each(|(dbtype, readers, merge)| {
@@ -463,9 +481,11 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
         let mut database_count = 0;
+        let total_databases = 6;
+
         progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
             databases_seen: 0,
-            total_databases: 5,
+            total_databases,
         });
 
         debug!("Writing the docid word positions into LMDB on disk...");
@@ -480,7 +500,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         database_count += 1;
         progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
             databases_seen: database_count,
-            total_databases: 5,
+            total_databases,
         });
 
         debug!("Writing the documents into LMDB on disk...");
@@ -495,7 +515,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         database_count += 1;
         progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
             databases_seen: database_count,
-            total_databases: 5,
+            total_databases,
         });
 
         debug!("Writing the words pairs proximities docids into LMDB on disk...");
@@ -510,7 +530,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         database_count += 1;
         progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
             databases_seen: database_count,
-            total_databases: 5,
+            total_databases,
         });
 
         for (db_type, result) in receiver {
@@ -537,16 +557,27 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         write_method,
                     )?;
                 },
+                DatabaseType::FacetValuesDocids => {
+                    debug!("Writing the facet values docids into LMDB on disk...");
+                    let db = *self.index.facet_field_id_value_docids.as_polymorph();
+                    write_into_lmdb_database(
+                        self.wtxn,
+                        db,
+                        content,
+                        facet_field_value_docids_merge,
+                        write_method,
+                    )?;
+                },
             }
 
             database_count += 1;
             progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
                 databases_seen: database_count,
-                total_databases: 5,
+                total_databases,
             });
         }
 
-        debug_assert_eq!(database_count, 5);
+        debug_assert_eq!(database_count, total_databases);
 
         info!("Transform output indexed in {:.02?}", before_indexing.elapsed());
 

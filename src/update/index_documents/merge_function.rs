@@ -29,23 +29,13 @@ pub fn main_merge(key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
             ensure!(values.windows(2).all(|vs| vs[0] == vs[1]), "fields ids map doesn't match");
             Ok(values[0].to_vec())
         },
-        DOCUMENTS_IDS_KEY => word_docids_merge(&[], values),
+        DOCUMENTS_IDS_KEY => roaring_bitmap_merge(values),
         otherwise => bail!("wut {:?}", otherwise),
     }
 }
 
 pub fn word_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
-    let (head, tail) = values.split_first().unwrap();
-    let mut head = RoaringBitmap::deserialize_from(&head[..])?;
-
-    for value in tail {
-        let bitmap = RoaringBitmap::deserialize_from(&value[..])?;
-        head.union_with(&bitmap);
-    }
-
-    let mut vec = Vec::with_capacity(head.serialized_size());
-    head.serialize_into(&mut vec)?;
-    Ok(vec)
+    roaring_bitmap_merge(values)
 }
 
 pub fn docid_word_positions_merge(key: &[u8], _values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
@@ -53,17 +43,11 @@ pub fn docid_word_positions_merge(key: &[u8], _values: &[Cow<[u8]>]) -> anyhow::
 }
 
 pub fn words_pairs_proximities_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
-    let (head, tail) = values.split_first().unwrap();
-    let mut head = CboRoaringBitmapCodec::deserialize_from(&head[..])?;
+    cbo_roaring_bitmap_merge(values)
+}
 
-    for value in tail {
-        let bitmap = CboRoaringBitmapCodec::deserialize_from(&value[..])?;
-        head.union_with(&bitmap);
-    }
-
-    let mut vec = Vec::new();
-    CboRoaringBitmapCodec::serialize_into(&head, &mut vec)?;
-    Ok(vec)
+pub fn facet_field_value_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+    cbo_roaring_bitmap_merge(values)
 }
 
 pub fn documents_merge(key: &[u8], _values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
@@ -84,4 +68,32 @@ pub fn merge_two_obkvs(base: obkv::KvReader, update: obkv::KvReader, buffer: &mu
     }
 
     writer.finish().unwrap();
+}
+
+fn roaring_bitmap_merge(values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+    let (head, tail) = values.split_first().unwrap();
+    let mut head = RoaringBitmap::deserialize_from(&head[..])?;
+
+    for value in tail {
+        let bitmap = RoaringBitmap::deserialize_from(&value[..])?;
+        head.union_with(&bitmap);
+    }
+
+    let mut vec = Vec::with_capacity(head.serialized_size());
+    head.serialize_into(&mut vec)?;
+    Ok(vec)
+}
+
+fn cbo_roaring_bitmap_merge(values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+    let (head, tail) = values.split_first().unwrap();
+    let mut head = CboRoaringBitmapCodec::deserialize_from(&head[..])?;
+
+    for value in tail {
+        let bitmap = CboRoaringBitmapCodec::deserialize_from(&value[..])?;
+        head.union_with(&bitmap);
+    }
+
+    let mut vec = Vec::new();
+    CboRoaringBitmapCodec::serialize_into(&head, &mut vec)?;
+    Ok(vec)
 }

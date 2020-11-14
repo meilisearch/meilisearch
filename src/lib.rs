@@ -4,6 +4,7 @@ mod index;
 mod mdfs;
 mod query_tokens;
 mod search;
+pub mod facet;
 pub mod heed_codec;
 pub mod proximity;
 pub mod subcommand;
@@ -33,6 +34,7 @@ pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;
 pub type SmallString32 = smallstr::SmallString<[u8; 32]>;
 pub type SmallVec32<T> = smallvec::SmallVec<[T; 32]>;
 pub type SmallVec16<T> = smallvec::SmallVec<[T; 16]>;
+pub type SmallVec8<T> = smallvec::SmallVec<[T; 8]>;
 pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
 pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 pub type DocumentId = u32;
@@ -60,9 +62,9 @@ pub fn obkv_to_json(
 }
 
 /// Transform a JSON value into a string that can be indexed.
-pub fn json_to_string(value: Value) -> Option<String> {
+pub fn json_to_string(value: &Value) -> Option<String> {
 
-    fn inner(value: Value, output: &mut String) -> bool {
+    fn inner(value: &Value, output: &mut String) -> bool {
         use std::fmt::Write;
         match value {
             Value::Null => false,
@@ -121,7 +123,7 @@ mod tests {
             "not_there": null,
         });
 
-        let string = json_to_string(value).unwrap();
+        let string = json_to_string(&value).unwrap();
         assert_eq!(string, "name: John Doe. age: 43. ");
     }
 
@@ -135,7 +137,7 @@ mod tests {
             null,
         ]);
 
-        let string = json_to_string(value).unwrap();
+        let string = json_to_string(&value).unwrap();
         // We don't care about having two point (.) after the other as
         // the distance of hard separators is clamped to 8 anyway.
         assert_eq!(string, "name: John Doe. . 43. hello. I. am. fine. . ");

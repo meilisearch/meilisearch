@@ -1,9 +1,13 @@
-use anyhow::Context;
+use std::collections::HashMap;
+use std::str::FromStr;
+
+use anyhow::{ensure, Context};
 use grenad::CompressionType;
 use rayon::ThreadPool;
 
 use crate::update::index_documents::{Transform, IndexDocumentsMethod};
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
+use crate::facet::FacetType;
 use crate::{Index, FieldsIdsMap};
 
 pub struct Settings<'a, 't, 'u, 'i> {
@@ -22,6 +26,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     // however if it is `Some(None)` it means that the user forced a reset of the setting.
     searchable_fields: Option<Option<Vec<String>>>,
     displayed_fields: Option<Option<Vec<String>>>,
+    faceted_fields: Option<HashMap<String, String>>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -39,6 +44,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             thread_pool: None,
             searchable_fields: None,
             displayed_fields: None,
+            faceted_fields: None,
         }
     }
 
@@ -58,71 +64,92 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.displayed_fields = Some(Some(names));
     }
 
+    pub fn set_faceted_fields(&mut self, names_facet_types: HashMap<String, String>) {
+        self.faceted_fields = Some(names_facet_types);
+    }
+
     pub fn execute<F>(self, progress_callback: F) -> anyhow::Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync
     {
-        // Check that the searchable attributes have been specified.
-        if let Some(value) = self.searchable_fields {
-            let current_displayed_fields = self.index.displayed_fields(self.wtxn)?;
-            let current_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
+        let mut updated_searchable_fields = None;
+        let mut updated_faceted_fields = None;
+        let mut updated_displayed_fields = None;
 
-            let result = match value {
-                Some(fields_names) => {
-                    let mut fields_ids_map = current_fields_ids_map.clone();
-                    let searchable_fields: Vec<_> =
-                        fields_names.iter()
-                            .map(|name| fields_ids_map.insert(name))
-                            .collect::<Option<Vec<_>>>()
-                            .context("field id limit reached")?;
+        // Construct the new FieldsIdsMap based on the searchable fields order.
+        let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
+        let mut fields_ids_map = match self.searchable_fields {
+            Some(Some(searchable_fields)) => {
+                let mut new_fields_ids_map = FieldsIdsMap::new();
+                let mut new_searchable_fields = Vec::new();
 
-                    // If the searchable fields are ordered we don't have to generate a new `FieldsIdsMap`.
-                    if searchable_fields.windows(2).all(|win| win[0] < win[1]) {
-                        (
-                            fields_ids_map,
-                            Some(searchable_fields),
-                            current_displayed_fields.map(ToOwned::to_owned),
-                        )
-                    } else {
-                        // We create or generate the fields ids corresponding to those names.
-                        let mut fields_ids_map = FieldsIdsMap::new();
-                        let mut searchable_fields = Vec::new();
-                        for name in fields_names {
-                            let id = fields_ids_map.insert(&name).context("field id limit reached")?;
-                            searchable_fields.push(id);
-                        }
+                for name in searchable_fields {
+                    let id = new_fields_ids_map.insert(&name).context("field id limit reached")?;
+                    new_searchable_fields.push(id);
+                }
 
-                        // We complete the new FieldsIdsMap with the previous names.
-                        for (_id, name) in current_fields_ids_map.iter() {
-                            fields_ids_map.insert(name).context("field id limit reached")?;
-                        }
+                for (_, name) in fields_ids_map.iter() {
+                    new_fields_ids_map.insert(name).context("field id limit reached")?;
+                }
 
-                        // We must also update the displayed fields according to the new `FieldsIdsMap`.
-                        let displayed_fields = match current_displayed_fields {
-                            Some(fields) => {
-                                let mut displayed_fields = Vec::new();
-                                for id in fields {
-                                    let name = current_fields_ids_map.name(*id).unwrap();
-                                    let id = fields_ids_map.id(name).context("field id limit reached")?;
-                                    displayed_fields.push(id);
-                                }
-                                Some(displayed_fields)
-                            },
-                            None => None,
-                        };
+                updated_searchable_fields = Some(Some(new_searchable_fields));
+                new_fields_ids_map
+            },
+            Some(None) => {
+                updated_searchable_fields = Some(None);
+                fields_ids_map
+            },
+            None => fields_ids_map,
+        };
 
-                        (fields_ids_map, Some(searchable_fields), displayed_fields)
+        // We compute or generate the new primary key field id.
+        // TODO make the primary key settable.
+        let primary_key = match self.index.primary_key(&self.wtxn)? {
+            Some(id) => {
+                let current_fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
+                let name = current_fields_ids_map.name(id).unwrap();
+                fields_ids_map.insert(name).context("field id limit reached")?
+            },
+            None => fields_ids_map.insert("id").context("field id limit reached")?,
+        };
+
+        if let Some(fields_names_facet_types) = self.faceted_fields {
+            let current_faceted_fields = self.index.faceted_fields(self.wtxn)?;
+
+            let mut faceted_fields = HashMap::new();
+            for (name, sftype) in fields_names_facet_types {
+                let ftype = FacetType::from_str(&sftype).with_context(|| format!("parsing facet type {:?}", sftype))?;
+                let id = fields_ids_map.insert(&name).context("field id limit reached")?;
+                match current_faceted_fields.get(&id) {
+                    Some(pftype) => {
+                        ensure!(ftype == *pftype, "{} facet type changed from {} to {}", name, ftype, pftype);
+                        faceted_fields.insert(id, ftype)
+                    },
+                    None => faceted_fields.insert(id, ftype),
+                };
+            }
+
+            updated_faceted_fields = Some(faceted_fields);
+        }
+
+        // Check that the displayed attributes have been specified.
+        if let Some(value) = self.displayed_fields {
+            match value {
+                Some(names) => {
+                    let mut new_displayed_fields = Vec::new();
+                    for name in names {
+                        let id = fields_ids_map.insert(&name).context("field id limit reached")?;
+                        new_displayed_fields.push(id);
                     }
-                },
-                None => (
-                    current_fields_ids_map.clone(),
-                    None,
-                    current_displayed_fields.map(ToOwned::to_owned),
-                ),
-            };
+                    updated_displayed_fields = Some(Some(new_displayed_fields));
+                }
+                None => updated_displayed_fields = Some(None),
+            }
+        }
 
-            let (mut fields_ids_map, searchable_fields, displayed_fields) = result;
-
+        // If any setting have modified any of the datastructures it means that we need
+        // to retrieve the documents and then reindex then with the new settings.
+        if updated_searchable_fields.is_some() || updated_faceted_fields.is_some() {
             let transform = Transform {
                 rtxn: &self.wtxn,
                 index: self.index,
@@ -136,15 +163,6 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                 autogenerate_docids: false,
             };
 
-            // We compute or generate the new primary key field id.
-            let primary_key = match self.index.primary_key(&self.wtxn)? {
-                Some(id) => {
-                    let name = current_fields_ids_map.name(id).unwrap();
-                    fields_ids_map.insert(name).context("field id limit reached")?
-                },
-                None => fields_ids_map.insert("id").context("field id limit reached")?,
-            };
-
             // We remap the documents fields based on the new `FieldsIdsMap`.
             let output = transform.remap_index_documents(primary_key, fields_ids_map.clone())?;
 
@@ -152,18 +170,18 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             // this way next indexing methods will be based on that.
             self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
 
-            // The new searchable fields are also written down to make sure
-            // that the IndexDocuments system takes only these ones into account.
-            match searchable_fields {
-                Some(fields) => self.index.put_searchable_fields(self.wtxn, &fields)?,
-                None => self.index.delete_searchable_fields(self.wtxn).map(drop)?,
+            if let Some(faceted_fields) = updated_faceted_fields {
+                // We write the faceted_fields fields into the database here.
+                self.index.put_faceted_fields(self.wtxn, &faceted_fields)?;
             }
 
-            // We write the displayed fields into the database here
-            // to make sure that the right fields are displayed.
-            match displayed_fields {
-                Some(fields) => self.index.put_displayed_fields(self.wtxn, &fields)?,
-                None => self.index.delete_displayed_fields(self.wtxn).map(drop)?,
+            if let Some(searchable_fields) = updated_searchable_fields {
+                // The new searchable fields are also written down to make sure
+                // that the IndexDocuments system takes only these ones into account.
+                match searchable_fields {
+                    Some(fields) => self.index.put_searchable_fields(self.wtxn, &fields)?,
+                    None => self.index.delete_searchable_fields(self.wtxn).map(drop)?,
+                }
             }
 
             // We clear the full database (words-fst, documents ids and documents content).
@@ -180,33 +198,15 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             indexing_builder.chunk_compression_level = self.chunk_compression_level;
             indexing_builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
             indexing_builder.thread_pool = self.thread_pool;
-            indexing_builder.execute_raw(output, progress_callback)?;
+            indexing_builder.execute_raw(output, &progress_callback)?;
         }
 
-        // Check that the displayed attributes have been specified.
-        if let Some(value) = self.displayed_fields {
-            match value {
-                // If it has been set, and it was a list of fields names, we create
-                // or generate the fields ids corresponds to those names and store them
-                // in the database in the order they were specified.
-                Some(fields_names) => {
-                    let mut fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
-
-                    // We create or generate the fields ids corresponding to those names.
-                    let mut fields_ids = Vec::new();
-                    for name in fields_names {
-                        let id = fields_ids_map.insert(&name).context("field id limit reached")?;
-                        fields_ids.push(id);
-                    }
-
-                    self.index.put_displayed_fields(self.wtxn, &fields_ids)?;
-                },
-                // If it was set to `null` it means that the user wants to get the default behavior
-                // which is displaying all the attributes in no specific order (FieldsIdsMap order),
-                // we just have to delete the displayed fields.
-                None => {
-                    self.index.delete_displayed_fields(self.wtxn)?;
-                },
+        if let Some(displayed_fields) = updated_displayed_fields {
+            // We write the displayed fields into the database here
+            // to make sure that the right fields are displayed.
+            match displayed_fields {
+                Some(fields) => self.index.put_displayed_fields(self.wtxn, &fields)?,
+                None => self.index.delete_displayed_fields(self.wtxn).map(drop)?,
             }
         }
 
@@ -219,6 +219,7 @@ mod tests {
     use super::*;
     use crate::update::{IndexDocuments, UpdateFormat};
     use heed::EnvOpenOptions;
+    use maplit::hashmap;
 
     #[test]
     fn set_and_reset_searchable_fields() {
@@ -384,6 +385,33 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.displayed_fields(&rtxn).unwrap();
         assert_eq!(fields_ids, None);
+        drop(rtxn);
+    }
+
+    #[test]
+    fn set_faceted_fields() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the faceted fields to be the age.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.set_faceted_fields(hashmap!{ "age".into() => "integer".into() });
+        builder.execute(|_| ()).unwrap();
+
+        // Then index some documents.
+        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Check that the displayed fields are correctly set.
+        let rtxn = index.read_txn().unwrap();
+        let fields_ids = index.faceted_fields(&rtxn).unwrap();
+        assert_eq!(fields_ids, hashmap!{ 1 => FacetType::Integer });
         drop(rtxn);
     }
 }
