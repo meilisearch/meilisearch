@@ -28,7 +28,7 @@ use warp::{Filter, http::Response};
 use milli::tokenizer::{simple_tokenizer, TokenType};
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
-use milli::{obkv_to_json, Index, UpdateStore, SearchResult};
+use milli::{obkv_to_json, Index, UpdateStore, SearchResult, FacetCondition};
 
 static GLOBAL_THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
@@ -550,9 +550,12 @@ async fn main() -> anyhow::Result<()> {
             .body(include_str!("../public/logo-black.svg"))
         );
 
-    #[derive(Deserialize)]
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    #[serde(rename_all = "camelCase")]
     struct QueryBody {
         query: Option<String>,
+        facet_condition: Option<String>,
     }
 
     let disable_highlighting = opt.disable_highlighting;
@@ -568,6 +571,10 @@ async fn main() -> anyhow::Result<()> {
             let mut search = index.search(&rtxn);
             if let Some(query) = query.query {
                 search.query(query);
+            }
+            if let Some(condition) = query.facet_condition {
+                let condition = FacetCondition::from_str(&rtxn, &index, &condition).unwrap();
+                search.facet_condition(condition);
             }
 
             let SearchResult { found_words, documents_ids } = search.execute().unwrap();

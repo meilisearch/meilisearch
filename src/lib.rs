@@ -24,7 +24,7 @@ pub use self::criterion::{Criterion, default_criteria};
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::index::Index;
-pub use self::search::{Search, SearchResult};
+pub use self::search::{Search, FacetCondition, SearchResult};
 pub use self::heed_codec::{
     RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec,
     ObkvCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
