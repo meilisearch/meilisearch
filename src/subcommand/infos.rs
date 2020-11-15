@@ -229,40 +229,91 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     use std::cmp::Reverse;
     use std::collections::BinaryHeap;
     use heed::types::{Str, ByteSlice};
-    use crate::heed_codec::BEU32StrCodec;
+    use crate::facet::FacetType;
+    use crate::heed_codec::facet::{FacetValueStringCodec, FacetValueF64Codec, FacetValueI64Codec};
+
+    let Index {
+        env: _env,
+        main,
+        word_docids,
+        docid_word_positions,
+        word_pair_proximity_docids,
+        facet_field_id_value_docids,
+        documents,
+    } = index;
 
     let main_name = "main";
     let word_docids_name = "word_docids";
     let docid_word_positions_name = "docid_word_positions";
+    let word_pair_proximity_docids_name = "word_pair_proximity_docids";
+    let facet_field_id_value_docids_name = "facet_field_id_value_docids";
+    let documents_name = "documents";
 
     let mut heap = BinaryHeap::with_capacity(limit + 1);
 
     if limit > 0 {
         let words_fst = index.words_fst(rtxn)?;
-
         heap.push(Reverse((words_fst.as_fst().as_bytes().len(), format!("words-fst"), main_name)));
         if heap.len() > limit { heap.pop(); }
 
-        if let Some(documents) = index.main.get::<_, Str, ByteSlice>(rtxn, "documents")? {
-            heap.push(Reverse((documents.len(), format!("documents"), main_name)));
-            if heap.len() > limit { heap.pop(); }
-        }
-
-        if let Some(documents_ids) = index.main.get::<_, Str, ByteSlice>(rtxn, "documents-ids")? {
+        if let Some(documents_ids) = main.get::<_, Str, ByteSlice>(rtxn, "documents-ids")? {
             heap.push(Reverse((documents_ids.len(), format!("documents-ids"), main_name)));
             if heap.len() > limit { heap.pop(); }
         }
 
-        for result in index.word_docids.as_polymorph().iter::<_, Str, ByteSlice>(rtxn)? {
+        for result in word_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let (word, value) = result?;
             heap.push(Reverse((value.len(), word.to_string(), word_docids_name)));
             if heap.len() > limit { heap.pop(); }
         }
 
-        for result in index.docid_word_positions.as_polymorph().iter::<_, BEU32StrCodec, ByteSlice>(rtxn)? {
+        for result in docid_word_positions.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let ((docid, word), value) = result?;
             let key = format!("{} {}", docid, word);
             heap.push(Reverse((value.len(), key, docid_word_positions_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        for result in word_pair_proximity_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let ((word1, word2, prox), value) = result?;
+            let key = format!("{} {} {}", word1, word2, prox);
+            heap.push(Reverse((value.len(), key, word_pair_proximity_docids_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        let faceted_fields = index.faceted_fields(rtxn)?;
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        for (field_id, field_type) in faceted_fields {
+            let facet_name = fields_ids_map.name(field_id).unwrap();
+            let iter = facet_field_id_value_docids.prefix_iter(&rtxn, &[field_id])?;
+            let iter = match field_type {
+                FacetType::String => {
+                    let iter = iter.remap_types::<FacetValueStringCodec, ByteSlice>()
+                        .map(|r| r.map(|((_, k), v)| (k.to_string(), v)));
+                    Box::new(iter) as Box<dyn Iterator<Item=_>>
+                },
+                FacetType::Float => {
+                    let iter = iter.remap_types::<FacetValueF64Codec, ByteSlice>()
+                        .map(|r| r.map(|((_, k), v)| (k.to_string(), v)));
+                    Box::new(iter)
+                },
+                FacetType::Integer => {
+                    let iter = iter.remap_types::<FacetValueI64Codec, ByteSlice>()
+                        .map(|r| r.map(|((_, k), v)| (k.to_string(), v)));
+                    Box::new(iter)
+                },
+            };
+            for result in iter {
+                let (fvalue, value) = result?;
+                let key = format!("{} {}", facet_name, fvalue);
+                heap.push(Reverse((value.len(), key, facet_field_id_value_docids_name)));
+                if heap.len() > limit { heap.pop(); }
+            }
+        }
+
+        for result in documents.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let (id, value) = result?;
+            heap.push(Reverse((value.len(), id.to_string(), documents_name)));
             if heap.len() > limit { heap.pop(); }
         }
     }
