@@ -90,7 +90,6 @@ pub enum Error {
     Internal(String),
     InvalidIndexUid,
     InvalidToken(String),
-    Maintenance,
     MissingAuthorizationHeader,
     NotFound(String),
     OpenIndex(String),
@@ -117,7 +116,6 @@ impl ErrorCode for Error {
             Internal(_) => Code::Internal,
             InvalidIndexUid => Code::InvalidIndexUid,
             InvalidToken(_) => Code::InvalidToken,
-            Maintenance => Code::Maintenance,
             MissingAuthorizationHeader => Code::MissingAuthorizationHeader,
             NotFound(_) => Code::NotFound,
             OpenIndex(_) => Code::OpenIndex,
@@ -218,10 +216,6 @@ impl Error {
         Error::InvalidIndexUid
     }
 
-    pub fn maintenance() -> Error {
-        Error::Maintenance
-    }
-
     pub fn retrieve_document(doc_id: u32, err: impl fmt::Display) -> Error {
         Error::RetrieveDocument(doc_id, err.to_string())
     }
@@ -251,7 +245,6 @@ impl fmt::Display for Error {
             Self::Internal(err) => f.write_str(err),
             Self::InvalidIndexUid => f.write_str("Index must have a valid uid; Index uid can be of type integer or string only composed of alphanumeric characters, hyphens (-) and underscores (_)."),
             Self::InvalidToken(err) => write!(f, "Invalid API key: {}", err),
-            Self::Maintenance => f.write_str("Server is in maintenance, please try again later"),
             Self::MissingAuthorizationHeader => f.write_str("You must have an authorization token"),
             Self::NotFound(err) => write!(f, "{} not found", err),
             Self::OpenIndex(err) => write!(f, "Impossible to open index; {}", err),
