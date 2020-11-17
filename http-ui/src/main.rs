@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, create_dir_all};
 use std::net::SocketAddr;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -27,7 +28,7 @@ use warp::{Filter, http::Response};
 
 use milli::tokenizer::{simple_tokenizer, TokenType};
 use milli::update::UpdateIndexingStep::*;
-use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
+use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat, EasingName};
 use milli::{obkv_to_json, Index, UpdateStore, SearchResult, FacetCondition};
 
 static GLOBAL_THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
@@ -196,6 +197,7 @@ enum UpdateMeta {
     DocumentsAddition { method: String, format: String },
     ClearDocuments,
     Settings(Settings),
+    FacetLevels(FacetLevels),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -229,6 +231,15 @@ struct Settings {
 
     #[serde(default)]
     faceted_attributes: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+struct FacetLevels {
+    last_level_size: Option<NonZeroUsize>,
+    number_of_levels: Option<NonZeroUsize>,
+    easing_function: Option<String>,
 }
 
 // Any value that is present is considered Some value, including null.
@@ -397,6 +408,36 @@ async fn main() -> anyhow::Result<()> {
 
                     match result {
                         Ok(_count) => wtxn.commit().map_err(Into::into),
+                        Err(e) => Err(e.into())
+                    }
+                },
+                UpdateMeta::FacetLevels(levels) => {
+                    // We must use the write transaction of the update here.
+                    let mut wtxn = index_cloned.write_txn()?;
+                    let mut builder = update_builder.facet_levels(&mut wtxn, &index_cloned);
+                    if let Some(value) = levels.last_level_size {
+                        builder.last_level_size(value);
+                    }
+                    if let Some(value) = levels.number_of_levels {
+                        builder.number_of_levels(value);
+                    }
+                    if let Some(value) = levels.easing_function {
+                        let easing_name = if value.eq_ignore_ascii_case("expo") {
+                            EasingName::Expo
+                        } else if value.eq_ignore_ascii_case("quart") {
+                            EasingName::Quart
+                        } else if value.eq_ignore_ascii_case("circ") {
+                            EasingName::Circ
+                        } else if value.eq_ignore_ascii_case("linear") {
+                            EasingName::Linear
+                        } else {
+                            panic!("Invalid easing function name")
+                        };
+                        builder.easing_function(easing_name);
+                    }
+
+                    match builder.execute() {
+                        Ok(()) => wtxn.commit().map_err(Into::into),
                         Err(e) => Err(e.into())
                     }
                 }
@@ -759,6 +800,19 @@ async fn main() -> anyhow::Result<()> {
             Ok(warp::reply())
         });
 
+    let update_store_cloned = update_store.clone();
+    let update_status_sender_cloned = update_status_sender.clone();
+    let change_facet_levels_route = warp::filters::method::post()
+        .and(warp::path!("facet-levels"))
+        .and(warp::body::json())
+        .map(move |levels: FacetLevels| {
+            let meta = UpdateMeta::FacetLevels(levels);
+            let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
+            let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
+            eprintln!("update {} registered", update_id);
+            warp::reply()
+        });
+
     let update_ws_route = warp::ws()
         .and(warp::path!("updates" / "ws"))
         .map(move |ws: warp::ws::Ws| {
@@ -807,6 +861,7 @@ async fn main() -> anyhow::Result<()> {
         .or(indexing_json_stream_route)
         .or(clearing_route)
         .or(change_settings_route)
+        .or(change_facet_levels_route)
         .or(update_ws_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;

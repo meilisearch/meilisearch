@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Seek, SeekFrom};
+use std::num::NonZeroUsize;
 use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 
@@ -14,32 +15,29 @@ use memmap::Mmap;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 
-use crate::facet::FacetType;
 use crate::index::Index;
-use crate::update::UpdateIndexingStep;
+use crate::update::{FacetLevels, UpdateIndexingStep};
 use self::store::{Store, Readers};
 use self::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
     docid_word_positions_merge, documents_merge, facet_field_value_docids_merge,
 };
 pub use self::transform::{Transform, TransformOutput};
-pub use self::facet_level::{clear_field_levels, compute_facet_levels};
 
 use crate::MergeFn;
 use super::UpdateBuilder;
 
-mod facet_level;
 mod merge_function;
 mod store;
 mod transform;
 
 #[derive(Debug, Copy, Clone)]
-enum WriteMethod {
+pub enum WriteMethod {
     Append,
     GetMergePut,
 }
 
-fn create_writer(typ: CompressionType, level: Option<u32>, file: File) -> io::Result<Writer<File>> {
+pub fn create_writer(typ: CompressionType, level: Option<u32>, file: File) -> io::Result<Writer<File>> {
     let mut builder = Writer::builder();
     builder.compression_type(typ);
     if let Some(level) = level {
@@ -48,7 +46,7 @@ fn create_writer(typ: CompressionType, level: Option<u32>, file: File) -> io::Re
     builder.build(file)
 }
 
-fn create_sorter(
+pub fn create_sorter(
     merge: MergeFn,
     chunk_compression_type: CompressionType,
     chunk_compression_level: Option<u32>,
@@ -74,7 +72,7 @@ fn create_sorter(
     builder.build()
 }
 
-fn writer_into_reader(writer: Writer<File>, shrink_size: Option<u64>) -> anyhow::Result<Reader<FileFuse>> {
+pub fn writer_into_reader(writer: Writer<File>, shrink_size: Option<u64>) -> anyhow::Result<Reader<FileFuse>> {
     let mut file = writer.into_inner()?;
     file.seek(SeekFrom::Start(0))?;
     let file = if let Some(shrink_size) = shrink_size {
@@ -85,13 +83,13 @@ fn writer_into_reader(writer: Writer<File>, shrink_size: Option<u64>) -> anyhow:
     Reader::new(file).map_err(Into::into)
 }
 
-fn merge_readers(sources: Vec<Reader<FileFuse>>, merge: MergeFn) -> Merger<FileFuse, MergeFn> {
+pub fn merge_readers(sources: Vec<Reader<FileFuse>>, merge: MergeFn) -> Merger<FileFuse, MergeFn> {
     let mut builder = Merger::builder(merge);
     builder.extend(sources);
     builder.build()
 }
 
-fn merge_into_lmdb_database(
+pub fn merge_into_lmdb_database(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
     sources: Vec<Reader<FileFuse>>,
@@ -135,7 +133,7 @@ fn merge_into_lmdb_database(
     Ok(())
 }
 
-fn write_into_lmdb_database(
+pub fn write_into_lmdb_database(
     wtxn: &mut heed::RwTxn,
     database: heed::PolyDatabase,
     mut reader: Reader<FileFuse>,
@@ -210,6 +208,8 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) chunk_fusing_shrink_size: Option<u64>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
+    facet_number_of_levels: Option<NonZeroUsize>,
+    facet_last_level_size: Option<NonZeroUsize>,
     update_method: IndexDocumentsMethod,
     update_format: UpdateFormat,
     autogenerate_docids: bool,
@@ -228,6 +228,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             chunk_compression_level: None,
             chunk_fusing_shrink_size: None,
             thread_pool: None,
+            facet_number_of_levels: None,
+            facet_last_level_size: None,
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             update_format: UpdateFormat::Json,
             autogenerate_docids: true,
@@ -478,9 +480,6 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         // We write the external documents ids into the main database.
         self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
 
-        // We get the faceted fields to be able to create the facet levels.
-        let faceted_fields = self.index.faceted_fields(self.wtxn)?;
-
         // We merge the new documents ids with the existing ones.
         documents_ids.union_with(&new_documents_ids);
         documents_ids.union_with(&replaced_documents_ids);
@@ -583,34 +582,17 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             });
         }
 
-        debug!("Computing and writing the facet values levels docids into LMDB on disk...");
-        for (field_id, facet_type) in faceted_fields {
-            if facet_type == FacetType::String { continue }
-
-            clear_field_levels(
-                self.wtxn,
-                self.index.facet_field_id_value_docids,
-                field_id,
-            )?;
-
-            let content = compute_facet_levels(
-                self.wtxn,
-                self.index.facet_field_id_value_docids,
-                chunk_compression_type,
-                chunk_compression_level,
-                chunk_fusing_shrink_size,
-                field_id,
-                facet_type,
-            )?;
-
-            write_into_lmdb_database(
-                self.wtxn,
-                *self.index.facet_field_id_value_docids.as_polymorph(),
-                content,
-                |_, _| anyhow::bail!("invalid facet level merging"),
-                WriteMethod::GetMergePut,
-            )?;
+        let mut builder = FacetLevels::new(self.wtxn, self.index);
+        builder.chunk_compression_type = self.chunk_compression_type;
+        builder.chunk_compression_level = self.chunk_compression_level;
+        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+        if let Some(value) = self.facet_number_of_levels {
+            builder.number_of_levels(value);
         }
+        if let Some(value) = self.facet_last_level_size {
+            builder.last_level_size(value);
+        }
+        builder.execute()?;
 
         debug_assert_eq!(database_count, total_databases);
 
