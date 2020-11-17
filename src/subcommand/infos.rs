@@ -89,6 +89,12 @@ enum Command {
         field_name: String,
     },
 
+    /// Outputs some facets statistics for the given facet name.
+    FacetStats {
+        /// The field name in the document.
+        field_name: String,
+    },
+
     /// Outputs the total size of all the docid-word-positions keys and values.
     TotalDocidWordPositionsSize,
 
@@ -165,6 +171,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         FacetValuesDocids { full_display, field_name } => {
             facet_values_docids(&index, &rtxn, !full_display, field_name)
         },
+        FacetStats { field_name } => facet_stats(&index, &rtxn, field_name),
         TotalDocidWordPositionsSize => total_docid_word_positions_size(&index, &rtxn),
         AverageNumberOfWordsByDoc => average_number_of_words_by_doc(&index, &rtxn),
         AverageNumberOfPositionsByWord => {
@@ -397,6 +404,62 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
     }
 
     Ok(wtr.flush()?)
+}
+
+fn facet_stats(index: &Index, rtxn: &heed::RoTxn, field_name: String) -> anyhow::Result<()> {
+    use crate::facet::FacetType;
+    use crate::heed_codec::facet::{
+        FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec,
+    };
+
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
+    let faceted_fields = index.faceted_fields(&rtxn)?;
+
+    let field_id = fields_ids_map.id(&field_name)
+        .with_context(|| format!("field {} not found", field_name))?;
+    let field_type = faceted_fields.get(&field_id)
+        .with_context(|| format!("field {} is not faceted", field_name))?;
+
+    let iter = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[field_id])?;
+    let iter = match field_type {
+        FacetType::String => {
+            let iter = iter.remap_key_type::<FacetValueStringCodec>()
+                .map(|r| r.map(|_| 0u8));
+            Box::new(iter) as Box<dyn Iterator<Item=_>>
+        },
+        FacetType::Float => {
+            let iter = iter.remap_key_type::<FacetLevelValueF64Codec>()
+                .map(|r| r.map(|((_, level, _, _), _)| level));
+            Box::new(iter)
+        },
+        FacetType::Integer => {
+            let iter = iter.remap_key_type::<FacetLevelValueI64Codec>()
+                .map(|r| r.map(|((_, level, _, _), _)| level));
+            Box::new(iter)
+        },
+    };
+
+    println!("The database {:?} facet stats", field_name);
+
+    let mut level_size = 0;
+    let mut current_level = None;
+    for result in iter {
+        let level = result?;
+        if let Some(current) = current_level {
+            if current != level {
+                println!("\tnumber of groups at level {}: {}", current, level_size);
+                level_size = 0;
+            }
+        }
+        current_level = Some(level);
+        level_size += 1;
+    }
+
+    if let Some(current) = current_level {
+        println!("\tnumber of groups at level {}: {}", current, level_size);
+    }
+
+    Ok(())
 }
 
 fn export_words_fst(index: &Index, rtxn: &heed::RoTxn, output: PathBuf) -> anyhow::Result<()> {
