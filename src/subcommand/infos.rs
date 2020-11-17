@@ -407,6 +407,7 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
 }
 
 fn facet_stats(index: &Index, rtxn: &heed::RoTxn, field_name: String) -> anyhow::Result<()> {
+    use heed::types::ByteSlice;
     use crate::facet::FacetType;
     use crate::heed_codec::facet::{
         FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec,
@@ -423,17 +424,17 @@ fn facet_stats(index: &Index, rtxn: &heed::RoTxn, field_name: String) -> anyhow:
     let iter = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[field_id])?;
     let iter = match field_type {
         FacetType::String => {
-            let iter = iter.remap_key_type::<FacetValueStringCodec>()
+            let iter = iter.remap_types::<FacetValueStringCodec, ByteSlice>()
                 .map(|r| r.map(|_| 0u8));
             Box::new(iter) as Box<dyn Iterator<Item=_>>
         },
         FacetType::Float => {
-            let iter = iter.remap_key_type::<FacetLevelValueF64Codec>()
+            let iter = iter.remap_types::<FacetLevelValueF64Codec, ByteSlice>()
                 .map(|r| r.map(|((_, level, _, _), _)| level));
             Box::new(iter)
         },
         FacetType::Integer => {
-            let iter = iter.remap_key_type::<FacetLevelValueI64Codec>()
+            let iter = iter.remap_types::<FacetLevelValueI64Codec, ByteSlice>()
                 .map(|r| r.map(|((_, level, _, _), _)| level));
             Box::new(iter)
         },
