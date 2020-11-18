@@ -19,7 +19,7 @@ use tempfile::tempfile;
 
 use crate::facet::FacetType;
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
-use crate::heed_codec::facet::{FacetValueStringCodec, FacetValueF64Codec, FacetValueI64Codec};
+use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::tokenizer::{simple_tokenizer, only_token};
 use crate::update::UpdateIndexingStep;
 use crate::{json_to_string, SmallVec8, SmallVec32, SmallString32, Position, DocumentId};
@@ -337,8 +337,8 @@ impl Store {
         for ((field_id, value), docids) in iter {
             let result = match value {
                 String(s) => FacetValueStringCodec::bytes_encode(&(field_id, &s)).map(Cow::into_owned),
-                Float(f) => FacetValueF64Codec::bytes_encode(&(field_id, *f)).map(Cow::into_owned),
-                Integer(i) => FacetValueI64Codec::bytes_encode(&(field_id, i)).map(Cow::into_owned),
+                Float(f) => FacetLevelValueF64Codec::bytes_encode(&(field_id, 0, *f, *f)).map(Cow::into_owned),
+                Integer(i) => FacetLevelValueI64Codec::bytes_encode(&(field_id, 0, i, i)).map(Cow::into_owned),
             };
             let key = result.context("could not serialize facet key")?;
             let bytes = CboRoaringBitmapCodec::bytes_encode(&docids)

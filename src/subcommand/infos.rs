@@ -2,9 +2,9 @@ use std::path::PathBuf;
 use std::{str, io};
 
 use anyhow::Context;
-use crate::Index;
 use heed::EnvOpenOptions;
 use structopt::StructOpt;
+use crate::Index;
 
 use Command::*;
 
@@ -225,12 +225,52 @@ fn most_common_words(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow:
     Ok(wtr.flush()?)
 }
 
+fn facet_values_iter<'txn, DC: 'txn>(
+    rtxn: &'txn heed::RoTxn,
+    db: heed::Database<heed::types::ByteSlice, DC>,
+    field_id: u8,
+    facet_type: crate::facet::FacetType,
+) -> heed::Result<Box<dyn Iterator<Item=heed::Result<(String, DC::DItem)>> + 'txn>>
+where
+    DC: heed::BytesDecode<'txn>,
+{
+    use crate::facet::FacetType;
+    use crate::heed_codec::facet::{
+        FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec,
+    };
+
+    let iter = db.prefix_iter(&rtxn, &[field_id])?;
+    match facet_type {
+        FacetType::String => {
+            let iter = iter.remap_key_type::<FacetValueStringCodec>()
+                .map(|r| r.map(|((_, key), value)| (key.to_string(), value)));
+            Ok(Box::new(iter) as Box<dyn Iterator<Item=_>>)
+        },
+        FacetType::Float => {
+            let iter = iter.remap_key_type::<FacetLevelValueF64Codec>()
+                .map(|r| r.map(|((_, level, left, right), value)| if level == 0 {
+                    (format!("{} (level {})", left, level), value)
+                } else {
+                    (format!("{} to {} (level {})", left, right, level), value)
+                }));
+            Ok(Box::new(iter))
+        },
+        FacetType::Integer => {
+            let iter = iter.remap_key_type::<FacetLevelValueI64Codec>()
+                .map(|r| r.map(|((_, level, left, right), value)| if level == 0 {
+                    (format!("{} (level {})", left, level), value)
+                } else {
+                    (format!("{} to {} (level {})", left, right, level), value)
+                }));
+            Ok(Box::new(iter))
+        },
+    }
+}
+
 fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow::Result<()> {
     use std::cmp::Reverse;
     use std::collections::BinaryHeap;
     use heed::types::{Str, ByteSlice};
-    use crate::facet::FacetType;
-    use crate::heed_codec::facet::{FacetValueStringCodec, FacetValueF64Codec, FacetValueI64Codec};
 
     let Index {
         env: _env,
@@ -285,25 +325,9 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         for (field_id, field_type) in faceted_fields {
             let facet_name = fields_ids_map.name(field_id).unwrap();
-            let iter = facet_field_id_value_docids.prefix_iter(&rtxn, &[field_id])?;
-            let iter = match field_type {
-                FacetType::String => {
-                    let iter = iter.remap_types::<FacetValueStringCodec, ByteSlice>()
-                        .map(|r| r.map(|((_, k), v)| (k.to_string(), v)));
-                    Box::new(iter) as Box<dyn Iterator<Item=_>>
-                },
-                FacetType::Float => {
-                    let iter = iter.remap_types::<FacetValueF64Codec, ByteSlice>()
-                        .map(|r| r.map(|((_, k), v)| (k.to_string(), v)));
-                    Box::new(iter)
-                },
-                FacetType::Integer => {
-                    let iter = iter.remap_types::<FacetValueI64Codec, ByteSlice>()
-                        .map(|r| r.map(|((_, k), v)| (k.to_string(), v)));
-                    Box::new(iter)
-                },
-            };
-            for result in iter {
+
+            let db = facet_field_id_value_docids.remap_data_type::<ByteSlice>();
+            for result in facet_values_iter(rtxn, db, field_id, field_type)? {
                 let (fvalue, value) = result?;
                 let key = format!("{} {}", facet_name, fvalue);
                 heap.push(Reverse((value.len(), key, facet_field_id_value_docids_name)));
@@ -349,10 +373,6 @@ fn words_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: Vec<Strin
 }
 
 fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_name: String) -> anyhow::Result<()> {
-    use crate::facet::FacetType;
-    use crate::heed_codec::facet::{FacetValueStringCodec, FacetValueF64Codec, FacetValueI64Codec};
-    use heed::{BytesDecode, Error::Decoding};
-
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let faceted_fields = index.faceted_fields(&rtxn)?;
 
@@ -361,39 +381,12 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
     let field_type = faceted_fields.get(&field_id)
         .with_context(|| format!("field {} is not faceted", field_name))?;
 
-    let iter = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[field_id])?;
-    let iter = match field_type {
-        FacetType::String => {
-            let iter = iter
-                .map(|result| result.and_then(|(key, value)| {
-                    let (_, key) = FacetValueStringCodec::bytes_decode(key).ok_or(Decoding)?;
-                    Ok((key.to_string(), value))
-                }));
-            Box::new(iter) as Box<dyn Iterator<Item=_>>
-        },
-        FacetType::Float => {
-            let iter = iter
-                .map(|result| result.and_then(|(key, value)| {
-                    let (_, key) = FacetValueF64Codec::bytes_decode(key).ok_or(Decoding)?;
-                    Ok((key.to_string(), value))
-                }));
-            Box::new(iter)
-        },
-        FacetType::Integer => {
-            let iter = iter
-                .map(|result| result.and_then(|(key, value)| {
-                    let (_, key) = FacetValueI64Codec::bytes_decode(key).ok_or(Decoding)?;
-                    Ok((key.to_string(), value))
-                }));
-            Box::new(iter)
-        },
-    };
-
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
     wtr.write_record(&["facet_value", "documents_ids"])?;
 
-    for result in iter {
+    let db = index.facet_field_id_value_docids;
+    for result in facet_values_iter(rtxn, db, field_id, *field_type)? {
         let (value, docids) = result?;
         let docids = if debug {
             format!("{:?}", docids)

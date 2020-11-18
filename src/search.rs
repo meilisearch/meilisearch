@@ -4,6 +4,7 @@ use std::fmt;
 
 use anyhow::{bail, ensure, Context};
 use fst::{IntoStreamer, Streamer};
+use heed::types::DecodeIgnore;
 use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use log::debug;
@@ -11,7 +12,7 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 use crate::facet::FacetType;
-use crate::heed_codec::{CboRoaringBitmapCodec, facet::FacetValueI64Codec};
+use crate::heed_codec::{facet::FacetLevelValueI64Codec, CboRoaringBitmapCodec};
 use crate::mdfs::Mdfs;
 use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, DocumentId};
@@ -238,29 +239,105 @@ impl<'a> Search<'a> {
         // We create the original candidates with the facet conditions results.
         let facet_candidates = match self.facet_condition {
             Some(FacetCondition::Operator(fid, operator)) => {
-                use std::ops::Bound::{Included, Excluded};
+                use std::ops::Bound::{self, Included, Excluded};
                 use FacetOperator::*;
-                // Make sure we always bound the ranges with the field id, as the facets
-                // values are all in the same database and prefixed by the field id.
-                let range = match operator {
-                    GreaterThan(val) => (Excluded((fid, val)), Included((fid, i64::MAX))),
-                    GreaterThanOrEqual(val) => (Included((fid, val)), Included((fid, i64::MAX))),
-                    LowerThan(val) => (Included((fid, i64::MIN)), Excluded((fid, val))),
-                    LowerThanOrEqual(val) => (Included((fid, i64::MIN)), Included((fid, val))),
-                    Equal(val) => (Included((fid, val)), Included((fid, val))),
-                    Between(left, right) => (Included((fid, left)), Included((fid, right))),
-                };
 
-                let mut candidates = RoaringBitmap::new();
+                fn explore_facet_levels(
+                    rtxn: &heed::RoTxn,
+                    db: &heed::Database<FacetLevelValueI64Codec, CboRoaringBitmapCodec>,
+                    field_id: u8,
+                    level: u8,
+                    left: Bound<i64>,
+                    right: Bound<i64>,
+                    candidates: &mut RoaringBitmap,
+                ) -> anyhow::Result<()>
+                {
+                    let mut left_found = left;
+                    let mut right_found = right;
 
-                let db = self.index.facet_field_id_value_docids;
-                let db = db.remap_types::<FacetValueI64Codec, CboRoaringBitmapCodec>();
-                for result in db.range(self.rtxn, &range)? {
-                    let ((_fid, _value), docids) = result?;
-                    candidates.union_with(&docids);
+                    let range = {
+                        let left = match left {
+                            Included(left) => Included((field_id, level, left, i64::MIN)),
+                            Excluded(left) => Excluded((field_id, level, left, i64::MIN)),
+                            Bound::Unbounded => Bound::Unbounded,
+                        };
+                        let right = Included((field_id, level, i64::MAX, i64::MAX));
+                        (left, right)
+                    };
+
+                    for (i, result) in db.range(rtxn, &range)?.enumerate() {
+                        let ((_fid, _level, l, r), docids) = result?;
+                        match right {
+                            Included(right) if r > right => break,
+                            Excluded(right) if r >= right => break,
+                            _ => (),
+                        }
+
+                        eprintln!("{} to {} (level {})", l, r, _level);
+                        candidates.union_with(&docids);
+                        // We save the leftest and rightest bounds we actually found at this level.
+                        if i == 0 { left_found = Excluded(l); }
+                        right_found = Excluded(r);
+                    }
+
+                    // Can we go deeper?
+                    let deeper_level = match level.checked_sub(1) {
+                        Some(level) => level,
+                        None => return Ok(()),
+                    };
+
+                    // We must refine the left and right bounds of this range by retrieving the
+                    // missing part in a deeper level.
+                    // TODO we must avoid going at deeper when the bounds are already satisfied.
+                    explore_facet_levels(rtxn, db, field_id, deeper_level, left, left_found, candidates)?;
+                    explore_facet_levels(rtxn, db, field_id, deeper_level, right_found, right, candidates)?;
+
+                    Ok(())
                 }
 
-                Some(candidates)
+                // Make sure we always bound the ranges with the field id, as the facets
+                // values are all in the same database and prefixed by the field id.
+                let (left, right) = match operator {
+                    GreaterThan(val)        => (Excluded(val),      Included(i64::MAX)),
+                    GreaterThanOrEqual(val) => (Included(val),      Included(i64::MAX)),
+                    LowerThan(val)          => (Included(i64::MIN), Excluded(val)),
+                    LowerThanOrEqual(val)   => (Included(i64::MIN), Included(val)),
+                    Equal(val)              => (Included(val),      Included(val)),
+                    Between(left, right)    => (Included(left),     Included(right)),
+                };
+
+                let db = self.index
+                    .facet_field_id_value_docids
+                    .remap_key_type::<FacetLevelValueI64Codec>();
+
+                let biggest_level = match fid.checked_add(1) {
+                    Some(next_fid) => {
+                        // If we are able to find the next field id we ask the key that is before
+                        // the first entry of it which corresponds to the last key of our field id.
+                        let db = db.remap_data_type::<DecodeIgnore>();
+                        match db.get_lower_than(self.rtxn, &(next_fid, 0, i64::MIN, i64::MIN))? {
+                            Some(((id, level, _left, _right), _docids)) if fid == id => Some(level),
+                            _ => None,
+                        }
+                    },
+                    None => {
+                        // If we can't generate a bigger field id, it must be equal to 255 and
+                        // therefore the last key of the database must be the one we want.
+                        match db.remap_data_type::<DecodeIgnore>().last(self.rtxn)? {
+                            Some(((id, level, _left, _right), _docids)) if fid == id => Some(level),
+                            _ => None,
+                        }
+                    },
+                };
+
+                match biggest_level {
+                    Some(level) => {
+                        let mut candidates = RoaringBitmap::new();
+                        explore_facet_levels(self.rtxn, &db, fid, level, left, right, &mut candidates)?;
+                        Some(candidates)
+                    },
+                    None => None,
+                }
             },
             None => None,
         };

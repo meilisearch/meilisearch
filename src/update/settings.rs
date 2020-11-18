@@ -412,7 +412,8 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.faceted_fields(&rtxn).unwrap();
         assert_eq!(fields_ids, hashmap!{ 1 => FacetType::Integer });
-        let count = index.facet_field_id_value_docids.len(&rtxn).unwrap();
+        // Only count the field_id 0 and level 0 facet values.
+        let count = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[1, 0]).unwrap().count();
         assert_eq!(count, 3);
         drop(rtxn);
 
@@ -425,7 +426,8 @@ mod tests {
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
-        let count = index.facet_field_id_value_docids.len(&rtxn).unwrap();
+        // Only count the field_id 0 and level 0 facet values.
+        let count = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[1, 0]).unwrap().count();
         assert_eq!(count, 4);
         drop(rtxn);
     }

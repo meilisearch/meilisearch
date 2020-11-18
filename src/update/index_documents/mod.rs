@@ -14,6 +14,7 @@ use memmap::Mmap;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 
+use crate::facet::FacetType;
 use crate::index::Index;
 use crate::update::UpdateIndexingStep;
 use self::store::{Store, Readers};
@@ -22,10 +23,12 @@ use self::merge_function::{
     docid_word_positions_merge, documents_merge, facet_field_value_docids_merge,
 };
 pub use self::transform::{Transform, TransformOutput};
+pub use self::facet_level::{clear_field_levels, compute_facet_levels};
 
 use crate::MergeFn;
 use super::UpdateBuilder;
 
+mod facet_level;
 mod merge_function;
 mod store;
 mod transform;
@@ -327,7 +330,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         enum DatabaseType {
             Main,
             WordDocids,
-            FacetValuesDocids,
+            FacetLevel0ValuesDocids,
         }
 
         let faceted_fields = self.index.faceted_fields(self.wtxn)?;
@@ -427,7 +430,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                     (DatabaseType::Main, main_readers, main_merge as MergeFn),
                     (DatabaseType::WordDocids, word_docids_readers, word_docids_merge),
                     (
-                        DatabaseType::FacetValuesDocids,
+                        DatabaseType::FacetLevel0ValuesDocids,
                         facet_field_value_docids_readers,
                         facet_field_value_docids_merge,
                     ),
@@ -474,6 +477,9 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
 
         // We write the external documents ids into the main database.
         self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
+
+        // We get the faceted fields to be able to create the facet levels.
+        let faceted_fields = self.index.faceted_fields(self.wtxn)?;
 
         // We merge the new documents ids with the existing ones.
         documents_ids.union_with(&new_documents_ids);
@@ -557,7 +563,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         write_method,
                     )?;
                 },
-                DatabaseType::FacetValuesDocids => {
+                DatabaseType::FacetLevel0ValuesDocids => {
                     debug!("Writing the facet values docids into LMDB on disk...");
                     let db = *self.index.facet_field_id_value_docids.as_polymorph();
                     write_into_lmdb_database(
@@ -575,6 +581,35 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 databases_seen: database_count,
                 total_databases,
             });
+        }
+
+        debug!("Computing and writing the facet values levels docids into LMDB on disk...");
+        for (field_id, facet_type) in faceted_fields {
+            if facet_type == FacetType::String { continue }
+
+            clear_field_levels(
+                self.wtxn,
+                self.index.facet_field_id_value_docids,
+                field_id,
+            )?;
+
+            let content = compute_facet_levels(
+                self.wtxn,
+                self.index.facet_field_id_value_docids,
+                chunk_compression_type,
+                chunk_compression_level,
+                chunk_fusing_shrink_size,
+                field_id,
+                facet_type,
+            )?;
+
+            write_into_lmdb_database(
+                self.wtxn,
+                *self.index.facet_field_id_value_docids.as_polymorph(),
+                content,
+                |_, _| anyhow::bail!("invalid facet level merging"),
+                WriteMethod::GetMergePut,
+            )?;
         }
 
         debug_assert_eq!(database_count, total_databases);
