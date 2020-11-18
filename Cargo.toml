@@ -14,7 +14,7 @@ flate2 = "1.0.17"
 fst = "0.4.4"
 fxhash = "0.2.1"
 grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3eb7ad9" }
-heed = { version = "0.10.1", default-features = false, features = ["lmdb", "sync-read-txn"] }
+heed = { version = "0.10.3", default-features = false, features = ["lmdb", "sync-read-txn"] }
 human_format = "1.0.3"
 jemallocator = "0.3.2"
 levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
