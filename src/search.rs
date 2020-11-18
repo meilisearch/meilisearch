@@ -347,25 +347,12 @@ impl<'a> Search<'a> {
                     .facet_field_id_value_docids
                     .remap_key_type::<FacetLevelValueI64Codec>();
 
-                let biggest_level = match fid.checked_add(1) {
-                    Some(next_fid) => {
-                        // If we are able to find the next field id we ask the key that is before
-                        // the first entry of it which corresponds to the last key of our field id.
-                        let db = db.remap_data_type::<DecodeIgnore>();
-                        match db.get_lower_than(self.rtxn, &(next_fid, 0, i64::MIN, i64::MIN))? {
-                            Some(((id, level, ..), _)) if fid == id => Some(level),
-                            _ => None,
-                        }
-                    },
-                    None => {
-                        // If we can't generate a bigger field id, it must be equal to 255 and
-                        // therefore the last key of the database must be the one we want.
-                        match db.remap_data_type::<DecodeIgnore>().last(self.rtxn)? {
-                            Some(((id, level, ..), _)) if fid == id => Some(level),
-                            _ => None,
-                        }
-                    },
-                };
+                // Ask for the biggest value that can exist for this specific field, if it exists
+                // that's fine if it don't, the value just before will be returned instead.
+                let biggest_level = db
+                    .remap_data_type::<DecodeIgnore>()
+                    .get_lower_than_or_equal_to(self.rtxn, &(fid, u8::MAX, i64::MAX, i64::MAX))?
+                    .and_then(|((id, level, _, _), _)| if id == fid { Some(level) } else { None });
 
                 match biggest_level {
                     Some(level) => {
