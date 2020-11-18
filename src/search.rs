@@ -1,7 +1,9 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::fmt;
+use std::error::Error as StdError;
+use std::fmt::{self, Debug};
 use std::ops::Bound::{self, Unbounded, Included, Excluded};
+use std::str::FromStr;
 
 use anyhow::{bail, ensure, Context};
 use fst::{IntoStreamer, Streamer};
@@ -9,11 +11,12 @@ use heed::types::DecodeIgnore;
 use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use log::debug;
+use num_traits::Bounded;
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 use crate::facet::FacetType;
-use crate::heed_codec::facet::FacetLevelValueI64Codec;
+use crate::heed_codec::facet::{FacetLevelValueI64Codec, FacetLevelValueF64Codec};
 use crate::mdfs::Mdfs;
 use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, DocumentId};
@@ -24,20 +27,21 @@ static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
 static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
 // TODO support also floats
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum FacetOperator {
-    GreaterThan(i64),
-    GreaterThanOrEqual(i64),
-    LowerThan(i64),
-    LowerThanOrEqual(i64),
-    Equal(i64),
-    Between(i64, i64),
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum FacetOperator<T> {
+    GreaterThan(T),
+    GreaterThanOrEqual(T),
+    LowerThan(T),
+    LowerThanOrEqual(T),
+    Equal(T),
+    Between(T, T),
 }
 
 // TODO also support ANDs, ORs, NOTs.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum FacetCondition {
-    Operator(u8, FacetOperator),
+    OperatorI64(u8, FacetOperator<i64>),
+    OperatorF64(u8, FacetOperator<f64>),
 }
 
 impl FacetCondition {
@@ -48,7 +52,6 @@ impl FacetCondition {
     ) -> anyhow::Result<Option<FacetCondition>>
     {
         use FacetCondition::*;
-        use FacetOperator::*;
 
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         let faceted_fields = index.faceted_fields(rtxn)?;
@@ -64,33 +67,44 @@ impl FacetCondition {
         let field_id = fields_ids_map.id(&field_name).with_context(|| format!("field {} not found", field_name))?;
         let field_type = faceted_fields.get(&field_id).with_context(|| format!("field {} is not faceted", field_name))?;
 
-        ensure!(*field_type == FacetType::Integer, "Only conditions on integer facets");
+        match field_type {
+            FacetType::Integer => Self::parse_condition(iter).map(|op| Some(OperatorI64(field_id, op))),
+            FacetType::Float => Self::parse_condition(iter).map(|op| Some(OperatorF64(field_id, op))),
+            FacetType::String => bail!("invalid facet type"),
+        }
+    }
 
+    fn parse_condition<'a, T: FromStr>(
+        mut iter: impl Iterator<Item=&'a str>,
+    ) -> anyhow::Result<FacetOperator<T>>
+    where T::Err: Send + Sync + StdError + 'static,
+    {
+        use FacetOperator::*;
         match iter.next() {
             Some(">") => {
                 let param = iter.next().context("missing parameter")?;
                 let value = param.parse().with_context(|| format!("invalid parameter ({:?})", param))?;
-                Ok(Some(Operator(field_id, GreaterThan(value))))
+                Ok(GreaterThan(value))
             },
             Some(">=") => {
                 let param = iter.next().context("missing parameter")?;
                 let value = param.parse().with_context(|| format!("invalid parameter ({:?})", param))?;
-                Ok(Some(Operator(field_id, GreaterThanOrEqual(value))))
+                Ok(GreaterThanOrEqual(value))
             },
             Some("<") => {
                 let param = iter.next().context("missing parameter")?;
                 let value = param.parse().with_context(|| format!("invalid parameter ({:?})", param))?;
-                Ok(Some(Operator(field_id, LowerThan(value))))
+                Ok(LowerThan(value))
             },
             Some("<=") => {
                 let param = iter.next().context("missing parameter")?;
                 let value = param.parse().with_context(|| format!("invalid parameter ({:?})", param))?;
-                Ok(Some(Operator(field_id, LowerThanOrEqual(value))))
+                Ok(LowerThanOrEqual(value))
             },
             Some("=") => {
                 let param = iter.next().context("missing parameter")?;
                 let value = param.parse().with_context(|| format!("invalid parameter ({:?})", param))?;
-                Ok(Some(Operator(field_id, Equal(value))))
+                Ok(Equal(value))
             },
             Some(otherwise) => {
                 // BETWEEN or X TO Y (both inclusive)
@@ -98,7 +112,7 @@ impl FacetCondition {
                 ensure!(iter.next().map_or(false, |s| s.eq_ignore_ascii_case("to")), "TO keyword missing or invalid");
                 let next = iter.next().context("missing second TO parameter")?;
                 let right_param = next.parse().with_context(|| format!("invalid second TO parameter ({:?})", next))?;
-                Ok(Some(Operator(field_id, Between(left_param, right_param))))
+                Ok(Between(left_param, right_param))
             },
             None => bail!("missing facet filter first parameter"),
         }
@@ -229,19 +243,23 @@ impl<'a> Search<'a> {
 
     /// Aggregates the documents ids that are part of the specified range automatically
     /// going deeper through the levels.
-    fn explore_facet_levels(
+    fn explore_facet_levels<T: 'a, KC>(
         &self,
         field_id: u8,
         level: u8,
-        left: Bound<i64>,
-        right: Bound<i64>,
+        left: Bound<T>,
+        right: Bound<T>,
         output: &mut RoaringBitmap,
     ) -> anyhow::Result<()>
+    where
+        T: Copy + PartialEq + PartialOrd + Bounded + Debug,
+        KC: heed::BytesDecode<'a, DItem = (u8, u8, T, T)>,
+        KC: for<'x> heed::BytesEncode<'x, EItem = (u8, u8, T, T)>,
     {
         match (left, right) {
             // If the request is an exact value we must go directly to the deepest level.
             (Included(l), Included(r)) if l == r && level > 0 => {
-                return self.explore_facet_levels(field_id, 0, left, right, output);
+                return self.explore_facet_levels::<T, KC>(field_id, 0, left, right, output);
             },
             // lower TO upper when lower > upper must return no result
             (Included(l), Included(r)) if l > r => return Ok(()),
@@ -257,12 +275,12 @@ impl<'a> Search<'a> {
         // We must create a custom iterator to be able to iterate over the
         // requested range as the range iterator cannot express some conditions.
         let left_bound = match left {
-            Included(left) => Included((field_id, level, left, i64::MIN)),
-            Excluded(left) => Excluded((field_id, level, left, i64::MIN)),
+            Included(left) => Included((field_id, level, left, T::min_value())),
+            Excluded(left) => Excluded((field_id, level, left, T::min_value())),
             Unbounded => Unbounded,
         };
-        let right_bound = Included((field_id, level, i64::MAX, i64::MAX));
-        let db = self.index.facet_field_id_value_docids.remap_key_type::<FacetLevelValueI64Codec>();
+        let right_bound = Included((field_id, level, T::max_value(), T::max_value()));
+        let db = self.index.facet_field_id_value_docids.remap_key_type::<KC>();
         let iter = db
             .range(self.rtxn, &(left_bound, right_bound))?
             .take_while(|r| r.as_ref().map_or(true, |((.., r), _)| {
@@ -277,7 +295,7 @@ impl<'a> Search<'a> {
 
         for (i, result) in iter.enumerate() {
             let ((_fid, _level, l, r), docids) = result?;
-            debug!("{} to {} (level {}) found {} documents", l, r, _level, docids.len());
+            debug!("{:?} to {:?} (level {}) found {} documents", l, r, _level, docids.len());
             output.union_with(&docids);
             // We save the leftest and rightest bounds we actually found at this level.
             if i == 0 { left_found = Some(l); }
@@ -298,18 +316,18 @@ impl<'a> Search<'a> {
                 if !matches!(left, Included(l) if l == left_found) {
                     let sub_right = Excluded(left_found);
                     debug!("calling left with {:?} to {:?} (level {})",  left, sub_right, deeper_level);
-                    self.explore_facet_levels(field_id, deeper_level, left, sub_right, output)?;
+                    self.explore_facet_levels::<T, KC>(field_id, deeper_level, left, sub_right, output)?;
                 }
                 if !matches!(right, Included(r) if r == right_found) {
                     let sub_left = Excluded(right_found);
                     debug!("calling right with {:?} to {:?} (level {})", sub_left, right, deeper_level);
-                    self.explore_facet_levels(field_id, deeper_level, sub_left, right, output)?;
+                    self.explore_facet_levels::<T, KC>(field_id, deeper_level, sub_left, right, output)?;
                 }
             },
             None => {
                 // If we found nothing at this level it means that we must find
                 // the same bounds but at a deeper, more precise level.
-                self.explore_facet_levels(field_id, deeper_level, left, right, output)?;
+                self.explore_facet_levels::<T, KC>(field_id, deeper_level, left, right, output)?;
             },
         }
 
@@ -327,10 +345,10 @@ impl<'a> Search<'a> {
         };
 
         // We create the original candidates with the facet conditions results.
+        use FacetOperator::*;
         let facet_candidates = match self.facet_condition {
-            Some(FacetCondition::Operator(fid, operator)) => {
-                use FacetOperator::*;
-
+            // TODO make that generic over floats and integers.
+            Some(FacetCondition::OperatorI64(fid, operator)) => {
                 // Make sure we always bound the ranges with the field id and the level,
                 // as the facets values are all in the same database and prefixed by the
                 // field id and the level.
@@ -357,7 +375,40 @@ impl<'a> Search<'a> {
                 match biggest_level {
                     Some(level) => {
                         let mut output = RoaringBitmap::new();
-                        self.explore_facet_levels(fid, level, left, right, &mut output)?;
+                        self.explore_facet_levels::<i64, FacetLevelValueI64Codec>(fid, level, left, right, &mut output)?;
+                        Some(output)
+                    },
+                    None => None,
+                }
+            },
+            Some(FacetCondition::OperatorF64(fid, operator)) => {
+                // Make sure we always bound the ranges with the field id and the level,
+                // as the facets values are all in the same database and prefixed by the
+                // field id and the level.
+                let (left, right) = match operator {
+                    GreaterThan(val)        => (Excluded(val),      Included(f64::MAX)),
+                    GreaterThanOrEqual(val) => (Included(val),      Included(f64::MAX)),
+                    LowerThan(val)          => (Included(f64::MIN), Excluded(val)),
+                    LowerThanOrEqual(val)   => (Included(f64::MIN), Included(val)),
+                    Equal(val)              => (Included(val),      Included(val)),
+                    Between(left, right)    => (Included(left),     Included(right)),
+                };
+
+                let db = self.index
+                    .facet_field_id_value_docids
+                    .remap_key_type::<FacetLevelValueF64Codec>();
+
+                // Ask for the biggest value that can exist for this specific field, if it exists
+                // that's fine if it don't, the value just before will be returned instead.
+                let biggest_level = db
+                    .remap_data_type::<DecodeIgnore>()
+                    .get_lower_than_or_equal_to(self.rtxn, &(fid, u8::MAX, f64::MAX, f64::MAX))?
+                    .and_then(|((id, level, _, _), _)| if id == fid { Some(level) } else { None });
+
+                match biggest_level {
+                    Some(level) => {
+                        let mut output = RoaringBitmap::new();
+                        self.explore_facet_levels::<f64, FacetLevelValueF64Codec>(fid, level, left, right, &mut output)?;
                         Some(output)
                     },
                     None => None,

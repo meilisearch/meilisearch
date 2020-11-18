@@ -6,10 +6,12 @@ use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesEncode, Error};
 use itertools::Itertools;
 use log::debug;
+use num_traits::{Bounded, Zero};
 use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
-use crate::heed_codec::{facet::FacetLevelValueI64Codec, CboRoaringBitmapCodec};
+use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::heed_codec::facet::{FacetLevelValueI64Codec, FacetLevelValueF64Codec};
 use crate::Index;
 use crate::update::index_documents::WriteMethod;
 use crate::update::index_documents::{create_writer, writer_into_reader, write_into_lmdb_database};
@@ -68,26 +70,47 @@ impl<'t, 'u, 'i> FacetLevels<'t, 'u, 'i> {
 
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
         for (field_id, facet_type) in faceted_fields {
-            if facet_type == FacetType::String { continue }
+            let content = match facet_type {
+                FacetType::Integer => {
+                    clear_field_levels::<i64, FacetLevelValueI64Codec>(
+                        self.wtxn,
+                        self.index.facet_field_id_value_docids,
+                        field_id,
+                    )?;
 
-            clear_field_levels(
-                self.wtxn,
-                self.index.facet_field_id_value_docids,
-                field_id,
-            )?;
+                    compute_facet_levels::<i64, FacetLevelValueI64Codec>(
+                        self.wtxn,
+                        self.index.facet_field_id_value_docids,
+                        self.chunk_compression_type,
+                        self.chunk_compression_level,
+                        self.chunk_fusing_shrink_size,
+                        self.last_level_size,
+                        self.number_of_levels,
+                        self.easing_function,
+                        field_id,
+                    )?
+                },
+                FacetType::Float => {
+                    clear_field_levels::<f64, FacetLevelValueF64Codec>(
+                        self.wtxn,
+                        self.index.facet_field_id_value_docids,
+                        field_id,
+                    )?;
 
-            let content = compute_facet_levels(
-                self.wtxn,
-                self.index.facet_field_id_value_docids,
-                self.chunk_compression_type,
-                self.chunk_compression_level,
-                self.chunk_fusing_shrink_size,
-                self.last_level_size,
-                self.number_of_levels,
-                self.easing_function,
-                field_id,
-                facet_type,
-            )?;
+                    compute_facet_levels::<f64, FacetLevelValueF64Codec>(
+                        self.wtxn,
+                        self.index.facet_field_id_value_docids,
+                        self.chunk_compression_type,
+                        self.chunk_compression_level,
+                        self.chunk_fusing_shrink_size,
+                        self.last_level_size,
+                        self.number_of_levels,
+                        self.easing_function,
+                        field_id,
+                    )?
+                },
+                FacetType::String => continue,
+            };
 
             write_into_lmdb_database(
                 self.wtxn,
@@ -102,20 +125,26 @@ impl<'t, 'u, 'i> FacetLevels<'t, 'u, 'i> {
     }
 }
 
-fn clear_field_levels(
-    wtxn: &mut heed::RwTxn,
+fn clear_field_levels<'t, T: 't, KC>(
+    wtxn: &'t mut heed::RwTxn,
     db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
     field_id: u8,
 ) -> heed::Result<()>
+where
+    T: Copy + Bounded,
+    KC: heed::BytesDecode<'t, DItem = (u8, u8, T, T)>,
+    KC: for<'x> heed::BytesEncode<'x, EItem = (u8, u8, T, T)>,
 {
-    let range = (field_id, 1, i64::MIN, i64::MIN)..=(field_id, u8::MAX, i64::MAX, i64::MAX);
-    db.remap_key_type::<FacetLevelValueI64Codec>()
+    let left = (field_id, 1, T::min_value(), T::min_value());
+    let right = (field_id, u8::MAX, T::max_value(), T::max_value());
+    let range = left..=right;
+    db.remap_key_type::<KC>()
         .delete_range(wtxn, &range)
         .map(drop)
 }
 
-fn compute_facet_levels(
-    rtxn: &heed::RoTxn,
+fn compute_facet_levels<'t, T: 't, KC>(
+    rtxn: &'t heed::RoTxn,
     db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
     compression_type: CompressionType,
     compression_level: Option<u32>,
@@ -124,8 +153,11 @@ fn compute_facet_levels(
     number_of_levels: NonZeroUsize,
     easing_function: EasingName,
     field_id: u8,
-    facet_type: FacetType,
 ) -> anyhow::Result<Reader<FileFuse>>
+where
+    T: Copy + PartialEq + PartialOrd + Bounded + Zero,
+    KC: heed::BytesDecode<'t, DItem = (u8, u8, T, T)>,
+    KC: for<'x> heed::BytesEncode<'x, EItem = (u8, u8, T, T)>,
 {
     let first_level_size = db.prefix_iter(rtxn, &[field_id])?
         .remap_types::<DecodeIgnore, DecodeIgnore>()
@@ -137,7 +169,12 @@ fn compute_facet_levels(
         create_writer(compression_type, compression_level, file)
     })?;
 
-    let level_0_range = (field_id, 0, i64::MIN, i64::MIN)..=(field_id, 0, i64::MAX, i64::MAX);
+    let level_0_range = {
+        let left = (field_id, 0, T::min_value(), T::min_value());
+        let right = (field_id, 0, T::max_value(), T::max_value());
+        left..=right
+    };
+
     let level_sizes_iter =
         levels_iterator(first_level_size, last_level_size.get(), number_of_levels.get(), easing_function)
             .map(|size| (first_level_size as f64 / size as f64).ceil() as usize)
@@ -147,13 +184,11 @@ fn compute_facet_levels(
 
     // TODO we must not create levels with identical group sizes.
     for (level, level_entry_sizes) in level_sizes_iter {
-        let mut left = 0;
-        let mut right = 0;
+        let mut left = T::zero();
+        let mut right = T::zero();
         let mut group_docids = RoaringBitmap::new();
 
-        dbg!(level, level_entry_sizes, first_level_size);
-
-        let db = db.remap_key_type::<FacetLevelValueI64Codec>();
+        let db = db.remap_key_type::<KC>();
         for (i, result) in db.range(rtxn, &level_0_range)?.enumerate() {
             let ((_field_id, _level, value, _right), docids) = result?;
 
@@ -162,7 +197,7 @@ fn compute_facet_levels(
             } else if i % level_entry_sizes == 0 {
                 // we found the first bound of the next group, we must store the left
                 // and right bounds associated with the docids.
-                write_entry(&mut writer, field_id, level as u8, left, right, &group_docids)?;
+                write_entry::<T, KC>(&mut writer, field_id, level as u8, left, right, &group_docids)?;
 
                 // We save the left bound for the new group and also reset the docids.
                 group_docids = RoaringBitmap::new();
@@ -175,24 +210,26 @@ fn compute_facet_levels(
         }
 
         if !group_docids.is_empty() {
-            write_entry(&mut writer, field_id, level as u8, left, right, &group_docids)?;
+            write_entry::<T, KC>(&mut writer, field_id, level as u8, left, right, &group_docids)?;
         }
     }
 
     writer_into_reader(writer, shrink_size)
 }
 
-fn write_entry(
+fn write_entry<T, KC>(
     writer: &mut Writer<File>,
     field_id: u8,
     level: u8,
-    left: i64,
-    right: i64,
+    left: T,
+    right: T,
     ids: &RoaringBitmap,
 ) -> anyhow::Result<()>
+where
+    KC: for<'x> heed::BytesEncode<'x, EItem = (u8, u8, T, T)>,
 {
     let key = (field_id, level, left, right);
-    let key = FacetLevelValueI64Codec::bytes_encode(&key).ok_or(Error::Encoding)?;
+    let key = KC::bytes_encode(&key).ok_or(Error::Encoding)?;
     let data = CboRoaringBitmapCodec::bytes_encode(&ids).ok_or(Error::Encoding)?;
     writer.insert(&key, &data)?;
     Ok(())
