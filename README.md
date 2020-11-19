@@ -68,6 +68,12 @@ Create a MeiliSearch instance in [MeiliSearch Sandbox](https://sandbox.meilisear
 
 [![DigitalOcean Marketplace](assets/do-btn-blue.svg)](https://marketplace.digitalocean.com/apps/meilisearch?action=deploy&refcode=7c67bd97e101)
 
+#### Deploy on Platform.sh
+
+<a href="https://console.platform.sh/projects/create-project?template=https://raw.githubusercontent.com/platformsh/template-builder/master/templates/meilisearch/.platform.template.yaml&utm_content=meilisearch&utm_source=github&utm_medium=button&utm_campaign=deploy_on_platform">
+    <img src="https://platform.sh/images/deploy/lg-blue.svg" alt="Deploy on Platform.sh" width="180px" />
+</a>
+
 #### APT (Debian & Ubuntu)
 
 ```bash
