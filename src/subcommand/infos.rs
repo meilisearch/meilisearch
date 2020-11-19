@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::{str, io};
+use std::{str, io, fmt};
 
 use anyhow::Context;
 use heed::EnvOpenOptions;
@@ -232,12 +232,17 @@ fn most_common_words(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow:
     Ok(wtr.flush()?)
 }
 
-fn facet_values_iter<'txn, DC: 'txn>(
+/// Helper function that converts the facet value key to a unique type
+/// that can be used to log or display purposes.
+fn facet_values_iter<'txn, DC: 'txn, T>(
     rtxn: &'txn heed::RoTxn,
     db: heed::Database<heed::types::ByteSlice, DC>,
     field_id: u8,
     facet_type: crate::facet::FacetType,
-) -> heed::Result<Box<dyn Iterator<Item=heed::Result<(String, DC::DItem)>> + 'txn>>
+    string_fn: impl Fn(&str) -> T + 'txn,
+    float_fn: impl Fn(u8, f64, f64) -> T + 'txn,
+    integer_fn: impl Fn(u8, i64, i64) -> T + 'txn,
+) -> heed::Result<Box<dyn Iterator<Item=heed::Result<(T, DC::DItem)>> + 'txn>>
 where
     DC: heed::BytesDecode<'txn>,
 {
@@ -250,27 +255,31 @@ where
     match facet_type {
         FacetType::String => {
             let iter = iter.remap_key_type::<FacetValueStringCodec>()
-                .map(|r| r.map(|((_, key), value)| (key.to_string(), value)));
+                .map(move |r| r.map(|((_, key), value)| (string_fn(key), value)));
             Ok(Box::new(iter) as Box<dyn Iterator<Item=_>>)
         },
         FacetType::Float => {
             let iter = iter.remap_key_type::<FacetLevelValueF64Codec>()
-                .map(|r| r.map(|((_, level, left, right), value)| if level == 0 {
-                    (format!("{} (level {})", left, level), value)
-                } else {
-                    (format!("{} to {} (level {})", left, right, level), value)
+                .map(move |r| r.map(|((_, level, left, right), value)| {
+                    (float_fn(level, left, right), value)
                 }));
             Ok(Box::new(iter))
         },
         FacetType::Integer => {
             let iter = iter.remap_key_type::<FacetLevelValueI64Codec>()
-                .map(|r| r.map(|((_, level, left, right), value)| if level == 0 {
-                    (format!("{} (level {})", left, level), value)
-                } else {
-                    (format!("{} to {} (level {})", left, right, level), value)
+                .map(move |r| r.map(|((_, level, left, right), value)| {
+                    (integer_fn(level, left, right), value)
                 }));
             Ok(Box::new(iter))
         },
+    }
+}
+
+fn facet_number_value_to_string<T: fmt::Debug>(level: u8, left: T, right: T) -> String {
+    if level == 0 {
+        format!("{:?} (level {})", left, level)
+    } else {
+        format!("{:?} to {:?} (level {})", left, right, level)
     }
 }
 
@@ -334,7 +343,17 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             let facet_name = fields_ids_map.name(field_id).unwrap();
 
             let db = facet_field_id_value_docids.remap_data_type::<ByteSlice>();
-            for result in facet_values_iter(rtxn, db, field_id, field_type)? {
+            let iter = facet_values_iter(
+                rtxn,
+                db,
+                field_id,
+                field_type,
+                |key| key.to_owned(),
+                facet_number_value_to_string,
+                facet_number_value_to_string,
+            )?;
+
+            for result in iter {
                 let (fvalue, value) = result?;
                 let key = format!("{} {}", facet_name, fvalue);
                 heap.push(Reverse((value.len(), key, facet_field_id_value_docids_name)));
@@ -393,7 +412,17 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
     wtr.write_record(&["facet_value", "documents_ids"])?;
 
     let db = index.facet_field_id_value_docids;
-    for result in facet_values_iter(rtxn, db, field_id, *field_type)? {
+    let iter = facet_values_iter(
+        rtxn,
+        db,
+        field_id,
+        *field_type,
+        |key| key.to_owned(),
+        facet_number_value_to_string,
+        facet_number_value_to_string,
+    )?;
+
+    for result in iter {
         let (value, docids) = result?;
         let docids = if debug {
             format!("{:?}", docids)
@@ -407,12 +436,6 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
 }
 
 fn facet_stats(index: &Index, rtxn: &heed::RoTxn, field_name: String) -> anyhow::Result<()> {
-    use heed::types::ByteSlice;
-    use crate::facet::FacetType;
-    use crate::heed_codec::facet::{
-        FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec,
-    };
-
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let faceted_fields = index.faceted_fields(&rtxn)?;
 
@@ -421,31 +444,23 @@ fn facet_stats(index: &Index, rtxn: &heed::RoTxn, field_name: String) -> anyhow:
     let field_type = faceted_fields.get(&field_id)
         .with_context(|| format!("field {} is not faceted", field_name))?;
 
-    let iter = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[field_id])?;
-    let iter = match field_type {
-        FacetType::String => {
-            let iter = iter.remap_types::<FacetValueStringCodec, ByteSlice>()
-                .map(|r| r.map(|_| 0u8));
-            Box::new(iter) as Box<dyn Iterator<Item=_>>
-        },
-        FacetType::Float => {
-            let iter = iter.remap_types::<FacetLevelValueF64Codec, ByteSlice>()
-                .map(|r| r.map(|((_, level, _, _), _)| level));
-            Box::new(iter)
-        },
-        FacetType::Integer => {
-            let iter = iter.remap_types::<FacetLevelValueI64Codec, ByteSlice>()
-                .map(|r| r.map(|((_, level, _, _), _)| level));
-            Box::new(iter)
-        },
-    };
+    let db = index.facet_field_id_value_docids;
+    let iter = facet_values_iter(
+        rtxn,
+        db,
+        field_id,
+        *field_type,
+        |_key| 0u8,
+        |level, _left, _right| level,
+        |level, _left, _right| level,
+    )?;
 
     println!("The database {:?} facet stats", field_name);
 
     let mut level_size = 0;
     let mut current_level = None;
     for result in iter {
-        let level = result?;
+        let (level, _) = result?;
         if let Some(current) = current_level {
             if current != level {
                 println!("\tnumber of groups at level {}: {}", current, level_size);
