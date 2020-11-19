@@ -2,8 +2,9 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 
-use deunicode::deunicode_with_tofu;
 use meilisearch_schema::IndexedPos;
+use meilisearch_tokenizer::tokenizer::{Analyzer, AnalyzerConfig};
+use meilisearch_tokenizer::Token;
 use sdset::SetBuf;
 
 use crate::{DocIndex, DocumentId};
@@ -18,6 +19,7 @@ pub struct RawIndexer<A> {
     stop_words: fst::Set<A>,
     words_doc_indexes: BTreeMap<Word, Vec<DocIndex>>,
     docs_words: HashMap<DocumentId, Vec<Word>>,
+    analyzer: Analyzer,
 }
 
 pub struct Indexed<'a> {
@@ -36,6 +38,7 @@ impl<A> RawIndexer<A> {
             stop_words,
             words_doc_indexes: BTreeMap::new(),
             docs_words: HashMap::new(),
+            analyzer: Analyzer::new(AnalyzerConfig::default()),
         }
     }
 }
@@ -44,9 +47,12 @@ impl<A: AsRef<[u8]>> RawIndexer<A> {
     pub fn index_text(&mut self, id: DocumentId, indexed_pos: IndexedPos, text: &str) -> usize {
         let mut number_of_words = 0;
 
-        for token in Tokenizer::new(text) {
+        let analyzed_text = self.analyzer.analyze(text);
+        for (word_pos, (token_index, token)) in  analyzed_text.tokens().enumerate().filter(|(_, t)| !t.is_separator()).enumerate() {
             let must_continue = index_token(
                 token,
+                token_index,
+                word_pos,
                 id,
                 indexed_pos,
                 self.word_limit,
@@ -69,20 +75,47 @@ impl<A: AsRef<[u8]>> RawIndexer<A> {
     where
         I: IntoIterator<Item = &'s str>,
     {
-        let iter = iter.into_iter();
-        for token in SeqTokenizer::new(iter) {
-            let must_continue = index_token(
-                token,
-                id,
-                indexed_pos,
-                self.word_limit,
-                &self.stop_words,
-                &mut self.words_doc_indexes,
-                &mut self.docs_words,
-            );
+        let mut token_index_offset = 0;
+        let mut byte_offset = 0;
+        let mut word_offset = 0;
 
-            if !must_continue {
-                break;
+        for s in iter.into_iter() {
+            let current_token_index_offset = token_index_offset;
+            let current_byte_offset = byte_offset;
+            let current_word_offset = word_offset;
+
+            let analyzed_text = self.analyzer.analyze(s);
+            let tokens = analyzed_text
+                .tokens()
+                .enumerate()
+                .map(|(i, mut t)| {
+                    t.byte_start = t.byte_start + current_byte_offset;
+                    t.byte_end = t.byte_end + current_byte_offset;
+                    (i + current_token_index_offset, t)
+                })
+                .enumerate()
+                .map(|(i, t)| (i + current_word_offset, t));
+
+            for (word_pos, (token_index, token)) in tokens  {
+                token_index_offset = token_index + 1;
+                word_offset = word_pos + 1;
+                byte_offset = token.byte_end + 1;
+
+                let must_continue = index_token(
+                    token,
+                    token_index,
+                    word_pos,
+                    id,
+                    indexed_pos,
+                    self.word_limit,
+                    &self.stop_words,
+                    &mut self.words_doc_indexes,
+                    &mut self.docs_words,
+                );
+
+                if !must_continue {
+                    break;
+                }
             }
         }
     }
@@ -114,6 +147,8 @@ impl<A: AsRef<[u8]>> RawIndexer<A> {
 
 fn index_token<A>(
     token: Token,
+    position: usize,
+    word_pos: usize,
     id: DocumentId,
     indexed_pos: IndexedPos,
     word_limit: usize,
@@ -123,20 +158,14 @@ fn index_token<A>(
 ) -> bool
 where A: AsRef<[u8]>,
 {
-    if token.index >= word_limit {
+    if position >= word_limit {
         return false;
     }
 
-    let lower = token.word.to_lowercase();
-    let token = Token {
-        word: &lower,
-        ..token
-    };
-
-    if !stop_words.contains(&token.word) {
-        match token_to_docindex(id, indexed_pos, token) {
+    if !stop_words.contains(&token.word.as_ref()) {
+        match token_to_docindex(id, indexed_pos, &token, word_pos) {
             Some(docindex) => {
-                let word = Vec::from(token.word);
+                let word = Vec::from(token.word.as_ref());
 
                 if word.len() <= WORD_LENGTH_LIMIT {
                     words_doc_indexes
@@ -144,20 +173,6 @@ where A: AsRef<[u8]>,
                         .or_insert_with(Vec::new)
                         .push(docindex);
                     docs_words.entry(id).or_insert_with(Vec::new).push(word);
-
-                    if !lower.contains(is_cjk) {
-                        let unidecoded = deunicode_with_tofu(&lower, "");
-                        if unidecoded != lower && !unidecoded.is_empty() {
-                            let word = Vec::from(unidecoded);
-                            if word.len() <= WORD_LENGTH_LIMIT {
-                                words_doc_indexes
-                                    .entry(word.clone())
-                                    .or_insert_with(Vec::new)
-                                    .push(docindex);
-                                docs_words.entry(id).or_insert_with(Vec::new).push(word);
-                            }
-                        }
-                    }
                 }
             }
             None => return false,
@@ -167,8 +182,8 @@ where A: AsRef<[u8]>,
     true
 }
 
-fn token_to_docindex(id: DocumentId, indexed_pos: IndexedPos, token: Token) -> Option<DocIndex> {
-    let word_index = u16::try_from(token.word_index).ok()?;
+fn token_to_docindex(id: DocumentId, indexed_pos: IndexedPos, token: &Token, word_index: usize) -> Option<DocIndex> {
+    let word_index = u16::try_from(word_index).ok()?;
     let char_index = u16::try_from(token.char_index).ok()?;
     let char_length = u16::try_from(token.word.chars().count()).ok()?;
 

@@ -7,13 +7,14 @@ use std::{cmp, fmt, iter::once};
 
 use fst::{IntoStreamer, Streamer};
 use itertools::{EitherOrBoth, merge_join_by};
-use meilisearch_tokenizer::split_query_string;
-use sdset::{Set, SetBuf, SetOperation};
 use log::debug;
+use meilisearch_tokenizer::Token;
+use meilisearch_tokenizer::tokenizer::{Analyzer, AnalyzerConfig};
+use sdset::{Set, SetBuf, SetOperation};
 
 use crate::database::MainT;
 use crate::{store, DocumentId, DocIndex, MResult, FstSetCow};
-use crate::automaton::{normalize_str, build_dfa, build_prefix_dfa, build_exact_dfa};
+use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
 use crate::QueryWordsMapper;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -146,7 +147,7 @@ fn split_best_frequency<'a>(reader: &heed::RoTxn<MainT>, ctx: &Context, word: &'
 }
 
 fn fetch_synonyms(reader: &heed::RoTxn<MainT>, ctx: &Context, words: &[&str]) -> MResult<Vec<Vec<String>>> {
-    let words = normalize_str(&words.join(" "));
+    let words = &words.join(" ");
     let set = ctx.synonyms.synonyms_fst(reader, words.as_bytes())?;
 
     let mut strings = Vec::new();
@@ -174,15 +175,25 @@ where I: IntoIterator<Item=Operation>,
 
 const MAX_NGRAM: usize = 3;
 
+fn split_query_string(s: &str) -> Vec<(usize, String)> {
+    // TODO: Use global instance instead
+    let analyzer = Analyzer::new(AnalyzerConfig::default());
+    analyzer
+        .analyze(s)
+        .tokens()
+        .filter(|t| !t.is_stopword())
+        .enumerate()
+        .map(|(i, Token { word, .. })| (i, word.to_string()))
+        .collect()
+}
+
 pub fn create_query_tree(
     reader: &heed::RoTxn<MainT>,
     ctx: &Context,
     query: &str,
 ) -> MResult<(Operation, HashMap<QueryId, Range<usize>>)>
 {
-    let words = split_query_string(query).map(str::to_lowercase);
-    let words = words.filter(|w| !ctx.stop_words.contains(w));
-    let words: Vec<_> = words.enumerate().collect();
+    let words = split_query_string(query);
 
     let mut mapper = QueryWordsMapper::new(words.iter().map(|(_, w)| w));
 

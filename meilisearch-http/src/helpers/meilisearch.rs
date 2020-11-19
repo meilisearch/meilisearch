@@ -11,7 +11,6 @@ use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
 use meilisearch_core::{Highlight, Index, RankedMap};
 use meilisearch_schema::{FieldId, Schema};
-use meilisearch_tokenizer::is_cjk;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use siphasher::sip::SipHasher;
@@ -344,7 +343,7 @@ pub struct SearchResult {
 
 /// returns the start index and the length on the crop.
 fn aligned_crop(text: &str, match_index: usize, context: usize) -> (usize, usize) {
-    let is_word_component = |c: &char| c.is_alphanumeric() && !is_cjk(*c);
+    let is_word_component = |c: &char| c.is_alphanumeric() && !super::is_cjk(*c);
 
     let word_end_index = |mut index| {
         if text.chars().nth(index - 1).map_or(false, |c| is_word_component(&c)) {
