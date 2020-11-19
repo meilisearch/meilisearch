@@ -158,7 +158,7 @@ pub fn write_into_lmdb_database(
                 match iter.next().transpose()? {
                     Some((key, old_val)) if key == k => {
                         let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
-                        let val = merge(k, &vals).expect("merge failed");
+                        let val = merge(k, &vals)?;
                         iter.put_current(k, &val)?;
                     },
                     _ => {
@@ -313,8 +313,10 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 thread_pool: self.thread_pool,
             };
             let mut deletion_builder = update_builder.delete_documents(self.wtxn, self.index)?;
+            debug!("documents to delete {:?}", replaced_documents_ids);
             deletion_builder.delete_documents(&replaced_documents_ids);
-            let _deleted_documents_count = deletion_builder.execute()?;
+            let deleted_documents_count = deletion_builder.execute()?;
+            debug!("{} documents actually deleted", deleted_documents_count);
         }
 
         let mmap;
