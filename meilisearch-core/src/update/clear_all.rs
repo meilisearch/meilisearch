@@ -11,12 +11,14 @@ pub fn apply_clear_all(
     index.main.put_internal_docids(writer, &sdset::SetBuf::default())?;
     index.main.put_ranked_map(writer, &RankedMap::default())?;
     index.main.put_number_of_documents(writer, |_| 0)?;
+    index.main.put_sorted_document_ids_cache(writer, &[])?;
     index.documents_fields.clear(writer)?;
     index.documents_fields_counts.clear(writer)?;
     index.postings_lists.clear(writer)?;
     index.docs_words.clear(writer)?;
     index.prefix_documents_cache.clear(writer)?;
     index.prefix_postings_lists_cache.clear(writer)?;
+    index.facets.clear(writer)?;
 
     Ok(())
 }
