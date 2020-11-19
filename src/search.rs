@@ -280,8 +280,11 @@ impl<'a> Search<'a> {
             Unbounded => Unbounded,
         };
         let right_bound = Included((field_id, level, T::max_value(), T::max_value()));
-        let db = self.index.facet_field_id_value_docids.remap_key_type::<KC>();
-        let iter = db
+        // We also make sure that we don't decode the data before we are sure we must return it.
+        let iter = self.index
+            .facet_field_id_value_docids
+            .remap_key_type::<KC>()
+            .lazily_decode_data()
             .range(self.rtxn, &(left_bound, right_bound))?
             .take_while(|r| r.as_ref().map_or(true, |((.., r), _)| {
                 match right {
@@ -289,13 +292,14 @@ impl<'a> Search<'a> {
                     Excluded(right) => *r < right,
                     Unbounded => true,
                 }
-            }));
+            }))
+            .map(|r| r.and_then(|(key, lazy)| lazy.decode().map(|data| (key, data))));
 
         debug!("Iterating between {:?} and {:?} (level {})", left, right, level);
 
         for (i, result) in iter.enumerate() {
-            let ((_fid, _level, l, r), docids) = result?;
-            debug!("{:?} to {:?} (level {}) found {} documents", l, r, _level, docids.len());
+            let ((_fid, level, l, r), docids) = result?;
+            debug!("{:?} to {:?} (level {}) found {} documents", l, r, level, docids.len());
             output.union_with(&docids);
             // We save the leftest and rightest bounds we actually found at this level.
             if i == 0 { left_found = Some(l); }
