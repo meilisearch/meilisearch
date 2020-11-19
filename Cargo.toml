@@ -3,7 +3,6 @@ members = [
     "meilisearch-core",
     "meilisearch-http",
     "meilisearch-schema",
-    "meilisearch-tokenizer",
     "meilisearch-types",
 ]
 

@@ -4,7 +4,6 @@ use std::convert::TryFrom;
 
 use deunicode::deunicode_with_tofu;
 use meilisearch_schema::IndexedPos;
-use meilisearch_tokenizer::{is_cjk, SeqTokenizer, Token, Tokenizer};
 use sdset::SetBuf;
 
 use crate::{DocIndex, DocumentId};
