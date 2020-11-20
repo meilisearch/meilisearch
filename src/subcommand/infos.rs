@@ -409,7 +409,7 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
 
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
-    wtr.write_record(&["facet_value", "documents_ids"])?;
+    wtr.write_record(&["facet_value", "documents_count", "documents_ids"])?;
 
     let db = index.facet_field_id_value_docids;
     let iter = facet_values_iter(
@@ -424,12 +424,13 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
 
     for result in iter {
         let (value, docids) = result?;
+        let count = docids.len();
         let docids = if debug {
             format!("{:?}", docids)
         } else {
             format!("{:?}", docids.iter().collect::<Vec<_>>())
         };
-        wtr.write_record(&[value, docids])?;
+        wtr.write_record(&[value, count.to_string(), docids])?;
     }
 
     Ok(wtr.flush()?)
