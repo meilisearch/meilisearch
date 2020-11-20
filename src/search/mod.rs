@@ -156,7 +156,7 @@ impl<'a> Search<'a> {
 
         // We create the original candidates with the facet conditions results.
         let facet_db = self.index.facet_field_id_value_docids;
-        let facet_candidates = match self.facet_condition {
+        let facet_candidates = match &self.facet_condition {
             Some(condition) => Some(condition.evaluate(self.rtxn, facet_db)?),
             None => None,
         };

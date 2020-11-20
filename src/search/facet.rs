@@ -5,19 +5,21 @@ use std::str::FromStr;
 
 use anyhow::{bail, ensure, Context};
 use heed::types::{ByteSlice, DecodeIgnore};
+use itertools::Itertools;
 use log::debug;
 use num_traits::Bounded;
 use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
+use crate::heed_codec::facet::FacetValueStringCodec;
 use crate::heed_codec::facet::{FacetLevelValueI64Codec, FacetLevelValueF64Codec};
 use crate::{Index, CboRoaringBitmapCodec};
 
 use self::FacetCondition::*;
-use self::FacetOperator::*;
+use self::FacetNumberOperator::*;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub enum FacetOperator<T> {
+pub enum FacetNumberOperator<T> {
     GreaterThan(T),
     GreaterThanOrEqual(T),
     LowerThan(T),
@@ -26,11 +28,17 @@ pub enum FacetOperator<T> {
     Between(T, T),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum FacetStringOperator {
+    Equal(String),
+}
+
 // TODO also support ANDs, ORs, NOTs.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FacetCondition {
-    OperatorI64(u8, FacetOperator<i64>),
-    OperatorF64(u8, FacetOperator<f64>),
+    OperatorI64(u8, FacetNumberOperator<i64>),
+    OperatorF64(u8, FacetNumberOperator<f64>),
+    OperatorString(u8, FacetStringOperator),
 }
 
 impl FacetCondition {
@@ -55,15 +63,34 @@ impl FacetCondition {
         let field_type = faceted_fields.get(&field_id).with_context(|| format!("field {} is not faceted", field_name))?;
 
         match field_type {
-            FacetType::Integer => Self::parse_condition(iter).map(|op| Some(OperatorI64(field_id, op))),
-            FacetType::Float => Self::parse_condition(iter).map(|op| Some(OperatorF64(field_id, op))),
-            FacetType::String => bail!("invalid facet type"),
+            FacetType::Integer => Self::parse_number_condition(iter).map(|op| Some(OperatorI64(field_id, op))),
+            FacetType::Float => Self::parse_number_condition(iter).map(|op| Some(OperatorF64(field_id, op))),
+            FacetType::String => Self::parse_string_condition(iter).map(|op| Some(OperatorString(field_id, op))),
         }
     }
 
-    fn parse_condition<'a, T: FromStr>(
+    fn parse_string_condition<'a>(
         mut iter: impl Iterator<Item=&'a str>,
-    ) -> anyhow::Result<FacetOperator<T>>
+    ) -> anyhow::Result<FacetStringOperator>
+    {
+        match iter.next() {
+            Some("=") | Some(":") => {
+                match iter.next() {
+                    Some(q @ "\"") | Some(q @ "\'") => {
+                        let string: String = iter.take_while(|&c| c != q).intersperse(" ").collect();
+                        Ok(FacetStringOperator::Equal(string.to_lowercase()))
+                    },
+                    Some(param) => Ok(FacetStringOperator::Equal(param.to_lowercase())),
+                    None => bail!("missing parameter"),
+                }
+            },
+            _ => bail!("invalid facet string operator"),
+        }
+    }
+
+    fn parse_number_condition<'a, T: FromStr>(
+        mut iter: impl Iterator<Item=&'a str>,
+    ) -> anyhow::Result<FacetNumberOperator<T>>
     where T::Err: Send + Sync + StdError + 'static,
     {
         match iter.next() {
@@ -201,11 +228,11 @@ impl FacetCondition {
         Ok(())
     }
 
-    fn evaluate_operator<'t, T: 't, KC>(
+    fn evaluate_number_operator<'t, T: 't, KC>(
         rtxn: &'t heed::RoTxn,
         db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
         field_id: u8,
-        operator: FacetOperator<T>,
+        operator: FacetNumberOperator<T>,
     ) -> anyhow::Result<RoaringBitmap>
     where
         T: Copy + PartialEq + PartialOrd + Bounded + Debug,
@@ -241,19 +268,40 @@ impl FacetCondition {
         }
     }
 
+    fn evaluate_string_operator(
+        rtxn: &heed::RoTxn,
+        db: heed::Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
+        field_id: u8,
+        operator: &FacetStringOperator,
+    ) -> anyhow::Result<RoaringBitmap>
+    {
+        match operator {
+            FacetStringOperator::Equal(string) => {
+                match db.get(rtxn, &(field_id, string))? {
+                    Some(docids) => Ok(docids),
+                    None => Ok(RoaringBitmap::new())
+                }
+            }
+        }
+    }
+
     pub fn evaluate(
         &self,
         rtxn: &heed::RoTxn,
         db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
     ) -> anyhow::Result<RoaringBitmap>
     {
-        match *self {
-            FacetCondition::OperatorI64(fid, operator) => {
-                Self::evaluate_operator::<i64, FacetLevelValueI64Codec>(rtxn, db, fid, operator)
+        match self {
+            OperatorI64(fid, op) => {
+                Self::evaluate_number_operator::<i64, FacetLevelValueI64Codec>(rtxn, db, *fid, *op)
             },
-            FacetCondition::OperatorF64(fid, operator) => {
-                Self::evaluate_operator::<f64, FacetLevelValueF64Codec>(rtxn, db, fid, operator)
-            }
+            OperatorF64(fid, op) => {
+                Self::evaluate_number_operator::<f64, FacetLevelValueF64Codec>(rtxn, db, *fid, *op)
+            },
+            OperatorString(fid, op) => {
+                let db = db.remap_key_type::<FacetValueStringCodec>();
+                Self::evaluate_string_operator(rtxn, db, *fid, op)
+            },
         }
     }
 }
