@@ -1,0 +1,14 @@
+services:
+- type: web
+  name: meilisearch
+  env: docker
+  dockerfilePath: ./render/Dockerfile
+  envVars:
+  - key: MEILI_DB_PATH
+    value: /var/lib/meilifiles
+  - key: MEILI_MASTER_KEY
+    generateValue: true
+  disk:
+    name: data
+    mountPath: /var/lib/meilifiles
+    sizeGB: 10
