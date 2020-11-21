@@ -74,6 +74,10 @@ Create a MeiliSearch instance in [MeiliSearch Sandbox](https://sandbox.meilisear
     <img src="https://platform.sh/images/deploy/lg-blue.svg" alt="Deploy on Platform.sh" width="180px" />
 </a>
 
+#### Deploy on Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/meilisearch/MeiliSearch)
+
 #### APT (Debian & Ubuntu)
 
 ```bash
