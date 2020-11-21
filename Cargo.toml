@@ -37,6 +37,10 @@ structopt = { version = "0.3.14", default-features = false, features = ["wrap_he
 tempfile = "3.1.0"
 uuid = { version = "0.8.1", features = ["v4"] }
 
+# facet filter parser
+pest = { git = "https://github.com/pest-parser/pest.git", rev = "51fd1d49f1041f7839975664ef71fe15c7dcaf67" }
+pest_derive = "2.1.0"
+
 # documents words self-join
 itertools = "0.9.0"
 

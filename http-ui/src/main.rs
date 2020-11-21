@@ -614,7 +614,8 @@ async fn main() -> anyhow::Result<()> {
                 search.query(query);
             }
             if let Some(condition) = query.facet_condition {
-                if let Some(condition) = FacetCondition::from_str(&rtxn, &index, &condition).unwrap() {
+                if !condition.trim().is_empty() {
+                    let condition = FacetCondition::from_str(&rtxn, &index, &condition).unwrap();
                     search.facet_condition(condition);
                 }
             }
