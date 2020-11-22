@@ -1,4 +1,5 @@
 mod criterion;
+mod external_documents_ids;
 mod fields_ids_map;
 mod index;
 mod mdfs;
