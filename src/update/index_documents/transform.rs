@@ -6,13 +6,12 @@ use std::iter::Peekable;
 use std::time::Instant;
 
 use anyhow::{anyhow, Context};
-use fst::{IntoStreamer, Streamer};
 use grenad::CompressionType;
 use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
-use crate::{BEU32, MergeFn, Index, FieldsIdsMap};
+use crate::{BEU32, MergeFn, Index, FieldsIdsMap, ExternalDocumentsIds};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
@@ -20,7 +19,7 @@ use super::{create_writer, create_sorter, IndexDocumentsMethod};
 pub struct TransformOutput {
     pub primary_key: u8,
     pub fields_ids_map: FieldsIdsMap,
-    pub external_documents_ids: fst::Map<Vec<u8>>,
+    pub external_documents_ids: ExternalDocumentsIds<'static>,
     pub new_documents_ids: RoaringBitmap,
     pub replaced_documents_ids: RoaringBitmap,
     pub documents_count: usize,
@@ -116,7 +115,7 @@ impl Transform<'_, '_> {
             return Ok(TransformOutput {
                 primary_key,
                 fields_ids_map,
-                external_documents_ids: fst::Map::default(),
+                external_documents_ids: ExternalDocumentsIds::default(),
                 new_documents_ids: RoaringBitmap::new(),
                 replaced_documents_ids: RoaringBitmap::new(),
                 documents_count: 0,
@@ -370,7 +369,7 @@ impl Transform<'_, '_> {
         primary_key: u8,
         fields_ids_map: FieldsIdsMap,
         approximate_number_of_documents: usize,
-        external_documents_ids: fst::Map<Cow<'_, [u8]>>,
+        mut external_documents_ids: ExternalDocumentsIds<'_>,
         progress_callback: F,
     ) -> anyhow::Result<TransformOutput>
     where
@@ -457,28 +456,17 @@ impl Transform<'_, '_> {
         let mut documents_file = writer.into_inner()?;
         documents_file.seek(SeekFrom::Start(0))?;
 
-        // We create the union between the existing external documents ids with the new ones.
-        let new_external_documents_ids = new_external_documents_ids_builder.into_map();
-        let union_op = fst::map::OpBuilder::new()
-            .add(&external_documents_ids)
-            .add(&new_external_documents_ids)
-            .r#union();
-
-        // We stream and merge the new external documents ids map with the existing one.
         let before_docids_merging = Instant::now();
-        let mut external_documents_ids_builder = fst::MapBuilder::memory();
-        let mut iter = union_op.into_stream();
-        while let Some((external_id, vals)) = iter.next() {
-            assert_eq!(vals.len(), 1, "there must be exactly one document id");
-            external_documents_ids_builder.insert(external_id, vals[0].value)?;
-        }
+        // We merge the new external ids with existing external documents ids.
+        let new_external_documents_ids = new_external_documents_ids_builder.into_map();
+        external_documents_ids.insert_ids(&new_external_documents_ids)?;
 
         info!("Documents external merging took {:.02?}", before_docids_merging.elapsed());
 
         Ok(TransformOutput {
             primary_key,
             fields_ids_map,
-            external_documents_ids: external_documents_ids_builder.into_map(),
+            external_documents_ids: external_documents_ids.into_static(),
             new_documents_ids,
             replaced_documents_ids,
             documents_count,
@@ -531,7 +519,7 @@ impl Transform<'_, '_> {
         Ok(TransformOutput {
             primary_key,
             fields_ids_map,
-            external_documents_ids: external_documents_ids.map_data(Cow::into_owned)?,
+            external_documents_ids: external_documents_ids.into_static(),
             new_documents_ids: documents_ids,
             replaced_documents_ids: RoaringBitmap::default(),
             documents_count,

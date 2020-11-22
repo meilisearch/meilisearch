@@ -1,16 +1,13 @@
-use std::borrow::Cow;
-use std::convert::TryFrom;
-
-use fst::{IntoStreamer, Streamer};
+use fst::IntoStreamer;
 use roaring::RoaringBitmap;
 
-use crate::{Index, BEU32, SmallString32};
+use crate::{Index, BEU32, SmallString32, ExternalDocumentsIds};
 use super::ClearDocuments;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
-    external_documents_ids: fst::Map<Vec<u8>>,
+    external_documents_ids: ExternalDocumentsIds<'static>,
     documents_ids: RoaringBitmap,
 }
 
@@ -22,7 +19,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
     {
         let external_documents_ids = index
             .external_documents_ids(wtxn)?
-            .map_data(Cow::into_owned)?;
+            .into_static();
 
         Ok(DeleteDocuments {
             wtxn,
@@ -41,7 +38,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
     }
 
     pub fn delete_external_id(&mut self, external_id: &str) -> Option<u32> {
-        let docid = self.external_documents_ids.get(external_id).map(|id| u32::try_from(id).unwrap())?;
+        let docid = self.external_documents_ids.get(external_id)?;
         self.delete_document(docid);
         Some(docid)
     }
@@ -112,26 +109,14 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // We create the FST map of the external ids that we must delete.
         external_ids.sort_unstable();
         let external_ids_to_delete = fst::Set::from_iter(external_ids.iter().map(AsRef::as_ref))?;
-        let external_ids_to_delete = fst::Map::from(external_ids_to_delete.into_fst());
 
-        let new_external_documents_ids = {
-            // We acquire the current external documents ids map and create
-            // a difference operation between the current and to-delete external ids.
-            let external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
-            let difference = external_documents_ids.op().add(&external_ids_to_delete).difference();
-
-            // We stream the new external ids that does no more contains the to-delete external ids.
-            let mut iter = difference.into_stream();
-            let mut new_external_documents_ids_builder = fst::MapBuilder::memory();
-            while let Some((external_id, docids)) = iter.next() {
-                new_external_documents_ids_builder.insert(external_id, docids[0].value)?;
-            }
-
-            // We create an FST map from the above builder.
-            new_external_documents_ids_builder.into_map()
-        };
+        // We acquire the current external documents ids map...
+        let mut new_external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
+        // ...and remove the to-delete external ids.
+        new_external_documents_ids.delete_ids(external_ids_to_delete)?;
 
         // We write the new external ids into the main database.
+        let new_external_documents_ids = new_external_documents_ids.into_static();
         self.index.put_external_documents_ids(self.wtxn, &new_external_documents_ids)?;
 
         // Maybe we can improve the get performance of the words

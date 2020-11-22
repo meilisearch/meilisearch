@@ -7,11 +7,10 @@ use heed::types::*;
 use heed::{PolyDatabase, Database, RwTxn, RoTxn};
 use roaring::RoaringBitmap;
 
-use crate::external_documents_ids::ExternalDocumentsIds;
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::Search;
-use crate::{BEU32, DocumentId};
+use crate::{BEU32, DocumentId, ExternalDocumentsIds};
 use crate::{
     RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec, ObkvCodec,
     BoRoaringBitmapCodec, CboRoaringBitmapCodec,
@@ -143,14 +142,15 @@ impl Index {
     pub fn external_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<ExternalDocumentsIds<'t>> {
         let hard = self.main.get::<_, Str, ByteSlice>(rtxn, HARD_EXTERNAL_DOCUMENTS_IDS_KEY)?;
         let soft = self.main.get::<_, Str, ByteSlice>(rtxn, SOFT_EXTERNAL_DOCUMENTS_IDS_KEY)?;
-        match hard.zip(soft) {
-            Some((hard, soft)) => {
-                let hard = fst::Map::new(hard)?.map_data(Cow::Borrowed)?;
-                let soft = fst::Map::new(soft)?.map_data(Cow::Borrowed)?;
-                Ok(ExternalDocumentsIds::new(hard, soft))
-            },
-            None => Ok(ExternalDocumentsIds::default()),
-        }
+        let hard = match hard {
+            Some(hard) => fst::Map::new(hard)?.map_data(Cow::Borrowed)?,
+            None => fst::Map::default().map_data(Cow::Owned)?,
+        };
+        let soft = match soft {
+            Some(soft) => fst::Map::new(soft)?.map_data(Cow::Borrowed)?,
+            None => fst::Map::default().map_data(Cow::Owned)?,
+        };
+        Ok(ExternalDocumentsIds::new(hard, soft))
     }
 
     /* fields ids map */
