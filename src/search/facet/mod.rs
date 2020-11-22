@@ -474,3 +474,53 @@ impl FacetCondition {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::update::Settings;
+    use heed::EnvOpenOptions;
+    use maplit::hashmap;
+
+    #[test]
+    fn simple_string_equal() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the faceted fields to be the channel.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.set_faceted_fields(hashmap!{ "channel".into() => "string".into() });
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Test that the facet condition is correctly generated.
+        let rtxn = index.read_txn().unwrap();
+        let condition = FacetCondition::from_str(&rtxn, &index, "channel = ponce").unwrap();
+        let expected = FacetCondition::OperatorString(1, FacetStringOperator::Equal("ponce".into()));
+        assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn simple_between_i64() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the faceted fields to be the channel.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.set_faceted_fields(hashmap!{ "timestamp".into() => "integer".into() });
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Test that the facet condition is correctly generated.
+        let rtxn = index.read_txn().unwrap();
+        let condition = FacetCondition::from_str(&rtxn, &index, "timestamp 22 TO 44").unwrap();
+        let expected = FacetCondition::OperatorI64(1, FacetNumberOperator::Between(22, 44));
+        assert_eq!(condition, expected);
+    }
+}
