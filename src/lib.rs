@@ -1,4 +1,5 @@
 mod criterion;
+mod external_documents_ids;
 mod fields_ids_map;
 mod index;
 mod mdfs;
@@ -20,6 +21,7 @@ use fxhash::{FxHasher32, FxHasher64};
 use serde_json::{Map, Value};
 
 pub use self::criterion::{Criterion, default_criteria};
+pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::index::Index;
 pub use self::search::{Search, SearchResult};

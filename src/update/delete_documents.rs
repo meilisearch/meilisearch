@@ -1,16 +1,13 @@
-use std::borrow::Cow;
-use std::convert::TryFrom;
-
-use fst::{IntoStreamer, Streamer};
+use fst::IntoStreamer;
 use roaring::RoaringBitmap;
 
-use crate::{Index, BEU32, SmallString32};
+use crate::{Index, BEU32, SmallString32, ExternalDocumentsIds};
 use super::ClearDocuments;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
-    users_ids_documents_ids: fst::Map<Vec<u8>>,
+    external_documents_ids: ExternalDocumentsIds<'static>,
     documents_ids: RoaringBitmap,
 }
 
@@ -20,14 +17,14 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         index: &'i Index,
     ) -> anyhow::Result<DeleteDocuments<'t, 'u, 'i>>
     {
-        let users_ids_documents_ids = index
-            .users_ids_documents_ids(wtxn)?
-            .map_data(Cow::into_owned)?;
+        let external_documents_ids = index
+            .external_documents_ids(wtxn)?
+            .into_static();
 
         Ok(DeleteDocuments {
             wtxn,
             index,
-            users_ids_documents_ids,
+            external_documents_ids,
             documents_ids: RoaringBitmap::new(),
         })
     }
@@ -40,8 +37,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         self.documents_ids.union_with(docids);
     }
 
-    pub fn delete_user_id(&mut self, user_id: &str) -> Option<u32> {
-        let docid = self.users_ids_documents_ids.get(user_id).map(|id| u32::try_from(id).unwrap())?;
+    pub fn delete_external_id(&mut self, external_id: &str) -> Option<u32> {
+        let docid = self.external_documents_ids.get(external_id)?;
         self.delete_document(docid);
         Some(docid)
     }
@@ -80,9 +77,9 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             documents,
         } = self.index;
 
-        // Retrieve the words and the users ids contained in the documents.
+        // Retrieve the words and the external documents ids contained in the documents.
         let mut words = Vec::new();
-        let mut users_ids = Vec::new();
+        let mut external_ids = Vec::new();
         for docid in &self.documents_ids {
             // We create an iterator to be able to get the content and delete the document
             // content itself. It's faster to acquire a cursor to get and delete,
@@ -91,8 +88,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let mut iter = documents.range_mut(self.wtxn, &(key..=key))?;
             if let Some((_key, obkv)) = iter.next().transpose()? {
                 if let Some(content) = obkv.get(id_field) {
-                    let user_id: SmallString32 = serde_json::from_slice(content).unwrap();
-                    users_ids.push(user_id);
+                    let external_id: SmallString32 = serde_json::from_slice(content).unwrap();
+                    external_ids.push(external_id);
                 }
                 iter.del_current()?;
             }
@@ -109,30 +106,18 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             }
         }
 
-        // We create the FST map of the users ids that we must delete.
-        users_ids.sort_unstable();
-        let users_ids_to_delete = fst::Set::from_iter(users_ids.iter().map(AsRef::as_ref))?;
-        let users_ids_to_delete = fst::Map::from(users_ids_to_delete.into_fst());
+        // We create the FST map of the external ids that we must delete.
+        external_ids.sort_unstable();
+        let external_ids_to_delete = fst::Set::from_iter(external_ids.iter().map(AsRef::as_ref))?;
 
-        let new_users_ids_documents_ids = {
-            // We acquire the current users ids documents ids map and create
-            // a difference operation between the current and to-delete users ids.
-            let users_ids_documents_ids = self.index.users_ids_documents_ids(self.wtxn)?;
-            let difference = users_ids_documents_ids.op().add(&users_ids_to_delete).difference();
+        // We acquire the current external documents ids map...
+        let mut new_external_documents_ids = self.index.external_documents_ids(self.wtxn)?;
+        // ...and remove the to-delete external ids.
+        new_external_documents_ids.delete_ids(external_ids_to_delete)?;
 
-            // We stream the new users ids that does no more contains the to-delete users ids.
-            let mut iter = difference.into_stream();
-            let mut new_users_ids_documents_ids_builder = fst::MapBuilder::memory();
-            while let Some((userid, docids)) = iter.next() {
-                new_users_ids_documents_ids_builder.insert(userid, docids[0].value)?;
-            }
-
-            // We create an FST map from the above builder.
-            new_users_ids_documents_ids_builder.into_map()
-        };
-
-        // We write the new users ids into the main database.
-        self.index.put_users_ids_documents_ids(self.wtxn, &new_users_ids_documents_ids)?;
+        // We write the new external ids into the main database.
+        let new_external_documents_ids = new_external_documents_ids.into_static();
+        self.index.put_external_documents_ids(self.wtxn, &new_external_documents_ids)?;
 
         // Maybe we can improve the get performance of the words
         // if we sort the words first, keeping the LMDB pages in cache.
@@ -169,7 +154,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let words_fst = self.index.words_fst(self.wtxn)?;
             let difference = words_fst.op().add(&words_to_delete).difference();
 
-            // We stream the new users ids that does no more contains the to-delete users ids.
+            // We stream the new external ids that does no more contains the to-delete external ids.
             let mut new_words_fst_builder = fst::SetBuilder::memory();
             new_words_fst_builder.extend_stream(difference.into_stream())?;
 

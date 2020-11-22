@@ -13,6 +13,7 @@ const WORD_DOCIDS_DB_NAME: &str = "word-docids";
 const DOCID_WORD_POSITIONS_DB_NAME: &str = "docid-word-positions";
 const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
 const DOCUMENTS_DB_NAME: &str = "documents";
+const USERS_IDS_DOCUMENTS_IDS: &[u8] = b"users-ids-documents-ids";
 
 const ALL_DATABASE_NAMES: &[&str] = &[
     MAIN_DB_NAME,
@@ -137,6 +138,10 @@ enum Command {
         #[structopt(short, long, default_value = "words.fst")]
         output: PathBuf,
     },
+
+    /// A command that patches the old external ids
+    /// into the new external ids format.
+    PatchToNewExternalIds,
 }
 
 pub fn run(opt: Opt) -> anyhow::Result<()> {
@@ -171,7 +176,30 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
         },
         ExportWordsFst { output } => export_words_fst(&index, &rtxn, output),
+        PatchToNewExternalIds => {
+            drop(rtxn);
+            let mut wtxn = index.write_txn()?;
+            let result = patch_to_new_external_ids(&index, &mut wtxn);
+            wtxn.commit()?;
+            result
+        }
     }
+}
+
+fn patch_to_new_external_ids(index: &Index, wtxn: &mut heed::RwTxn) -> anyhow::Result<()> {
+    use heed::types::ByteSlice;
+
+    if let Some(documents_ids) = index.main.get::<_, ByteSlice, ByteSlice>(wtxn, USERS_IDS_DOCUMENTS_IDS)? {
+        let documents_ids = documents_ids.to_owned();
+        index.main.put::<_, ByteSlice, ByteSlice>(
+            wtxn,
+            crate::index::HARD_EXTERNAL_DOCUMENTS_IDS_KEY.as_bytes(),
+            &documents_ids,
+        )?;
+        index.main.delete::<_, ByteSlice>(wtxn, USERS_IDS_DOCUMENTS_IDS)?;
+    }
+
+    Ok(())
 }
 
 fn most_common_words(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow::Result<()> {

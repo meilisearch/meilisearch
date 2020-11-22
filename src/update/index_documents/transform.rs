@@ -3,14 +3,15 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::iter::Peekable;
+use std::time::Instant;
 
 use anyhow::{anyhow, Context};
-use fst::{IntoStreamer, Streamer};
 use grenad::CompressionType;
+use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
-use crate::{BEU32, MergeFn, Index, FieldsIdsMap};
+use crate::{BEU32, MergeFn, Index, FieldsIdsMap, ExternalDocumentsIds};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
@@ -18,14 +19,14 @@ use super::{create_writer, create_sorter, IndexDocumentsMethod};
 pub struct TransformOutput {
     pub primary_key: u8,
     pub fields_ids_map: FieldsIdsMap,
-    pub users_ids_documents_ids: fst::Map<Vec<u8>>,
+    pub external_documents_ids: ExternalDocumentsIds<'static>,
     pub new_documents_ids: RoaringBitmap,
     pub replaced_documents_ids: RoaringBitmap,
     pub documents_count: usize,
     pub documents_file: File,
 }
 
-/// Extract the users ids, deduplicate and compute the new internal documents ids
+/// Extract the external ids, deduplicate and compute the new internal documents ids
 /// and fields ids, writing all the documents under their internal ids into a final file.
 ///
 /// Outputs the new `FieldsIdsMap`, the new `UsersIdsDocumentsIds` map, the new documents ids,
@@ -72,7 +73,7 @@ impl Transform<'_, '_> {
         F: Fn(UpdateIndexingStep) + Sync,
     {
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn).unwrap();
+        let external_documents_ids = self.index.external_documents_ids(self.rtxn).unwrap();
         let primary_key = self.index.primary_key(self.rtxn)?;
 
         // Deserialize the whole batch of documents in memory.
@@ -114,7 +115,7 @@ impl Transform<'_, '_> {
             return Ok(TransformOutput {
                 primary_key,
                 fields_ids_map,
-                users_ids_documents_ids: fst::Map::default(),
+                external_documents_ids: ExternalDocumentsIds::default(),
                 new_documents_ids: RoaringBitmap::new(),
                 replaced_documents_ids: RoaringBitmap::new(),
                 documents_count: 0,
@@ -170,7 +171,7 @@ impl Transform<'_, '_> {
 
             // We retrieve the user id from the document based on the primary key name,
             // if the document id isn't present we generate a uuid.
-            let user_id = match document.get(&primary_key_name) {
+            let external_id = match document.get(&primary_key_name) {
                 Some(value) => match value {
                     Value::String(string) => Cow::Borrowed(string.as_str()),
                     Value::Number(number) => Cow::Owned(number.to_string()),
@@ -198,19 +199,19 @@ impl Transform<'_, '_> {
                 }
                 else if field_id == primary_key {
                     // We validate the document id [a-zA-Z0-9\-_].
-                    let user_id = match validate_document_id(&user_id) {
+                    let external_id = match validate_document_id(&external_id) {
                         Some(valid) => valid,
-                        None => return Err(anyhow!("invalid document id: {:?}", user_id)),
+                        None => return Err(anyhow!("invalid document id: {:?}", external_id)),
                     };
 
                     // We serialize the document id.
-                    serde_json::to_writer(&mut json_buffer, &user_id)?;
+                    serde_json::to_writer(&mut json_buffer, &external_id)?;
                     writer.insert(field_id, &json_buffer)?;
                 }
             }
 
             // We use the extracted/generated user id as the key for this document.
-            sorter.insert(user_id.as_bytes(), &obkv_buffer)?;
+            sorter.insert(external_id.as_bytes(), &obkv_buffer)?;
             documents_count += 1;
         }
 
@@ -225,7 +226,7 @@ impl Transform<'_, '_> {
             primary_key,
             fields_ids_map,
             documents_count,
-            users_ids_documents_ids,
+            external_documents_ids,
             progress_callback,
         )
     }
@@ -236,7 +237,7 @@ impl Transform<'_, '_> {
         F: Fn(UpdateIndexingStep) + Sync,
     {
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn).unwrap();
+        let external_documents_ids = self.index.external_documents_ids(self.rtxn).unwrap();
 
         let mut csv = csv::Reader::from_reader(reader);
         let headers = csv.headers()?;
@@ -250,7 +251,7 @@ impl Transform<'_, '_> {
         }
 
         // Extract the position of the primary key in the current headers, None if not found.
-        let user_id_pos = match primary_key {
+        let external_id_pos = match primary_key {
             Some(primary_key) => {
                 // Te primary key have is known so we must find the position in the CSV headers.
                 let name = fields_ids_map.name(primary_key).expect("found the primary key name");
@@ -261,7 +262,7 @@ impl Transform<'_, '_> {
 
         // Returns the field id in the fileds ids map, create an "id" field
         // in case it is not in the current headers.
-        let primary_key_field_id = match user_id_pos {
+        let primary_key_field_id = match external_id_pos {
             Some(pos) => fields_ids_map.id(&headers[pos]).expect("found the primary key"),
             None => {
                 if !self.autogenerate_docids {
@@ -292,7 +293,7 @@ impl Transform<'_, '_> {
         );
 
         // We write into the sorter to merge and deduplicate the documents
-        // based on the users ids.
+        // based on the external ids.
         let mut json_buffer = Vec::new();
         let mut obkv_buffer = Vec::new();
         let mut uuid_buffer = [0; uuid::adapter::Hyphenated::LENGTH];
@@ -310,13 +311,13 @@ impl Transform<'_, '_> {
             }
 
             // We extract the user id if we know where it is or generate an UUID V4 otherwise.
-            let user_id = match user_id_pos {
+            let external_id = match external_id_pos {
                 Some(pos) => {
-                    let user_id = &record[pos];
+                    let external_id = &record[pos];
                     // We validate the document id [a-zA-Z0-9\-_].
-                    match validate_document_id(&user_id) {
+                    match validate_document_id(&external_id) {
                         Some(valid) => valid,
-                        None => return Err(anyhow!("invalid document id: {:?}", user_id)),
+                        None => return Err(anyhow!("invalid document id: {:?}", external_id)),
                     }
                 },
                 None => uuid::Uuid::new_v4().to_hyphenated().encode_lower(&mut uuid_buffer),
@@ -326,7 +327,7 @@ impl Transform<'_, '_> {
             // we return the generated document id instead of the record field.
             let iter = fields_ids.iter()
                 .map(|(fi, i)| {
-                    let field = if *fi == primary_key_field_id { user_id } else { &record[*i] };
+                    let field = if *fi == primary_key_field_id { external_id } else { &record[*i] };
                     (fi, field)
                 });
 
@@ -339,7 +340,7 @@ impl Transform<'_, '_> {
             }
 
             // We use the extracted/generated user id as the key for this document.
-            sorter.insert(user_id, &obkv_buffer)?;
+            sorter.insert(external_id, &obkv_buffer)?;
             documents_count += 1;
         }
 
@@ -354,7 +355,7 @@ impl Transform<'_, '_> {
             primary_key_field_id,
             fields_ids_map,
             documents_count,
-            users_ids_documents_ids,
+            external_documents_ids,
             progress_callback,
         )
     }
@@ -368,7 +369,7 @@ impl Transform<'_, '_> {
         primary_key: u8,
         fields_ids_map: FieldsIdsMap,
         approximate_number_of_documents: usize,
-        users_ids_documents_ids: fst::Map<Cow<'_, [u8]>>,
+        mut external_documents_ids: ExternalDocumentsIds<'_>,
         progress_callback: F,
     ) -> anyhow::Result<TransformOutput>
     where
@@ -386,7 +387,7 @@ impl Transform<'_, '_> {
             self.max_nb_chunks,
             self.max_memory,
         );
-        let mut new_users_ids_documents_ids_builder = fst::MapBuilder::memory();
+        let mut new_external_documents_ids_builder = fst::MapBuilder::memory();
         let mut replaced_documents_ids = RoaringBitmap::new();
         let mut new_documents_ids = RoaringBitmap::new();
         let mut obkv_buffer = Vec::new();
@@ -394,7 +395,7 @@ impl Transform<'_, '_> {
         // While we write into final file we get or generate the internal documents ids.
         let mut documents_count = 0;
         let mut iter = sorter.into_iter()?;
-        while let Some((user_id, update_obkv)) = iter.next()? {
+        while let Some((external_id, update_obkv)) = iter.next()? {
 
             if self.log_every_n.map_or(false, |len| documents_count % len == 0) {
                 progress_callback(UpdateIndexingStep::ComputeIdsAndMergeDocuments {
@@ -403,9 +404,9 @@ impl Transform<'_, '_> {
                 });
             }
 
-            let (docid, obkv) = match users_ids_documents_ids.get(user_id) {
+            let (docid, obkv) = match external_documents_ids.get(external_id) {
                 Some(docid) => {
-                    // If we find the user id in the current users ids documents ids map
+                    // If we find the user id in the current external documents ids map
                     // we use it and insert it in the list of replaced documents.
                     let docid = u32::try_from(docid).expect("valid document id");
                     replaced_documents_ids.insert(docid);
@@ -425,11 +426,11 @@ impl Transform<'_, '_> {
                     }
                 },
                 None => {
-                    // If this user id is new we add it to the users ids documents ids map
+                    // If this user id is new we add it to the external documents ids map
                     // for new ids and into the list of new documents.
                     let new_docid = available_documents_ids.next()
                         .context("no more available documents ids")?;
-                    new_users_ids_documents_ids_builder.insert(user_id, new_docid as u64)?;
+                    new_external_documents_ids_builder.insert(external_id, new_docid as u64)?;
                     new_documents_ids.insert(new_docid);
                     (new_docid, update_obkv)
                 },
@@ -455,25 +456,17 @@ impl Transform<'_, '_> {
         let mut documents_file = writer.into_inner()?;
         documents_file.seek(SeekFrom::Start(0))?;
 
-        // We create the union between the existing users ids documents ids with the new ones.
-        let new_users_ids_documents_ids = new_users_ids_documents_ids_builder.into_map();
-        let union_ = fst::map::OpBuilder::new()
-            .add(&users_ids_documents_ids)
-            .add(&new_users_ids_documents_ids)
-            .r#union();
+        let before_docids_merging = Instant::now();
+        // We merge the new external ids with existing external documents ids.
+        let new_external_documents_ids = new_external_documents_ids_builder.into_map();
+        external_documents_ids.insert_ids(&new_external_documents_ids)?;
 
-        // We stream and merge the new users ids documents ids map with the existing one.
-        let mut users_ids_documents_ids_builder = fst::MapBuilder::memory();
-        let mut iter = union_.into_stream();
-        while let Some((user_id, vals)) = iter.next() {
-            assert_eq!(vals.len(), 1, "there must be exactly one document id");
-            users_ids_documents_ids_builder.insert(user_id, vals[0].value)?;
-        }
+        info!("Documents external merging took {:.02?}", before_docids_merging.elapsed());
 
         Ok(TransformOutput {
             primary_key,
             fields_ids_map,
-            users_ids_documents_ids: users_ids_documents_ids_builder.into_map(),
+            external_documents_ids: external_documents_ids.into_static(),
             new_documents_ids,
             replaced_documents_ids,
             documents_count,
@@ -491,7 +484,7 @@ impl Transform<'_, '_> {
     ) -> anyhow::Result<TransformOutput>
     {
         let current_fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let users_ids_documents_ids = self.index.users_ids_documents_ids(self.rtxn)?;
+        let external_documents_ids = self.index.external_documents_ids(self.rtxn)?;
         let documents_ids = self.index.documents_ids(self.rtxn)?;
         let documents_count = documents_ids.len() as usize;
 
@@ -526,7 +519,7 @@ impl Transform<'_, '_> {
         Ok(TransformOutput {
             primary_key,
             fields_ids_map,
-            users_ids_documents_ids: users_ids_documents_ids.map_data(Cow::into_owned)?,
+            external_documents_ids: external_documents_ids.into_static(),
             new_documents_ids: documents_ids,
             replaced_documents_ids: RoaringBitmap::default(),
             documents_count,
