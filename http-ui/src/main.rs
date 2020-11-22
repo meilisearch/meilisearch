@@ -605,14 +605,14 @@ async fn main() -> anyhow::Result<()> {
             let index = index_cloned.clone();
             let rtxn = index.read_txn().unwrap();
 
-            let users_ids_documents_ids = index.users_ids_documents_ids(&rtxn).unwrap();
+            let external_documents_ids = index.external_documents_ids(&rtxn).unwrap();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
             let displayed_fields = match index.displayed_fields(&rtxn).unwrap() {
                 Some(fields) => Cow::Borrowed(fields),
                 None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
             };
 
-            match users_ids_documents_ids.get(&id) {
+            match external_documents_ids.get(&id) {
                 Some(document_id) => {
                     let document_id = document_id as u32;
                     let (_, obkv) = index.documents(&rtxn, Some(document_id)).unwrap().pop().unwrap();

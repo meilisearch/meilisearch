@@ -27,7 +27,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
 
         // We clean some of the main engine datastructures.
         self.index.put_words_fst(self.wtxn, &fst::Set::default())?;
-        self.index.put_users_ids_documents_ids(self.wtxn, &fst::Map::default())?;
+        self.index.put_external_documents_ids(self.wtxn, &fst::Map::default())?;
         self.index.put_documents_ids(self.wtxn, &RoaringBitmap::default())?;
 
         // Clear the other databases.

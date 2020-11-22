@@ -287,7 +287,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         let TransformOutput {
             primary_key,
             fields_ids_map,
-            users_ids_documents_ids,
+            external_documents_ids,
             new_documents_ids,
             replaced_documents_ids,
             documents_count,
@@ -472,8 +472,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         // We write the primary key field id into the main database
         self.index.put_primary_key(self.wtxn, primary_key)?;
 
-        // We write the users_ids_documents_ids into the main database.
-        self.index.put_users_ids_documents_ids(self.wtxn, &users_ids_documents_ids)?;
+        // We write the external documents ids into the main database.
+        self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;
 
         // We merge the new documents ids with the existing ones.
         documents_ids.union_with(&new_documents_ids);

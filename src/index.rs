@@ -22,7 +22,7 @@ pub const FACETED_FIELDS_KEY: &str = "faceted-fields";
 pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const PRIMARY_KEY_KEY: &str = "primary-key";
 pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
-pub const USERS_IDS_DOCUMENTS_IDS_KEY: &str = "users-ids-documents-ids";
+pub const EXTERNAL_DOCUMENTS_IDS_KEY: &str = "external-documents-ids";
 pub const WORDS_FST_KEY: &str = "words-fst";
 
 #[derive(Clone)]
@@ -119,18 +119,18 @@ impl Index {
         self.main.get::<_, Str, OwnedType<u8>>(rtxn, PRIMARY_KEY_KEY)
     }
 
-    /* users ids documents ids */
+    /* external documents ids */
 
-    /// Writes the users ids documents ids, a user id is a byte slice (i.e. `[u8]`)
+    /// Writes the external documents ids, it is a byte slice (i.e. `[u8]`)
     /// and refers to an internal id (i.e. `u32`).
-    pub fn put_users_ids_documents_ids<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Map<A>) -> heed::Result<()> {
-        self.main.put::<_, Str, ByteSlice>(wtxn, USERS_IDS_DOCUMENTS_IDS_KEY, fst.as_fst().as_bytes())
+    pub fn put_external_documents_ids<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Map<A>) -> heed::Result<()> {
+        self.main.put::<_, Str, ByteSlice>(wtxn, EXTERNAL_DOCUMENTS_IDS_KEY, fst.as_fst().as_bytes())
     }
 
-    /// Returns the user ids documents ids map which associate the user ids (i.e. `[u8]`)
+    /// Returns the external documents ids map which associate the external ids (i.e. `[u8]`)
     /// with the internal ids (i.e. `u32`).
-    pub fn users_ids_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<fst::Map<Cow<'t, [u8]>>> {
-        match self.main.get::<_, Str, ByteSlice>(rtxn, USERS_IDS_DOCUMENTS_IDS_KEY)? {
+    pub fn external_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<fst::Map<Cow<'t, [u8]>>> {
+        match self.main.get::<_, Str, ByteSlice>(rtxn, EXTERNAL_DOCUMENTS_IDS_KEY)? {
             Some(bytes) => Ok(fst::Map::new(bytes)?.map_data(Cow::Borrowed)?),
             None => Ok(fst::Map::default().map_data(Cow::Owned)?),
         }
