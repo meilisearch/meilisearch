@@ -3,10 +3,12 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::iter::Peekable;
+use std::time::Instant;
 
 use anyhow::{anyhow, Context};
 use fst::{IntoStreamer, Streamer};
 use grenad::CompressionType;
+use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
@@ -457,18 +459,21 @@ impl Transform<'_, '_> {
 
         // We create the union between the existing users ids documents ids with the new ones.
         let new_users_ids_documents_ids = new_users_ids_documents_ids_builder.into_map();
-        let union_ = fst::map::OpBuilder::new()
+        let union_op = fst::map::OpBuilder::new()
             .add(&users_ids_documents_ids)
             .add(&new_users_ids_documents_ids)
             .r#union();
 
         // We stream and merge the new users ids documents ids map with the existing one.
+        let before_docids_merging = Instant::now();
         let mut users_ids_documents_ids_builder = fst::MapBuilder::memory();
-        let mut iter = union_.into_stream();
+        let mut iter = union_op.into_stream();
         while let Some((user_id, vals)) = iter.next() {
             assert_eq!(vals.len(), 1, "there must be exactly one document id");
             users_ids_documents_ids_builder.insert(user_id, vals[0].value)?;
         }
+
+        info!("Documents users ids merging took {:.02?}", before_docids_merging.elapsed());
 
         Ok(TransformOutput {
             primary_key,
