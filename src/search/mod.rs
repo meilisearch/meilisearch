@@ -210,11 +210,12 @@ impl<'a> Search<'a> {
 
 impl fmt::Debug for Search<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let Search { query, facet_condition, offset, limit, rtxn: _, index: _ } = self;
         f.debug_struct("Search")
-            .field("query", &self.query)
-            .field("facet_condition", &self.facet_condition)
-            .field("offset", &self.offset)
-            .field("limit", &self.limit)
+            .field("query", query)
+            .field("facet_condition", facet_condition)
+            .field("offset", offset)
+            .field("limit", limit)
             .finish()
     }
 }
