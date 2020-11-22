@@ -12,7 +12,14 @@ impl<'a> ExternalDocumentsIds<'a> {
         ExternalDocumentsIds { hard, soft }
     }
 
-    pub fn get<A: AsRef<str>>(&self, external_id: A) -> Option<u32> {
+    pub fn into_static(self) -> ExternalDocumentsIds<'static> {
+        ExternalDocumentsIds {
+            hard: self.hard.map_data(|c| Cow::Owned(c.into_owned())).unwrap(),
+            soft: self.soft.map_data(|c| Cow::Owned(c.into_owned())).unwrap(),
+        }
+    }
+
+    pub fn get<A: AsRef<[u8]>>(&self, external_id: A) -> Option<u32> {
         let external_id = external_id.as_ref();
         match self.soft.get(external_id).or_else(|| self.hard.get(external_id)) {
             // u64 MAX means deleted in the soft fst map

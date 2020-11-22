@@ -7,6 +7,7 @@ use heed::types::*;
 use heed::{PolyDatabase, Database, RwTxn, RoTxn};
 use roaring::RoaringBitmap;
 
+use crate::external_documents_ids::ExternalDocumentsIds;
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::Search;
@@ -22,7 +23,8 @@ pub const FACETED_FIELDS_KEY: &str = "faceted-fields";
 pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const PRIMARY_KEY_KEY: &str = "primary-key";
 pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
-pub const EXTERNAL_DOCUMENTS_IDS_KEY: &str = "external-documents-ids";
+pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
+pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
 pub const WORDS_FST_KEY: &str = "words-fst";
 
 #[derive(Clone)]
@@ -121,18 +123,33 @@ impl Index {
 
     /* external documents ids */
 
-    /// Writes the external documents ids, it is a byte slice (i.e. `[u8]`)
-    /// and refers to an internal id (i.e. `u32`).
-    pub fn put_external_documents_ids<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Map<A>) -> heed::Result<()> {
-        self.main.put::<_, Str, ByteSlice>(wtxn, EXTERNAL_DOCUMENTS_IDS_KEY, fst.as_fst().as_bytes())
+    /// Writes the external documents ids and internal ids (i.e. `u32`).
+    pub fn put_external_documents_ids<'a>(
+        &self,
+        wtxn: &mut RwTxn,
+        external_documents_ids: &ExternalDocumentsIds<'a>,
+    ) -> heed::Result<()>
+    {
+        let ExternalDocumentsIds { hard, soft } = external_documents_ids;
+        let hard = hard.as_fst().as_bytes();
+        let soft = soft.as_fst().as_bytes();
+        self.main.put::<_, Str, ByteSlice>(wtxn, HARD_EXTERNAL_DOCUMENTS_IDS_KEY, hard)?;
+        self.main.put::<_, Str, ByteSlice>(wtxn, SOFT_EXTERNAL_DOCUMENTS_IDS_KEY, soft)?;
+        Ok(())
     }
 
-    /// Returns the external documents ids map which associate the external ids (i.e. `[u8]`)
+    /// Returns the external documents ids map which associate the external ids
     /// with the internal ids (i.e. `u32`).
-    pub fn external_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<fst::Map<Cow<'t, [u8]>>> {
-        match self.main.get::<_, Str, ByteSlice>(rtxn, EXTERNAL_DOCUMENTS_IDS_KEY)? {
-            Some(bytes) => Ok(fst::Map::new(bytes)?.map_data(Cow::Borrowed)?),
-            None => Ok(fst::Map::default().map_data(Cow::Owned)?),
+    pub fn external_documents_ids<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<ExternalDocumentsIds<'t>> {
+        let hard = self.main.get::<_, Str, ByteSlice>(rtxn, HARD_EXTERNAL_DOCUMENTS_IDS_KEY)?;
+        let soft = self.main.get::<_, Str, ByteSlice>(rtxn, SOFT_EXTERNAL_DOCUMENTS_IDS_KEY)?;
+        match hard.zip(soft) {
+            Some((hard, soft)) => {
+                let hard = fst::Map::new(hard)?.map_data(Cow::Borrowed)?;
+                let soft = fst::Map::new(soft)?.map_data(Cow::Borrowed)?;
+                Ok(ExternalDocumentsIds::new(hard, soft))
+            },
+            None => Ok(ExternalDocumentsIds::default()),
         }
     }
 
