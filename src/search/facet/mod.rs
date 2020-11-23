@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Bound::{self, Unbounded, Included, Excluded};
+use std::str::FromStr;
 
 use heed::types::{ByteSlice, DecodeIgnore};
 use log::debug;
@@ -115,6 +116,21 @@ fn get_field_id_facet_type<'a>(
     Ok((field_id, facet_type))
 }
 
+fn pest_parse<T>(pair: Pair<Rule>) -> Result<T, pest::error::Error<Rule>>
+where T: FromStr,
+      T::Err: ToString,
+{
+    match pair.as_str().parse() {
+        Ok(value) => Ok(value),
+        Err(e) => {
+            Err(PestError::<Rule>::new_from_span(
+                ErrorVariant::CustomError { message: e.to_string() },
+                pair.as_span(),
+            ))
+        }
+    }
+}
+
 impl FacetCondition {
     pub fn from_str(
         rtxn: &heed::RoTxn,
@@ -188,13 +204,13 @@ impl FacetCondition {
         let rvalue = items.next().unwrap();
         match ftype {
             FacetType::Integer => {
-                let lvalue = lvalue.as_str().parse()?;
-                let rvalue = rvalue.as_str().parse()?;
+                let lvalue = pest_parse(lvalue)?;
+                let rvalue = pest_parse(rvalue)?;
                 Ok(OperatorI64(fid, Between(lvalue, rvalue)))
             },
             FacetType::Float => {
-                let lvalue = lvalue.as_str().parse()?;
-                let rvalue = rvalue.as_str().parse()?;
+                let lvalue = pest_parse(lvalue)?;
+                let rvalue = pest_parse(rvalue)?;
                 Ok(OperatorF64(fid, Between(lvalue, rvalue)))
             },
             FacetType::String => {
@@ -218,8 +234,8 @@ impl FacetCondition {
         let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
         let value = items.next().unwrap();
         match ftype {
-            FacetType::Integer => Ok(OperatorI64(fid, Equal(value.as_str().parse()?))),
-            FacetType::Float => Ok(OperatorF64(fid, Equal(value.as_str().parse()?))),
+            FacetType::Integer => Ok(OperatorI64(fid, Equal(pest_parse(value)?))),
+            FacetType::Float => Ok(OperatorF64(fid, Equal(pest_parse(value)?))),
             FacetType::String => {
                 Ok(OperatorString(fid, FacetStringOperator::Equal(value.as_str().to_string())))
             },
@@ -237,8 +253,8 @@ impl FacetCondition {
         let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
         let value = items.next().unwrap();
         match ftype {
-            FacetType::Integer => Ok(OperatorI64(fid, GreaterThan(value.as_str().parse()?))),
-            FacetType::Float => Ok(OperatorF64(fid, GreaterThan(value.as_str().parse()?))),
+            FacetType::Integer => Ok(OperatorI64(fid, GreaterThan(pest_parse(value)?))),
+            FacetType::Float => Ok(OperatorF64(fid, GreaterThan(pest_parse(value)?))),
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
@@ -261,8 +277,8 @@ impl FacetCondition {
         let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
         let value = items.next().unwrap();
         match ftype {
-            FacetType::Integer => Ok(OperatorI64(fid, GreaterThanOrEqual(value.as_str().parse()?))),
-            FacetType::Float => Ok(OperatorF64(fid, GreaterThanOrEqual(value.as_str().parse()?))),
+            FacetType::Integer => Ok(OperatorI64(fid, GreaterThanOrEqual(pest_parse(value)?))),
+            FacetType::Float => Ok(OperatorF64(fid, GreaterThanOrEqual(pest_parse(value)?))),
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
@@ -285,8 +301,8 @@ impl FacetCondition {
         let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
         let value = items.next().unwrap();
         match ftype {
-            FacetType::Integer => Ok(OperatorI64(fid, LowerThan(value.as_str().parse()?))),
-            FacetType::Float => Ok(OperatorF64(fid, LowerThan(value.as_str().parse()?))),
+            FacetType::Integer => Ok(OperatorI64(fid, LowerThan(pest_parse(value)?))),
+            FacetType::Float => Ok(OperatorF64(fid, LowerThan(pest_parse(value)?))),
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
@@ -309,8 +325,8 @@ impl FacetCondition {
         let (fid, ftype) = get_field_id_facet_type(fields_ids_map, faceted_fields, &mut items)?;
         let value = items.next().unwrap();
         match ftype {
-            FacetType::Integer => Ok(OperatorI64(fid, LowerThanOrEqual(value.as_str().parse()?))),
-            FacetType::Float => Ok(OperatorF64(fid, LowerThanOrEqual(value.as_str().parse()?))),
+            FacetType::Integer => Ok(OperatorI64(fid, LowerThanOrEqual(pest_parse(value)?))),
+            FacetType::Float => Ok(OperatorF64(fid, LowerThanOrEqual(pest_parse(value)?))),
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
