@@ -184,6 +184,14 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         drop(iter);
 
+        // Remove the documents ids from the faceted documents ids.
+        let faceted_fields = self.index.faceted_fields(self.wtxn)?;
+        for (field_id, _) in faceted_fields {
+            let mut docids = self.index.faceted_documents_ids(self.wtxn, field_id)?;
+            docids.difference_with(&self.documents_ids);
+            self.index.put_faceted_documents_ids(self.wtxn, field_id, &docids)?;
+        }
+
         // We delete the documents ids that are under the facet field id values.
         let mut iter = facet_field_id_value_docids.iter_mut(self.wtxn)?;
         while let Some(result) = iter.next() {

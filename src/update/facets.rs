@@ -24,7 +24,7 @@ pub enum EasingName {
     Linear,
 }
 
-pub struct FacetLevels<'t, 'u, 'i> {
+pub struct Facets<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
     pub(crate) chunk_compression_type: CompressionType,
@@ -35,9 +35,9 @@ pub struct FacetLevels<'t, 'u, 'i> {
     easing_function: EasingName,
 }
 
-impl<'t, 'u, 'i> FacetLevels<'t, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> FacetLevels<'t, 'u, 'i> {
-        FacetLevels {
+impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
+    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> Facets<'t, 'u, 'i> {
+        Facets {
             wtxn,
             index,
             chunk_compression_type: CompressionType::None,
@@ -70,7 +70,7 @@ impl<'t, 'u, 'i> FacetLevels<'t, 'u, 'i> {
 
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
         for (field_id, facet_type) in faceted_fields {
-            let content = match facet_type {
+            let (content, documents_ids) = match facet_type {
                 FacetType::Integer => {
                     clear_field_levels::<i64, FacetLevelValueI64Codec>(
                         self.wtxn,
@@ -78,7 +78,13 @@ impl<'t, 'u, 'i> FacetLevels<'t, 'u, 'i> {
                         field_id,
                     )?;
 
-                    compute_facet_levels::<i64, FacetLevelValueI64Codec>(
+                    let documents_ids = compute_faceted_documents_ids(
+                        self.wtxn,
+                        self.index.facet_field_id_value_docids,
+                        field_id,
+                    )?;
+
+                    let content = compute_facet_levels::<i64, FacetLevelValueI64Codec>(
                         self.wtxn,
                         self.index.facet_field_id_value_docids,
                         self.chunk_compression_type,
@@ -88,7 +94,9 @@ impl<'t, 'u, 'i> FacetLevels<'t, 'u, 'i> {
                         self.number_of_levels,
                         self.easing_function,
                         field_id,
-                    )?
+                    )?;
+
+                    (Some(content), documents_ids)
                 },
                 FacetType::Float => {
                     clear_field_levels::<f64, FacetLevelValueF64Codec>(
@@ -97,7 +105,13 @@ impl<'t, 'u, 'i> FacetLevels<'t, 'u, 'i> {
                         field_id,
                     )?;
 
-                    compute_facet_levels::<f64, FacetLevelValueF64Codec>(
+                    let documents_ids = compute_faceted_documents_ids(
+                        self.wtxn,
+                        self.index.facet_field_id_value_docids,
+                        field_id,
+                    )?;
+
+                    let content = compute_facet_levels::<f64, FacetLevelValueF64Codec>(
                         self.wtxn,
                         self.index.facet_field_id_value_docids,
                         self.chunk_compression_type,
@@ -107,18 +121,32 @@ impl<'t, 'u, 'i> FacetLevels<'t, 'u, 'i> {
                         self.number_of_levels,
                         self.easing_function,
                         field_id,
-                    )?
+                    )?;
+
+                    (Some(content), documents_ids)
                 },
-                FacetType::String => continue,
+                FacetType::String => {
+                    let documents_ids = compute_faceted_documents_ids(
+                        self.wtxn,
+                        self.index.facet_field_id_value_docids,
+                        field_id,
+                    )?;
+
+                    (None, documents_ids)
+                },
             };
 
-            write_into_lmdb_database(
-                self.wtxn,
-                *self.index.facet_field_id_value_docids.as_polymorph(),
-                content,
-                |_, _| anyhow::bail!("invalid facet level merging"),
-                WriteMethod::GetMergePut,
-            )?;
+            if let Some(content) = content {
+                write_into_lmdb_database(
+                    self.wtxn,
+                    *self.index.facet_field_id_value_docids.as_polymorph(),
+                    content,
+                    |_, _| anyhow::bail!("invalid facet level merging"),
+                    WriteMethod::GetMergePut,
+                )?;
+            }
+
+            self.index.put_faceted_documents_ids(self.wtxn, field_id, &documents_ids)?;
         }
 
         Ok(())
@@ -138,9 +166,7 @@ where
     let left = (field_id, 1, T::min_value(), T::min_value());
     let right = (field_id, u8::MAX, T::max_value(), T::max_value());
     let range = left..=right;
-    db.remap_key_type::<KC>()
-        .delete_range(wtxn, &range)
-        .map(drop)
+    db.remap_key_type::<KC>().delete_range(wtxn, &range).map(drop)
 }
 
 fn compute_facet_levels<'t, T: 't, KC>(
@@ -215,6 +241,20 @@ where
     }
 
     writer_into_reader(writer, shrink_size)
+}
+
+fn compute_faceted_documents_ids(
+    rtxn: &heed::RoTxn,
+    db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
+    field_id: u8,
+) -> anyhow::Result<RoaringBitmap>
+{
+    let mut documents_ids = RoaringBitmap::new();
+    for result in db.prefix_iter(rtxn, &[field_id])? {
+        let (_key, docids) = result?;
+        documents_ids.union_with(&docids);
+    }
+    Ok(documents_ids)
 }
 
 fn write_entry<T, KC>(

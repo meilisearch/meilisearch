@@ -197,7 +197,7 @@ enum UpdateMeta {
     DocumentsAddition { method: String, format: String },
     ClearDocuments,
     Settings(Settings),
-    FacetLevels(FacetLevels),
+    Facets(Facets),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -236,7 +236,7 @@ struct Settings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
-struct FacetLevels {
+struct Facets {
     last_level_size: Option<NonZeroUsize>,
     number_of_levels: Option<NonZeroUsize>,
     easing_function: Option<String>,
@@ -411,10 +411,10 @@ async fn main() -> anyhow::Result<()> {
                         Err(e) => Err(e.into())
                     }
                 },
-                UpdateMeta::FacetLevels(levels) => {
+                UpdateMeta::Facets(levels) => {
                     // We must use the write transaction of the update here.
                     let mut wtxn = index_cloned.write_txn()?;
-                    let mut builder = update_builder.facet_levels(&mut wtxn, &index_cloned);
+                    let mut builder = update_builder.facets(&mut wtxn, &index_cloned);
                     if let Some(value) = levels.last_level_size {
                         builder.last_level_size(value);
                     }
@@ -806,8 +806,8 @@ async fn main() -> anyhow::Result<()> {
     let change_facet_levels_route = warp::filters::method::post()
         .and(warp::path!("facet-levels"))
         .and(warp::body::json())
-        .map(move |levels: FacetLevels| {
-            let meta = UpdateMeta::FacetLevels(levels);
+        .map(move |levels: Facets| {
+            let meta = UpdateMeta::Facets(levels);
             let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
             let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
             eprintln!("update {} registered", update_id);

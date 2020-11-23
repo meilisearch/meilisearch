@@ -26,15 +26,42 @@ mod parser;
 pub enum FacetNumberOperator<T> {
     GreaterThan(T),
     GreaterThanOrEqual(T),
+    Equal(T),
+    NotEqual(T),
     LowerThan(T),
     LowerThanOrEqual(T),
-    Equal(T),
     Between(T, T),
+}
+
+impl<T> FacetNumberOperator<T> {
+    /// This method can return two operations in case it must express
+    /// an OR operation for the between case (i.e. `TO`).
+    fn negate(self) -> (Self, Option<Self>) {
+        match self {
+            GreaterThan(x)        => (LowerThanOrEqual(x), None),
+            GreaterThanOrEqual(x) => (LowerThan(x), None),
+            Equal(x)              => (NotEqual(x), None),
+            NotEqual(x)           => (Equal(x), None),
+            LowerThan(x)          => (GreaterThanOrEqual(x), None),
+            LowerThanOrEqual(x)   => (GreaterThan(x), None),
+            Between(x, y)         => (LowerThan(x), Some(GreaterThan(y))),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FacetStringOperator {
     Equal(String),
+    NotEqual(String),
+}
+
+impl FacetStringOperator {
+    fn negate(self) -> Self {
+        match self {
+            FacetStringOperator::Equal(x)    => FacetStringOperator::NotEqual(x),
+            FacetStringOperator::NotEqual(x) => FacetStringOperator::Equal(x),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,7 +71,6 @@ pub enum FacetCondition {
     OperatorString(u8, FacetStringOperator),
     Or(Box<Self>, Box<Self>),
     And(Box<Self>, Box<Self>),
-    Not(Box<Self>),
 }
 
 fn get_field_id_facet_type<'a>(
@@ -106,24 +132,24 @@ impl FacetCondition {
         fim: &FieldsIdsMap,
         ff: &HashMap<u8, FacetType>,
         expression: Pairs<Rule>,
-    ) -> anyhow::Result<FacetCondition>
+    ) -> anyhow::Result<Self>
     {
         PREC_CLIMBER.climb(
             expression,
             |pair: Pair<Rule>| match pair.as_rule() {
-                Rule::between => Ok(FacetCondition::between(fim, ff, pair)?),
-                Rule::eq => Ok(FacetCondition::equal(fim, ff, pair)?),
-                Rule::neq => Ok(Not(Box::new(FacetCondition::equal(fim, ff, pair)?))),
-                Rule::greater => Ok(FacetCondition::greater_than(fim, ff, pair)?),
-                Rule::geq => Ok(FacetCondition::greater_than_or_equal(fim, ff, pair)?),
-                Rule::less => Ok(FacetCondition::lower_than(fim, ff, pair)?),
-                Rule::leq => Ok(FacetCondition::lower_than_or_equal(fim, ff, pair)?),
+                Rule::greater => Ok(Self::greater_than(fim, ff, pair)?),
+                Rule::geq => Ok(Self::greater_than_or_equal(fim, ff, pair)?),
+                Rule::eq => Ok(Self::equal(fim, ff, pair)?),
+                Rule::neq => Ok(Self::equal(fim, ff, pair)?.negate()),
+                Rule::leq => Ok(Self::lower_than_or_equal(fim, ff, pair)?),
+                Rule::less => Ok(Self::lower_than(fim, ff, pair)?),
+                Rule::between => Ok(Self::between(fim, ff, pair)?),
+                Rule::not => Ok(Self::from_pairs(fim, ff, pair.into_inner())?.negate()),
                 Rule::prgm => Self::from_pairs(fim, ff, pair.into_inner()),
                 Rule::term => Self::from_pairs(fim, ff, pair.into_inner()),
-                Rule::not => Ok(Not(Box::new(Self::from_pairs(fim, ff, pair.into_inner())?))),
                 _ => unreachable!(),
             },
-            |lhs: anyhow::Result<FacetCondition>, op: Pair<Rule>, rhs: anyhow::Result<FacetCondition>| {
+            |lhs: anyhow::Result<Self>, op: Pair<Rule>, rhs: anyhow::Result<Self>| {
                 match op.as_rule() {
                     Rule::or => Ok(Or(Box::new(lhs?), Box::new(rhs?))),
                     Rule::and => Ok(And(Box::new(lhs?), Box::new(rhs?))),
@@ -131,6 +157,22 @@ impl FacetCondition {
                 }
             },
         )
+    }
+
+    fn negate(self) -> FacetCondition {
+        match self {
+            OperatorI64(fid, op) => match op.negate() {
+                (op, None) => OperatorI64(fid, op),
+                (a, Some(b)) => Or(Box::new(OperatorI64(fid, a)), Box::new(OperatorI64(fid, b))),
+            },
+            OperatorF64(fid, op) => match op.negate() {
+                (op, None) => OperatorF64(fid, op),
+                (a, Some(b)) => Or(Box::new(OperatorF64(fid, a)), Box::new(OperatorF64(fid, b))),
+            },
+            OperatorString(fid, op) => OperatorString(fid, op.negate()),
+            Or(a, b) => And(Box::new(a.negate()), Box::new(b.negate())),
+            And(a, b) => Or(Box::new(a.negate()), Box::new(b.negate())),
+        }
     }
 
     fn between(
@@ -381,6 +423,7 @@ impl FacetCondition {
 
     fn evaluate_number_operator<'t, T: 't, KC>(
         rtxn: &'t heed::RoTxn,
+        index: &Index,
         db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
         field_id: u8,
         operator: FacetNumberOperator<T>,
@@ -396,9 +439,14 @@ impl FacetCondition {
         let (left, right) = match operator {
             GreaterThan(val)        => (Excluded(val),            Included(T::max_value())),
             GreaterThanOrEqual(val) => (Included(val),            Included(T::max_value())),
+            Equal(val)              => (Included(val),            Included(val)),
+            NotEqual(val)           => {
+                let all_documents_ids = index.faceted_documents_ids(rtxn, field_id)?;
+                let docids = Self::evaluate_number_operator::<T, KC>(rtxn, index, db, field_id, Equal(val))?;
+                return Ok(all_documents_ids - docids);
+            },
             LowerThan(val)          => (Included(T::min_value()), Excluded(val)),
             LowerThanOrEqual(val)   => (Included(T::min_value()), Included(val)),
-            Equal(val)              => (Included(val),            Included(val)),
             Between(left, right)    => (Included(left),           Included(right)),
         };
 
@@ -421,6 +469,7 @@ impl FacetCondition {
 
     fn evaluate_string_operator(
         rtxn: &heed::RoTxn,
+        index: &Index,
         db: heed::Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
         field_id: u8,
         operator: &FacetStringOperator,
@@ -432,7 +481,13 @@ impl FacetCondition {
                     Some(docids) => Ok(docids),
                     None => Ok(RoaringBitmap::new())
                 }
-            }
+            },
+            FacetStringOperator::NotEqual(string) => {
+                let all_documents_ids = index.faceted_documents_ids(rtxn, field_id)?;
+                let op = FacetStringOperator::Equal(string.clone());
+                let docids = Self::evaluate_string_operator(rtxn, index, db, field_id, &op)?;
+                return Ok(all_documents_ids - docids);
+            },
         }
     }
 
@@ -445,14 +500,14 @@ impl FacetCondition {
         let db = index.facet_field_id_value_docids;
         match self {
             OperatorI64(fid, op) => {
-                Self::evaluate_number_operator::<i64, FacetLevelValueI64Codec>(rtxn, db, *fid, *op)
+                Self::evaluate_number_operator::<i64, FacetLevelValueI64Codec>(rtxn, index, db, *fid, *op)
             },
             OperatorF64(fid, op) => {
-                Self::evaluate_number_operator::<f64, FacetLevelValueF64Codec>(rtxn, db, *fid, *op)
+                Self::evaluate_number_operator::<f64, FacetLevelValueF64Codec>(rtxn, index, db, *fid, *op)
             },
             OperatorString(fid, op) => {
                 let db = db.remap_key_type::<FacetValueStringCodec>();
-                Self::evaluate_string_operator(rtxn, db, *fid, op)
+                Self::evaluate_string_operator(rtxn, index, db, *fid, op)
             },
             Or(lhs, rhs) => {
                 let lhs = lhs.evaluate(rtxn, index)?;
@@ -463,13 +518,6 @@ impl FacetCondition {
                 let lhs = lhs.evaluate(rtxn, index)?;
                 let rhs = rhs.evaluate(rtxn, index)?;
                 Ok(lhs & rhs)
-            },
-            Not(op) => {
-                // TODO is this right or is this wrong? because all documents ids are not faceted
-                //      so doing that can return documents that are not faceted at all.
-                let all_documents_ids = index.documents_ids(rtxn)?;
-                let documents_ids = op.evaluate(rtxn, index)?;
-                Ok(all_documents_ids - documents_ids)
             },
         }
     }

@@ -18,6 +18,7 @@ use crate::{
 
 pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
+pub const FACETED_DOCUMENTS_IDS_PREFIX: &str = "faceted-documents-ids";
 pub const FACETED_FIELDS_KEY: &str = "faceted-fields";
 pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
 pub const PRIMARY_KEY_KEY: &str = "primary-key";
@@ -222,6 +223,27 @@ impl Index {
     /// Returns the facet fields ids associated with their facet type.
     pub fn faceted_fields(&self, wtxn: &RoTxn) -> heed::Result<HashMap<u8, FacetType>> {
         Ok(self.main.get::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY)?.unwrap_or_default())
+    }
+
+    /* faceted documents ids */
+
+    /// Writes the documents ids that are faceted under this field id.
+    pub fn put_faceted_documents_ids(&self, wtxn: &mut RwTxn, field_id: u8, docids: &RoaringBitmap) -> heed::Result<()> {
+        let mut buffer = [0u8; FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        buffer[..FACETED_DOCUMENTS_IDS_PREFIX.len()].clone_from_slice(FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        *buffer.last_mut().unwrap() = field_id;
+        self.main.put::<_, ByteSlice, RoaringBitmapCodec>(wtxn, &buffer, docids)
+    }
+
+    /// Retrieve all the documents ids that faceted under this field id.
+    pub fn faceted_documents_ids(&self, rtxn: &RoTxn, field_id: u8) -> heed::Result<RoaringBitmap> {
+        let mut buffer = [0u8; FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
+        buffer[..FACETED_DOCUMENTS_IDS_PREFIX.len()].clone_from_slice(FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
+        *buffer.last_mut().unwrap() = field_id;
+        match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
+            Some(docids) => Ok(docids),
+            None => Ok(RoaringBitmap::new()),
+        }
     }
 
     /* words fst */

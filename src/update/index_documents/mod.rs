@@ -16,7 +16,7 @@ use rayon::prelude::*;
 use rayon::ThreadPool;
 
 use crate::index::Index;
-use crate::update::{FacetLevels, UpdateIndexingStep};
+use crate::update::{Facets, UpdateIndexingStep};
 use self::store::{Store, Readers};
 use self::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
@@ -584,7 +584,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             });
         }
 
-        let mut builder = FacetLevels::new(self.wtxn, self.index);
+        let mut builder = Facets::new(self.wtxn, self.index);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
