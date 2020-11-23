@@ -349,8 +349,8 @@ fn search_command(command: SearchCommand, database: Database) -> Result<(), Box<
 
                 if let Some(ref filter) = command.filter {
                     let filter = filter.as_str();
-                    let (positive, filter) = if filter.chars().next() == Some('!') {
-                        (false, &filter[1..])
+                    let (positive, filter) = if let Some(stripped) = filter.strip_prefix('!') {
+                        (false, stripped)
                     } else {
                         (true, filter)
                     };

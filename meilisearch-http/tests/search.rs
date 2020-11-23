@@ -130,13 +130,13 @@ async fn search_unexpected_params() {
 
     let expected = "unknown field `lol`, expected one of `q`, `offset`, `limit`, `attributesToRetrieve`, `attributesToCrop`, `cropLength`, `attributesToHighlight`, `filters`, `matches`, `facetFilters`, `facetsDistribution` at line 1 column 6";
 
-    let post_query = serde_json::from_str::<meilisearch_http::routes::search::SearchQueryPost>(&query.clone().to_string());
+    let post_query = serde_json::from_str::<meilisearch_http::routes::search::SearchQueryPost>(&query.to_string());
     assert!(post_query.is_err());
-    assert_eq!(expected.clone(), post_query.err().unwrap().to_string());
+    assert_eq!(expected, post_query.err().unwrap().to_string());
 
-    let get_query: Result<meilisearch_http::routes::search::SearchQuery, _> = serde_json::from_str(&query.clone().to_string());
+    let get_query: Result<meilisearch_http::routes::search::SearchQuery, _> = serde_json::from_str(&query.to_string());
     assert!(get_query.is_err());
-    assert_eq!(expected.clone(), get_query.err().unwrap().to_string());
+    assert_eq!(expected, get_query.err().unwrap().to_string());
 }
 
 #[actix_rt::test]
