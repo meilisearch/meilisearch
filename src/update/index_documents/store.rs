@@ -571,7 +571,10 @@ fn parse_facet_value(ftype: FacetType, value: &Value) -> anyhow::Result<SmallVec
             Value::Null => Ok(()),
             Value::Bool(b) => Ok(output.push(Integer(*b as i64))),
             Value::Number(number) => match ftype {
-                FacetType::String => bail!("invalid facet type, expecting {} found number", ftype),
+                FacetType::String => {
+                    let string = SmallString32::from(number.to_string());
+                    Ok(output.push(String(string)))
+                },
                 FacetType::Float => match number.as_f64() {
                     Some(float) => Ok(output.push(Float(OrderedFloat(float)))),
                     None => bail!("invalid facet type, expecting {} found integer", ftype),
