@@ -12,13 +12,12 @@ use crate::serde::SerializerError;
 use crate::store::DiscoverIds;
 
 /// Returns the number of words indexed or `None` if the type is unindexable.
-pub fn index_value<A>(
-    indexer: &mut RawIndexer<A>,
+pub fn index_value(
+    indexer: &mut RawIndexer,
     document_id: DocumentId,
     indexed_pos: IndexedPos,
     value: &Value,
 ) -> Option<usize>
-where A: AsRef<[u8]>,
 {
     match value {
         Value::Null => None,

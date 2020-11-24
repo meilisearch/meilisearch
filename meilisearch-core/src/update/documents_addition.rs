@@ -110,18 +110,17 @@ pub fn push_documents_addition<D: serde::Serialize>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn index_document<A>(
+fn index_document(
     writer: &mut heed::RwTxn<MainT>,
     documents_fields: DocumentsFields,
     documents_fields_counts: DocumentsFieldsCounts,
     ranked_map: &mut RankedMap,
-    indexer: &mut RawIndexer<A>,
+    indexer: &mut RawIndexer,
     schema: &Schema,
     field_id: FieldId,
     document_id: DocumentId,
     value: &Value,
 ) -> MResult<()>
-where A: AsRef<[u8]>,
 {
     let serialized = serde_json::to_vec(value)?;
     documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
@@ -373,14 +372,13 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
     Ok(())
 }
 
-pub fn write_documents_addition_index<A>(
+pub fn write_documents_addition_index(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     ranked_map: &RankedMap,
     number_of_inserted_documents: usize,
-    indexer: RawIndexer<A>,
+    indexer: RawIndexer,
 ) -> MResult<()>
-where A: AsRef<[u8]>,
 {
     let indexed = indexer.build();
     let mut delta_words_builder = SetBuilder::memory();

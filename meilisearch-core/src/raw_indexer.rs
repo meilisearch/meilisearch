@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
+use std::println;
 
 use meilisearch_schema::IndexedPos;
-use meilisearch_tokenizer::tokenizer::{Analyzer, AnalyzerConfig};
+use meilisearch_tokenizer::analyzer::{Analyzer, AnalyzerConfig};
 use meilisearch_tokenizer::Token;
 use sdset::SetBuf;
 
@@ -14,9 +15,8 @@ const WORD_LENGTH_LIMIT: usize = 80;
 
 type Word = Vec<u8>; // TODO make it be a SmallVec
 
-pub struct RawIndexer<A> {
+pub struct RawIndexer {
     word_limit: usize, // the maximum number of indexed words
-    stop_words: fst::Set<A>,
     words_doc_indexes: BTreeMap<Word, Vec<DocIndex>>,
     docs_words: HashMap<DocumentId, Vec<Word>>,
     analyzer: Analyzer,
@@ -27,28 +27,26 @@ pub struct Indexed<'a> {
     pub docs_words: HashMap<DocumentId, FstSetCow<'a>>,
 }
 
-impl<A> RawIndexer<A> {
-    pub fn new(stop_words: fst::Set<A>) -> RawIndexer<A> {
+impl RawIndexer {
+    pub fn new<A: AsRef<[u8]>>(stop_words: fst::Set<A>) -> RawIndexer {
         RawIndexer::with_word_limit(stop_words, 1000)
     }
 
-    pub fn with_word_limit(stop_words: fst::Set<A>, limit: usize) -> RawIndexer<A> {
+    pub fn with_word_limit<A: AsRef<[u8]>>(stop_words: fst::Set<A>, limit: usize) -> RawIndexer {
         RawIndexer {
             word_limit: limit,
-            stop_words,
             words_doc_indexes: BTreeMap::new(),
             docs_words: HashMap::new(),
-            analyzer: Analyzer::new(AnalyzerConfig::default()),
+            analyzer: Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words.stream().into_strs().unwrap().into_iter().collect()))
         }
     }
-}
 
-impl<A: AsRef<[u8]>> RawIndexer<A> {
     pub fn index_text(&mut self, id: DocumentId, indexed_pos: IndexedPos, text: &str) -> usize {
         let mut number_of_words = 0;
 
         let analyzed_text = self.analyzer.analyze(text);
-        for (word_pos, (token_index, token)) in  analyzed_text.tokens().enumerate().filter(|(_, t)| !t.is_separator()).enumerate() {
+        for (word_pos, (token_index, token)) in  analyzed_text.tokens().enumerate().filter(|(_, t)| t.is_word()).enumerate() {
+            print!("token: {}", token.word);
             let must_continue = index_token(
                 token,
                 token_index,
@@ -56,7 +54,6 @@ impl<A: AsRef<[u8]>> RawIndexer<A> {
                 id,
                 indexed_pos,
                 self.word_limit,
-                &self.stop_words,
                 &mut self.words_doc_indexes,
                 &mut self.docs_words,
             );
@@ -88,6 +85,7 @@ impl<A: AsRef<[u8]>> RawIndexer<A> {
             let tokens = analyzed_text
                 .tokens()
                 .enumerate()
+                .filter(|(_, t)| t.is_word())
                 .map(|(i, mut t)| {
                     t.byte_start = t.byte_start + current_byte_offset;
                     t.byte_end = t.byte_end + current_byte_offset;
@@ -103,12 +101,11 @@ impl<A: AsRef<[u8]>> RawIndexer<A> {
 
                 let must_continue = index_token(
                     token,
-                    token_index,
                     word_pos,
+                    token_index,
                     id,
                     indexed_pos,
                     self.word_limit,
-                    &self.stop_words,
                     &mut self.words_doc_indexes,
                     &mut self.docs_words,
                 );
@@ -145,24 +142,23 @@ impl<A: AsRef<[u8]>> RawIndexer<A> {
     }
 }
 
-fn index_token<A>(
+fn index_token(
     token: Token,
     position: usize,
     word_pos: usize,
     id: DocumentId,
     indexed_pos: IndexedPos,
     word_limit: usize,
-    stop_words: &fst::Set<A>,
     words_doc_indexes: &mut BTreeMap<Word, Vec<DocIndex>>,
     docs_words: &mut HashMap<DocumentId, Vec<Word>>,
 ) -> bool
-where A: AsRef<[u8]>,
 {
-    if position >= word_limit {
+    println!(" position {}, limit: {}", position, word_limit);
+    if word_pos >= word_limit {
         return false;
     }
 
-    if !stop_words.contains(&token.word.as_ref()) {
+    if !token.is_stopword() {
         match token_to_docindex(id, indexed_pos, &token, word_pos) {
             Some(docindex) => {
                 let word = Vec::from(token.word.as_ref());
@@ -220,9 +216,6 @@ mod tests {
         assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
         assert!(words_doc_indexes.get(&b"ai"[..]).is_some());
         assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
-        assert!(words_doc_indexes
-            .get(&"éteindre".to_owned().into_bytes())
-            .is_some());
     }
 
     #[test]
@@ -242,9 +235,6 @@ mod tests {
         assert!(words_doc_indexes.get(&b"aspirateur"[..]).is_some());
         assert!(words_doc_indexes.get(&b"ai"[..]).is_some());
         assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
-        assert!(words_doc_indexes
-            .get(&"éteindre".to_owned().into_bytes())
-            .is_some());
     }
 
     #[test]
@@ -269,9 +259,6 @@ mod tests {
         assert!(words_doc_indexes.get(&b"ai"[..]).is_none());
         assert!(words_doc_indexes.get(&b"de"[..]).is_none());
         assert!(words_doc_indexes.get(&b"eteindre"[..]).is_some());
-        assert!(words_doc_indexes
-            .get(&"éteindre".to_owned().into_bytes())
-            .is_some());
     }
 
     #[test]
@@ -303,7 +290,7 @@ mod tests {
         let Indexed {
             words_doc_indexes, ..
         } = indexer.build();
-        assert!(words_doc_indexes.get(&"buffering".to_owned().into_bytes()).is_some());
+        assert!(words_doc_indexes.get(&"request_buffering".to_owned().into_bytes()).is_some());
     }
 
     #[test]

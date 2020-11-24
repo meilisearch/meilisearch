@@ -9,7 +9,7 @@ use fst::{IntoStreamer, Streamer};
 use itertools::{EitherOrBoth, merge_join_by};
 use log::debug;
 use meilisearch_tokenizer::Token;
-use meilisearch_tokenizer::tokenizer::{Analyzer, AnalyzerConfig};
+use meilisearch_tokenizer::analyzer::{Analyzer, AnalyzerConfig};
 use sdset::{Set, SetBuf, SetOperation};
 
 use crate::database::MainT;
