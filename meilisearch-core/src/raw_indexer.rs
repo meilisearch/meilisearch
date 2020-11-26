@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 
 use meilisearch_schema::IndexedPos;
 use meilisearch_tokenizer::analyzer::{Analyzer, AnalyzerConfig};
-use meilisearch_tokenizer::{Token, token::SeparatorKind};
+use meilisearch_tokenizer::{Token, token::SeparatorKind, TokenKind};
 use sdset::SetBuf;
 
 use crate::{DocIndex, DocumentId};
@@ -45,10 +45,22 @@ impl RawIndexer {
 
         let analyzed_text = self.analyzer.analyze(text);
         for (word_pos, token) in  analyzed_text.tokens()
-            .scan(0, |offset, mut token| {
-                token.char_index += *offset;
-                if let Some(SeparatorKind::Hard) = token.is_separator() {
-                    *offset += 8;
+            .scan((0, None), |(offset, sepcat), mut token| {
+                match token.kind {
+                    TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
+                        if let Some(SeparatorKind::Hard) = sepcat {
+                            *offset += 8;
+                        }
+                        *sepcat = None;
+                        token.char_index += *offset;
+                    }
+                    TokenKind::Separator(SeparatorKind::Hard) => {
+                        *sepcat = Some(SeparatorKind::Hard);
+                    }
+                    TokenKind::Separator(SeparatorKind::Soft) if *sepcat != Some(SeparatorKind::Hard) => {
+                        *sepcat = Some(SeparatorKind::Soft);
+                    }
+                    _ => (),
                 }
                 Some(token)
             })
@@ -88,10 +100,22 @@ impl RawIndexer {
             let analyzed_text = self.analyzer.analyze(s);
             let tokens = analyzed_text
                 .tokens()
-                .scan(0, |offset, mut token| {
-                    token.char_index += *offset;
-                    if let Some(SeparatorKind::Hard) = token.is_separator() {
-                        *offset += 8;
+                .scan((0, None), |(offset, sepcat), mut token| {
+                    match token.kind {
+                        TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
+                            if let Some(SeparatorKind::Hard) = sepcat {
+                                *offset += 8;
+                            }
+                            *sepcat = None;
+                            token.char_index += *offset;
+                        }
+                        TokenKind::Separator(SeparatorKind::Hard) => {
+                            *sepcat = Some(SeparatorKind::Hard);
+                        }
+                        TokenKind::Separator(SeparatorKind::Soft) if *sepcat != Some(SeparatorKind::Hard) => {
+                            *sepcat = Some(SeparatorKind::Soft);
+                        }
+                        _ => (),
                     }
                     Some(token)
                 })

@@ -8,7 +8,7 @@ use std::{cmp, fmt, iter::once};
 use fst::{IntoStreamer, Streamer};
 use itertools::{EitherOrBoth, merge_join_by};
 use log::debug;
-use meilisearch_tokenizer::{Token, token::SeparatorKind};
+use meilisearch_tokenizer::{Token, token::SeparatorKind, TokenKind};
 use meilisearch_tokenizer::analyzer::{Analyzer, AnalyzerConfig};
 use sdset::{Set, SetBuf, SetOperation};
 
@@ -181,10 +181,22 @@ fn split_query_string(s: &str, stop_words: HashSet<String>) -> Vec<(usize, Strin
     analyzer
         .analyze(s)
         .tokens()
-        .scan(0, |offset, mut token| {
-            token.char_index += *offset;
-            if let Some(SeparatorKind::Hard) = token.is_separator() {
-                *offset += 8;
+        .scan((0, None), |(offset, sepcat), mut token| {
+            match token.kind {
+                TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
+                    if let Some(SeparatorKind::Hard) = sepcat {
+                        *offset += 8;
+                    }
+                    *sepcat = None;
+                    token.char_index += *offset;
+                }
+                TokenKind::Separator(SeparatorKind::Hard) => {
+                    *sepcat = Some(SeparatorKind::Hard);
+                }
+                TokenKind::Separator(SeparatorKind::Soft) if *sepcat != Some(SeparatorKind::Hard) => {
+                    *sepcat = Some(SeparatorKind::Soft);
+                }
+                _ => (),
             }
             Some(token)
         })
