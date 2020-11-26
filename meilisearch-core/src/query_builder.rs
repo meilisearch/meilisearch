@@ -225,10 +225,17 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
 
     fn sort_result_from_docids(&self, docids: &[DocumentId], range: Range<usize>) -> SortResult {
         let mut sort_result = SortResult::default();
+        let mut filtered_count = 0;
         let mut result = match self.filter {
             Some(ref filter) => docids
                 .iter()
-                .filter(|item| (filter)(**item))
+                .filter(|item| {
+                    let accepted = (filter)(**item);
+                    if !accepted {
+                        filtered_count += 1;
+                    }
+                    accepted
+                })
                 .skip(range.start)
                 .take(range.end - range.start)
                 .map(|&id| Document::from_highlights(id, &[]))
@@ -248,15 +255,19 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
             result.retain(|doc| {
                 let id = doc.id;
                 let key = (distinct)(id);
-                match key {
+                let distinct_accepted = match key {
                     Some(key) => distinct_map.register(key),
                     None => distinct_map.register_without_key(),
+                };
+                if !distinct_accepted {
+                    filtered_count += 1;
                 }
+                distinct_accepted
             });
         }
 
         sort_result.documents = result;
-        sort_result.nb_hits = docids.len();
+        sort_result.nb_hits = docids.len() - filtered_count;
         sort_result
     }
 
