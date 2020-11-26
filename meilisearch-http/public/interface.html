@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="/bulma.min.css">
+    <link rel="stylesheet" href="bulma.min.css">
     <title>MeiliSearch</title>
     <style>
       em {
@@ -28,8 +28,6 @@
       }
 
       .document {
-        padding: 20px 20px;
-        background-color: #f5f5f5;
         border-radius: 4px;
         margin-bottom: 20px;
         display: flex;
@@ -40,121 +38,141 @@
         max-width: 75%;
         padding: 0;
         margin: 0;
+        list-style-type: none;
       }
 
+      .document ol li {
+        list-style: none;
+      }
+
+
       .document .image {
-        max-width: 25%;
-        flex: 0 0 25%;
-        padding-left: 30px;
+        max-width: 50%;
+        margin: 0 auto;
         box-sizing: border-box;
+      }
+
+      @media screen and (min-width: 770px) {
+        .document .image {
+          max-width: 25%;
+          flex: 0 0 25%;
+          margin: 0;
+          padding-left: 30px;
+          box-sizing: border-box;
+        }
       }
 
       .document .image img {
         width: 100%;
       }
 
-      .field {
-        list-style-type: none;
-        display: flex;
-        flex-wrap: wrap;
-      }
-
-      .field:not(:last-child) {
-        margin-bottom: 7px;
-      }
-
       .attribute {
-        flex: 0 0 25%;
-        max-width: 25%;
-        text-align: right;
-        padding-right: 10px;
+        text-align: center;
         box-sizing: border-box;
         text-transform: uppercase;
+        font-weight: bold;
         color: rgba(0,0,0,.7);
       }
 
+      @media screen and (min-width: 770px) {
+        .attribute {
+          flex: 0 0 25%;
+          max-width: 25%;
+          text-align: right;
+          padding-right: 10px;
+          font-weight: normal;
+          box-sizing: border-box;
+        }
+      }
+      @media screen and (max-width: 770px) {
+        .attribute {
+          padding-bottom: 0;
+        }
+      }
+
       .content {
-        max-width: 75%;
         flex: 0 0 75%;
         box-sizing: border-box;
-        padding-left: 10px;
         color: rgba(0,0,0,.9);
-        overflow-wrap: break-word;
+        overflow-wrap: anywhere;
+      }
+
+      .hero-foot {
+        padding-bottom: 3rem;
+      }
+
+      @media screen and (max-width: 770px) {
+        .align-on-mobile {
+          text-align: center;
+        }
       }
     </style>
   </head>
   <body>
 
     <section class="hero is-light">
+      
       <div class="hero-body">
         <div class="container">
-          <h1 class="title">
-            Welcome to MeiliSearch
-          </h1>
-          <h2 class="subtitle">
-            This dashboard will help you check the search results with ease.
-          </h2>
-
-          <div class="field">
-            <!-- API Key -->
-            <div class="field">
-              <div class="control">
-                <input id="apiKey" class="input is-small" type="password" placeholder="API key (optional)">
-                <div class="help">At least a private API key is required for the dashboard to access the indexes list.</div>
+          <div class="content is-medium align-on-mobile">
+            <h1 class="title is-1 is-spaced">
+              Welcome to MeiliSearch
+            </h1>
+            <p class="subtitle is-4">
+              This dashboard will help you check the search results with ease.
+            </p>
+          </div>
+          <div class="columns">
+            <div class="column is-4">
+              <div class="field">
+                  <!-- API Key -->
+                    <label class="label" for="apiKey">API Key (optionnal)</label>
+                    <div class="control">
+                      <input id="apiKey" class="input is-small" type="password" placeholder="Enter your API key">
+                    </div>
+                    <p class="help">At least a private API key is required for the dashboard to access the indexes list.</p>
               </div>
             </div>
           </div>
-
-        </div>
-      </div>
-    </section>
-
-    <section class="hero container">
-        <div class="notification" style="border-radius: 0 0 4px 4px;">
-
-          <nav class="level">
-            <!-- Left side -->
-            <div class="level-left">
-              <div class="level-item">
-                <div class="field has-addons has-addons-right">
-                  <p class="control">
+          <div class="columns">
+            <div class="column is-8">
+                <label class="label" for="search">Search something</label>
+                <div class="field has-addons">
+                  <div class="control">
                     <span class="select">
-                      <select id="index">
+                      <select role="listbox" id="index" aria-label="Select the index you want to search on">
                         <!-- indexes names -->
                       </select>
                     </span>
-                  </p>
-                  <p class="control">
-                    <input id="search" class="input" type="text" autofocus placeholder="e.g. George Clooney">
-                  </p>
+                  </div>
+                  <div class="control is-expanded">
+                    <input id="search" class="input" type="search" autofocus placeholder="e.g. George Clooney" aria-label="Search through your documents">
+                  </div>
                 </div>
-              </div>
             </div>
-
-            <!-- Right side -->
-            <nav class="level-right">
-              <div class="level-item has-text-centered">
-                <div>
+            <div class="column is-4">
+              <div class="columns">
+                <div class="column is-6 has-text-centered">
                   <p class="heading">Documents</p>
                   <p id="count" class="title">0</p>
                 </div>
-              </div>
-              <div class="level-item has-text-centered">
-                <div>
+                <div class="column is-6 has-text-centered">
                   <p class="heading">Time Spent</p>
                   <p id="time" class="title">N/A</p>
                 </div>
               </div>
-            </nav>
-          </nav>
-
+            </div>
+          </div>
         </div>
+      </div>
     </section>
 
     <section>
-      <ol id="results" class="content">
-        <!-- documents matching resquests -->
-      </ol>
+      <div class="container">
+        <ol id="results" class="content">
+          <!-- documents matching resquests -->
+        </ol>
+      </div>
     </section>
   </body>
 
@@ -230,9 +248,12 @@
                     delete element._formatted;
 
                     const elem = document.createElement('li');
-                    elem.classList.add("document");
+                    elem.classList.add("document","box");
 
-                    const ol = document.createElement('ol');
+                    const div = document.createElement('div');
+                    div.classList.add("columns","is-desktop","is-tablet");
+                    const info = document.createElement('div');
+                    info.classList.add("column","align-on-mobile");
                     let image = undefined;
 
                     for (const prop in element) {
@@ -243,15 +264,16 @@
                             }
                         }
 
-                        const field = document.createElement('li');
-                        field.classList.add("field");
+                        const field = document.createElement('div');
+                        field.classList.add("columns");
 
                         const attribute = document.createElement('div');
-                        attribute.classList.add("attribute");
+                        attribute.classList.add("attribute", "column");
                         attribute.innerHTML = prop;
 
                         const content = document.createElement('div');
-                        content.classList.add("content");
+                        content.classList.add("content", "column");
+                        
                         if (typeof (element[prop]) === "object") {
                           content.innerHTML = JSON.stringify(element[prop]);
                         } else {
@@ -261,19 +283,22 @@
                         field.appendChild(attribute);
                         field.appendChild(content);
 
-                        ol.appendChild(field);
+                        info.appendChild(field);
                     }
 
-                    elem.appendChild(ol);
+                    div.appendChild(info);
+                    elem.appendChild(div);
 
                     if (image != undefined) {
-                        const div = document.createElement('div');
-                        div.classList.add("image");
-
+                        const divImage = document.createElement('div');
+                        divImage.classList.add("image","column","align-on-mobile");
+                        
                         const img = document.createElement('img');
                         img.src = image;
+                        img.setAttribute("alt","Item illustration");
 
-                        div.appendChild(img);
+                        divImage.appendChild(img);
+                        div.appendChild(divImage);
                         elem.appendChild(div);
                     }
 
