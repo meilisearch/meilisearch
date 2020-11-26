@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 use std::str;
 
+use crate::FieldId;
+
 pub struct FacetValueStringCodec;
 
 impl<'a> heed::BytesDecode<'a> for FacetValueStringCodec {
-    type DItem = (u8, &'a str);
+    type DItem = (FieldId, &'a str);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
         let (field_id, bytes) = bytes.split_first()?;
@@ -14,7 +16,7 @@ impl<'a> heed::BytesDecode<'a> for FacetValueStringCodec {
 }
 
 impl<'a> heed::BytesEncode<'a> for FacetValueStringCodec {
-    type EItem = (u8, &'a str);
+    type EItem = (FieldId, &'a str);
 
     fn bytes_encode((field_id, value): &Self::EItem) -> Option<Cow<[u8]>> {
         let mut bytes = Vec::with_capacity(value.len() + 1);

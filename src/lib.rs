@@ -40,15 +40,16 @@ pub type SmallVec16<T> = smallvec::SmallVec<[T; 16]>;
 pub type SmallVec8<T> = smallvec::SmallVec<[T; 8]>;
 pub type BEU32 = heed::zerocopy::U32<heed::byteorder::BE>;
 pub type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
-pub type DocumentId = u32;
 pub type Attribute = u32;
+pub type DocumentId = u32;
+pub type FieldId = u8;
 pub type Position = u32;
 
 type MergeFn = for<'a> fn(&[u8], &[Cow<'a, [u8]>]) -> anyhow::Result<Vec<u8>>;
 
 /// Transform a raw obkv store into a JSON Object.
 pub fn obkv_to_json(
-    displayed_fields: &[u8],
+    displayed_fields: &[FieldId],
     fields_ids_map: &FieldsIdsMap,
     obkv: obkv::KvReader,
 ) -> anyhow::Result<Map<String, Value>>

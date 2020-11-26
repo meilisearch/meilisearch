@@ -2,12 +2,13 @@ use std::borrow::Cow;
 use std::convert::TryInto;
 
 use crate::facet::value_encoding::f64_into_bytes;
+use crate::FieldId;
 
 // TODO do not de/serialize right bound when level = 0
 pub struct FacetLevelValueF64Codec;
 
 impl<'a> heed::BytesDecode<'a> for FacetLevelValueF64Codec {
-    type DItem = (u8, u8, f64, f64);
+    type DItem = (FieldId, u8, f64, f64);
 
     fn bytes_decode(bytes: &'a [u8]) -> Option<Self::DItem> {
         let (field_id, bytes) = bytes.split_first()?;
@@ -27,7 +28,7 @@ impl<'a> heed::BytesDecode<'a> for FacetLevelValueF64Codec {
 }
 
 impl heed::BytesEncode<'_> for FacetLevelValueF64Codec {
-    type EItem = (u8, u8, f64, f64);
+    type EItem = (FieldId, u8, f64, f64);
 
     fn bytes_encode((field_id, level, left, right): &Self::EItem) -> Option<Cow<[u8]>> {
         let mut buffer = [0u8; 32];

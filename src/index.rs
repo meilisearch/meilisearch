@@ -10,7 +10,7 @@ use roaring::RoaringBitmap;
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::Search;
-use crate::{BEU32, DocumentId, ExternalDocumentsIds};
+use crate::{BEU32, DocumentId, FieldId, ExternalDocumentsIds};
 use crate::{
     RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec, ObkvCodec,
     BoRoaringBitmapCodec, CboRoaringBitmapCodec,
@@ -107,8 +107,8 @@ impl Index {
     /* primary key */
 
     /// Writes the documents primary key, this is the field name that is used to store the id.
-    pub fn put_primary_key(&self, wtxn: &mut RwTxn, primary_key: u8) -> heed::Result<()> {
-        self.main.put::<_, Str, OwnedType<u8>>(wtxn, PRIMARY_KEY_KEY, &primary_key)
+    pub fn put_primary_key(&self, wtxn: &mut RwTxn, primary_key: FieldId) -> heed::Result<()> {
+        self.main.put::<_, Str, OwnedType<FieldId>>(wtxn, PRIMARY_KEY_KEY, &primary_key)
     }
 
     /// Deletes the primary key of the documents, this can be done to reset indexes settings.
@@ -117,8 +117,8 @@ impl Index {
     }
 
     /// Returns the documents primary key, `None` if it hasn't been defined.
-    pub fn primary_key(&self, rtxn: &RoTxn) -> heed::Result<Option<u8>> {
-        self.main.get::<_, Str, OwnedType<u8>>(rtxn, PRIMARY_KEY_KEY)
+    pub fn primary_key(&self, rtxn: &RoTxn) -> heed::Result<Option<FieldId>> {
+        self.main.get::<_, Str, OwnedType<FieldId>>(rtxn, PRIMARY_KEY_KEY)
     }
 
     /* external documents ids */
@@ -172,7 +172,7 @@ impl Index {
 
     /// Writes the fields ids that must be displayed in the defined order.
     /// There must be not be any duplicate field id.
-    pub fn put_displayed_fields(&self, wtxn: &mut RwTxn, fields: &[u8]) -> heed::Result<()> {
+    pub fn put_displayed_fields(&self, wtxn: &mut RwTxn, fields: &[FieldId]) -> heed::Result<()> {
         self.main.put::<_, Str, ByteSlice>(wtxn, DISPLAYED_FIELDS_KEY, fields)
     }
 
@@ -184,14 +184,14 @@ impl Index {
 
     /// Returns the displayed fields ids in the order they must be returned. If it returns
     /// `None` it means that all the attributes are displayed in the order of the `FieldsIdsMap`.
-    pub fn displayed_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t [u8]>> {
+    pub fn displayed_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t [FieldId]>> {
         self.main.get::<_, Str, ByteSlice>(rtxn, DISPLAYED_FIELDS_KEY)
     }
 
     /* searchable fields */
 
     /// Writes the searchable fields, when this list is specified, only these are indexed.
-    pub fn put_searchable_fields(&self, wtxn: &mut RwTxn, fields: &[u8]) -> heed::Result<()> {
+    pub fn put_searchable_fields(&self, wtxn: &mut RwTxn, fields: &[FieldId]) -> heed::Result<()> {
         assert!(fields.windows(2).all(|win| win[0] < win[1])); // is sorted
         self.main.put::<_, Str, ByteSlice>(wtxn, SEARCHABLE_FIELDS_KEY, fields)
     }
@@ -203,7 +203,7 @@ impl Index {
 
     /// Returns the searchable fields ids, those are the fields that are indexed,
     /// if the searchable fields aren't there it means that **all** the fields are indexed.
-    pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t [u8]>> {
+    pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t [FieldId]>> {
         self.main.get::<_, Str, ByteSlice>(rtxn, SEARCHABLE_FIELDS_KEY)
     }
 
@@ -211,7 +211,7 @@ impl Index {
 
     /// Writes the facet fields ids associated with their facet type or `None` if
     /// the facet type is currently unknown.
-    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields_types: &HashMap<u8, FacetType>) -> heed::Result<()> {
+    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields_types: &HashMap<FieldId, FacetType>) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY, fields_types)
     }
 
@@ -221,14 +221,14 @@ impl Index {
     }
 
     /// Returns the facet fields ids associated with their facet type.
-    pub fn faceted_fields(&self, wtxn: &RoTxn) -> heed::Result<HashMap<u8, FacetType>> {
+    pub fn faceted_fields(&self, wtxn: &RoTxn) -> heed::Result<HashMap<FieldId, FacetType>> {
         Ok(self.main.get::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY)?.unwrap_or_default())
     }
 
     /* faceted documents ids */
 
     /// Writes the documents ids that are faceted under this field id.
-    pub fn put_faceted_documents_ids(&self, wtxn: &mut RwTxn, field_id: u8, docids: &RoaringBitmap) -> heed::Result<()> {
+    pub fn put_faceted_documents_ids(&self, wtxn: &mut RwTxn, field_id: FieldId, docids: &RoaringBitmap) -> heed::Result<()> {
         let mut buffer = [0u8; FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
         buffer[..FACETED_DOCUMENTS_IDS_PREFIX.len()].clone_from_slice(FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
         *buffer.last_mut().unwrap() = field_id;
@@ -236,7 +236,7 @@ impl Index {
     }
 
     /// Retrieve all the documents ids that faceted under this field id.
-    pub fn faceted_documents_ids(&self, rtxn: &RoTxn, field_id: u8) -> heed::Result<RoaringBitmap> {
+    pub fn faceted_documents_ids(&self, rtxn: &RoTxn, field_id: FieldId) -> heed::Result<RoaringBitmap> {
         let mut buffer = [0u8; FACETED_DOCUMENTS_IDS_PREFIX.len() + 1];
         buffer[..FACETED_DOCUMENTS_IDS_PREFIX.len()].clone_from_slice(FACETED_DOCUMENTS_IDS_PREFIX.as_bytes());
         *buffer.last_mut().unwrap() = field_id;

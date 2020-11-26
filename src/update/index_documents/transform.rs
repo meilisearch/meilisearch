@@ -10,13 +10,13 @@ use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
-use crate::{BEU32, MergeFn, Index, FieldsIdsMap, ExternalDocumentsIds};
+use crate::{BEU32, MergeFn, Index, FieldId, FieldsIdsMap, ExternalDocumentsIds};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
 
 pub struct TransformOutput {
-    pub primary_key: u8,
+    pub primary_key: FieldId,
     pub fields_ids_map: FieldsIdsMap,
     pub external_documents_ids: ExternalDocumentsIds<'static>,
     pub new_documents_ids: RoaringBitmap,
@@ -365,7 +365,7 @@ impl Transform<'_, '_> {
     fn output_from_sorter<F>(
         self,
         sorter: grenad::Sorter<MergeFn>,
-        primary_key: u8,
+        primary_key: FieldId,
         fields_ids_map: FieldsIdsMap,
         approximate_number_of_documents: usize,
         mut external_documents_ids: ExternalDocumentsIds<'_>,
@@ -477,7 +477,7 @@ impl Transform<'_, '_> {
     // TODO this can be done in parallel by using the rayon `ThreadPool`.
     pub fn remap_index_documents(
         self,
-        primary_key: u8,
+        primary_key: FieldId,
         fields_ids_map: FieldsIdsMap,
     ) -> anyhow::Result<TransformOutput>
     {

@@ -15,7 +15,7 @@ use roaring::RoaringBitmap;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::FacetValueStringCodec;
 use crate::heed_codec::facet::{FacetLevelValueI64Codec, FacetLevelValueF64Codec};
-use crate::{Index, FieldsIdsMap, CboRoaringBitmapCodec};
+use crate::{Index, FieldId, FieldsIdsMap, CboRoaringBitmapCodec};
 
 use self::FacetCondition::*;
 use self::FacetNumberOperator::*;
@@ -75,18 +75,18 @@ impl FacetStringOperator {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FacetCondition {
-    OperatorI64(u8, FacetNumberOperator<i64>),
-    OperatorF64(u8, FacetNumberOperator<f64>),
-    OperatorString(u8, FacetStringOperator),
+    OperatorI64(FieldId, FacetNumberOperator<i64>),
+    OperatorF64(FieldId, FacetNumberOperator<f64>),
+    OperatorString(FieldId, FacetStringOperator),
     Or(Box<Self>, Box<Self>),
     And(Box<Self>, Box<Self>),
 }
 
 fn get_field_id_facet_type<'a>(
     fields_ids_map: &FieldsIdsMap,
-    faceted_fields: &HashMap<u8, FacetType>,
+    faceted_fields: &HashMap<FieldId, FacetType>,
     items: &mut Pairs<'a, Rule>,
-) -> Result<(u8, FacetType), PestError<Rule>>
+) -> Result<(FieldId, FacetType), PestError<Rule>>
 {
     // lexing ensures that we at least have a key
     let key = items.next().unwrap();
@@ -154,7 +154,7 @@ impl FacetCondition {
 
     fn from_pairs(
         fim: &FieldsIdsMap,
-        ff: &HashMap<u8, FacetType>,
+        ff: &HashMap<FieldId, FacetType>,
         expression: Pairs<Rule>,
     ) -> anyhow::Result<Self>
     {
@@ -201,7 +201,7 @@ impl FacetCondition {
 
     fn between(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<u8, FacetType>,
+        faceted_fields: &HashMap<FieldId, FacetType>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
@@ -234,7 +234,7 @@ impl FacetCondition {
 
     fn equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<u8, FacetType>,
+        faceted_fields: &HashMap<FieldId, FacetType>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
@@ -250,7 +250,7 @@ impl FacetCondition {
 
     fn greater_than(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<u8, FacetType>,
+        faceted_fields: &HashMap<FieldId, FacetType>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
@@ -274,7 +274,7 @@ impl FacetCondition {
 
     fn greater_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<u8, FacetType>,
+        faceted_fields: &HashMap<FieldId, FacetType>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
@@ -298,7 +298,7 @@ impl FacetCondition {
 
     fn lower_than(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<u8, FacetType>,
+        faceted_fields: &HashMap<FieldId, FacetType>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
@@ -322,7 +322,7 @@ impl FacetCondition {
 
     fn lower_than_or_equal(
         fields_ids_map: &FieldsIdsMap,
-        faceted_fields: &HashMap<u8, FacetType>,
+        faceted_fields: &HashMap<FieldId, FacetType>,
         item: Pair<Rule>,
     ) -> anyhow::Result<FacetCondition>
     {
@@ -351,7 +351,7 @@ impl FacetCondition {
     fn explore_facet_levels<'t, T: 't, KC>(
         rtxn: &'t heed::RoTxn,
         db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
-        field_id: u8,
+        field_id: FieldId,
         level: u8,
         left: Bound<T>,
         right: Bound<T>,
@@ -447,7 +447,7 @@ impl FacetCondition {
         rtxn: &'t heed::RoTxn,
         index: &Index,
         db: heed::Database<ByteSlice, CboRoaringBitmapCodec>,
-        field_id: u8,
+        field_id: FieldId,
         operator: FacetNumberOperator<T>,
     ) -> anyhow::Result<RoaringBitmap>
     where
@@ -493,7 +493,7 @@ impl FacetCondition {
         rtxn: &heed::RoTxn,
         index: &Index,
         db: heed::Database<FacetValueStringCodec, CboRoaringBitmapCodec>,
-        field_id: u8,
+        field_id: FieldId,
         operator: &FacetStringOperator,
     ) -> anyhow::Result<RoaringBitmap>
     {

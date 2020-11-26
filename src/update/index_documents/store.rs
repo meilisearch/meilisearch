@@ -22,7 +22,7 @@ use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::tokenizer::{simple_tokenizer, only_token};
 use crate::update::UpdateIndexingStep;
-use crate::{json_to_string, SmallVec8, SmallVec32, SmallString32, Position, DocumentId};
+use crate::{json_to_string, SmallVec8, SmallVec32, SmallString32, Position, DocumentId, FieldId};
 
 use super::{MergeFn, create_writer, create_sorter, writer_into_reader};
 use super::merge_function::{
@@ -47,8 +47,8 @@ pub struct Readers {
 
 pub struct Store {
     // Indexing parameters
-    searchable_fields: HashSet<u8>,
-    faceted_fields: HashMap<u8, FacetType>,
+    searchable_fields: HashSet<FieldId>,
+    faceted_fields: HashMap<FieldId, FacetType>,
     // Caches
     word_docids: LinkedHashMap<SmallVec32<u8>, RoaringBitmap>,
     word_docids_limit: usize,
@@ -72,8 +72,8 @@ pub struct Store {
 
 impl Store {
     pub fn new(
-        searchable_fields: HashSet<u8>,
-        faceted_fields: HashMap<u8, FacetType>,
+        searchable_fields: HashSet<FieldId>,
+        faceted_fields: HashMap<FieldId, FacetType>,
         linked_hash_map_size: Option<usize>,
         max_nb_chunks: Option<usize>,
         max_memory: Option<usize>,
@@ -176,7 +176,7 @@ impl Store {
     // Save the documents ids under the facet field id and value we have seen it.
     fn insert_facet_values_docid(
         &mut self,
-        field_id: u8,
+        field_id: FieldId,
         field_value: FacetValue,
         id: DocumentId,
     ) -> anyhow::Result<()>
@@ -243,7 +243,7 @@ impl Store {
         &mut self,
         document_id: DocumentId,
         words_positions: &mut HashMap<String, SmallVec32<Position>>,
-        facet_values: &mut HashMap<u8, SmallVec8<FacetValue>>,
+        facet_values: &mut HashMap<FieldId, SmallVec8<FacetValue>>,
         record: &[u8],
     ) -> anyhow::Result<()>
     {
