@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::time::Instant;
@@ -8,7 +8,7 @@ use std::{cmp, fmt, iter::once};
 use fst::{IntoStreamer, Streamer};
 use itertools::{EitherOrBoth, merge_join_by};
 use log::debug;
-use meilisearch_tokenizer::Token;
+use meilisearch_tokenizer::{Token, token::SeparatorKind};
 use meilisearch_tokenizer::analyzer::{Analyzer, AnalyzerConfig};
 use sdset::{Set, SetBuf, SetOperation};
 
@@ -175,13 +175,20 @@ where I: IntoIterator<Item=Operation>,
 
 const MAX_NGRAM: usize = 3;
 
-fn split_query_string(s: &str) -> Vec<(usize, String)> {
+fn split_query_string(s: &str, stop_words: HashSet<String>) -> Vec<(usize, String)> {
     // TODO: Use global instance instead
-    let analyzer = Analyzer::new(AnalyzerConfig::default());
+    let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
     analyzer
         .analyze(s)
         .tokens()
-        .filter(|t| !t.is_stopword())
+        .scan(0, |offset, mut token| {
+            token.char_index += *offset;
+            if let Some(SeparatorKind::Hard) = token.is_separator() {
+                *offset += 8;
+            }
+            Some(token)
+        })
+        .filter(|t| t.is_word())
         .enumerate()
         .map(|(i, Token { word, .. })| (i, word.to_string()))
         .collect()
@@ -193,7 +200,13 @@ pub fn create_query_tree(
     query: &str,
 ) -> MResult<(Operation, HashMap<QueryId, Range<usize>>)>
 {
-    let words = split_query_string(query);
+    // TODO: use a shared analyzer instance
+    let words = split_query_string(query, ctx.stop_words
+        .stream()
+        .into_strs()
+        .unwrap_or_default()
+        .into_iter().
+        collect());
 
     let mut mapper = QueryWordsMapper::new(words.iter().map(|(_, w)| w));
 

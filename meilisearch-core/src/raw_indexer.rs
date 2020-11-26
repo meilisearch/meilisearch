@@ -1,11 +1,10 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
-use std::println;
 
 use meilisearch_schema::IndexedPos;
 use meilisearch_tokenizer::analyzer::{Analyzer, AnalyzerConfig};
-use meilisearch_tokenizer::Token;
+use meilisearch_tokenizer::{Token, token::SeparatorKind};
 use sdset::SetBuf;
 
 use crate::{DocIndex, DocumentId};
@@ -45,11 +44,18 @@ impl RawIndexer {
         let mut number_of_words = 0;
 
         let analyzed_text = self.analyzer.analyze(text);
-        for (word_pos, (token_index, token)) in  analyzed_text.tokens().enumerate().filter(|(_, t)| t.is_word()).enumerate() {
-            print!("token: {}", token.word);
+        for (word_pos, token) in  analyzed_text.tokens()
+            .scan(0, |offset, mut token| {
+                token.char_index += *offset;
+                if let Some(SeparatorKind::Hard) = token.is_separator() {
+                    *offset += 8;
+                }
+                Some(token)
+            })
+            .filter(|t| t.is_word())
+            .enumerate() {
             let must_continue = index_token(
                 token,
-                token_index,
                 word_pos,
                 id,
                 indexed_pos,
@@ -72,37 +78,39 @@ impl RawIndexer {
     where
         I: IntoIterator<Item = &'s str>,
     {
-        let mut token_index_offset = 0;
         let mut byte_offset = 0;
         let mut word_offset = 0;
 
         for s in iter.into_iter() {
-            let current_token_index_offset = token_index_offset;
             let current_byte_offset = byte_offset;
             let current_word_offset = word_offset;
 
             let analyzed_text = self.analyzer.analyze(s);
             let tokens = analyzed_text
                 .tokens()
-                .enumerate()
-                .filter(|(_, t)| t.is_word())
-                .map(|(i, mut t)| {
+                .scan(0, |offset, mut token| {
+                    token.char_index += *offset;
+                    if let Some(SeparatorKind::Hard) = token.is_separator() {
+                        *offset += 8;
+                    }
+                    Some(token)
+                })
+                .filter(|t| t.is_word())
+                .map(|mut t| {
                     t.byte_start = t.byte_start + current_byte_offset;
                     t.byte_end = t.byte_end + current_byte_offset;
-                    (i + current_token_index_offset, t)
+                    t
                 })
                 .enumerate()
                 .map(|(i, t)| (i + current_word_offset, t));
 
-            for (word_pos, (token_index, token)) in tokens  {
-                token_index_offset = token_index + 1;
+            for (word_pos, token) in tokens  {
                 word_offset = word_pos + 1;
                 byte_offset = token.byte_end + 1;
 
                 let must_continue = index_token(
                     token,
                     word_pos,
-                    token_index,
                     id,
                     indexed_pos,
                     self.word_limit,
@@ -144,7 +152,6 @@ impl RawIndexer {
 
 fn index_token(
     token: Token,
-    position: usize,
     word_pos: usize,
     id: DocumentId,
     indexed_pos: IndexedPos,
@@ -153,7 +160,6 @@ fn index_token(
     docs_words: &mut HashMap<DocumentId, Vec<Word>>,
 ) -> bool
 {
-    println!(" position {}, limit: {}", position, word_limit);
     if word_pos >= word_limit {
         return false;
     }
