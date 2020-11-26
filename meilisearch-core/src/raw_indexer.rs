@@ -50,31 +50,32 @@ where
         let mut number_of_words = 0;
 
         let analyzed_text = self.analyzer.analyze(text);
-        for (word_pos, token) in  analyzed_text.tokens()
-            .scan((0, None), |(offset, sepcat), mut token| {
+        for (token_pos, (word_pos, token)) in analyzed_text
+            .tokens()
+            .scan((0, false), |(offset, is_hard_sep), mut token| {
                 match token.kind {
-                    TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
-                        if let Some(SeparatorKind::Hard) = sepcat {
+                    TokenKind::Word => {
+                        if *is_hard_sep {
                             *offset += 8;
+                        } else {
+                            *offset += 1;
                         }
-                        *sepcat = None;
+                        *is_hard_sep = false;
                         token.char_index += *offset;
                     }
                     TokenKind::Separator(SeparatorKind::Hard) => {
-                        *sepcat = Some(SeparatorKind::Hard);
-                    }
-                    TokenKind::Separator(SeparatorKind::Soft) if *sepcat != Some(SeparatorKind::Hard) => {
-                        *sepcat = Some(SeparatorKind::Soft);
+                        *is_hard_sep = true;
                     }
                     _ => (),
                 }
-                Some(token)
+                Some((*offset, token))
             })
-            .filter(|t| t.is_word())
+            .filter(|(_, t)| t.is_word())
             .enumerate() {
             let must_continue = index_token(
                 token,
                 word_pos,
+                token_pos,
                 id,
                 indexed_pos,
                 self.word_limit,
@@ -106,41 +107,41 @@ where
             let analyzed_text = self.analyzer.analyze(s);
             let tokens = analyzed_text
                 .tokens()
-                .scan((0, None), |(offset, sepcat), mut token| {
+                .scan((0, false), |(offset, is_hard_sep), mut token| {
                     match token.kind {
                         TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
-                            if let Some(SeparatorKind::Hard) = sepcat {
+                            if *is_hard_sep {
                                 *offset += 8;
+                            } else {
+                                *offset += 1;
                             }
-                            *sepcat = None;
+                            *is_hard_sep = false;
                             token.char_index += *offset;
                         }
                         TokenKind::Separator(SeparatorKind::Hard) => {
-                            *sepcat = Some(SeparatorKind::Hard);
-                        }
-                        TokenKind::Separator(SeparatorKind::Soft) if *sepcat != Some(SeparatorKind::Hard) => {
-                            *sepcat = Some(SeparatorKind::Soft);
+                            *is_hard_sep = true;
                         }
                         _ => (),
                     }
-                    Some(token)
+                    Some((*offset, token))
                 })
-                .filter(|t| t.is_word())
-                .map(|mut t| {
+                .filter(|(_, t)| t.is_word())
+                .map(|(i, mut t)| {
                     t.byte_start = t.byte_start + current_byte_offset;
                     t.byte_end = t.byte_end + current_byte_offset;
-                    t
+                    (i, t)
                 })
-                .enumerate()
-                .map(|(i, t)| (i + current_word_offset, t));
+                .map(|(i, t)| (i + current_word_offset, t))
+                .enumerate();
 
-            for (word_pos, token) in tokens  {
+            for (token_pos, (word_pos, token)) in tokens  {
                 word_offset = word_pos + 1;
                 byte_offset = token.byte_end + 1;
 
                 let must_continue = index_token(
                     token,
                     word_pos,
+                    token_pos,
                     id,
                     indexed_pos,
                     self.word_limit,
@@ -183,6 +184,7 @@ where
 fn index_token(
     token: Token,
     word_pos: usize,
+    token_pos: usize,
     id: DocumentId,
     indexed_pos: IndexedPos,
     word_limit: usize,
@@ -190,7 +192,7 @@ fn index_token(
     docs_words: &mut HashMap<DocumentId, Vec<Word>>,
 ) -> bool
 {
-    if word_pos >= word_limit {
+    if token_pos >= word_limit {
         return false;
     }
 
@@ -330,7 +332,7 @@ mod tests {
         let Indexed {
             words_doc_indexes, ..
         } = indexer.build();
-        assert!(words_doc_indexes.get(&"request_buffering".to_owned().into_bytes()).is_some());
+        assert!(words_doc_indexes.get(&"request".to_owned().into_bytes()).is_some());
     }
 
     #[test]

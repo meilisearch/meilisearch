@@ -181,27 +181,25 @@ fn split_query_string<'a, A: AsRef<[u8]>>(s: &str, stop_words: &'a fst::Set<A>) 
     analyzer
         .analyze(s)
         .tokens()
-        .scan((0, None), |(offset, sepcat), mut token| {
+        .scan((0, false), |(offset, is_hard_sep), mut token| {
             match token.kind {
                 TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
-                    if let Some(SeparatorKind::Hard) = sepcat {
+                    if *is_hard_sep {
                         *offset += 8;
+                    } else {
+                        *offset += 1;
                     }
-                    *sepcat = None;
+                    *is_hard_sep = false;
                     token.char_index += *offset;
                 }
                 TokenKind::Separator(SeparatorKind::Hard) => {
-                    *sepcat = Some(SeparatorKind::Hard);
-                }
-                TokenKind::Separator(SeparatorKind::Soft) if *sepcat != Some(SeparatorKind::Hard) => {
-                    *sepcat = Some(SeparatorKind::Soft);
+                    *is_hard_sep = true;
                 }
                 _ => (),
             }
-            Some(token)
+            Some((*offset, token))
         })
-        .filter(|t| t.is_word())
-        .enumerate()
+        .filter(|(_, t)| t.is_word())
         .map(|(i, Token { word, .. })| (i, word.to_string()))
         .collect()
 }
