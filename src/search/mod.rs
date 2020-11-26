@@ -13,7 +13,7 @@ use crate::mdfs::Mdfs;
 use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, DocumentId};
 
-pub use self::facet::FacetCondition;
+pub use self::facet::{FacetCondition, FacetNumberOperator, FacetStringOperator};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
