@@ -12,8 +12,8 @@ use crate::serde::SerializerError;
 use crate::store::DiscoverIds;
 
 /// Returns the number of words indexed or `None` if the type is unindexable.
-pub fn index_value(
-    indexer: &mut RawIndexer,
+pub fn index_value<A: AsRef<[u8]>>(
+    indexer: &mut RawIndexer<A>,
     document_id: DocumentId,
     indexed_pos: IndexedPos,
     value: &Value,

@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::time::Instant;
@@ -175,7 +175,7 @@ where I: IntoIterator<Item=Operation>,
 
 const MAX_NGRAM: usize = 3;
 
-fn split_query_string(s: &str, stop_words: HashSet<String>) -> Vec<(usize, String)> {
+fn split_query_string<'a, A: AsRef<[u8]>>(s: &str, stop_words: &'a fst::Set<A>) -> Vec<(usize, String)> {
     // TODO: Use global instance instead
     let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
     analyzer
@@ -213,12 +213,7 @@ pub fn create_query_tree(
 ) -> MResult<(Operation, HashMap<QueryId, Range<usize>>)>
 {
     // TODO: use a shared analyzer instance
-    let words = split_query_string(query, ctx.stop_words
-        .stream()
-        .into_strs()
-        .unwrap_or_default()
-        .into_iter().
-        collect());
+    let words = split_query_string(query, &ctx.stop_words);
 
     let mut mapper = QueryWordsMapper::new(words.iter().map(|(_, w)| w));
 
