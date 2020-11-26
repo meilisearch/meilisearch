@@ -181,26 +181,9 @@ fn split_query_string<'a, A: AsRef<[u8]>>(s: &str, stop_words: &'a fst::Set<A>) 
     analyzer
         .analyze(s)
         .tokens()
-        .scan((0, false), |(offset, is_hard_sep), mut token| {
-            match token.kind {
-                TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
-                    if *is_hard_sep {
-                        *offset += 8;
-                    } else {
-                        *offset += 1;
-                    }
-                    *is_hard_sep = false;
-                    token.char_index += *offset;
-                }
-                TokenKind::Separator(SeparatorKind::Hard) => {
-                    *is_hard_sep = true;
-                }
-                _ => (),
-            }
-            Some((*offset, token))
-        })
-        .filter(|(_, t)| t.is_word())
-        .map(|(i, Token { word, .. })| (i, word.to_string()))
+        .filter(|t| t.is_word())
+        .map(| Token { word, .. }| word.to_string())
+        .enumerate()
         .collect()
 }
 

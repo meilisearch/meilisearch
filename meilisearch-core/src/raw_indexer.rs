@@ -55,13 +55,13 @@ where
             .scan((0, false), |(offset, is_hard_sep), mut token| {
                 match token.kind {
                     TokenKind::Word => {
+                        token.char_index += *offset;
                         if *is_hard_sep {
                             *offset += 8;
                         } else {
                             *offset += 1;
                         }
                         *is_hard_sep = false;
-                        token.char_index += *offset;
                     }
                     TokenKind::Separator(SeparatorKind::Hard) => {
                         *is_hard_sep = true;
@@ -110,13 +110,13 @@ where
                 .scan((0, false), |(offset, is_hard_sep), mut token| {
                     match token.kind {
                         TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
+                            token.char_index += *offset;
                             if *is_hard_sep {
                                 *offset += 8;
                             } else {
                                 *offset += 1;
                             }
                             *is_hard_sep = false;
-                            token.char_index += *offset;
                         }
                         TokenKind::Separator(SeparatorKind::Hard) => {
                             *is_hard_sep = true;
