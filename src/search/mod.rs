@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+use anyhow::{bail, Context};
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
@@ -9,11 +10,14 @@ use log::debug;
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
+use crate::facet::FacetType;
+use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::mdfs::Mdfs;
 use crate::query_tokens::{QueryTokens, QueryToken};
-use crate::{Index, DocumentId};
+use crate::{Index, FieldId, DocumentId, Criterion};
 
-pub use self::facet::{FacetCondition, FacetNumberOperator, FacetStringOperator};
+pub use self::facet::{FacetCondition, FacetNumberOperator, FacetStringOperator, Order};
+pub use self::facet::facet_number_recurse;
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -144,6 +148,50 @@ impl<'a> Search<'a> {
         candidates
     }
 
+    fn facet_ordered(
+        &self,
+        field_id: FieldId,
+        facet_type: FacetType,
+        order: Order,
+        documents_ids: RoaringBitmap,
+        limit: usize,
+    ) -> anyhow::Result<Vec<DocumentId>>
+    {
+        let mut output = Vec::new();
+        match facet_type {
+            FacetType::Float => {
+                facet_number_recurse::<f64, FacetLevelValueF64Codec, _>(
+                    self.rtxn,
+                    self.index,
+                    field_id,
+                    order,
+                    documents_ids,
+                    |_val, docids| {
+                        output.push(docids);
+                        // Returns `true` if we must continue iterating
+                        output.iter().map(|ids| ids.len()).sum::<u64>() < limit as u64
+                    }
+                )?;
+            },
+            FacetType::Integer => {
+                facet_number_recurse::<i64, FacetLevelValueI64Codec, _>(
+                    self.rtxn,
+                    self.index,
+                    field_id,
+                    order,
+                    documents_ids,
+                    |_val, docids| {
+                        output.push(docids);
+                        // Returns `true` if we must continue iterating
+                        output.iter().map(|ids| ids.len()).sum::<u64>() < limit as u64
+                    }
+                )?;
+            },
+            FacetType::String => bail!("criteria facet type must be a number"),
+        }
+        Ok(output.into_iter().flatten().take(limit).collect())
+    }
+
     pub fn execute(&self) -> anyhow::Result<SearchResult> {
         let limit = self.limit;
         let fst = self.index.words_fst(self.rtxn)?;
@@ -160,6 +208,25 @@ impl<'a> Search<'a> {
             None => None,
         };
 
+        let order_by_facet = {
+            let criteria = self.index.criteria(self.rtxn)?;
+            let result = criteria.into_iter().flat_map(|criterion| {
+                match criterion {
+                    Criterion::Asc(fid) => Some((fid, Order::Asc)),
+                    Criterion::Desc(fid) => Some((fid, Order::Desc)),
+                    _ => None
+                }
+            }).next();
+            match result {
+                Some((fid, order)) => {
+                    let faceted_fields = self.index.faceted_fields(self.rtxn)?;
+                    let ftype = *faceted_fields.get(&fid).context("unknown field id")?;
+                    Some((fid, ftype, order))
+                },
+                None => None,
+            }
+        };
+
         debug!("facet candidates: {:?}", facet_candidates);
 
         let (candidates, derived_words) = match (facet_candidates, derived_words) {
@@ -174,12 +241,19 @@ impl<'a> Search<'a> {
             (Some(facet_candidates), None) => {
                 // If the query is not set or results in no DFAs but
                 // there is some facet conditions we return a placeholder.
-                let documents_ids = facet_candidates.iter().take(limit).collect();
+                let documents_ids = match order_by_facet {
+                    Some((fid, ftype, order)) => self.facet_ordered(fid, ftype, order, facet_candidates, limit)?,
+                    None => facet_candidates.iter().take(limit).collect(),
+                };
                 return Ok(SearchResult { documents_ids, ..Default::default() })
             },
             (None, None) => {
                 // If the query is not set or results in no DFAs we return a placeholder.
-                let documents_ids = self.index.documents_ids(self.rtxn)?.iter().take(limit).collect();
+                let documents_ids = self.index.documents_ids(self.rtxn)?;
+                let documents_ids = match order_by_facet {
+                    Some((fid, ftype, order)) => self.facet_ordered(fid, ftype, order, documents_ids, limit)?,
+                    None => documents_ids.iter().take(limit).collect(),
+                };
                 return Ok(SearchResult { documents_ids, ..Default::default() })
             },
         };
