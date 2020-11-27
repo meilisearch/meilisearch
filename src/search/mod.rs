@@ -16,8 +16,7 @@ use crate::mdfs::Mdfs;
 use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, FieldId, DocumentId, Criterion};
 
-pub use self::facet::{FacetCondition, FacetNumberOperator, FacetStringOperator, Order};
-pub use self::facet::facet_number_recurse;
+pub use self::facet::{FacetCondition, FacetNumberOperator, FacetStringOperator};
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -157,6 +156,7 @@ impl<'a> Search<'a> {
         limit: usize,
     ) -> anyhow::Result<Vec<DocumentId>>
     {
+        let mut limit_tmp = limit;
         let mut output = Vec::new();
         match facet_type {
             FacetType::Float => {
@@ -167,9 +167,10 @@ impl<'a> Search<'a> {
                     order,
                     documents_ids,
                     |_val, docids| {
+                        limit_tmp = limit_tmp.saturating_sub(docids.len() as usize);
+                        debug!("Facet ordered iteration find {:?}", docids);
                         output.push(docids);
-                        // Returns `true` if we must continue iterating
-                        output.iter().map(|ids| ids.len()).sum::<u64>() < limit as u64
+                        limit_tmp != 0 // Returns `true` if we must continue iterating
                     }
                 )?;
             },
@@ -181,9 +182,10 @@ impl<'a> Search<'a> {
                     order,
                     documents_ids,
                     |_val, docids| {
+                        limit_tmp = limit_tmp.saturating_sub(docids.len() as usize);
+                        debug!("Facet ordered iteration find {:?}", docids);
                         output.push(docids);
-                        // Returns `true` if we must continue iterating
-                        output.iter().map(|ids| ids.len()).sum::<u64>() < limit as u64
+                        limit_tmp != 0 // Returns `true` if we must continue iterating
                     }
                 )?;
             },
