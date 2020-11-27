@@ -277,7 +277,19 @@ impl<'a> Search<'a> {
         }
 
         let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
-        let documents_ids = documents.into_iter().flatten().take(limit).collect();
+        let documents_ids = match order_by_facet {
+            Some((fid, ftype, order)) => {
+                let mut ordered_documents = Vec::new();
+                for documents_ids in documents {
+                    let docids = self.facet_ordered(fid, ftype, order, documents_ids, limit)?;
+                    ordered_documents.push(docids);
+                    if ordered_documents.iter().map(Vec::len).sum::<usize>() >= limit { break }
+                }
+                ordered_documents.into_iter().flatten().take(limit).collect()
+            },
+            None => documents.into_iter().flatten().take(limit).collect(),
+        };
+
         Ok(SearchResult { found_words, documents_ids })
     }
 }
