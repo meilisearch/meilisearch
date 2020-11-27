@@ -9,13 +9,14 @@ use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::Search;
+use crate::{default_criteria, Criterion, Search};
 use crate::{BEU32, DocumentId, FieldId, ExternalDocumentsIds};
 use crate::{
     RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec, ObkvCodec,
     BoRoaringBitmapCodec, CboRoaringBitmapCodec,
 };
 
+pub const CRITERIA_KEY: &str = "criteria";
 pub const DISPLAYED_FIELDS_KEY: &str = "displayed-fields";
 pub const DOCUMENTS_IDS_KEY: &str = "documents-ids";
 pub const FACETED_DOCUMENTS_IDS_PREFIX: &str = "faceted-documents-ids";
@@ -243,6 +244,23 @@ impl Index {
         match self.main.get::<_, ByteSlice, RoaringBitmapCodec>(rtxn, &buffer)? {
             Some(docids) => Ok(docids),
             None => Ok(RoaringBitmap::new()),
+        }
+    }
+
+    /* criteria */
+
+    pub fn put_criteria(&self, wtxn: &mut RwTxn, criteria: &[Criterion]) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<&[Criterion]>>(wtxn, CRITERIA_KEY, &criteria)
+    }
+
+    pub fn delete_criteria(&self, wtxn: &mut RwTxn) -> heed::Result<bool> {
+        self.main.delete::<_, Str>(wtxn, CRITERIA_KEY)
+    }
+
+    pub fn criteria(&self, rtxn: &RoTxn) -> heed::Result<Vec<Criterion>> {
+        match self.main.get::<_, Str, SerdeJson<Vec<Criterion>>>(rtxn, CRITERIA_KEY)? {
+            Some(criteria) => Ok(criteria),
+            None => Ok(default_criteria()),
         }
     }
 

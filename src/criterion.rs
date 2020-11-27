@@ -1,3 +1,8 @@
+use crate::FieldId;
+
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
 pub enum Criterion {
     /// Sorted by increasing number of typos.
     Typo,
@@ -14,9 +19,9 @@ pub enum Criterion {
     /// Sorted by the similarity of the matched words with the query words.
     Exactness,
     /// Sorted by the increasing value of the field specified.
-    CustomAsc(String),
+    Asc(FieldId),
     /// Sorted by the decreasing value of the field specified.
-    CustomDesc(String),
+    Desc(FieldId),
 }
 
 pub fn default_criteria() -> Vec<Criterion> {
