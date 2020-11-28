@@ -19,7 +19,7 @@ use tempfile::tempfile;
 
 use crate::facet::FacetType;
 use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
-use crate::heed_codec::facet::{FacetValueStringCodec, FacetValueF64Codec, FacetValueI64Codec};
+use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::tokenizer::{simple_tokenizer, only_token};
 use crate::update::UpdateIndexingStep;
 use crate::{json_to_string, SmallVec8, SmallVec32, SmallString32, Position, DocumentId};
@@ -337,8 +337,8 @@ impl Store {
         for ((field_id, value), docids) in iter {
             let result = match value {
                 String(s) => FacetValueStringCodec::bytes_encode(&(field_id, &s)).map(Cow::into_owned),
-                Float(f) => FacetValueF64Codec::bytes_encode(&(field_id, *f)).map(Cow::into_owned),
-                Integer(i) => FacetValueI64Codec::bytes_encode(&(field_id, i)).map(Cow::into_owned),
+                Float(f) => FacetLevelValueF64Codec::bytes_encode(&(field_id, 0, *f, *f)).map(Cow::into_owned),
+                Integer(i) => FacetLevelValueI64Codec::bytes_encode(&(field_id, 0, i, i)).map(Cow::into_owned),
             };
             let key = result.context("could not serialize facet key")?;
             let bytes = CboRoaringBitmapCodec::bytes_encode(&docids)
@@ -399,7 +399,7 @@ impl Store {
             // We skip documents that must not be indexed by this thread.
             if count % num_threads == thread_index {
                 // This is a log routine that we do every `log_every_n` documents.
-                if log_every_n.map_or(false, |len| count % len == 0) {
+                if thread_index == 0 && log_every_n.map_or(false, |len| count % len == 0) {
                     info!("We have seen {} documents so far ({:.02?}).", format_count(count), before.elapsed());
                     progress_callback(UpdateIndexingStep::IndexDocuments {
                         documents_seen: count,
@@ -571,7 +571,10 @@ fn parse_facet_value(ftype: FacetType, value: &Value) -> anyhow::Result<SmallVec
             Value::Null => Ok(()),
             Value::Bool(b) => Ok(output.push(Integer(*b as i64))),
             Value::Number(number) => match ftype {
-                FacetType::String => bail!("invalid facet type, expecting {} found number", ftype),
+                FacetType::String => {
+                    let string = SmallString32::from(number.to_string());
+                    Ok(output.push(String(string)))
+                },
                 FacetType::Float => match number.as_f64() {
                     Some(float) => Ok(output.push(Float(OrderedFloat(float)))),
                     None => bail!("invalid facet type, expecting {} found integer", ftype),
@@ -586,7 +589,7 @@ fn parse_facet_value(ftype: FacetType, value: &Value) -> anyhow::Result<SmallVec
                 },
             },
             Value::String(string) => {
-                let string = string.trim();
+                let string = string.trim().to_lowercase();
                 if string.is_empty() { return Ok(()) }
                 match ftype {
                     FacetType::String => {

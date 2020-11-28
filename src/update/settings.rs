@@ -412,6 +412,23 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let fields_ids = index.faceted_fields(&rtxn).unwrap();
         assert_eq!(fields_ids, hashmap!{ 1 => FacetType::Integer });
+        // Only count the field_id 0 and level 0 facet values.
+        let count = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[1, 0]).unwrap().count();
+        assert_eq!(count, 3);
+        drop(rtxn);
+
+        // Index a little more documents with new and current facets values.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &b"name,age\nkevin2,23\nkevina2,21\nbenoit2,35\n"[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        builder.update_format(UpdateFormat::Csv);
+        builder.execute(content, |_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        let rtxn = index.read_txn().unwrap();
+        // Only count the field_id 0 and level 0 facet values.
+        let count = index.facet_field_id_value_docids.prefix_iter(&rtxn, &[1, 0]).unwrap().count();
+        assert_eq!(count, 4);
         drop(rtxn);
     }
 }

@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fs::{File, create_dir_all};
 use std::net::SocketAddr;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -28,7 +29,7 @@ use warp::{Filter, http::Response};
 use milli::tokenizer::{simple_tokenizer, TokenType};
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
-use milli::{obkv_to_json, Index, UpdateStore, SearchResult};
+use milli::{obkv_to_json, Index, UpdateStore, SearchResult, FacetCondition};
 
 static GLOBAL_THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
@@ -196,6 +197,7 @@ enum UpdateMeta {
     DocumentsAddition { method: String, format: String },
     ClearDocuments,
     Settings(Settings),
+    Facets(Facets),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -229,6 +231,14 @@ struct Settings {
 
     #[serde(default)]
     faceted_attributes: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+struct Facets {
+    level_group_size: Option<NonZeroUsize>,
+    min_level_size: Option<NonZeroUsize>,
 }
 
 // Any value that is present is considered Some value, including null.
@@ -399,6 +409,21 @@ async fn main() -> anyhow::Result<()> {
                         Ok(_count) => wtxn.commit().map_err(Into::into),
                         Err(e) => Err(e.into())
                     }
+                },
+                UpdateMeta::Facets(levels) => {
+                    // We must use the write transaction of the update here.
+                    let mut wtxn = index_cloned.write_txn()?;
+                    let mut builder = update_builder.facets(&mut wtxn, &index_cloned);
+                    if let Some(value) = levels.level_group_size {
+                        builder.level_group_size(value);
+                    }
+                    if let Some(value) = levels.min_level_size {
+                        builder.min_level_size(value);
+                    }
+                    match builder.execute() {
+                        Ok(()) => wtxn.commit().map_err(Into::into),
+                        Err(e) => Err(e.into())
+                    }
                 }
             };
 
@@ -550,9 +575,12 @@ async fn main() -> anyhow::Result<()> {
             .body(include_str!("../public/logo-black.svg"))
         );
 
-    #[derive(Deserialize)]
+    #[derive(Debug, Deserialize)]
+    #[serde(deny_unknown_fields)]
+    #[serde(rename_all = "camelCase")]
     struct QueryBody {
         query: Option<String>,
+        facet_condition: Option<String>,
     }
 
     let disable_highlighting = opt.disable_highlighting;
@@ -568,6 +596,12 @@ async fn main() -> anyhow::Result<()> {
             let mut search = index.search(&rtxn);
             if let Some(query) = query.query {
                 search.query(query);
+            }
+            if let Some(condition) = query.facet_condition {
+                if !condition.trim().is_empty() {
+                    let condition = FacetCondition::from_str(&rtxn, &index, &condition).unwrap();
+                    search.facet_condition(condition);
+                }
             }
 
             let SearchResult { found_words, documents_ids } = search.execute().unwrap();
@@ -751,6 +785,19 @@ async fn main() -> anyhow::Result<()> {
             Ok(warp::reply())
         });
 
+    let update_store_cloned = update_store.clone();
+    let update_status_sender_cloned = update_status_sender.clone();
+    let change_facet_levels_route = warp::filters::method::post()
+        .and(warp::path!("facet-level-sizes"))
+        .and(warp::body::json())
+        .map(move |levels: Facets| {
+            let meta = UpdateMeta::Facets(levels);
+            let update_id = update_store_cloned.register_update(&meta, &[]).unwrap();
+            let _ = update_status_sender_cloned.send(UpdateStatus::Pending { update_id, meta });
+            eprintln!("update {} registered", update_id);
+            warp::reply()
+        });
+
     let update_ws_route = warp::ws()
         .and(warp::path!("updates" / "ws"))
         .map(move |ws: warp::ws::Ws| {
@@ -799,6 +846,7 @@ async fn main() -> anyhow::Result<()> {
         .or(indexing_json_stream_route)
         .or(clearing_route)
         .or(change_settings_route)
+        .or(change_facet_levels_route)
         .or(update_ws_route);
 
     let addr = SocketAddr::from_str(&opt.http_listen_addr)?;

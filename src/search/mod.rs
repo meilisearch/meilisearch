@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 
 use fst::{IntoStreamer, Streamer};
 use levenshtein_automata::DFA;
@@ -8,17 +9,22 @@ use log::debug;
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::mdfs::Mdfs;
+use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, DocumentId};
+
+pub use self::facet::FacetCondition;
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
 static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
 static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
+mod facet;
+
 pub struct Search<'a> {
     query: Option<String>,
+    facet_condition: Option<FacetCondition>,
     offset: usize,
     limit: usize,
     rtxn: &'a heed::RoTxn<'a>,
@@ -27,7 +33,7 @@ pub struct Search<'a> {
 
 impl<'a> Search<'a> {
     pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> Search<'a> {
-        Search { query: None, offset: 0, limit: 20, rtxn, index }
+        Search { query: None, facet_condition: None, offset: 0, limit: 20, rtxn, index }
     }
 
     pub fn query(&mut self, query: impl Into<String>) -> &mut Search<'a> {
@@ -42,6 +48,11 @@ impl<'a> Search<'a> {
 
     pub fn limit(&mut self, limit: usize) -> &mut Search<'a> {
         self.limit = limit;
+        self
+    }
+
+    pub fn facet_condition(&mut self, condition: FacetCondition) -> &mut Search<'a> {
+        self.facet_condition = Some(condition);
         self
     }
 
@@ -135,21 +146,43 @@ impl<'a> Search<'a> {
 
     pub fn execute(&self) -> anyhow::Result<SearchResult> {
         let limit = self.limit;
-
         let fst = self.index.words_fst(self.rtxn)?;
 
         // Construct the DFAs related to the query words.
-        let dfas = match self.query.as_deref().map(Self::generate_query_dfas) {
-            Some(dfas) if !dfas.is_empty() => dfas,
-            _ => {
+        let derived_words = match self.query.as_deref().map(Self::generate_query_dfas) {
+            Some(dfas) if !dfas.is_empty() => Some(self.fetch_words_docids(&fst, dfas)?),
+            _otherwise => None,
+        };
+
+        // We create the original candidates with the facet conditions results.
+        let facet_candidates = match &self.facet_condition {
+            Some(condition) => Some(condition.evaluate(self.rtxn, self.index)?),
+            None => None,
+        };
+
+        debug!("facet candidates: {:?}", facet_candidates);
+
+        let (candidates, derived_words) = match (facet_candidates, derived_words) {
+            (Some(mut facet_candidates), Some(derived_words)) => {
+                let words_candidates = Self::compute_candidates(&derived_words);
+                facet_candidates.intersect_with(&words_candidates);
+                (facet_candidates, derived_words)
+            },
+            (None, Some(derived_words)) => {
+                (Self::compute_candidates(&derived_words), derived_words)
+            },
+            (Some(facet_candidates), None) => {
+                // If the query is not set or results in no DFAs but
+                // there is some facet conditions we return a placeholder.
+                let documents_ids = facet_candidates.iter().take(limit).collect();
+                return Ok(SearchResult { documents_ids, ..Default::default() })
+            },
+            (None, None) => {
                 // If the query is not set or results in no DFAs we return a placeholder.
                 let documents_ids = self.index.documents_ids(self.rtxn)?.iter().take(limit).collect();
                 return Ok(SearchResult { documents_ids, ..Default::default() })
             },
         };
-
-        let derived_words = self.fetch_words_docids(&fst, dfas)?;
-        let candidates = Self::compute_candidates(&derived_words);
 
         debug!("candidates: {:?}", candidates);
 
@@ -172,6 +205,18 @@ impl<'a> Search<'a> {
         let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
         let documents_ids = documents.into_iter().flatten().take(limit).collect();
         Ok(SearchResult { found_words, documents_ids })
+    }
+}
+
+impl fmt::Debug for Search<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let Search { query, facet_condition, offset, limit, rtxn: _, index: _ } = self;
+        f.debug_struct("Search")
+            .field("query", query)
+            .field("facet_condition", facet_condition)
+            .field("offset", offset)
+            .field("limit", limit)
+            .finish()
     }
 }
 

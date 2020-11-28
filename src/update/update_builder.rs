@@ -2,7 +2,7 @@ use grenad::CompressionType;
 use rayon::ThreadPool;
 
 use crate::Index;
-use super::{ClearDocuments, DeleteDocuments, IndexDocuments, Settings};
+use super::{ClearDocuments, DeleteDocuments, IndexDocuments, Settings, Facets};
 
 pub struct UpdateBuilder<'a> {
     pub(crate) log_every_n: Option<usize>,
@@ -115,6 +115,21 @@ impl<'a> UpdateBuilder<'a> {
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
         builder.thread_pool = self.thread_pool;
+
+        builder
+    }
+
+    pub fn facets<'t, 'u, 'i>(
+        self,
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        index: &'i Index,
+    ) -> Facets<'t, 'u, 'i>
+    {
+        let mut builder = Facets::new(wtxn, index);
+
+        builder.chunk_compression_type = self.chunk_compression_type;
+        builder.chunk_compression_level = self.chunk_compression_level;
+        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
 
         builder
     }
