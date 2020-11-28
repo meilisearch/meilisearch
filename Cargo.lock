@@ -673,6 +673,7 @@ dependencies = [
  "criterion",
  "crossbeam-channel",
  "csv",
+ "either",
  "flate2",
  "fst",
  "fxhash",

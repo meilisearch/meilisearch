@@ -999,6 +999,7 @@ dependencies = [
  "byteorder",
  "crossbeam-channel",
  "csv",
+ "either",
  "flate2",
  "fst",
  "fxhash",
