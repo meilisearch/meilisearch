@@ -28,7 +28,7 @@ use warp::{Filter, http::Response};
 
 use milli::tokenizer::{simple_tokenizer, TokenType};
 use milli::update::UpdateIndexingStep::*;
-use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat, EasingName};
+use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
 use milli::{obkv_to_json, Index, UpdateStore, SearchResult, FacetCondition};
 
 static GLOBAL_THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
@@ -237,9 +237,8 @@ struct Settings {
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 struct Facets {
-    last_level_size: Option<NonZeroUsize>,
-    number_of_levels: Option<NonZeroUsize>,
-    easing_function: Option<String>,
+    level_group_size: Option<NonZeroUsize>,
+    min_level_size: Option<NonZeroUsize>,
 }
 
 // Any value that is present is considered Some value, including null.
@@ -415,27 +414,12 @@ async fn main() -> anyhow::Result<()> {
                     // We must use the write transaction of the update here.
                     let mut wtxn = index_cloned.write_txn()?;
                     let mut builder = update_builder.facets(&mut wtxn, &index_cloned);
-                    if let Some(value) = levels.last_level_size {
-                        builder.last_level_size(value);
+                    if let Some(value) = levels.level_group_size {
+                        builder.level_group_size(value);
                     }
-                    if let Some(value) = levels.number_of_levels {
-                        builder.number_of_levels(value);
+                    if let Some(value) = levels.min_level_size {
+                        builder.min_level_size(value);
                     }
-                    if let Some(value) = levels.easing_function {
-                        let easing_name = if value.eq_ignore_ascii_case("expo") {
-                            EasingName::Expo
-                        } else if value.eq_ignore_ascii_case("quart") {
-                            EasingName::Quart
-                        } else if value.eq_ignore_ascii_case("circ") {
-                            EasingName::Circ
-                        } else if value.eq_ignore_ascii_case("linear") {
-                            EasingName::Linear
-                        } else {
-                            panic!("Invalid easing function name")
-                        };
-                        builder.easing_function(easing_name);
-                    }
-
                     match builder.execute() {
                         Ok(()) => wtxn.commit().map_err(Into::into),
                         Err(e) => Err(e.into())
@@ -804,7 +788,7 @@ async fn main() -> anyhow::Result<()> {
     let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
     let change_facet_levels_route = warp::filters::method::post()
-        .and(warp::path!("facet-levels"))
+        .and(warp::path!("facet-level-sizes"))
         .and(warp::body::json())
         .map(move |levels: Facets| {
             let meta = UpdateMeta::Facets(levels);

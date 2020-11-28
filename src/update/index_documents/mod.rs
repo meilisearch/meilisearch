@@ -208,8 +208,8 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) chunk_fusing_shrink_size: Option<u64>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
-    facet_number_of_levels: Option<NonZeroUsize>,
-    facet_last_level_size: Option<NonZeroUsize>,
+    facet_level_group_size: Option<NonZeroUsize>,
+    facet_min_level_size: Option<NonZeroUsize>,
     update_method: IndexDocumentsMethod,
     update_format: UpdateFormat,
     autogenerate_docids: bool,
@@ -228,8 +228,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             chunk_compression_level: None,
             chunk_fusing_shrink_size: None,
             thread_pool: None,
-            facet_number_of_levels: None,
-            facet_last_level_size: None,
+            facet_level_group_size: None,
+            facet_min_level_size: None,
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             update_format: UpdateFormat::Json,
             autogenerate_docids: true,
@@ -588,11 +588,11 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
-        if let Some(value) = self.facet_number_of_levels {
-            builder.number_of_levels(value);
+        if let Some(value) = self.facet_level_group_size {
+            builder.level_group_size(value);
         }
-        if let Some(value) = self.facet_last_level_size {
-            builder.last_level_size(value);
+        if let Some(value) = self.facet_min_level_size {
+            builder.min_level_size(value);
         }
         builder.execute()?;
 

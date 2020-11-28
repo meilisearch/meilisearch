@@ -1,10 +1,10 @@
+use std::cmp;
 use std::fs::File;
 use std::num::NonZeroUsize;
 
 use grenad::{CompressionType, Reader, Writer, FileFuse};
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesEncode, Error};
-use itertools::Itertools;
 use log::debug;
 use num_traits::{Bounded, Zero};
 use roaring::RoaringBitmap;
@@ -16,23 +16,14 @@ use crate::Index;
 use crate::update::index_documents::WriteMethod;
 use crate::update::index_documents::{create_writer, writer_into_reader, write_into_lmdb_database};
 
-#[derive(Debug, Copy, Clone)]
-pub enum EasingName {
-    Expo,
-    Quart,
-    Circ,
-    Linear,
-}
-
 pub struct Facets<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) chunk_fusing_shrink_size: Option<u64>,
-    number_of_levels: NonZeroUsize,
-    last_level_size: NonZeroUsize,
-    easing_function: EasingName,
+    level_group_size: NonZeroUsize,
+    min_level_size: NonZeroUsize,
 }
 
 impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
@@ -43,24 +34,18 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
             chunk_fusing_shrink_size: None,
-            number_of_levels: NonZeroUsize::new(5).unwrap(),
-            last_level_size: NonZeroUsize::new(5).unwrap(),
-            easing_function: EasingName::Expo,
+            level_group_size: NonZeroUsize::new(4).unwrap(),
+            min_level_size: NonZeroUsize::new(5).unwrap(),
         }
     }
 
-    pub fn number_of_levels(&mut self, value: NonZeroUsize) -> &mut Self {
-        self.number_of_levels = value;
+    pub fn level_group_size(&mut self, value: NonZeroUsize) -> &mut Self {
+        self.level_group_size = NonZeroUsize::new(cmp::max(value.get(), 2)).unwrap();
         self
     }
 
-    pub fn last_level_size(&mut self, value: NonZeroUsize) -> &mut Self {
-        self.last_level_size = value;
-        self
-    }
-
-    pub fn easing_function(&mut self, value: EasingName) -> &mut Self {
-        self.easing_function = value;
+    pub fn min_level_size(&mut self, value: NonZeroUsize) -> &mut Self {
+        self.min_level_size = value;
         self
     }
 
@@ -90,9 +75,8 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                         self.chunk_compression_type,
                         self.chunk_compression_level,
                         self.chunk_fusing_shrink_size,
-                        self.last_level_size,
-                        self.number_of_levels,
-                        self.easing_function,
+                        self.level_group_size,
+                        self.min_level_size,
                         field_id,
                     )?;
 
@@ -117,9 +101,8 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
                         self.chunk_compression_type,
                         self.chunk_compression_level,
                         self.chunk_fusing_shrink_size,
-                        self.last_level_size,
-                        self.number_of_levels,
-                        self.easing_function,
+                        self.level_group_size,
+                        self.min_level_size,
                         field_id,
                     )?;
 
@@ -175,9 +158,8 @@ fn compute_facet_levels<'t, T: 't, KC>(
     compression_type: CompressionType,
     compression_level: Option<u32>,
     shrink_size: Option<u64>,
-    last_level_size: NonZeroUsize,
-    number_of_levels: NonZeroUsize,
-    easing_function: EasingName,
+    level_group_size: NonZeroUsize,
+    min_level_size: NonZeroUsize,
     field_id: u8,
 ) -> anyhow::Result<Reader<FileFuse>>
 where
@@ -201,15 +183,13 @@ where
         left..=right
     };
 
-    let level_sizes_iter =
-        levels_iterator(first_level_size, last_level_size.get(), number_of_levels.get(), easing_function)
-            .map(|size| (first_level_size as f64 / size as f64).ceil() as usize)
-            .unique()
-            .enumerate()
-            .skip(1);
+    // Groups sizes are always a power of the original level_group_size and therefore a group
+    // always maps groups of the previous level and never splits previous levels groups in half.
+    let group_size_iter = (1u8..)
+        .map(|l| (l, level_group_size.get().pow(l as u32)))
+        .take_while(|(_, s)| first_level_size / *s >= min_level_size.get());
 
-    // TODO we must not create levels with identical group sizes.
-    for (level, level_entry_sizes) in level_sizes_iter {
+    for (level, group_size) in group_size_iter {
         let mut left = T::zero();
         let mut right = T::zero();
         let mut group_docids = RoaringBitmap::new();
@@ -220,10 +200,10 @@ where
 
             if i == 0 {
                 left = value;
-            } else if i % level_entry_sizes == 0 {
+            } else if i % group_size == 0 {
                 // we found the first bound of the next group, we must store the left
                 // and right bounds associated with the docids.
-                write_entry::<T, KC>(&mut writer, field_id, level as u8, left, right, &group_docids)?;
+                write_entry::<T, KC>(&mut writer, field_id, level, left, right, &group_docids)?;
 
                 // We save the left bound for the new group and also reset the docids.
                 group_docids = RoaringBitmap::new();
@@ -236,7 +216,7 @@ where
         }
 
         if !group_docids.is_empty() {
-            write_entry::<T, KC>(&mut writer, field_id, level as u8, left, right, &group_docids)?;
+            write_entry::<T, KC>(&mut writer, field_id, level, left, right, &group_docids)?;
         }
     }
 
@@ -273,52 +253,4 @@ where
     let data = CboRoaringBitmapCodec::bytes_encode(&ids).ok_or(Error::Encoding)?;
     writer.insert(&key, &data)?;
     Ok(())
-}
-
-fn levels_iterator(
-    first_level_size: usize, // biggest level
-    last_level_size: usize, // smallest level
-    number_of_levels: usize,
-    easing_function: EasingName,
-) -> impl Iterator<Item=usize>
-{
-    let easing_function = match easing_function {
-        EasingName::Expo => ease_out_expo,
-        EasingName::Quart => ease_out_quart,
-        EasingName::Circ => ease_out_circ,
-        EasingName::Linear => ease_out_linear,
-    };
-
-    let b = last_level_size as f64;
-    let end = first_level_size as f64;
-    let c = end - b;
-    let d = number_of_levels;
-    (0..=d).map(move |t| ((end + b) - easing_function(t as f64, b, c, d as f64)) as usize)
-}
-
-// Go look at the function definitions here:
-// https://docs.rs/easer/0.2.1/easer/index.html
-// https://easings.net/#easeOutExpo
-fn ease_out_expo(t: f64, b: f64, c: f64, d: f64) -> f64 {
-    if t == d {
-        b + c
-    } else {
-        c * (-2.0_f64.powf(-10.0 * t / d) + 1.0) + b
-    }
-}
-
-// https://easings.net/#easeOutCirc
-fn ease_out_circ(t: f64, b: f64, c: f64, d: f64) -> f64 {
-    let t = t / d - 1.0;
-    c * (1.0 - t * t).sqrt() + b
-}
-
-// https://easings.net/#easeOutQuart
-fn ease_out_quart(t: f64, b: f64, c: f64, d: f64) -> f64 {
-    let t = t / d - 1.0;
-    -c * ((t * t * t * t) - 1.0) + b
-}
-
-fn ease_out_linear(t: f64, b: f64, c: f64, d: f64) -> f64 {
-    c * t / d + b
 }
