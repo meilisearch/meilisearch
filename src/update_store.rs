@@ -238,7 +238,7 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
         let key = BEU64::new(update_id);
 
         // We cannot abort an update that is currently being processed.
-        if self.processing_update_id() == Some(update_id) {
+        if self.pending_meta.first(&wtxn)?.map(|(key, _)| key.get()) == Some(update_id) {
             return Ok(None);
         }
 
@@ -262,15 +262,12 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
     where M: Serialize + for<'a> Deserialize<'a>,
     {
         let mut wtxn = self.env.write_txn()?;
-        let processing_update_id = self.processing_update_id();
-
         let mut aborted_updates = Vec::new();
-        for result in self.pending_meta.iter(&wtxn)? {
+
+        // We skip the first pending update as it is currently being processed.
+        for result in self.pending_meta.iter(&wtxn)?.skip(1) {
             let (key, meta) = result?;
             let id = key.get();
-            if processing_update_id == Some(id) {
-                continue;
-            }
             aborted_updates.push((id, meta));
         }
 
