@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crossbeam_channel::Sender;
 use heed::types::{OwnedType, DecodeIgnore, SerdeJson, ByteSlice};
@@ -14,7 +15,9 @@ pub struct UpdateStore<M, N> {
     pending_meta: Database<OwnedType<BEU64>, SerdeJson<M>>,
     pending: Database<OwnedType<BEU64>, ByteSlice>,
     processed_meta: Database<OwnedType<BEU64>, SerdeJson<N>>,
+    aborted_meta: Database<OwnedType<BEU64>, SerdeJson<M>>,
     notification_sender: Sender<()>,
+    processing_update_id: Arc<AtomicU64>,
 }
 
 impl<M: 'static, N: 'static> UpdateStore<M, N> {
@@ -29,11 +32,12 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
         M: for<'a> Deserialize<'a>,
         N: Serialize,
     {
-        options.max_dbs(3);
+        options.max_dbs(4);
         let env = options.open(path)?;
         let pending_meta = env.create_database(Some("pending-meta"))?;
         let pending = env.create_database(Some("pending"))?;
         let processed_meta = env.create_database(Some("processed-meta"))?;
+        let aborted_meta = env.create_database(Some("aborted-meta"))?;
 
         let (notification_sender, notification_receiver) = crossbeam_channel::bounded(1);
         // Send a first notification to trigger the process.
@@ -44,7 +48,9 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
             pending,
             pending_meta,
             processed_meta,
+            aborted_meta,
             notification_sender,
+            processing_update_id: Arc::new(AtomicU64::new(u64::MAX)),
         });
 
         let update_store_cloned = update_store.clone();
@@ -67,20 +73,27 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
     /// Returns the new biggest id to use to store the new update.
     fn new_update_id(&self, txn: &heed::RoTxn) -> heed::Result<u64> {
         let last_pending = self.pending_meta
-            .as_polymorph()
-            .last::<_, OwnedType<BEU64>, DecodeIgnore>(txn)?
+            .remap_data_type::<DecodeIgnore>()
+            .last(txn)?
             .map(|(k, _)| k.get());
-
-        if let Some(last_id) = last_pending {
-            return Ok(last_id + 1);
-        }
 
         let last_processed = self.processed_meta
-            .as_polymorph()
-            .last::<_, OwnedType<BEU64>, DecodeIgnore>(txn)?
+            .remap_data_type::<DecodeIgnore>()
+            .last(txn)?
             .map(|(k, _)| k.get());
 
-        match last_processed {
+        let last_aborted = self.aborted_meta
+            .remap_data_type::<DecodeIgnore>()
+            .last(txn)?
+            .map(|(k, _)| k.get());
+
+        let last_update_id = [last_pending, last_processed, last_aborted]
+            .iter()
+            .copied()
+            .flatten()
+            .max();
+
+        match last_update_id {
             Some(last_id) => Ok(last_id + 1),
             None => Ok(0),
         }
@@ -134,7 +147,10 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
                     .expect("associated update content");
 
                 // Process the pending update using the provided user function.
-                let new_meta = (f)(first_id.get(), first_meta, first_content)?;
+                self.processing_update_id.store(first_id.get(), Ordering::Relaxed);
+                let result = (f)(first_id.get(), first_meta, first_content);
+                self.processing_update_id.store(u64::MAX, Ordering::Relaxed);
+                let new_meta = result?;
                 drop(rtxn);
 
                 // Once the pending update have been successfully processed
@@ -152,8 +168,18 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
         }
     }
 
-    /// Execute the user defined function with both meta-store iterators, the first
-    /// iterator is the *processed* meta one and the secind is the *pending* meta one.
+    /// The id of the update tha is currently being processed,
+    /// `None` if no update is being processed.
+    pub fn processing_update_id(&self) -> Option<u64> {
+        match self.processing_update_id.load(Ordering::Relaxed) {
+            u64::MAX => None,
+            update_id => Some(update_id),
+        }
+    }
+
+    /// Execute the user defined function with the meta-store iterators, the first
+    /// iterator is the *processed* meta one, the second the *aborted* meta one
+    /// and, the last is the *pending* meta one.
     pub fn iter_metas<F, T>(&self, mut f: F) -> heed::Result<T>
     where
         M: for<'a> Deserialize<'a>,
@@ -161,19 +187,21 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
         F: for<'a> FnMut(
             heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<N>>,
             heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<M>>,
+            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<M>>,
         ) -> heed::Result<T>,
     {
         let rtxn = self.env.read_txn()?;
 
-        // We get both the pending and processed meta iterators.
+        // We get the pending, processed and aborted meta iterators.
         let processed_iter = self.processed_meta.iter(&rtxn)?;
+        let aborted_iter = self.aborted_meta.iter(&rtxn)?;
         let pending_iter = self.pending_meta.iter(&rtxn)?;
 
         // We execute the user defined function with both iterators.
-        (f)(processed_iter, pending_iter)
+        (f)(processed_iter, aborted_iter, pending_iter)
     }
 
-    /// Returns the update associated meta or `None` if the update deosn't exist.
+    /// Returns the update associated meta or `None` if the update doesn't exist.
     pub fn meta(&self, update_id: u64) -> heed::Result<Option<UpdateStatusMeta<M, N>>>
     where
         M: for<'a> Deserialize<'a>,
@@ -186,10 +214,76 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
             return Ok(Some(UpdateStatusMeta::Pending(meta)));
         }
 
-        match self.processed_meta.get(&rtxn, &key)? {
-            Some(meta) => Ok(Some(UpdateStatusMeta::Processed(meta))),
-            None => Ok(None),
+        if let Some(meta) = self.processed_meta.get(&rtxn, &key)? {
+            return Ok(Some(UpdateStatusMeta::Processed(meta)));
         }
+
+        if let Some(meta) = self.aborted_meta.get(&rtxn, &key)? {
+            return Ok(Some(UpdateStatusMeta::Aborted(meta)));
+        }
+
+        Ok(None)
+    }
+
+    /// Aborts an update, an aborted update content is deleted and
+    /// the meta of it is moved into the aborted updates database.
+    ///
+    /// Trying to abort an update that is currently being processed, an update
+    /// that as already been processed or which doesn't actually exist, will
+    /// return `None`.
+    pub fn abort_update(&self, update_id: u64) -> heed::Result<Option<M>>
+    where M: Serialize + for<'a> Deserialize<'a>,
+    {
+        let mut wtxn = self.env.write_txn()?;
+        let key = BEU64::new(update_id);
+
+        // We cannot abort an update that is currently being processed.
+        if self.processing_update_id() == Some(update_id) {
+            return Ok(None);
+        }
+
+        let meta = match self.pending_meta.get(&wtxn, &key)? {
+            Some(meta) => meta,
+            None => return Ok(None),
+        };
+
+        self.aborted_meta.put(&mut wtxn, &key, &meta)?;
+        self.pending_meta.delete(&mut wtxn, &key)?;
+        self.pending.delete(&mut wtxn, &key)?;
+
+        wtxn.commit()?;
+
+        Ok(Some(meta))
+    }
+
+    /// Aborts all the pending updates, and not the one being currently processed.
+    /// Returns the update metas and ids that were successfully aborted.
+    pub fn abort_pendings(&self) -> heed::Result<Vec<(u64, M)>>
+    where M: Serialize + for<'a> Deserialize<'a>,
+    {
+        let mut wtxn = self.env.write_txn()?;
+        let processing_update_id = self.processing_update_id();
+
+        let mut aborted_updates = Vec::new();
+        for result in self.pending_meta.iter(&wtxn)? {
+            let (key, meta) = result?;
+            let id = key.get();
+            if processing_update_id == Some(id) {
+                continue;
+            }
+            aborted_updates.push((id, meta));
+        }
+
+        for (id, meta) in &aborted_updates {
+            let key = BEU64::new(*id);
+            self.aborted_meta.put(&mut wtxn, &key, &meta)?;
+            self.pending_meta.delete(&mut wtxn, &key)?;
+            self.pending.delete(&mut wtxn, &key)?;
+        }
+
+        wtxn.commit()?;
+
+        Ok(aborted_updates)
     }
 }
 
@@ -197,6 +291,7 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
 pub enum UpdateStatusMeta<M, N> {
     Pending(M),
     Processed(N),
+    Aborted(M),
 }
 
 #[cfg(test)]

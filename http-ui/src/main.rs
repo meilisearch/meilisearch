@@ -189,6 +189,18 @@ enum UpdateStatus<M, P, N> {
     Pending { update_id: u64, meta: M },
     Progressing { update_id: u64, meta: P },
     Processed { update_id: u64, meta: N },
+    Aborted { update_id: u64, meta: M },
+}
+
+impl<M, P, N> UpdateStatus<M, P, N> {
+    fn update_id(&self) -> u64 {
+        match self {
+            UpdateStatus::Pending { update_id, .. } => *update_id,
+            UpdateStatus::Progressing { update_id, .. } => *update_id,
+            UpdateStatus::Processed { update_id, .. } => *update_id,
+            UpdateStatus::Aborted { update_id, .. } => *update_id,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -473,11 +485,15 @@ async fn main() -> anyhow::Result<()> {
         .and(warp::path!("updates"))
         .map(move |header: String| {
             let update_store = update_store_cloned.clone();
-            let mut updates = update_store.iter_metas(|processed, pending| {
+            let mut updates = update_store.iter_metas(|processed, aborted, pending| {
                 let mut updates = Vec::<UpdateStatus<_, UpdateMetaProgress, _>>::new();
                 for result in processed {
                     let (uid, meta) = result?;
                     updates.push(UpdateStatus::Processed { update_id: uid.get(), meta });
+                }
+                for result in aborted {
+                    let (uid, meta) = result?;
+                    updates.push(UpdateStatus::Aborted { update_id: uid.get(), meta });
                 }
                 for result in pending {
                     let (uid, meta) = result?;
@@ -486,9 +502,9 @@ async fn main() -> anyhow::Result<()> {
                 Ok(updates)
             }).unwrap();
 
-            if header.contains("text/html") {
-                updates.reverse();
+            updates.sort_unstable_by(|s1, s2| s1.update_id().cmp(&s2.update_id()).reverse());
 
+            if header.contains("text/html") {
                 // We retrieve the database size.
                 let db_size = File::open(lmdb_path_cloned.clone())
                     .unwrap()
@@ -798,6 +814,31 @@ async fn main() -> anyhow::Result<()> {
             warp::reply()
         });
 
+    let update_store_cloned = update_store.clone();
+    let update_status_sender_cloned = update_status_sender.clone();
+    let abort_update_id_route = warp::filters::method::delete()
+        .and(warp::path!("update" / u64))
+        .map(move |update_id: u64| {
+            if let Some(meta) = update_store_cloned.abort_update(update_id).unwrap() {
+                let _ = update_status_sender_cloned.send(UpdateStatus::Aborted { update_id, meta });
+                eprintln!("update {} aborted", update_id);
+            }
+            warp::reply()
+        });
+
+    let update_store_cloned = update_store.clone();
+    let update_status_sender_cloned = update_status_sender.clone();
+    let abort_pending_updates_route = warp::filters::method::delete()
+        .and(warp::path!("updates"))
+        .map(move || {
+            let updates = update_store_cloned.abort_pendings().unwrap();
+            for (update_id, meta) in updates {
+                let _ = update_status_sender_cloned.send(UpdateStatus::Aborted { update_id, meta });
+                eprintln!("update {} aborted", update_id);
+            }
+            warp::reply()
+        });
+
     let update_ws_route = warp::ws()
         .and(warp::path!("updates" / "ws"))
         .map(move |ws: warp::ws::Ws| {
@@ -844,6 +885,8 @@ async fn main() -> anyhow::Result<()> {
         .or(indexing_csv_route)
         .or(indexing_json_route)
         .or(indexing_json_stream_route)
+        .or(abort_update_id_route)
+        .or(abort_pending_updates_route)
         .or(clearing_route)
         .or(change_settings_route)
         .or(change_facet_levels_route)
