@@ -160,7 +160,7 @@ impl Server {
         eprintln!("get_request: {}", url);
 
         let mut app =
-            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+            test::init_service(meilisearch_http::create_app(&self.data, true).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::get().uri(url).to_request();
         let res = test::call_service(&mut app, req).await;
@@ -175,7 +175,7 @@ impl Server {
         eprintln!("post_request: {}", url);
 
         let mut app =
-            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+            test::init_service(meilisearch_http::create_app(&self.data, true).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::post()
             .uri(url)
@@ -204,7 +204,7 @@ impl Server {
         eprintln!("put_request: {}", url);
 
         let mut app =
-            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+            test::init_service(meilisearch_http::create_app(&self.data, true).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::put()
             .uri(url)
@@ -233,7 +233,7 @@ impl Server {
         eprintln!("delete_request: {}", url);
 
         let mut app =
-            test::init_service(meilisearch_http::create_app(&self.data).wrap(NormalizePath)).await;
+            test::init_service(meilisearch_http::create_app(&self.data, true).wrap(NormalizePath)).await;
 
         let req = test::TestRequest::delete().uri(url).to_request();
         let res = test::call_service(&mut app, req).await;
