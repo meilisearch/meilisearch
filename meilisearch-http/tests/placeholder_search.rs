@@ -37,14 +37,8 @@ async fn placeholder_search_with_offset() {
         assert_eq!(status_code, 200);
         // take results at offset 3 as reference
         let lock = expected.lock().unwrap();
-        lock.replace(
-            response["hits"].as_array().unwrap()[3..6]
-                .iter()
-                .cloned()
-                .collect(),
-        );
+        lock.replace(response["hits"].as_array().unwrap()[3..6].to_vec());
     });
-
     let expected = expected.into_inner().unwrap().into_inner();
 
     let query = json!({

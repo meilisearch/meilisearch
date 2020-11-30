@@ -61,7 +61,7 @@ impl Server {
             ..Opt::default()
         };
 
-        let data = Data::new(opt.clone()).unwrap();
+        let data = Data::new(opt).unwrap();
 
         Server {
             uid: uid.to_string(),
@@ -164,7 +164,7 @@ impl Server {
 
         let req = test::TestRequest::get().uri(url).to_request();
         let res = test::call_service(&mut app, req).await;
-        let status_code = res.status().clone();
+        let status_code = res.status();
 
         let body = test::read_body(res).await;
         let response = serde_json::from_slice(&body).unwrap_or_default();
@@ -182,7 +182,7 @@ impl Server {
             .set_json(&body)
             .to_request();
         let res = test::call_service(&mut app, req).await;
-        let status_code = res.status().clone();
+        let status_code = res.status();
 
         let body = test::read_body(res).await;
         let response = serde_json::from_slice(&body).unwrap_or_default();
@@ -211,7 +211,7 @@ impl Server {
             .set_json(&body)
             .to_request();
         let res = test::call_service(&mut app, req).await;
-        let status_code = res.status().clone();
+        let status_code = res.status();
 
         let body = test::read_body(res).await;
         let response = serde_json::from_slice(&body).unwrap_or_default();
@@ -237,7 +237,7 @@ impl Server {
 
         let req = test::TestRequest::delete().uri(url).to_request();
         let res = test::call_service(&mut app, req).await;
-        let status_code = res.status().clone();
+        let status_code = res.status();
 
         let body = test::read_body(res).await;
         let response = serde_json::from_slice(&body).unwrap_or_default();
