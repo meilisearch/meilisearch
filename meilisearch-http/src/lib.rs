@@ -24,6 +24,7 @@ use self::error::{payload_error_handler, ResponseError};
 
 pub fn create_app(
     data: &Data,
+    enable_frontend: bool,
 ) -> App<
     impl ServiceFactory<
         Config = (),
@@ -34,7 +35,7 @@ pub fn create_app(
     >,
     actix_http::body::Body,
 > {
-    App::new()
+    let app = App::new()
         .data(data.clone())
         .app_data(
             web::JsonConfig::default()
@@ -46,8 +47,6 @@ pub fn create_app(
             web::QueryConfig::default()
             .error_handler(|err, _req| payload_error_handler(err).into())
         )
-        .service(routes::load_html)
-        .service(routes::load_css)
         .configure(routes::document::services)
         .configure(routes::index::services)
         .configure(routes::search::services)
@@ -57,7 +56,14 @@ pub fn create_app(
         .configure(routes::health::services)
         .configure(routes::stats::services)
         .configure(routes::key::services)
-        .configure(routes::dump::services)
+        .configure(routes::dump::services);
+    if enable_frontend {
+        app
+            .service(routes::load_html)
+            .service(routes::load_css)
+    } else {
+        app
+    }
 }
 
 pub fn index_update_callback_txn(index: Index, index_uid: &str, data: &Data, mut writer: &mut MainWriter) -> Result<(), String> {
