@@ -1,3 +1,15 @@
+## v0.17.0
+  - Fix corrupted data during placeholder search (#1089)
+  - Remove maintenance error from http (#1082)
+  - Disable frontend in production (#1097)
+  - Update nbHits count with filtered documents (#849)
+  - Remove update changelog ci check (#1090)
+  - Add deploy on Platform.sh option to README (#1087)
+  - Change movie gifs in README (#1077)
+  - Remove some clippy warnings (#1100)
+  - Improve script `download-latest.sh` (#1054)
+  - Bump dependencies version (#1056, #1057, #1059)
+
 ## v0.16.0
 
   - Automatically create index on document push if index doesn't exist (#914)
