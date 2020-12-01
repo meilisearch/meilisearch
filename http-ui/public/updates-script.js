@@ -78,6 +78,12 @@ $(window).on('load', function () {
       const content = $(`#${id} .updateStatus.content`);
       content.html('processed ' + JSON.stringify(status.meta));
     }
+
+    if (status.type == "Aborted") {
+      const id = 'update-' + status.update_id;
+      const content = $(`#${id} .updateStatus.content`);
+      content.html('aborted ' + JSON.stringify(status.meta));
+    }
   }
 });
 

@@ -7,6 +7,7 @@ mod index;
 mod mdfs;
 mod query_tokens;
 mod search;
+mod update_store;
 pub mod facet;
 pub mod heed_codec;
 pub mod proximity;
@@ -25,13 +26,11 @@ use serde_json::{Map, Value};
 pub use self::criterion::{Criterion, default_criteria};
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fields_ids_map::FieldsIdsMap;
+pub use self::heed_codec::{BEU32StrCodec, StrStrU8Codec, ObkvCodec};
+pub use self::heed_codec::{RoaringBitmapCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 pub use self::index::Index;
 pub use self::search::{Search, FacetCondition, SearchResult};
-pub use self::heed_codec::{
-    RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec,
-    ObkvCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
-};
-pub use self::update::UpdateStore;
+pub use self::update_store::UpdateStore;
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
 pub type FastMap8<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher64>>;

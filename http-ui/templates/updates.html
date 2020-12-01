@@ -72,6 +72,15 @@
               </li>
             </ol>
           </li>
+        {% when UpdateStatus::Aborted with { update_id, meta } %}
+          <li id="update-{{ update_id }}" class="document">
+            <ol>
+              <li class="field">
+                <div class="attribute">update id</div><div class="updateId content">{{ update_id }}</div>
+                <div class="attribute">update status</div><div class="updateStatus content">aborted</div>
+              </li>
+            </ol>
+          </li>
         {% else %}
         {% endmatch %}
       {% endfor %}
