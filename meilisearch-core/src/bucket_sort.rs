@@ -212,6 +212,7 @@ where
     FD: Fn(DocumentId) -> Option<u64>,
 {
     let mut result = SortResult::default();
+    let mut filtered_count = 0;
 
     let words_set = index.main.words_fst(reader)?;
     let stop_words = index.main.stop_words_fst(reader)?;
@@ -322,19 +323,36 @@ where
                     let filter_accepted = match &filter {
                         Some(filter) => {
                             let entry = filter_map.entry(document.id);
-                            *entry.or_insert_with(|| (filter)(document.id))
+                            *entry.or_insert_with(|| {
+                                let accepted = (filter)(document.id);
+                                // we only want to count it out the first time we see it
+                                if !accepted {
+                                    filtered_count += 1;
+                                }
+                                accepted
+                            })
                         }
                         None => true,
                     };
 
                     if filter_accepted {
                         let entry = key_cache.entry(document.id);
-                        let key = entry.or_insert_with(|| (distinct)(document.id).map(Rc::new));
+                        let mut seen = true;
+                        let key = entry.or_insert_with(|| {
+                            seen = false;
+                            (distinct)(document.id).map(Rc::new)
+                        });
 
-                        match key.clone() {
+                        let distinct = match key.clone() {
                             Some(key) => buf_distinct.register(key),
                             None => buf_distinct.register_without_key(),
                         };
+
+                        // we only want to count the document if it is the first time we see it and
+                        // if it wasn't accepted by distinct
+                        if !seen && !distinct {
+                            filtered_count += 1;
+                        }
                     }
 
                     // the requested range end is reached: stop computing distinct
@@ -396,7 +414,7 @@ where
         }
     }
     result.documents = documents;
-    result.nb_hits = docids.len();
+    result.nb_hits = docids.len() - filtered_count;
 
     Ok(result)
 }

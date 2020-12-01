@@ -80,8 +80,9 @@ async fn main() -> Result<(), MainError> {
 
     print_launch_resume(&opt, &data);
 
+    let enable_frontend = opt.env != "production";
     let http_server = HttpServer::new(move || {
-        create_app(&data)
+        create_app(&data, enable_frontend)
             .wrap(
                 Cors::new()
                     .send_wildcard()

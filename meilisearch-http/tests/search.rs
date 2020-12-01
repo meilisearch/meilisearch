@@ -130,13 +130,13 @@ async fn search_unexpected_params() {
 
     let expected = "unknown field `lol`, expected one of `q`, `offset`, `limit`, `attributesToRetrieve`, `attributesToCrop`, `cropLength`, `attributesToHighlight`, `filters`, `matches`, `facetFilters`, `facetsDistribution` at line 1 column 6";
 
-    let post_query = serde_json::from_str::<meilisearch_http::routes::search::SearchQueryPost>(&query.clone().to_string());
+    let post_query = serde_json::from_str::<meilisearch_http::routes::search::SearchQueryPost>(&query.to_string());
     assert!(post_query.is_err());
-    assert_eq!(expected.clone(), post_query.err().unwrap().to_string());
+    assert_eq!(expected, post_query.err().unwrap().to_string());
 
-    let get_query: Result<meilisearch_http::routes::search::SearchQuery, _> = serde_json::from_str(&query.clone().to_string());
+    let get_query: Result<meilisearch_http::routes::search::SearchQuery, _> = serde_json::from_str(&query.to_string());
     assert!(get_query.is_err());
-    assert_eq!(expected.clone(), get_query.err().unwrap().to_string());
+    assert_eq!(expected, get_query.err().unwrap().to_string());
 }
 
 #[actix_rt::test]
@@ -1828,4 +1828,52 @@ async fn update_documents_with_facet_distribution() {
     server.add_or_update_multiple_documents(update2).await;
     let (response2, _) = server.search_post(search).await;
     assert_json_eq!(expected_facet_distribution, response2["facetsDistribution"].clone());
+}
+
+#[actix_rt::test]
+async fn test_filter_nb_hits_search_normal() {
+    let mut server = common::Server::with_uid("test");
+
+    let body = json!({
+        "uid": "test",
+        "primaryKey": "id",
+    });
+
+    server.create_index(body).await;
+    let documents = json!([
+        {
+            "id": 1,
+            "content": "a",
+            "color": "green",
+            "size": 1,
+        },
+        {
+            "id": 2,
+            "content": "a",
+            "color": "green",
+            "size": 2,
+        },
+        {
+            "id": 3,
+            "content": "a",
+            "color": "blue",
+            "size": 3,
+        },
+    ]);
+
+    server.add_or_update_multiple_documents(documents).await;
+    let (response, _) = server.search_post(json!({"q": "a"})).await;
+    assert_eq!(response["nbHits"], 3);
+
+    let (response, _) = server.search_post(json!({"q": "a", "filters": "size = 1"})).await;
+    assert_eq!(response["nbHits"], 1);
+
+    server.update_distinct_attribute(json!("color")).await;
+
+    let (response, _) = server.search_post(json!({"q": "a"})).await;
+    assert_eq!(response["nbHits"], 2);
+
+    let (response, _) = server.search_post(json!({"q": "a", "filters": "size < 3"})).await;
+    println!("result: {}", response);
+    assert_eq!(response["nbHits"], 1);
 }
