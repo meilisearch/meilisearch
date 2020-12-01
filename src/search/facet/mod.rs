@@ -237,7 +237,8 @@ impl FacetCondition {
             FacetType::Integer => Ok(OperatorI64(fid, Equal(pest_parse(value)?))),
             FacetType::Float => Ok(OperatorF64(fid, Equal(pest_parse(value)?))),
             FacetType::String => {
-                Ok(OperatorString(fid, FacetStringOperator::Equal(value.as_str().to_string())))
+                let value = value.as_str().to_lowercase().to_string();
+                Ok(OperatorString(fid, FacetStringOperator::Equal(value)))
             },
         }
     }
@@ -563,7 +564,7 @@ mod tests {
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
         let condition = FacetCondition::from_str(&rtxn, &index, "channel = ponce").unwrap();
-        let expected = OperatorString(1, FacetStringOperator::Equal("ponce".into()));
+        let expected = OperatorString(1, FacetStringOperator::Equal("Ponce".into()));
         assert_eq!(condition, expected);
 
         let condition = FacetCondition::from_str(&rtxn, &index, "channel != ponce").unwrap();
