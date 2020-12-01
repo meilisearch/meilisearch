@@ -25,7 +25,7 @@ actix-web = { version = "3.1.0", features = ["rustls"] }
 bytes = "0.5.4"
 chrono = { version = "0.4.19", features = ["serde"] }
 crossbeam-channel = "0.5.0"
-env_logger = "0.7.1"
+env_logger = "0.8.2"
 flate2 = "1.0.18"
 futures = "0.3.7"
 http = "0.2.1"
