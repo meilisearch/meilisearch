@@ -57,6 +57,14 @@ pub enum FacetStringOperator {
 }
 
 impl FacetStringOperator {
+    fn equal(s: &str) -> Self {
+        FacetStringOperator::Equal(s.to_lowercase())
+    }
+
+    fn not_equal(s: &str) -> Self {
+        FacetStringOperator::equal(s).negate()
+    }
+
     fn negate(self) -> Self {
         match self {
             FacetStringOperator::Equal(x)    => FacetStringOperator::NotEqual(x),
@@ -236,10 +244,7 @@ impl FacetCondition {
         match ftype {
             FacetType::Integer => Ok(OperatorI64(fid, Equal(pest_parse(value)?))),
             FacetType::Float => Ok(OperatorF64(fid, Equal(pest_parse(value)?))),
-            FacetType::String => {
-                let value = value.as_str().to_lowercase().to_string();
-                Ok(OperatorString(fid, FacetStringOperator::Equal(value)))
-            },
+            FacetType::String => Ok(OperatorString(fid, FacetStringOperator::equal(value.as_str()))),
         }
     }
 
@@ -564,15 +569,15 @@ mod tests {
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
         let condition = FacetCondition::from_str(&rtxn, &index, "channel = ponce").unwrap();
-        let expected = OperatorString(1, FacetStringOperator::Equal("Ponce".into()));
+        let expected = OperatorString(1, FacetStringOperator::equal("Ponce"));
         assert_eq!(condition, expected);
 
         let condition = FacetCondition::from_str(&rtxn, &index, "channel != ponce").unwrap();
-        let expected = OperatorString(1, FacetStringOperator::NotEqual("ponce".into()));
+        let expected = OperatorString(1, FacetStringOperator::not_equal("ponce"));
         assert_eq!(condition, expected);
 
         let condition = FacetCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
-        let expected = OperatorString(1, FacetStringOperator::NotEqual("ponce".into()));
+        let expected = OperatorString(1, FacetStringOperator::not_equal("ponce"));
         assert_eq!(condition, expected);
     }
 
@@ -629,10 +634,10 @@ mod tests {
             "channel = gotaga OR (timestamp 22 TO 44 AND channel != ponce)",
         ).unwrap();
         let expected = Or(
-            Box::new(OperatorString(0, FacetStringOperator::Equal("gotaga".into()))),
+            Box::new(OperatorString(0, FacetStringOperator::equal("gotaga"))),
             Box::new(And(
                 Box::new(OperatorI64(1, Between(22, 44))),
-                Box::new(OperatorString(0, FacetStringOperator::NotEqual("ponce".into()))),
+                Box::new(OperatorString(0, FacetStringOperator::not_equal("ponce"))),
             ))
         );
         assert_eq!(condition, expected);
@@ -642,13 +647,13 @@ mod tests {
             "channel = gotaga OR NOT (timestamp 22 TO 44 AND channel != ponce)",
         ).unwrap();
         let expected = Or(
-            Box::new(OperatorString(0, FacetStringOperator::Equal("gotaga".into()))),
+            Box::new(OperatorString(0, FacetStringOperator::equal("gotaga"))),
             Box::new(Or(
                 Box::new(Or(
                     Box::new(OperatorI64(1, LowerThan(22))),
                     Box::new(OperatorI64(1, GreaterThan(44))),
                 )),
-                Box::new(OperatorString(0, FacetStringOperator::Equal("ponce".into()))),
+                Box::new(OperatorString(0, FacetStringOperator::equal("ponce"))),
             )),
         );
         assert_eq!(condition, expected);
