@@ -49,7 +49,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     let stdin = io::stdin();
     let lines = match opt.query {
-        Some(query) => Box::new(once(Ok(query.to_string()))),
+        Some(query) => Box::new(once(Ok(query))),
         None => Box::new(stdin.lock().lines()) as Box<dyn Iterator<Item = _>>,
     };
 

@@ -134,3 +134,9 @@ impl<'a> UpdateBuilder<'a> {
         builder
     }
 }
+
+impl Default for UpdateBuilder<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}

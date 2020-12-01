@@ -440,7 +440,7 @@ impl Store {
             }
 
             // Compute the document id of the next document.
-            count = count + 1;
+            count += 1;
         }
 
         progress_callback(UpdateIndexingStep::IndexDocuments {
@@ -527,10 +527,8 @@ fn compute_words_pair_proximities(
             let prox = u8::try_from(prox).unwrap();
             // We don't care about a word that appear at the
             // same position or too far from the other.
-            if prox >= 1 && prox <= 7 {
-                if min_prox.map_or(true, |mp| prox < mp) {
-                    min_prox = Some(prox)
-                }
+            if prox >= 1 && prox <= 7 && min_prox.map_or(true, |mp| prox < mp) {
+                min_prox = Some(prox)
             }
         }
 
@@ -569,18 +567,28 @@ fn parse_facet_value(ftype: FacetType, value: &Value) -> anyhow::Result<SmallVec
     {
         match value {
             Value::Null => Ok(()),
-            Value::Bool(b) => Ok(output.push(Integer(*b as i64))),
+            Value::Bool(b) => {
+                output.push(Integer(*b as i64));
+                Ok(())
+            },
             Value::Number(number) => match ftype {
                 FacetType::String => {
                     let string = SmallString32::from(number.to_string());
-                    Ok(output.push(String(string)))
+                    output.push(String(string));
+                    Ok(())
                 },
                 FacetType::Float => match number.as_f64() {
-                    Some(float) => Ok(output.push(Float(OrderedFloat(float)))),
+                    Some(float) => {
+                        output.push(Float(OrderedFloat(float)));
+                        Ok(())
+                    },
                     None => bail!("invalid facet type, expecting {} found integer", ftype),
                 },
                 FacetType::Integer => match number.as_i64() {
-                    Some(integer) => Ok(output.push(Integer(integer))),
+                    Some(integer) => {
+                        output.push(Integer(integer));
+                        Ok(())
+                    },
                     None => if number.is_f64() {
                         bail!("invalid facet type, expecting {} found float", ftype)
                     } else {
@@ -594,14 +602,21 @@ fn parse_facet_value(ftype: FacetType, value: &Value) -> anyhow::Result<SmallVec
                 match ftype {
                     FacetType::String => {
                         let string = SmallString32::from(string);
-                        Ok(output.push(String(string)))
+                        output.push(String(string));
+                        Ok(())
                     },
                     FacetType::Float => match string.parse() {
-                        Ok(float) => Ok(output.push(Float(OrderedFloat(float)))),
+                        Ok(float) => {
+                            output.push(Float(OrderedFloat(float)));
+                            Ok(())
+                        },
                         Err(_err) => bail!("invalid facet type, expecting {} found string", ftype),
                     },
                     FacetType::Integer => match string.parse() {
-                        Ok(integer) => Ok(output.push(Integer(integer))),
+                        Ok(integer) => {
+                            output.push(Integer(integer));
+                            Ok(())
+                        },
                         Err(_err) => bail!("invalid facet type, expecting {} found string", ftype),
                     },
                 }

@@ -224,7 +224,7 @@ impl FacetCondition {
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
-                        message: format!("invalid operator on a faceted string"),
+                        message: "invalid operator on a faceted string".to_string(),
                     },
                     item_span,
                 ).into())
@@ -264,7 +264,7 @@ impl FacetCondition {
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
-                        message: format!("invalid operator on a faceted string"),
+                        message: "invalid operator on a faceted string".to_string(),
                     },
                     item_span,
                 ).into())
@@ -288,7 +288,7 @@ impl FacetCondition {
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
-                        message: format!("invalid operator on a faceted string"),
+                        message: "invalid operator on a faceted string".to_string(),
                     },
                     item_span,
                 ).into())
@@ -312,7 +312,7 @@ impl FacetCondition {
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
-                        message: format!("invalid operator on a faceted string"),
+                        message: "invalid operator on a faceted string".to_string(),
                     },
                     item_span,
                 ).into())
@@ -336,7 +336,7 @@ impl FacetCondition {
             FacetType::String => {
                 Err(PestError::<Rule>::new_from_span(
                     ErrorVariant::CustomError {
-                        message: format!("invalid operator on a faceted string"),
+                        message: "invalid operator on a faceted string".to_string(),
                     },
                     item_span,
                 ).into())
@@ -508,7 +508,7 @@ impl FacetCondition {
                 let all_documents_ids = index.faceted_documents_ids(rtxn, field_id)?;
                 let op = FacetStringOperator::Equal(string.clone());
                 let docids = Self::evaluate_string_operator(rtxn, index, db, field_id, &op)?;
-                return Ok(all_documents_ids - docids);
+                Ok(all_documents_ids - docids)
             },
         }
     }
