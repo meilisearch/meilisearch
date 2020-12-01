@@ -25,7 +25,7 @@ impl<'a> Mdfs<'a> {
     ) -> Mdfs<'a>
     {
         // Compute the number of pairs (windows) we have for this list of words.
-        let mana = words.len().checked_sub(1).unwrap_or(0) as u32;
+        let mana = words.len().saturating_sub(1) as u32;
         let max_mana = mana * 8;
         Mdfs { index, rtxn, words, union_cache: HashMap::new(), candidates, mana, max_mana }
     }
@@ -59,7 +59,7 @@ impl<'a> Iterator for Mdfs<'a> {
                 Ok(()) => {
                     // We always increase the mana for the next loop.
                     let proximity = self.mana;
-                    self.mana = self.mana + 1;
+                    self.mana += 1;
 
                     // If no documents were found we must not return and continue
                     // the search with more mana.

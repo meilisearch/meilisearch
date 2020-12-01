@@ -66,14 +66,13 @@ impl CharCategory {
     fn new(c: char) -> Self {
         if c.is_alphanumeric() {
             if is_chinese(c) { Chinese } else { Alphanumeric }
-        } else {
-            if c.is_whitespace() { Space } else { Other }
-        }
+        } else if c.is_whitespace() { Space } else { Other }
     }
 }
 
 fn is_chinese(c: char) -> bool {
-    match u32::from(c) {
+    matches!(
+        u32::from(c),
           0x4E00..=0x9FEF
         | 0x3400..=0x4DBF
         | 0x20000..=0x2A6DF
@@ -81,9 +80,8 @@ fn is_chinese(c: char) -> bool {
         | 0x2B740..=0x2B81F
         | 0x2B820..=0x2CEAF
         | 0x2CEB0..=0x2EBEF
-        | 0x3007..=0x3007 => true,
-        _ => false,
-    }
+        | 0x3007..=0x3007
+    )
 }
 
 /// Find the longest key that is prefix of the given value.

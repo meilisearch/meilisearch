@@ -273,9 +273,9 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         };
 
         let output = match self.update_format {
-            UpdateFormat::Csv => transform.from_csv(reader, &progress_callback)?,
-            UpdateFormat::Json => transform.from_json(reader, &progress_callback)?,
-            UpdateFormat::JsonStream => transform.from_json_stream(reader, &progress_callback)?,
+            UpdateFormat::Csv => transform.output_from_csv(reader, &progress_callback)?,
+            UpdateFormat::Json => transform.output_from_json(reader, &progress_callback)?,
+            UpdateFormat::JsonStream => transform.output_from_json_stream(reader, &progress_callback)?,
         };
 
         info!("Update transformed in {:.02?}", before_transform.elapsed());

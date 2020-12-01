@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::iter::Peekable;
@@ -46,23 +45,23 @@ pub struct Transform<'t, 'i> {
 }
 
 impl Transform<'_, '_> {
-    pub fn from_json<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<TransformOutput>
+    pub fn output_from_json<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<TransformOutput>
     where
         R: Read,
         F: Fn(UpdateIndexingStep) + Sync,
     {
-        self.from_generic_json(reader, false, progress_callback)
+        self.output_from_generic_json(reader, false, progress_callback)
     }
 
-    pub fn from_json_stream<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<TransformOutput>
+    pub fn output_from_json_stream<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<TransformOutput>
     where
         R: Read,
         F: Fn(UpdateIndexingStep) + Sync,
     {
-        self.from_generic_json(reader, true, progress_callback)
+        self.output_from_generic_json(reader, true, progress_callback)
     }
 
-    fn from_generic_json<R, F>(
+    fn output_from_generic_json<R, F>(
         self,
         reader: R,
         is_stream: bool,
@@ -221,7 +220,7 @@ impl Transform<'_, '_> {
 
         // Now that we have a valid sorter that contains the user id and the obkv we
         // give it to the last transforming function which returns the TransformOutput.
-        self.from_sorter(
+        self.output_from_sorter(
             sorter,
             primary_key,
             fields_ids_map,
@@ -231,7 +230,7 @@ impl Transform<'_, '_> {
         )
     }
 
-    pub fn from_csv<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<TransformOutput>
+    pub fn output_from_csv<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<TransformOutput>
     where
         R: Read,
         F: Fn(UpdateIndexingStep) + Sync,
@@ -350,7 +349,7 @@ impl Transform<'_, '_> {
 
         // Now that we have a valid sorter that contains the user id and the obkv we
         // give it to the last transforming function which returns the TransformOutput.
-        self.from_sorter(
+        self.output_from_sorter(
             sorter,
             primary_key_field_id,
             fields_ids_map,
@@ -363,7 +362,7 @@ impl Transform<'_, '_> {
     /// Generate the `TransformOutput` based on the given sorter that can be generated from any
     /// format like CSV, JSON or JSON stream. This sorter must contain a key that is the document
     /// id for the user side and the value must be an obkv where keys are valid fields ids.
-    fn from_sorter<F>(
+    fn output_from_sorter<F>(
         self,
         sorter: grenad::Sorter<MergeFn>,
         primary_key: u8,
@@ -408,7 +407,6 @@ impl Transform<'_, '_> {
                 Some(docid) => {
                     // If we find the user id in the current external documents ids map
                     // we use it and insert it in the list of replaced documents.
-                    let docid = u32::try_from(docid).expect("valid document id");
                     replaced_documents_ids.insert(docid);
 
                     // Depending on the update indexing method we will merge
