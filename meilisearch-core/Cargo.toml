@@ -28,7 +28,7 @@ meilisearch-error = { path = "../meilisearch-error", version = "0.17.0" }
 meilisearch-schema = { path = "../meilisearch-schema", version = "0.17.0" }
 meilisearch-tokenizer = { path = "../meilisearch-tokenizer", version = "0.17.0" }
 meilisearch-types = { path = "../meilisearch-types", version = "0.17.0" }
-once_cell = "1.3.1"
+once_cell = "1.5.2"
 ordered-float = { version = "2.0.0", features = ["serde"] }
 pest = { git = "https://github.com/pest-parser/pest.git", rev = "51fd1d49f1041f7839975664ef71fe15c7dcaf67" }
 pest_derive = "2.0"
