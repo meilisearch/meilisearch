@@ -18,7 +18,7 @@ either = "1.5.3"
 env_logger = "0.7.1"
 fst = "0.4.4"
 hashbrown = { version = "0.9.0", features = ["serde"] }
-heed = "0.8.0"
+heed = "0.10.4"
 indexmap = { version = "1.3.2", features = ["serde-1"] }
 intervaltree = "0.2.5"
 itertools = "0.9.0"
