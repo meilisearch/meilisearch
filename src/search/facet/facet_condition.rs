@@ -16,8 +16,9 @@ use crate::heed_codec::facet::FacetValueStringCodec;
 use crate::heed_codec::facet::{FacetLevelValueI64Codec, FacetLevelValueF64Codec};
 use crate::{Index, FieldId, FieldsIdsMap, CboRoaringBitmapCodec};
 
-use super::parser::{PREC_CLIMBER, FilterParser};
+use super::FacetRange;
 use super::parser::Rule;
+use super::parser::{PREC_CLIMBER, FilterParser};
 
 use self::FacetCondition::*;
 use self::FacetNumberOperator::*;
@@ -379,25 +380,7 @@ impl FacetCondition {
 
         // We must create a custom iterator to be able to iterate over the
         // requested range as the range iterator cannot express some conditions.
-        let left_bound = match left {
-            Included(left) => Included((field_id, level, left, T::min_value())),
-            Excluded(left) => Excluded((field_id, level, left, T::min_value())),
-            Unbounded => Unbounded,
-        };
-        let right_bound = Included((field_id, level, T::max_value(), T::max_value()));
-        // We also make sure that we don't decode the data before we are sure we must return it.
-        let iter = db
-            .remap_key_type::<KC>()
-            .lazily_decode_data()
-            .range(rtxn, &(left_bound, right_bound))?
-            .take_while(|r| r.as_ref().map_or(true, |((.., r), _)| {
-                match right {
-                    Included(right) => *r <= right,
-                    Excluded(right) => *r < right,
-                    Unbounded => true,
-                }
-            }))
-            .map(|r| r.and_then(|(key, lazy)| lazy.decode().map(|data| (key, data))));
+        let iter = FacetRange::new(rtxn, db.remap_key_type::<KC>(), field_id, level, left, right)?;
 
         debug!("Iterating between {:?} and {:?} (level {})", left, right, level);
 
