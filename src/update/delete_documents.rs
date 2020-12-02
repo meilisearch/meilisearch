@@ -2,7 +2,9 @@ use fst::IntoStreamer;
 use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
 
+use crate::facet::FacetType;
 use crate::{Index, BEU32, SmallString32, ExternalDocumentsIds};
+use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
 use super::ClearDocuments;
 
 pub struct DeleteDocuments<'t, 'u, 'i> {
@@ -75,6 +77,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             docid_word_positions,
             word_pair_proximity_docids,
             facet_field_id_value_docids,
+            field_id_docid_facet_values,
             documents,
         } = self.index;
 
@@ -186,10 +189,42 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         // Remove the documents ids from the faceted documents ids.
         let faceted_fields = self.index.faceted_fields(self.wtxn)?;
-        for (field_id, _) in faceted_fields {
+        for (field_id, facet_type) in faceted_fields {
             let mut docids = self.index.faceted_documents_ids(self.wtxn, field_id)?;
             docids.difference_with(&self.documents_ids);
             self.index.put_faceted_documents_ids(self.wtxn, field_id, &docids)?;
+
+            // We delete the entries that are part of the documents ids.
+            let iter = field_id_docid_facet_values.prefix_iter_mut(self.wtxn, &[field_id])?;
+            match facet_type {
+                FacetType::String => {
+                    let mut iter = iter.remap_key_type::<FieldDocIdFacetStringCodec>();
+                    while let Some(result) = iter.next() {
+                        let ((_fid, docid, _value), ()) = result?;
+                        if self.documents_ids.contains(docid) {
+                            iter.del_current()?;
+                        }
+                    }
+                },
+                FacetType::Float => {
+                    let mut iter = iter.remap_key_type::<FieldDocIdFacetF64Codec>();
+                    while let Some(result) = iter.next() {
+                        let ((_fid, docid, _value), ()) = result?;
+                        if self.documents_ids.contains(docid) {
+                            iter.del_current()?;
+                        }
+                    }
+                },
+                FacetType::Integer => {
+                    let mut iter = iter.remap_key_type::<FieldDocIdFacetI64Codec>();
+                    while let Some(result) = iter.next() {
+                        let ((_fid, docid, _value), ()) = result?;
+                        if self.documents_ids.contains(docid) {
+                            iter.del_current()?;
+                        }
+                    }
+                },
+            }
         }
 
         // We delete the documents ids that are under the facet field id values.
@@ -204,6 +239,8 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
                 iter.put_current(bytes, &docids)?;
             }
         }
+
+        drop(iter);
 
         Ok(self.documents_ids.len() as usize)
     }

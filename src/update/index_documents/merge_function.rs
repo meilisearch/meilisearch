@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use anyhow::{bail, ensure};
+use anyhow::{bail, ensure, Context};
 use bstr::ByteSlice as _;
 use fst::IntoStreamer;
 use roaring::RoaringBitmap;
@@ -40,6 +40,12 @@ pub fn word_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Ve
 
 pub fn docid_word_positions_merge(key: &[u8], _values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
     bail!("merging docid word positions is an error ({:?})", key.as_bstr())
+}
+
+pub fn field_id_docid_facet_values_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
+    let first = values.first().context("no value to merge")?;
+    ensure!(values.iter().all(|v| v == first), "invalid field id docid facet value merging");
+    Ok(first.to_vec())
 }
 
 pub fn words_pairs_proximities_docids_merge(_key: &[u8], values: &[Cow<[u8]>]) -> anyhow::Result<Vec<u8>> {
