@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::time::Instant;
 
 use anyhow::{bail, Context};
 use fst::{IntoStreamer, Streamer};
@@ -202,10 +203,13 @@ impl<'a> Search<'a> {
         };
 
         // We create the original candidates with the facet conditions results.
+        let before = Instant::now();
         let facet_candidates = match &self.facet_condition {
             Some(condition) => Some(condition.evaluate(self.rtxn, self.index)?),
             None => None,
         };
+
+        debug!("facet candidates: {:?} took {:.02?}", facet_candidates, before.elapsed());
 
         let order_by_facet = {
             let criteria = self.index.criteria(self.rtxn)?;
@@ -226,8 +230,7 @@ impl<'a> Search<'a> {
             }
         };
 
-        debug!("facet candidates: {:?}", facet_candidates);
-
+        let before = Instant::now();
         let (candidates, derived_words) = match (facet_candidates, derived_words) {
             (Some(mut facet_candidates), Some(derived_words)) => {
                 let words_candidates = Self::compute_candidates(&derived_words);
@@ -261,7 +264,7 @@ impl<'a> Search<'a> {
             },
         };
 
-        debug!("candidates: {:?}", candidates);
+        debug!("candidates: {:?} took {:.02?}", candidates, before.elapsed());
 
         // The mana depth first search is a revised DFS that explore
         // solutions in the order of their proximities.

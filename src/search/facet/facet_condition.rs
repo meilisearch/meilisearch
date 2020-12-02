@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::ops::Bound::{self, Unbounded, Included, Excluded};
+use std::ops::Bound::{self, Included, Excluded};
 use std::str::FromStr;
 
 use heed::types::{ByteSlice, DecodeIgnore};
