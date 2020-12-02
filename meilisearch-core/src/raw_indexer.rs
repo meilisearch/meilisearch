@@ -147,17 +147,17 @@ fn process_tokens<'a>(tokens: impl Iterator<Item = Token<'a>>) -> impl Iterator<
                 match token.kind {
                     TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
                         *offset += match *sepkind {
-                            Some(SeparatorKind::Hard) => 8,
-                            Some(SeparatorKind::Soft) => 1,
+                            Some(TokenKind::Separator(SeparatorKind::Hard)) => 8,
+                            Some(_) => 1,
                             None => 0,
                         };
-                        *sepkind = None;
+                        *sepkind = Some(token.kind)
                     }
                     TokenKind::Separator(SeparatorKind::Hard) => {
-                        *sepkind = Some(SeparatorKind::Hard);
+                        *sepkind = Some(token.kind);
                     }
                     TokenKind::Separator(SeparatorKind::Soft) if sepkind.is_none() => {
-                        *sepkind = Some(SeparatorKind::Soft);
+                        *sepkind = Some(token.kind);
                     }
                     _ => (),
                 }

@@ -882,7 +882,6 @@ mod tests {
 
         // even try to search for a document
         let reader = db.main_read_txn().unwrap();
-        println!("here");
         let SortResult {documents, .. } = index.query_builder().query(&reader, Some("21 "), 0..20).unwrap();
         assert_matches!(documents.len(), 1);
 
