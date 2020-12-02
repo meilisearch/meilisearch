@@ -145,6 +145,11 @@ enum Command {
         output: PathBuf,
     },
 
+    /// Outputs the documents as JSON lines to the standard output.
+    ///
+    /// All of the fields are extracted, not just the displayed ones.
+    ExportDocuments,
+
     /// A command that patches the old external ids
     /// into the new external ids format.
     PatchToNewExternalIds,
@@ -183,13 +188,14 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
         },
         ExportWordsFst { output } => export_words_fst(&index, &rtxn, output),
+        ExportDocuments => export_documents(&index, &rtxn),
         PatchToNewExternalIds => {
             drop(rtxn);
             let mut wtxn = index.write_txn()?;
             let result = patch_to_new_external_ids(&index, &mut wtxn);
             wtxn.commit()?;
             result
-        }
+        },
     }
 }
 
@@ -488,6 +494,25 @@ fn export_words_fst(index: &Index, rtxn: &heed::RoTxn, output: PathBuf) -> anyho
 
     let words_fst = index.words_fst(rtxn)?;
     output.write_all(words_fst.as_fst().as_bytes())?;
+
+fn export_documents(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+    use std::io::{BufWriter, Write as _};
+    use crate::obkv_to_json;
+
+    let stdout = io::stdout();
+    let mut out = BufWriter::new(stdout);
+
+    let fields_ids_map = index.fields_ids_map(rtxn)?;
+    let displayed_fields: Vec<_> = fields_ids_map.iter().map(|(id, _name)| id).collect();
+
+    for result in index.documents.iter(rtxn)? {
+        let (_id, obkv) = result?;
+        let document = obkv_to_json(&displayed_fields, &fields_ids_map, obkv)?;
+        serde_json::to_writer(&mut out, &document)?;
+        writeln!(&mut out)?;
+    }
+
+    out.into_inner()?;
 
     Ok(())
 }
