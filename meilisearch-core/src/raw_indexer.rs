@@ -46,32 +46,12 @@ where
         }
     }
 
+
     pub fn index_text(&mut self, id: DocumentId, indexed_pos: IndexedPos, text: &str) -> usize {
         let mut number_of_words = 0;
 
         let analyzed_text = self.analyzer.analyze(text);
-        for (token_pos, (word_pos, token)) in analyzed_text
-            .tokens()
-            .scan((0, false), |(offset, is_hard_sep), mut token| {
-                match token.kind {
-                    TokenKind::Word => {
-                        token.char_index += *offset;
-                        if *is_hard_sep {
-                            *offset += 8;
-                        } else {
-                            *offset += 1;
-                        }
-                        *is_hard_sep = false;
-                    }
-                    TokenKind::Separator(SeparatorKind::Hard) => {
-                        *is_hard_sep = true;
-                    }
-                    _ => (),
-                }
-                Some((*offset, token))
-            })
-            .filter(|(_, t)| t.is_word())
-            .enumerate() {
+        for (token_pos, (word_pos, token)) in process_tokens(analyzed_text.tokens()).enumerate() {
             let must_continue = index_token(
                 token,
                 word_pos,
@@ -105,27 +85,7 @@ where
             let current_word_offset = word_offset;
 
             let analyzed_text = self.analyzer.analyze(s);
-            let tokens = analyzed_text
-                .tokens()
-                .scan((0, false), |(offset, is_hard_sep), mut token| {
-                    match token.kind {
-                        TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
-                            token.char_index += *offset;
-                            if *is_hard_sep {
-                                *offset += 8;
-                            } else {
-                                *offset += 1;
-                            }
-                            *is_hard_sep = false;
-                        }
-                        TokenKind::Separator(SeparatorKind::Hard) => {
-                            *is_hard_sep = true;
-                        }
-                        _ => (),
-                    }
-                    Some((*offset, token))
-                })
-                .filter(|(_, t)| t.is_word())
+            let tokens = process_tokens(analyzed_text.tokens())
                 .map(|(i, mut t)| {
                     t.byte_start = t.byte_start + current_byte_offset;
                     t.byte_end = t.byte_end + current_byte_offset;
@@ -179,6 +139,31 @@ where
             docs_words,
         }
     }
+}
+
+fn process_tokens<'a>(tokens: impl Iterator<Item = Token<'a>>) -> impl Iterator<Item = (usize, Token<'a>)> {
+    tokens
+        .scan((0, None), |(offset, sepkind), token| {
+                match token.kind {
+                    TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
+                        *offset += match *sepkind {
+                            Some(SeparatorKind::Hard) => 8,
+                            Some(SeparatorKind::Soft) => 1,
+                            None => 0,
+                        };
+                        *sepkind = None;
+                    }
+                    TokenKind::Separator(SeparatorKind::Hard) => {
+                        *sepkind = Some(SeparatorKind::Hard);
+                    }
+                    TokenKind::Separator(SeparatorKind::Soft) if sepkind.is_none() => {
+                        *sepkind = Some(SeparatorKind::Soft);
+                    }
+                    _ => (),
+                }
+            Some((*offset, token))
+        })
+    .filter(|(_, t)| t.is_word())
 }
 
 fn index_token(
@@ -236,6 +221,18 @@ fn token_to_docindex(id: DocumentId, indexed_pos: IndexedPos, token: &Token, wor
 mod tests {
     use super::*;
     use meilisearch_schema::IndexedPos;
+    use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
+    use fst::Set;
+
+    #[test]
+    fn test_process_token() {
+        let text = " Zut, l’aspirateur, j’ai oublié de l’éteindre !";
+        let stopwords = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stopwords));
+        let analyzer = analyzer.analyze(text);
+        let tokens: Vec<_> = process_tokens(analyzer.tokens()).collect();
+        println!("tokens: {:?}", tokens);
+    }
 
     #[test]
     fn strange_apostrophe() {

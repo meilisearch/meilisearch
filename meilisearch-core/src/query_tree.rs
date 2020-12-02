@@ -8,7 +8,7 @@ use std::{cmp, fmt, iter::once};
 use fst::{IntoStreamer, Streamer};
 use itertools::{EitherOrBoth, merge_join_by};
 use log::debug;
-use meilisearch_tokenizer::{Token, token::SeparatorKind, TokenKind};
+use meilisearch_tokenizer::Token;
 use meilisearch_tokenizer::analyzer::{Analyzer, AnalyzerConfig};
 use sdset::{Set, SetBuf, SetOperation};
 
