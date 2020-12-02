@@ -9,10 +9,12 @@ use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use log::debug;
 use once_cell::sync::Lazy;
+use ordered_float::OrderedFloat;
 use roaring::bitmap::RoaringBitmap;
 
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetLevelValueI64Codec};
+use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
 use crate::mdfs::Mdfs;
 use crate::query_tokens::{QueryTokens, QueryToken};
 use crate::{Index, FieldId, DocumentId, Criterion};
@@ -162,34 +164,69 @@ impl<'a> Search<'a> {
         let mut output = Vec::new();
         match facet_type {
             FacetType::Float => {
-                let facet_fn = if ascending {
-                    FacetIter::<f64, FacetLevelValueF64Codec>::new
+                if documents_ids.len() <= 1000 {
+                    let db = self.index.field_id_docid_facet_values.remap_key_type::<FieldDocIdFacetF64Codec>();
+                    let mut docids_values = Vec::with_capacity(documents_ids.len() as usize);
+                    for docid in documents_ids {
+                        let left = (field_id, docid, f64::MIN);
+                        let right = (field_id, docid, f64::MAX);
+                        let mut iter = db.range(self.rtxn, &(left..=right))?;
+                        let entry = if ascending { iter.next() } else { iter.last() };
+                        if let Some(((_, _, value), ())) = entry.transpose()? {
+                            docids_values.push((docid, OrderedFloat(value)));
+                        }
+                    }
+                    docids_values.sort_unstable_by_key(|(_, value)| *value);
+                    let iter = docids_values.into_iter().map(|(id, _)| id).take(limit);
+                    if ascending { Ok(iter.collect()) } else { Ok(iter.rev().collect()) }
                 } else {
-                    FacetIter::<f64, FacetLevelValueF64Codec>::new_reverse
-                };
-                for result in facet_fn(self.rtxn, self.index, field_id, documents_ids)? {
-                    let (_val, docids) = result?;
-                    limit_tmp = limit_tmp.saturating_sub(docids.len() as usize);
-                    output.push(docids);
-                    if limit_tmp == 0 { break }
+                    let facet_fn = if ascending {
+                        FacetIter::<f64, FacetLevelValueF64Codec>::new
+                    } else {
+                        FacetIter::<f64, FacetLevelValueF64Codec>::new_reverse
+                    };
+                    for result in facet_fn(self.rtxn, self.index, field_id, documents_ids)? {
+                        let (_val, docids) = result?;
+                        limit_tmp = limit_tmp.saturating_sub(docids.len() as usize);
+                        output.push(docids);
+                        if limit_tmp == 0 { break }
+                    }
+                    Ok(output.into_iter().flatten().take(limit).collect())
                 }
             },
             FacetType::Integer => {
-                let facet_fn = if ascending {
-                    FacetIter::<i64, FacetLevelValueI64Codec>::new
+                if documents_ids.len() <= 1000 {
+                    let db = self.index.field_id_docid_facet_values.remap_key_type::<FieldDocIdFacetI64Codec>();
+                    let mut docids_values = Vec::with_capacity(documents_ids.len() as usize);
+                    for docid in documents_ids {
+                        let left = (field_id, docid, i64::MIN);
+                        let right = (field_id, docid, i64::MAX);
+                        let mut iter = db.range(self.rtxn, &(left..=right))?;
+                        let entry = if ascending { iter.next() } else { iter.last() };
+                        if let Some(((_, _, value), ())) = entry.transpose()? {
+                            docids_values.push((docid, value));
+                        }
+                    }
+                    docids_values.sort_unstable_by_key(|(_, value)| *value);
+                    let iter = docids_values.into_iter().map(|(id, _)| id).take(limit);
+                    if ascending { Ok(iter.collect()) } else { Ok(iter.rev().collect()) }
                 } else {
-                    FacetIter::<i64, FacetLevelValueI64Codec>::new_reverse
-                };
-                for result in facet_fn(self.rtxn, self.index, field_id, documents_ids)? {
-                    let (_val, docids) = result?;
-                    limit_tmp = limit_tmp.saturating_sub(docids.len() as usize);
-                    output.push(docids);
-                    if limit_tmp == 0 { break }
+                    let facet_fn = if ascending {
+                        FacetIter::<i64, FacetLevelValueI64Codec>::new
+                    } else {
+                        FacetIter::<i64, FacetLevelValueI64Codec>::new_reverse
+                    };
+                    for result in facet_fn(self.rtxn, self.index, field_id, documents_ids)? {
+                        let (_val, docids) = result?;
+                        limit_tmp = limit_tmp.saturating_sub(docids.len() as usize);
+                        output.push(docids);
+                        if limit_tmp == 0 { break }
+                    }
+                    Ok(output.into_iter().flatten().take(limit).collect())
                 }
             },
             FacetType::String => bail!("criteria facet type must be a number"),
         }
-        Ok(output.into_iter().flatten().take(limit).collect())
     }
 
     pub fn execute(&self) -> anyhow::Result<SearchResult> {
