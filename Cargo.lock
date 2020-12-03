@@ -1697,6 +1697,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "meilisearch-tokenizer"
+version = "0.1.0"
+source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.1.0#32b2aee7e4a819478226eab5525232f09dd61bf5"
+dependencies = [
+ "character_converter",
+ "cow-utils",
+ "deunicode",
+ "fst",
+ "jieba-rs",
+ "once_cell",
+ "slice-group-by",
+ "unicode-segmentation",
+ "whatlang",
+]
+
+[[package]]
 name = "meilisearch-types"
 version = "0.17.0"
 dependencies = [
