@@ -102,8 +102,6 @@ async fn placeholder_search_witch_crop() {
         "cropLength": 20
     });
 
-    println!("here");
-
     test_post_get_search!(server, query, |response, status_code| {
         assert_eq!(status_code, 200);
 

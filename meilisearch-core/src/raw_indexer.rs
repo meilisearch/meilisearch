@@ -14,10 +14,7 @@ const WORD_LENGTH_LIMIT: usize = 80;
 
 type Word = Vec<u8>; // TODO make it be a SmallVec
 
-pub struct RawIndexer<'a, A>
-where
-    A: AsRef<[u8]>
-{
+pub struct RawIndexer<'a, A> {
     word_limit: usize, // the maximum number of indexed words
     words_doc_indexes: BTreeMap<Word, Vec<DocIndex>>,
     docs_words: HashMap<DocumentId, Vec<Word>>,
@@ -73,25 +70,24 @@ where
         number_of_words
     }
 
-    pub fn index_text_seq<'s, I>(&mut self, id: DocumentId, indexed_pos: IndexedPos, iter: I)
+    pub fn index_text_seq<'s, I>(&mut self, id: DocumentId, indexed_pos: IndexedPos, text_iter: I)
     where
         I: IntoIterator<Item = &'s str>,
     {
         let mut byte_offset = 0;
         let mut word_offset = 0;
 
-        for s in iter.into_iter() {
+        for text in text_iter.into_iter() {
             let current_byte_offset = byte_offset;
             let current_word_offset = word_offset;
 
-            let analyzed_text = self.analyzer.analyze(s);
+            let analyzed_text = self.analyzer.analyze(text);
             let tokens = process_tokens(analyzed_text.tokens())
                 .map(|(i, mut t)| {
                     t.byte_start = t.byte_start + current_byte_offset;
                     t.byte_end = t.byte_end + current_byte_offset;
-                    (i, t)
+                    (i + current_word_offset, t)
                 })
-                .map(|(i, t)| (i + current_word_offset, t))
                 .enumerate();
 
             for (token_pos, (word_pos, token)) in tokens  {
@@ -143,21 +139,22 @@ where
 
 fn process_tokens<'a>(tokens: impl Iterator<Item = Token<'a>>) -> impl Iterator<Item = (usize, Token<'a>)> {
     tokens
-        .scan((0, None), |(offset, sepkind), token| {
+        .scan((0, None), |(offset, prev_kind), token| {
                 match token.kind {
                     TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
-                        *offset += match *sepkind {
+                        *offset += match *prev_kind {
                             Some(TokenKind::Separator(SeparatorKind::Hard)) => 8,
                             Some(_) => 1,
                             None => 0,
                         };
-                        *sepkind = Some(token.kind)
+                        *prev_kind = Some(token.kind)
                     }
                     TokenKind::Separator(SeparatorKind::Hard) => {
-                        *sepkind = Some(token.kind);
+                        *prev_kind = Some(token.kind);
                     }
-                    TokenKind::Separator(SeparatorKind::Soft) if sepkind.is_none() => {
-                        *sepkind = Some(token.kind);
+                    TokenKind::Separator(SeparatorKind::Soft)
+                        if *prev_kind != Some(TokenKind::Separator(SeparatorKind::Hard)) => {
+                        *prev_kind = Some(token.kind);
                     }
                     _ => (),
                 }
@@ -226,12 +223,12 @@ mod tests {
 
     #[test]
     fn test_process_token() {
-        let text = " Zut, l’aspirateur, j’ai oublié de l’éteindre !";
+        let text = " 為一包含一千多萬目詞的帶標記平衡語料庫";
         let stopwords = Set::default();
         let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stopwords));
         let analyzer = analyzer.analyze(text);
-        let tokens: Vec<_> = process_tokens(analyzer.tokens()).collect();
-        println!("tokens: {:?}", tokens);
+        let tokens: Vec<_> = process_tokens(analyzer.tokens()).map(|(_, t)| t.text().to_string()).collect();
+        assert_eq!(tokens, ["为", "一", "包含", "一千多万", "目", "词", "的", "带", "标记", "平衡", "语料库"]);
     }
 
     #[test]

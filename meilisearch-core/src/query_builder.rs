@@ -395,7 +395,6 @@ mod tests {
             let mut writer = db.main_write_txn().unwrap();
 
             let word = normalize_str(word);
-            println!("synonym: {}", word);
 
             let alternatives = self
                 .index
@@ -1261,7 +1260,6 @@ mod tests {
 
         let builder = store.query_builder();
         let SortResult { documents, .. } = builder.query(&reader, Some("telephone"), 0..20).unwrap();
-        println!("documents: {:#?}", documents);
         let mut iter = documents.into_iter();
 
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
@@ -1297,7 +1295,6 @@ mod tests {
         let builder = store.query_builder();
         let SortResult { documents, .. } = builder.query(&reader, Some("télephone"), 0..20).unwrap();
         let mut iter = documents.into_iter();
-        // this test was in the opposite order, I am not sure why...
         assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut iter = matches.into_iter();
             assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, .. }));
