@@ -8,7 +8,7 @@ use rayon::ThreadPool;
 use crate::update::index_documents::{Transform, IndexDocumentsMethod};
 use crate::update::{ClearDocuments, IndexDocuments, UpdateIndexingStep};
 use crate::facet::FacetType;
-use crate::{Index, FieldsIdsMap};
+use crate::{Index, FieldsIdsMap, Criterion};
 
 pub struct Settings<'a, 't, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -27,6 +27,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     searchable_fields: Option<Option<Vec<String>>>,
     displayed_fields: Option<Option<Vec<String>>>,
     faceted_fields: Option<HashMap<String, String>>,
+    criteria: Option<Option<Vec<String>>>,
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
@@ -45,6 +46,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             searchable_fields: None,
             displayed_fields: None,
             faceted_fields: None,
+            criteria: None,
         }
     }
 
@@ -68,6 +70,14 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         self.faceted_fields = Some(names_facet_types);
     }
 
+    pub fn reset_criteria(&mut self) {
+        self.criteria = Some(None);
+    }
+
+    pub fn set_criteria(&mut self, criteria: Vec<String>) {
+        self.criteria = Some(Some(criteria));
+    }
+
     pub fn execute<F>(self, progress_callback: F) -> anyhow::Result<()>
     where
         F: Fn(UpdateIndexingStep) + Sync
@@ -75,6 +85,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         let mut updated_searchable_fields = None;
         let mut updated_faceted_fields = None;
         let mut updated_displayed_fields = None;
+        let mut updated_criteria = None;
 
         // Construct the new FieldsIdsMap based on the searchable fields order.
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
@@ -113,9 +124,8 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             None => fields_ids_map.insert("id").context("field id limit reached")?,
         };
 
+        let current_faceted_fields = self.index.faceted_fields(self.wtxn)?;
         if let Some(fields_names_facet_types) = self.faceted_fields {
-            let current_faceted_fields = self.index.faceted_fields(self.wtxn)?;
-
             let mut faceted_fields = HashMap::new();
             for (name, sftype) in fields_names_facet_types {
                 let ftype = FacetType::from_str(&sftype).with_context(|| format!("parsing facet type {:?}", sftype))?;
@@ -144,6 +154,25 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
                     updated_displayed_fields = Some(Some(new_displayed_fields));
                 }
                 None => updated_displayed_fields = Some(None),
+            }
+        }
+
+        if let Some(criteria) = self.criteria {
+            match criteria {
+                Some(criteria_names) => {
+                    let mut new_criteria = Vec::new();
+                    for name in criteria_names {
+                        let criterion = Criterion::from_str(&mut fields_ids_map, &name)?;
+                        if let Some(fid) = criterion.field_id() {
+                            let name = fields_ids_map.name(fid).unwrap();
+                            let faceted_fields = updated_faceted_fields.as_ref().unwrap_or(&current_faceted_fields);
+                            ensure!(faceted_fields.contains_key(&fid), "criterion field {} must be faceted", name);
+                        }
+                        new_criteria.push(criterion);
+                    }
+                    updated_criteria = Some(Some(new_criteria));
+                },
+                None => updated_criteria = Some(None),
             }
         }
 
@@ -202,11 +231,16 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
         }
 
         if let Some(displayed_fields) = updated_displayed_fields {
-            // We write the displayed fields into the database here
-            // to make sure that the right fields are displayed.
             match displayed_fields {
                 Some(fields) => self.index.put_displayed_fields(self.wtxn, &fields)?,
                 None => self.index.delete_displayed_fields(self.wtxn).map(drop)?,
+            }
+        }
+
+        if let Some(criteria) = updated_criteria {
+            match criteria {
+                Some(criteria) => self.index.put_criteria(self.wtxn, &criteria)?,
+                None => self.index.delete_criteria(self.wtxn).map(drop)?,
             }
         }
 
