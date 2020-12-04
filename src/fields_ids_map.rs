@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
 use serde::{Serialize, Deserialize};
+use crate::FieldId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldsIdsMap {
-    names_ids: BTreeMap<String, u8>,
-    ids_names: BTreeMap<u8, String>,
-    next_id: Option<u8>,
+    names_ids: BTreeMap<String, FieldId>,
+    ids_names: BTreeMap<FieldId, String>,
+    next_id: Option<FieldId>,
 }
 
 impl FieldsIdsMap {
@@ -29,7 +30,7 @@ impl FieldsIdsMap {
 
     /// Returns the field id related to a field name, it will create a new field id if the
     /// name is not already known. Returns `None` if the maximum field id as been reached.
-    pub fn insert(&mut self, name: &str) -> Option<u8> {
+    pub fn insert(&mut self, name: &str) -> Option<FieldId> {
         match self.names_ids.get(name) {
             Some(id) => Some(*id),
             None => {
@@ -43,17 +44,17 @@ impl FieldsIdsMap {
     }
 
     /// Get the id of a field based on its name.
-    pub fn id(&self, name: &str) -> Option<u8> {
+    pub fn id(&self, name: &str) -> Option<FieldId> {
         self.names_ids.get(name).copied()
     }
 
     /// Get the name of a field based on its id.
-    pub fn name(&self, id: u8) -> Option<&str> {
+    pub fn name(&self, id: FieldId) -> Option<&str> {
         self.ids_names.get(&id).map(String::as_str)
     }
 
     /// Remove a field name and id based on its name.
-    pub fn remove(&mut self, name: &str) -> Option<u8> {
+    pub fn remove(&mut self, name: &str) -> Option<FieldId> {
         match self.names_ids.remove(name) {
             Some(id) => self.ids_names.remove_entry(&id).map(|(id, _)| id),
             None => None,
@@ -61,7 +62,7 @@ impl FieldsIdsMap {
     }
 
     /// Iterate over the ids and names in the ids order.
-    pub fn iter(&self) -> impl Iterator<Item=(u8, &str)> {
+    pub fn iter(&self) -> impl Iterator<Item=(FieldId, &str)> {
         self.ids_names.iter().map(|(id, name)| (*id, name.as_str()))
     }
 }

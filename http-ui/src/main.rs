@@ -243,6 +243,13 @@ struct Settings {
 
     #[serde(default)]
     faceted_attributes: Option<HashMap<String, String>>,
+
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none",
+    )]
+    criteria: Option<Option<Vec<String>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -397,6 +404,14 @@ async fn main() -> anyhow::Result<()> {
                     // We transpose the settings JSON struct into a real setting update.
                     if let Some(facet_types) = settings.faceted_attributes {
                         builder.set_faceted_fields(facet_types);
+                    }
+
+                    // We transpose the settings JSON struct into a real setting update.
+                    if let Some(criteria) = settings.criteria {
+                        match criteria {
+                            Some(criteria) => builder.set_criteria(criteria),
+                            None => builder.reset_criteria(),
+                        }
                     }
 
                     let result = builder.execute(|indexing_step| {

@@ -19,6 +19,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
             docid_word_positions,
             word_pair_proximity_docids,
             facet_field_id_value_docids,
+            field_id_docid_facet_values,
             documents,
         } = self.index;
 
@@ -41,6 +42,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         docid_word_positions.clear(self.wtxn)?;
         word_pair_proximity_docids.clear(self.wtxn)?;
         facet_field_id_value_docids.clear(self.wtxn)?;
+        field_id_docid_facet_values.clear(self.wtxn)?;
         documents.clear(self.wtxn)?;
 
         Ok(number_of_documents)

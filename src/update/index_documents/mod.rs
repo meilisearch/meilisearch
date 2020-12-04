@@ -21,6 +21,7 @@ use self::store::{Store, Readers};
 use self::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
     docid_word_positions_merge, documents_merge, facet_field_value_docids_merge,
+    field_id_docid_facet_values_merge,
 };
 pub use self::transform::{Transform, TransformOutput};
 
@@ -395,6 +396,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             let mut docid_word_positions_readers = Vec::with_capacity(readers.len());
             let mut words_pairs_proximities_docids_readers = Vec::with_capacity(readers.len());
             let mut facet_field_value_docids_readers = Vec::with_capacity(readers.len());
+            let mut field_id_docid_facet_values_readers = Vec::with_capacity(readers.len());
             let mut documents_readers = Vec::with_capacity(readers.len());
             readers.into_iter().for_each(|readers| {
                 let Readers {
@@ -403,6 +405,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                     docid_word_positions,
                     words_pairs_proximities_docids,
                     facet_field_value_docids,
+                    field_id_docid_facet_values,
                     documents
                 } = readers;
                 main_readers.push(main);
@@ -410,6 +413,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 docid_word_positions_readers.push(docid_word_positions);
                 words_pairs_proximities_docids_readers.push(words_pairs_proximities_docids);
                 facet_field_value_docids_readers.push(facet_field_value_docids);
+                field_id_docid_facet_values_readers.push(field_id_docid_facet_values);
                 documents_readers.push(documents);
             });
 
@@ -453,6 +457,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 docid_word_positions_readers,
                 documents_readers,
                 words_pairs_proximities_docids_readers,
+                field_id_docid_facet_values_readers,
             )) as anyhow::Result<_>
         })?;
 
@@ -461,6 +466,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             docid_word_positions_readers,
             documents_readers,
             words_pairs_proximities_docids_readers,
+            field_id_docid_facet_values_readers,
         ) = readers;
 
         let mut documents_ids = self.index.documents_ids(self.wtxn)?;
@@ -488,7 +494,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
         let mut database_count = 0;
-        let total_databases = 6;
+        let total_databases = 7;
 
         progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
             databases_seen: 0,
@@ -517,6 +523,21 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             documents_readers,
             documents_merge,
             write_method
+        )?;
+
+        database_count += 1;
+        progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
+            databases_seen: database_count,
+            total_databases,
+        });
+
+        debug!("Writing the field id docid facet values into LMDB on disk...");
+        merge_into_lmdb_database(
+            self.wtxn,
+            *self.index.field_id_docid_facet_values.as_polymorph(),
+            field_id_docid_facet_values_readers,
+            field_id_docid_facet_values_merge,
+            write_method,
         )?;
 
         database_count += 1;
