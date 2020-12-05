@@ -7,7 +7,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.28"
-grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3eb7ad9" }
+grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
 heed = "0.10.5"
 memmap = "0.7.0"
 milli = { path = ".." }
