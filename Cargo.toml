@@ -14,7 +14,7 @@ either = "1.6.1"
 flate2 = "1.0.17"
 fst = "0.4.4"
 fxhash = "0.2.1"
-grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3eb7ad9" }
+grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
 heed = { version = "0.10.5", default-features = false, features = ["lmdb", "sync-read-txn"] }
 human_format = "1.0.3"
 jemallocator = "0.3.2"
