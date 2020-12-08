@@ -83,8 +83,8 @@ where
             let analyzed_text = self.analyzer.analyze(text);
             let tokens = process_tokens(analyzed_text.tokens())
                 .map(|(i, mut t)| {
-                    t.byte_start = t.byte_start + current_byte_offset;
-                    t.byte_end = t.byte_end + current_byte_offset;
+                    t.byte_start += current_byte_offset;
+                    t.byte_end += current_byte_offset;
                     (i + current_word_offset, t)
                 })
                 .enumerate();
@@ -163,6 +163,7 @@ fn process_tokens<'a>(tokens: impl Iterator<Item = Token<'a>>) -> impl Iterator<
     .filter(|(_, t)| t.is_word())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn index_token(
     token: Token,
     word_pos: usize,
