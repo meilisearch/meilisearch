@@ -43,7 +43,6 @@ where
         }
     }
 
-
     pub fn index_text(&mut self, id: DocumentId, indexed_pos: IndexedPos, text: &str) -> usize {
         let mut number_of_words = 0;
 

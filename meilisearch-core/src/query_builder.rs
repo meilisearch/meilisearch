@@ -185,7 +185,9 @@ impl<'c, 'f, 'd, 'i> QueryBuilder<'c, 'f, 'd, 'i> {
             None => {
                 match self.index.main.sorted_document_ids_cache(reader)? {
                     // build result from cached document ids
-                    Some(docids) => { let mut sort_result = self.sort_result_from_docids(&docids, range);
+                    Some(docids) => {
+                        let mut sort_result = self.sort_result_from_docids(&docids, range);
+
                         if let Some(f) = self.facet_count_docids(reader)? {
                             sort_result.exhaustive_facets_count = Some(true);
                             // document ids are not sorted in natural order, we need to construct a new set

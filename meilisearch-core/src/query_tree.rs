@@ -8,7 +8,6 @@ use std::{cmp, fmt, iter::once};
 use fst::{IntoStreamer, Streamer};
 use itertools::{EitherOrBoth, merge_join_by};
 use log::debug;
-use meilisearch_tokenizer::Token;
 use meilisearch_tokenizer::analyzer::{Analyzer, AnalyzerConfig};
 use sdset::{Set, SetBuf, SetOperation};
 
@@ -177,12 +176,11 @@ const MAX_NGRAM: usize = 3;
 
 fn split_query_string<'a, A: AsRef<[u8]>>(s: &str, stop_words: &'a fst::Set<A>) -> Vec<(usize, String)> {
     // TODO: Use global instance instead
-    let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
-    analyzer
+    Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words))
         .analyze(s)
         .tokens()
         .filter(|t| t.is_word())
-        .map(| Token { word, .. }| word.to_string())
+        .map(|t| t.word.to_string())
         .enumerate()
         .collect()
 }
