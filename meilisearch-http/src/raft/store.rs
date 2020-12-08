@@ -449,10 +449,14 @@ impl RaftStorage<ClientRequest, ClientResponse> for RaftStore {
         Ok(())
     }
 
-    async fn do_log_compaction(&self, through: u64) -> Result<CurrentSnapshotData<Self::Snapshot>> {
+    async fn do_log_compaction(&self) -> Result<CurrentSnapshotData<Self::Snapshot>> {
         // it is necessary to do all the heed transation in a standalone function because heed
         // transations are not thread safe.
         info!("compacting log");
+        let through = { 
+            let txn = self.env.read_txn()?;
+            self.last_applied_log(&txn)?.unwrap_or_default()
+        };
         let snapshot = self.create_snapshot_and_compact(through)?;
         let snapshot_file = File::open(&snapshot.path).await?;
 

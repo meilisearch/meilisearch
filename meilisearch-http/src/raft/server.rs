@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use async_raft::error::ChangeConfigError;
-use async_raft::RaftStorage;
+use async_raft::{RaftStorage, error::ChangeConfigError};
 use bincode::{deserialize, serialize};
 use log::{info, warn, error};
 use tonic::{Code, Request, Response, Status};
@@ -15,7 +14,7 @@ use super::raft_service::{
 };
 use super::router::RaftRouter;
 use super::store::RaftStore;
-use super::InnerRaft;
+use super::{InnerRaft, ClientRequest};
 
 pub struct RaftServerService {
     raft: Arc<InnerRaft>,
@@ -79,11 +78,12 @@ impl RaftService for RaftServerService {
         &self,
         request: Request<ClientWriteRequest>,
     ) -> Result<Response<ClientWriteResponse>, Status> {
-        let request: async_raft::raft::ClientWriteRequest<super::ClientRequest> =
+        let request: ClientRequest =
             deserialize(&request.into_inner().data)
                 .map_err(|e| Status::new(Code::Internal, e.to_string()))?;
 
-        let data = match self.raft.client_write(request).await {
+        let write_request = async_raft::raft::ClientWriteRequest::new(request);
+        let data = match self.raft.client_write(write_request).await {
             Ok(ref response) => serialize(response).unwrap(),
             Err(e) => return Err(Status::new(Code::Internal, e.to_string())),
         };

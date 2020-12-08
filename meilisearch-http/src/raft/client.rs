@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use anyhow::Result;
 use async_raft::raft::{
-    AppendEntriesRequest, AppendEntriesResponse, ClientWriteRequest, ClientWriteResponse,
+    AppendEntriesRequest, AppendEntriesResponse, ClientWriteResponse,
     InstallSnapshotRequest, InstallSnapshotResponse, VoteRequest, VoteResponse,
 };
 use async_raft::{AppData, AppDataResponse, NodeId};
@@ -29,7 +29,7 @@ impl Client {
 
     pub async fn forward<D: AppData, R: AppDataResponse>(
         &mut self,
-        req: ClientWriteRequest<D>,
+        req: D,
     ) -> Result<ClientWriteResponse<R>> {
         let message = raft_service::ClientWriteRequest {
             data: serialize(&req)?,
