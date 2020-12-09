@@ -43,7 +43,7 @@ regex = "1.4.2"
 rustls = "0.18"
 serde = { version = "1.0.117", features = ["derive"] }
 serde_json = { version = "1.0.59", features = ["preserve_order"] }
-serde_qs = "0.7.0"
+serde_qs = "0.8.1"
 sha2 = "0.9.1"
 siphasher = "0.3.2"
 slice-group-by = "0.2.6"
