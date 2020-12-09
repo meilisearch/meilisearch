@@ -37,7 +37,7 @@ meilisearch-error = { path = "../meilisearch-error", version = "0.17.0" }
 meilisearch-schema = { path = "../meilisearch-schema", version = "0.17.0" }
 meilisearch-tokenizer = {path = "../meilisearch-tokenizer", version = "0.17.0"}
 mime = "0.3.16"
-once_cell = "1.4.1"
+once_cell = "1.5.2"
 rand = "0.7.3"
 regex = "1.4.1"
 rustls = "0.18"
