@@ -39,7 +39,7 @@ meilisearch-tokenizer = {path = "../meilisearch-tokenizer", version = "0.17.0"}
 mime = "0.3.16"
 once_cell = "1.5.2"
 rand = "0.7.3"
-regex = "1.4.1"
+regex = "1.4.2"
 rustls = "0.18"
 serde = { version = "1.0.117", features = ["derive"] }
 serde_json = { version = "1.0.59", features = ["preserve_order"] }
