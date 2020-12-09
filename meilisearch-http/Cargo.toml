@@ -22,7 +22,7 @@ actix-http = "2"
 actix-rt = "1"
 actix-service = "1.0.6"
 actix-web = { version = "3.1.0", features = ["rustls"] }
-bytes = "0.5.4"
+bytes = "0.6.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 crossbeam-channel = "0.5.0"
 env_logger = "0.8.2"
