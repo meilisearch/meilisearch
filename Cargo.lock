@@ -891,7 +891,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
 dependencies = [
  "atty",
- "humantime",
+ "humantime 1.3.0",
+ "log",
+ "regex",
+ "termcolor",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f26ecb66b4bdca6c1409b40fb255eefc2bd4f6d135dab3c3124f80ffa2a9661e"
+dependencies = [
+ "atty",
+ "humantime 2.0.1",
  "log",
  "regex",
  "termcolor",
@@ -1272,6 +1285,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "humantime"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c1ad908cc71012b7bea4d0c53ba96a8cba9962f048fa68d143376143d863b7a"
+
+[[package]]
 name = "hyper"
 version = "0.13.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1564,7 +1583,7 @@ dependencies = [
  "csv",
  "deunicode",
  "either",
- "env_logger",
+ "env_logger 0.8.2",
  "fst",
  "hashbrown",
  "heed",
@@ -1615,7 +1634,7 @@ dependencies = [
  "bytes",
  "chrono",
  "crossbeam-channel 0.5.0",
- "env_logger",
+ "env_logger 0.8.2",
  "flate2",
  "futures",
  "http",
@@ -2412,7 +2431,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b01b723fc1b0a0f9394ca1a8451daec6e20206d47f96c3dceea7fd11ec9eec0"
 dependencies = [
  "backtrace",
- "env_logger",
+ "env_logger 0.7.1",
  "failure",
  "hostname",
  "httpdate",
