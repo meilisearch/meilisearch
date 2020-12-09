@@ -84,11 +84,10 @@ async fn main() -> Result<(), MainError> {
     let http_server = HttpServer::new(move || {
         create_app(&data, enable_frontend)
             .wrap(
-                Cors::new()
+                Cors::default()
                     .send_wildcard()
                     .allowed_headers(vec!["content-type", "x-meili-api-key"])
                     .max_age(86_400) // 24h
-                    .finish(),
             )
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())

@@ -17,7 +17,7 @@ path = "src/main.rs"
 default = ["sentry"]
 
 [dependencies]
-actix-cors = "0.4.1"
+actix-cors = "0.5.3"
 actix-http = "2"
 actix-rt = "1"
 actix-service = "1.0.6"
