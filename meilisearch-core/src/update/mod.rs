@@ -212,8 +212,8 @@ pub fn next_update_id(
     Ok(new_update_id)
 }
 
-pub fn update_task<'a, 'b>(
-    writer: &'a mut heed::RwTxn<'b, MainT>,
+pub fn update_task<'a, 'b, 'c>(
+    writer: &'a mut heed::RwTxn<'b, 'c, MainT>,
     index: &store::Index,
     update_id: u64,
     update: Update,

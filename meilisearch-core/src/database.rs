@@ -22,11 +22,11 @@ type ArcSwapFn = arc_swap::ArcSwapOption<BoxUpdateFn>;
 
 type SerdeDatetime = SerdeBincode<DateTime<Utc>>;
 
-pub type MainWriter<'a> = heed::RwTxn<'a, MainT>;
-pub type MainReader = heed::RoTxn<MainT>;
+pub type MainWriter<'a, 'b> = heed::RwTxn<'a, 'b, MainT>;
+pub type MainReader<'a, 'b> = heed::RoTxn<'a, MainT>;
 
-pub type UpdateWriter<'a> = heed::RwTxn<'a, UpdateT>;
-pub type UpdateReader = heed::RoTxn<UpdateT>;
+pub type UpdateWriter<'a, 'b> = heed::RwTxn<'a, 'b, UpdateT>;
+pub type UpdateReader<'a> = heed::RoTxn<'a, UpdateT>;
 
 const LAST_UPDATE_KEY: &str = "last-update";
 

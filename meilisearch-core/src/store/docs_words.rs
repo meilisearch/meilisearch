@@ -33,7 +33,7 @@ impl DocsWords {
         self.docs_words.clear(writer)
     }
 
-    pub fn doc_words(self, reader: &heed::RoTxn<MainT>, document_id: DocumentId) -> ZResult<FstSetCow> {
+    pub fn doc_words<'a>(self, reader: &'a heed::RoTxn<'a, MainT>, document_id: DocumentId) -> ZResult<FstSetCow> {
         let document_id = BEU32::new(document_id.0);
         match self.docs_words.get(reader, &document_id)? {
             Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),

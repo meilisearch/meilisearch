@@ -51,7 +51,7 @@ impl From<heed::Error> for DeserializerError {
 
 pub struct Deserializer<'a> {
     pub document_id: DocumentId,
-    pub reader: &'a heed::RoTxn<MainT>,
+    pub reader: &'a heed::RoTxn<'a, MainT>,
     pub documents_fields: DocumentsFields,
     pub schema: &'a Schema,
     pub fields: Option<&'a HashSet<FieldId>>,

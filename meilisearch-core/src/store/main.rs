@@ -143,7 +143,7 @@ impl Main {
         self.put_external_docids(writer, &external_docids)
     }
 
-    pub fn external_docids(self, reader: &heed::RoTxn<MainT>) -> MResult<FstMapCow> {
+    pub fn external_docids<'a>(self, reader: &'a heed::RoTxn<'a, MainT>) -> MResult<FstMapCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, EXTERNAL_DOCIDS_KEY)? {
             Some(bytes) => Ok(fst::Map::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
             None => Ok(fst::Map::default().map_data(Cow::Owned).unwrap()),
@@ -155,7 +155,7 @@ impl Main {
         Ok(external_ids.get(external_docid).map(|id| DocumentId(id as u32)))
     }
 
-    pub fn words_fst(self, reader: &heed::RoTxn<MainT>) -> MResult<FstSetCow> {
+    pub fn words_fst<'a>(self, reader: &'a heed::RoTxn<'a, MainT>) -> MResult<FstSetCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, WORDS_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
             None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
@@ -170,7 +170,7 @@ impl Main {
         Ok(self.main.put::<_, Str, CowSlice<DocumentId>>(writer, SORTED_DOCUMENT_IDS_CACHE_KEY, documents_ids)?)
     }
 
-    pub fn sorted_document_ids_cache(self, reader: &heed::RoTxn<MainT>) -> MResult<Option<Cow<[DocumentId]>>> {
+    pub fn sorted_document_ids_cache<'a>(self, reader: &'a heed::RoTxn<'a, MainT>) -> MResult<Option<Cow<[DocumentId]>>> {
         Ok(self.main.get::<_, Str, CowSlice<DocumentId>>(reader, SORTED_DOCUMENT_IDS_CACHE_KEY)?)
     }
 
@@ -199,7 +199,7 @@ impl Main {
         Ok(self.main.put::<_, Str, ByteSlice>(writer, SYNONYMS_KEY, bytes)?)
     }
 
-    pub(crate) fn synonyms_fst(self, reader: &heed::RoTxn<MainT>) -> MResult<FstSetCow> {
+    pub(crate) fn synonyms_fst<'a>(self, reader: &'a heed::RoTxn<'a, MainT>) -> MResult<FstSetCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, SYNONYMS_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
             None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),
@@ -219,7 +219,7 @@ impl Main {
         Ok(self.main.put::<_, Str, ByteSlice>(writer, STOP_WORDS_KEY, bytes)?)
     }
 
-    pub(crate) fn stop_words_fst(self, reader: &heed::RoTxn<MainT>) -> MResult<FstSetCow> {
+    pub(crate) fn stop_words_fst<'a>(self, reader: &'a heed::RoTxn<'a, MainT>) -> MResult<FstSetCow> {
         match self.main.get::<_, Str, ByteSlice>(reader, STOP_WORDS_KEY)? {
             Some(bytes) => Ok(fst::Set::new(bytes).unwrap().map_data(Cow::Borrowed).unwrap()),
             None => Ok(fst::Set::default().map_data(Cow::Owned).unwrap()),

@@ -146,8 +146,8 @@ where A: AsRef<[u8]>,
     Ok(())
 }
 
-pub fn apply_addition<'a, 'b>(
-    writer: &'a mut heed::RwTxn<'b, MainT>,
+pub fn apply_addition<'a, 'b, 'c>(
+    writer: &'a mut heed::RwTxn<'b, 'c, MainT>,
     index: &store::Index,
     new_documents: Vec<IndexMap<String, Value>>,
     partial: bool
@@ -272,16 +272,16 @@ pub fn apply_addition<'a, 'b>(
     Ok(())
 }
 
-pub fn apply_documents_partial_addition<'a, 'b>(
-    writer: &'a mut heed::RwTxn<'b, MainT>,
+pub fn apply_documents_partial_addition<'a, 'b, 'c>(
+    writer: &'a mut heed::RwTxn<'b, 'c, MainT>,
     index: &store::Index,
     new_documents: Vec<IndexMap<String, Value>>,
 ) -> MResult<()> {
     apply_addition(writer, index, new_documents, true)
 }
 
-pub fn apply_documents_addition<'a, 'b>(
-    writer: &'a mut heed::RwTxn<'b, MainT>,
+pub fn apply_documents_addition<'a, 'b, 'c>(
+    writer: &'a mut heed::RwTxn<'b, 'c, MainT>,
     index: &store::Index,
     new_documents: Vec<IndexMap<String, Value>>,
 ) -> MResult<()> {

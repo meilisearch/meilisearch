@@ -61,7 +61,7 @@ pub trait Criterion {
 }
 
 pub struct ContextMut<'h, 'p, 'tag, 'txn, 'q> {
-    pub reader: &'h heed::RoTxn<MainT>,
+    pub reader: &'h heed::RoTxn<'h, MainT>,
     pub postings_lists: &'p mut SmallArena<'tag, PostingsListView<'txn>>,
     pub query_mapping: &'q HashMap<QueryId, Range<usize>>,
     pub documents_fields_counts_store: store::DocumentsFieldsCounts,
