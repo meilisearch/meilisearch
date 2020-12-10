@@ -130,12 +130,13 @@ impl SearchQuery {
                     restricted_attributes = available_attributes.clone();
                 } else {
                     restricted_attributes = HashSet::new();
+                    search_builder.attributes_to_retrieve(HashSet::new());
                     for attr in attributes_to_retrieve {
                         if available_attributes.contains(attr) {
                             restricted_attributes.insert(attr);
                             search_builder.add_retrievable_field(attr.to_string());
                         } else {
-                            warn!("The attributes {:?} present in attributesToCrop parameter doesn't exist", attr);
+                            warn!("The attributes {:?} present in attributesToRetrieve parameter doesn't exist", attr);
                         }
                     }
                 }
