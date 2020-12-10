@@ -193,9 +193,7 @@ impl<'a> SearchBuilder<'a> {
                 .index
                 .document(reader, Some(&all_attributes), doc.id)
                 .map_err(|e| Error::retrieve_document(doc.id.0, e))?
-                .ok_or(Error::internal(
-                    "Impossible to retrieve the document; Corrupted data",
-                ))?;
+                .unwrap_or_default();
 
             let mut formatted = document.iter()
                 .filter(|(key, _)| all_formatted.contains(key.as_str()))

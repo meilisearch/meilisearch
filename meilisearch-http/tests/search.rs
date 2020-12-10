@@ -554,6 +554,16 @@ async fn search_with_attributes_to_retrieve() {
     test_post_get_search!(server, query, |response, _status_code| {
         assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
     });
+
+    let query = json!({
+        "q": "cherry",
+        "limit": 1,
+        "attributesToRetrieve": [],
+    });
+
+    test_post_get_search!(server, query, |response, _status_code| {
+        assert_json_eq!(json!([{}]), response["hits"].clone(), ordered: false);
+    });
 }
 
 #[actix_rt::test]
