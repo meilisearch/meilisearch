@@ -22,23 +22,7 @@ async fn get(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let reader = data.db.main_read_txn()?;
-
-    let synonyms_list = index.main.synonyms(&reader)?;
-
-    let mut synonyms = IndexMap::new();
-    let index_synonyms = &index.synonyms;
-    for synonym in synonyms_list {
-        let list = index_synonyms.synonyms(&reader, synonym.as_bytes())?;
-        synonyms.insert(synonym, list);
-    }
-
-    Ok(HttpResponse::Ok().json(synonyms))
+    todo!()
 }
 
 #[post(
@@ -50,18 +34,7 @@ async fn update(
     path: web::Path<IndexParam>,
     body: web::Json<BTreeMap<String, Vec<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
-    let update_id = data.get_or_create_index(&path.index_uid, |index| {
-        let settings = SettingsUpdate {
-            synonyms: UpdateState::Update(body.into_inner()),
-            ..SettingsUpdate::default()
-        };
-
-        Ok(data
-            .db
-            .update_write(|w| index.settings_update(w, settings))?)
-    })?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+    todo!()
 }
 
 #[delete(
@@ -72,19 +45,5 @@ async fn delete(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let settings = SettingsUpdate {
-        synonyms: UpdateState::Clear,
-        ..SettingsUpdate::default()
-    };
-
-    let update_id = data
-        .db
-        .update_write(|w| index.settings_update(w, settings))?;
-
-    Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)))
+    todo!()
 }

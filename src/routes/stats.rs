@@ -32,30 +32,7 @@ async fn index_stats(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = data
-        .db
-        .open_index(&path.index_uid)
-        .ok_or(Error::index_not_found(&path.index_uid))?;
-
-    let reader = data.db.main_read_txn()?;
-
-    let number_of_documents = index.main.number_of_documents(&reader)?;
-
-    let fields_distribution = index.main.fields_distribution(&reader)?.unwrap_or_default();
-
-    let update_reader = data.db.update_read_txn()?;
-
-    let is_indexing =
-        data.db.is_indexing(&update_reader, &path.index_uid)?
-            .ok_or(Error::internal(
-                "Impossible to know if the database is indexing",
-            ))?;
-
-    Ok(HttpResponse::Ok().json(IndexStatsResponse {
-        number_of_documents,
-        is_indexing,
-        fields_distribution,
-    }))
+    todo!()
 }
 
 #[derive(Serialize)]
@@ -68,52 +45,7 @@ struct StatsResult {
 
 #[get("/stats", wrap = "Authentication::Private")]
 async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    let mut index_list = HashMap::new();
-
-    let reader = data.db.main_read_txn()?;
-    let update_reader = data.db.update_read_txn()?;
-
-    let indexes_set = data.db.indexes_uids();
-    for index_uid in indexes_set {
-        let index = data.db.open_index(&index_uid);
-        match index {
-            Some(index) => {
-                let number_of_documents = index.main.number_of_documents(&reader)?;
-
-                let fields_distribution = index.main.fields_distribution(&reader)?.unwrap_or_default();
-
-                let is_indexing = data.db.is_indexing(&update_reader, &index_uid)?.ok_or(
-                    Error::internal("Impossible to know if the database is indexing"),
-                )?;
-
-                let response = IndexStatsResponse {
-                    number_of_documents,
-                    is_indexing,
-                    fields_distribution,
-                };
-                index_list.insert(index_uid, response);
-            }
-            None => error!(
-                "Index {:?} is referenced in the indexes list but cannot be found",
-                index_uid
-            ),
-        }
-    }
-
-    let database_size = WalkDir::new(&data.db_path)
-        .into_iter()
-        .filter_map(|entry| entry.ok())
-        .filter_map(|entry| entry.metadata().ok())
-        .filter(|metadata| metadata.is_file())
-        .fold(0, |acc, m| acc + m.len());
-
-    let last_update = data.db.last_update(&reader)?;
-
-    Ok(HttpResponse::Ok().json(StatsResult {
-        database_size,
-        last_update,
-        indexes: index_list,
-    }))
+    todo!()
 }
 
 #[derive(Serialize)]
@@ -126,9 +58,5 @@ struct VersionResponse {
 
 #[get("/version", wrap = "Authentication::Private")]
 async fn get_version() -> HttpResponse {
-    HttpResponse::Ok().json(VersionResponse {
-        commit_sha: env!("VERGEN_SHA").to_string(),
-        build_date: env!("VERGEN_BUILD_TIMESTAMP").to_string(),
-        pkg_version: env!("CARGO_PKG_VERSION").to_string(),
-    })
+    todo!()
 }
