@@ -177,8 +177,12 @@ impl<'a> Search<'a> {
                         }
                     }
                     docids_values.sort_unstable_by_key(|(_, value)| *value);
-                    let iter = docids_values.into_iter().map(|(id, _)| id).take(limit);
-                    if ascending { Ok(iter.collect()) } else { Ok(iter.rev().collect()) }
+                    let iter = docids_values.into_iter().map(|(id, _)| id);
+                    if ascending {
+                        Ok(iter.take(limit).collect())
+                    } else {
+                        Ok(iter.rev().take(limit).collect())
+                    }
                 } else {
                     let facet_fn = if ascending {
                         FacetIter::<f64, FacetLevelValueF64Codec>::new
@@ -208,8 +212,12 @@ impl<'a> Search<'a> {
                         }
                     }
                     docids_values.sort_unstable_by_key(|(_, value)| *value);
-                    let iter = docids_values.into_iter().map(|(id, _)| id).take(limit);
-                    if ascending { Ok(iter.collect()) } else { Ok(iter.rev().collect()) }
+                    let iter = docids_values.into_iter().map(|(id, _)| id);
+                    if ascending {
+                        Ok(iter.take(limit).collect())
+                    } else {
+                        Ok(iter.rev().take(limit).collect())
+                    }
                 } else {
                     let facet_fn = if ascending {
                         FacetIter::<i64, FacetLevelValueI64Codec>::new
