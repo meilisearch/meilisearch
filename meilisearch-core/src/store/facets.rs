@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::mem;
 
-use heed::{RwTxn, RoTxn, RoRange, types::Str, BytesEncode, BytesDecode};
+use heed::{RwTxn, RoTxn, RoPrefix, types::Str, BytesEncode, BytesDecode};
 use sdset::{SetBuf, Set, SetOperation};
 
 use meilisearch_types::DocumentId;
@@ -62,7 +62,7 @@ impl Facets {
         Ok(self.facets.put(writer, &facet_key, &(facet_value, doc_ids))?)
     }
 
-    pub fn field_document_ids<'txn>(&self, reader: &'txn RoTxn<MainT>, field_id: FieldId) -> MResult<RoRange<'txn, FacetKey, FacetData>> {
+    pub fn field_document_ids<'txn>(&self, reader: &'txn RoTxn<MainT>, field_id: FieldId) -> MResult<RoPrefix<'txn, FacetKey, FacetData>> {
         Ok(self.facets.prefix_iter(reader, &FacetKey::new(field_id, String::new()))?)
     }
 

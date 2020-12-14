@@ -47,7 +47,7 @@ async fn main() -> Result<(), MainError> {
             }
         }
         "development" => {
-            env_logger::from_env(env_logger::Env::default().default_filter_or("info")).init();
+            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
         }
         _ => unreachable!(),
     }
@@ -84,11 +84,10 @@ async fn main() -> Result<(), MainError> {
     let http_server = HttpServer::new(move || {
         create_app(&data, enable_frontend)
             .wrap(
-                Cors::new()
+                Cors::default()
                     .send_wildcard()
                     .allowed_headers(vec!["content-type", "x-meili-api-key"])
                     .max_age(86_400) // 24h
-                    .finish(),
             )
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
