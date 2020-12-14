@@ -479,7 +479,7 @@ fn calculate_highlights(
     for (attribute, matches) in matches.iter() {
         if attributes_to_highlight.contains(attribute) {
             if let Some(Value::String(value)) = document.get(attribute) {
-                let value: Vec<_> = value.chars().collect();
+                let value = value.clone();
                 let mut highlighted_value = String::new();
                 let mut index = 0;
 
@@ -492,16 +492,16 @@ fn calculate_highlights(
                     let before = value.get(index..m.start);
                     let highlighted = value.get(m.start..(m.start + m.length));
                     if let (Some(before), Some(highlighted)) = (before, highlighted) {
-                        highlighted_value.extend(before);
+                        highlighted_value.push_str(before);
                         highlighted_value.push_str("<em>");
-                        highlighted_value.extend(highlighted);
+                        highlighted_value.push_str(highlighted);
                         highlighted_value.push_str("</em>");
                         index = m.start + m.length;
                     } else {
                         error!("value: {:?}; index: {:?}, match: {:?}", value, index, m);
                     }
                 }
-                highlighted_value.extend(value[index..].iter());
+                highlighted_value.push_str(&value[index..]);
                 highlight_result.insert(attribute.to_string(), Value::String(highlighted_value));
             };
         }

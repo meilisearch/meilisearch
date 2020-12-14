@@ -199,8 +199,8 @@ fn index_token(
 
 fn token_to_docindex(id: DocumentId, indexed_pos: IndexedPos, token: &Token, word_index: usize) -> Option<DocIndex> {
     let word_index = u16::try_from(word_index).ok()?;
-    let char_index = u16::try_from(token.char_index).ok()?;
-    let char_length = u16::try_from(token.word.chars().count()).ok()?;
+    let char_index = u16::try_from(token.byte_start).ok()?;
+    let char_length = u16::try_from(token.word.len()).ok()?;
 
     let docindex = DocIndex {
         document_id: id,
