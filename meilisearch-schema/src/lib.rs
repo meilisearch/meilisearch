@@ -1,9 +1,10 @@
 mod error;
 mod fields_map;
 mod schema;
+mod position_map;
 
 pub use error::{Error, SResult};
-pub use fields_map::FieldsMap;
+use fields_map::FieldsMap;
 pub use schema::Schema;
 use serde::{Deserialize, Serialize};
 use zerocopy::{AsBytes, FromBytes};
