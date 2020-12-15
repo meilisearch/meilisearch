@@ -13,7 +13,7 @@ static RANKING_RULE_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
     regex::Regex::new(r"(asc|desc)\(([a-zA-Z0-9-_]*)\)").unwrap()
 });
 
-#[derive(Default, Clone, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Settings {
     #[serde(default, deserialize_with = "deserialize_some")]

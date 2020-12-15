@@ -126,13 +126,13 @@ where A: AsRef<[u8]>,
     let serialized = serde_json::to_vec(value)?;
     documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
 
-    if let Some(indexed_pos) = schema.is_indexed(field_id) {
-        let number_of_words = index_value(indexer, document_id, *indexed_pos, value);
+    if let Some(indexed_pos) = schema.is_searchable(field_id) {
+        let number_of_words = index_value(indexer, document_id, indexed_pos, value);
         if let Some(number_of_words) = number_of_words {
             documents_fields_counts.put_document_field_count(
                 writer,
                 document_id,
-                *indexed_pos,
+                indexed_pos,
                 number_of_words as u16,
             )?;
         }
@@ -228,7 +228,7 @@ pub fn apply_addition<'a, 'b, 'c>(
     for (document_id, document) in &documents_additions {
         // For each key-value pair in the document.
         for (attribute, value) in document {
-            let field_id = schema.insert_and_index(&attribute)?;
+            let (field_id, _) = schema.insert_with_position(&attribute)?;
             index_document(
                 writer,
                 index.documents_fields,

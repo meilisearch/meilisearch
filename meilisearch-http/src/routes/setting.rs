@@ -523,11 +523,11 @@ async fn delete_attributes_for_faceting(
 }
 
 fn get_indexed_attributes(schema: &Schema) -> Vec<String> {
-    if schema.is_indexed_all() {
+    if schema.is_searchable_all() {
         ["*"].iter().map(|s| s.to_string()).collect()
     } else {
         schema
-            .indexed_name()
+            .searchable_names()
             .iter()
             .map(|s| s.to_string())
             .collect()
@@ -539,7 +539,7 @@ fn get_displayed_attributes(schema: &Schema) -> BTreeSet<String> {
         ["*"].iter().map(|s| s.to_string()).collect()
     } else {
         schema
-            .displayed_name()
+            .displayed_names()
             .iter()
             .map(|s| s.to_string())
             .collect()

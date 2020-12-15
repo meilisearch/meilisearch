@@ -71,14 +71,14 @@ pub fn apply_settings_update(
     match settings.searchable_attributes.clone() {
         UpdateState::Update(v) => {
             if v.iter().any(|e| e == "*") || v.is_empty() {
-                schema.set_all_fields_as_indexed();
+                schema.set_all_searchable();
             } else {
-                schema.update_indexed(v)?;
+                schema.update_searchable(v)?;
             }
             must_reindex = true;
         },
         UpdateState::Clear => {
-            schema.set_all_fields_as_indexed();
+            schema.set_all_searchable();
             must_reindex = true;
         },
         UpdateState::Nothing => (),
@@ -86,13 +86,13 @@ pub fn apply_settings_update(
     match settings.displayed_attributes.clone() {
         UpdateState::Update(v) => {
             if v.contains("*") || v.is_empty() {
-                schema.set_all_fields_as_displayed();
+                schema.set_all_displayed();
             } else {
                 schema.update_displayed(v)?
             }
         },
         UpdateState::Clear => {
-            schema.set_all_fields_as_displayed();
+            schema.set_all_displayed();
         },
         UpdateState::Nothing => (),
     }

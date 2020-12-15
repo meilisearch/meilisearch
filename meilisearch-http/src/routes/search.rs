@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, BTreeSet};
 
 use actix_web::{get, post, web, HttpResponse};
 use log::warn;
@@ -120,8 +120,8 @@ impl SearchQuery {
             search_builder.limit(limit);
         }
 
-        let available_attributes = schema.displayed_name();
-        let mut restricted_attributes: HashSet<&str>;
+        let available_attributes = schema.displayed_names();
+        let mut restricted_attributes: BTreeSet<&str>;
         match &self.attributes_to_retrieve {
             Some(attributes_to_retrieve) => {
                 let attributes_to_retrieve: HashSet<&str> =
@@ -129,7 +129,7 @@ impl SearchQuery {
                 if attributes_to_retrieve.contains("*") {
                     restricted_attributes = available_attributes.clone();
                 } else {
-                    restricted_attributes = HashSet::new();
+                    restricted_attributes = BTreeSet::new();
                     search_builder.attributes_to_retrieve(HashSet::new());
                     for attr in attributes_to_retrieve {
                         if available_attributes.contains(attr) {

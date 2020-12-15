@@ -415,8 +415,7 @@ mod tests {
                 let mut final_indexes = Vec::new();
                 for index in indexes {
                     let name = index.attribute.to_string();
-                    schema.insert(&name).unwrap();
-                    let indexed_pos = schema.set_indexed(&name).unwrap().1;
+                    let indexed_pos = schema.insert_with_position(&name).unwrap().1;
                     let index = DocIndex {
                         attribute: indexed_pos.0,
                         ..*index
@@ -447,7 +446,7 @@ mod tests {
                     .postings_lists
                     .put_postings_list(&mut writer, &word, &postings_list)
                     .unwrap();
-            }
+                }
 
             for ((docid, attr, _), count) in fields_counts {
                 let prev = index
@@ -461,7 +460,7 @@ mod tests {
                     .documents_fields_counts
                     .put_document_field_count(&mut writer, docid, IndexedPos(attr), prev + count)
                     .unwrap();
-            }
+                }
 
             writer.commit().unwrap();
 
