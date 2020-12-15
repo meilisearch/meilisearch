@@ -524,7 +524,7 @@ async fn delete_attributes_for_faceting(
 
 fn get_indexed_attributes(schema: &Schema) -> Vec<String> {
     if schema.is_searchable_all() {
-        ["*"].iter().map(|s| s.to_string()).collect()
+        vec!["*".to_string()]
     } else {
         schema
             .searchable_names()

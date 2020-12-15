@@ -132,8 +132,6 @@ async fn get_dump_status_should_return_done() {
 
     let (value, status_code) = server.trigger_dump().await;
 
-    println!("value: {:#?}", value);
-
     assert_eq!(status_code, 202);
 
     let dump_uid = value["uid"].as_str().unwrap().to_string();

@@ -240,9 +240,6 @@ mod test {
     }
 
     #[test]
-    fn test_insert_with_position_non_all_searchable_attributes() {}
-
-    #[test]
     fn test_insert() {
         let mut schema = Schema::default();
         let field_id = schema.insert("foo").unwrap();
