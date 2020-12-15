@@ -1789,8 +1789,6 @@ async fn update_documents_with_facet_distribution() {
     server.create_index(body).await;
     let settings = json!({
         "attributesForFaceting": ["genre"],
-        "displayedAttributes": ["genre"],
-        "searchableAttributes": ["genre"]
     });
     server.update_all_settings(settings).await;
     let update1 = json!([
