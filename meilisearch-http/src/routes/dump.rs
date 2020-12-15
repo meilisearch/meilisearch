@@ -45,7 +45,7 @@ async fn get_dump_status(
     let dumps_dir = Path::new(&data.dumps_dir);
     let dump_uid = &path.dump_uid;
 
-    if let Some(resume) = DumpInfo::get_current() {
+    if let Some(resume) = data.get_current_dump_info() {
         if &resume.uid == dump_uid {
             return Ok(HttpResponse::Ok().json(resume));
         }
