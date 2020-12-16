@@ -178,7 +178,7 @@ impl<'a> SearchBuilder<'a> {
                 all_attributes.extend(&all_formatted);
             },
             None => {
-                all_attributes.extend(schema.displayed_name());
+                all_attributes.extend(schema.displayed_names());
                 // If we specified at least one attribute to highlight or crop then
                 // all available attributes will be returned in the _formatted field.
                 if self.attributes_to_highlight.is_some() || self.attributes_to_crop.is_some() {
@@ -445,7 +445,7 @@ fn calculate_matches(
                     continue;
                 }
             }
-            if !schema.displayed_name().contains(attribute) {
+            if !schema.displayed_names().contains(&attribute) {
                 continue;
             }
             if let Some(pos) = matches_result.get_mut(attribute) {

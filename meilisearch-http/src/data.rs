@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use meilisearch_core::{Database, DatabaseOptions, Index};
 use sha2::Digest;
@@ -9,6 +9,7 @@ use sha2::Digest;
 use crate::error::{Error as MSError, ResponseError};
 use crate::index_update_callback;
 use crate::option::Opt;
+use crate::dump::DumpInfo;
 
 #[derive(Clone)]
 pub struct Data {
@@ -32,6 +33,7 @@ pub struct DataInner {
     pub api_keys: ApiKeys,
     pub server_pid: u32,
     pub http_payload_size_limit: usize,
+    pub current_dump: Arc<Mutex<Option<DumpInfo>>>,
 }
 
 #[derive(Clone)]
@@ -82,6 +84,8 @@ impl Data {
 
         api_keys.generate_missing_api_keys();
 
+        let current_dump = Arc::new(Mutex::new(None));
+
         let inner_data = DataInner {
             db: db.clone(),
             db_path,
@@ -90,6 +94,7 @@ impl Data {
             api_keys,
             server_pid,
             http_payload_size_limit,
+            current_dump,
         };
 
         let data = Data {
@@ -133,6 +138,14 @@ impl Data {
         })?;
 
         Ok(created_index)
+    }
+
+    pub fn get_current_dump_info(&self) -> Option<DumpInfo> {
+        self.current_dump.lock().unwrap().clone()
+    }
+
+    pub fn set_current_dump_info(&self, dump_info: DumpInfo) {
+        self.current_dump.lock().unwrap().replace(dump_info);
     }
 
     pub fn get_or_create_index<F, R>(&self, uid: &str, f: F) -> Result<R, ResponseError>

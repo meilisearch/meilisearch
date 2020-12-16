@@ -350,7 +350,7 @@ impl Database {
                 index.main.put_name(&mut writer, name)?;
                 index.main.put_created_at(&mut writer)?;
                 index.main.put_updated_at(&mut writer)?;
-                index.main.put_schema(&mut writer, &Schema::new())?;
+                index.main.put_schema(&mut writer, &Schema::default())?;
 
                 let env_clone = self.env.clone();
                 let update_env_clone = self.update_env.clone();

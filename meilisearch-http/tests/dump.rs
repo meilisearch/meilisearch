@@ -367,20 +367,10 @@ async fn dump_index_updates_should_be_valid() {
     compression::from_tar_gz(&dumps_dir.join(&format!("{}.dump", uid)), tmp_dir_path).unwrap();
 
     let file = File::open(tmp_dir_path.join("test").join("updates.jsonl")).unwrap();
-    let mut updates = read_all_jsonline(file);
+    let updates = read_all_jsonline(file);
 
-
-    // hotfix until #943 is fixed (https://github.com/meilisearch/MeiliSearch/issues/943)
-    updates.as_array_mut().unwrap()
-            .get_mut(0).unwrap()
-            .get_mut("type").unwrap()
-            .get_mut("settings").unwrap()
-            .get_mut("displayed_attributes").unwrap()
-            .get_mut("Update").unwrap()
-            .as_array_mut().unwrap().sort_by(|a, b| a.as_str().cmp(&b.as_str()));
-
-    eprintln!("{}\n", updates.to_string());
-    eprintln!("{}", expected.to_string());
+    eprintln!("{}\n", updates);
+    eprintln!("{}", expected);
     assert_json_include!(expected: expected, actual: updates);
 }
  

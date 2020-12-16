@@ -4,22 +4,22 @@ use slice_group_by::StrGroupBy;
 use std::iter::Peekable;
 
 pub fn is_cjk(c: char) -> bool {
-    (c >= '\u{1100}' && c <= '\u{11ff}')  // Hangul Jamo
-        || (c >= '\u{2e80}' && c <= '\u{2eff}')  // CJK Radicals Supplement
-        || (c >= '\u{2f00}' && c <= '\u{2fdf}') // Kangxi radical
-        || (c >= '\u{3000}' && c <= '\u{303f}') // Japanese-style punctuation
-        || (c >= '\u{3040}' && c <= '\u{309f}') // Japanese Hiragana
-        || (c >= '\u{30a0}' && c <= '\u{30ff}') // Japanese Katakana
-        || (c >= '\u{3100}' && c <= '\u{312f}')
-        || (c >= '\u{3130}' && c <= '\u{318F}') // Hangul Compatibility Jamo
-        || (c >= '\u{3200}' && c <= '\u{32ff}') // Enclosed CJK Letters and Months
-        || (c >= '\u{3400}' && c <= '\u{4dbf}') // CJK Unified Ideographs Extension A
-        || (c >= '\u{4e00}' && c <= '\u{9fff}') // CJK Unified Ideographs
-        || (c >= '\u{a960}' && c <= '\u{a97f}') // Hangul Jamo Extended-A
-        || (c >= '\u{ac00}' && c <= '\u{d7a3}') // Hangul Syllables
-        || (c >= '\u{d7b0}' && c <= '\u{d7ff}') // Hangul Jamo Extended-B
-        || (c >= '\u{f900}' && c <= '\u{faff}') // CJK Compatibility Ideographs
-        || (c >= '\u{ff00}' && c <= '\u{ffef}') // Full-width roman characters and half-width katakana
+    ('\u{1100}'..='\u{11ff}').contains(&c)
+        || ('\u{2e80}'..='\u{2eff}').contains(&c)  // CJK Radicals Supplement
+        || ('\u{2f00}'..='\u{2fdf}').contains(&c) // Kangxi radical
+        || ('\u{3000}'..='\u{303f}').contains(&c) // Japanese-style punctuation
+        || ('\u{3040}'..='\u{309f}').contains(&c) // Japanese Hiragana
+        || ('\u{30a0}'..='\u{30ff}').contains(&c) // Japanese Katakana
+        || ('\u{3100}'..='\u{312f}').contains(&c)
+        || ('\u{3130}'..='\u{318F}').contains(&c) // Hangul Compatibility Jamo
+        || ('\u{3200}'..='\u{32ff}').contains(&c) // Enclosed CJK Letters and Months
+        || ('\u{3400}'..='\u{4dbf}').contains(&c) // CJK Unified Ideographs Extension A
+        || ('\u{4e00}'..='\u{9fff}').contains(&c) // CJK Unified Ideographs
+        || ('\u{a960}'..='\u{a97f}').contains(&c) // Hangul Jamo Extended-A
+        || ('\u{ac00}'..='\u{d7a3}').contains(&c) // Hangul Syllables
+        || ('\u{d7b0}'..='\u{d7ff}').contains(&c) // Hangul Jamo Extended-B
+        || ('\u{f900}'..='\u{faff}').contains(&c) // CJK Compatibility Ideographs
+        || ('\u{ff00}'..='\u{ffef}').contains(&c) // Full-width roman characters and half-width katakana
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
