@@ -138,6 +138,7 @@ where
 
 fn process_tokens<'a>(tokens: impl Iterator<Item = Token<'a>>) -> impl Iterator<Item = (usize, Token<'a>)> {
     tokens
+        .skip_while(|token| !token.is_word())
         .scan((0, None), |(offset, prev_kind), token| {
                 match token.kind {
                     TokenKind::Word | TokenKind::StopWord | TokenKind::Unknown => {
