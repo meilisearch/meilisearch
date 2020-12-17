@@ -81,6 +81,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-compression"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb1ff21a63d3262af46b9f33a826a8d134e2d0d9b2179c86034948b732ea8b2a"
+dependencies = [
+ "flate2",
+ "futures-core",
+ "memchr",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -745,6 +758,7 @@ dependencies = [
  "anyhow",
  "askama",
  "askama_warp",
+ "async-compression",
  "bytes",
  "flate2",
  "futures",

@@ -10,6 +10,7 @@ use std::time::Instant;
 use std::{mem, io};
 
 use askama_warp::Template;
+use async_compression::tokio_02::write::GzipEncoder;
 use flate2::read::GzDecoder;
 use futures::stream;
 use futures::{FutureExt, StreamExt};
@@ -340,7 +341,7 @@ async fn main() -> anyhow::Result<()> {
                         otherwise => panic!("invalid indexing method {:?}", otherwise),
                     };
 
-                    let gzipped = false;
+                    let gzipped = true;
                     let reader = if gzipped {
                         Box::new(GzDecoder::new(content))
                     } else {
@@ -704,13 +705,17 @@ async fn main() -> anyhow::Result<()> {
     ) -> Result<impl warp::Reply, warp::Rejection>
     {
         let file = tokio::task::block_in_place(tempfile::tempfile).unwrap();
-        let mut file = TFile::from_std(file);
+        let file = TFile::from_std(file);
+        let mut encoder = GzipEncoder::new(file);
 
         while let Some(result) = stream.next().await {
             let bytes = result.unwrap().to_bytes();
-            file.write_all(&bytes[..]).await.unwrap();
+            encoder.write_all(&bytes[..]).await.unwrap();
         }
 
+        encoder.shutdown().await.unwrap();
+        let mut file = encoder.into_inner();
+        file.sync_all().await.unwrap();
         let file = file.into_std().await;
         let mmap = unsafe { memmap::Mmap::map(&file).unwrap() };
 

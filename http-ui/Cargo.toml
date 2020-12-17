@@ -7,6 +7,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.28"
+async-compression = { version = "0.3.6", features = ["gzip", "tokio-02"] }
 grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
 heed = "0.10.5"
 memmap = "0.7.0"
