@@ -140,7 +140,7 @@ fn process_tokens<'a>(tokens: impl Iterator<Item = Token<'a>>) -> impl Iterator<
     tokens
         .scan((0, None), |(offset, prev_kind), token| {
                 match token.kind {
-                    TokenKind::Word | TokenKind::StopWord | TokenKind::Any => {
+                    TokenKind::Word | TokenKind::StopWord | TokenKind::Unknown => {
                         *offset += match *prev_kind {
                             Some(TokenKind::Separator(SeparatorKind::Hard)) => 8,
                             Some(_) => 1,
@@ -227,7 +227,7 @@ mod tests {
         let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stopwords));
         let analyzer = analyzer.analyze(text);
         let tokens: Vec<_> = process_tokens(analyzer.tokens()).map(|(_, t)| t.text().to_string()).collect();
-        assert_eq!(tokens, ["为", "一", "包含", "一千多万", "目", "词", "的", "带", "标记", "平衡", "语料库"]);
+        assert_eq!(tokens, ["为", "一", "包含", "一千多万", "目词", "的", "带", "标记", "平衡", "语料库"]);
     }
 
     #[test]
