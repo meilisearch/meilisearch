@@ -11,6 +11,7 @@ use std::{mem, io};
 
 use askama_warp::Template;
 use async_compression::tokio_02::write::GzipEncoder;
+use byte_unit::Byte;
 use flate2::read::GzDecoder;
 use futures::stream;
 use futures::{FutureExt, StreamExt};
@@ -44,13 +45,13 @@ pub struct Opt {
 
     /// The maximum size the database can take on disk. It is recommended to specify
     /// the whole disk space (value must be a multiple of a page size).
-    #[structopt(long = "db-size", default_value = "107374182400")] // 100 GB
-    database_size: usize,
+    #[structopt(long = "db-size", default_value = "100 GiB")]
+    database_size: Byte,
 
     /// The maximum size the database that stores the updates can take on disk. It is recommended
     /// to specify the whole disk space (value must be a multiple of a page size).
-    #[structopt(long = "udb-size", default_value = "10737418240")] // 10 GB
-    update_database_size: usize,
+    #[structopt(long = "udb-size", default_value = "10 GiB")]
+    update_database_size: Byte,
 
     /// Disable document highlighting on the dashboard.
     #[structopt(long)]
@@ -84,8 +85,8 @@ pub struct IndexerOpt {
     ///
     /// It is automatically split by the number of jobs e.g. if you use 7 jobs
     /// and 7 GB of max memory, each thread will use a maximum of 1 GB.
-    #[structopt(long, default_value = "7516192768")] // 7 GB
-    pub max_memory: usize,
+    #[structopt(long, default_value = "7 GiB")]
+    pub max_memory: Byte,
 
     /// Size of the linked hash map cache when indexing.
     /// The bigger it is, the faster the indexing is but the more memory it takes.
@@ -108,8 +109,8 @@ pub struct IndexerOpt {
     ///
     /// File fusing must only be enable on file systems that support the `FALLOC_FL_COLLAPSE_RANGE`,
     /// (i.e. ext4 and XFS). File fusing will only work if the `enable-chunk-fusing` is set.
-    #[structopt(long, default_value = "4294967296")] // 4 GB
-    pub chunk_fusing_shrink_size: u64,
+    #[structopt(long, default_value = "4 GiB")]
+    pub chunk_fusing_shrink_size: Byte,
 
     /// Enable the chunk fusing or not, this reduces the amount of disk used by a factor of 2.
     #[structopt(long)]
@@ -281,7 +282,7 @@ async fn main() -> anyhow::Result<()> {
 
     create_dir_all(&opt.database)?;
     let mut options = EnvOpenOptions::new();
-    options.map_size(opt.database_size);
+    options.map_size(opt.database_size.get_bytes() as usize);
 
     // Setup the global thread pool
     let jobs = opt.indexer.indexing_jobs.unwrap_or(0);
@@ -293,7 +294,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Setup the LMDB based update database.
     let mut update_store_options = EnvOpenOptions::new();
-    update_store_options.map_size(opt.update_database_size);
+    update_store_options.map_size(opt.update_database_size.get_bytes() as usize);
 
     let update_store_path = opt.database.join("updates.mdb");
     create_dir_all(&update_store_path)?;
@@ -316,10 +317,10 @@ async fn main() -> anyhow::Result<()> {
             }
             update_builder.thread_pool(GLOBAL_THREAD_POOL.get().unwrap());
             update_builder.log_every_n(indexer_opt_cloned.log_every_n);
-            update_builder.max_memory(indexer_opt_cloned.max_memory);
+            update_builder.max_memory(indexer_opt_cloned.max_memory.get_bytes() as usize);
             update_builder.linked_hash_map_size(indexer_opt_cloned.linked_hash_map_size);
             update_builder.chunk_compression_type(indexer_opt_cloned.chunk_compression_type);
-            update_builder.chunk_fusing_shrink_size(indexer_opt_cloned.chunk_fusing_shrink_size);
+            update_builder.chunk_fusing_shrink_size(indexer_opt_cloned.chunk_fusing_shrink_size.get_bytes());
 
             // we extract the update type and execute the update itself.
             let result: anyhow::Result<()> = match meta {

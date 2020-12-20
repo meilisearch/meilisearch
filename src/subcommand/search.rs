@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::Context;
+use byte_unit::Byte;
 use heed::EnvOpenOptions;
 use log::debug;
 use structopt::StructOpt;
@@ -21,8 +22,8 @@ pub struct Opt {
 
     /// The maximum size the database can take on disk. It is recommended to specify
     /// the whole disk space (value must be a multiple of a page size).
-    #[structopt(long = "db-size", default_value = "107374182400")] // 100 GB
-    database_size: usize,
+    #[structopt(long = "db-size", default_value = "100 GiB")]
+    database_size: Byte,
 
     /// Verbose mode (-v, -vv, -vvv, etc.)
     #[structopt(short, long, parse(from_occurrences))]
@@ -41,7 +42,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
 
     std::fs::create_dir_all(&opt.database)?;
     let mut options = EnvOpenOptions::new();
-    options.map_size(opt.database_size);
+    options.map_size(opt.database_size.get_bytes() as usize);
 
     // Open the LMDB database.
     let index = Index::new(options, &opt.database)?;
