@@ -10,7 +10,6 @@ use std::time::Instant;
 use std::{mem, io};
 
 use askama_warp::Template;
-use async_compression::tokio_02::write::GzipEncoder;
 use byte_unit::Byte;
 use flate2::read::GzDecoder;
 use futures::stream;
@@ -208,7 +207,7 @@ impl<M, P, N> UpdateStatus<M, P, N> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 enum UpdateMeta {
-    DocumentsAddition { method: String, format: String },
+    DocumentsAddition { method: String, format: String, encoding: Option<String> },
     ClearDocuments,
     Settings(Settings),
     Facets(Facets),
@@ -325,7 +324,7 @@ async fn main() -> anyhow::Result<()> {
 
             // we extract the update type and execute the update itself.
             let result: anyhow::Result<()> = match meta {
-                UpdateMeta::DocumentsAddition { method, format } => {
+                UpdateMeta::DocumentsAddition { method, format, encoding } => {
                     // We must use the write transaction of the update here.
                     let mut wtxn = index_cloned.write_txn()?;
                     let mut builder = update_builder.index_documents(&mut wtxn, &index_cloned);
@@ -343,11 +342,10 @@ async fn main() -> anyhow::Result<()> {
                         otherwise => panic!("invalid indexing method {:?}", otherwise),
                     };
 
-                    let gzipped = true;
-                    let reader = if gzipped {
-                        Box::new(GzDecoder::new(content))
-                    } else {
-                        Box::new(content) as Box<dyn io::Read>
+                    let reader = match encoding.as_deref() {
+                        Some("gzip") => Box::new(GzDecoder::new(content)),
+                        None => Box::new(content) as Box<dyn io::Read>,
+                        otherwise => panic!("invalid encoding format {:?}", otherwise),
                     };
 
                     let result = builder.execute(reader, |indexing_step| {
@@ -703,21 +701,18 @@ async fn main() -> anyhow::Result<()> {
         update_status_sender: broadcast::Sender<UpdateStatus<UpdateMeta, UpdateMetaProgress, String>>,
         update_method: Option<String>,
         update_format: UpdateFormat,
+        encoding: Option<String>,
         mut stream: impl futures::Stream<Item=Result<impl bytes::Buf, warp::Error>> + Unpin,
     ) -> Result<impl warp::Reply, warp::Rejection>
     {
         let file = tokio::task::block_in_place(tempfile::tempfile).unwrap();
-        let file = TFile::from_std(file);
-        let mut encoder = GzipEncoder::new(file);
+        let mut file = TFile::from_std(file);
 
         while let Some(result) = stream.next().await {
             let bytes = result.unwrap().to_bytes();
-            encoder.write_all(&bytes[..]).await.unwrap();
+            file.write_all(&bytes[..]).await.unwrap();
         }
 
-        encoder.shutdown().await.unwrap();
-        let mut file = encoder.into_inner();
-        file.sync_all().await.unwrap();
         let file = file.into_std().await;
         let mmap = unsafe { memmap::Mmap::map(&file).unwrap() };
 
@@ -734,7 +729,7 @@ async fn main() -> anyhow::Result<()> {
             _ => panic!("Unknown update format"),
         };
 
-        let meta = UpdateMeta::DocumentsAddition { method, format };
+        let meta = UpdateMeta::DocumentsAddition { method, format, encoding };
         let update_id = update_store.register_update(&meta, &mmap[..]).unwrap();
         let _ = update_status_sender.send(UpdateStatus::Pending { update_id, meta });
         eprintln!("update {} registered", update_id);
@@ -749,51 +744,26 @@ async fn main() -> anyhow::Result<()> {
 
     let update_store_cloned = update_store.clone();
     let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_csv_route = warp::filters::method::post()
+    let indexing_route = warp::filters::method::post()
         .and(warp::path!("documents"))
-        .and(warp::header::exact_ignore_case("content-type", "text/csv"))
-        .and(warp::filters::query::query())
+        .and(warp::header::header("content-type"))
+        .and(warp::header::optional::<String>("content-encoding"))
+        .and(warp::query::query())
         .and(warp::body::stream())
-        .and_then(move |params: QueryUpdate, stream| {
-            buf_stream(
-                update_store_cloned.clone(),
-                update_status_sender_cloned.clone(),
-                params.method,
-                UpdateFormat::Csv,
-                stream,
-            )
-        });
+        .and_then(move |content_type: String, content_encoding, params: QueryUpdate, stream| {
+            let format = match content_type.as_str() {
+                "text/csv" => UpdateFormat::Csv,
+                "application/json" => UpdateFormat::Json,
+                "application/x-ndjson" => UpdateFormat::JsonStream,
+                otherwise => panic!("invalid update format: {}", otherwise),
+            };
 
-    let update_store_cloned = update_store.clone();
-    let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_json_route = warp::filters::method::post()
-        .and(warp::path!("documents"))
-        .and(warp::header::exact_ignore_case("content-type", "application/json"))
-        .and(warp::filters::query::query())
-        .and(warp::body::stream())
-        .and_then(move |params: QueryUpdate, stream| {
             buf_stream(
                 update_store_cloned.clone(),
                 update_status_sender_cloned.clone(),
                 params.method,
-                UpdateFormat::Json,
-                stream,
-            )
-        });
-
-    let update_store_cloned = update_store.clone();
-    let update_status_sender_cloned = update_status_sender.clone();
-    let indexing_json_stream_route = warp::filters::method::post()
-        .and(warp::path!("documents"))
-        .and(warp::header::exact_ignore_case("content-type", "application/x-ndjson"))
-        .and(warp::filters::query::query())
-        .and(warp::body::stream())
-        .and_then(move |params: QueryUpdate, stream| {
-            buf_stream(
-                update_store_cloned.clone(),
-                update_status_sender_cloned.clone(),
-                params.method,
-                UpdateFormat::JsonStream,
+                format,
+                content_encoding,
                 stream,
             )
         });
@@ -904,9 +874,7 @@ async fn main() -> anyhow::Result<()> {
         .or(dash_logo_black_route)
         .or(query_route)
         .or(document_route)
-        .or(indexing_csv_route)
-        .or(indexing_json_route)
-        .or(indexing_json_stream_route)
+        .or(indexing_route)
         .or(abort_update_id_route)
         .or(abort_pending_updates_route)
         .or(clearing_route)
