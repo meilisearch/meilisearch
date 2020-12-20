@@ -322,6 +322,7 @@ async fn main() -> anyhow::Result<()> {
             update_builder.chunk_compression_type(indexer_opt_cloned.chunk_compression_type);
             update_builder.chunk_fusing_shrink_size(indexer_opt_cloned.chunk_fusing_shrink_size.get_bytes());
 
+            let before_update = Instant::now();
             // we extract the update type and execute the update itself.
             let result: anyhow::Result<()> = match meta {
                 UpdateMeta::DocumentsAddition { method, format, encoding } => {
@@ -456,7 +457,7 @@ async fn main() -> anyhow::Result<()> {
             };
 
             let meta = match result {
-                Ok(()) => format!("valid update content"),
+                Ok(()) => format!("valid update content processed in {:.02?}", before_update.elapsed()),
                 Err(e) => format!("error while processing update content: {:?}", e),
             };
 
