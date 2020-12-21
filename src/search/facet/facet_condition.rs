@@ -717,4 +717,35 @@ mod tests {
         );
         assert_eq!(condition, expected);
     }
+
+    #[test]
+    fn from_array() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the faceted fields to be the channel.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.set_searchable_fields(vec!["channel".into(), "timestamp".into()]); // to keep the fields order
+        builder.set_faceted_fields(hashmap!{
+            "channel".into() => "string".into(),
+            "timestamp".into() => "integer".into(),
+        });
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Test that the facet condition is correctly generated.
+        let rtxn = index.read_txn().unwrap();
+        let condition = FacetCondition::from_array(
+            &rtxn, &index,
+            vec![Either::Right("channel:gotaga"), Either::Left(vec!["timestamp:44", "channel:-ponce"])],
+        ).unwrap().unwrap();
+        let expected = FacetCondition::from_str(
+            &rtxn, &index,
+            "channel = gotaga AND (timestamp = 44 OR channel != ponce)",
+        ).unwrap();
+        assert_eq!(condition, expected);
+    }
 }
