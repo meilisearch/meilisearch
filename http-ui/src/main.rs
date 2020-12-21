@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::fs::{File, create_dir_all};
 use std::net::SocketAddr;
 use std::num::NonZeroUsize;
@@ -177,7 +178,7 @@ struct IndexTemplate {
 
 #[derive(Template)]
 #[template(path = "updates.html")]
-struct UpdatesTemplate<M: Serialize + Send, P: Serialize + Send, N: Serialize + Send> {
+struct UpdatesTemplate<M: Serialize + Send, P: Serialize + Send, N: Serialize + Send + Display> {
     db_name: String,
     db_size: usize,
     docs_count: usize,
