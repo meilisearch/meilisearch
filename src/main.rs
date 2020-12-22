@@ -147,7 +147,7 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
 
     eprintln!();
 
-    if data.api_keys.master.is_some() {
+    if data.api_keys().master.is_some() {
         eprintln!("A Master Key has been set. Requests to MeiliSearch won't be authorized unless you provide an authentication key.");
     } else {
         eprintln!("No master key found; The server will accept unidentified requests. \

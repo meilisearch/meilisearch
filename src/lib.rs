@@ -35,7 +35,7 @@ pub fn create_app(
         .data(data.clone())
         .app_data(
             web::JsonConfig::default()
-                .limit(data.http_payload_size_limit)
+                .limit(data.http_payload_size_limit())
                 .content_type(|_mime| true) // Accept all mime types
                 .error_handler(|err, _req| payload_error_handler(err).into()),
         )

@@ -65,7 +65,7 @@ where
         // it means that actix-web has an issue or someone changes the type `Data`.
         let data = req.app_data::<web::Data<Data>>().unwrap();
 
-        if data.api_keys.master.is_none() {
+        if data.api_keys().master.is_none() {
             return Box::pin(svc.call(req));
         }
 
@@ -80,15 +80,15 @@ where
         };
 
         let authenticated = match self.acl {
-            Authentication::Admin => data.api_keys.master.as_deref() == Some(auth_header),
+            Authentication::Admin => data.api_keys().master.as_deref() == Some(auth_header),
             Authentication::Private => {
-                data.api_keys.master.as_deref() == Some(auth_header)
-                    || data.api_keys.private.as_deref() == Some(auth_header)
+                data.api_keys().master.as_deref() == Some(auth_header)
+                    || data.api_keys().private.as_deref() == Some(auth_header)
             }
             Authentication::Public => {
-                data.api_keys.master.as_deref() == Some(auth_header)
-                    || data.api_keys.private.as_deref() == Some(auth_header)
-                    || data.api_keys.public.as_deref() == Some(auth_header)
+                data.api_keys().master.as_deref() == Some(auth_header)
+                    || data.api_keys().private.as_deref() == Some(auth_header)
+                    || data.api_keys().public.as_deref() == Some(auth_header)
             }
         };
 

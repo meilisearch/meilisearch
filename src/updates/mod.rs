@@ -3,7 +3,6 @@ mod settings;
 pub use settings::{Settings, Facets};
 
 use std::io;
-use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -41,6 +40,7 @@ enum UpdateMetaProgress {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
+#[allow(dead_code)]
 enum UpdateStatus<M, P, N> {
     Pending { update_id: u64, meta: M },
     Progressing { update_id: u64, meta: P },
@@ -331,8 +331,8 @@ impl Handler<UpdateMeta, String> for UpdateHandler {
 }
 
 impl UpdateQueue {
-    pub fn new<P: AsRef<Path>>(
-        opt: Opt,
+    pub fn new(
+        opt: &Opt,
         indexes: Arc<Index>,
         ) -> Result<Self> {
         let (sender, _) = broadcast::channel(100);

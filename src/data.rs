@@ -1,6 +1,4 @@
-use std::error::Error;
 use std::ops::Deref;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use sha2::Digest;
@@ -25,13 +23,9 @@ impl Deref for Data {
 #[derive(Clone)]
 pub struct DataInner {
     pub indexes: Arc<Index>,
-    pub update_store: UpdateQueue,
-    pub db_path: String,
-    pub dumps_dir: PathBuf,
-    pub dump_batch_size: usize,
-    pub api_keys: ApiKeys,
-    pub server_pid: u32,
-    pub http_payload_size_limit: usize,
+    pub update_queue: UpdateQueue,
+    api_keys: ApiKeys,
+    options: Opt,
 }
 
 #[derive(Clone)]
@@ -59,7 +53,34 @@ impl ApiKeys {
 }
 
 impl Data {
-    pub fn new(_opt: Opt) -> Result<Data, Box<dyn Error>> {
-        todo!()
+    pub fn new(options: Opt) -> anyhow::Result<Data> {
+        let db_size = options.max_mdb_size.get_bytes() as usize;
+        let path = options.db_path.join("main");
+        let indexes = Index::new(&path, Some(db_size))?;
+        let indexes = Arc::new(indexes);
+
+        let update_queue = UpdateQueue::new(&options, indexes.clone())?;
+
+        let mut api_keys = ApiKeys {
+            master: options.clone().master_key,
+            private: None,
+            public: None,
+        };
+
+        api_keys.generate_missing_api_keys();
+
+        let inner = DataInner { indexes, options, update_queue, api_keys };
+        let inner = Arc::new(inner);
+
+        Ok(Data { inner })
+    }
+
+    #[inline]
+    pub fn http_payload_size_limit(&self) -> usize {
+        self.options.http_payload_size_limit.get_bytes() as usize
+    }
+
+    pub fn api_keys(&self) -> &ApiKeys {
+        &self.api_keys
     }
 }
