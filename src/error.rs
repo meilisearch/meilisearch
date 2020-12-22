@@ -6,8 +6,8 @@ use actix_web as aweb;
 use actix_web::error::{JsonPayloadError, QueryPayloadError};
 use actix_web::http::StatusCode;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
-
 use meilisearch_error::{ErrorCode, Code};
+
 
 #[derive(Debug)]
 pub struct ResponseError {
@@ -31,18 +31,6 @@ impl fmt::Display for ResponseError {
 impl From<Error> for ResponseError {
     fn from(error: Error) -> ResponseError {
         ResponseError { inner: Box::new(error) }
-    }
-}
-
-impl From<meilisearch_core::Error> for ResponseError {
-    fn from(err: meilisearch_core::Error) -> ResponseError {
-        ResponseError { inner: Box::new(err) }
-    }
-}
-
-impl From<meilisearch_schema::Error> for ResponseError {
-    fn from(err: meilisearch_schema::Error) -> ResponseError {
-        ResponseError { inner: Box::new(err) }
     }
 }
 
@@ -123,8 +111,9 @@ impl ErrorCode for Error {
             SearchDocuments(_) => Code::SearchDocuments,
             PayloadTooLarge => Code::PayloadTooLarge,
             UnsupportedMediaType => Code::UnsupportedMediaType,
-            DumpAlreadyInProgress => Code::DumpAlreadyInProgress,
-            DumpProcessFailed(_) => Code::DumpProcessFailed,
+            _ => unreachable!()
+            //DumpAlreadyInProgress => Code::DumpAlreadyInProgress,
+            //DumpProcessFailed(_) => Code::DumpProcessFailed,
         }
     }
 }
@@ -266,12 +255,6 @@ impl From<std::io::Error> for Error {
 
 impl From<actix_http::Error> for Error {
     fn from(err: actix_http::Error) -> Error {
-        Error::Internal(err.to_string())
-    }
-}
-
-impl From<meilisearch_core::Error> for Error {
-    fn from(err: meilisearch_core::Error) -> Error {
         Error::Internal(err.to_string())
     }
 }

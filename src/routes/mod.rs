@@ -10,11 +10,11 @@ pub mod setting;
 pub mod stats;
 pub mod stop_words;
 pub mod synonym;
-pub mod dump;
+//pub mod dump;
 
 #[derive(Deserialize)]
 pub struct IndexParam {
-    index_uid: String,
+    _index_uid: String,
 }
 
 #[derive(Serialize)]

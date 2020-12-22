@@ -17,6 +17,6 @@ struct KeysResponse {
 }
 
 #[get("/keys", wrap = "Authentication::Admin")]
-async fn list(data: web::Data<Data>) -> HttpResponse {
+async fn list(_data: web::Data<Data>) -> HttpResponse {
     todo!()
 }

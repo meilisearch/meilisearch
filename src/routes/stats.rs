@@ -4,11 +4,9 @@ use actix_web::web;
 use actix_web::HttpResponse;
 use actix_web::get;
 use chrono::{DateTime, Utc};
-use log::error;
 use serde::Serialize;
-use walkdir::WalkDir;
 
-use crate::error::{Error, ResponseError};
+use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
@@ -29,8 +27,8 @@ struct IndexStatsResponse {
 
 #[get("/indexes/{index_uid}/stats", wrap = "Authentication::Private")]
 async fn index_stats(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -44,7 +42,7 @@ struct StatsResult {
 }
 
 #[get("/stats", wrap = "Authentication::Private")]
-async fn get_stats(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
+async fn get_stats(_data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
 

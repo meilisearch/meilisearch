@@ -8,9 +8,6 @@ use actix_web::web;
 use chrono::offset::Utc;
 use indexmap::IndexMap;
 use log::{error, info};
-use meilisearch_core::{MainWriter, MainReader, UpdateReader};
-use meilisearch_core::settings::Settings;
-use meilisearch_core::update::{apply_settings_update, apply_documents_addition};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -20,6 +17,7 @@ use crate::Data;
 use crate::error::{Error, ResponseError};
 use crate::helpers::compression;
 use crate::routes::index;
+use crate::routes::setting::Settings;
 use crate::routes::index::IndexResponse;
 
 // Mutex to share dump progress.

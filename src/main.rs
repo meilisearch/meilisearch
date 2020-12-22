@@ -1,14 +1,13 @@
-use std::{env, thread};
+use std::env;
 
 use actix_cors::Cors;
 use actix_web::{middleware, HttpServer};
 use main_error::MainError;
 use meilisearch_http::helpers::NormalizePath;
-use meilisearch_http::{create_app, index_update_callback, Data, Opt};
+use meilisearch_http::{create_app, Data, Opt};
 use structopt::StructOpt;
-use meilisearch_http::{snapshot, dump};
 
-mod analytics;
+//mod analytics;
 
 #[cfg(target_os = "linux")]
 #[global_allocator]
@@ -52,31 +51,25 @@ async fn main() -> Result<(), MainError> {
         _ => unreachable!(),
     }
 
-    if let Some(path) = &opt.import_snapshot {
-        snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
-    }
+    //if let Some(path) = &opt.import_snapshot {
+        //snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
+    //}
 
     let data = Data::new(opt.clone())?;
 
-    if !opt.no_analytics {
-        let analytics_data = data.clone();
-        let analytics_opt = opt.clone();
-        thread::spawn(move || analytics::analytics_sender(analytics_data, analytics_opt));
-    }
+    //if !opt.no_analytics {
+        //let analytics_data = data.clone();
+        //let analytics_opt = opt.clone();
+        //thread::spawn(move || analytics::analytics_sender(analytics_data, analytics_opt));
+    //}
 
-    let data_cloned = data.clone();
-    data.db.set_update_callback(Box::new(move |name, status| {
-        index_update_callback(name, &data_cloned, status);
-    }));
+    //if let Some(path) = &opt.import_dump {
+        //dump::import_dump(&data, path, opt.dump_batch_size)?;
+    //}
 
-
-    if let Some(path) = &opt.import_dump {
-        dump::import_dump(&data, path, opt.dump_batch_size)?;
-    }
-
-    if opt.schedule_snapshot {
-        snapshot::schedule_snapshot(data.clone(), &opt.snapshot_dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
-    }
+    //if opt.schedule_snapshot {
+        //snapshot::schedule_snapshot(data.clone(), &opt.snapshot_dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
+    //}
 
     print_launch_resume(&opt, &data);
 

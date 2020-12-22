@@ -1,15 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use actix_web::{delete, get, post};
 use actix_web::{web, HttpResponse};
-use meilisearch_core::{MainReader, UpdateWriter};
-use meilisearch_core::settings::{Settings, SettingsUpdate, UpdateState, DEFAULT_RANKING_RULES};
-use meilisearch_schema::Schema;
 
 use crate::Data;
-use crate::error::{Error, ResponseError};
+use crate::error::ResponseError;
 use crate::helpers::Authentication;
-use crate::routes::{IndexParam, IndexUpdateResponse};
+use crate::updates::Settings;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(update_all)
@@ -32,27 +29,28 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(update_attributes_for_faceting);
 }
 
+
 #[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn update_all(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    body: web::Json<Settings>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
+    _body: web::Json<Settings>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
 
 #[get("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn get_all(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
 
 #[delete("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
 async fn delete_all(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -62,8 +60,8 @@ async fn delete_all(
     wrap = "Authentication::Private"
 )]
 async fn get_rules(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -73,9 +71,9 @@ async fn get_rules(
     wrap = "Authentication::Private"
 )]
 async fn update_rules(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    body: web::Json<Option<Vec<String>>>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
+    _body: web::Json<Option<Vec<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -85,8 +83,8 @@ async fn update_rules(
     wrap = "Authentication::Private"
 )]
 async fn delete_rules(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -96,8 +94,8 @@ async fn delete_rules(
     wrap = "Authentication::Private"
 )]
 async fn get_distinct(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -107,9 +105,9 @@ async fn get_distinct(
     wrap = "Authentication::Private"
 )]
 async fn update_distinct(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    body: web::Json<Option<String>>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
+    _body: web::Json<Option<String>>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -119,8 +117,8 @@ async fn update_distinct(
     wrap = "Authentication::Private"
 )]
 async fn delete_distinct(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -130,8 +128,8 @@ async fn delete_distinct(
     wrap = "Authentication::Private"
 )]
 async fn get_searchable(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -141,9 +139,9 @@ async fn get_searchable(
     wrap = "Authentication::Private"
 )]
 async fn update_searchable(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    body: web::Json<Option<Vec<String>>>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
+    _body: web::Json<Option<Vec<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -153,8 +151,8 @@ async fn update_searchable(
     wrap = "Authentication::Private"
 )]
 async fn delete_searchable(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -164,8 +162,8 @@ async fn delete_searchable(
     wrap = "Authentication::Private"
 )]
 async fn get_displayed(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -175,9 +173,9 @@ async fn get_displayed(
     wrap = "Authentication::Private"
 )]
 async fn update_displayed(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    body: web::Json<Option<BTreeSet<String>>>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
+    _body: web::Json<Option<BTreeSet<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -187,8 +185,8 @@ async fn update_displayed(
     wrap = "Authentication::Private"
 )]
 async fn delete_displayed(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -198,8 +196,8 @@ async fn delete_displayed(
     wrap = "Authentication::Private"
 )]
 async fn get_attributes_for_faceting(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -209,9 +207,9 @@ async fn get_attributes_for_faceting(
     wrap = "Authentication::Private"
 )]
 async fn update_attributes_for_faceting(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
-    body: web::Json<Option<Vec<String>>>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
+    _body: web::Json<Option<Vec<String>>>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
@@ -221,8 +219,8 @@ async fn update_attributes_for_faceting(
     wrap = "Authentication::Private"
 )]
 async fn delete_attributes_for_faceting(
-    data: web::Data<Data>,
-    path: web::Path<IndexParam>,
+    _data: web::Data<Data>,
+    _path: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }

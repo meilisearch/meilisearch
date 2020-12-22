@@ -3,6 +3,7 @@ use std::io::{BufReader, Read};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use byte_unit::Byte;
 use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use rustls::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
@@ -12,7 +13,7 @@ use structopt::StructOpt;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
-#[derive(Debug, Default, Clone, StructOpt)]
+#[derive(Debug, Clone, StructOpt)]
 pub struct Opt {
     /// The destination where the database must be created.
     #[structopt(long, env = "MEILI_DB_PATH", default_value = "./data.ms")]
@@ -49,16 +50,16 @@ pub struct Opt {
     pub no_analytics: bool,
 
     /// The maximum size, in bytes, of the main lmdb database directory
-    #[structopt(long, env = "MEILI_MAX_MDB_SIZE", default_value = "107374182400")] // 100GB
-    pub max_mdb_size: usize,
+    #[structopt(long, env = "MEILI_MAX_MDB_SIZE", default_value = "100 GiB")]
+    pub max_mdb_size: Byte,
 
     /// The maximum size, in bytes, of the update lmdb database directory
-    #[structopt(long, env = "MEILI_MAX_UDB_SIZE", default_value = "107374182400")] // 100GB
-    pub max_udb_size: usize,
+    #[structopt(long, env = "MEILI_MAX_UDB_SIZE", default_value = "10 GiB")]
+    pub max_udb_size: Byte,
 
     /// The maximum size, in bytes, of accepted JSON payloads
-    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "10485760")] // 10MB
-    pub http_payload_size_limit: usize,
+    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "10 MiB")]
+    pub http_payload_size_limit: Byte,
 
     /// Read server certificates from CERTFILE.
     /// This should contain PEM-format certificates
