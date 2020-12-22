@@ -11,13 +11,15 @@ use rustls::{
 };
 use structopt::StructOpt;
 
+use crate::updates::IndexerOpts;
+
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct Opt {
     /// The destination where the database must be created.
     #[structopt(long, env = "MEILI_DB_PATH", default_value = "./data.ms")]
-    pub db_path: String,
+    pub db_path: PathBuf,
 
     /// The address on which the http server will listen.
     #[structopt(long, env = "MEILI_HTTP_ADDR", default_value = "127.0.0.1:7700")]
@@ -132,6 +134,9 @@ pub struct Opt {
     /// The batch size used in the importation process, the bigger it is the faster the dump is created.
     #[structopt(long, env = "MEILI_DUMP_BATCH_SIZE", default_value = "1024")]
     pub dump_batch_size: usize,
+
+    #[structopt(flatten)]
+    pub indexer_options: IndexerOpts,
 }
 
 impl Opt {

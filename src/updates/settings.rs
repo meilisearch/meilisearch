@@ -20,24 +20,24 @@ pub struct Settings {
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none",
     )]
-    displayed_attributes: Option<Option<Vec<String>>>,
+    pub displayed_attributes: Option<Option<Vec<String>>>,
 
     #[serde(
         default,
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none",
     )]
-    searchable_attributes: Option<Option<Vec<String>>>,
+    pub searchable_attributes: Option<Option<Vec<String>>>,
 
     #[serde(default)]
-    faceted_attributes: Option<HashMap<String, String>>,
+    pub faceted_attributes: Option<HashMap<String, String>>,
 
     #[serde(
         default,
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none",
     )]
-    criteria: Option<Option<Vec<String>>>,
+    pub criteria: Option<Option<Vec<String>>>,
 }
 
 
@@ -45,7 +45,7 @@ pub struct Settings {
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct Facets {
-    level_group_size: Option<NonZeroUsize>,
-    min_level_size: Option<NonZeroUsize>,
+    pub level_group_size: Option<NonZeroUsize>,
+    pub min_level_size: Option<NonZeroUsize>,
 }
 
