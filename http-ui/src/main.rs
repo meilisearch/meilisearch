@@ -306,7 +306,8 @@ async fn main() -> anyhow::Result<()> {
     let update_store = UpdateStore::open(
         update_store_options,
         update_store_path,
-        move |update_id, meta, content| {
+        // the type hint is necessary: https://github.com/rust-lang/rust/issues/32600
+        move |update_id, meta, content:&_| {
             // We prepare the update by using the update builder.
             let mut update_builder = UpdateBuilder::new();
             if let Some(max_nb_chunks) = indexer_opt_cloned.max_nb_chunks {

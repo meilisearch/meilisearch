@@ -18,15 +18,26 @@ pub struct UpdateStore<M, N> {
     notification_sender: Sender<()>,
 }
 
+pub trait UpdateHandler<M, N> {
+    fn handle_update(&mut self, update_id: u64, meta: M, content: &[u8]) -> heed::Result<N>;
+}
+
+impl<M, N, F> UpdateHandler<M, N> for F
+where F: FnMut(u64, M, &[u8]) -> heed::Result<N> + Send + 'static {
+    fn handle_update(&mut self, update_id: u64, meta: M, content: &[u8]) -> heed::Result<N> {
+        self(update_id, meta, content)
+    }
+}
+
 impl<M: 'static, N: 'static> UpdateStore<M, N> {
-    pub fn open<P, F>(
+    pub fn open<P, U>(
         mut options: EnvOpenOptions,
         path: P,
-        mut update_function: F,
+        mut update_handler: U,
     ) -> heed::Result<Arc<UpdateStore<M, N>>>
     where
         P: AsRef<Path>,
-        F: FnMut(u64, M, &[u8]) -> heed::Result<N> + Send + 'static,
+        U: UpdateHandler<M, N> + Send + 'static,
         M: for<'a> Deserialize<'a>,
         N: Serialize,
     {
@@ -55,7 +66,7 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
             // Block and wait for something to process.
             for () in notification_receiver {
                 loop {
-                    match update_store_cloned.process_pending_update(&mut update_function) {
+                    match update_store_cloned.process_pending_update(&mut update_handler) {
                         Ok(Some(_)) => (),
                         Ok(None) => break,
                         Err(e) => eprintln!("error while processing update: {}", e),
@@ -125,9 +136,9 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    fn process_pending_update<F>(&self, mut f: F) -> heed::Result<Option<(u64, N)>>
+    fn process_pending_update<U>(&self, handler: &mut U) -> heed::Result<Option<(u64, N)>>
     where
-        F: FnMut(u64, M, &[u8]) -> heed::Result<N>,
+        U: UpdateHandler<M, N>,
         M: for<'a> Deserialize<'a>,
         N: Serialize,
     {
@@ -144,7 +155,7 @@ impl<M: 'static, N: 'static> UpdateStore<M, N> {
                     .expect("associated update content");
 
                 // Process the pending update using the provided user function.
-                let new_meta = (f)(first_id.get(), first_meta, first_content)?;
+                let new_meta = handler.handle_update(first_id.get(), first_meta, first_content)?;
                 drop(rtxn);
 
                 // Once the pending update have been successfully processed
@@ -298,7 +309,7 @@ mod tests {
     fn simple() {
         let dir = tempfile::tempdir().unwrap();
         let options = EnvOpenOptions::new();
-        let update_store = UpdateStore::open(options, dir, |_id, meta: String, _content| {
+        let update_store = UpdateStore::open(options, dir, |_id, meta: String, _content:&_| {
             Ok(meta + " processed")
         }).unwrap();
 
@@ -316,7 +327,7 @@ mod tests {
     fn long_running_update() {
         let dir = tempfile::tempdir().unwrap();
         let options = EnvOpenOptions::new();
-        let update_store = UpdateStore::open(options, dir, |_id, meta: String, _content| {
+        let update_store = UpdateStore::open(options, dir, |_id, meta: String, _content:&_| {
             thread::sleep(Duration::from_millis(400));
             Ok(meta + " processed")
         }).unwrap();
