@@ -181,7 +181,7 @@ pub fn write_into_lmdb_database(
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum IndexDocumentsMethod {
     /// Replace the previous document with the new one,
@@ -193,7 +193,7 @@ pub enum IndexDocumentsMethod {
     UpdateDocuments,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum UpdateFormat {
     /// The given update is a real **comma seperated** CSV with headers on the first line.
