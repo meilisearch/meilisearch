@@ -13,10 +13,11 @@ pub struct UpdateBuilder<'a> {
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) chunk_fusing_shrink_size: Option<u64>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
+    pub(crate) update_id: u64,
 }
 
 impl<'a> UpdateBuilder<'a> {
-    pub fn new() -> UpdateBuilder<'a> {
+    pub fn new(update_id: u64) -> UpdateBuilder<'a> {
         UpdateBuilder {
             log_every_n: None,
             max_nb_chunks: None,
@@ -26,6 +27,7 @@ impl<'a> UpdateBuilder<'a> {
             chunk_compression_level: None,
             chunk_fusing_shrink_size: None,
             thread_pool: None,
+            update_id,
         }
     }
 
@@ -67,7 +69,7 @@ impl<'a> UpdateBuilder<'a> {
         index: &'i Index,
     ) -> ClearDocuments<'t, 'u, 'i>
     {
-        ClearDocuments::new(wtxn, index)
+        ClearDocuments::new(wtxn, index, self.update_id)
     }
 
     pub fn delete_documents<'t, 'u, 'i>(
@@ -76,7 +78,7 @@ impl<'a> UpdateBuilder<'a> {
         index: &'i Index,
     ) -> anyhow::Result<DeleteDocuments<'t, 'u, 'i>>
     {
-        DeleteDocuments::new(wtxn, index)
+        DeleteDocuments::new(wtxn, index, self.update_id)
     }
 
     pub fn index_documents<'t, 'u, 'i>(
@@ -85,7 +87,7 @@ impl<'a> UpdateBuilder<'a> {
         index: &'i Index,
     ) -> IndexDocuments<'t, 'u, 'i, 'a>
     {
-        let mut builder = IndexDocuments::new(wtxn, index);
+        let mut builder = IndexDocuments::new(wtxn, index, self.update_id);
 
         builder.log_every_n = self.log_every_n;
         builder.max_nb_chunks = self.max_nb_chunks;
@@ -105,7 +107,7 @@ impl<'a> UpdateBuilder<'a> {
         index: &'i Index,
     ) -> Settings<'a, 't, 'u, 'i>
     {
-        let mut builder = Settings::new(wtxn, index);
+        let mut builder = Settings::new(wtxn, index, self.update_id);
 
         builder.log_every_n = self.log_every_n;
         builder.max_nb_chunks = self.max_nb_chunks;
@@ -125,18 +127,12 @@ impl<'a> UpdateBuilder<'a> {
         index: &'i Index,
     ) -> Facets<'t, 'u, 'i>
     {
-        let mut builder = Facets::new(wtxn, index);
+        let mut builder = Facets::new(wtxn, index, self.update_id);
 
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
 
         builder
-    }
-}
-
-impl Default for UpdateBuilder<'_> {
-    fn default() -> Self {
-        Self::new()
     }
 }

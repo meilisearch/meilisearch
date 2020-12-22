@@ -4,11 +4,17 @@ use crate::{ExternalDocumentsIds, Index};
 pub struct ClearDocuments<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
     index: &'i Index,
+    _update_id: u64,
 }
 
 impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> ClearDocuments<'t, 'u, 'i> {
-        ClearDocuments { wtxn, index }
+    pub fn new(
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        index: &'i Index,
+        update_id: u64
+    ) -> ClearDocuments<'t, 'u, 'i> {
+
+        ClearDocuments { wtxn, index, _update_id: update_id }
     }
 
     pub fn execute(self) -> anyhow::Result<usize> {
