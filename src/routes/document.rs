@@ -93,10 +93,10 @@ async fn update_multiple_documents(
 
 #[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn add_documents(
-    _data: web::Data<Data>,
+    data: web::Data<Data>,
     _path: web::Path<IndexParam>,
     _params: web::Query<UpdateDocumentsQuery>,
-    _body: web::Json<Vec<Document>>,
+    body: web::Json<Vec<Document>>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }

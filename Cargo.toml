@@ -19,6 +19,7 @@ actix-rt = "1"
 actix-service = "1.0.6"
 actix-web = { version = "3.3.2", features = ["rustls"] }
 anyhow = "1.0.36"
+async-compression = { version = "0.3.6", features = ["gzip", "tokio-02"] }
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
 bytes = "0.6.0"
 chrono = { version = "0.4.19", features = ["serde"] }
@@ -49,10 +50,12 @@ slice-group-by = "0.2.6"
 structopt = "0.3.20"
 tar = "0.4.29"
 tempfile = "3.1.0"
-tokio = "*"
+tokio = { version = "*", features = ["full"] }
 ureq = { version = "1.5.1", default-features = false, features = ["tls"] }
 walkdir = "2.3.1"
 whoami = "1.0.0"
+futures-util = "0.3.8"
+memmap = "0.7.0"
 
 [dependencies.sentry]
 default-features = false

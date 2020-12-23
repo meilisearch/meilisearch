@@ -4,6 +4,7 @@ pub use settings::{Settings, Facets};
 
 use std::io;
 use std::sync::Arc;
+use std::ops::Deref;
 
 use anyhow::Result;
 use flate2::read::GzDecoder;
@@ -20,8 +21,8 @@ use crate::option::Opt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
-enum UpdateMeta {
-    DocumentsAddition { method: String, format: String },
+pub enum UpdateMeta {
+    DocumentsAddition { method: IndexDocumentsMethod, format: UpdateFormat },
     ClearDocuments,
     Settings(Settings),
     Facets(Facets),
@@ -29,7 +30,7 @@ enum UpdateMeta {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
-enum UpdateMetaProgress {
+pub enum UpdateMetaProgress {
     DocumentsAddition {
         step: usize,
         total_steps: usize,
@@ -41,7 +42,7 @@ enum UpdateMetaProgress {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 #[allow(dead_code)]
-enum UpdateStatus<M, P, N> {
+pub enum UpdateStatus<M, P, N> {
     Pending { update_id: u64, meta: M },
     Progressing { update_id: u64, meta: P },
     Processed { update_id: u64, meta: N },
@@ -53,6 +54,13 @@ pub struct UpdateQueue {
     inner: Arc<UpdateStore<UpdateMeta, String>>,
 }
 
+impl Deref for UpdateQueue {
+    type Target = Arc<UpdateStore<UpdateMeta, String>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
 
 #[derive(Debug, Clone, StructOpt)]
 pub struct IndexerOpts {
@@ -164,27 +172,16 @@ impl UpdateHandler {
 
     fn update_documents(
         &self,
-        format: String,
-        method: String,
+        format: UpdateFormat,
+        method: IndexDocumentsMethod,
         content: &[u8],
         update_builder: UpdateBuilder,
     ) -> Result<()> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.indexes.write_txn()?;
         let mut builder = update_builder.index_documents(&mut wtxn, &self.indexes);
-
-        match format.as_str() {
-            "csv" => builder.update_format(UpdateFormat::Csv),
-            "json" => builder.update_format(UpdateFormat::Json),
-            "json-stream" => builder.update_format(UpdateFormat::JsonStream),
-            otherwise => panic!("invalid update format {:?}", otherwise),
-        };
-
-        match method.as_str() {
-            "replace" => builder.index_documents_method(IndexDocumentsMethod::ReplaceDocuments),
-            "update" => builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments),
-            otherwise => panic!("invalid indexing method {:?}", otherwise),
-        };
+        builder.update_format(format);
+        builder.index_documents_method(method);
 
         let gzipped = true;
         let reader = if gzipped {

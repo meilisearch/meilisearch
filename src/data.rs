@@ -1,11 +1,15 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use sha2::Digest;
+use async_compression::tokio_02::write::GzipEncoder;
+use futures_util::stream::StreamExt;
+use tokio::io::AsyncWriteExt;
 use milli::Index;
+use milli::update::{IndexDocumentsMethod, UpdateFormat};
+use sha2::Digest;
 
 use crate::option::Opt;
-use crate::updates::UpdateQueue;
+use crate::updates::{UpdateQueue, UpdateMeta, UpdateStatus, UpdateMetaProgress};
 
 #[derive(Clone)]
 pub struct Data {
@@ -75,11 +79,43 @@ impl Data {
         Ok(Data { inner })
     }
 
+    pub async fn add_documents<B, E>(
+        &self,
+        method: IndexDocumentsMethod,
+        format: UpdateFormat,
+        mut stream: impl futures::Stream<Item=Result<B, E>> + Unpin,
+    ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateMetaProgress, String>>
+    where
+        B: Deref<Target = [u8]>,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        let file = tokio::task::block_in_place(tempfile::tempfile)?;
+        let file = tokio::fs::File::from_std(file);
+        let mut encoder = GzipEncoder::new(file);
+
+        while let Some(result) = stream.next().await {
+            let bytes = &*result?;
+            encoder.write_all(&bytes[..]).await?;
+        }
+
+        encoder.shutdown().await?;
+        let mut file = encoder.into_inner();
+        file.sync_all().await?;
+        let file = file.into_std().await;
+        let mmap = unsafe { memmap::Mmap::map(&file)? };
+
+        let meta = UpdateMeta::DocumentsAddition { method, format };
+        let update_id = tokio::task::block_in_place(|| self.update_queue.register_update(&meta, &mmap[..]))?;
+
+        Ok(UpdateStatus::Pending { update_id, meta })
+    }
+
     #[inline]
     pub fn http_payload_size_limit(&self) -> usize {
         self.options.http_payload_size_limit.get_bytes() as usize
     }
 
+    #[inline]
     pub fn api_keys(&self) -> &ApiKeys {
         &self.api_keys
     }
