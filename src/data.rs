@@ -1,5 +1,6 @@
 use std::ops::Deref;
 use std::sync::Arc;
+use std::fs::create_dir_all;
 
 use async_compression::tokio_02::write::GzipEncoder;
 use futures_util::stream::StreamExt;
@@ -27,7 +28,7 @@ impl Deref for Data {
 #[derive(Clone)]
 pub struct DataInner {
     pub indexes: Arc<Index>,
-    pub update_queue: UpdateQueue,
+    pub update_queue: Arc<UpdateQueue>,
     api_keys: ApiKeys,
     options: Opt,
 }
@@ -60,10 +61,11 @@ impl Data {
     pub fn new(options: Opt) -> anyhow::Result<Data> {
         let db_size = options.max_mdb_size.get_bytes() as usize;
         let path = options.db_path.join("main");
+        create_dir_all(&path)?;
         let indexes = Index::new(&path, Some(db_size))?;
         let indexes = Arc::new(indexes);
 
-        let update_queue = UpdateQueue::new(&options, indexes.clone())?;
+        let update_queue = Arc::new(UpdateQueue::new(&options, indexes.clone())?);
 
         let mut api_keys = ApiKeys {
             master: options.clone().master_key,
@@ -89,8 +91,8 @@ impl Data {
         B: Deref<Target = [u8]>,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let file = tokio::task::block_in_place(tempfile::tempfile)?;
-        let file = tokio::fs::File::from_std(file);
+        let file = tokio::task::spawn_blocking(tempfile::tempfile).await?;
+        let file = tokio::fs::File::from_std(file?);
         let mut encoder = GzipEncoder::new(file);
 
         while let Some(result) = stream.next().await {
@@ -105,7 +107,10 @@ impl Data {
         let mmap = unsafe { memmap::Mmap::map(&file)? };
 
         let meta = UpdateMeta::DocumentsAddition { method, format };
-        let update_id = tokio::task::block_in_place(|| self.update_queue.register_update(&meta, &mmap[..]))?;
+
+        let queue = self.update_queue.clone();
+        let meta_cloned = meta.clone();
+        let update_id = tokio::task::spawn_blocking(move || queue.register_update(&meta_cloned, &mmap[..])).await??;
 
         Ok(UpdateStatus::Pending { update_id, meta })
     }

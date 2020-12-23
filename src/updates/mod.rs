@@ -5,6 +5,7 @@ pub use settings::{Settings, Facets};
 use std::io;
 use std::sync::Arc;
 use std::ops::Deref;
+use std::fs::create_dir_all;
 
 use anyhow::Result;
 use flate2::read::GzDecoder;
@@ -336,6 +337,7 @@ impl UpdateQueue {
         let handler = UpdateHandler::new(&opt.indexer_options, indexes, sender)?;
         let size = opt.max_udb_size.get_bytes() as usize;
         let path = opt.db_path.join("updates.mdb");
+        create_dir_all(&path)?;
         let inner = UpdateStore::open(
             Some(size),
             path,

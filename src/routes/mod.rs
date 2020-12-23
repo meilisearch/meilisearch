@@ -14,7 +14,7 @@ pub mod synonym;
 
 #[derive(Deserialize)]
 pub struct IndexParam {
-    _index_uid: String,
+    index_uid: String,
 }
 
 #[derive(Serialize)]

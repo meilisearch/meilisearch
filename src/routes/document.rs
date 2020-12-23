@@ -1,13 +1,30 @@
+use actix_web::web::Payload;
 use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use indexmap::IndexMap;
-use serde_json::Value;
+use log::error;
+use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::Data;
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
+
+macro_rules! guard_content_type {
+    ($fn_name:ident, $guard_value:literal) => {
+        fn $fn_name(head: &actix_web::dev::RequestHead) -> bool {
+            if let Some(content_type) = head.headers.get("Content-Type") {
+                content_type.to_str().map(|v| v.contains($guard_value)).unwrap_or(false)
+            } else {
+                false
+            }
+        }
+    };
+}
+
+guard_content_type!(guard_json, "application/json");
 
 type Document = IndexMap<String, Value>;
 
@@ -21,7 +38,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(get_document)
         .service(delete_document)
         .service(get_all_documents)
-        .service(add_documents)
+        .service(add_documents_json)
         .service(update_documents)
         .service(delete_documents)
         .service(clear_all_documents);
@@ -91,12 +108,46 @@ async fn update_multiple_documents(
     todo!()
 }
 
-#[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
-async fn add_documents(
+/// Route used when the payload type is "application/json"
+#[post(
+    "/indexes/{index_uid}/documents",
+    wrap = "Authentication::Private",
+    guard = "guard_json"
+)]
+async fn add_documents_json(
     data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    params: web::Query<UpdateDocumentsQuery>,
+    body: Payload,
+) -> Result<HttpResponse, ResponseError> {
+    let addition_result = data
+        .add_documents(
+            IndexDocumentsMethod::UpdateDocuments,
+            UpdateFormat::Json,
+            body
+        ).await;
+
+    match addition_result {
+        Ok(update) => {
+            let value = serde_json::to_string(&update).unwrap();
+            let response = HttpResponse::Ok().body(value);
+            Ok(response)
+        }
+        Err(e) => {
+            error!("{}", e);
+            todo!()
+        }
+    }
+}
+
+
+/// Default route for addign documents, this should return an error en redirect to the docuentation
+#[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn add_documents_default(
+    _data: web::Data<Data>,
     _path: web::Path<IndexParam>,
     _params: web::Query<UpdateDocumentsQuery>,
-    body: web::Json<Vec<Document>>,
+    _body: web::Json<Vec<Document>>,
 ) -> Result<HttpResponse, ResponseError> {
     todo!()
 }
