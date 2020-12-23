@@ -1,5 +1,4 @@
-use std::str;
-use crate::tokenizer::{simple_tokenizer, TokenType};
+use meilisearch_tokenizer::{Token, TokenKind};
 
 #[derive(Debug)]
 enum State {
@@ -18,138 +17,201 @@ impl State {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum QueryToken<'a> {
-    Free(&'a str),
-    Quoted(&'a str),
+    Free(Token<'a>),
+    Quoted(Token<'a>),
 }
 
-pub struct QueryTokens<'a> {
-    state: State,
-    iter: Box<dyn Iterator<Item=(TokenType, &'a str)> + 'a>,
-}
-
-impl QueryTokens<'_> {
-    pub fn new(query: &str) -> QueryTokens {
-        QueryTokens {
-            state: State::Free,
-            iter: Box::new(simple_tokenizer(query)),
-        }
-    }
-}
-
-impl<'a> Iterator for QueryTokens<'a> {
-    type Item = QueryToken<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+pub fn query_tokens<'a>(mut tokens: impl Iterator<Item = Token<'a>>) -> impl Iterator<Item = QueryToken<'a>> {
+    let mut state = State::Free;
+    let f = move || {
         loop {
-            match self.iter.next()? {
-                (TokenType::Other, "\"") => self.state.swap(),
-                (TokenType::Word, token) => {
-                    let token = match self.state {
+            let token = tokens.next()?;
+            match token.kind() {
+                _ if token.text().trim() == "\"" => state.swap(),
+                TokenKind::Word => {
+                    let token = match state {
                         State::Quoted => QueryToken::Quoted(token),
                         State::Free => QueryToken::Free(token),
                     };
                     return Some(token);
                 },
-                (_, _) => (),
+                _ => (),
             }
         }
-    }
+    };
+    std::iter::from_fn(f)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use QueryToken::{Quoted, Free};
+    use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
+    use fst::Set;
+
+    macro_rules! assert_eq_query_token {
+        ($test:expr, Quoted($val:literal)) => {
+            match $test {
+                Quoted(val) => assert_eq!(val.text(), $val),
+                Free(val) => panic!("expected Quoted(\"{}\"), found Free(\"{}\")", $val, val.text()),
+                }
+            };
+
+        ($test:expr, Free($val:literal)) => {
+            match $test {
+                Quoted(val) => panic!("expected Free(\"{}\"), found Quoted(\"{}\")", $val, val.text()),
+                Free(val) => assert_eq!(val.text(), $val),
+            }
+        };
+    }
 
     #[test]
     fn empty() {
-        let mut iter = QueryTokens::new("");
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert!(iter.next().is_none());
 
-        let mut iter = QueryTokens::new(" ");
-        assert_eq!(iter.next(), None);
+        let query = " ";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn one_quoted_string() {
-        let mut iter = QueryTokens::new("\"hello\"");
-        assert_eq!(iter.next(), Some(Quoted("hello")));
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "\"hello\"";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("hello"));
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn one_pending_quoted_string() {
-        let mut iter = QueryTokens::new("\"hello");
-        assert_eq!(iter.next(), Some(Quoted("hello")));
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "\"hello";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("hello"));
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn one_non_quoted_string() {
-        let mut iter = QueryTokens::new("hello");
-        assert_eq!(iter.next(), Some(Free("hello")));
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "hello";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert_eq_query_token!(iter.next().unwrap(), Free("hello"));
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn quoted_directly_followed_by_free_strings() {
-        let mut iter = QueryTokens::new("\"hello\"world");
-        assert_eq!(iter.next(), Some(Quoted("hello")));
-        assert_eq!(iter.next(), Some(Free("world")));
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "\"hello\"world";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("hello"));
+        assert_eq_query_token!(iter.next().unwrap(), Free("world"));
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn free_directly_followed_by_quoted_strings() {
-        let mut iter = QueryTokens::new("hello\"world\"");
-        assert_eq!(iter.next(), Some(Free("hello")));
-        assert_eq!(iter.next(), Some(Quoted("world")));
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "hello\"world\"";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert_eq_query_token!(iter.next().unwrap(), Free("hello"));
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("world"));
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn free_followed_by_quoted_strings() {
-        let mut iter = QueryTokens::new("hello \"world\"");
-        assert_eq!(iter.next(), Some(Free("hello")));
-        assert_eq!(iter.next(), Some(Quoted("world")));
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "hello \"world\"";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert_eq_query_token!(iter.next().unwrap(), Free("hello"));
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("world"));
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn multiple_spaces_separated_strings() {
-        let mut iter = QueryTokens::new("hello    world   ");
-        assert_eq!(iter.next(), Some(Free("hello")));
-        assert_eq!(iter.next(), Some(Free("world")));
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "hello    world   ";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert_eq_query_token!(iter.next().unwrap(), Free("hello"));
+        assert_eq_query_token!(iter.next().unwrap(), Free("world"));
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn multi_interleaved_quoted_free_strings() {
-        let mut iter = QueryTokens::new("hello \"world\" coucou \"monde\"");
-        assert_eq!(iter.next(), Some(Free("hello")));
-        assert_eq!(iter.next(), Some(Quoted("world")));
-        assert_eq!(iter.next(), Some(Free("coucou")));
-        assert_eq!(iter.next(), Some(Quoted("monde")));
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "hello \"world\" coucou \"monde\"";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert_eq_query_token!(iter.next().unwrap(), Free("hello"));
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("world"));
+        assert_eq_query_token!(iter.next().unwrap(), Free("coucou"));
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("monde"));
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn multi_quoted_strings() {
-        let mut iter = QueryTokens::new("\"hello world\" coucou \"monde est beau\"");
-        assert_eq!(iter.next(), Some(Quoted("hello")));
-        assert_eq!(iter.next(), Some(Quoted("world")));
-        assert_eq!(iter.next(), Some(Free("coucou")));
-        assert_eq!(iter.next(), Some(Quoted("monde")));
-        assert_eq!(iter.next(), Some(Quoted("est")));
-        assert_eq!(iter.next(), Some(Quoted("beau")));
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "\"hello world\" coucou \"monde est beau\"";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("hello"));
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("world"));
+        assert_eq_query_token!(iter.next().unwrap(), Free("coucou"));
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("monde"));
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("est"));
+        assert_eq_query_token!(iter.next().unwrap(), Quoted("beau"));
+        assert!(iter.next().is_none());
     }
 
     #[test]
     fn chinese() {
-        let mut iter = QueryTokens::new("汽车男生");
-        assert_eq!(iter.next(), Some(Free("汽车")));
-        assert_eq!(iter.next(), Some(Free("男生")));
-        assert_eq!(iter.next(), None);
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let query = "汽车男生";
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let mut iter = query_tokens(tokens);
+        assert_eq_query_token!(iter.next().unwrap(), Free("汽车"));
+        assert_eq_query_token!(iter.next().unwrap(), Free("男生"));
+        assert!(iter.next().is_none());
     }
 }

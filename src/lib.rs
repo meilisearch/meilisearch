@@ -12,7 +12,6 @@ pub mod facet;
 pub mod heed_codec;
 pub mod proximity;
 pub mod subcommand;
-pub mod tokenizer;
 pub mod update;
 
 use std::borrow::Cow;
