@@ -32,3 +32,4 @@ warp = "0.2.2"
 # logging
 log = "0.4.11"
 stderrlog = "0.5.0"
+fst = "0.4.5"

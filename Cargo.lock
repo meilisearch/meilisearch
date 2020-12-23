@@ -711,7 +711,7 @@ checksum = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
 [[package]]
 name = "meilisearch-tokenizer"
 version = "0.1.1"
-source = "git+https://github.com/meilisearch/Tokenizer.git?branch=token-eq#daeb4a4ac91081f1c592e3ebb3ec5d8dcb4e6976"
+source = "git+https://github.com/meilisearch/Tokenizer.git?branch=main#147b6154b1b34cb8f5da2df6a416b7da191bc850"
 dependencies = [
  "character_converter",
  "cow-utils",

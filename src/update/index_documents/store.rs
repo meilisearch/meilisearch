@@ -8,21 +8,21 @@ use std::{cmp, iter};
 
 use anyhow::{bail, Context};
 use bstr::ByteSlice as _;
+use fst::Set;
 use grenad::{Reader, FileFuse, Writer, Sorter, CompressionType};
 use heed::BytesEncode;
 use linked_hash_map::LinkedHashMap;
 use log::{debug, info};
+use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 use serde_json::Value;
 use tempfile::tempfile;
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, TokenKind};
-use fst::Set;
 
 use crate::facet::FacetType;
-use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
+use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::update::UpdateIndexingStep;
 use crate::{json_to_string, SmallVec8, SmallVec32, SmallString32, Position, DocumentId, FieldId};
 
@@ -167,7 +167,7 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
             // MTBL writers
             docid_word_positions_writer,
             documents_writer,
-            //tokenizer
+            // tokenizer
             analyzer,
         })
     }

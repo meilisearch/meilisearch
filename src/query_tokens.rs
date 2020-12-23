@@ -54,8 +54,8 @@ mod tests {
             match $test {
                 Quoted(val) => assert_eq!(val.text(), $val),
                 Free(val) => panic!("expected Quoted(\"{}\"), found Free(\"{}\")", $val, val.text()),
-                }
-            };
+            }
+        };
 
         ($test:expr, Free($val:literal)) => {
             match $test {
