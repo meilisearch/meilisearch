@@ -117,11 +117,12 @@ async fn update_multiple_documents(
 async fn add_documents_json(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-    params: web::Query<UpdateDocumentsQuery>,
+    _params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
     let addition_result = data
         .add_documents(
+            &path.index_uid,
             IndexDocumentsMethod::UpdateDocuments,
             UpdateFormat::Json,
             body

@@ -26,7 +26,9 @@ chrono = { version = "0.4.19", features = ["serde"] }
 crossbeam-channel = "0.5.0"
 env_logger = "0.8.2"
 flate2 = "1.0.19"
+fst = "0.4.5"
 futures = "0.3.7"
+futures-util = "0.3.8"
 grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
 heed = "0.10.6"
 http = "0.2.1"
@@ -34,6 +36,8 @@ indexmap =  { version = "1.3.2", features = ["serde-1"] }
 log = "0.4.8"
 main_error = "0.1.0"
 meilisearch-error = { path = "../MeiliSearch/meilisearch-error" }
+meilisearch-tokenizer = { git = "https://github.com/meilisearch/Tokenizer.git", branch = "main" }
+memmap = "0.7.0"
 milli = { path = "../milli" }
 mime = "0.3.16"
 once_cell = "1.5.2"
@@ -54,8 +58,6 @@ tokio = { version = "0.2", features = ["full"] }
 ureq = { version = "1.5.1", default-features = false, features = ["tls"] }
 walkdir = "2.3.1"
 whoami = "1.0.0"
-futures-util = "0.3.8"
-memmap = "0.7.0"
 
 [dependencies.sentry]
 default-features = false
