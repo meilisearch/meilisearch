@@ -19,6 +19,8 @@ const WORD_DOCIDS_DB_NAME: &str = "word-docids";
 const WORD_PREFIX_DOCIDS_DB_NAME: &str = "word-prefix-docids";
 const DOCID_WORD_POSITIONS_DB_NAME: &str = "docid-word-positions";
 const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
+const FACET_FIELD_ID_VALUE_DOCIDS_NAME: &str = "facet-field-id-value-docids";
+const FIELD_ID_DOCID_FACET_VALUES_NAME: &str = "field-id-docid-facet-values";
 const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-prefix-pair-proximity-docids";
 const DOCUMENTS_DB_NAME: &str = "documents";
 
@@ -28,6 +30,8 @@ const ALL_DATABASE_NAMES: &[&str] = &[
     WORD_PREFIX_DOCIDS_DB_NAME,
     DOCID_WORD_POSITIONS_DB_NAME,
     WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
+    FACET_FIELD_ID_VALUE_DOCIDS_NAME,
+    FIELD_ID_DOCID_FACET_VALUES_NAME,
     WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
     DOCUMENTS_DB_NAME,
 ];
@@ -116,9 +120,6 @@ enum Command {
         field_name: String,
     },
 
-    /// Outputs the total size of all the docid-word-positions keys and values.
-    TotalDocidWordPositionsSize,
-
     /// Outputs the average number of *different* words by document.
     AverageNumberOfWordsByDoc,
 
@@ -132,10 +133,10 @@ enum Command {
         database: String,
     },
 
-    /// Outputs the size in bytes of the specified database.
+    /// Outputs the size in bytes of the specified databases names.
     SizeOfDatabase {
         #[structopt(possible_values = ALL_DATABASE_NAMES)]
-        database: String,
+        databases: Vec<String>,
     },
 
     /// Outputs a CSV with the proximities for the two specidied words and
@@ -209,12 +210,11 @@ fn main() -> anyhow::Result<()> {
             facet_values_docids(&index, &rtxn, !full_display, field_name)
         },
         FacetStats { field_name } => facet_stats(&index, &rtxn, field_name),
-        TotalDocidWordPositionsSize => total_docid_word_positions_size(&index, &rtxn),
         AverageNumberOfWordsByDoc => average_number_of_words_by_doc(&index, &rtxn),
         AverageNumberOfPositionsByWord => {
             average_number_of_positions_by_word(&index, &rtxn)
         },
-        SizeOfDatabase { database } => size_of_database(&index, &rtxn, &database),
+        SizeOfDatabase { databases } => size_of_databases(&index, &rtxn, databases),
         DatabaseStats { database } => database_stats(&index, &rtxn, &database),
         WordPairProximitiesDocids { full_display, word1, word2 } => {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
@@ -620,28 +620,6 @@ fn export_documents(index: &Index, rtxn: &heed::RoTxn, internal_ids: Vec<u32>) -
     Ok(())
 }
 
-fn total_docid_word_positions_size(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
-    use heed::types::ByteSlice;
-
-    let mut total_key_size = 0;
-    let mut total_val_size = 0;
-    let mut count = 0;
-
-    let iter = index.docid_word_positions.as_polymorph().iter::<_, ByteSlice, ByteSlice>(rtxn)?;
-    for result in iter {
-        let (key, val) = result?;
-        total_key_size += key.len();
-        total_val_size += val.len();
-        count += 1;
-    }
-
-    println!("number of keys: {}", count);
-    println!("total key size: {}", total_key_size);
-    println!("total value size: {}", total_val_size);
-
-    Ok(())
-}
-
 fn average_number_of_words_by_doc(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use heed::types::DecodeIgnore;
     use milli::{DocumentId, BEU32StrCodec};
@@ -703,32 +681,36 @@ fn average_number_of_positions_by_word(index: &Index, rtxn: &heed::RoTxn) -> any
     Ok(())
 }
 
-fn size_of_database(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Result<()> {
+fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> anyhow::Result<()> {
     use heed::types::ByteSlice;
 
-    let database = match name {
-        MAIN_DB_NAME => &index.main,
-        WORD_PREFIX_DOCIDS_DB_NAME => index.word_prefix_docids.as_polymorph(),
-        WORD_DOCIDS_DB_NAME => index.word_docids.as_polymorph(),
-        DOCID_WORD_POSITIONS_DB_NAME => index.docid_word_positions.as_polymorph(),
-        WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_pair_proximity_docids.as_polymorph(),
-        WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_prefix_pair_proximity_docids.as_polymorph(),
-        DOCUMENTS_DB_NAME => index.documents.as_polymorph(),
-        unknown => anyhow::bail!("unknown database {:?}", unknown),
-    };
+    for name in names {
+        let database = match name.as_str() {
+            MAIN_DB_NAME => &index.main,
+            WORD_PREFIX_DOCIDS_DB_NAME => index.word_prefix_docids.as_polymorph(),
+            WORD_DOCIDS_DB_NAME => index.word_docids.as_polymorph(),
+            DOCID_WORD_POSITIONS_DB_NAME => index.docid_word_positions.as_polymorph(),
+            WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_pair_proximity_docids.as_polymorph(),
+            WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_prefix_pair_proximity_docids.as_polymorph(),
+            FACET_FIELD_ID_VALUE_DOCIDS_NAME => index.facet_field_id_value_docids.as_polymorph(),
+            FIELD_ID_DOCID_FACET_VALUES_NAME => index.field_id_docid_facet_values.as_polymorph(),
+            DOCUMENTS_DB_NAME => index.documents.as_polymorph(),
+            unknown => anyhow::bail!("unknown database {:?}", unknown),
+        };
 
-    let mut key_size: u64 = 0;
-    let mut val_size: u64 = 0;
-    for result in database.iter::<_, ByteSlice, ByteSlice>(rtxn)? {
-        let (k, v) = result?;
-        key_size += k.len() as u64;
-        val_size += v.len() as u64;
+        let mut key_size: u64 = 0;
+        let mut val_size: u64 = 0;
+        for result in database.iter::<_, ByteSlice, ByteSlice>(rtxn)? {
+            let (k, v) = result?;
+            key_size += k.len() as u64;
+            val_size += v.len() as u64;
+        }
+
+        println!("The {} database weigh:", name);
+        println!("\ttotal key size: {} bytes", key_size);
+        println!("\ttotal val size: {} bytes", val_size);
+        println!("\ttotal size: {} bytes", key_size + val_size);
     }
-
-    println!("The {} database weigh:", name);
-    println!("\ttotal key size: {} bytes", key_size);
-    println!("\ttotal val size: {} bytes", val_size);
-    println!("\ttotal size: {} bytes", key_size + val_size);
 
     Ok(())
 }
