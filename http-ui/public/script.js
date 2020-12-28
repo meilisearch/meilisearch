@@ -34,6 +34,8 @@ $('#query, #facet').on('input', function () {
           for (value of data.facets[facet_name]) {
               const elem = document.createElement('span');
               elem.classList.add("tag");
+              elem.setAttribute('data-name', facet_name);
+              elem.setAttribute('data-value', value);
               elem.innerHTML = `${facet_name}:${value}`;
               facets.appendChild(elem);
           }
@@ -67,6 +69,19 @@ $('#query, #facet').on('input', function () {
           results.appendChild(elem);
         }
 
+        // When we click on a tag we append the facet value
+        // at the end of the facet query.
+        $('#facets .tag').on('click', function () {
+          let name = $(this).attr("data-name");
+          let value = $(this).attr("data-value");
+
+          let facet_query = $('#facet').val().trim();
+          if (facet_query === "") {
+            $('#facet').val(`${name} = "${value}"`).trigger('input');
+          } else {
+            $('#facet').val(`${facet_query} AND ${name} = "${value}"`).trigger('input');
+          }
+        });
       },
       beforeSend: function () {
         if (request !== null) {
@@ -88,8 +103,8 @@ $('#db-size').text(function(index, text) {
   return filesize(parseInt(text))
 });
 
-// We trigger the input when we load the script, this way
-// we execute a placeholder search when the input is empty.
+// We trigger the input when we load the script.
 $(window).on('load', function () {
+  // We execute a placeholder search when the input is empty.
   $('#query').trigger('input');
 });
