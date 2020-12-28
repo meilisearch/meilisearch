@@ -20,7 +20,7 @@ use crate::mdfs::Mdfs;
 use crate::query_tokens::{query_tokens, QueryToken};
 use crate::{Index, FieldId, DocumentId, Criterion};
 
-pub use self::facet::{FacetCondition, FacetNumberOperator, FacetStringOperator};
+pub use self::facet::{FacetCondition, FacetDistribution, FacetNumberOperator, FacetStringOperator};
 pub use self::facet::{FacetIter};
 
 // Building these factories is not free.
@@ -313,22 +313,26 @@ impl<'a> Search<'a> {
                 // there is some facet conditions we return a placeholder.
                 let documents_ids = match order_by_facet {
                     Some((fid, ftype, is_ascending)) => {
-                        self.facet_ordered(fid, ftype, is_ascending, facet_candidates, limit)?
+                        self.facet_ordered(fid, ftype, is_ascending, facet_candidates.clone(), limit)?
                     },
                     None => facet_candidates.iter().take(limit).collect(),
                 };
-                return Ok(SearchResult { documents_ids, ..Default::default() })
+                return Ok(SearchResult {
+                    documents_ids,
+                    candidates: facet_candidates,
+                    ..Default::default()
+                })
             },
             (None, None) => {
                 // If the query is not set or results in no DFAs we return a placeholder.
-                let documents_ids = self.index.documents_ids(self.rtxn)?;
+                let all_docids = self.index.documents_ids(self.rtxn)?;
                 let documents_ids = match order_by_facet {
                     Some((fid, ftype, is_ascending)) => {
-                        self.facet_ordered(fid, ftype, is_ascending, documents_ids, limit)?
+                        self.facet_ordered(fid, ftype, is_ascending, all_docids.clone(), limit)?
                     },
-                    None => documents_ids.iter().take(limit).collect(),
+                    None => all_docids.iter().take(limit).collect(),
                 };
-                return Ok(SearchResult { documents_ids, ..Default::default() })
+                return Ok(SearchResult { documents_ids, candidates: all_docids,..Default::default() })
             },
         };
 
@@ -336,7 +340,7 @@ impl<'a> Search<'a> {
 
         // The mana depth first search is a revised DFS that explore
         // solutions in the order of their proximities.
-        let mut mdfs = Mdfs::new(self.index, self.rtxn, &derived_words, candidates);
+        let mut mdfs = Mdfs::new(self.index, self.rtxn, &derived_words, candidates.clone());
         let mut documents = Vec::new();
 
         // We execute the Mdfs iterator until we find enough documents.
@@ -364,7 +368,7 @@ impl<'a> Search<'a> {
             None => documents.into_iter().flatten().take(limit).collect(),
         };
 
-        Ok(SearchResult { found_words, documents_ids })
+        Ok(SearchResult { found_words, candidates, documents_ids })
     }
 }
 
@@ -383,6 +387,7 @@ impl fmt::Debug for Search<'_> {
 #[derive(Default)]
 pub struct SearchResult {
     pub found_words: HashSet<String>,
+    pub candidates: RoaringBitmap,
     // TODO those documents ids should be associated with their criteria scores.
     pub documents_ids: Vec<DocumentId>,
 }

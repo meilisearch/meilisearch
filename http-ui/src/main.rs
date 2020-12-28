@@ -626,6 +626,14 @@ async fn main() -> anyhow::Result<()> {
     struct QueryBody {
         query: Option<String>,
         facet_condition: Option<String>,
+        facet_distribution: Option<bool>,
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Answer {
+        documents: Vec<Map<String, Value>>,
+        facets: HashMap<String, Vec<Value>>,
     }
 
     let disable_highlighting = opt.disable_highlighting;
@@ -649,7 +657,13 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            let SearchResult { found_words, documents_ids } = search.execute().unwrap();
+            let SearchResult { found_words, candidates, documents_ids } = search.execute().unwrap();
+
+            let facets = if query.facet_distribution == Some(true) {
+                Some(index.facets(&rtxn).candidates(candidates).execute().unwrap())
+            } else {
+                None
+            };
 
             let mut documents = Vec::new();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
@@ -674,10 +688,15 @@ async fn main() -> anyhow::Result<()> {
                 documents.push(object);
             }
 
+            let answer = Answer {
+                documents,
+                facets: facets.unwrap_or_default(),
+            };
+
             Response::builder()
                 .header("Content-Type", "application/json")
                 .header("Time-Ms", before_search.elapsed().as_millis().to_string())
-                .body(serde_json::to_string(&documents).unwrap())
+                .body(serde_json::to_string(&answer).unwrap())
         });
 
     let index_cloned = index.clone();

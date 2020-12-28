@@ -15,18 +15,18 @@ $('#query, #facet').on('input', function () {
       type: "POST",
       url: "query",
       contentType: 'application/json',
-      data: JSON.stringify({ 'query': query, 'facetCondition': facet }),
+      data: JSON.stringify({ 'query': query, 'facetCondition': facet, "facetDistribution": true }),
       contentType: 'application/json',
       success: function (data, textStatus, request) {
         results.innerHTML = '';
 
         let timeSpent = request.getResponseHeader('Time-Ms');
-        let numberOfDocuments = data.length;
+        let numberOfDocuments = data.documents.length;
         count.innerHTML = `${numberOfDocuments}`;
         time.innerHTML = `${timeSpent}ms`;
         time.classList.remove('fade-in-out');
 
-        for (element of data) {
+        for (element of data.documents) {
           const elem = document.createElement('li');
           elem.classList.add("document");
 

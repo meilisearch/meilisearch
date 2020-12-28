@@ -13,11 +13,13 @@ use crate::heed_codec::CboRoaringBitmapCodec;
 use crate::{Index, FieldId};
 
 pub use self::facet_condition::{FacetCondition, FacetNumberOperator, FacetStringOperator};
+pub use self::facet_distribution::FacetDistribution;
 
 mod facet_condition;
+mod facet_distribution;
 mod parser;
 
-struct FacetRange<'t, T: 't, KC> {
+pub struct FacetRange<'t, T: 't, KC> {
     iter: RoRange<'t, KC, LazyDecode<CboRoaringBitmapCodec>>,
     end: Bound<T>,
 }
@@ -27,7 +29,7 @@ where
     KC: for<'a> BytesEncode<'a, EItem = (FieldId, u8, T, T)>,
     T: PartialOrd + Copy + Bounded,
 {
-    fn new(
+    pub fn new(
         rtxn: &'t heed::RoTxn,
         db: Database<KC, CboRoaringBitmapCodec>,
         field_id: FieldId,
@@ -78,7 +80,7 @@ where
     }
 }
 
-struct FacetRevRange<'t, T: 't, KC> {
+pub struct FacetRevRange<'t, T: 't, KC> {
     iter: RoRevRange<'t, KC, LazyDecode<CboRoaringBitmapCodec>>,
     end: Bound<T>,
 }
@@ -88,7 +90,7 @@ where
     KC: for<'a> BytesEncode<'a, EItem = (FieldId, u8, T, T)>,
     T: PartialOrd + Copy + Bounded,
 {
-    fn new(
+    pub fn new(
         rtxn: &'t heed::RoTxn,
         db: Database<KC, CboRoaringBitmapCodec>,
         field_id: FieldId,

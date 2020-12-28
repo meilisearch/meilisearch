@@ -28,7 +28,7 @@ pub use self::fields_ids_map::FieldsIdsMap;
 pub use self::heed_codec::{BEU32StrCodec, StrStrU8Codec, ObkvCodec};
 pub use self::heed_codec::{RoaringBitmapCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 pub use self::index::Index;
-pub use self::search::{Search, FacetCondition, SearchResult};
+pub use self::search::{Search, FacetDistribution, FacetCondition, SearchResult};
 pub use self::update_store::UpdateStore;
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
