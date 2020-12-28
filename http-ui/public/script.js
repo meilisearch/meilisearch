@@ -26,7 +26,7 @@ $('#query, #facet').on('input', function () {
 
         let timeSpent = request.getResponseHeader('Time-Ms');
         let numberOfDocuments = data.documents.length;
-        count.innerHTML = `${numberOfDocuments}`;
+        count.innerHTML = data.numberOfCandidates.toLocaleString();
         time.innerHTML = `${timeSpent}ms`;
         time.classList.remove('fade-in-out');
 

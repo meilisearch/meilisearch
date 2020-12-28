@@ -633,6 +633,7 @@ async fn main() -> anyhow::Result<()> {
     #[serde(rename_all = "camelCase")]
     struct Answer {
         documents: Vec<Map<String, Value>>,
+        number_of_candidates: u64,
         facets: HashMap<String, Vec<Value>>,
     }
 
@@ -659,6 +660,7 @@ async fn main() -> anyhow::Result<()> {
 
             let SearchResult { found_words, candidates, documents_ids } = search.execute().unwrap();
 
+            let number_of_candidates = candidates.len();
             let facets = if query.facet_distribution == Some(true) {
                 Some(index.facets(&rtxn).candidates(candidates).execute().unwrap())
             } else {
@@ -690,6 +692,7 @@ async fn main() -> anyhow::Result<()> {
 
             let answer = Answer {
                 documents,
+                number_of_candidates,
                 facets: facets.unwrap_or_default(),
             };
 
