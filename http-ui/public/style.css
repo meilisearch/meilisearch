@@ -4,6 +4,18 @@
   padding: 0;
 }
 
+#facets .tag {
+    margin-right: 1em;
+    margin-bottom: 1em;
+}
+#facets {
+    max-width: 900px;
+    margin: 20px auto 0 auto;
+    padding: 0;
+    max-height: 16em;
+  overflow: scroll;
+}
+
 #logo-white {
   display: none;
 }

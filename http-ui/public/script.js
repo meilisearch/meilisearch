@@ -4,6 +4,7 @@ var timeoutID = null;
 $('#query, #facet').on('input', function () {
   var query = $('#query').val();
   var facet = $('#facet').val();
+  let fetchFacetDistribution = query.trim() !== "" || facet.trim() !== "";
   var timeoutMs = 100;
 
   if (timeoutID !== null) {
@@ -15,16 +16,28 @@ $('#query, #facet').on('input', function () {
       type: "POST",
       url: "query",
       contentType: 'application/json',
-      data: JSON.stringify({ 'query': query, 'facetCondition': facet, "facetDistribution": true }),
+      data: JSON.stringify({
+        'query': query, 'facetCondition': facet, "facetDistribution": fetchFacetDistribution
+      }),
       contentType: 'application/json',
       success: function (data, textStatus, request) {
         results.innerHTML = '';
+        facets.innerHTML = '';
 
         let timeSpent = request.getResponseHeader('Time-Ms');
         let numberOfDocuments = data.documents.length;
         count.innerHTML = `${numberOfDocuments}`;
         time.innerHTML = `${timeSpent}ms`;
         time.classList.remove('fade-in-out');
+
+        for (facet_name in data.facets) {
+          for (value of data.facets[facet_name]) {
+              const elem = document.createElement('span');
+              elem.classList.add("tag");
+              elem.innerHTML = `${facet_name}:${value}`;
+              facets.appendChild(elem);
+          }
+        }
 
         for (element of data.documents) {
           const elem = document.createElement('li');
