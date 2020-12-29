@@ -8,14 +8,15 @@ use std::ops::Deref;
 use std::fs::create_dir_all;
 
 use anyhow::Result;
+use byte_unit::Byte;
 use flate2::read::GzDecoder;
 use grenad::CompressionType;
-use byte_unit::Byte;
-use milli::update::{UpdateBuilder, UpdateFormat, IndexDocumentsMethod, UpdateIndexingStep::*};
-use milli::{UpdateStore, UpdateHandler as Handler, Index};
+use log::info;
+use milli::Index;
+use milli::update::{UpdateBuilder, UpdateFormat, IndexDocumentsMethod };
+use milli::update_store::{UpdateStore, UpdateHandler as Handler, UpdateStatus, Processing, Processed, Failed};
 use rayon::ThreadPool;
 use serde::{Serialize, Deserialize};
-use tokio::sync::broadcast;
 use structopt::StructOpt;
 
 use crate::option::Opt;
@@ -40,23 +41,13 @@ pub enum UpdateMetaProgress {
     },
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type")]
-#[allow(dead_code)]
-pub enum UpdateStatus<M, P, N> {
-    Pending { update_id: u64, meta: M },
-    Progressing { update_id: u64, meta: P },
-    Processed { update_id: u64, meta: N },
-    Aborted { update_id: u64, meta: M },
-}
-
 #[derive(Clone)]
 pub struct UpdateQueue {
-    inner: Arc<UpdateStore<UpdateMeta, String>>,
+    inner: Arc<UpdateStore<UpdateMeta, String, String>>,
 }
 
 impl Deref for UpdateQueue {
-    type Target = Arc<UpdateStore<UpdateMeta, String>>;
+    type Target = Arc<UpdateStore<UpdateMeta, String, String>>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -115,8 +106,6 @@ pub struct IndexerOpts {
     pub indexing_jobs: Option<usize>,
 }
 
-type UpdateSender = broadcast::Sender<UpdateStatus<UpdateMeta, UpdateMetaProgress, String>>;
-
 struct UpdateHandler {
     indexes: Arc<Index>,
     max_nb_chunks: Option<usize>,
@@ -127,14 +116,12 @@ struct UpdateHandler {
     linked_hash_map_size: usize,
     chunk_compression_type: CompressionType,
     chunk_fusing_shrink_size: u64,
-    update_status_sender: UpdateSender,
 }
 
 impl UpdateHandler {
     fn new(
         opt: &IndexerOpts,
         indexes: Arc<Index>,
-        update_status_sender: UpdateSender,
     ) -> Result<Self> {
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(opt.indexing_jobs.unwrap_or(0))
@@ -149,7 +136,6 @@ impl UpdateHandler {
             linked_hash_map_size: opt.linked_hash_map_size,
             chunk_compression_type: opt.chunk_compression_type,
             chunk_fusing_shrink_size: opt.chunk_fusing_shrink_size.get_bytes(),
-            update_status_sender,
         })
     }
 
@@ -191,23 +177,7 @@ impl UpdateHandler {
             Box::new(content) as Box<dyn io::Read>
         };
 
-        let result = builder.execute(reader, |indexing_step, update_id| {
-            let (current, total) = match indexing_step {
-                TransformFromUserIntoGenericFormat { documents_seen } => (documents_seen, None),
-                ComputeIdsAndMergeDocuments { documents_seen, total_documents } => (documents_seen, Some(total_documents)),
-                IndexDocuments { documents_seen, total_documents } => (documents_seen, Some(total_documents)),
-                MergeDataIntoFinalDatabase { databases_seen, total_databases } => (databases_seen, Some(total_databases)),
-            };
-            let _ = self.update_status_sender.send(UpdateStatus::Progressing {
-                update_id,
-                meta: UpdateMetaProgress::DocumentsAddition {
-                    step: indexing_step.step(),
-                    total_steps: indexing_step.number_of_steps(),
-                    current,
-                    total,
-                }
-            });
-        });
+        let result = builder.execute(reader, |indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step));
 
         match result {
             Ok(()) => wtxn.commit().map_err(Into::into),
@@ -226,57 +196,41 @@ impl UpdateHandler {
         }
     }
 
-    fn update_settings(&self, settings: Settings, update_builder: UpdateBuilder) -> Result<()> {
+    fn update_settings(&self, settings: &Settings, update_builder: UpdateBuilder) -> Result<()> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.indexes.write_txn()?;
         let mut builder = update_builder.settings(&mut wtxn, &self.indexes);
 
         // We transpose the settings JSON struct into a real setting update.
-        if let Some(names) = settings.searchable_attributes {
+        if let Some(ref names) = settings.searchable_attributes {
             match names {
-                Some(names) => builder.set_searchable_fields(names),
+                Some(names) => builder.set_searchable_fields(&names),
                 None => builder.reset_searchable_fields(),
             }
         }
 
         // We transpose the settings JSON struct into a real setting update.
-        if let Some(names) = settings.displayed_attributes {
+        if let Some(ref names) = settings.displayed_attributes {
             match names {
-                Some(names) => builder.set_displayed_fields(names),
+                Some(names) => builder.set_displayed_fields(&names),
                 None => builder.reset_displayed_fields(),
             }
         }
 
         // We transpose the settings JSON struct into a real setting update.
-        if let Some(facet_types) = settings.faceted_attributes {
-            builder.set_faceted_fields(facet_types);
+        if let Some(ref facet_types) = settings.faceted_attributes {
+            builder.set_faceted_fields(&facet_types);
         }
 
         // We transpose the settings JSON struct into a real setting update.
-        if let Some(criteria) = settings.criteria {
+        if let Some(ref criteria) = settings.criteria {
             match criteria {
-                Some(criteria) => builder.set_criteria(criteria),
+                Some(criteria) => builder.set_criteria(&criteria),
                 None => builder.reset_criteria(),
             }
         }
 
-        let result = builder.execute(|indexing_step, update_id| {
-            let (current, total) = match indexing_step {
-                TransformFromUserIntoGenericFormat { documents_seen } => (documents_seen, None),
-                ComputeIdsAndMergeDocuments { documents_seen, total_documents } => (documents_seen, Some(total_documents)),
-                IndexDocuments { documents_seen, total_documents } => (documents_seen, Some(total_documents)),
-                MergeDataIntoFinalDatabase { databases_seen, total_databases } => (databases_seen, Some(total_databases)),
-            };
-            let _ = self.update_status_sender.send(UpdateStatus::Progressing {
-                update_id,
-                meta: UpdateMetaProgress::DocumentsAddition {
-                    step: indexing_step.step(),
-                    total_steps: indexing_step.number_of_steps(),
-                    current,
-                    total,
-                }
-            });
-        });
+        let result = builder.execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step));
 
         match result {
             Ok(_count) => wtxn.commit().map_err(Into::into),
@@ -284,7 +238,7 @@ impl UpdateHandler {
         }
     }
 
-    fn update_facets(&self, levels: Facets, update_builder: UpdateBuilder) -> Result<()> {
+    fn update_facets(&self, levels: &Facets, update_builder: UpdateBuilder) -> Result<()> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.indexes.write_txn()?;
         let mut builder = update_builder.facets(&mut wtxn, &self.indexes);
@@ -301,28 +255,30 @@ impl UpdateHandler {
     }
 }
 
-impl Handler<UpdateMeta, String> for UpdateHandler {
-    fn handle_update(&mut self, update_id: u64, meta: UpdateMeta, content: &[u8]) -> heed::Result<String> {
+impl Handler<UpdateMeta, String, String> for UpdateHandler {
+    fn handle_update(
+        &mut self,
+        update_id: u64,
+        meta: Processing<UpdateMeta>,
+        content: &[u8]
+    ) -> Result<Processed<UpdateMeta, String>, Failed<UpdateMeta, String>> {
         use UpdateMeta::*;
 
         let update_builder = self.update_buidler(update_id);
 
-        let result: anyhow::Result<()> = match meta {
-            DocumentsAddition { method, format } => {
-                self.update_documents(format, method, content, update_builder)
-            },
+        let result: anyhow::Result<()> = match meta.meta() {
+            DocumentsAddition { method, format } => self.update_documents(*format, *method, content, update_builder),
             ClearDocuments => self.clear_documents(update_builder),
             Settings(settings) => self.update_settings(settings, update_builder),
             Facets(levels) => self.update_facets(levels, update_builder),
         };
 
-        let meta = match result {
+        let new_meta = match result {
             Ok(()) => format!("valid update content"),
             Err(e) => format!("error while processing update content: {:?}", e),
         };
 
-        let processed = UpdateStatus::Processed { update_id, meta: meta.clone() };
-        let _ = self.update_status_sender.send(processed);
+        let meta = meta.process(new_meta);
 
         Ok(meta)
     }
@@ -333,8 +289,7 @@ impl UpdateQueue {
         opt: &Opt,
         indexes: Arc<Index>,
         ) -> Result<Self> {
-        let (sender, _) = broadcast::channel(100);
-        let handler = UpdateHandler::new(&opt.indexer_options, indexes, sender)?;
+        let handler = UpdateHandler::new(&opt.indexer_options, indexes)?;
         let size = opt.max_udb_size.get_bytes() as usize;
         let path = opt.db_path.join("updates.mdb");
         create_dir_all(&path)?;
@@ -344,5 +299,10 @@ impl UpdateQueue {
             handler
         )?;
         Ok(Self { inner })
+    }
+
+    #[inline]
+    pub fn get_update_status(&self, update_id: u64) -> Result<Option<UpdateStatus<UpdateMeta, String, String>>> {
+        Ok(self.inner.meta(update_id)?)
     }
 }

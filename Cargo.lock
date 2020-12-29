@@ -1191,12 +1191,28 @@ dependencies = [
 [[package]]
 name = "heed"
 version = "0.10.6"
+dependencies = [
+ "byteorder",
+ "heed-traits 0.7.0",
+ "heed-types 0.7.2",
+ "libc",
+ "lmdb-rkv-sys",
+ "once_cell",
+ "page_size",
+ "synchronoise",
+ "url",
+ "zerocopy",
+]
+
+[[package]]
+name = "heed"
+version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "afcc6c911acaadad3ebe9f1ef1707d80bd71c92037566f47b6238a03b60adf1a"
 dependencies = [
  "byteorder",
- "heed-traits",
- "heed-types",
+ "heed-traits 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heed-types 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc",
  "lmdb-rkv-sys",
  "once_cell",
@@ -1210,8 +1226,23 @@ dependencies = [
 [[package]]
 name = "heed-traits"
 version = "0.7.0"
+
+[[package]]
+name = "heed-traits"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b328f6260a7e51bdb0ca6b68e6ea27ee3d11fba5dee930896ee7ff6ad5fc072c"
+
+[[package]]
+name = "heed-types"
+version = "0.7.2"
+dependencies = [
+ "bincode",
+ "heed-traits 0.7.0",
+ "serde",
+ "serde_json",
+ "zerocopy",
+]
 
 [[package]]
 name = "heed-types"
@@ -1220,7 +1251,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e628efb08beaee58355f80dc4adba79d644940ea9eef60175ea17dc218aab405"
 dependencies = [
  "bincode",
- "heed-traits",
+ "heed-traits 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
  "zerocopy",
@@ -1615,7 +1646,7 @@ dependencies = [
  "futures",
  "futures-util",
  "grenad",
- "heed",
+ "heed 0.10.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "http",
  "indexmap",
  "jemallocator",
@@ -1699,6 +1730,7 @@ dependencies = [
  "bstr",
  "byte-unit",
  "byteorder",
+ "chrono",
  "crossbeam-channel",
  "csv",
  "either",
@@ -1706,7 +1738,7 @@ dependencies = [
  "fst",
  "fxhash",
  "grenad",
- "heed",
+ "heed 0.10.6",
  "human_format",
  "itertools",
  "jemallocator",
@@ -1728,6 +1760,7 @@ dependencies = [
  "roaring",
  "serde",
  "serde_json",
+ "serde_millis",
  "slice-group-by",
  "smallstr",
  "smallvec",
@@ -2591,6 +2624,15 @@ dependencies = [
  "indexmap",
  "itoa",
  "ryu",
+ "serde",
+]
+
+[[package]]
+name = "serde_millis"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6e2dc780ca5ee2c369d1d01d100270203c4ff923d2a4264812d723766434d00"
+dependencies = [
  "serde",
 ]
 
