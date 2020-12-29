@@ -57,7 +57,7 @@ pub struct Opt {
     pub max_udb_size: usize,
 
     /// The maximum size, in bytes, of accepted JSON payloads
-    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "10485760")] // 10MB
+    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "104857600")] // 100MB
     pub http_payload_size_limit: usize,
 
     /// Read server certificates from CERTFILE.

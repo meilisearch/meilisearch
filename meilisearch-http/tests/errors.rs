@@ -177,7 +177,7 @@ async fn document_not_found_error() {
 #[actix_rt::test]
 async fn payload_too_large_error() {
     let mut server = common::Server::with_uid("test");
-    let bigvec = vec![0u64; 10_000_000]; // 80mb
+    let bigvec = vec![0u64; 100_000_000]; // 800mb
     assert_error!(
         "payload_too_large",
         "invalid_request_error",
