@@ -13,7 +13,7 @@ use flate2::read::GzDecoder;
 use grenad::CompressionType;
 use log::info;
 use milli::Index;
-use milli::update::{UpdateBuilder, UpdateFormat, IndexDocumentsMethod };
+use milli::update::{UpdateBuilder, UpdateFormat, IndexDocumentsMethod, DocumentAdditionResult };
 use milli::update_store::{UpdateStore, UpdateHandler as Handler, UpdateStatus, Processing, Processed, Failed};
 use rayon::ThreadPool;
 use serde::{Serialize, Deserialize};
@@ -41,13 +41,19 @@ pub enum UpdateMetaProgress {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum UpdateResult {
+    DocumentsAddition(DocumentAdditionResult),
+    Other,
+}
+
 #[derive(Clone)]
 pub struct UpdateQueue {
-    inner: Arc<UpdateStore<UpdateMeta, String, String>>,
+    inner: Arc<UpdateStore<UpdateMeta, UpdateResult, String>>,
 }
 
 impl Deref for UpdateQueue {
-    type Target = Arc<UpdateStore<UpdateMeta, String, String>>;
+    type Target = Arc<UpdateStore<UpdateMeta, UpdateResult, String>>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -163,7 +169,7 @@ impl UpdateHandler {
         method: IndexDocumentsMethod,
         content: &[u8],
         update_builder: UpdateBuilder,
-    ) -> Result<()> {
+    ) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.indexes.write_txn()?;
         let mut builder = update_builder.index_documents(&mut wtxn, &self.indexes);
@@ -180,23 +186,29 @@ impl UpdateHandler {
         let result = builder.execute(reader, |indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step));
 
         match result {
-            Ok(()) => wtxn.commit().map_err(Into::into),
+            Ok(addition_result) => wtxn
+                .commit()
+                .and(Ok(UpdateResult::DocumentsAddition(addition_result)))
+                .map_err(Into::into),
             Err(e) => Err(e.into())
         }
     }
 
-    fn clear_documents(&self, update_builder: UpdateBuilder) -> Result<()> {
+    fn clear_documents(&self, update_builder: UpdateBuilder) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.indexes.write_txn()?;
         let builder = update_builder.clear_documents(&mut wtxn, &self.indexes);
 
         match builder.execute() {
-            Ok(_count) => wtxn.commit().map_err(Into::into),
+            Ok(_count) => wtxn
+                .commit()
+                .and(Ok(UpdateResult::Other))
+                .map_err(Into::into),
             Err(e) => Err(e.into())
         }
     }
 
-    fn update_settings(&self, settings: &Settings, update_builder: UpdateBuilder) -> Result<()> {
+    fn update_settings(&self, settings: &Settings, update_builder: UpdateBuilder) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.indexes.write_txn()?;
         let mut builder = update_builder.settings(&mut wtxn, &self.indexes);
@@ -233,12 +245,15 @@ impl UpdateHandler {
         let result = builder.execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step));
 
         match result {
-            Ok(_count) => wtxn.commit().map_err(Into::into),
+            Ok(_count) => wtxn
+                .commit()
+                .and(Ok(UpdateResult::Other))
+                .map_err(Into::into),
             Err(e) => Err(e.into())
         }
     }
 
-    fn update_facets(&self, levels: &Facets, update_builder: UpdateBuilder) -> Result<()> {
+    fn update_facets(&self, levels: &Facets, update_builder: UpdateBuilder) -> Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.indexes.write_txn()?;
         let mut builder = update_builder.facets(&mut wtxn, &self.indexes);
@@ -249,38 +264,37 @@ impl UpdateHandler {
             builder.min_level_size(value);
         }
         match builder.execute() {
-            Ok(()) => wtxn.commit().map_err(Into::into),
+            Ok(()) => wtxn
+                .commit()
+                .and(Ok(UpdateResult::Other))
+                .map_err(Into::into),
             Err(e) => Err(e.into())
         }
     }
 }
 
-impl Handler<UpdateMeta, String, String> for UpdateHandler {
+impl Handler<UpdateMeta, UpdateResult, String> for UpdateHandler {
     fn handle_update(
         &mut self,
         update_id: u64,
         meta: Processing<UpdateMeta>,
         content: &[u8]
-    ) -> Result<Processed<UpdateMeta, String>, Failed<UpdateMeta, String>> {
+    ) -> Result<Processed<UpdateMeta, UpdateResult>, Failed<UpdateMeta, String>> {
         use UpdateMeta::*;
 
         let update_builder = self.update_buidler(update_id);
 
-        let result: anyhow::Result<()> = match meta.meta() {
+        let result = match meta.meta() {
             DocumentsAddition { method, format } => self.update_documents(*format, *method, content, update_builder),
             ClearDocuments => self.clear_documents(update_builder),
             Settings(settings) => self.update_settings(settings, update_builder),
             Facets(levels) => self.update_facets(levels, update_builder),
         };
 
-        let new_meta = match result {
-            Ok(()) => format!("valid update content"),
-            Err(e) => format!("error while processing update content: {:?}", e),
-        };
-
-        let meta = meta.process(new_meta);
-
-        Ok(meta)
+        match result {
+            Ok(result) => Ok(meta.process(result)),
+            Err(e) => Err(meta.fail(e.to_string())),
+        }
     }
 }
 
@@ -302,7 +316,7 @@ impl UpdateQueue {
     }
 
     #[inline]
-    pub fn get_update_status(&self, update_id: u64) -> Result<Option<UpdateStatus<UpdateMeta, String, String>>> {
+    pub fn get_update_status(&self, update_id: u64) -> Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
         Ok(self.inner.meta(update_id)?)
     }
 }

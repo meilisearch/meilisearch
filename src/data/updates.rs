@@ -7,7 +7,7 @@ use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use milli::update_store::UpdateStatus;
 
 use super::Data;
-use crate::updates::UpdateMeta;
+use crate::updates::{UpdateMeta, UpdateResult};
 
 impl Data {
         pub async fn add_documents<B, E, S>(
@@ -47,7 +47,7 @@ impl Data {
 
 
     #[inline]
-    pub fn get_update_status(&self, _index: &str, uid: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, String, String>>> {
+    pub fn get_update_status(&self, _index: &str, uid: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
         self.update_queue.get_update_status(uid)
     }
 }
