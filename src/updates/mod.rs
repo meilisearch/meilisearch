@@ -216,7 +216,7 @@ impl UpdateHandler {
         // We transpose the settings JSON struct into a real setting update.
         if let Some(ref names) = settings.searchable_attributes {
             match names {
-                Some(names) => builder.set_searchable_fields(&names),
+                Some(names) => builder.set_searchable_fields(names.clone()),
                 None => builder.reset_searchable_fields(),
             }
         }
@@ -224,20 +224,20 @@ impl UpdateHandler {
         // We transpose the settings JSON struct into a real setting update.
         if let Some(ref names) = settings.displayed_attributes {
             match names {
-                Some(names) => builder.set_displayed_fields(&names),
+                Some(names) => builder.set_displayed_fields(names.clone()),
                 None => builder.reset_displayed_fields(),
             }
         }
 
         // We transpose the settings JSON struct into a real setting update.
         if let Some(ref facet_types) = settings.faceted_attributes {
-            builder.set_faceted_fields(&facet_types);
+            builder.set_faceted_fields(facet_types.clone());
         }
 
         // We transpose the settings JSON struct into a real setting update.
         if let Some(ref criteria) = settings.criteria {
             match criteria {
-                Some(criteria) => builder.set_criteria(&criteria),
+                Some(criteria) => builder.set_criteria(criteria.clone()),
                 None => builder.reset_criteria(),
             }
         }
