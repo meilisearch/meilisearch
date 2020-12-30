@@ -12,8 +12,9 @@ use grenad::{Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
 use heed::types::ByteSlice;
 use log::{debug, info, error};
 use memmap::Mmap;
-use rayon::prelude::*;
 use rayon::ThreadPool;
+use rayon::prelude::*;
+use serde::{Serialize, Deserialize};
 
 use crate::index::Index;
 use crate::update::{Facets, UpdateIndexingStep};
@@ -31,6 +32,11 @@ use super::UpdateBuilder;
 mod merge_function;
 mod store;
 mod transform;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DocumentAdditionResult {
+    nb_documents: usize,
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum WriteMethod {
@@ -253,7 +259,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.autogenerate_docids = false;
     }
 
-    pub fn execute<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<()>
+    pub fn execute<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<DocumentAdditionResult>
     where
         R: io::Read,
         F: Fn(UpdateIndexingStep) + Sync,
@@ -279,9 +285,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             UpdateFormat::JsonStream => transform.output_from_json_stream(reader, &progress_callback)?,
         };
 
+        let nb_documents = output.documents_count;
+
         info!("Update transformed in {:.02?}", before_transform.elapsed());
 
-        self.execute_raw(output, progress_callback)
+        self.execute_raw(output, progress_callback)?;
+        Ok(DocumentAdditionResult { nb_documents })
     }
 
     pub fn execute_raw<F>(self, output: TransformOutput, progress_callback: F) -> anyhow::Result<()>
