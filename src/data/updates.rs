@@ -50,4 +50,20 @@ impl Data {
     pub fn get_update_status(&self, _index: &str, uid: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
         self.update_queue.get_update_status(uid)
     }
+
+    pub fn get_updates_status(&self, _index: &str) -> anyhow::Result<Vec<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
+        let result = self.update_queue.iter_metas(|processing, processed, pending, aborted, failed| {
+            let mut metas = processing
+            .map(UpdateStatus::from)
+            .into_iter()
+            .chain(processed.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
+            .chain(pending.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
+            .chain(aborted.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
+            .chain(failed.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
+            .collect::<Vec<_>>();
+            metas.sort_by(|a, b| a.id().cmp(&b.id()));
+            Ok(metas)
+        })?;
+        Ok(result)
+    }
 }
