@@ -10,7 +10,7 @@ pub struct PositionMap {
 }
 
 impl PositionMap {
-    /// insert `id` at the specified `position` updating the other position if a shit if caused by
+    /// insert `id` at the specified `position` updating the other position if a shift is caused by
     /// the operation. If `id` is already present in the position map, it is moved to the requested
     /// `position`, potentially causing shifts.
     pub fn insert(&mut self, id: FieldId, position: IndexedPos) -> IndexedPos {
