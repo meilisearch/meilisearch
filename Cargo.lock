@@ -542,9 +542,9 @@ checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
 
 [[package]]
 name = "bytes"
-version = "0.6.0"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0dcbc35f504eb6fc275a6d20e4ebcda18cf50d40ba6fabff8c711fa16cb3b16"
+checksum = "ad1f8e949d755f9d79112b5bb46938e0ef9d3804a0b16dfab13aafcaa5f0fa72"
 
 [[package]]
 name = "bytestring"
@@ -1674,7 +1674,7 @@ dependencies = [
  "actix-service",
  "actix-web",
  "assert-json-diff",
- "bytes 0.6.0",
+ "bytes 1.0.0",
  "chrono",
  "crossbeam-channel 0.5.0",
  "env_logger 0.8.2",
