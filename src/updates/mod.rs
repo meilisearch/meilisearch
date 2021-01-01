@@ -6,6 +6,7 @@ use std::io;
 use std::sync::Arc;
 use std::ops::Deref;
 use std::fs::create_dir_all;
+use std::collections::HashMap;
 
 use anyhow::Result;
 use byte_unit::Byte;
@@ -20,6 +21,8 @@ use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
 
 use crate::option::Opt;
+
+pub type UpdateStatusResponse = UpdateStatus<UpdateMeta, UpdateResult, String>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -231,7 +234,8 @@ impl UpdateHandler {
 
         // We transpose the settings JSON struct into a real setting update.
         if let Some(ref facet_types) = settings.faceted_attributes {
-            builder.set_faceted_fields(facet_types.clone());
+            let facet_types = facet_types.clone().unwrap_or_else(|| HashMap::new());
+            builder.set_faceted_fields(facet_types);
         }
 
         // We transpose the settings JSON struct into a real setting update.
@@ -245,7 +249,7 @@ impl UpdateHandler {
         let result = builder.execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step));
 
         match result {
-            Ok(_count) => wtxn
+            Ok(()) => wtxn
                 .commit()
                 .and(Ok(UpdateResult::Other))
                 .map_err(Into::into),
@@ -316,7 +320,7 @@ impl UpdateQueue {
     }
 
     #[inline]
-    pub fn get_update_status(&self, update_id: u64) -> Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
+    pub fn get_update_status(&self, update_id: u64) -> Result<Option<UpdateStatusResponse>> {
         Ok(self.inner.meta(update_id)?)
     }
 }

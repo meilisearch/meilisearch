@@ -6,7 +6,7 @@ pub mod health;
 pub mod index;
 pub mod key;
 pub mod search;
-pub mod setting;
+pub mod settings;
 pub mod stats;
 pub mod stop_words;
 pub mod synonym;

@@ -7,7 +7,7 @@ use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use milli::update_store::UpdateStatus;
 
 use super::Data;
-use crate::updates::{UpdateMeta, UpdateResult};
+use crate::updates::{UpdateMeta, UpdateResult, UpdateStatusResponse, Settings};
 
 impl Data {
         pub async fn add_documents<B, E, S>(
@@ -16,7 +16,7 @@ impl Data {
         method: IndexDocumentsMethod,
         format: UpdateFormat,
         mut stream: impl futures::Stream<Item=Result<B, E>> + Unpin,
-    ) -> anyhow::Result<UpdateStatus<UpdateMeta, String, String>>
+    ) -> anyhow::Result<UpdateStatusResponse>
     where
         B: Deref<Target = [u8]>,
         E: std::error::Error + Send + Sync + 'static,
@@ -45,6 +45,16 @@ impl Data {
         Ok(update.into())
     }
 
+    pub async fn update_settings<S: AsRef<str>>(
+        &self,
+        _index: S,
+        settings: Settings
+    ) -> anyhow::Result<UpdateStatusResponse> {
+        let meta = UpdateMeta::Settings(settings);
+        let queue = self.update_queue.clone();
+        let update = tokio::task::spawn_blocking(move || queue.register_update(meta, &[])).await??;
+        Ok(update.into())
+    }
 
     #[inline]
     pub fn get_update_status(&self, _index: &str, uid: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>> {

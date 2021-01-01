@@ -46,7 +46,7 @@ pub fn create_app(
         .configure(routes::document::services)
         .configure(routes::index::services)
         .configure(routes::search::services)
-        .configure(routes::setting::services)
+        .configure(routes::settings::services)
         .configure(routes::stop_words::services)
         .configure(routes::synonym::services)
         .configure(routes::health::services)

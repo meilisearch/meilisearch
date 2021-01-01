@@ -11,7 +11,7 @@ where T: Deserialize<'de>,
     Deserialize::deserialize(deserializer).map(Some)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -30,7 +30,7 @@ pub struct Settings {
     pub searchable_attributes: Option<Option<Vec<String>>>,
 
     #[serde(default)]
-    pub faceted_attributes: Option<HashMap<String, String>>,
+    pub faceted_attributes: Option<Option<HashMap<String, String>>>,
 
     #[serde(
         default,
@@ -38,6 +38,17 @@ pub struct Settings {
         skip_serializing_if = "Option::is_none",
     )]
     pub criteria: Option<Option<Vec<String>>>,
+}
+
+impl Settings {
+    pub fn cleared() -> Self {
+        Self {
+            displayed_attributes: Some(None),
+            searchable_attributes: Some(None),
+            faceted_attributes: Some(None),
+            criteria: Some(None),
+        } 
+    }
 }
 
 
@@ -48,4 +59,3 @@ pub struct Facets {
     pub level_group_size: Option<NonZeroUsize>,
     pub min_level_size: Option<NonZeroUsize>,
 }
-

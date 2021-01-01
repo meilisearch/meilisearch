@@ -3,6 +3,7 @@ mod updates;
 
 pub use search::{SearchQuery, SearchResult};
 
+use std::collections::HashMap;
 use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use milli::Index;
 use sha2::Digest;
 
-use crate::option::Opt;
+use crate::{option::Opt, updates::Settings};
 use crate::updates::UpdateQueue;
 
 #[derive(Clone)]
@@ -80,6 +81,39 @@ impl Data {
         let inner = Arc::new(inner);
 
         Ok(Data { inner })
+    }
+
+    pub fn settings<S: AsRef<str>>(&self, _index: S) -> anyhow::Result<Settings> {
+        let txn = self.indexes.env.read_txn()?;
+        let fields_map = self.indexes.fields_ids_map(&txn)?;
+        println!("fields_map: {:?}", fields_map);
+
+        let displayed_attributes = self.indexes
+            .displayed_fields(&txn)?
+            .map(|fields| {println!("{:?}", fields); fields.iter().filter_map(|f| fields_map.name(*f).map(String::from)).collect()})
+            .unwrap_or_else(|| vec!["*".to_string()]);
+
+        let searchable_attributes = self.indexes
+            .searchable_fields(&txn)?
+            .map(|fields| fields
+                .iter()
+                .filter_map(|f| fields_map.name(*f).map(String::from))
+                .collect())
+            .unwrap_or_else(|| vec!["*".to_string()]);
+
+        let faceted_attributes = self.indexes
+            .faceted_fields(&txn)?
+            .iter()
+            .filter_map(|(f, t)| Some((fields_map.name(*f)?.to_string(), t.to_string())))
+            .collect::<HashMap<_, _>>()
+            .into();
+
+        Ok(Settings {
+            displayed_attributes: Some(Some(displayed_attributes)),
+            searchable_attributes: Some(Some(searchable_attributes)),
+            faceted_attributes: Some(faceted_attributes),
+            criteria: None,
+        })
     }
 
     #[inline]
