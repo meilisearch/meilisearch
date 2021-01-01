@@ -325,9 +325,15 @@ dependencies = [
 
 [[package]]
 name = "arc-swap"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d25d88fd6b8041580a654f9d0c581a047baee2b3efee13275f2fc392fc75034"
+checksum = "dabe5a181f83789739c194cbe5a897dde195078fac08568d09221fd6137a7ba8"
+
+[[package]]
+name = "arc-swap"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec5a4539a733493f412c4d0bb962748ea1f90f3dfdba9ff3ee18acbefc3b33f0"
 
 [[package]]
 name = "assert-json-diff"
@@ -1614,7 +1620,7 @@ checksum = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
 name = "meilisearch-core"
 version = "0.17.0"
 dependencies = [
- "arc-swap",
+ "arc-swap 1.1.0",
  "assert_matches",
  "bincode",
  "byteorder",
@@ -2645,7 +2651,7 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3e12110bc539e657a646068aaf5eb5b63af9d0c1f7b29c97113fad80e15f035"
 dependencies = [
- "arc-swap",
+ "arc-swap 0.4.8",
  "libc",
 ]
 
