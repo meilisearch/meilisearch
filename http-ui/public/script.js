@@ -4,7 +4,6 @@ var timeoutID = null;
 $('#query, #facet').on('input', function () {
   var query = $('#query').val();
   var facet = $('#facet').val();
-  let fetchFacetDistribution = query.trim() !== "" || facet.trim() !== "";
   var timeoutMs = 100;
 
   if (timeoutID !== null) {
@@ -17,7 +16,7 @@ $('#query, #facet').on('input', function () {
       url: "query",
       contentType: 'application/json',
       data: JSON.stringify({
-        'query': query, 'facetCondition': facet, "facetDistribution": fetchFacetDistribution
+        'query': query, 'facetCondition': facet, "facetDistribution": true
       }),
       contentType: 'application/json',
       success: function (data, textStatus, request) {
