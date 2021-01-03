@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::{str, io, fmt};
 
@@ -278,11 +279,11 @@ where
     }
 }
 
-fn facet_number_value_to_string<T: fmt::Debug>(level: u8, left: T, right: T) -> String {
+fn facet_number_value_to_string<T: fmt::Debug>(level: u8, left: T, right: T) -> (u8, String) {
     if level == 0 {
-        format!("{:?} (level {})", left, level)
+        (level, format!("{:?}", left))
     } else {
-        format!("{:?} to {:?} (level {})", left, right, level)
+        (level, format!("{:?} to {:?}", left, right))
     }
 }
 
@@ -353,8 +354,16 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
                 field_id,
                 field_type,
                 |key| key.to_owned(),
-                facet_number_value_to_string,
-                facet_number_value_to_string,
+                |level, left, right| {
+                    let mut output = facet_number_value_to_string(level, left, right).1;
+                    let _ = write!(&mut output, " (level {})", level);
+                    output
+                },
+                |level, left, right| {
+                    let mut output = facet_number_value_to_string(level, left, right).1;
+                    let _ = write!(&mut output, " (level {})", level);
+                    output
+                },
             )?;
 
             for result in iter {
@@ -413,7 +422,7 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
 
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());
-    wtr.write_record(&["facet_value", "documents_count", "documents_ids"])?;
+    wtr.write_record(&["facet_value", "facet_level", "documents_count", "documents_ids"])?;
 
     let db = index.facet_field_id_value_docids;
     let iter = facet_values_iter(
@@ -421,20 +430,20 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
         db,
         field_id,
         *field_type,
-        |key| key.to_owned(),
+        |key| (0, key.to_owned()),
         facet_number_value_to_string,
         facet_number_value_to_string,
     )?;
 
     for result in iter {
-        let (value, docids) = result?;
+        let ((level, value), docids) = result?;
         let count = docids.len();
         let docids = if debug {
             format!("{:?}", docids)
         } else {
             format!("{:?}", docids.iter().collect::<Vec<_>>())
         };
-        wtr.write_record(&[value, count.to_string(), docids])?;
+        wtr.write_record(&[value, level.to_string(), count.to_string(), docids])?;
     }
 
     Ok(wtr.flush()?)
