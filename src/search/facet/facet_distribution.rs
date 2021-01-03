@@ -1,5 +1,5 @@
 use std::collections::{HashSet, HashMap};
-use std::fmt;
+use std::{cmp, fmt};
 use std::ops::Bound::Unbounded;
 
 use roaring::RoaringBitmap;
@@ -13,13 +13,19 @@ use crate::{Index, FieldId};
 pub struct FacetDistribution<'a> {
     facets: Option<HashSet<String>>,
     candidates: Option<RoaringBitmap>,
+    max_values_by_facet: usize,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
 
 impl<'a> FacetDistribution<'a> {
     pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> FacetDistribution<'a> {
-        FacetDistribution { facets: None, candidates: None, rtxn, index }
+        FacetDistribution { facets: None, candidates: None, max_values_by_facet: 100, rtxn, index }
+    }
+
+    pub fn facets<I: IntoIterator<Item=A>, A: AsRef<str>>(&mut self, names: I) -> &mut Self {
+        self.facets = Some(names.into_iter().map(|s| s.as_ref().to_string()).collect());
+        self
     }
 
     pub fn candidates(&mut self, candidates: RoaringBitmap) -> &mut Self {
@@ -27,8 +33,8 @@ impl<'a> FacetDistribution<'a> {
         self
     }
 
-    pub fn facets<I: IntoIterator<Item=A>, A: AsRef<str>>(&mut self, names: I) -> &mut Self {
-        self.facets = Some(names.into_iter().map(|s| s.as_ref().to_string()).collect());
+    pub fn max_values_by_facet(&mut self, max: usize) -> &mut Self {
+        self.max_values_by_facet = cmp::min(max, 1000);
         self
     }
 
@@ -67,7 +73,11 @@ impl<'a> FacetDistribution<'a> {
                 },
                 None => facet_values.push(value),
             }
+            if facet_values.len() == self.max_values_by_facet {
+                break;
+            }
         }
+
         Ok(facet_values)
     }
 
@@ -97,10 +107,18 @@ impl<'a> FacetDistribution<'a> {
 
 impl fmt::Debug for FacetDistribution<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let FacetDistribution { facets, candidates, rtxn: _, index: _ } = self;
+        let FacetDistribution {
+            facets,
+            candidates,
+            max_values_by_facet,
+            rtxn: _,
+            index: _,
+        } = self;
+
         f.debug_struct("FacetDistribution")
             .field("facets", facets)
             .field("candidates", candidates)
+            .field("max_values_by_facet", max_values_by_facet)
             .finish()
     }
 }
