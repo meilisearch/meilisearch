@@ -1,5 +1,6 @@
 var request = null;
 var timeoutID = null;
+var selected_facets = {};
 
 $('#query, #facet').on('input', function () {
   var query = $('#query').val();
@@ -20,7 +21,7 @@ $('#query, #facet').on('input', function () {
       }),
       contentType: 'application/json',
       success: function (data, textStatus, request) {
-        results.innerHTML = '';
+        documents.innerHTML = '';
         facets.innerHTML = '';
 
         let timeSpent = request.getResponseHeader('Time-Ms');
@@ -30,15 +31,28 @@ $('#query, #facet').on('input', function () {
         time.classList.remove('fade-in-out');
 
         for (facet_name in data.facets) {
+          // Append an header to the list of facets
+          let upperCaseName = facet_name.charAt(0).toUpperCase() + facet_name.slice(1);
+          $("<h3></h3>").text(upperCaseName).appendTo($('#facets'));
+
+          // Create a div for a bulma select
+          const header = document.createElement('div');
+          let div = $("<div></div>").addClass('select is-multiple');
+
+          // Create the select element
+          let select = $(`<select data-facet-name='${facet_name}' multiple size=\"8\"></select>`);
           for (value of data.facets[facet_name]) {
-              const elem = document.createElement('span');
-              elem.classList.add("tag");
-              elem.setAttribute('data-name', facet_name);
-              elem.setAttribute('data-value', value);
-              elem.innerHTML = `${facet_name}:${value}`;
-              facets.appendChild(elem);
+              let option = $('<option></option>')
+                .text(value)
+                .attr('value', value)
+                .attr('title', value);
+              select.append(option);
           }
+
+          div.append(select);
+          $('#facets').append(div);
         }
+
 
         for (element of data.documents) {
           const elem = document.createElement('li');
@@ -65,22 +79,16 @@ $('#query, #facet').on('input', function () {
           }
 
           elem.appendChild(ol);
-          results.appendChild(elem);
+          documents.appendChild(elem);
         }
 
-        // When we click on a tag we append the facet value
-        // at the end of the facet query.
-        $('#facets .tag').on('click', function () {
-          let name = $(this).attr("data-name");
-          let value = $(this).attr("data-value");
-
-          let facet_query = $('#facet').val().trim();
-          if (facet_query === "") {
-            $('#facet').val(`${name} = "${value}"`).trigger('input');
-          } else {
-            $('#facet').val(`${facet_query} AND ${name} = "${value}"`).trigger('input');
-          }
+        // When we click on a facet value we change the global values
+        // to make sure that we don't loose the selection between requests.
+        $('#facets select').on('change', function(e) {
+            let facet_name = $(this).attr('data-facet-name');
+            selected_facets[facet_name] = $(this).val();
         });
+
       },
       beforeSend: function () {
         if (request !== null) {
