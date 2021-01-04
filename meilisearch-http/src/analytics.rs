@@ -127,9 +127,14 @@ pub fn analytics_sender(data: Data, opt: Opt) {
 
         let body = qs::to_string(&request).unwrap();
         let response = ureq::post("https://api.amplitude.com/httpapi").send_string(&body);
-        if !response.ok() {
-            let body = response.into_string().unwrap();
-            error!("Unsuccessful call to Amplitude: {}", body);
+        match response {
+            Err(ureq::Error::Status(_ , response)) => {
+                error!("Unsuccessful call to Amplitude: {}", response.into_string().unwrap_or_default());
+            }
+            Err(e) => {
+                error!("Unsuccessful call to Amplitude: {}", e);
+            }
+            _ => (),
         }
 
         thread::sleep(Duration::from_secs(3600)) // one hour
