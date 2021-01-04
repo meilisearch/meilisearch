@@ -6,8 +6,8 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-indexmap = { version = "1.3.2", features = ["serde-1"] }
+indexmap = { version = "1.6.1", features = ["serde-1"] }
 meilisearch-error = { path = "../meilisearch-error", version = "0.17.0" }
-serde = { version = "1.0.117", features = ["derive"] }
-serde_json = { version = "1.0.59", features = ["preserve_order"] }
+serde = { version = "1.0.118", features = ["derive"] }
+serde_json = { version = "1.0.61", features = ["preserve_order"] }
 zerocopy = "0.3.0"
