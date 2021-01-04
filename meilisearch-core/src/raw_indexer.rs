@@ -73,25 +73,18 @@ where
     where
         I: IntoIterator<Item = &'s str>,
     {
-        let mut byte_offset = 0;
         let mut word_offset = 0;
 
         for text in text_iter.into_iter() {
-            let current_byte_offset = byte_offset;
             let current_word_offset = word_offset;
 
             let analyzed_text = self.analyzer.analyze(text);
             let tokens = process_tokens(analyzed_text.tokens())
-                .map(|(i, mut t)| {
-                    t.byte_start += current_byte_offset;
-                    t.byte_end += current_byte_offset;
-                    (i + current_word_offset, t)
-                })
+                .map(|(i, t)| (i + current_word_offset, t))
                 .enumerate();
 
             for (token_pos, (word_pos, token)) in tokens  {
                 word_offset = word_pos + 1;
-                byte_offset = token.byte_end + 1;
 
                 let must_continue = index_token(
                     token,
