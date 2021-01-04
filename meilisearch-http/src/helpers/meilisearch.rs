@@ -479,7 +479,7 @@ fn calculate_highlights(
     for (attribute, matches) in matches.iter() {
         if attributes_to_highlight.contains(attribute) {
             if let Some(Value::String(value)) = document.get(attribute) {
-                let value = value.clone();
+                let value = value;
                 let mut highlighted_value = String::new();
                 let mut index = 0;
 
@@ -612,7 +612,6 @@ mod tests {
 
         assert_eq!(result, result_expected);
     }
-
 
     #[test]
     fn highlight_longest_match() {
