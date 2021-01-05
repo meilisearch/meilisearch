@@ -42,14 +42,12 @@ fn current_dump_version() -> String {
 }
 
 fn read_all_jsonline<R: std::io::Read>(r: R) -> Value {
-    let deserializer = serde_json::Deserializer::from_reader(r);
-    let iterator = deserializer.into_iter::<serde_json::Value>();
+    let deserializer = serde_json::Deserializer::from_reader(r); let iterator = deserializer.into_iter::<serde_json::Value>();
 
     json!(iterator.map(|v| v.unwrap()).collect::<Vec<Value>>())
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn trigger_dump_should_return_ok() {
     let server = common::Server::test_server().await;
 
@@ -59,7 +57,6 @@ async fn trigger_dump_should_return_ok() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn trigger_dump_twice_should_return_conflict() {
     let server = common::Server::test_server().await;
 
@@ -82,7 +79,6 @@ async fn trigger_dump_twice_should_return_conflict() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn trigger_dump_concurently_should_return_conflict() {
     let server = common::Server::test_server().await;
 
@@ -100,7 +96,6 @@ async fn trigger_dump_concurently_should_return_conflict() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn get_dump_status_early_should_return_in_progress() {
     let mut server = common::Server::test_server().await;
     
@@ -125,7 +120,6 @@ async fn get_dump_status_early_should_return_in_progress() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn get_dump_status_should_return_done() {
     let mut server = common::Server::test_server().await;
 
@@ -151,7 +145,6 @@ async fn get_dump_status_should_return_done() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn get_dump_status_should_return_error_provoking_it() {
     let mut server = common::Server::test_server().await;
 
@@ -184,7 +177,6 @@ async fn get_dump_status_should_return_error_provoking_it() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn dump_metadata_should_be_valid() {
     let mut server = common::Server::test_server().await;
     
@@ -232,7 +224,6 @@ async fn dump_metadata_should_be_valid() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn dump_gzip_should_have_been_created() {
     let mut server = common::Server::test_server().await;
     
@@ -245,7 +236,6 @@ async fn dump_gzip_should_have_been_created() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn dump_index_settings_should_be_valid() {
     let mut server = common::Server::test_server().await;
 
@@ -325,7 +315,6 @@ async fn dump_index_settings_should_be_valid() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn dump_index_documents_should_be_valid() {
     let mut server = common::Server::test_server().await;
 
@@ -349,7 +338,6 @@ async fn dump_index_documents_should_be_valid() {
 }
 
 #[actix_rt::test]
-#[ignore]
 async fn dump_index_updates_should_be_valid() {
     let mut server = common::Server::test_server().await;
 
@@ -375,7 +363,6 @@ async fn dump_index_updates_should_be_valid() {
 }
  
 #[actix_rt::test]
-#[ignore]
 async fn get_unexisting_dump_status_should_return_not_found() {
     let mut server = common::Server::test_server().await;
 
