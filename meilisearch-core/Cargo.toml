@@ -51,7 +51,3 @@ termcolor = "1.1.2"
 
 [target.'cfg(unix)'.dev-dependencies]
 jemallocator = "0.3.2"
-
-[[bench]]
-name = "search_benchmark"
-harness = false
