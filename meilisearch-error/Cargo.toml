@@ -5,4 +5,4 @@ authors = ["marin <postma.marin@protonmail.com>"]
 edition = "2018"
 
 [dependencies]
-actix-http = "2"
+actix-http = "2.2.0"

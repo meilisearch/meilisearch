@@ -6,5 +6,5 @@ authors = ["Kerollmops <renault.cle@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-deunicode = "1.1.0"
+deunicode = "1.1.1"
 slice-group-by = "0.2.6"
