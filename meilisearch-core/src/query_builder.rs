@@ -444,7 +444,7 @@ mod tests {
                 for index in indexes {
                     let name = index.attribute.to_string();
                     schema.insert(&name).unwrap();
-                    let indexed_pos = schema.set_indexed(&name).unwrap().1;
+                    let indexed_pos = schema.insert_with_position(&name).unwrap().1;
                     let index = DocIndex {
                         attribute: indexed_pos.0,
                         ..*index
