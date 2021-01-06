@@ -11,7 +11,6 @@ use meilisearch_core::criterion::*;
 use meilisearch_core::settings::RankingRule;
 use meilisearch_core::{Highlight, Index, RankedMap};
 use meilisearch_schema::{FieldId, Schema};
-use meilisearch_tokenizer::is_cjk;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use siphasher::sip::SipHasher;
@@ -344,7 +343,7 @@ pub struct SearchResult {
 
 /// returns the start index and the length on the crop.
 fn aligned_crop(text: &str, match_index: usize, context: usize) -> (usize, usize) {
-    let is_word_component = |c: &char| c.is_alphanumeric() && !is_cjk(*c);
+    let is_word_component = |c: &char| c.is_alphanumeric() && !super::is_cjk(*c);
 
     let word_end_index = |mut index| {
         if text.chars().nth(index - 1).map_or(false, |c| is_word_component(&c)) {
@@ -480,7 +479,7 @@ fn calculate_highlights(
     for (attribute, matches) in matches.iter() {
         if attributes_to_highlight.contains(attribute) {
             if let Some(Value::String(value)) = document.get(attribute) {
-                let value: Vec<_> = value.chars().collect();
+                let value = value;
                 let mut highlighted_value = String::new();
                 let mut index = 0;
 
@@ -493,16 +492,16 @@ fn calculate_highlights(
                     let before = value.get(index..m.start);
                     let highlighted = value.get(m.start..(m.start + m.length));
                     if let (Some(before), Some(highlighted)) = (before, highlighted) {
-                        highlighted_value.extend(before);
+                        highlighted_value.push_str(before);
                         highlighted_value.push_str("<em>");
-                        highlighted_value.extend(highlighted);
+                        highlighted_value.push_str(highlighted);
                         highlighted_value.push_str("</em>");
                         index = m.start + m.length;
                     } else {
                         error!("value: {:?}; index: {:?}, match: {:?}", value, index, m);
                     }
                 }
-                highlighted_value.extend(value[index..].iter());
+                highlighted_value.push_str(&value[index..]);
                 highlight_result.insert(attribute.to_string(), Value::String(highlighted_value));
             };
         }
@@ -598,7 +597,7 @@ mod tests {
 
         let mut m = Vec::new();
         m.push(MatchPosition {
-            start: 510,
+            start: 529,
             length: 9,
         });
         matches.insert("description".to_string(), m);

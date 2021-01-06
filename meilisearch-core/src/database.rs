@@ -193,8 +193,8 @@ fn version_guard(path: &Path, create: bool) -> MResult<(u32, u32, u32)> {
                 Err(Error::VersionMismatch(format!("{}.{}.XX", version_major, version_minor)))
             } else {
                 Ok((
-                    version_major.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?, 
-                    version_minor.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?, 
+                    version_major.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?,
+                    version_minor.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?,
                     version_patch.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?
                 ))
             }
@@ -212,8 +212,8 @@ fn version_guard(path: &Path, create: bool) -> MResult<(u32, u32, u32)> {
                                 current_version_patch).as_bytes())?;
 
                         Ok((
-                            current_version_major.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?, 
-                            current_version_minor.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?, 
+                            current_version_major.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?,
+                            current_version_minor.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?,
                             current_version_patch.parse().map_err(|e| Error::VersionMismatch(format!("error parsing database version: {}", e)))?
                         ))
                     } else {

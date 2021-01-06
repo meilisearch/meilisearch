@@ -110,7 +110,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn index_document<A>(
+fn index_document<A: AsRef<[u8]>>(
     writer: &mut heed::RwTxn<MainT>,
     documents_fields: DocumentsFields,
     documents_fields_counts: DocumentsFieldsCounts,
@@ -121,7 +121,6 @@ fn index_document<A>(
     document_id: DocumentId,
     value: &Value,
 ) -> MResult<()>
-where A: AsRef<[u8]>,
 {
     let serialized = serde_json::to_vec(value)?;
     documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
@@ -222,7 +221,7 @@ pub fn apply_addition(
     let stop_words = index.main.stop_words_fst(writer)?.map_data(Cow::into_owned)?;
 
 
-    let mut indexer = RawIndexer::new(stop_words);
+    let mut indexer = RawIndexer::new(&stop_words);
 
     // For each document in this update
     for (document_id, document) in &documents_additions {
@@ -317,7 +316,7 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
         .unwrap();
 
     let number_of_inserted_documents = documents_ids_to_reindex.len();
-    let mut indexer = RawIndexer::new(stop_words);
+    let mut indexer = RawIndexer::new(&stop_words);
     let mut ram_store = HashMap::new();
 
     if let Some(ref attributes_for_facetting) = index.main.attributes_for_faceting(writer)? {
@@ -373,14 +372,13 @@ pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Ind
     Ok(())
 }
 
-pub fn write_documents_addition_index<A>(
+pub fn write_documents_addition_index<A: AsRef<[u8]>>(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     ranked_map: &RankedMap,
     number_of_inserted_documents: usize,
     indexer: RawIndexer<A>,
 ) -> MResult<()>
-where A: AsRef<[u8]>,
 {
     let indexed = indexer.build();
     let mut delta_words_builder = SetBuilder::memory();

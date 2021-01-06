@@ -359,6 +359,66 @@ async fn search_with_attribute_to_highlight_wildcard() {
 }
 
 #[actix_rt::test]
+async fn search_with_attribute_to_highlight_wildcard_chinese() {
+    let mut server = common::Server::test_server().await;
+
+    let query = json!({
+        "q": "子孙",
+        "limit": 1,
+        "attributesToHighlight": ["*"]
+    });
+
+    let expected = json!([
+        {
+            "id": 77,
+            "isActive": false,
+            "balance": "$1,274.29",
+            "picture": "http://placehold.it/32x32",
+            "age": 25,
+            "color": "Red",
+            "name": "孫武",
+            "gender": "male",
+            "email": "SunTzu@chorizon.com",
+            "phone": "+1 (810) 407-3258",
+            "address": "吴國",
+            "about": "孫武（前544年－前470年或前496年），字長卿，春秋時期齊國人，著名軍事家、政治家，兵家代表人物。兵書《孫子兵法》的作者，後人尊稱為孫子、兵聖、東方兵聖，山東、蘇州等地尚有祀奉孫武的廟宇兵聖廟。其族人为樂安孫氏始祖，次子孙明为富春孫氏始祖。\r\n",
+            "registered": "2014-10-20T10:13:32 -02:00",
+            "latitude": 17.11935,
+            "longitude": 65.38197,
+            "tags": [
+              "new issue",
+              "wontfix"
+            ],
+          "_formatted": {
+            "id": 77,
+            "isActive": false,
+            "balance": "$1,274.29",
+            "picture": "http://placehold.it/32x32",
+            "age": 25,
+            "color": "Red",
+            "name": "<em>孫武</em>",
+            "gender": "male",
+            "email": "SunTzu@chorizon.com",
+            "phone": "+1 (810) 407-3258",
+            "address": "吴國",
+            "about": "<em>孫武</em>（前544年－前470年或前496年），字長卿，春秋時期齊國人，著名軍事家、政治家，兵家代表人物。兵書《<em>孫子</em>兵法》的作者，後人尊稱為<em>孫子</em>、兵聖、東方兵聖，山東、蘇州等地尚有祀奉<em>孫武</em>的廟宇兵聖廟。其族人为樂安<em>孫氏</em>始祖，次<em>子孙</em>明为富春孫氏始祖。\r\n",
+            "registered": "2014-10-20T10:13:32 -02:00",
+            "latitude": 17.11935,
+            "longitude": 65.38197,
+            "tags": [
+              "new issue",
+              "wontfix"
+            ]
+          }
+        }
+    ]);
+
+    test_post_get_search!(server, query, |response, _status_code| {
+        assert_json_eq!(expected.clone(), response["hits"].clone(), ordered: false);
+    });
+}
+
+#[actix_rt::test]
 async fn search_with_attribute_to_highlight_1() {
     let mut server = common::Server::test_server().await;
 

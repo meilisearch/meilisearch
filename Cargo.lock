@@ -301,6 +301,12 @@ checksum = "ee2a4ec343196209d6594e19543ae87a39f96d5534d7174822a3ad825dd6ed7e"
 
 [[package]]
 name = "ahash"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8fd72866655d1904d6b0997d0b07ba561047d070fbe29de039031c641b61217"
+
+[[package]]
+name = "ahash"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "739f4a8db6605981345c5654f3a85b056ce52f37a39d34da03f25bf2151ea16e"
@@ -571,6 +577,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c0496836a84f8d0495758516b8621a622beb77c0fed418570e50764093ced48"
 
 [[package]]
+name = "cedarwood"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "963e82c7b94163808ca3a452608d260b64ba5bc7b5653b4af1af59887899f48d"
+dependencies = [
+ "smallvec",
+]
+
+[[package]]
 name = "cfg-if"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -581,6 +596,15 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "character_converter"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e48477ece09d6a21c033cb604968524a37782532727055d6f6faafac1781e5c"
+dependencies = [
+ "bincode",
+]
 
 [[package]]
 name = "chrono"
@@ -1185,11 +1209,21 @@ checksum = "d36fab90f82edc3c747f9d438e06cf0a491055896f2a279638bb5beed6c40177"
 
 [[package]]
 name = "hashbrown"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96282e96bfcd3da0d3aa9938bedf1e50df3269b6db08b4876d2da0bb1a0841cf"
+dependencies = [
+ "ahash 0.3.8",
+ "autocfg",
+]
+
+[[package]]
+name = "hashbrown"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7afe4a420e3fe79967a00898cc1f4db7c8a49a9333a29f8a4bd76a253d5cd04"
 dependencies = [
- "ahash",
+ "ahash 0.4.7",
  "serde",
 ]
 
@@ -1380,7 +1414,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb1fa934250de4de8aef298d81c729a7d33d8c239daa3a7575e6b92bfc7313b"
 dependencies = [
  "autocfg",
- "hashbrown",
+ "hashbrown 0.9.1",
  "serde",
 ]
 
@@ -1472,6 +1506,21 @@ checksum = "43ae63fcfc45e99ab3d1b29a46782ad679e98436c3169d15a167a1108a724b69"
 dependencies = [
  "jemalloc-sys",
  "libc",
+]
+
+[[package]]
+name = "jieba-rs"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34fbdeee8786790f4a99fa30ff5c5f88aa5183f7583693e3788d17fc8a48f33a"
+dependencies = [
+ "cedarwood",
+ "fxhash",
+ "hashbrown 0.9.1",
+ "lazy_static",
+ "phf",
+ "phf_codegen",
+ "regex",
 ]
 
 [[package]]
@@ -1606,7 +1655,7 @@ dependencies = [
  "either",
  "env_logger 0.8.2",
  "fst",
- "hashbrown",
+ "hashbrown 0.9.1",
  "heed",
  "indexmap",
  "intervaltree",
@@ -1666,7 +1715,6 @@ dependencies = [
  "meilisearch-core",
  "meilisearch-error",
  "meilisearch-schema",
- "meilisearch-tokenizer",
  "mime",
  "once_cell",
  "rand 0.8.1",
@@ -1704,10 +1752,18 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-tokenizer"
-version = "0.17.0"
+version = "0.1.1"
+source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.1.2#8d91cd52f30aa4b651a085c15056938f7b599646"
 dependencies = [
+ "character_converter",
+ "cow-utils",
  "deunicode",
+ "fst",
+ "jieba-rs",
+ "once_cell",
  "slice-group-by",
+ "unicode-segmentation",
+ "whatlang",
 ]
 
 [[package]]
@@ -1986,6 +2042,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "phf"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3dfb61232e34fcb633f43d12c58f83c1df82962dcdfa565a4e866ffc17dafe12"
+dependencies = [
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_codegen"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbffee61585b0411840d3ece935cce9cb6321f01c45477d30066498cd5e1a815"
+dependencies = [
+ "phf_generator",
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_generator"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17367f0cc86f2d25802b2c26ee58a7b23faeccf78a396094c13dced0d0182526"
+dependencies = [
+ "phf_shared",
+ "rand 0.7.3",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c00cf8b9eafe68dde5e9eaa2cef8ee84a9336a47d566ec55ca16589633b65af7"
+dependencies = [
+ "siphasher",
+]
+
+[[package]]
 name = "pin-project"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2151,6 +2245,7 @@ dependencies = [
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
  "rand_hc 0.2.0",
+ "rand_pcg",
 ]
 
 [[package]]
@@ -2234,6 +2329,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3190ef7066a446f2e7f42e239d161e905420ccab01eb967c9eb27d21b2322a73"
 dependencies = [
  "rand_core 0.6.1",
+]
+
+[[package]]
+name = "rand_pcg"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16abd0c1b639e9eb4d7c50c0b8100b0d0f849be2349829c740fe8e6eb4816429"
+dependencies = [
+ "rand_core 0.5.1",
 ]
 
 [[package]]
@@ -3419,6 +3523,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82015b7e0b8bad8185994674a13a93306bea76cf5a16c5a181382fd3a5ec2376"
 dependencies = [
  "webpki",
+]
+
+[[package]]
+name = "whatlang"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc0289c1d1548414a5645e6583e118e9c569c579ec2a0c32417cc3dbf7a89075"
+dependencies = [
+ "hashbrown 0.7.2",
 ]
 
 [[package]]

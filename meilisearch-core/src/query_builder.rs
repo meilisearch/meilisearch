@@ -296,13 +296,41 @@ mod tests {
     use sdset::SetBuf;
     use tempfile::TempDir;
 
-    use crate::automaton::normalize_str;
     use crate::bucket_sort::SimpleMatch;
     use crate::database::{Database, DatabaseOptions};
     use crate::store::Index;
     use crate::DocIndex;
     use crate::Document;
     use meilisearch_schema::Schema;
+
+    fn is_cjk(c: char) -> bool {
+        ('\u{1100}'..'\u{11ff}').contains(&c)  // Hangul Jamo
+            || ('\u{2e80}'..'\u{2eff}').contains(&c)  // CJK Radicals Supplement
+            || ('\u{2f00}'..'\u{2fdf}').contains(&c) // Kangxi radical
+            || ('\u{3000}'..'\u{303f}').contains(&c) // Japanese-style punctuation
+            || ('\u{3040}'..'\u{309f}').contains(&c) // Japanese Hiragana
+            || ('\u{30a0}'..'\u{30ff}').contains(&c) // Japanese Katakana
+            || ('\u{3100}'..'\u{312f}').contains(&c)
+            || ('\u{3130}'..'\u{318F}').contains(&c) // Hangul Compatibility Jamo
+            || ('\u{3200}'..'\u{32ff}').contains(&c) // Enclosed CJK Letters and Months
+            || ('\u{3400}'..'\u{4dbf}').contains(&c) // CJK Unified Ideographs Extension A
+            || ('\u{4e00}'..'\u{9fff}').contains(&c) // CJK Unified Ideographs
+            || ('\u{a960}'..'\u{a97f}').contains(&c) // Hangul Jamo Extended-A
+            || ('\u{ac00}'..'\u{d7a3}').contains(&c) // Hangul Syllables
+            || ('\u{d7b0}'..'\u{d7ff}').contains(&c) // Hangul Jamo Extended-B
+            || ('\u{f900}'..'\u{faff}').contains(&c) // CJK Compatibility Ideographs
+            || ('\u{ff00}'..'\u{ffef}').contains(&c) // Full-width roman characters and half-width katakana
+    }
+
+    fn normalize_str(string: &str) -> String {
+        let mut string = string.to_lowercase();
+
+        if !string.contains(is_cjk) {
+            string = deunicode::deunicode_with_tofu(&string, "");
+        }
+
+        string
+    }
 
     fn set_from_stream<'f, I, S>(stream: I) -> fst::Set<Vec<u8>>
     where
@@ -415,6 +443,7 @@ mod tests {
                 let mut final_indexes = Vec::new();
                 for index in indexes {
                     let name = index.attribute.to_string();
+                    schema.insert(&name).unwrap();
                     let indexed_pos = schema.insert_with_position(&name).unwrap().1;
                     let index = DocIndex {
                         attribute: indexed_pos.0,
@@ -446,7 +475,7 @@ mod tests {
                     .postings_lists
                     .put_postings_list(&mut writer, &word, &postings_list)
                     .unwrap();
-                }
+            }
 
             for ((docid, attr, _), count) in fields_counts {
                 let prev = index
@@ -460,7 +489,7 @@ mod tests {
                     .documents_fields_counts
                     .put_document_field_count(&mut writer, docid, IndexedPos(attr), prev + count)
                     .unwrap();
-                }
+            }
 
             writer.commit().unwrap();
 
@@ -1268,15 +1297,15 @@ mod tests {
         let builder = store.query_builder();
         let SortResult { documents, .. } = builder.query(&reader, Some("télephone"), 0..20).unwrap();
         let mut iter = documents.into_iter();
-
-        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
             let mut iter = matches.into_iter();
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, .. }));
             assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, .. }));
             assert_matches!(iter.next(), None);
         });
-        assert_matches!(iter.next(), Some(Document { id: DocumentId(0), matches, .. }) => {
+        assert_matches!(iter.next(), Some(Document { id: DocumentId(1), matches, .. }) => {
             let mut iter = matches.into_iter();
-            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, distance: 1, word_index: 0, is_exact: false, .. })); // iphone | telephone
+            assert_matches!(iter.next(), Some(SimpleMatch { query_index: 0, .. }));
             assert_matches!(iter.next(), None);
         });
         assert_matches!(iter.next(), None);

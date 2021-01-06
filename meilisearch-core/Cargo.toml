@@ -26,7 +26,7 @@ levenshtein_automata = { version = "0.2.0", features = ["fst_automaton"] }
 log = "0.4.11"
 meilisearch-error = { path = "../meilisearch-error", version = "0.17.0" }
 meilisearch-schema = { path = "../meilisearch-schema", version = "0.17.0" }
-meilisearch-tokenizer = { path = "../meilisearch-tokenizer", version = "0.17.0" }
+meilisearch-tokenizer = { git = "https://github.com/meilisearch/Tokenizer.git", tag = "v0.1.2" }
 meilisearch-types = { path = "../meilisearch-types", version = "0.17.0" }
 once_cell = "1.5.2"
 ordered-float = { version = "2.0.1", features = ["serde"] }
