@@ -189,9 +189,9 @@ impl<'a> Search<'a> {
                     }
                 } else {
                     let facet_fn = if ascending {
-                        FacetIter::<f64, FacetLevelValueF64Codec>::new
+                        FacetIter::<f64, FacetLevelValueF64Codec>::new_reducing
                     } else {
-                        FacetIter::<f64, FacetLevelValueF64Codec>::new_reverse
+                        FacetIter::<f64, FacetLevelValueF64Codec>::new_reverse_reducing
                     };
                     let mut limit_tmp = limit;
                     let mut output = Vec::new();
@@ -226,9 +226,9 @@ impl<'a> Search<'a> {
                     }
                 } else {
                     let facet_fn = if ascending {
-                        FacetIter::<i64, FacetLevelValueI64Codec>::new
+                        FacetIter::<i64, FacetLevelValueI64Codec>::new_reducing
                     } else {
-                        FacetIter::<i64, FacetLevelValueI64Codec>::new_reverse
+                        FacetIter::<i64, FacetLevelValueI64Codec>::new_reverse_reducing
                     };
                     let mut limit_tmp = limit;
                     let mut output = Vec::new();

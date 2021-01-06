@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
-use crate::search::facet::FacetRange;
+use crate::search::facet::{FacetIter, FacetRange};
 use crate::{Index, FieldId};
 
 pub struct FacetDistribution<'a> {
@@ -41,61 +41,99 @@ impl<'a> FacetDistribution<'a> {
     }
 
     fn facet_values(&self, field_id: FieldId, facet_type: FacetType) -> heed::Result<Vec<Value>> {
-        if let Some(candidates) = self.candidates.as_ref().filter(|c| c.len() <= 1000) {
-            let mut key_buffer = vec![field_id];
-            match facet_type {
-                FacetType::Float => {
-                    let mut facet_values = HashSet::new();
-                    for docid in candidates {
-                        key_buffer.truncate(1);
-                        key_buffer.extend_from_slice(&docid.to_be_bytes());
-                        let iter = self.index.field_id_docid_facet_values
-                            .prefix_iter(self.rtxn, &key_buffer)?
-                            .remap_key_type::<FieldDocIdFacetF64Codec>();
-                        for result in iter {
-                            let ((_, _, value), ()) = result?;
-                            facet_values.insert(OrderedFloat(value));
+        if let Some(candidates) = self.candidates.as_ref() {
+            if candidates.len() <= 1000 {
+                let mut key_buffer = vec![field_id];
+                match facet_type {
+                    FacetType::Float => {
+                        let mut facet_values = HashSet::new();
+                        for docid in candidates {
+                            key_buffer.truncate(1);
+                            key_buffer.extend_from_slice(&docid.to_be_bytes());
+                            let iter = self.index.field_id_docid_facet_values
+                                .prefix_iter(self.rtxn, &key_buffer)?
+                                .remap_key_type::<FieldDocIdFacetF64Codec>();
+                            for result in iter {
+                                let ((_, _, value), ()) = result?;
+                                facet_values.insert(OrderedFloat(value));
+                            }
                         }
-                    }
-                    Ok(facet_values.into_iter().map(|f| Value::from(*f)).collect())
-                },
-                FacetType::Integer => {
-                    let mut facet_values = HashSet::new();
-                    for docid in candidates {
-                        key_buffer.truncate(1);
-                        key_buffer.extend_from_slice(&docid.to_be_bytes());
-                        let iter = self.index.field_id_docid_facet_values
-                            .prefix_iter(self.rtxn, &key_buffer)?
-                            .remap_key_type::<FieldDocIdFacetI64Codec>();
-                        for result in iter {
-                            let ((_, _, value), ()) = result?;
-                            facet_values.insert(value);
+                        Ok(facet_values.into_iter().map(|f| Value::from(*f)).collect())
+                    },
+                    FacetType::Integer => {
+                        let mut facet_values = HashSet::new();
+                        for docid in candidates {
+                            key_buffer.truncate(1);
+                            key_buffer.extend_from_slice(&docid.to_be_bytes());
+                            let iter = self.index.field_id_docid_facet_values
+                                .prefix_iter(self.rtxn, &key_buffer)?
+                                .remap_key_type::<FieldDocIdFacetI64Codec>();
+                            for result in iter {
+                                let ((_, _, value), ()) = result?;
+                                facet_values.insert(value);
+                            }
                         }
-                    }
-                    Ok(facet_values.into_iter().map(Value::from).collect())
-                },
-                FacetType::String => {
-                    let mut facet_values = HashSet::new();
-                    for docid in candidates {
-                        key_buffer.truncate(1);
-                        key_buffer.extend_from_slice(&docid.to_be_bytes());
-                        let iter = self.index.field_id_docid_facet_values
-                            .prefix_iter(self.rtxn, &key_buffer)?
-                            .remap_key_type::<FieldDocIdFacetStringCodec>();
-                        for result in iter {
-                            let ((_, _, value), ()) = result?;
-                            facet_values.insert(value);
+                        Ok(facet_values.into_iter().map(Value::from).collect())
+                    },
+                    FacetType::String => {
+                        let mut facet_values = HashSet::new();
+                        for docid in candidates {
+                            key_buffer.truncate(1);
+                            key_buffer.extend_from_slice(&docid.to_be_bytes());
+                            let iter = self.index.field_id_docid_facet_values
+                                .prefix_iter(self.rtxn, &key_buffer)?
+                                .remap_key_type::<FieldDocIdFacetStringCodec>();
+                            for result in iter {
+                                let ((_, _, value), ()) = result?;
+                                facet_values.insert(value);
+                            }
                         }
+                        Ok(facet_values.into_iter().map(Value::from).collect())
+                    },
+                }
+            } else {
+                let iter = match facet_type {
+                    FacetType::String => {
+                        let db = self.index.facet_field_id_value_docids;
+                        let iter = db
+                            .prefix_iter(self.rtxn, &[field_id])?
+                            .remap_key_type::<FacetValueStringCodec>()
+                            .map(|r| r.map(|((_, v), docids)| (Value::from(v), docids)));
+                        Box::new(iter) as Box::<dyn Iterator<Item=_>>
+                    },
+                    FacetType::Integer => {
+                        let iter = FacetIter::<i64, FacetLevelValueI64Codec>::new_non_reducing(
+                            self.rtxn, self.index, field_id, candidates.clone(),
+                        )?;
+                        Box::new(iter.map(|r| r.map(|(v, docids)| (Value::from(v), docids))))
+                    },
+                    FacetType::Float => {
+                        let iter = FacetIter::<f64, FacetLevelValueF64Codec>::new_non_reducing(
+                            self.rtxn, self.index, field_id, candidates.clone(),
+                        )?;
+                        Box::new(iter.map(|r| r.map(|(v, docids)| (Value::from(v), docids))))
+                    },
+                };
+
+                let mut facet_values = Vec::new();
+                for result in iter {
+                    let (value, docids) = result?;
+                    if self.candidates.as_ref().map_or(true, |c| docids.is_disjoint(c)) {
+                        facet_values.push(value);
                     }
-                    Ok(facet_values.into_iter().map(Value::from).collect())
-                },
+                    if facet_values.len() == self.max_values_by_facet {
+                        break;
+                    }
+                }
+
+                Ok(facet_values)
             }
         } else {
             let db = self.index.facet_field_id_value_docids;
             let iter = match facet_type {
                 FacetType::String => {
                     let iter = db
-                        .prefix_iter(&self.rtxn, &[field_id])?
+                        .prefix_iter(self.rtxn, &[field_id])?
                         .remap_key_type::<FacetValueStringCodec>()
                         .map(|r| r.map(|((_, v), docids)| (Value::from(v), docids)));
                     Box::new(iter) as Box::<dyn Iterator<Item=_>>
@@ -119,11 +157,8 @@ impl<'a> FacetDistribution<'a> {
             let mut facet_values = Vec::new();
             for result in iter {
                 let (value, docids) = result?;
-                match &self.candidates {
-                    Some(candidates) => if !docids.is_disjoint(candidates) {
-                        facet_values.push(value);
-                    },
-                    None => facet_values.push(value),
+                if self.candidates.as_ref().map_or(true, |c| docids.is_disjoint(c)) {
+                    facet_values.push(value);
                 }
                 if facet_values.len() == self.max_values_by_facet {
                     break;
