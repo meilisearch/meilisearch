@@ -22,6 +22,7 @@ tempfile = "3.1.0"
 askama = "0.10.1"
 askama_warp = "0.10.0"
 bytes = "0.5.6"
+either = "1.6.1"
 flate2 = "1.0.19"
 futures = "0.3.6"
 serde = { version = "1.0", features = ["derive"] }

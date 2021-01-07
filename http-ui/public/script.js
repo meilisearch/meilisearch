@@ -2,9 +2,10 @@ var request = null;
 var timeoutID = null;
 var selected_facets = {};
 
-$('#query, #facet').on('input', function () {
+$('#query, #filters').on('input', function () {
   var query = $('#query').val();
-  var facet = $('#facet').val();
+  var filters = $('#filters').val();
+  var facet_filters = selectedFacetsToArray(selected_facets);
   var timeoutMs = 100;
 
   if (timeoutID !== null) {
@@ -17,7 +18,10 @@ $('#query, #facet').on('input', function () {
       url: "query",
       contentType: 'application/json',
       data: JSON.stringify({
-        'query': query, 'facetCondition': facet, "facetDistribution": true
+        'query': query,
+        'filters': filters,
+        'facetFilters': facet_filters,
+        "facetDistribution": true,
       }),
       contentType: 'application/json',
       success: function (data, textStatus, request) {
@@ -41,7 +45,20 @@ $('#query, #facet').on('input', function () {
 
           // Create the select element
           let select = $(`<select data-facet-name='${facet_name}' multiple size=\"8\"></select>`);
-          for (value of data.facets[facet_name]) {
+          let selected_values = selected_facets[facet_name] || [];
+          // Create the previously selected facets (mark them as selected)
+          for (value of selected_values) {
+              let option = $('<option></option>')
+                .text(value)
+                .attr('selected', "selected")
+                .attr('value', value)
+                .attr('title', value);
+              select.append(option);
+          }
+
+          // Create the newly discovered facets
+          let diff = diffArray(data.facets[facet_name], selected_values);
+          for (value of diff) {
               let option = $('<option></option>')
                 .text(value)
                 .attr('value', value)
@@ -52,7 +69,6 @@ $('#query, #facet').on('input', function () {
           div.append(select);
           $('#facets').append(div);
         }
-
 
         for (element of data.documents) {
           const elem = document.createElement('li');
@@ -87,8 +103,8 @@ $('#query, #facet').on('input', function () {
         $('#facets select').on('change', function(e) {
             let facet_name = $(this).attr('data-facet-name');
             selected_facets[facet_name] = $(this).val();
+            $('#query').trigger('input');
         });
-
       },
       beforeSend: function () {
         if (request !== null) {
@@ -99,6 +115,25 @@ $('#query, #facet').on('input', function () {
     });
   }, timeoutMs);
 });
+
+function diffArray(arr1, arr2) {
+  return arr1.concat(arr2).filter(function (val) {
+    if (!(arr1.includes(val) && arr2.includes(val)))
+      return val;
+  });
+}
+
+function selectedFacetsToArray(facets_obj) {
+  var array = [];
+  for (const facet_name in facets_obj) {
+    var subarray = [];
+    for (const facet_value of facets_obj[facet_name]) {
+      subarray.push(`${facet_name}:${facet_value}`);
+    }
+    array.push(subarray);
+  }
+  return array;
+}
 
 // Make the number of document a little bit prettier
 $('#docs-count').text(function(index, text) {
