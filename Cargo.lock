@@ -1734,6 +1734,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "ureq",
+ "uuid",
  "vergen",
  "walkdir",
  "whoami",
