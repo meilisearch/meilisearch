@@ -18,12 +18,10 @@ pub fn parse_size(src: &str) -> Result<usize, ParseIntError> {
     if let Ok(bytes) = Byte::from_str(src) {
         Ok(bytes.get_bytes() as usize)
     } else {
-        if let Ok(parsed_byte) = src.parse::<i32>() {
-            Ok(parsed_byte as usize)
-        } else {
-            //TODO add warning
-            Ok(107374182400)
-        }
+        let parsed_byte = src
+            .parse::<i32>()
+            .expect("It is not a byte number correct.");
+        Ok(parsed_byte as usize)
     }
 }
 
