@@ -4,7 +4,7 @@
   - Fix setting consistency bug (#1128)
   - Fix attributes to retrieve bug (#1131)
   - Increase default payload size (#1147)
-  - Improvements to code quality (#1167, #1165, #1126, #1161)
+  - Improvements to code quality (#1167, #1165, #1126, #1151)
 
 ## v0.17.0
   - Fix corrupted data during placeholder search (#1089)
