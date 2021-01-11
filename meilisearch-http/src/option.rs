@@ -1,7 +1,9 @@
-use std::{error, fs};
+use byte_unit::Byte;
 use std::io::{BufReader, Read};
+use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::{error, fs};
 
 use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use rustls::{
@@ -11,6 +13,19 @@ use rustls::{
 use structopt::StructOpt;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
+
+pub fn parse_size(src: &str) -> Result<usize, ParseIntError> {
+    if let Ok(bytes) = Byte::from_str(src) {
+        Ok(bytes.get_bytes() as usize)
+    } else {
+        if let Ok(parsed_byte) = src.parse::<i32>() {
+            Ok(parsed_byte as usize)
+        } else {
+            //TODO add warning
+            Ok(107374182400)
+        }
+    }
+}
 
 #[derive(Debug, Default, Clone, StructOpt)]
 pub struct Opt {
@@ -29,7 +44,11 @@ pub struct Opt {
     /// The Sentry DSN to use for error reporting. This defaults to the MeiliSearch Sentry project.
     /// You can disable sentry all together using the `--no-sentry` flag or `MEILI_NO_SENTRY` environment variable.
     #[cfg(all(not(debug_assertions), feature = "sentry"))]
-    #[structopt(long, env = "SENTRY_DSN", default_value = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337")]
+    #[structopt(
+        long,
+        env = "SENTRY_DSN",
+        default_value = "https://5ddfa22b95f241198be2271aaf028653@sentry.io/3060337"
+    )]
     pub sentry_dsn: String,
 
     /// Disable Sentry error reporting.
@@ -49,15 +68,21 @@ pub struct Opt {
     pub no_analytics: bool,
 
     /// The maximum size, in bytes, of the main lmdb database directory
-    #[structopt(long, env = "MEILI_MAX_MDB_SIZE", default_value = "107374182400")] // 100GB
+    #[structopt(long, env = "MEILI_MAX_MDB_SIZE", parse(try_from_str=parse_size), default_value = "107374182400")]
+    // 100GB
     pub max_mdb_size: usize,
 
     /// The maximum size, in bytes, of the update lmdb database directory
-    #[structopt(long, env = "MEILI_MAX_UDB_SIZE", default_value = "107374182400")] // 100GB
+    #[structopt(long, env = "MEILI_MAX_UDB_SIZE", parse(try_from_str=parse_size), default_value = "107374182400")]
+    // 100GB
     pub max_udb_size: usize,
 
     /// The maximum size, in bytes, of accepted JSON payloads
-    #[structopt(long, env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT", default_value = "104857600")] // 100MB
+    #[structopt(
+        long,
+        env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT",
+        default_value = "104857600"
+    )] // 100MB
     pub http_payload_size_limit: usize,
 
     /// Read server certificates from CERTFILE.
