@@ -11,7 +11,7 @@ use meilisearch_error::{ErrorCode, Code};
 
 #[derive(Debug)]
 pub struct ResponseError {
-    inner: Box<dyn ErrorCode>,
+    inner: Box<dyn ErrorCode + Sync + Send>,
 }
 
 impl error::Error for ResponseError {}

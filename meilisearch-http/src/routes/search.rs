@@ -40,7 +40,9 @@ async fn search_with_url_query(
     path: web::Path<IndexParam>,
     params: web::Query<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_result = params.search(&path.index_uid, data)?;
+
+    let search_result = tokio::task::spawn_blocking(move || params.search(&path.index_uid, data)).await
+        .map_err(|e| Error::Internal(format!("Search thread returned an error: {:?}", e)))??;
     Ok(HttpResponse::Ok().json(search_result))
 }
 
@@ -85,7 +87,8 @@ async fn search_with_post(
     params: web::Json<SearchQueryPost>,
 ) -> Result<HttpResponse, ResponseError> {
     let query: SearchQuery = params.0.into();
-    let search_result = query.search(&path.index_uid, data)?;
+    let search_result = tokio::task::spawn_blocking(move || query.search(&path.index_uid, data)).await
+        .map_err(|e| Error::Internal(format!("Search thread returned an error: {:?}", e)))??;
     Ok(HttpResponse::Ok().json(search_result))
 }
 
