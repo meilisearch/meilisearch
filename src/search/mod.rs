@@ -4,10 +4,11 @@ use std::fmt;
 use std::time::Instant;
 
 use anyhow::{bail, Context};
-use fst::{IntoStreamer, Streamer};
+use fst::{IntoStreamer, Streamer, Set};
 use levenshtein_automata::DFA;
 use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
 use log::debug;
+use meilisearch_tokenizer::{AnalyzerConfig, Analyzer};
 use once_cell::sync::Lazy;
 use ordered_float::OrderedFloat;
 use roaring::bitmap::RoaringBitmap;
@@ -16,7 +17,7 @@ use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
 use crate::mdfs::Mdfs;
-use crate::query_tokens::{QueryTokens, QueryToken};
+use crate::query_tokens::{query_tokens, QueryToken};
 use crate::{Index, FieldId, DocumentId, Criterion};
 
 pub use self::facet::{FacetCondition, FacetNumberOperator, FacetStringOperator};
@@ -68,14 +69,19 @@ impl<'a> Search<'a> {
     fn generate_query_dfas(query: &str) -> Vec<(String, bool, DFA)> {
         let (lev0, lev1, lev2) = (&LEVDIST0, &LEVDIST1, &LEVDIST2);
 
-        let words: Vec<_> = QueryTokens::new(query).collect();
+        let stop_words = Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+        let analyzed = analyzer.analyze(query);
+        let tokens = analyzed.tokens();
+        let words: Vec<_> = query_tokens(tokens).collect();
+
         let ends_with_whitespace = query.chars().last().map_or(false, char::is_whitespace);
         let number_of_words = words.len();
 
         words.into_iter().enumerate().map(|(i, word)| {
             let (word, quoted) = match word {
-                QueryToken::Free(word) => (word.to_lowercase(), word.len() <= 3),
-                QueryToken::Quoted(word) => (word.to_lowercase(), true),
+                QueryToken::Free(token) => (token.text().to_string(), token.text().len() <= 3),
+                QueryToken::Quoted(token) => (token.text().to_string(), true),
             };
             let is_last = i + 1 == number_of_words;
             let is_prefix = is_last && !ends_with_whitespace && !quoted;

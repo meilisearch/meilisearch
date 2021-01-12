@@ -8,20 +8,21 @@ use std::{cmp, iter};
 
 use anyhow::{bail, Context};
 use bstr::ByteSlice as _;
+use fst::Set;
 use grenad::{Reader, FileFuse, Writer, Sorter, CompressionType};
 use heed::BytesEncode;
 use linked_hash_map::LinkedHashMap;
 use log::{debug, info};
+use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 use serde_json::Value;
 use tempfile::tempfile;
 
 use crate::facet::FacetType;
-use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
-use crate::tokenizer::{simple_tokenizer, only_token};
+use crate::heed_codec::{BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 use crate::update::UpdateIndexingStep;
 use crate::{json_to_string, SmallVec8, SmallVec32, SmallString32, Position, DocumentId, FieldId};
 
@@ -47,7 +48,7 @@ pub struct Readers {
     pub documents: Reader<FileFuse>,
 }
 
-pub struct Store {
+pub struct Store<'s, A> {
     // Indexing parameters
     searchable_fields: HashSet<FieldId>,
     faceted_fields: HashMap<FieldId, FacetType>,
@@ -71,9 +72,11 @@ pub struct Store {
     // MTBL writers
     docid_word_positions_writer: Writer<File>,
     documents_writer: Writer<File>,
+    // tokenizer
+    analyzer: Analyzer<'s, A>,
 }
 
-impl Store {
+impl<'s, A: AsRef<[u8]>> Store<'s, A> {
     pub fn new(
         searchable_fields: HashSet<FieldId>,
         faceted_fields: HashMap<FieldId, FacetType>,
@@ -83,7 +86,8 @@ impl Store {
         chunk_compression_type: CompressionType,
         chunk_compression_level: Option<u32>,
         chunk_fusing_shrink_size: Option<u64>,
-    ) -> anyhow::Result<Store>
+        stop_words: &'s Set<A>,
+    ) -> anyhow::Result<Self>
     {
         // We divide the max memory by the number of sorter the Store have.
         let max_memory = max_memory.map(|mm| cmp::max(ONE_KILOBYTE, mm / 4));
@@ -137,6 +141,8 @@ impl Store {
             create_writer(chunk_compression_type, chunk_compression_level, f)
         })?;
 
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+
         Ok(Store {
             // Indexing parameters.
             searchable_fields,
@@ -161,6 +167,8 @@ impl Store {
             // MTBL writers
             docid_word_positions_writer,
             documents_writer,
+            // tokenizer
+            analyzer,
         })
     }
 
@@ -462,9 +470,13 @@ impl Store {
                                 None => continue,
                             };
 
-                            let tokens = simple_tokenizer(&content).filter_map(only_token);
-                            for (pos, token) in tokens.enumerate().take(MAX_POSITION) {
-                                let word = token.to_lowercase();
+                            let analyzed = self.analyzer.analyze(&content);
+                            let tokens = analyzed
+                                .tokens()
+                                .filter(|t| t.is_word())
+                                .map(|t| t.text().to_string());
+
+                            for (pos, word) in tokens.enumerate().take(MAX_POSITION) {
                                 let position = (attr as usize * MAX_POSITION + pos) as u32;
                                 words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
                             }

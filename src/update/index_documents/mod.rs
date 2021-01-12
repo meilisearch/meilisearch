@@ -370,6 +370,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             let readers = rayon::iter::repeatn(documents, num_threads)
                 .enumerate()
                 .map(|(i, documents)| {
+                    let stop_words = fst::Set::default();
                     let store = Store::new(
                         searchable_fields.clone(),
                         faceted_fields.clone(),
@@ -379,6 +380,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         chunk_compression_type,
                         chunk_compression_level,
                         chunk_fusing_shrink_size,
+                        &stop_words,
                     )?;
                     store.index(
                         documents,

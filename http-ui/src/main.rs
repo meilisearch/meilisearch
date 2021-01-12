@@ -27,8 +27,9 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::broadcast;
 use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
+use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
+use fst::Set;
 
-use milli::tokenizer::{simple_tokenizer, TokenType};
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
 use milli::{obkv_to_json, Index, UpdateStore, SearchResult, FacetCondition};
@@ -121,49 +122,61 @@ pub struct IndexerOpt {
     pub indexing_jobs: Option<usize>,
 }
 
-fn highlight_record(
-    object: &mut Map<String, Value>,
-    words_to_highlight: &HashSet<String>,
-    attributes_to_highlight: &HashSet<String>,
-) {
-    // TODO do we need to create a string for element that are not and needs to be highlight?
-    fn highlight_value(value: Value, words_to_highlight: &HashSet<String>) -> Value {
+struct Highlighter<'a, A> {
+    analyzer: Analyzer<'a, A>,
+}
+
+impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
+    fn new(stop_words: &'a fst::Set<A>) -> Self {
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        Self { analyzer }
+    }
+
+    fn highlight_value(&self, value: Value, words_to_highlight: &HashSet<String>) -> Value {
         match value {
             Value::Null => Value::Null,
             Value::Bool(boolean) => Value::Bool(boolean),
             Value::Number(number) => Value::Number(number),
             Value::String(old_string) => {
                 let mut string = String::new();
-                for (token_type, token) in simple_tokenizer(&old_string) {
-                    if token_type == TokenType::Word {
-                        let lowercase_token = token.to_lowercase();
-                        let to_highlight = words_to_highlight.contains(&lowercase_token);
+                let analyzed = self.analyzer.analyze(&old_string);
+                for (word, token) in analyzed.reconstruct() {
+                    if token.is_word() {
+                        let to_highlight = words_to_highlight.contains(token.text());
                         if to_highlight { string.push_str("<mark>") }
-                        string.push_str(token);
+                        string.push_str(word);
                         if to_highlight { string.push_str("</mark>") }
                     } else {
-                        string.push_str(token);
+                        string.push_str(word);
                     }
                 }
                 Value::String(string)
             },
             Value::Array(values) => {
                 Value::Array(values.into_iter()
-                    .map(|v| highlight_value(v, words_to_highlight))
+                    .map(|v| self.highlight_value(v, words_to_highlight))
                     .collect())
             },
             Value::Object(object) => {
                 Value::Object(object.into_iter()
-                    .map(|(k, v)| (k, highlight_value(v, words_to_highlight)))
+                    .map(|(k, v)| (k, self.highlight_value(v, words_to_highlight)))
                     .collect())
             },
         }
     }
 
-    for (key, value) in object.iter_mut() {
-        if attributes_to_highlight.contains(key) {
-            let old_value = mem::take(value);
-            *value = highlight_value(old_value, words_to_highlight);
+    fn highlight_record(
+        &self,
+        object: &mut Map<String, Value>,
+        words_to_highlight: &HashSet<String>,
+        attributes_to_highlight: &HashSet<String>,
+    ) {
+        // TODO do we need to create a string for element that are not and needs to be highlight?
+        for (key, value) in object.iter_mut() {
+            if attributes_to_highlight.contains(key) {
+                let old_value = mem::take(value);
+                *value = self.highlight_value(old_value, words_to_highlight);
+            }
         }
     }
 }
@@ -651,10 +664,13 @@ async fn main() -> anyhow::Result<()> {
                 None => fields_ids_map.iter().map(|(_, name)| name).map(ToOwned::to_owned).collect(),
             };
 
+            let stop_words = fst::Set::default();
+            let highlighter = Highlighter::new(&stop_words);
+
             for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
                 let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
                 if !disable_highlighting {
-                    highlight_record(&mut object, &found_words, &attributes_to_highlight);
+                    highlighter.highlight_record(&mut object, &found_words, &attributes_to_highlight);
                 }
 
                 documents.push(object);
@@ -716,7 +732,7 @@ async fn main() -> anyhow::Result<()> {
         }
 
         let file = file.into_std().await;
-        let mmap = unsafe { memmap::Mmap::map(&file).unwrap() };
+        let mmap = unsafe { memmap::Mmap::map(&file).expect("can't map file") };
 
         let method = match update_method.as_deref() {
             Some("replace") => String::from("replace"),
