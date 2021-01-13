@@ -296,10 +296,7 @@ pub fn apply_synonyms_update(
     fn normalize<T: AsRef<[u8]>>(analyzer: &Analyzer<T>, text: &str) -> String {
         analyzer.analyze(&text)
             .tokens()
-            .fold(String::new(), |mut s, t| {
-                s.push_str(&t.word);
-                s
-            })
+            .fold(String::new(), |mut s, t| s + t.text())
     }
 
     let mut synonyms_builder = SetBuilder::memory();
