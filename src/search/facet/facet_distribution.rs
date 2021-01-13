@@ -1,12 +1,10 @@
-use std::collections::{HashSet, HashMap};
-use std::{cmp, fmt};
+use std::collections::{HashSet, BTreeSet, BTreeMap};
 use std::ops::Bound::Unbounded;
+use std::{cmp, fmt};
 
-use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
-use serde_json::Value;
 
-use crate::facet::FacetType;
+use crate::facet::{FacetType, FacetValue};
 use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
 use crate::search::facet::{FacetIter, FacetRange};
@@ -40,13 +38,13 @@ impl<'a> FacetDistribution<'a> {
         self
     }
 
-    fn facet_values(&self, field_id: FieldId, facet_type: FacetType) -> heed::Result<Vec<Value>> {
+    fn facet_values(&self, field_id: FieldId, facet_type: FacetType) -> heed::Result<BTreeSet<FacetValue>> {
         if let Some(candidates) = self.candidates.as_ref() {
             if candidates.len() <= 1000 {
                 let mut key_buffer = vec![field_id];
                 match facet_type {
                     FacetType::Float => {
-                        let mut facet_values = HashSet::new();
+                        let mut facet_values = BTreeSet::new();
                         for docid in candidates {
                             key_buffer.truncate(1);
                             key_buffer.extend_from_slice(&docid.to_be_bytes());
@@ -55,13 +53,13 @@ impl<'a> FacetDistribution<'a> {
                                 .remap_key_type::<FieldDocIdFacetF64Codec>();
                             for result in iter {
                                 let ((_, _, value), ()) = result?;
-                                facet_values.insert(OrderedFloat(value));
+                                facet_values.insert(FacetValue::from(value));
                             }
                         }
-                        Ok(facet_values.into_iter().map(|f| Value::from(*f)).collect())
+                        Ok(facet_values)
                     },
                     FacetType::Integer => {
-                        let mut facet_values = HashSet::new();
+                        let mut facet_values = BTreeSet::new();
                         for docid in candidates {
                             key_buffer.truncate(1);
                             key_buffer.extend_from_slice(&docid.to_be_bytes());
@@ -70,13 +68,13 @@ impl<'a> FacetDistribution<'a> {
                                 .remap_key_type::<FieldDocIdFacetI64Codec>();
                             for result in iter {
                                 let ((_, _, value), ()) = result?;
-                                facet_values.insert(value);
+                                facet_values.insert(FacetValue::from(value));
                             }
                         }
-                        Ok(facet_values.into_iter().map(Value::from).collect())
+                        Ok(facet_values)
                     },
                     FacetType::String => {
-                        let mut facet_values = HashSet::new();
+                        let mut facet_values = BTreeSet::new();
                         for docid in candidates {
                             key_buffer.truncate(1);
                             key_buffer.extend_from_slice(&docid.to_be_bytes());
@@ -85,10 +83,10 @@ impl<'a> FacetDistribution<'a> {
                                 .remap_key_type::<FieldDocIdFacetStringCodec>();
                             for result in iter {
                                 let ((_, _, value), ()) = result?;
-                                facet_values.insert(value);
+                                facet_values.insert(FacetValue::from(value));
                             }
                         }
-                        Ok(facet_values.into_iter().map(Value::from).collect())
+                        Ok(facet_values)
                     },
                 }
             } else {
@@ -98,28 +96,28 @@ impl<'a> FacetDistribution<'a> {
                         let iter = db
                             .prefix_iter(self.rtxn, &[field_id])?
                             .remap_key_type::<FacetValueStringCodec>()
-                            .map(|r| r.map(|((_, v), docids)| (Value::from(v), docids)));
+                            .map(|r| r.map(|((_, v), docids)| (FacetValue::from(v), docids)));
                         Box::new(iter) as Box::<dyn Iterator<Item=_>>
                     },
                     FacetType::Integer => {
                         let iter = FacetIter::<i64, FacetLevelValueI64Codec>::new_non_reducing(
                             self.rtxn, self.index, field_id, candidates.clone(),
                         )?;
-                        Box::new(iter.map(|r| r.map(|(v, docids)| (Value::from(v), docids))))
+                        Box::new(iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids))))
                     },
                     FacetType::Float => {
                         let iter = FacetIter::<f64, FacetLevelValueF64Codec>::new_non_reducing(
                             self.rtxn, self.index, field_id, candidates.clone(),
                         )?;
-                        Box::new(iter.map(|r| r.map(|(v, docids)| (Value::from(v), docids))))
+                        Box::new(iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids))))
                     },
                 };
 
-                let mut facet_values = Vec::new();
+                let mut facet_values = BTreeSet::new();
                 for result in iter {
                     let (value, docids) = result?;
                     if self.candidates.as_ref().map_or(true, |c| docids.is_disjoint(c)) {
-                        facet_values.push(value);
+                        facet_values.insert(value);
                     }
                     if facet_values.len() == self.max_values_by_facet {
                         break;
@@ -135,7 +133,7 @@ impl<'a> FacetDistribution<'a> {
                     let iter = db
                         .prefix_iter(self.rtxn, &[field_id])?
                         .remap_key_type::<FacetValueStringCodec>()
-                        .map(|r| r.map(|((_, v), docids)| (Value::from(v), docids)));
+                        .map(|r| r.map(|((_, v), docids)| (FacetValue::from(v), docids)));
                     Box::new(iter) as Box::<dyn Iterator<Item=_>>
                 },
                 FacetType::Integer => {
@@ -143,22 +141,22 @@ impl<'a> FacetDistribution<'a> {
                     let range = FacetRange::<i64, _>::new(
                         self.rtxn, db, field_id, 0, Unbounded, Unbounded,
                     )?;
-                    Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (Value::from(v), docids))))
+                    Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (FacetValue::from(v), docids))))
                 },
                 FacetType::Float => {
                     let db = db.remap_key_type::<FacetLevelValueF64Codec>();
                     let range = FacetRange::<f64, _>::new(
                         self.rtxn, db, field_id, 0, Unbounded, Unbounded,
                     )?;
-                    Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (Value::from(v), docids))))
+                    Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (FacetValue::from(v), docids))))
                 },
             };
 
-            let mut facet_values = Vec::new();
+            let mut facet_values = BTreeSet::new();
             for result in iter {
                 let (value, docids) = result?;
                 if self.candidates.as_ref().map_or(true, |c| docids.is_disjoint(c)) {
-                    facet_values.push(value);
+                    facet_values.insert(value);
                 }
                 if facet_values.len() == self.max_values_by_facet {
                     break;
@@ -169,7 +167,7 @@ impl<'a> FacetDistribution<'a> {
         }
     }
 
-    pub fn execute(&self) -> heed::Result<HashMap<String, Vec<Value>>> {
+    pub fn execute(&self) -> heed::Result<BTreeMap<String, BTreeSet<FacetValue>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let faceted_fields = self.index.faceted_fields(self.rtxn)?;
         let fields_ids: Vec<_> = match &self.facets {
@@ -182,7 +180,7 @@ impl<'a> FacetDistribution<'a> {
             None => faceted_fields.iter().map(|(id, t)| (*id, *t)).collect(),
         };
 
-        let mut facets_values = HashMap::new();
+        let mut facets_values = BTreeMap::new();
         for (fid, ftype) in fields_ids {
             let facet_name = fields_ids_map.name(fid).unwrap();
             let values = self.facet_values(fid, ftype)?;
