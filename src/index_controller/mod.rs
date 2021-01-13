@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use heed::types::{Str, SerdeBincode};
 use heed::{EnvOpenOptions, Env, Database};
-use milli::Index;
+use milli::{Index, FieldsIdsMap};
 use serde::{Serialize, Deserialize};
 
 use crate::data::{SearchQuery, SearchResult};
@@ -112,6 +112,18 @@ impl<'a, U: UpdateStore> IndexView<'a, U> {
         search.limit(limit);
 
         Ok(search.execute()?)
+    }
+
+    pub fn fields_ids_map(&self) -> Result<FieldsIdsMap> {
+        self.index.fields_ids_map(self.txn)
+    }
+
+    pub fn fields_displayed_fields_ids(&self) -> Result<FieldsIdsMap> {
+        self.index.fields_displayed_fields_ids(self.txn)
+    }
+
+    pub fn documents(&self, ids: &[u32]) -> Result<Vec<()>> {
+        self.index.documents(self.txn, ids)
     }
 }
 

@@ -109,11 +109,12 @@ impl Data {
         let index = self.indexes
             .get(index)?
             .ok_or_else(|| Error::OpenIndex(format!("Index {} doesn't exists.", index.as_ref())))?;
-        let Results { found_words, documents_ids, nb_hits, .. } = index.search(search_query)?;
 
-        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let Results { found_words, documents_ids, nb_hits, limit, .. } = index.search(search_query)?;
 
-        let displayed_fields = match index.displayed_fields_ids(&rtxn).unwrap() {
+        let fields_ids_map = index.fields_ids_map()?;
+
+        let displayed_fields = match index.displayed_fields_ids()? {
             Some(fields) => fields,
             None => fields_ids_map.iter().map(|(id, _)| id).collect(),
         };
@@ -126,7 +127,7 @@ impl Data {
         let stop_words = fst::Set::default();
         let highlighter = Highlighter::new(&stop_words);
         let mut documents = Vec::new();
-        for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
+        for (_id, obkv) in index.documents(&documents_ids)? {
             let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
             highlighter.highlight_record(&mut object, &found_words, &attributes_to_highlight);
             documents.push(object);
