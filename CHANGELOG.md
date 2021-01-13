@@ -1,3 +1,7 @@
+## v0.18.1
+
+  - Fix unexpected CORS error (#1185)
+
 ## v0.18.0
 
   - Integration with the new tokenizer (#1091)
