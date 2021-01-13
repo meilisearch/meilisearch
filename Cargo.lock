@@ -778,6 +778,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "4.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e77a43b28d0668df09411cb0bc9a8c2adc40f9a048afe863e05fd43251e8e39c"
+dependencies = [
+ "cfg-if 1.0.0",
+ "num_cpus",
+]
+
+[[package]]
 name = "debugid"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1201,7 +1211,6 @@ dependencies = [
  "lmdb-rkv-sys",
  "once_cell",
  "page_size",
- "serde",
  "synchronoise",
  "url",
  "zerocopy",
@@ -1588,7 +1597,7 @@ checksum = "7ffc5c5338469d4d3ea17d269fa8ea3512ad247247c30bd2df69e68309ed0a08"
 
 [[package]]
 name = "meilisearch-error"
-version = "0.15.0"
+version = "0.18.0"
 dependencies = [
  "actix-http",
 ]
@@ -1609,6 +1618,7 @@ dependencies = [
  "bytes 0.6.0",
  "chrono",
  "crossbeam-channel",
+ "dashmap",
  "env_logger 0.8.2",
  "flate2",
  "fst",
@@ -1627,6 +1637,7 @@ dependencies = [
  "milli",
  "mime",
  "once_cell",
+ "page_size",
  "rand 0.7.3",
  "rayon",
  "regex",
@@ -1699,7 +1710,6 @@ dependencies = [
  "bstr",
  "byte-unit",
  "byteorder",
- "chrono",
  "crossbeam-channel",
  "csv",
  "either",
@@ -1714,13 +1724,13 @@ dependencies = [
  "levenshtein_automata",
  "linked-hash-map",
  "log",
- "meilisearch-tokenizer",
  "memmap",
  "near-proximity",
  "num-traits",
  "obkv",
  "once_cell",
  "ordered-float",
+ "page_size",
  "pest 2.1.3 (git+https://github.com/pest-parser/pest.git?rev=51fd1d49f1041f7839975664ef71fe15c7dcaf67)",
  "pest_derive",
  "rayon",
@@ -1729,7 +1739,6 @@ dependencies = [
  "roaring",
  "serde",
  "serde_json",
- "serde_millis",
  "slice-group-by",
  "smallstr",
  "smallvec",
@@ -2593,15 +2602,6 @@ dependencies = [
  "indexmap",
  "itoa",
  "ryu",
- "serde",
-]
-
-[[package]]
-name = "serde_millis"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6e2dc780ca5ee2c369d1d01d100270203c4ff923d2a4264812d723766434d00"
-dependencies = [
  "serde",
 ]
 

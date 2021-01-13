@@ -30,7 +30,7 @@ fst = "0.4.5"
 futures = "0.3.7"
 futures-util = "0.3.8"
 grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
-heed = "0.10.6"
+heed = { version = "0.10.6", default-features = false, features = ["lmdb", "sync-read-txn"] }
 http = "0.2.1"
 indexmap =  { version = "1.3.2", features = ["serde-1"] }
 log = "0.4.8"
@@ -58,6 +58,8 @@ tokio = { version = "0.2", features = ["full"] }
 ureq = { version = "1.5.1", default-features = false, features = ["tls"] }
 walkdir = "2.3.1"
 whoami = "1.0.0"
+dashmap = "4.0.2"
+page_size = "0.4.2"
 
 [dependencies.sentry]
 default-features = false

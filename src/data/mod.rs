@@ -3,7 +3,6 @@ mod updates;
 
 pub use search::{SearchQuery, SearchResult};
 
-use std::collections::HashMap;
 use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -13,6 +12,7 @@ use sha2::Digest;
 
 use crate::{option::Opt, updates::Settings};
 use crate::updates::UpdateQueue;
+use crate::index_controller::IndexController;
 
 #[derive(Clone)]
 pub struct Data {
@@ -29,7 +29,7 @@ impl Deref for Data {
 
 #[derive(Clone)]
 pub struct DataInner {
-    pub indexes: Arc<Index>,
+    pub indexes: Arc<IndexController>,
     pub update_queue: Arc<UpdateQueue>,
     api_keys: ApiKeys,
     options: Opt,
@@ -62,9 +62,7 @@ impl ApiKeys {
 impl Data {
     pub fn new(options: Opt) -> anyhow::Result<Data> {
         let db_size = options.max_mdb_size.get_bytes() as usize;
-        let path = options.db_path.join("main");
-        create_dir_all(&path)?;
-        let indexes = Index::new(&path, Some(db_size))?;
+        let indexes = IndexController::new(&options.db_path)?;
         let indexes = Arc::new(indexes);
 
         let update_queue = Arc::new(UpdateQueue::new(&options, indexes.clone())?);
@@ -90,28 +88,26 @@ impl Data {
 
         let displayed_attributes = self.indexes
             .displayed_fields(&txn)?
-            .map(|fields| {println!("{:?}", fields); fields.iter().filter_map(|f| fields_map.name(*f).map(String::from)).collect()})
+            .map(|fields| fields.into_iter().map(String::from).collect())
             .unwrap_or_else(|| vec!["*".to_string()]);
 
         let searchable_attributes = self.indexes
             .searchable_fields(&txn)?
             .map(|fields| fields
-                .iter()
-                .filter_map(|f| fields_map.name(*f).map(String::from))
+                .into_iter()
+                .map(String::from)
                 .collect())
             .unwrap_or_else(|| vec!["*".to_string()]);
 
-        let faceted_attributes = self.indexes
-            .faceted_fields(&txn)?
-            .iter()
-            .filter_map(|(f, t)| Some((fields_map.name(*f)?.to_string(), t.to_string())))
-            .collect::<HashMap<_, _>>()
-            .into();
+        let faceted_attributes = self.indexes.faceted_fields(&txn)?
+            .into_iter()
+            .map(|(k, v)| (k, v.to_string()))
+            .collect();
 
         Ok(Settings {
             displayed_attributes: Some(Some(displayed_attributes)),
             searchable_attributes: Some(Some(searchable_attributes)),
-            faceted_attributes: Some(faceted_attributes),
+            faceted_attributes: Some(Some(faceted_attributes)),
             criteria: None,
         })
     }

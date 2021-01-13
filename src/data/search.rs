@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::mem;
 use std::time::Instant;
@@ -8,9 +7,13 @@ use serde::{Deserialize, Serialize};
 use milli::{SearchResult as Results, obkv_to_json};
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 
+use crate::error::Error;
+
 use super::Data;
 
 const DEFAULT_SEARCH_LIMIT: usize = 20;
+
+const fn default_search_limit() -> usize { DEFAULT_SEARCH_LIMIT }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -18,7 +21,8 @@ const DEFAULT_SEARCH_LIMIT: usize = 20;
 pub struct SearchQuery {
     q: Option<String>,
     offset: Option<usize>,
-    limit: Option<usize>,
+    #[serde(default = "default_search_limit")]
+    limit: usize,
     attributes_to_retrieve: Option<Vec<String>>,
     attributes_to_crop: Option<Vec<String>>,
     crop_length: Option<usize>,
@@ -100,30 +104,18 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
 }
 
 impl Data {
-        pub fn search<S: AsRef<str>>(&self, _index: S, search_query: SearchQuery) -> anyhow::Result<SearchResult> {
+    pub fn search<S: AsRef<str>>(&self, index: S, search_query: SearchQuery) -> anyhow::Result<SearchResult> {
         let start =  Instant::now();
-        let index = &self.indexes;
-        let rtxn = index.read_txn()?;
-
-        let mut search = index.search(&rtxn);
-        if let Some(query) = &search_query.q {
-            search.query(query);
-        }
-
-        if let Some(offset) = search_query.offset {
-            search.offset(offset);
-        }
-
-        let limit = search_query.limit.unwrap_or(DEFAULT_SEARCH_LIMIT);
-            search.limit(limit);
-
-        let Results { found_words, documents_ids, nb_hits, .. } = search.execute().unwrap();
+        let index = self.indexes
+            .get(index)?
+            .ok_or_else(|| Error::OpenIndex(format!("Index {} doesn't exists.", index.as_ref())))?;
+        let Results { found_words, documents_ids, nb_hits, .. } = index.search(search_query)?;
 
         let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
 
-        let displayed_fields = match index.displayed_fields(&rtxn).unwrap() {
-            Some(fields) => Cow::Borrowed(fields),
-            None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
+        let displayed_fields = match index.displayed_fields_ids(&rtxn).unwrap() {
+            Some(fields) => fields,
+            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
         };
 
         let attributes_to_highlight = match search_query.attributes_to_highlight {
