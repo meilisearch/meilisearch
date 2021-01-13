@@ -67,8 +67,9 @@ struct IndexMetadata {
 }
 
 impl IndexMetadata {
-    fn open_index(&self) -> Result<Self> {
-        todo!()
+    fn open_index(&self, path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref().to_path_buf().push("indexes").push(&self.id);
+        Ok(Index::new(self.options, path)?)
     }
 }
 
@@ -79,7 +80,7 @@ struct IndexView<'a, U> {
 }
 
 struct IndexViewMut<'a, U> {
-    txn: heed::RwTxn<'a>,
+    txn: heed::RwTxn<'a, 'a>,
     index: &'a Index,
     update_store: &'a U,
 }
@@ -97,7 +98,7 @@ impl<'a, U> Deref for IndexViewMut<'a, U> {
 }
 
 impl<'a, U: UpdateStore> IndexView<'a, U> {
-    fn search(&self, search_query: SearchQuery) -> Result<SearchResult> {
+    pub fn search(&self, search_query: SearchQuery) -> Result<SearchResult> {
         let mut search = self.index.search(self.txn);
         if let Some(query) = &search_query.q {
             search.query(query);
