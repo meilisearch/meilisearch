@@ -1,6 +1,6 @@
 [package]
 name = "meilisearch-core"
-version = "0.18.0"
+version = "0.18.1"
 license = "MIT"
 authors = ["Kerollmops <clement@meilisearch.com>"]
 edition = "2018"
