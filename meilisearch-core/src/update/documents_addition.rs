@@ -23,7 +23,7 @@ pub struct DocumentsAddition<D> {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     updates_notifier: UpdateEventsEmitter,
-    // Whether the user explicitely set the primary key in the update
+    // Whether the user explicitly set the primary key in the update
     primary_key: Option<String>,
     documents: Vec<D>,
     is_partial: bool,
