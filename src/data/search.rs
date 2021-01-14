@@ -19,18 +19,18 @@ const fn default_search_limit() -> usize { DEFAULT_SEARCH_LIMIT }
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[allow(dead_code)]
 pub struct SearchQuery {
-    q: Option<String>,
-    offset: Option<usize>,
+    pub q: Option<String>,
+    pub offset: Option<usize>,
     #[serde(default = "default_search_limit")]
-    limit: usize,
-    attributes_to_retrieve: Option<Vec<String>>,
-    attributes_to_crop: Option<Vec<String>>,
-    crop_length: Option<usize>,
-    attributes_to_highlight: Option<Vec<String>>,
-    filters: Option<String>,
-    matches: Option<bool>,
-    facet_filters: Option<Value>,
-    facets_distribution: Option<Vec<String>>,
+    pub limit: usize,
+    pub attributes_to_retrieve: Option<Vec<String>>,
+    pub attributes_to_crop: Option<Vec<String>>,
+    pub crop_length: Option<usize>,
+    pub attributes_to_highlight: Option<Vec<String>>,
+    pub filters: Option<String>,
+    pub matches: Option<bool>,
+    pub facet_filters: Option<Value>,
+    pub facets_distribution: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]

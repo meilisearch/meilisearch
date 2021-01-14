@@ -1,25 +1,26 @@
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::Path;
-use std::ops::Deref;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
+use dashmap::mapref::one::Ref;
 use heed::types::{Str, SerdeBincode};
 use heed::{EnvOpenOptions, Env, Database};
-use milli::{Index, FieldsIdsMap};
+use milli::{Index, FieldsIdsMap, SearchResult, FieldId};
 use serde::{Serialize, Deserialize};
 
-use crate::data::{SearchQuery, SearchResult};
+use crate::data::SearchQuery;
 
 const CONTROLLER_META_FILENAME: &str = "index_controller_meta";
 const INDEXES_CONTROLLER_FILENAME: &str = "indexes_db";
 const INDEXES_DB_NAME: &str = "indexes_db";
 
-trait UpdateStore {}
+pub trait UpdateStore {}
 
 pub struct IndexController<U> {
+    path: PathBuf,
     update_store: U,
     env: Env,
     indexes_db: Database<Str, SerdeBincode<IndexMetadata>>,
@@ -34,7 +35,8 @@ struct IndexControllerMeta {
 
 impl IndexControllerMeta {
     fn from_path(path: impl AsRef<Path>) -> Result<Option<IndexControllerMeta>> {
-        let path = path.as_ref().to_path_buf().push(CONTROLLER_META_FILENAME);
+        let mut path = path.as_ref().to_path_buf();
+        path.push(CONTROLLER_META_FILENAME);
         if path.exists() {
             let mut file = File::open(path)?;
             let mut buffer = Vec::new();
@@ -47,7 +49,8 @@ impl IndexControllerMeta {
     }
 
     fn to_path(self, path: impl AsRef<Path>) -> Result<()> {
-        let path = path.as_ref().to_path_buf().push(CONTROLLER_META_FILENAME);
+        let mut path = path.as_ref().to_path_buf();
+        path.push(CONTROLLER_META_FILENAME);
         if path.exists() {
             Err(anyhow::anyhow!("Index controller metadata already exists"))
         } else {
@@ -67,39 +70,24 @@ struct IndexMetadata {
 }
 
 impl IndexMetadata {
-    fn open_index(&self, path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref().to_path_buf().push("indexes").push(&self.id);
-        Ok(Index::new(self.options, path)?)
+    fn open_index(&self, path: impl AsRef<Path>) -> Result<Index> {
+        // create a path in the form "db_path/indexes/index_id"
+        let mut path = path.as_ref().to_path_buf();
+        path.push("indexes");
+        path.push(&self.id);
+        Ok(Index::new(self.open_options, path)?)
     }
 }
 
 struct IndexView<'a, U> {
     txn: heed::RoTxn<'a>,
-    index: &'a Index,
+    index: Ref<'a, String, Index>,
     update_store: &'a U,
-}
-
-struct IndexViewMut<'a, U> {
-    txn: heed::RwTxn<'a, 'a>,
-    index: &'a Index,
-    update_store: &'a U,
-}
-
-impl<'a, U> Deref for IndexViewMut<'a, U> {
-    type Target = IndexView<'a, U>;
-
-    fn deref(&self) -> &Self::Target {
-        IndexView {
-            txn: *self.txn,
-            index: self.index,
-            update_store: self.update_store,
-        }
-    }
 }
 
 impl<'a, U: UpdateStore> IndexView<'a, U> {
     pub fn search(&self, search_query: SearchQuery) -> Result<SearchResult> {
-        let mut search = self.index.search(self.txn);
+        let mut search = self.index.search(&self.txn);
         if let Some(query) = &search_query.q {
             search.query(query);
         }
@@ -115,15 +103,15 @@ impl<'a, U: UpdateStore> IndexView<'a, U> {
     }
 
     pub fn fields_ids_map(&self) -> Result<FieldsIdsMap> {
-        self.index.fields_ids_map(self.txn)
+        Ok(self.index.fields_ids_map(&self.txn)?)
     }
 
-    pub fn fields_displayed_fields_ids(&self) -> Result<FieldsIdsMap> {
-        self.index.fields_displayed_fields_ids(self.txn)
+    pub fn fields_displayed_fields_ids(&self) -> Result<Option<Vec<FieldId>>> {
+        Ok(self.index.displayed_fields_ids(&self.txn)?)
     }
 
-    pub fn documents(&self, ids: &[u32]) -> Result<Vec<()>> {
-        self.index.documents(self.txn, ids)
+    pub fn documents(&self, ids: Vec<u32>) -> Result<Vec<(u32, obkv::KvReader<'_>)>> {
+        Ok(self.index.documents(&self.txn, ids)?)
     }
 }
 
@@ -133,28 +121,29 @@ impl<U: UpdateStore> IndexController<U> {
     pub fn new(path: impl AsRef<Path>, update_store: U) -> Result<Self> {
         // If index controller metadata is present, we return the env, otherwise, we create a new
         // metadata from scratch before returning a new env.
-        let env = match IndexControllerMeta::from_path(path)? {
+        let path = path.as_ref().to_path_buf();
+        let env = match IndexControllerMeta::from_path(&path)? {
             Some(meta) =>  meta.open_options.open(INDEXES_CONTROLLER_FILENAME)?,
             None => {
                 let open_options = EnvOpenOptions::new()
                     .map_size(page_size::get() * 1000);
                 let env = open_options.open(INDEXES_CONTROLLER_FILENAME)?;
                 let created_at = Utc::now();
-                let meta = IndexControllerMeta { open_options, created_at };
+                let meta = IndexControllerMeta { open_options: open_options.clone(), created_at };
                 meta.to_path(path)?;
                 env
             }
         };
         let indexes = DashMap::new();
-        let indexes_db = match env.open_database(INDEXES_DB_NAME)? {
+        let indexes_db = match env.open_database(Some(INDEXES_DB_NAME))? {
             Some(indexes_db) => indexes_db,
-            None => env.create_database(INDEXES_DB_NAME)?,
+            None => env.create_database(Some(INDEXES_DB_NAME))?,
         };
 
-        Ok(Self { env, indexes, indexes_db, update_store })
+        Ok(Self { env, indexes, indexes_db, update_store, path })
     }
 
-    pub fn get_or_create<S: AsRef<str>>(&mut self, name: S) -> Result<IndexViewMut<'_, U>> {
+    pub fn get_or_create<S: AsRef<str>>(&mut self, name: S) -> Result<IndexView<'_, U>> {
         todo!()
     }
 
@@ -162,19 +151,26 @@ impl<U: UpdateStore> IndexController<U> {
     /// check for its exixtence in the indexes map, and if it doesn't exist, the index db is check
     /// for metadata to launch the index.
     pub fn get<S: AsRef<str>>(&self, name: S) -> Result<Option<IndexView<'_, U>>> {
+        let update_store = &self.update_store;
         match self.indexes.get(name.as_ref()) {
             Some(index) => {
                let txn = index.read_txn()?;
-               let update_store = &self.update_store;
                Ok(Some(IndexView { index, update_store, txn }))
             }
             None => {
                 let txn = self.env.read_txn()?;
                 match self.indexes_db.get(&txn, name.as_ref())? {
                     Some(meta) => {
-                        let index = meta.open_index()?;
+                        let index = meta.open_index(self.path)?;
                         self.indexes.insert(name.as_ref().to_owned(), index);
-                        Ok(self.indexes.get(name.as_ref()))
+                        // TODO: create index view
+                        match self.indexes.get(name.as_ref()) {
+                            Some(index) => {
+                                let txn = index.read_txn()?;
+                                Ok(Some(IndexView { index, txn, update_store }))
+                            }
+                            None => Ok(None)
+                        }
                     }
                     None => Ok(None)
                 }
@@ -182,7 +178,7 @@ impl<U: UpdateStore> IndexController<U> {
         }
     }
 
-    pub fn get_mut<S: AsRef<str>>(&self, name: S) -> Result<Option<IndexViewMut<'_, U>>> {
+    pub fn get_mut<S: AsRef<str>>(&self, name: S) -> Result<Option<IndexView<'_, U>>> {
         todo!()
     }
 

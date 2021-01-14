@@ -3,11 +3,9 @@ mod updates;
 
 pub use search::{SearchQuery, SearchResult};
 
-use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use milli::Index;
 use sha2::Digest;
 
 use crate::{option::Opt, updates::Settings};
@@ -29,8 +27,7 @@ impl Deref for Data {
 
 #[derive(Clone)]
 pub struct DataInner {
-    pub indexes: Arc<IndexController>,
-    pub update_queue: Arc<UpdateQueue>,
+    pub indexes: Arc<IndexController<UpdateQueue>>,
     api_keys: ApiKeys,
     options: Opt,
 }

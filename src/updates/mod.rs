@@ -55,6 +55,8 @@ pub struct UpdateQueue {
     inner: Arc<UpdateStore<UpdateMeta, UpdateResult, String>>,
 }
 
+impl crate::index_controller::UpdateStore for UpdateQueue {}
+
 impl Deref for UpdateQueue {
     type Target = Arc<UpdateStore<UpdateMeta, UpdateResult, String>>;
 
