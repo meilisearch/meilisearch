@@ -1,7 +1,7 @@
 [package]
 name = "meilisearch-http"
 description = "MeiliSearch HTTP server"
-version = "0.18.0"
+version = "0.18.1"
 license = "MIT"
 authors = [
     "Quentin de Quelen <quentin@dequelen.me>",
@@ -33,8 +33,8 @@ indexmap = { version = "1.6.1", features = ["serde-1"] }
 log = "0.4.11"
 main_error = "0.1.1"
 meilisearch-core = { path = "../meilisearch-core", version = "0.18.0" }
-meilisearch-error = { path = "../meilisearch-error", version = "0.18.0" }
-meilisearch-schema = { path = "../meilisearch-schema", version = "0.18.0" }
+meilisearch-error = { path = "../meilisearch-error", version = "0.18.1" }
+meilisearch-schema = { path = "../meilisearch-schema", version = "0.18.1" }
 mime = "0.3.16"
 once_cell = "1.5.2"
 rand = "0.8.1"
