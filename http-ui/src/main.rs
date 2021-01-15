@@ -28,7 +28,6 @@ use tokio::sync::broadcast;
 use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
-use fst::Set;
 
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
