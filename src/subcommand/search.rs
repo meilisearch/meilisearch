@@ -1,16 +1,15 @@
-use std::collections::HashMap;
-use std::io::{self, BufRead};
+use std::borrow::Cow;
+use std::io::{self, BufRead, Write};
 use std::iter::once;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use anyhow::Context;
 use byte_unit::Byte;
 use heed::EnvOpenOptions;
 use log::debug;
 use structopt::StructOpt;
 
-use crate::Index;
+use crate::{Index, obkv_to_json};
 
 #[derive(Debug, StructOpt)]
 /// A simple search helper binary for the milli project.
@@ -47,6 +46,11 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
     // Open the LMDB database.
     let index = Index::new(options, &opt.database)?;
     let rtxn = index.read_txn()?;
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
+    let displayed_fields = match index.displayed_fields(&rtxn)? {
+        Some(fields) => Cow::Borrowed(fields),
+        None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
+    };
 
     let stdin = io::stdin();
     let lines = match opt.query {
@@ -54,27 +58,18 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         None => Box::new(stdin.lock().lines()) as Box<dyn Iterator<Item = _>>,
     };
 
+    let mut stdout = io::stdout();
     for result in lines {
         let before = Instant::now();
 
         let query = result?;
-        let result = index.search(&rtxn).query(query).execute().unwrap();
-
-        let mut stdout = io::stdout();
-        let fields_ids_map = index.fields_ids_map(&rtxn)?;
+        let result = index.search(&rtxn).query(query).execute()?;
         let documents = index.documents(&rtxn, result.documents_ids.iter().cloned())?;
 
         for (_id, record) in documents {
-            let document: anyhow::Result<HashMap<_, _>> = record.iter()
-                .map(|(k, v)| {
-                    let key = fields_ids_map.name(k).context("field id not found")?;
-                    let val = std::str::from_utf8(v)?;
-                    Ok((key, val))
-                })
-                .collect();
-
-            let document = document?;
-            serde_json::to_writer(&mut stdout, &document)?;
+            let val = obkv_to_json(&displayed_fields, &fields_ids_map, record)?;
+            serde_json::to_writer(&mut stdout, &val)?;
+            let _ = writeln!(&mut stdout);
         }
 
         debug!("Took {:.02?} to find {} documents", before.elapsed(), result.documents_ids.len());
