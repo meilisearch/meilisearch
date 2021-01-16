@@ -107,10 +107,10 @@ impl Data {
     pub fn search<S: AsRef<str>>(&self, index: S, search_query: SearchQuery) -> anyhow::Result<SearchResult> {
         let start =  Instant::now();
         let index = self.indexes
-            .get(index)?
+            .get(&index)?
             .ok_or_else(|| Error::OpenIndex(format!("Index {} doesn't exists.", index.as_ref())))?;
 
-        let Results { found_words, documents_ids, nb_hits, limit, .. } = index.search(search_query)?;
+        let Results { found_words, documents_ids, nb_hits, limit, .. } = index.search(&search_query)?;
 
         let fields_ids_map = index.fields_ids_map()?;
 

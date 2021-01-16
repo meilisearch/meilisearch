@@ -8,17 +8,16 @@ use std::sync::Arc;
 
 use sha2::Digest;
 
-use crate::{option::Opt, updates::Settings};
-use crate::updates::UpdateQueue;
-use crate::index_controller::IndexController;
+use crate::{option::Opt, index_controller::Settings};
+use crate::index_controller::{IndexStore, UpdateStore};
 
 #[derive(Clone)]
 pub struct Data {
-    inner: Arc<DataInner>,
+    inner: Arc<DataInner<UpdateStore>>,
 }
 
 impl Deref for Data {
-    type Target = DataInner;
+    type Target = DataInner<UpdateStore>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -26,8 +25,8 @@ impl Deref for Data {
 }
 
 #[derive(Clone)]
-pub struct DataInner {
-    pub indexes: Arc<IndexController<UpdateQueue>>,
+pub struct DataInner<I> {
+    pub indexes: Arc<I>,
     api_keys: ApiKeys,
     options: Opt,
 }
@@ -58,11 +57,10 @@ impl ApiKeys {
 
 impl Data {
     pub fn new(options: Opt) -> anyhow::Result<Data> {
-        let db_size = options.max_mdb_size.get_bytes() as usize;
-        let indexes = IndexController::new(&options.db_path)?;
-        let indexes = Arc::new(indexes);
-
-        let update_queue = Arc::new(UpdateQueue::new(&options, indexes.clone())?);
+        let path = options.db_path.clone();
+        let index_store = IndexStore::new(&path)?;
+        let index_controller = UpdateStore::new(index_store);
+        let indexes = Arc::new(index_controller);
 
         let mut api_keys = ApiKeys {
             master: options.clone().master_key,
@@ -72,31 +70,28 @@ impl Data {
 
         api_keys.generate_missing_api_keys();
 
-        let inner = DataInner { indexes, options, update_queue, api_keys };
+        let inner = DataInner { indexes, options, api_keys };
         let inner = Arc::new(inner);
 
         Ok(Data { inner })
     }
 
-    pub fn settings<S: AsRef<str>>(&self, _index: S) -> anyhow::Result<Settings> {
-        let txn = self.indexes.env.read_txn()?;
-        let fields_map = self.indexes.fields_ids_map(&txn)?;
-        println!("fields_map: {:?}", fields_map);
+    pub fn settings<S: AsRef<str>>(&self, index_uid: S) -> anyhow::Result<Settings> {
+        let index = self.indexes
+            .get(&index_uid)?
+            .ok_or_else(|| anyhow::anyhow!("Index {} does not exist.", index_uid.as_ref()))?;
 
-        let displayed_attributes = self.indexes
-            .displayed_fields(&txn)?
+        let displayed_attributes = index
+            .displayed_fields()?
             .map(|fields| fields.into_iter().map(String::from).collect())
             .unwrap_or_else(|| vec!["*".to_string()]);
 
-        let searchable_attributes = self.indexes
-            .searchable_fields(&txn)?
-            .map(|fields| fields
-                .into_iter()
-                .map(String::from)
-                .collect())
+        let searchable_attributes = index
+            .searchable_fields()?
+            .map(|fields| fields.into_iter().map(String::from).collect())
             .unwrap_or_else(|| vec!["*".to_string()]);
 
-        let faceted_attributes = self.indexes.faceted_fields(&txn)?
+        let faceted_attributes = index.faceted_fields()?
             .into_iter()
             .map(|(k, v)| (k, v.to_string()))
             .collect();

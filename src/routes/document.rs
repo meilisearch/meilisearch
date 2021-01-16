@@ -122,7 +122,7 @@ async fn add_documents_json(
 ) -> Result<HttpResponse, ResponseError> {
     let addition_result = data
         .add_documents(
-            &path.index_uid,
+            path.into_inner().index_uid,
             IndexDocumentsMethod::UpdateDocuments,
             UpdateFormat::Json,
             body

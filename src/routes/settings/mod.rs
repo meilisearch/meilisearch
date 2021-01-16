@@ -3,7 +3,7 @@ use log::error;
 
 use crate::Data;
 use crate::error::ResponseError;
-use crate::updates::Settings;
+use crate::index_controller::Settings;
 use crate::helpers::Authentication;
 
 #[macro_export]
@@ -15,19 +15,19 @@ macro_rules! make_setting_route {
             use crate::data;
             use crate::error::ResponseError;
             use crate::helpers::Authentication;
-            use crate::updates::Settings;
+            use crate::index_controller::Settings;
 
             #[actix_web::delete($route, wrap = "Authentication::Private")]
             pub async fn delete(
                 data: web::Data<data::Data>,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
-                use crate::updates::Settings;
+                use crate::index_controller::Settings;
                 let settings = Settings {
                     $attr: Some(None),
                     ..Default::default()
                 };
-                match data.update_settings(index_uid.as_ref(), settings).await {
+                match data.update_settings(index_uid.into_inner(), settings).await {
                     Ok(update_status) => {
                         let json = serde_json::to_string(&update_status).unwrap();
                         Ok(HttpResponse::Ok().body(json))
@@ -50,7 +50,7 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                match data.update_settings(index_uid.as_ref(), settings).await {
+                match data.update_settings(index_uid.into_inner(), settings).await {
                     Ok(update_status) => {
                         let json = serde_json::to_string(&update_status).unwrap();
                         Ok(HttpResponse::Ok().body(json))
@@ -141,7 +141,7 @@ async fn update_all(
     index_uid: web::Path<String>,
     body: web::Json<Settings>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.update_settings(index_uid.as_ref(), body.into_inner()).await {
+    match data.update_settings(index_uid.into_inner(), body.into_inner()).await {
         Ok(update_result) => {
             let json = serde_json::to_string(&update_result).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -176,7 +176,7 @@ async fn delete_all(
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = Settings::cleared();
-    match data.update_settings(index_uid.as_ref(), settings).await {
+    match data.update_settings(index_uid.into_inner(), settings).await {
         Ok(update_result) => {
             let json = serde_json::to_string(&update_result).unwrap();
             Ok(HttpResponse::Ok().body(json))

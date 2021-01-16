@@ -61,6 +61,7 @@ whoami = "1.0.0"
 dashmap = "4.0.2"
 page_size = "0.4.2"
 obkv = "0.1.1"
+ouroboros = "0.8.0"
 
 [dependencies.sentry]
 default-features = false

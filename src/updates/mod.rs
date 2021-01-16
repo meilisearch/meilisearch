@@ -1,10 +1,10 @@
 mod settings;
+mod update_store;
 
 pub use settings::{Settings, Facets};
 
 use std::io;
 use std::sync::Arc;
-use std::ops::Deref;
 use std::fs::create_dir_all;
 use std::collections::HashMap;
 
@@ -53,16 +53,6 @@ pub enum UpdateResult {
 #[derive(Clone)]
 pub struct UpdateQueue {
     inner: Arc<UpdateStore<UpdateMeta, UpdateResult, String>>,
-}
-
-impl crate::index_controller::UpdateStore for UpdateQueue {}
-
-impl Deref for UpdateQueue {
-    type Target = Arc<UpdateStore<UpdateMeta, UpdateResult, String>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
 }
 
 #[derive(Debug, Clone, StructOpt)]

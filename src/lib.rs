@@ -5,7 +5,7 @@ pub mod error;
 pub mod helpers;
 pub mod option;
 pub mod routes;
-mod updates;
+//mod updates;
 mod index_controller;
 
 use actix_http::Error;
