@@ -242,3 +242,30 @@ fn load_ocsp(filename: &Option<PathBuf>) -> Result<Vec<u8>, Box<dyn error::Error
 
     Ok(ret)
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_one_byte() {
+        let byt_value = parse_size("1").unwrap();
+        assert!(byt_value == 1)
+    }
+
+    #[test]
+    fn parse_compose_bytes() {
+        let bytes = parse_size("20").unwrap();
+        assert!(bytes == 20)
+    }
+
+    #[test]
+    fn parse_correct_format_with_size_unit() {
+        let bytes = parse_size("123KiB").unwrap();
+        assert!(bytes == 125952);
+    }
+    #[test]
+    fn parse_correct_format_with_separated_size_unit() {
+        let bytes = parse_size("1.50 MB").unwrap();
+        assert!(bytes == 1500000);
+    }
+}
