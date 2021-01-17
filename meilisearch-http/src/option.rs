@@ -14,14 +14,13 @@ use structopt::StructOpt;
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
+/// Byte size function for parsing.
 pub fn parse_size(src: &str) -> Result<usize, ParseIntError> {
     if let Ok(bytes) = Byte::from_str(src) {
         Ok(bytes.get_bytes() as usize)
     } else {
-        let parsed_byte = src
-            .parse::<i32>()
-            .expect("It is not a byte number correct.");
-        Ok(parsed_byte as usize)
+        let parsed_byte = src.parse::<usize>().unwrap_or(107374182400);
+        Ok(parsed_byte)
     }
 }
 
@@ -267,5 +266,29 @@ mod tests {
     fn parse_correct_format_with_separated_size_unit() {
         let bytes = parse_size("1.50 MB").unwrap();
         assert!(bytes == 1500000);
+    }
+
+    #[test]
+    fn parse_correct_opt_max_mdb_size_incorrect() {
+        let opts = Opt::from_iter("test --max-mdb-size notsize".split(' '));
+        assert!(opts.max_mdb_size == 107374182400);
+    }
+
+    #[test]
+    fn parse_correct_opt_max_mdb_size() {
+        let opts = Opt::from_iter("test --max-mdb-size 1".split(' '));
+        assert!(opts.max_mdb_size == 1);
+    }
+
+    #[test]
+    fn parse_correct_opt_max_mdb_size_unit() {
+        let opts = Opt::from_iter("test --max-mdb-size 123KiB".split(' '));
+        assert!(opts.max_mdb_size == 125952);
+    }
+
+    #[test]
+    fn parse_correct_opt_max_udb_size_unit() {
+        let opts = Opt::from_iter("test --max-udb-size 123KiB".split(' '));
+        assert!(opts.max_udb_size == 125952);
     }
 }
