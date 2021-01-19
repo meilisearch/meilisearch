@@ -1,13 +1,13 @@
 [package]
 name = "meilisearch-schema"
-version = "0.18.0"
+version = "0.18.1"
 license = "MIT"
 authors = ["Kerollmops <renault.cle@gmail.com>"]
 edition = "2018"
 
 [dependencies]
 indexmap = { version = "1.6.1", features = ["serde-1"] }
-meilisearch-error = { path = "../meilisearch-error", version = "0.18.0" }
+meilisearch-error = { path = "../meilisearch-error", version = "0.18.1" }
 serde = { version = "1.0.118", features = ["derive"] }
 serde_json = { version = "1.0.61", features = ["preserve_order"] }
 zerocopy = "0.3.0"
