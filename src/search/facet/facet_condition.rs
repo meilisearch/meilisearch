@@ -148,7 +148,7 @@ impl FacetCondition {
     ) -> anyhow::Result<FacetCondition>
     {
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let faceted_fields = index.faceted_fields(rtxn)?;
+        let faceted_fields = index.faceted_fields_ids(rtxn)?;
         let lexed = FilterParser::parse(Rule::prgm, expression)?;
         FacetCondition::from_pairs(&fields_ids_map, &faceted_fields, lexed)
     }
@@ -552,15 +552,15 @@ mod tests {
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
         let condition = FacetCondition::from_str(&rtxn, &index, "channel = ponce").unwrap();
-        let expected = OperatorString(1, FacetStringOperator::equal("Ponce"));
+        let expected = OperatorString(0, FacetStringOperator::equal("Ponce"));
         assert_eq!(condition, expected);
 
         let condition = FacetCondition::from_str(&rtxn, &index, "channel != ponce").unwrap();
-        let expected = OperatorString(1, FacetStringOperator::not_equal("ponce"));
+        let expected = OperatorString(0, FacetStringOperator::not_equal("ponce"));
         assert_eq!(condition, expected);
 
         let condition = FacetCondition::from_str(&rtxn, &index, "NOT channel = ponce").unwrap();
-        let expected = OperatorString(1, FacetStringOperator::not_equal("ponce"));
+        let expected = OperatorString(0, FacetStringOperator::not_equal("ponce"));
         assert_eq!(condition, expected);
     }
 
@@ -581,13 +581,13 @@ mod tests {
         // Test that the facet condition is correctly generated.
         let rtxn = index.read_txn().unwrap();
         let condition = FacetCondition::from_str(&rtxn, &index, "timestamp 22 TO 44").unwrap();
-        let expected = OperatorI64(1, Between(22, 44));
+        let expected = OperatorI64(0, Between(22, 44));
         assert_eq!(condition, expected);
 
         let condition = FacetCondition::from_str(&rtxn, &index, "NOT timestamp 22 TO 44").unwrap();
         let expected = Or(
-            Box::new(OperatorI64(1, LowerThan(22))),
-            Box::new(OperatorI64(1, GreaterThan(44))),
+            Box::new(OperatorI64(0, LowerThan(22))),
+            Box::new(OperatorI64(0, GreaterThan(44))),
         );
         assert_eq!(condition, expected);
     }

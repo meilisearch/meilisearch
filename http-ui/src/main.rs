@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::{File, create_dir_all};
@@ -654,13 +653,13 @@ async fn main() -> anyhow::Result<()> {
 
             let mut documents = Vec::new();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
-            let displayed_fields = match index.displayed_fields(&rtxn).unwrap() {
-                Some(fields) => Cow::Borrowed(fields),
-                None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
+            let displayed_fields = match index.displayed_fields_ids(&rtxn).unwrap() {
+                Some(fields) => fields,
+                None => fields_ids_map.iter().map(|(id, _)| id).collect(),
             };
             let attributes_to_highlight = match index.searchable_fields(&rtxn).unwrap() {
-                Some(fields) => fields.iter().flat_map(|id| fields_ids_map.name(*id)).map(ToOwned::to_owned).collect(),
-                None => fields_ids_map.iter().map(|(_, name)| name).map(ToOwned::to_owned).collect(),
+                Some(fields) => fields.into_iter().map(String::from).collect(),
+                None => fields_ids_map.iter().map(|(_, name)| name).map(String::from).collect(),
             };
 
             let stop_words = fst::Set::default();
@@ -690,9 +689,9 @@ async fn main() -> anyhow::Result<()> {
 
             let external_documents_ids = index.external_documents_ids(&rtxn).unwrap();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
-            let displayed_fields = match index.displayed_fields(&rtxn).unwrap() {
-                Some(fields) => Cow::Borrowed(fields),
-                None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
+            let displayed_fields = match index.displayed_fields_ids(&rtxn).unwrap() {
+                Some(fields) => fields,
+                None => fields_ids_map.iter().map(|(id, _)| id).collect(),
             };
 
             match external_documents_ids.get(&id) {

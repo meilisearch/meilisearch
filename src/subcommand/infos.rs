@@ -342,7 +342,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             if heap.len() > limit { heap.pop(); }
         }
 
-        let faceted_fields = index.faceted_fields(rtxn)?;
+        let faceted_fields = index.faceted_fields_ids(rtxn)?;
         let fields_ids_map = index.fields_ids_map(rtxn)?;
         for (field_id, field_type) in faceted_fields {
             let facet_name = fields_ids_map.name(field_id).unwrap();
@@ -413,7 +413,7 @@ fn words_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: Vec<Strin
 
 fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_name: String) -> anyhow::Result<()> {
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
-    let faceted_fields = index.faceted_fields(&rtxn)?;
+    let faceted_fields = index.faceted_fields_ids(&rtxn)?;
 
     let field_id = fields_ids_map.id(&field_name)
         .with_context(|| format!("field {} not found", field_name))?;
@@ -451,7 +451,7 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
 
 fn facet_stats(index: &Index, rtxn: &heed::RoTxn, field_name: String) -> anyhow::Result<()> {
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
-    let faceted_fields = index.faceted_fields(&rtxn)?;
+    let faceted_fields = index.faceted_fields_ids(&rtxn)?;
 
     let field_id = fields_ids_map.id(&field_name)
         .with_context(|| format!("field {} not found", field_name))?;

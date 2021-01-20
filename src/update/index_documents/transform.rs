@@ -10,13 +10,15 @@ use log::info;
 use roaring::RoaringBitmap;
 use serde_json::{Map, Value};
 
-use crate::{BEU32, MergeFn, Index, FieldId, FieldsIdsMap, ExternalDocumentsIds};
+use crate::{Index, BEU32, MergeFn, FieldsIdsMap, ExternalDocumentsIds, FieldId};
 use crate::update::{AvailableDocumentsIds, UpdateIndexingStep};
 use super::merge_function::merge_two_obkvs;
 use super::{create_writer, create_sorter, IndexDocumentsMethod};
 
+const DEFAULT_PRIMARY_KEY_NAME: &str = "id";
+
 pub struct TransformOutput {
-    pub primary_key: FieldId,
+    pub primary_key: String,
     pub fields_ids_map: FieldsIdsMap,
     pub external_documents_ids: ExternalDocumentsIds<'static>,
     pub new_documents_ids: RoaringBitmap,
@@ -73,7 +75,6 @@ impl Transform<'_, '_> {
     {
         let mut fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let external_documents_ids = self.index.external_documents_ids(self.rtxn).unwrap();
-        let primary_key = self.index.primary_key(self.rtxn)?;
 
         // Deserialize the whole batch of documents in memory.
         let mut documents: Peekable<Box<dyn Iterator<Item=serde_json::Result<Map<String, Value>>>>> = if is_stream {
@@ -88,27 +89,15 @@ impl Transform<'_, '_> {
         };
 
         // We extract the primary key from the first document in
-        // the batch if it hasn't already been defined in the index.
-        let primary_key = match primary_key {
-            Some(primary_key) => primary_key,
-            None => {
-                // We ignore a potential error here as we can't early return it now,
-                // the peek method gives us only a reference on the next item,
-                // we will eventually return it in the iteration just after.
-                let first = documents.peek().and_then(|r| r.as_ref().ok());
-                match first.and_then(|doc| doc.keys().find(|k| k.contains("id"))) {
-                    Some(key) => fields_ids_map.insert(&key).context("field id limit reached")?,
-                    None => {
-                        if !self.autogenerate_docids {
-                            // If there is no primary key in the current document batch, we must
-                            // return an error and not automatically generate any document id.
-                            return Err(anyhow!("missing primary key"))
-                        }
-                        fields_ids_map.insert("id").context("field id limit reached")?
-                    },
-                }
-            },
-        };
+        // the batch if it hasn't already been defined in the index
+        let first = documents.peek().and_then(|r| r.as_ref().ok());
+        let alternative_name = first.and_then(|doc| doc.keys().find(|k| k.contains(DEFAULT_PRIMARY_KEY_NAME)).cloned());
+        let (primary_key_id, primary_key) = compute_primary_key_pair(
+            self.index.primary_key(self.rtxn)?,
+            &mut fields_ids_map,
+            alternative_name,
+            self.autogenerate_docids
+        )?;
 
         if documents.peek().is_none() {
             return Ok(TransformOutput {
@@ -121,13 +110,6 @@ impl Transform<'_, '_> {
                 documents_file: tempfile::tempfile()?,
             });
         }
-
-        // Get the primary key field name now, this way we will
-        // be able to get the value in the JSON Map document.
-        let primary_key_name = fields_ids_map
-            .name(primary_key)
-            .expect("found the primary key name")
-            .to_owned();
 
         // We must choose the appropriate merge function for when two or more documents
         // with the same user id must be merged or fully replaced in the same batch.
@@ -170,7 +152,7 @@ impl Transform<'_, '_> {
 
             // We retrieve the user id from the document based on the primary key name,
             // if the document id isn't present we generate a uuid.
-            let external_id = match document.get(&primary_key_name) {
+            let external_id = match document.get(&primary_key) {
                 Some(value) => match value {
                     Value::String(string) => Cow::Borrowed(string.as_str()),
                     Value::Number(number) => Cow::Owned(number.to_string()),
@@ -196,7 +178,7 @@ impl Transform<'_, '_> {
                     serde_json::to_writer(&mut json_buffer, value)?;
                     writer.insert(field_id, &json_buffer)?;
                 }
-                else if field_id == primary_key {
+                else if field_id == primary_key_id {
                     // We validate the document id [a-zA-Z0-9\-_].
                     let external_id = match validate_document_id(&external_id) {
                         Some(valid) => valid,
@@ -240,42 +222,37 @@ impl Transform<'_, '_> {
 
         let mut csv = csv::Reader::from_reader(reader);
         let headers = csv.headers()?;
-        let primary_key = self.index.primary_key(self.rtxn)?;
 
-        // Generate the new fields ids based on the current fields ids and this CSV headers.
         let mut fields_ids = Vec::new();
+        // Generate the new fields ids based on the current fields ids and this CSV headers.
         for (i, header) in headers.iter().enumerate() {
             let id = fields_ids_map.insert(header).context("field id limit reached)")?;
             fields_ids.push((id, i));
         }
 
         // Extract the position of the primary key in the current headers, None if not found.
-        let external_id_pos = match primary_key {
+        let primary_key_pos = match self.index.primary_key(self.rtxn)? {
             Some(primary_key) => {
-                // Te primary key have is known so we must find the position in the CSV headers.
-                let name = fields_ids_map.name(primary_key).expect("found the primary key name");
-                headers.iter().position(|h| h == name)
+               // The primary key is known so we must find the position in the CSV headers.
+               headers.iter().position(|h| h == primary_key)
             },
             None => headers.iter().position(|h| h.contains("id")),
         };
 
-        // Returns the field id in the fileds ids map, create an "id" field
+        // Returns the field id in the fields ids map, create an "id" field
         // in case it is not in the current headers.
-        let primary_key_field_id = match external_id_pos {
-            Some(pos) => fields_ids_map.id(&headers[pos]).expect("found the primary key"),
-            None => {
-                if !self.autogenerate_docids {
-                    // If there is no primary key in the current document batch, we must
-                    // return an error and not automatically generate any document id.
-                    return Err(anyhow!("missing primary key"))
-                }
-                let field_id = fields_ids_map.insert("id").context("field id limit reached")?;
-                // We make sure to add the primary key field id to the fields ids,
-                // this way it is added to the obks.
-                fields_ids.push((field_id, usize::max_value()));
-                field_id
-            },
-        };
+        let alternative_name = primary_key_pos.map(|pos| headers[pos].to_string());
+        let (primary_key_id, _) = compute_primary_key_pair(
+            self.index.primary_key(self.rtxn)?,
+            &mut fields_ids_map,
+            alternative_name,
+            self.autogenerate_docids
+        )?;
+
+        // The primary key field is not present in the header, so we need to create it.
+        if primary_key_pos.is_none() {
+            fields_ids.push((primary_key_id, usize::max_value()));
+        }
 
         // We sort the fields ids by the fields ids map id, this way we are sure to iterate over
         // the records fields in the fields ids map order and correctly generate the obkv.
@@ -310,7 +287,7 @@ impl Transform<'_, '_> {
             }
 
             // We extract the user id if we know where it is or generate an UUID V4 otherwise.
-            let external_id = match external_id_pos {
+            let external_id = match primary_key_pos {
                 Some(pos) => {
                     let external_id = &record[pos];
                     // We validate the document id [a-zA-Z0-9\-_].
@@ -326,7 +303,7 @@ impl Transform<'_, '_> {
             // we return the generated document id instead of the record field.
             let iter = fields_ids.iter()
                 .map(|(fi, i)| {
-                    let field = if *fi == primary_key_field_id { external_id } else { &record[*i] };
+                    let field = if *fi == primary_key_id { external_id } else { &record[*i] };
                     (fi, field)
                 });
 
@@ -349,9 +326,13 @@ impl Transform<'_, '_> {
 
         // Now that we have a valid sorter that contains the user id and the obkv we
         // give it to the last transforming function which returns the TransformOutput.
+        let primary_key_name = fields_ids_map
+            .name(primary_key_id)
+            .map(String::from)
+            .expect("Primary key must be present in fields id map");
         self.output_from_sorter(
             sorter,
-            primary_key_field_id,
+            primary_key_name,
             fields_ids_map,
             documents_count,
             external_documents_ids,
@@ -365,7 +346,7 @@ impl Transform<'_, '_> {
     fn output_from_sorter<F>(
         self,
         sorter: grenad::Sorter<MergeFn>,
-        primary_key: FieldId,
+        primary_key: String,
         fields_ids_map: FieldsIdsMap,
         approximate_number_of_documents: usize,
         mut external_documents_ids: ExternalDocumentsIds<'_>,
@@ -477,11 +458,11 @@ impl Transform<'_, '_> {
     // TODO this can be done in parallel by using the rayon `ThreadPool`.
     pub fn remap_index_documents(
         self,
-        primary_key: FieldId,
-        fields_ids_map: FieldsIdsMap,
+        primary_key: String,
+        old_fields_ids_map: FieldsIdsMap,
+        new_fields_ids_map: FieldsIdsMap,
     ) -> anyhow::Result<TransformOutput>
     {
-        let current_fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let external_documents_ids = self.index.external_documents_ids(self.rtxn)?;
         let documents_ids = self.index.documents_ids(self.rtxn)?;
         let documents_count = documents_ids.len() as usize;
@@ -499,8 +480,8 @@ impl Transform<'_, '_> {
             let mut obkv_writer = obkv::KvWriter::new(&mut obkv_buffer);
 
             // We iterate over the new `FieldsIdsMap` ids in order and construct the new obkv.
-            for (id, name) in fields_ids_map.iter() {
-                if let Some(val) = current_fields_ids_map.id(name).and_then(|id| obkv.get(id)) {
+            for (id, name) in new_fields_ids_map.iter() {
+                if let Some(val) = old_fields_ids_map.id(name).and_then(|id| obkv.get(id)) {
                     obkv_writer.insert(id, val)?;
                 }
             }
@@ -516,13 +497,49 @@ impl Transform<'_, '_> {
 
         Ok(TransformOutput {
             primary_key,
-            fields_ids_map,
+            fields_ids_map: new_fields_ids_map,
             external_documents_ids: external_documents_ids.into_static(),
             new_documents_ids: documents_ids,
             replaced_documents_ids: RoaringBitmap::default(),
             documents_count,
             documents_file,
         })
+    }
+}
+
+/// Given an optional primary key and an optional alternative name, returns the (field_id, attr_name)
+/// for the primary key according to the following rules:
+/// - if primary_key is `Some`, returns the id and the name, else
+/// - if alternative_name is Some, adds alternative to the fields_ids_map, and returns the pair, else
+/// - if autogenerate_docids is true, insert the default id value in the field ids map ("id") and
+/// returns the pair, else
+/// - returns an error.
+fn compute_primary_key_pair(
+    primary_key: Option<&str>,
+    fields_ids_map: &mut FieldsIdsMap,
+    alternative_name: Option<String>,
+    autogenerate_docids: bool,
+) -> anyhow::Result<(FieldId, String)> {
+    match primary_key {
+        Some(primary_key) => {
+            let id = fields_ids_map.id(primary_key).expect("primary key must be present in the fields id map");
+            Ok((id, primary_key.to_string()))
+        }
+        None => {
+            let name = match alternative_name {
+                Some(key) => key,
+                None => {
+                    if !autogenerate_docids {
+                        // If there is no primary key in the current document batch, we must
+                        // return an error and not automatically generate any document id.
+                        anyhow::bail!("missing primary key")
+                    }
+                    DEFAULT_PRIMARY_KEY_NAME.to_string()
+                },
+            };
+            let id = fields_ids_map.insert(&name).context("field id limit reached")?;
+            Ok((id, name))
+        },
     }
 }
 
@@ -551,4 +568,74 @@ fn validate_document_id(document_id: &str) -> Option<&str> {
             matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_')
         })
     })
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    mod compute_primary_key {
+        use super::compute_primary_key_pair;
+        use super::FieldsIdsMap;
+
+        #[test]
+        #[should_panic]
+        fn should_panic_primary_key_not_in_map() {
+            let mut fields_map = FieldsIdsMap::new();
+            let _result = compute_primary_key_pair(
+                Some("toto"),
+                &mut fields_map,
+                None,
+                false);
+        }
+
+        #[test]
+        fn should_return_primary_key_if_is_some() {
+            let mut fields_map = FieldsIdsMap::new();
+            fields_map.insert("toto").unwrap();
+            let result = compute_primary_key_pair(
+                Some("toto"),
+                &mut fields_map,
+                Some("tata".to_string()),
+                false);
+            assert_eq!(result.unwrap(), (0u8, "toto".to_string()));
+            assert_eq!(fields_map.len(), 1);
+        }
+
+        #[test]
+        fn should_return_alternative_if_primary_is_none() {
+            let mut fields_map = FieldsIdsMap::new();
+            let result = compute_primary_key_pair(
+                None,
+                &mut fields_map,
+                Some("tata".to_string()),
+                false);
+            assert_eq!(result.unwrap(), (0u8, "tata".to_string()));
+            assert_eq!(fields_map.len(), 1);
+        }
+
+        #[test]
+        fn should_return_default_if_both_are_none() {
+            let mut fields_map = FieldsIdsMap::new();
+            let result = compute_primary_key_pair(
+                None,
+                &mut fields_map,
+                None,
+                true);
+            assert_eq!(result.unwrap(), (0u8, "id".to_string()));
+            assert_eq!(fields_map.len(), 1);
+        }
+
+        #[test]
+        fn should_return_err_if_both_are_none_and_recompute_is_false(){
+            let mut fields_map = FieldsIdsMap::new();
+            let result = compute_primary_key_pair(
+                None,
+                &mut fields_map,
+                None,
+                false);
+            assert!(result.is_err());
+            assert_eq!(fields_map.len(), 0);
+        }
+    }
 }

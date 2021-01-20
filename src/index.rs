@@ -112,8 +112,8 @@ impl Index {
     /* primary key */
 
     /// Writes the documents primary key, this is the field name that is used to store the id.
-    pub fn put_primary_key(&self, wtxn: &mut RwTxn, primary_key: FieldId) -> heed::Result<()> {
-        self.main.put::<_, Str, OwnedType<FieldId>>(wtxn, PRIMARY_KEY_KEY, &primary_key)
+    pub fn put_primary_key(&self, wtxn: &mut RwTxn, primary_key: &str) -> heed::Result<()> {
+        self.main.put::<_, Str, Str>(wtxn, PRIMARY_KEY_KEY, &primary_key)
     }
 
     /// Deletes the primary key of the documents, this can be done to reset indexes settings.
@@ -122,8 +122,8 @@ impl Index {
     }
 
     /// Returns the documents primary key, `None` if it hasn't been defined.
-    pub fn primary_key(&self, rtxn: &RoTxn) -> heed::Result<Option<FieldId>> {
-        self.main.get::<_, Str, OwnedType<FieldId>>(rtxn, PRIMARY_KEY_KEY)
+    pub fn primary_key<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t str>> {
+        self.main.get::<_, Str, Str>(rtxn, PRIMARY_KEY_KEY)
     }
 
     /* external documents ids */
@@ -175,10 +175,10 @@ impl Index {
 
     /* displayed fields */
 
-    /// Writes the fields ids that must be displayed in the defined order.
+    /// Writes the fields that must be displayed in the defined order.
     /// There must be not be any duplicate field id.
-    pub fn put_displayed_fields(&self, wtxn: &mut RwTxn, fields: &[FieldId]) -> heed::Result<()> {
-        self.main.put::<_, Str, ByteSlice>(wtxn, DISPLAYED_FIELDS_KEY, fields)
+    pub fn put_displayed_fields(&self, wtxn: &mut RwTxn, fields: &[&str]) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<&[&str]>>(wtxn, DISPLAYED_FIELDS_KEY, &fields)
     }
 
     /// Deletes the displayed fields ids, this will make the engine to display
@@ -187,18 +187,27 @@ impl Index {
         self.main.delete::<_, Str>(wtxn, DISPLAYED_FIELDS_KEY)
     }
 
-    /// Returns the displayed fields ids in the order they must be returned. If it returns
-    /// `None` it means that all the attributes are displayed in the order of the `FieldsIdsMap`.
-    pub fn displayed_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t [FieldId]>> {
-        self.main.get::<_, Str, ByteSlice>(rtxn, DISPLAYED_FIELDS_KEY)
+    /// Returns the displayed fields in the order they were set by the user. If it returns
+    /// `None` it means that all the attributes are set as displayed in the order of the `FieldsIdsMap`.
+    pub fn displayed_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<Vec<&'t str>>> {
+        self.main.get::<_, Str, SerdeBincode<Vec<&'t str>>>(rtxn, DISPLAYED_FIELDS_KEY)
+    }
+
+    pub fn displayed_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<Option<Vec<FieldId>>> {
+        let fields_ids_map = self.fields_ids_map(rtxn)?;
+        let ids = self.displayed_fields(rtxn)?
+            .map(|fields| fields
+                .into_iter()
+                .map(|name| fields_ids_map.id(name).expect("Field not found"))
+                .collect::<Vec<_>>());
+        Ok(ids)
     }
 
     /* searchable fields */
 
     /// Writes the searchable fields, when this list is specified, only these are indexed.
-    pub fn put_searchable_fields(&self, wtxn: &mut RwTxn, fields: &[FieldId]) -> heed::Result<()> {
-        assert!(fields.windows(2).all(|win| win[0] < win[1])); // is sorted
-        self.main.put::<_, Str, ByteSlice>(wtxn, SEARCHABLE_FIELDS_KEY, fields)
+    pub fn put_searchable_fields(&self, wtxn: &mut RwTxn, fields: &[&str]) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeBincode<&[&str]>>(wtxn, SEARCHABLE_FIELDS_KEY, &fields)
     }
 
     /// Deletes the searchable fields, when no fields are specified, all fields are indexed.
@@ -206,17 +215,36 @@ impl Index {
         self.main.delete::<_, Str>(wtxn, SEARCHABLE_FIELDS_KEY)
     }
 
-    /// Returns the searchable fields ids, those are the fields that are indexed,
+    /// Returns the searchable fields, those are the fields that are indexed,
     /// if the searchable fields aren't there it means that **all** the fields are indexed.
-    pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<&'t [FieldId]>> {
-        self.main.get::<_, Str, ByteSlice>(rtxn, SEARCHABLE_FIELDS_KEY)
+    pub fn searchable_fields<'t>(&self, rtxn: &'t RoTxn) -> heed::Result<Option<Vec<&'t str>>> {
+        self.main.get::<_, Str, SerdeBincode<Vec<&'t str>>>(rtxn, SEARCHABLE_FIELDS_KEY)
+    }
+
+    /// Identical to `searchable_fields`, but returns the ids instead.
+    pub fn searchable_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<Option<Vec<FieldId>>> {
+        match self.searchable_fields(rtxn)? {
+            Some(names) => {
+                let fields_map = self.fields_ids_map(rtxn)?;
+                let mut ids = Vec::new();
+                for name in names {
+                    let id = fields_map
+                        .id(name)
+                        .ok_or_else(|| format!("field id map must contain {:?}", name))
+                        .expect("corrupted data: ");
+                    ids.push(id);
+                }
+                Ok(Some(ids))
+            }
+            None => Ok(None),
+        }
     }
 
     /* faceted fields */
 
-    /// Writes the facet fields ids associated with their facet type or `None` if
+    /// Writes the facet fields associated with their facet type or `None` if
     /// the facet type is currently unknown.
-    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields_types: &HashMap<FieldId, FacetType>) -> heed::Result<()> {
+    pub fn put_faceted_fields(&self, wtxn: &mut RwTxn, fields_types: &HashMap<String, FacetType>) -> heed::Result<()> {
         self.main.put::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY, fields_types)
     }
 
@@ -225,9 +253,26 @@ impl Index {
         self.main.delete::<_, Str>(wtxn, FACETED_FIELDS_KEY)
     }
 
-    /// Returns the facet fields ids associated with their facet type.
-    pub fn faceted_fields(&self, wtxn: &RoTxn) -> heed::Result<HashMap<FieldId, FacetType>> {
-        Ok(self.main.get::<_, Str, SerdeJson<_>>(wtxn, FACETED_FIELDS_KEY)?.unwrap_or_default())
+    /// Returns the facet fields names associated with their facet type.
+    pub fn faceted_fields(&self, rtxn: &RoTxn) -> heed::Result<HashMap<String, FacetType>> {
+        Ok(self.main.get::<_, Str, SerdeJson<_>>(rtxn, FACETED_FIELDS_KEY)?.unwrap_or_default())
+    }
+
+    /// Same as `faceted_fields`, but returns ids instead.
+    pub fn faceted_fields_ids(&self, rtxn: &RoTxn) -> heed::Result<HashMap<FieldId, FacetType>> {
+        let faceted_fields = self.faceted_fields(rtxn)?;
+        let fields_ids_map = self.fields_ids_map(rtxn)?;
+        let faceted_fields = faceted_fields
+            .iter()
+            .map(|(k, v)| {
+                let kid = fields_ids_map
+                    .id(k)
+                    .ok_or_else(|| format!("{:?} should be present in the field id map", k))
+                    .expect("corrupted data: ");
+                (kid, *v)
+            })
+            .collect();
+        Ok(faceted_fields)
     }
 
     /* faceted documents ids */
