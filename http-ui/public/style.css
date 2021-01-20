@@ -1,5 +1,24 @@
 #results {
+  max-width: 900px;
   margin: 20px auto 0 auto;
+  padding: 0;
+}
+
+#facets .tag {
+    margin-right: 1em;
+    margin-bottom: 1em;
+}
+
+#facets {
+    max-width: 900px;
+    margin: 20px auto 0 auto;
+    padding: 0;
+    max-height: 16em;
+  overflow: scroll;
+}
+
+#facets .tag:hover {
+  cursor: pointer;
 }
 
 #logo-white {
@@ -59,6 +78,14 @@
   box-sizing: border-box;
   text-transform: uppercase;
   opacity: 0.7;
+}
+
+.content {
+  max-width: 65%;
+  flex: 0 0 65%;
+  box-sizing: border-box;
+  padding-left: 10px;
+  color: rgba(0,0,0,.9);
 }
 
 .content mark {

@@ -1,11 +1,9 @@
 var request = null;
 var timeoutID = null;
-var selected_facets = {};
 
 $('#query, #filters').on('input', function () {
   var query = $('#query').val();
   var filters = $('#filters').val();
-  var facet_filters = selectedFacetsToArray(selected_facets);
   var timeoutMs = 100;
 
   if (timeoutID !== null) {
@@ -20,12 +18,11 @@ $('#query, #filters').on('input', function () {
       data: JSON.stringify({
         'query': query,
         'filters': filters,
-        'facetFilters': facet_filters,
         "facetDistribution": true,
       }),
       contentType: 'application/json',
       success: function (data, textStatus, request) {
-        documents.innerHTML = '';
+        results.innerHTML = '';
         facets.innerHTML = '';
 
         let timeSpent = request.getResponseHeader('Time-Ms');
@@ -35,39 +32,15 @@ $('#query, #filters').on('input', function () {
         time.classList.remove('fade-in-out');
 
         for (facet_name in data.facets) {
-          // Append an header to the list of facets
-          let upperCaseName = facet_name.charAt(0).toUpperCase() + facet_name.slice(1);
-          $("<h3></h3>").text(upperCaseName).appendTo($('#facets'));
-
-          // Create a div for a bulma select
-          const header = document.createElement('div');
-          let div = $("<div></div>").addClass('select is-multiple');
-
-          // Create the select element
-          let select = $(`<select data-facet-name='${facet_name}' multiple size=\"8\"></select>`);
-          let selected_values = selected_facets[facet_name] || [];
-          // Create the previously selected facets (mark them as selected)
-          for (value of selected_values) {
-              let option = $('<option></option>')
-                .text(value)
-                .attr('selected', "selected")
-                .attr('value', value)
-                .attr('title', value);
-              select.append(option);
+          for (value in data.facets[facet_name]) {
+              const elem = document.createElement('span');
+              const count = data.facets[facet_name][value];
+              elem.classList.add("tag");
+              elem.setAttribute('data-name', facet_name);
+              elem.setAttribute('data-value', value);
+              elem.innerHTML = `${facet_name}:${value} (${count})`;
+              facets.appendChild(elem);
           }
-
-          // Create the newly discovered facets
-          let diff = diffArray(Object.keys(data.facets[facet_name]), selected_values);
-          for (value of diff) {
-              let option = $('<option></option>')
-                .text(value)
-                .attr('value', value)
-                .attr('title', value);
-              select.append(option);
-          }
-
-          div.append(select);
-          $('#facets').append(div);
         }
 
         for (element of data.documents) {
@@ -95,15 +68,21 @@ $('#query, #filters').on('input', function () {
           }
 
           elem.appendChild(ol);
-          documents.appendChild(elem);
+          results.appendChild(elem);
         }
 
-        // When we click on a facet value we change the global values
-        // to make sure that we don't loose the selection between requests.
-        $('#facets select').on('change', function(e) {
-            let facet_name = $(this).attr('data-facet-name');
-            selected_facets[facet_name] = $(this).val();
-            $('#query').trigger('input');
+        // When we click on a tag we append the facet value
+        // at the end of the facet query.
+        $('#facets .tag').on('click', function () {
+          let name = $(this).attr("data-name");
+          let value = $(this).attr("data-value");
+
+          let facet_query = $('#filters').val().trim();
+          if (facet_query === "") {
+            $('#filters').val(`${name} = "${value}"`).trigger('input');
+          } else {
+            $('#filters').val(`${facet_query} AND ${name} = "${value}"`).trigger('input');
+          }
         });
       },
       beforeSend: function () {
