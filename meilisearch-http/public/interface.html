@@ -111,7 +111,7 @@
   <body>
 
     <section class="hero is-light">
-      
+
       <div class="hero-body">
         <div class="container">
           <div class="content is-medium align-on-mobile">
@@ -203,6 +203,10 @@
 
         if (!Array.isArray(result)) { return }
 
+        result.sort(function(a, b) {
+            return a.name.localeCompare(b.name);
+        })
+
         let select = document.getElementById("index");
         select.innerHTML = '';
 
@@ -273,7 +277,7 @@
 
                         const content = document.createElement('div');
                         content.classList.add("content", "column");
-                        
+
                         if (typeof (element[prop]) === "object") {
                           content.innerHTML = JSON.stringify(element[prop]);
                         } else {
@@ -292,7 +296,7 @@
                     if (image != undefined) {
                         const divImage = document.createElement('div');
                         divImage.classList.add("image","column","align-on-mobile");
-                        
+
                         const img = document.createElement('img');
                         img.src = image;
                         img.setAttribute("alt","Item illustration");
@@ -324,7 +328,7 @@
     refreshIndexList();
 
     search.oninput = triggerSearch;
-    
+
     let select = document.getElementById("index");
     select.onchange = triggerSearch;
 
