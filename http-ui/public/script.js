@@ -57,7 +57,7 @@ $('#query, #filters').on('input', function () {
           }
 
           // Create the newly discovered facets
-          let diff = diffArray(data.facets[facet_name], selected_values);
+          let diff = diffArray(Object.keys(data.facets[facet_name]), selected_values);
           for (value of diff) {
               let option = $('<option></option>')
                 .text(value)

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::{File, create_dir_all};
 use std::net::SocketAddr;
@@ -29,6 +29,7 @@ use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 
+use milli::facet::FacetValue;
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
 use milli::{obkv_to_json, Index, UpdateStore, SearchResult, FacetCondition};
@@ -652,7 +653,7 @@ async fn main() -> anyhow::Result<()> {
     struct Answer {
         documents: Vec<Map<String, Value>>,
         number_of_candidates: u64,
-        facets: HashMap<String, Vec<Value>>,
+        facets: BTreeMap<String, BTreeMap<FacetValue, u64>>,
     }
 
     let disable_highlighting = opt.disable_highlighting;

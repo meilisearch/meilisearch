@@ -1,8 +1,7 @@
 use ordered_float::OrderedFloat;
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Serializer};
 
 #[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Hash)]
-#[derive(Serialize, Deserialize)]
 pub enum FacetValue {
     String(String),
     Float(OrderedFloat<f64>),
@@ -36,5 +35,24 @@ impl From<OrderedFloat<f64>> for FacetValue {
 impl From<i64> for FacetValue {
     fn from(integer: i64) -> FacetValue {
         FacetValue::Integer(integer)
+    }
+}
+
+impl Serialize for FacetValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            FacetValue::String(string) => serializer.serialize_str(string),
+            FacetValue::Float(float) => {
+                let string = float.to_string();
+                serializer.serialize_str(&string)
+            },
+            FacetValue::Integer(integer) => {
+                let string = integer.to_string();
+                serializer.serialize_str(&string)
+            },
+        }
     }
 }
