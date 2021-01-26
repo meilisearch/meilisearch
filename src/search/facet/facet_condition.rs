@@ -176,7 +176,7 @@ impl FacetCondition {
         }
 
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let faceted_fields = index.faceted_fields(rtxn)?;
+        let faceted_fields = index.faceted_fields_ids(rtxn)?;
         let mut ands = None;
 
         for either in array {

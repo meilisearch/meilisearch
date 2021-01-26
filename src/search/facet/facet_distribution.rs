@@ -173,7 +173,7 @@ impl<'a> FacetDistribution<'a> {
 
     pub fn execute(&self) -> heed::Result<BTreeMap<String, BTreeMap<FacetValue, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let faceted_fields = self.index.faceted_fields(self.rtxn)?;
+        let faceted_fields = self.index.faceted_fields_ids(self.rtxn)?;
         let fields_ids: Vec<_> = match &self.facets {
             Some(names) => {
                 names.iter().filter_map(|n| {
