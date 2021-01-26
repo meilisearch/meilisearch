@@ -25,7 +25,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
 
         // We retrieve the number of documents ids that we are deleting.
         let number_of_documents = self.index.number_of_documents(self.wtxn)?;
-        let faceted_fields = self.index.faceted_fields(self.wtxn)?;
+        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
 
         // We clean some of the main engine datastructures.
         self.index.put_words_fst(self.wtxn, &fst::Set::default())?;

@@ -338,8 +338,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             FacetLevel0ValuesDocids,
         }
 
-        let faceted_fields = self.index.faceted_fields(self.wtxn)?;
-        let searchable_fields: HashSet<_> = match self.index.searchable_fields(self.wtxn)? {
+        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
+        let searchable_fields: HashSet<_> = match self.index.searchable_fields_ids(self.wtxn)? {
             Some(fields) => fields.iter().copied().collect(),
             None => fields_ids_map.iter().map(|(id, _name)| id).collect(),
         };
@@ -485,7 +485,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.index.put_fields_ids_map(self.wtxn, &fields_ids_map)?;
 
         // We write the primary key field id into the main database
-        self.index.put_primary_key(self.wtxn, primary_key)?;
+        self.index.put_primary_key(self.wtxn, &primary_key)?;
 
         // We write the external documents ids into the main database.
         self.index.put_external_documents_ids(self.wtxn, &external_documents_ids)?;

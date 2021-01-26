@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::io::{self, BufRead, Write};
 use std::iter::once;
 use std::path::PathBuf;
@@ -47,9 +46,9 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
     let index = Index::new(options, &opt.database)?;
     let rtxn = index.read_txn()?;
     let fields_ids_map = index.fields_ids_map(&rtxn)?;
-    let displayed_fields = match index.displayed_fields(&rtxn)? {
-        Some(fields) => Cow::Borrowed(fields),
-        None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
+    let displayed_fields = match index.displayed_fields_ids(&rtxn)? {
+        Some(fields) => fields,
+        None => fields_ids_map.iter().map(|(id, _)| id).collect(),
     };
 
     let stdin = io::stdin();

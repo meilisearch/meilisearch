@@ -51,7 +51,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
 
     pub fn execute(self) -> anyhow::Result<()> {
         // We get the faceted fields to be able to create the facet levels.
-        let faceted_fields = self.index.faceted_fields(self.wtxn)?;
+        let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
 
         debug!("Computing and writing the facet values levels docids into LMDB on disk...");
         for (field_id, facet_type) in faceted_fields {

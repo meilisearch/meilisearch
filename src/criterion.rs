@@ -1,10 +1,12 @@
-use crate::{FieldsIdsMap, FieldId};
+use std::collections::HashMap;
 
 use anyhow::{Context, bail};
 use regex::Regex;
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
+use crate::facet::FacetType;
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Criterion {
     /// Sorted by increasing number of typos.
     Typo,
@@ -21,13 +23,13 @@ pub enum Criterion {
     /// Sorted by the similarity of the matched words with the query words.
     Exactness,
     /// Sorted by the increasing value of the field specified.
-    Asc(FieldId),
+    Asc(String),
     /// Sorted by the decreasing value of the field specified.
-    Desc(FieldId),
+    Desc(String),
 }
 
 impl Criterion {
-    pub fn from_str(fields_ids_map: &mut FieldsIdsMap, txt: &str) -> anyhow::Result<Criterion> {
+    pub fn from_str(faceted_attributes: &HashMap<String, FacetType>, txt: &str) -> anyhow::Result<Criterion> {
         match txt {
             "typo" => Ok(Criterion::Typo),
             "words" => Ok(Criterion::Words),
@@ -40,20 +42,13 @@ impl Criterion {
                 let caps = re.captures(text).with_context(|| format!("unknown criterion name: {}", text))?;
                 let order = caps.get(1).unwrap().as_str();
                 let field_name = caps.get(2).unwrap().as_str();
-                let field_id = fields_ids_map.insert(field_name).context("field id limit reached")?;
+                faceted_attributes.get(field_name).with_context(|| format!("Can't use {:?} as a criterion as it isn't a faceted field.", field_name))?;
                 match order {
-                    "asc" => Ok(Criterion::Asc(field_id)),
-                    "desc" => Ok(Criterion::Desc(field_id)),
+                    "asc" => Ok(Criterion::Asc(field_name.to_string())),
+                    "desc" => Ok(Criterion::Desc(field_name.to_string())),
                     otherwise => bail!("unknown criterion name: {}", otherwise),
                 }
             },
-        }
-    }
-
-    pub fn field_id(&self) -> Option<FieldId> {
-        match *self {
-            Criterion::Asc(fid) | Criterion::Desc(fid) => Some(fid),
-            _ => None,
         }
     }
 }

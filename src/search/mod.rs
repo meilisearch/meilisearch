@@ -285,9 +285,13 @@ impl<'a> Search<'a> {
                 }
             }).next();
             match result {
-                Some((fid, is_ascending)) => {
-                    let faceted_fields = self.index.faceted_fields(self.rtxn)?;
-                    let ftype = *faceted_fields.get(&fid).context("unknown field id")?;
+                Some((attr_name, is_ascending)) => {
+                    let field_id_map = self.index.fields_ids_map(self.rtxn)?;
+                    let fid = field_id_map.id(&attr_name).with_context(|| format!("unknown field: {:?}", attr_name))?;
+                    let faceted_fields = self.index.faceted_fields_ids(self.rtxn)?;
+                    let ftype = *faceted_fields.get(&fid)
+                        .with_context(|| format!("{:?} not found in the faceted fields.", attr_name))
+                        .expect("corrupted data: ");
                     Some((fid, ftype, is_ascending))
                 },
                 None => None,
