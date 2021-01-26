@@ -1212,9 +1212,9 @@ checksum = "21215c1b9d8f7832b433255bd9eea3e2779aa55b21b2f8e13aad62c74749b237"
 
 [[package]]
 name = "roaring"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f12bdbc3b9b2fd12148ee9f97f9e36438f1e84d3ce47fec0ad6b4bfbb62b3a35"
+checksum = "4d60b41c8f25d07cecab125cb46ebbf234fc055effc61ca2392a3ef4f9422304"
 dependencies = [
  "byteorder",
 ]
