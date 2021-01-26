@@ -48,7 +48,7 @@ For more information about features go to [our documentation](https://docs.meili
 
 ### Deploy the Server
 
-#### Brew (Mac OS)
+#### Homebrew (Mac OS)
 
 ```bash
 brew update && brew install meilisearch
