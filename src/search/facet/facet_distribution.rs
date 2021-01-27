@@ -63,7 +63,11 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<BTreeMap<FacetValue, u64>>
     {
         if let Some(candidates) = self.candidates.as_ref() {
+            // Classic search, candidates were specified, we must return
+            // facet values only related to those candidates.
             if candidates.len() <= CANDIDATES_THRESHOLD || facet_type == FacetType::String {
+                // There is a small amount of candidates OR we ask for facet string values so we
+                // decide to iterate over the facet values of each one of them, one by one.
                 let mut key_buffer = vec![field_id];
                 match facet_type {
                     FacetType::String => {
@@ -116,6 +120,8 @@ impl<'a> FacetDistribution<'a> {
                     },
                 }
             } else {
+                // There is too much documents, we use the facet levels to move throught
+                // the facet values, to find the candidates and values associated.
                 let iter = match facet_type {
                     FacetType::String => unreachable!(),
                     FacetType::Float => {
@@ -148,6 +154,8 @@ impl<'a> FacetDistribution<'a> {
                 Ok(facet_values)
             }
         } else {
+            // Placeholder search, a.k.a. no candidates were specified. We iterate throught the
+            // facet values one by one and iterate on the facet level 0 for numbers.
             let db = self.index.facet_field_id_value_docids;
             let iter = match facet_type {
                 FacetType::String => {
