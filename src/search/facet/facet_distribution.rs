@@ -2,6 +2,7 @@ use std::collections::{HashSet, BTreeMap};
 use std::ops::Bound::Unbounded;
 use std::{cmp, fmt};
 
+use anyhow::Context;
 use roaring::RoaringBitmap;
 
 use crate::facet::{FacetType, FacetValue};
@@ -194,7 +195,7 @@ impl<'a> FacetDistribution<'a> {
         }
     }
 
-    pub fn execute(&self) -> heed::Result<BTreeMap<String, BTreeMap<FacetValue, u64>>> {
+    pub fn execute(&self) -> anyhow::Result<BTreeMap<String, BTreeMap<FacetValue, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
         let faceted_fields = self.index.faceted_fields(self.rtxn)?;
         let fields_ids: Vec<_> = match &self.facets {
@@ -207,7 +208,9 @@ impl<'a> FacetDistribution<'a> {
 
         let mut facets_values = BTreeMap::new();
         for (name, ftype) in fields_ids {
-            let fid = fields_ids_map.id(&name).unwrap();
+            let fid = fields_ids_map.id(&name).with_context(|| {
+                format!("missing field name {:?} from the fields id map", name)
+            })?;
             let values = self.facet_values(fid, ftype)?;
             facets_values.insert(name, values);
         }
