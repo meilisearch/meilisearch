@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::ops::Bound::{self, Included, Excluded};
 use std::str::FromStr;
 
+use anyhow::Context;
 use either::Either;
 use heed::types::{ByteSlice, DecodeIgnore};
 use log::debug;
@@ -154,16 +155,20 @@ impl FacetCondition {
     {
         fn facet_condition(
             fields_ids_map: &FieldsIdsMap,
-            faceted_fields: &HashMap<FieldId, FacetType>,
+            faceted_fields: &HashMap<String, FacetType>,
             key: &str,
             value: &str,
         ) -> anyhow::Result<FacetCondition>
         {
-            let fid = fields_ids_map.id(key).unwrap();
-            let ftype = faceted_fields.get(&fid).copied().unwrap();
-            let (neg, value) = match value.strip_prefix('-') {
-                Some(value) => (true, value),
-                None => (false, value),
+            let fid = fields_ids_map.id(key).with_context(|| {
+                format!("{:?} must isn't part of the fields ids map", key)
+            })?;
+            let ftype = faceted_fields.get(key).copied().with_context(|| {
+                format!("{:?} must isn't a faceted field", key)
+            })?;
+            let (neg, value) = match value.trim().strip_prefix('-') {
+                Some(value) => (true, value.trim()),
+                None => (false, value.trim()),
             };
 
             let operator = match ftype {
@@ -176,7 +181,7 @@ impl FacetCondition {
         }
 
         let fields_ids_map = index.fields_ids_map(rtxn)?;
-        let faceted_fields = index.faceted_fields_ids(rtxn)?;
+        let faceted_fields = index.faceted_fields(rtxn)?;
         let mut ands = None;
 
         for either in array {
@@ -185,8 +190,8 @@ impl FacetCondition {
                     let mut ors = None;
                     for rule in array {
                         let mut iter = rule.as_ref().splitn(2, ':');
-                        let key = iter.next().unwrap();
-                        let value = iter.next().unwrap();
+                        let key = iter.next().context("missing facet condition key")?;
+                        let value = iter.next().context("missing facet condition value")?;
                         let condition = facet_condition(&fields_ids_map, &faceted_fields, key, value)?;
                         ors = match ors.take() {
                             Some(ors) => Some(Or(Box::new(ors), Box::new(condition))),
@@ -203,8 +208,8 @@ impl FacetCondition {
                 },
                 Either::Right(rule) => {
                     let mut iter = rule.as_ref().splitn(2, ':');
-                    let key = iter.next().unwrap();
-                    let value = iter.next().unwrap();
+                    let key = iter.next().context("missing facet condition key")?;
+                    let value = iter.next().context("missing facet condition value")?;
                     let condition = facet_condition(&fields_ids_map, &faceted_fields, key, value)?;
                     ands = match ands.take() {
                         Some(ands) => Some(And(Box::new(ands), Box::new(condition))),
