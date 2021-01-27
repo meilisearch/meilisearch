@@ -3,13 +3,14 @@ use std::ops::Bound::Unbounded;
 use std::{cmp, fmt};
 
 use anyhow::Context;
+use heed::BytesDecode;
 use roaring::RoaringBitmap;
 
 use crate::facet::{FacetType, FacetValue};
 use crate::heed_codec::facet::{FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
 use crate::search::facet::{FacetIter, FacetRange};
-use crate::{Index, FieldId};
+use crate::{Index, FieldId, DocumentId};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.
@@ -66,55 +67,46 @@ impl<'a> FacetDistribution<'a> {
         candidates: &RoaringBitmap,
     ) -> heed::Result<BTreeMap<FacetValue, u64>>
     {
-        let mut key_buffer = vec![field_id];
+        fn fetch_facet_values<'t, KC, K: 't>(
+            index: &Index,
+            rtxn: &'t heed::RoTxn,
+            field_id: FieldId,
+            candidates: &RoaringBitmap,
+        ) -> heed::Result<BTreeMap<FacetValue, u64>>
+        where
+            KC: BytesDecode<'t, DItem = (FieldId, DocumentId, K)>,
+            K: Into<FacetValue>,
+        {
+            let mut facet_values = BTreeMap::new();
+            let mut key_buffer = vec![field_id];
+
+            for docid in candidates.into_iter().take(CANDIDATES_THRESHOLD as usize) {
+                key_buffer.truncate(1);
+                key_buffer.extend_from_slice(&docid.to_be_bytes());
+                let iter = index.field_id_docid_facet_values
+                    .prefix_iter(rtxn, &key_buffer)?
+                    .remap_key_type::<KC>();
+
+                for result in iter {
+                    let ((_, _, value), ()) = result?;
+                    *facet_values.entry(value.into()).or_insert(0) += 1;
+                }
+            }
+
+            Ok(facet_values)
+        }
+
+        let index = self.index;
+        let rtxn = self.rtxn;
         match facet_type {
             FacetType::String => {
-                let mut facet_values = BTreeMap::new();
-                for docid in candidates.into_iter().take(CANDIDATES_THRESHOLD as usize) {
-                    key_buffer.truncate(1);
-                    key_buffer.extend_from_slice(&docid.to_be_bytes());
-                    let iter = self.index.field_id_docid_facet_values
-                        .prefix_iter(self.rtxn, &key_buffer)?
-                        .remap_key_type::<FieldDocIdFacetStringCodec>();
-
-                    for result in iter {
-                        let ((_, _, value), ()) = result?;
-                        *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
-                    }
-                }
-                Ok(facet_values)
+                fetch_facet_values::<FieldDocIdFacetStringCodec, _>(index, rtxn, field_id, candidates)
             },
             FacetType::Float => {
-                let mut facet_values = BTreeMap::new();
-                for docid in candidates {
-                    key_buffer.truncate(1);
-                    key_buffer.extend_from_slice(&docid.to_be_bytes());
-                    let iter = self.index.field_id_docid_facet_values
-                        .prefix_iter(self.rtxn, &key_buffer)?
-                        .remap_key_type::<FieldDocIdFacetF64Codec>();
-
-                    for result in iter {
-                        let ((_, _, value), ()) = result?;
-                        *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
-                    }
-                }
-                Ok(facet_values)
+                fetch_facet_values::<FieldDocIdFacetF64Codec, _>(index, rtxn, field_id, candidates)
             },
             FacetType::Integer => {
-                let mut facet_values = BTreeMap::new();
-                for docid in candidates {
-                    key_buffer.truncate(1);
-                    key_buffer.extend_from_slice(&docid.to_be_bytes());
-                    let iter = self.index.field_id_docid_facet_values
-                        .prefix_iter(self.rtxn, &key_buffer)?
-                        .remap_key_type::<FieldDocIdFacetI64Codec>();
-
-                    for result in iter {
-                        let ((_, _, value), ()) = result?;
-                        *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
-                    }
-                }
-                Ok(facet_values)
+                fetch_facet_values::<FieldDocIdFacetI64Codec, _>(index, rtxn, field_id, candidates)
             },
         }
     }
