@@ -351,7 +351,7 @@ impl Index {
         Ok(self.documents_ids(rtxn).map(|docids| docids.len() as usize)?)
     }
 
-    pub fn facets<'a>(&'a self, rtxn: &'a RoTxn) -> FacetDistribution<'a> {
+    pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn) -> FacetDistribution<'a> {
         FacetDistribution::new(rtxn, self)
     }
 

@@ -76,7 +76,7 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         }
 
         if opt.print_facet_distribution {
-            let facets = index.facets(&rtxn).candidates(result.candidates).execute()?;
+            let facets = index.facets_distribution(&rtxn).candidates(result.candidates).execute()?;
             serde_json::to_writer(&mut stdout, &facets)?;
             let _ = writeln!(&mut stdout);
         }

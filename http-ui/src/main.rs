@@ -702,7 +702,7 @@ async fn main() -> anyhow::Result<()> {
 
             let number_of_candidates = candidates.len();
             let facets = if query.facet_distribution == Some(true) {
-                Some(index.facets(&rtxn).candidates(candidates).execute().unwrap())
+                Some(index.facets_distribution(&rtxn).candidates(candidates).execute().unwrap())
             } else {
                 None
             };
