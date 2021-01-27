@@ -66,6 +66,21 @@ impl<'a> FacetDistribution<'a> {
             if candidates.len() <= CANDIDATES_THRESHOLD {
                 let mut key_buffer = vec![field_id];
                 match facet_type {
+                    FacetType::String => {
+                        let mut facet_values = BTreeMap::new();
+                        for docid in candidates {
+                            key_buffer.truncate(1);
+                            key_buffer.extend_from_slice(&docid.to_be_bytes());
+                            let iter = self.index.field_id_docid_facet_values
+                                .prefix_iter(self.rtxn, &key_buffer)?
+                                .remap_key_type::<FieldDocIdFacetStringCodec>();
+                            for result in iter {
+                                let ((_, _, value), ()) = result?;
+                                *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
+                            }
+                        }
+                        Ok(facet_values)
+                    },
                     FacetType::Float => {
                         let mut facet_values = BTreeMap::new();
                         for docid in candidates {
@@ -96,21 +111,6 @@ impl<'a> FacetDistribution<'a> {
                         }
                         Ok(facet_values)
                     },
-                    FacetType::String => {
-                        let mut facet_values = BTreeMap::new();
-                        for docid in candidates {
-                            key_buffer.truncate(1);
-                            key_buffer.extend_from_slice(&docid.to_be_bytes());
-                            let iter = self.index.field_id_docid_facet_values
-                                .prefix_iter(self.rtxn, &key_buffer)?
-                                .remap_key_type::<FieldDocIdFacetStringCodec>();
-                            for result in iter {
-                                let ((_, _, value), ()) = result?;
-                                *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
-                            }
-                        }
-                        Ok(facet_values)
-                    },
                 }
             } else {
                 let iter = match facet_type {
@@ -122,14 +122,14 @@ impl<'a> FacetDistribution<'a> {
                             .map(|r| r.map(|((_, v), docids)| (FacetValue::from(v), docids)));
                         Box::new(iter) as Box::<dyn Iterator<Item=_>>
                     },
-                    FacetType::Integer => {
-                        let iter = FacetIter::<i64, FacetLevelValueI64Codec>::new_non_reducing(
+                    FacetType::Float => {
+                        let iter = FacetIter::<f64, FacetLevelValueF64Codec>::new_non_reducing(
                             self.rtxn, self.index, field_id, candidates.clone(),
                         )?;
                         Box::new(iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids))))
                     },
-                    FacetType::Float => {
-                        let iter = FacetIter::<f64, FacetLevelValueF64Codec>::new_non_reducing(
+                    FacetType::Integer => {
+                        let iter = FacetIter::<i64, FacetLevelValueI64Codec>::new_non_reducing(
                             self.rtxn, self.index, field_id, candidates.clone(),
                         )?;
                         Box::new(iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids))))
@@ -160,16 +160,16 @@ impl<'a> FacetDistribution<'a> {
                         .map(|r| r.map(|((_, v), docids)| (FacetValue::from(v), docids)));
                     Box::new(iter) as Box::<dyn Iterator<Item=_>>
                 },
-                FacetType::Integer => {
-                    let db = db.remap_key_type::<FacetLevelValueI64Codec>();
-                    let range = FacetRange::<i64, _>::new(
+                FacetType::Float => {
+                    let db = db.remap_key_type::<FacetLevelValueF64Codec>();
+                    let range = FacetRange::<f64, _>::new(
                         self.rtxn, db, field_id, 0, Unbounded, Unbounded,
                     )?;
                     Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (FacetValue::from(v), docids))))
                 },
-                FacetType::Float => {
-                    let db = db.remap_key_type::<FacetLevelValueF64Codec>();
-                    let range = FacetRange::<f64, _>::new(
+                FacetType::Integer => {
+                    let db = db.remap_key_type::<FacetLevelValueI64Codec>();
+                    let range = FacetRange::<i64, _>::new(
                         self.rtxn, db, field_id, 0, Unbounded, Unbounded,
                     )?;
                     Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (FacetValue::from(v), docids))))
