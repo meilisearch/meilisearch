@@ -10,6 +10,18 @@ use crate::heed_codec::facet::{FieldDocIdFacetStringCodec, FieldDocIdFacetF64Cod
 use crate::search::facet::{FacetIter, FacetRange};
 use crate::{Index, FieldId};
 
+/// The default number of values by facets that will
+/// be fetched from the key-value store.
+const DEFAULT_VALUES_BY_FACET: usize = 100;
+
+/// The hard limit in the number of values by facets that will be fetched from
+/// the key-value store. Searching for more values could slow down the engine.
+const MAX_VALUES_BY_FACET: usize = 1000;
+
+/// Threshold on the number of candidates that will make
+/// the system to choose between one algorithm or another.
+const CANDIDATES_THRESHOLD: u64 = 1000;
+
 pub struct FacetDistribution<'a> {
     facets: Option<HashSet<String>>,
     candidates: Option<RoaringBitmap>,
@@ -20,7 +32,13 @@ pub struct FacetDistribution<'a> {
 
 impl<'a> FacetDistribution<'a> {
     pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> FacetDistribution<'a> {
-        FacetDistribution { facets: None, candidates: None, max_values_by_facet: 100, rtxn, index }
+        FacetDistribution {
+            facets: None,
+            candidates: None,
+            max_values_by_facet: DEFAULT_VALUES_BY_FACET,
+            rtxn,
+            index,
+        }
     }
 
     pub fn facets<I: IntoIterator<Item=A>, A: AsRef<str>>(&mut self, names: I) -> &mut Self {
@@ -34,7 +52,7 @@ impl<'a> FacetDistribution<'a> {
     }
 
     pub fn max_values_by_facet(&mut self, max: usize) -> &mut Self {
-        self.max_values_by_facet = cmp::min(max, 1000);
+        self.max_values_by_facet = cmp::min(max, MAX_VALUES_BY_FACET);
         self
     }
 
@@ -45,7 +63,7 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<BTreeMap<FacetValue, u64>>
     {
         if let Some(candidates) = self.candidates.as_ref() {
-            if candidates.len() <= 1000 {
+            if candidates.len() <= CANDIDATES_THRESHOLD {
                 let mut key_buffer = vec![field_id];
                 match facet_type {
                     FacetType::Float => {
