@@ -38,6 +38,8 @@ impl From<i64> for FacetValue {
     }
 }
 
+/// We implement Serialize ourselves because we need to always serialize it as a string,
+/// JSON object keys must be strings not numbers.
 impl Serialize for FacetValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
