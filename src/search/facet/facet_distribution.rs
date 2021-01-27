@@ -63,17 +63,18 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<BTreeMap<FacetValue, u64>>
     {
         if let Some(candidates) = self.candidates.as_ref() {
-            if candidates.len() <= CANDIDATES_THRESHOLD {
+            if candidates.len() <= CANDIDATES_THRESHOLD || facet_type == FacetType::String {
                 let mut key_buffer = vec![field_id];
                 match facet_type {
                     FacetType::String => {
                         let mut facet_values = BTreeMap::new();
-                        for docid in candidates {
+                        for docid in candidates.into_iter().take(CANDIDATES_THRESHOLD as usize) {
                             key_buffer.truncate(1);
                             key_buffer.extend_from_slice(&docid.to_be_bytes());
                             let iter = self.index.field_id_docid_facet_values
                                 .prefix_iter(self.rtxn, &key_buffer)?
                                 .remap_key_type::<FieldDocIdFacetStringCodec>();
+
                             for result in iter {
                                 let ((_, _, value), ()) = result?;
                                 *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
@@ -89,6 +90,7 @@ impl<'a> FacetDistribution<'a> {
                             let iter = self.index.field_id_docid_facet_values
                                 .prefix_iter(self.rtxn, &key_buffer)?
                                 .remap_key_type::<FieldDocIdFacetF64Codec>();
+
                             for result in iter {
                                 let ((_, _, value), ()) = result?;
                                 *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
@@ -104,6 +106,7 @@ impl<'a> FacetDistribution<'a> {
                             let iter = self.index.field_id_docid_facet_values
                                 .prefix_iter(self.rtxn, &key_buffer)?
                                 .remap_key_type::<FieldDocIdFacetI64Codec>();
+
                             for result in iter {
                                 let ((_, _, value), ()) = result?;
                                 *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
@@ -114,19 +117,13 @@ impl<'a> FacetDistribution<'a> {
                 }
             } else {
                 let iter = match facet_type {
-                    FacetType::String => {
-                        let db = self.index.facet_field_id_value_docids;
-                        let iter = db
-                            .prefix_iter(self.rtxn, &[field_id])?
-                            .remap_key_type::<FacetValueStringCodec>()
-                            .map(|r| r.map(|((_, v), docids)| (FacetValue::from(v), docids)));
-                        Box::new(iter) as Box::<dyn Iterator<Item=_>>
-                    },
+                    FacetType::String => unreachable!(),
                     FacetType::Float => {
                         let iter = FacetIter::<f64, FacetLevelValueF64Codec>::new_non_reducing(
                             self.rtxn, self.index, field_id, candidates.clone(),
                         )?;
-                        Box::new(iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids))))
+                        let iter = iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids)));
+                        Box::new(iter) as Box::<dyn Iterator<Item=_>>
                     },
                     FacetType::Integer => {
                         let iter = FacetIter::<i64, FacetLevelValueI64Codec>::new_non_reducing(
