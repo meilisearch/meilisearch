@@ -196,22 +196,20 @@ impl<'a> FacetDistribution<'a> {
 
     pub fn execute(&self) -> heed::Result<BTreeMap<String, BTreeMap<FacetValue, u64>>> {
         let fields_ids_map = self.index.fields_ids_map(self.rtxn)?;
-        let faceted_fields = self.index.faceted_fields_ids(self.rtxn)?;
+        let faceted_fields = self.index.faceted_fields(self.rtxn)?;
         let fields_ids: Vec<_> = match &self.facets {
-            Some(names) => {
-                names.iter().filter_map(|n| {
-                    let id = fields_ids_map.id(n)?;
-                    faceted_fields.get(&id).cloned().map(|t| (id, t))
-                }).collect()
-            },
-            None => faceted_fields.iter().map(|(id, t)| (*id, *t)).collect(),
+            Some(names) => names
+                .iter()
+                .filter_map(|n| faceted_fields.get(n).map(|t| (n.to_string(), *t)))
+                .collect(),
+            None => faceted_fields.into_iter().collect(),
         };
 
         let mut facets_values = BTreeMap::new();
-        for (fid, ftype) in fields_ids {
-            let facet_name = fields_ids_map.name(fid).unwrap();
+        for (name, ftype) in fields_ids {
+            let fid = fields_ids_map.id(&name).unwrap();
             let values = self.facet_values(fid, ftype)?;
-            facets_values.insert(facet_name.to_string(), values);
+            facets_values.insert(name, values);
         }
 
         Ok(facets_values)
