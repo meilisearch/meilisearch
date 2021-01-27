@@ -57,6 +57,155 @@ impl<'a> FacetDistribution<'a> {
         self
     }
 
+    /// There is a small amount of candidates OR we ask for facet string values so we
+    /// decide to iterate over the facet values of each one of them, one by one.
+    fn facet_values_from_documents(
+        &self,
+        field_id: FieldId,
+        facet_type: FacetType,
+        candidates: &RoaringBitmap,
+    ) -> heed::Result<BTreeMap<FacetValue, u64>>
+    {
+        let mut key_buffer = vec![field_id];
+        match facet_type {
+            FacetType::String => {
+                let mut facet_values = BTreeMap::new();
+                for docid in candidates.into_iter().take(CANDIDATES_THRESHOLD as usize) {
+                    key_buffer.truncate(1);
+                    key_buffer.extend_from_slice(&docid.to_be_bytes());
+                    let iter = self.index.field_id_docid_facet_values
+                        .prefix_iter(self.rtxn, &key_buffer)?
+                        .remap_key_type::<FieldDocIdFacetStringCodec>();
+
+                    for result in iter {
+                        let ((_, _, value), ()) = result?;
+                        *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
+                    }
+                }
+                Ok(facet_values)
+            },
+            FacetType::Float => {
+                let mut facet_values = BTreeMap::new();
+                for docid in candidates {
+                    key_buffer.truncate(1);
+                    key_buffer.extend_from_slice(&docid.to_be_bytes());
+                    let iter = self.index.field_id_docid_facet_values
+                        .prefix_iter(self.rtxn, &key_buffer)?
+                        .remap_key_type::<FieldDocIdFacetF64Codec>();
+
+                    for result in iter {
+                        let ((_, _, value), ()) = result?;
+                        *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
+                    }
+                }
+                Ok(facet_values)
+            },
+            FacetType::Integer => {
+                let mut facet_values = BTreeMap::new();
+                for docid in candidates {
+                    key_buffer.truncate(1);
+                    key_buffer.extend_from_slice(&docid.to_be_bytes());
+                    let iter = self.index.field_id_docid_facet_values
+                        .prefix_iter(self.rtxn, &key_buffer)?
+                        .remap_key_type::<FieldDocIdFacetI64Codec>();
+
+                    for result in iter {
+                        let ((_, _, value), ()) = result?;
+                        *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
+                    }
+                }
+                Ok(facet_values)
+            },
+        }
+    }
+
+    /// There is too much documents, we use the facet levels to move throught
+    /// the facet values, to find the candidates and values associated.
+    fn facet_values_from_facet_levels(
+        &self,
+        field_id: FieldId,
+        facet_type: FacetType,
+        candidates: &RoaringBitmap,
+    ) -> heed::Result<BTreeMap<FacetValue, u64>>
+    {
+        let iter = match facet_type {
+            FacetType::String => unreachable!(),
+            FacetType::Float => {
+                let iter = FacetIter::<f64, FacetLevelValueF64Codec>::new_non_reducing(
+                    self.rtxn, self.index, field_id, candidates.clone(),
+                )?;
+                let iter = iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids)));
+                Box::new(iter) as Box::<dyn Iterator<Item=_>>
+            },
+            FacetType::Integer => {
+                let iter = FacetIter::<i64, FacetLevelValueI64Codec>::new_non_reducing(
+                    self.rtxn, self.index, field_id, candidates.clone(),
+                )?;
+                Box::new(iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids))))
+            },
+        };
+
+        let mut facet_values = BTreeMap::new();
+        for result in iter {
+            let (value, mut docids) = result?;
+            docids.intersect_with(candidates);
+            if !docids.is_empty() {
+                facet_values.insert(value, docids.len());
+            }
+            if facet_values.len() == self.max_values_by_facet {
+                break;
+            }
+        }
+
+        Ok(facet_values)
+    }
+
+    /// Placeholder search, a.k.a. no candidates were specified. We iterate throught the
+    /// facet values one by one and iterate on the facet level 0 for numbers.
+    fn facet_values_from_raw_facet_database(
+        &self,
+        field_id: FieldId,
+        facet_type: FacetType,
+    ) -> heed::Result<BTreeMap<FacetValue, u64>>
+    {
+        let db = self.index.facet_field_id_value_docids;
+        let level = 0;
+        let iter = match facet_type {
+            FacetType::String => {
+                let iter = db
+                    .prefix_iter(self.rtxn, &[field_id])?
+                    .remap_key_type::<FacetValueStringCodec>()
+                    .map(|r| r.map(|((_, v), docids)| (FacetValue::from(v), docids)));
+                Box::new(iter) as Box::<dyn Iterator<Item=_>>
+            },
+            FacetType::Float => {
+                let db = db.remap_key_type::<FacetLevelValueF64Codec>();
+                let range = FacetRange::<f64, _>::new(
+                    self.rtxn, db, field_id, level, Unbounded, Unbounded,
+                )?;
+                Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (FacetValue::from(v), docids))))
+            },
+            FacetType::Integer => {
+                let db = db.remap_key_type::<FacetLevelValueI64Codec>();
+                let range = FacetRange::<i64, _>::new(
+                    self.rtxn, db, field_id, level, Unbounded, Unbounded,
+                )?;
+                Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (FacetValue::from(v), docids))))
+            },
+        };
+
+        let mut facet_values = BTreeMap::new();
+        for result in iter {
+            let (value, docids) = result?;
+            facet_values.insert(value, docids.len());
+            if facet_values.len() == self.max_values_by_facet {
+                break;
+            }
+        }
+
+        Ok(facet_values)
+    }
+
     fn facet_values(
         &self,
         field_id: FieldId,
@@ -64,134 +213,15 @@ impl<'a> FacetDistribution<'a> {
     ) -> heed::Result<BTreeMap<FacetValue, u64>>
     {
         if let Some(candidates) = self.candidates.as_ref() {
-            // Classic search, candidates were specified, we must return
-            // facet values only related to those candidates.
+            // Classic search, candidates were specified, we must return facet values only related
+            // to those candidates. We also enter here for facet strings for performance reasons.
             if candidates.len() <= CANDIDATES_THRESHOLD || facet_type == FacetType::String {
-                // There is a small amount of candidates OR we ask for facet string values so we
-                // decide to iterate over the facet values of each one of them, one by one.
-                let mut key_buffer = vec![field_id];
-                match facet_type {
-                    FacetType::String => {
-                        let mut facet_values = BTreeMap::new();
-                        for docid in candidates.into_iter().take(CANDIDATES_THRESHOLD as usize) {
-                            key_buffer.truncate(1);
-                            key_buffer.extend_from_slice(&docid.to_be_bytes());
-                            let iter = self.index.field_id_docid_facet_values
-                                .prefix_iter(self.rtxn, &key_buffer)?
-                                .remap_key_type::<FieldDocIdFacetStringCodec>();
-
-                            for result in iter {
-                                let ((_, _, value), ()) = result?;
-                                *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
-                            }
-                        }
-                        Ok(facet_values)
-                    },
-                    FacetType::Float => {
-                        let mut facet_values = BTreeMap::new();
-                        for docid in candidates {
-                            key_buffer.truncate(1);
-                            key_buffer.extend_from_slice(&docid.to_be_bytes());
-                            let iter = self.index.field_id_docid_facet_values
-                                .prefix_iter(self.rtxn, &key_buffer)?
-                                .remap_key_type::<FieldDocIdFacetF64Codec>();
-
-                            for result in iter {
-                                let ((_, _, value), ()) = result?;
-                                *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
-                            }
-                        }
-                        Ok(facet_values)
-                    },
-                    FacetType::Integer => {
-                        let mut facet_values = BTreeMap::new();
-                        for docid in candidates {
-                            key_buffer.truncate(1);
-                            key_buffer.extend_from_slice(&docid.to_be_bytes());
-                            let iter = self.index.field_id_docid_facet_values
-                                .prefix_iter(self.rtxn, &key_buffer)?
-                                .remap_key_type::<FieldDocIdFacetI64Codec>();
-
-                            for result in iter {
-                                let ((_, _, value), ()) = result?;
-                                *facet_values.entry(FacetValue::from(value)).or_insert(0) += 1;
-                            }
-                        }
-                        Ok(facet_values)
-                    },
-                }
+                self.facet_values_from_documents(field_id, facet_type, candidates)
             } else {
-                // There is too much documents, we use the facet levels to move throught
-                // the facet values, to find the candidates and values associated.
-                let iter = match facet_type {
-                    FacetType::String => unreachable!(),
-                    FacetType::Float => {
-                        let iter = FacetIter::<f64, FacetLevelValueF64Codec>::new_non_reducing(
-                            self.rtxn, self.index, field_id, candidates.clone(),
-                        )?;
-                        let iter = iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids)));
-                        Box::new(iter) as Box::<dyn Iterator<Item=_>>
-                    },
-                    FacetType::Integer => {
-                        let iter = FacetIter::<i64, FacetLevelValueI64Codec>::new_non_reducing(
-                            self.rtxn, self.index, field_id, candidates.clone(),
-                        )?;
-                        Box::new(iter.map(|r| r.map(|(v, docids)| (FacetValue::from(v), docids))))
-                    },
-                };
-
-                let mut facet_values = BTreeMap::new();
-                for result in iter {
-                    let (value, mut docids) = result?;
-                    docids.intersect_with(candidates);
-                    if !docids.is_empty() {
-                        facet_values.insert(value, docids.len());
-                    }
-                    if facet_values.len() == self.max_values_by_facet {
-                        break;
-                    }
-                }
-
-                Ok(facet_values)
+                self.facet_values_from_facet_levels(field_id, facet_type, candidates)
             }
         } else {
-            // Placeholder search, a.k.a. no candidates were specified. We iterate throught the
-            // facet values one by one and iterate on the facet level 0 for numbers.
-            let db = self.index.facet_field_id_value_docids;
-            let iter = match facet_type {
-                FacetType::String => {
-                    let iter = db
-                        .prefix_iter(self.rtxn, &[field_id])?
-                        .remap_key_type::<FacetValueStringCodec>()
-                        .map(|r| r.map(|((_, v), docids)| (FacetValue::from(v), docids)));
-                    Box::new(iter) as Box::<dyn Iterator<Item=_>>
-                },
-                FacetType::Float => {
-                    let db = db.remap_key_type::<FacetLevelValueF64Codec>();
-                    let range = FacetRange::<f64, _>::new(
-                        self.rtxn, db, field_id, 0, Unbounded, Unbounded,
-                    )?;
-                    Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (FacetValue::from(v), docids))))
-                },
-                FacetType::Integer => {
-                    let db = db.remap_key_type::<FacetLevelValueI64Codec>();
-                    let range = FacetRange::<i64, _>::new(
-                        self.rtxn, db, field_id, 0, Unbounded, Unbounded,
-                    )?;
-                    Box::new(range.map(|r| r.map(|((_, _, v, _), docids)| (FacetValue::from(v), docids))))
-                },
-            };
-
-            let mut facet_values = BTreeMap::new();
-            for result in iter {
-                let (value, docids) = result?;
-                facet_values.insert(value, docids.len());
-                if facet_values.len() == self.max_values_by_facet {
-                    break;
-                }
-            }
-
-            Ok(facet_values)
+            self.facet_values_from_raw_facet_database(field_id, facet_type)
         }
     }
 
