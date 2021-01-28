@@ -1453,6 +1453,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37d572918e350e82412fe766d24b15e6682fb2ed2bbe018280caa810397cb319"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1650,6 +1659,7 @@ dependencies = [
  "heed",
  "http",
  "indexmap",
+ "itertools 0.10.0",
  "jemallocator",
  "log",
  "main_error",
@@ -1745,7 +1755,7 @@ dependencies = [
  "grenad",
  "heed",
  "human_format",
- "itertools",
+ "itertools 0.9.0",
  "jemallocator",
  "levenshtein_automata",
  "linked-hash-map",
@@ -3699,6 +3709,6 @@ checksum = "a1e6e8778706838f43f771d80d37787cb2fe06dafe89dd3aebaf6721b9eaec81"
 dependencies = [
  "cc",
  "glob",
- "itertools",
+ "itertools 0.9.0",
  "libc",
 ]

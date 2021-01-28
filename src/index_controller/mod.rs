@@ -137,4 +137,5 @@ pub trait IndexController {
     fn index(&self, uid: impl AsRef<str>) -> anyhow::Result<Option<Arc<Index>>>;
 
     fn update_status(&self, index: impl AsRef<str>, id: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>>;
+    fn all_update_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus<UpdateMeta, UpdateResult, String>>>;
 }

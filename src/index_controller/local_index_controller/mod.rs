@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use milli::Index;
 use anyhow::bail;
+use itertools::Itertools;
 
 use crate::option::IndexerOpts;
 use super::IndexController;
@@ -80,5 +81,26 @@ impl IndexController for LocalIndexController {
             Some((_, update_store)) => Ok(update_store.meta(id)?),
             None => bail!("index {:?} doesn't exist", index.as_ref()),
         }
+    }
+
+    fn all_update_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
+        match self.indexes.index(index)? {
+            Some((_, update_store)) => {
+                let updates = update_store.iter_metas(|processing, processed, pending, aborted, failed| {
+                    Ok(processing
+                        .map(UpdateStatus::from)
+                        .into_iter()
+                        .chain(pending.filter_map(|p| p.ok()).map(|(_, u)| UpdateStatus::from(u)))
+                        .chain(aborted.filter_map(Result::ok).map(|(_, u)| UpdateStatus::from(u)))
+                        .chain(processed.filter_map(Result::ok).map(|(_, u)| UpdateStatus::from(u)))
+                        .chain(failed.filter_map(Result::ok).map(|(_, u)| UpdateStatus::from(u)))
+                        .sorted_by(|a, b| a.id().cmp(&b.id()))
+                        .collect())
+                })?;
+                Ok(updates)
+            }
+            None => Ok(Vec::new())
+        }
+
     }
 }

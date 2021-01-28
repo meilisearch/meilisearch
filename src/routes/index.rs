@@ -124,19 +124,18 @@ async fn get_update_status(
 
 #[get("/indexes/{index_uid}/updates", wrap = "Authentication::Private")]
 async fn get_all_updates_status(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
-    //let result = data.get_updates_status(&path.index_uid);
-    //match result {
-        //Ok(metas) => {
-            //let json = serde_json::to_string(&metas).unwrap();
-            //Ok(HttpResponse::Ok().body(json))
-        //}
-        //Err(e) => {
-            //error!("{}", e);
-            //todo!()
-        //}
-    //}
+    let result = data.get_updates_status(&path.index_uid);
+    match result {
+        Ok(metas) => {
+            let json = serde_json::to_string(&metas).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            error!("{}", e);
+            todo!()
+        }
+    }
 }
