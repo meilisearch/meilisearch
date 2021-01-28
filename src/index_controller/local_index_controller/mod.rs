@@ -48,10 +48,13 @@ impl IndexController for LocalIndexController {
 
     fn update_settings<S: AsRef<str>>(
         &self,
-        _index_uid: S,
-        _settings: super::Settings
+        index: S,
+        settings: super::Settings
     ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>> {
-        todo!()
+        let (_, update_store) = self.indexes.get_or_create_index(&index, self.update_db_size, self.index_db_size)?;
+        let meta = UpdateMeta::Settings(settings);
+        let pending = update_store.register_update(meta, &[]).unwrap();
+        Ok(pending.into())
     }
 
     fn create_index<S: AsRef<str>>(&self, _index_uid: S) -> anyhow::Result<()> {

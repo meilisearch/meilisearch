@@ -188,8 +188,6 @@ impl HandleUpdate<UpdateMeta, UpdateResult, String> for UpdateHandler {
     ) -> Result<Processed<UpdateMeta, UpdateResult>, Failed<UpdateMeta, String>> {
         use UpdateMeta::*;
 
-        println!("handling update {}", update_id);
-
         let update_builder = self.update_buidler(update_id);
 
         let result = match meta.meta() {
@@ -198,8 +196,6 @@ impl HandleUpdate<UpdateMeta, UpdateResult, String> for UpdateHandler {
             Settings(settings) => self.update_settings(settings, update_builder),
             Facets(levels) => self.update_facets(levels, update_builder),
         };
-
-        println!("{:?}", result);
 
         match result {
             Ok(result) => Ok(meta.process(result)),
