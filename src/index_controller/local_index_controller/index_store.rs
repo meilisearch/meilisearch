@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::fs::create_dir_all;
 use std::sync::Arc;
 
 use dashmap::DashMap;
@@ -8,6 +9,7 @@ use milli::Index;
 use rayon::ThreadPool;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
+use log::warn;
 
 use super::update_store::UpdateStore;
 use super::update_handler::UpdateHandler;
@@ -15,8 +17,8 @@ use crate::option::IndexerOpts;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct IndexMeta {
-    update_size: usize,
-    index_size: usize,
+    update_size: u64,
+    index_size: u64,
     uid: Uuid,
 }
 
@@ -30,12 +32,15 @@ impl IndexMeta {
         let update_path = make_update_db_path(&path, &self.uid);
         let index_path = make_index_db_path(&path, &self.uid);
 
+        create_dir_all(&update_path)?;
+        create_dir_all(&index_path)?;
+
         let mut options = EnvOpenOptions::new();
-        options.map_size(self.index_size);
+        options.map_size(self.index_size as usize);
         let index = Arc::new(Index::new(options, index_path)?);
 
         let mut options = EnvOpenOptions::new();
-        options.map_size(self.update_size);
+        options.map_size(self.update_size as usize);
         let handler = UpdateHandler::new(opt, index.clone(), thread_pool)?;
         let update_store = UpdateStore::open(options, update_path, handler)?;
         Ok((index, update_store))
@@ -132,8 +137,8 @@ impl IndexStore {
 
     pub fn get_or_create_index(
         &self, name: impl AsRef<str>,
-        update_size: usize,
-        index_size: usize,
+        update_size: u64,
+        index_size: u64,
         ) -> anyhow::Result<(Arc<Index>, Arc<UpdateStore>)> {
         let mut txn = self.env.write_txn()?;
         match self._get_index(&txn, name.as_ref())? {
@@ -141,17 +146,39 @@ impl IndexStore {
             None => {
                 let uid = Uuid::new_v4();
                 // TODO: clean in case of error
-                Ok(self.create_index(&mut txn, uid, name, update_size, index_size)?)
+                let result = self.create_index(&mut txn, uid, name, update_size, index_size);
+                match result {
+                    Ok((index, update_store)) => {
+                        match txn.commit() {
+                            Ok(_) => Ok((index, update_store)),
+                            Err(e) => {
+                                self.clean_uid(&uid);
+                                Err(anyhow::anyhow!("error creating index: {}", e))
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.clean_uid(&uid);
+                        Err(e)
+                    }
+                }
             },
         }
+    }
+
+    /// removes all data acociated with an index Uuid. This is called when index creation failed
+    /// and outstanding files and data need to be cleaned.
+    fn clean_uid(&self, _uid: &Uuid) {
+        // TODO!
+        warn!("creating cleanup is not yet implemented");
     }
 
     fn create_index( &self,
         txn: &mut RwTxn,
         uid: Uuid,
         name: impl AsRef<str>,
-        update_size: usize,
-        index_size: usize,
+        update_size: u64,
+        index_size: u64,
     ) -> anyhow::Result<(Arc<Index>, Arc<UpdateStore>)> {
         let meta = IndexMeta { update_size, index_size, uid: uid.clone() };
 

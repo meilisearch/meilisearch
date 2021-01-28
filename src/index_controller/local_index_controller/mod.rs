@@ -11,30 +11,46 @@ use milli::Index;
 
 use crate::option::IndexerOpts;
 use super::IndexController;
+use super::updates::UpdateStatus;
+use super::{UpdateMeta, UpdateResult};
 
 pub struct LocalIndexController {
     indexes: IndexStore,
+    update_db_size: u64,
+    index_db_size: u64,
 }
 
 impl LocalIndexController {
-    pub fn new(path: impl AsRef<Path>, opt: IndexerOpts) -> anyhow::Result<Self> {
+    pub fn new(
+        path: impl AsRef<Path>,
+        opt: IndexerOpts,
+        index_db_size: u64,
+        update_db_size: u64,
+    ) -> anyhow::Result<Self> {
         let indexes = IndexStore::new(path, opt)?;
-        Ok(Self { indexes })
+        Ok(Self { indexes, index_db_size, update_db_size })
     }
 }
 
 impl IndexController for LocalIndexController {
     fn add_documents<S: AsRef<str>>(
         &self,
-        _index: S,
-        _method: milli::update::IndexDocumentsMethod,
-        _format: milli::update::UpdateFormat,
-        _data: &[u8],
-    ) -> anyhow::Result<super::UpdateStatusResponse> {
-        todo!()
+        index: S,
+        method: milli::update::IndexDocumentsMethod,
+        format: milli::update::UpdateFormat,
+        data: &[u8],
+    ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>> {
+        let (_, update_store) = self.indexes.get_or_create_index(&index, self.update_db_size, self.index_db_size)?;
+        let meta = UpdateMeta::DocumentsAddition { method, format };
+        let pending = update_store.register_update(meta, data).unwrap();
+        Ok(pending.into())
     }
 
-    fn update_settings<S: AsRef<str>>(&self, _index_uid: S, _settings: super::Settings) -> anyhow::Result<super::UpdateStatusResponse> {
+    fn update_settings<S: AsRef<str>>(
+        &self,
+        _index_uid: S,
+        _settings: super::Settings
+    ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>> {
         todo!()
     }
 

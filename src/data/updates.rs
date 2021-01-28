@@ -6,7 +6,8 @@ use futures_util::stream::StreamExt;
 use tokio::io::AsyncWriteExt;
 
 use super::Data;
-use crate::index_controller::{IndexController, UpdateStatusResponse, Settings};
+use crate::index_controller::{IndexController, Settings, UpdateResult, UpdateMeta};
+use crate::index_controller::updates::UpdateStatus;
 
 impl Data {
         pub async fn add_documents<B, E, S>(
@@ -15,7 +16,7 @@ impl Data {
         method: IndexDocumentsMethod,
         format: UpdateFormat,
         mut stream: impl futures::Stream<Item=Result<B, E>> + Unpin,
-    ) -> anyhow::Result<UpdateStatusResponse>
+    ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>>
     where
         B: Deref<Target = [u8]>,
         E: std::error::Error + Send + Sync + 'static,
@@ -45,7 +46,7 @@ impl Data {
         &self,
         index: S,
         settings: Settings
-    ) -> anyhow::Result<UpdateStatusResponse> {
+    ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>> {
         let indexes = self.index_controller.clone();
         let update = tokio::task::spawn_blocking(move || indexes.update_settings(index, settings)).await??;
         Ok(update.into())

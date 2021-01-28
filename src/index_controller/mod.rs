@@ -1,5 +1,5 @@
 mod local_index_controller;
-mod updates;
+pub mod updates;
 
 pub use local_index_controller::LocalIndexController;
 
@@ -12,9 +12,8 @@ use milli::Index;
 use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
 use serde::{Serialize, Deserialize, de::Deserializer};
 
-use updates::{Processed, Processing, Failed, Pending, Aborted};
+use updates::{Processed, Processing, Failed, UpdateStatus};
 
-pub type UpdateStatusResponse = UpdateStatus<UpdateMeta, UpdateResult, String>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -31,15 +30,6 @@ pub enum UpdateMeta {
 pub struct Facets {
     pub level_group_size: Option<NonZeroUsize>,
     pub min_level_size: Option<NonZeroUsize>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type")]
-pub enum UpdateStatus<M, P, N> {
-    Pending { update_id: u64, meta: Pending<M> },
-    Progressing { update_id: u64, meta: P },
-    Processed { update_id: u64, meta: Processed<M, N> },
-    Aborted { update_id: u64, meta: Aborted<M> },
 }
 
 fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -116,11 +106,11 @@ pub trait IndexController {
         method: IndexDocumentsMethod,
         format: UpdateFormat,
         data: &[u8],
-    ) -> anyhow::Result<UpdateStatusResponse>;
+    ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>>;
 
     /// Updates an index settings. If the index does not exist, it will be created when the update
     /// is applied to the index.
-    fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings) -> anyhow::Result<UpdateStatusResponse>;
+    fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>>;
 
     /// Create an index with the given `index_uid`.
     fn create_index<S: AsRef<str>>(&self, index_uid: S) -> Result<()>;

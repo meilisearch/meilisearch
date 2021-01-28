@@ -61,7 +61,12 @@ impl Data {
         let path = options.db_path.clone();
         let indexer_opts = options.indexer_options.clone();
         create_dir_all(&path)?;
-        let index_controller = LocalIndexController::new(&path, indexer_opts)?;
+        let index_controller = LocalIndexController::new(
+            &path,
+            indexer_opts,
+            options.max_mdb_size.get_bytes(),
+            options.max_udb_size.get_bytes(),
+        )?;
         let indexes = Arc::new(index_controller);
 
         let mut api_keys = ApiKeys {
