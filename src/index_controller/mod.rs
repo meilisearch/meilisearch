@@ -1,17 +1,18 @@
-mod index_store;
-mod update_store;
+mod local_index_controller;
+mod updates;
 
-pub use index_store::IndexStore;
-pub use update_store::UpdateStore;
+pub use local_index_controller::LocalIndexController;
 
-use std::num::NonZeroUsize;
-use std::ops::Deref;
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
 
 use anyhow::Result;
-use milli::update::{IndexDocumentsMethod, UpdateFormat};
-use milli::update_store::{Processed, Processing, Failed, Pending, Aborted};
+use milli::Index;
+use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
 use serde::{Serialize, Deserialize, de::Deserializer};
+
+use updates::{Processed, Processing, Failed, Pending, Aborted};
 
 pub type UpdateStatusResponse = UpdateStatus<UpdateMeta, UpdateResult, String>;
 
@@ -89,7 +90,7 @@ impl Settings {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateResult {
-    //DocumentsAddition(DocumentAdditionResult),
+    DocumentsAddition(DocumentAdditionResult),
     Other,
 }
 
@@ -97,7 +98,7 @@ pub enum UpdateResult {
 /// for read access which is provided, and write access which must be provided. This allows the
 /// implementer to define the behaviour of write accesses to the indices, and abstract the
 /// scheduling of the updates. The implementer must be able to provide an instance of `IndexStore`
-pub trait IndexController: Deref<Target = IndexStore> {
+pub trait IndexController {
 
     /*
      * Write operations
@@ -141,5 +142,7 @@ pub trait IndexController: Deref<Target = IndexStore> {
     ) -> Result<Processed<UpdateMeta, UpdateResult>, Failed<UpdateMeta, String>> {
         todo!()
     }
-}
 
+    /// Returns, if it exists, an `IndexView` to the requested index.
+    fn index(&self, uid: impl AsRef<str>) -> anyhow::Result<Option<Arc<Index>>>;
+}

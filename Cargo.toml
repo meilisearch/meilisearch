@@ -62,6 +62,7 @@ dashmap = "4.0.2"
 page_size = "0.4.2"
 obkv = "0.1.1"
 ouroboros = "0.8.0"
+uuid = "0.8.2"
 
 [dependencies.sentry]
 default-features = false

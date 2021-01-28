@@ -4,11 +4,11 @@ use std::time::Instant;
 
 use serde_json::{Value, Map};
 use serde::{Deserialize, Serialize};
-use milli::{SearchResult as Results, obkv_to_json};
+use milli::{Index, obkv_to_json, FacetCondition};
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
+use anyhow::bail;
 
-use crate::error::Error;
-
+use crate::index_controller::IndexController;
 use super::Data;
 
 const DEFAULT_SEARCH_LIMIT: usize = 20;
@@ -26,11 +26,68 @@ pub struct SearchQuery {
     pub attributes_to_retrieve: Option<Vec<String>>,
     pub attributes_to_crop: Option<Vec<String>>,
     pub crop_length: Option<usize>,
-    pub attributes_to_highlight: Option<Vec<String>>,
+    pub attributes_to_highlight: Option<HashSet<String>>,
     pub filters: Option<String>,
     pub matches: Option<bool>,
     pub facet_filters: Option<Value>,
     pub facets_distribution: Option<Vec<String>>,
+    pub facet_condition: Option<String>,
+}
+
+impl SearchQuery {
+    pub fn perform(&self, index: impl AsRef<Index>) -> anyhow::Result<SearchResult>{
+        let index = index.as_ref();
+
+        let before_search = Instant::now();
+        let rtxn = index.read_txn().unwrap();
+
+        let mut search = index.search(&rtxn);
+
+        if let Some(ref query) = self.q {
+            search.query(query);
+        }
+
+        if let Some(ref condition) = self.facet_condition {
+            if !condition.trim().is_empty() {
+                let condition = FacetCondition::from_str(&rtxn, &index, &condition).unwrap();
+                search.facet_condition(condition);
+            }
+        }
+
+        if let Some(offset) = self.offset {
+            search.offset(offset);
+        }
+
+        let milli::SearchResult { documents_ids, found_words, nb_hits, limit, } = search.execute()?;
+
+        let mut documents = Vec::new();
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+        let displayed_fields = match index.displayed_fields_ids(&rtxn).unwrap() {
+            Some(fields) => fields,
+            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
+        };
+
+        let stop_words = fst::Set::default();
+        let highlighter = Highlighter::new(&stop_words);
+
+        for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
+            let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
+            if let Some(ref attributes_to_highlight) = self.attributes_to_highlight {
+                highlighter.highlight_record(&mut object, &found_words, attributes_to_highlight);
+            }
+            documents.push(object);
+        }
+
+        Ok(SearchResult {
+            hits: documents,
+            nb_hits,
+            query: self.q.clone().unwrap_or_default(),
+            limit,
+            offset: self.offset.unwrap_or_default(),
+            processing_time_ms: before_search.elapsed().as_millis(),
+        })
+    }
 }
 
 #[derive(Serialize)]
@@ -105,45 +162,9 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
 
 impl Data {
     pub fn search<S: AsRef<str>>(&self, index: S, search_query: SearchQuery) -> anyhow::Result<SearchResult> {
-        let start =  Instant::now();
-        let index = self.indexes
-            .get(&index)?
-            .ok_or_else(|| Error::OpenIndex(format!("Index {} doesn't exists.", index.as_ref())))?;
-
-        let Results { found_words, documents_ids, nb_hits, limit, .. } = index.search(&search_query)?;
-
-        let fields_ids_map = index.fields_ids_map()?;
-
-        let displayed_fields = match index.displayed_fields_ids()? {
-            Some(fields) => fields,
-            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
-        };
-
-        let attributes_to_highlight = match search_query.attributes_to_highlight {
-            Some(fields) => fields.iter().map(ToOwned::to_owned).collect(),
-            None => HashSet::new(),
-        };
-
-        let stop_words = fst::Set::default();
-        let highlighter = Highlighter::new(&stop_words);
-        let mut documents = Vec::new();
-        for (_id, obkv) in index.documents(&documents_ids)? {
-            let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
-            highlighter.highlight_record(&mut object, &found_words, &attributes_to_highlight);
-            documents.push(object);
+        match self.index_controller.index(&index)? {
+            Some(index) => Ok(search_query.perform(index)?),
+            None => bail!("index {:?} doesn't exists", index.as_ref()),
         }
-
-        let processing_time_ms = start.elapsed().as_millis();
-
-        let result = SearchResult {
-            hits: documents,
-            nb_hits,
-            query: search_query.q.unwrap_or_default(),
-            offset: search_query.offset.unwrap_or(0),
-            limit,
-            processing_time_ms,
-        };
-
-        Ok(result)
     }
 }

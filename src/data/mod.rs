@@ -5,19 +5,20 @@ pub use search::{SearchQuery, SearchResult};
 
 use std::ops::Deref;
 use std::sync::Arc;
+use std::fs::create_dir_all;
 
 use sha2::Digest;
 
 use crate::{option::Opt, index_controller::Settings};
-use crate::index_controller::{IndexStore, UpdateStore};
+use crate::index_controller::{IndexController, LocalIndexController};
 
 #[derive(Clone)]
 pub struct Data {
-    inner: Arc<DataInner<UpdateStore>>,
+    inner: Arc<DataInner>,
 }
 
 impl Deref for Data {
-    type Target = DataInner<UpdateStore>;
+    type Target = DataInner;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -25,8 +26,8 @@ impl Deref for Data {
 }
 
 #[derive(Clone)]
-pub struct DataInner<I> {
-    pub indexes: Arc<I>,
+pub struct DataInner {
+    pub index_controller: Arc<LocalIndexController>,
     api_keys: ApiKeys,
     options: Opt,
 }
@@ -58,8 +59,9 @@ impl ApiKeys {
 impl Data {
     pub fn new(options: Opt) -> anyhow::Result<Data> {
         let path = options.db_path.clone();
-        let index_store = IndexStore::new(&path)?;
-        let index_controller = UpdateStore::new(index_store);
+        let indexer_opts = options.indexer_options.clone();
+        create_dir_all(&path)?;
+        let index_controller = LocalIndexController::new(&path, indexer_opts)?;
         let indexes = Arc::new(index_controller);
 
         let mut api_keys = ApiKeys {
@@ -70,28 +72,31 @@ impl Data {
 
         api_keys.generate_missing_api_keys();
 
-        let inner = DataInner { indexes, options, api_keys };
+        let inner = DataInner { index_controller: indexes, options, api_keys };
         let inner = Arc::new(inner);
 
         Ok(Data { inner })
     }
 
     pub fn settings<S: AsRef<str>>(&self, index_uid: S) -> anyhow::Result<Settings> {
-        let index = self.indexes
-            .get(&index_uid)?
+        let index = self.index_controller
+            .index(&index_uid)?
             .ok_or_else(|| anyhow::anyhow!("Index {} does not exist.", index_uid.as_ref()))?;
 
+        let txn = index.read_txn()?;
+
         let displayed_attributes = index
-            .displayed_fields()?
+            .displayed_fields(&txn)?
             .map(|fields| fields.into_iter().map(String::from).collect())
             .unwrap_or_else(|| vec!["*".to_string()]);
 
         let searchable_attributes = index
-            .searchable_fields()?
+            .searchable_fields(&txn)?
             .map(|fields| fields.into_iter().map(String::from).collect())
             .unwrap_or_else(|| vec!["*".to_string()]);
 
-        let faceted_attributes = index.faceted_fields()?
+        let faceted_attributes = index
+            .faceted_fields(&txn)?
             .into_iter()
             .map(|(k, v)| (k, v.to_string()))
             .collect();
