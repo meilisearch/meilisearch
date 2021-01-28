@@ -3,9 +3,9 @@ use serde::{Serialize, Deserialize};
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
 pub struct Pending<M> {
-    update_id: u64,
-    meta: M,
-    enqueued_at: DateTime<Utc>,
+    pub update_id: u64,
+    pub meta: M,
+    pub enqueued_at: DateTime<Utc>,
 }
 
 impl<M> Pending<M> {
@@ -42,10 +42,10 @@ impl<M> Pending<M> {
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
 pub struct Processed<M, N> {
-    success: N,
-    processed_at: DateTime<Utc>,
+    pub success: N,
+    pub processed_at: DateTime<Utc>,
     #[serde(flatten)]
-    from: Processing<M>,
+    pub from: Processing<M>,
 }
 
 impl<M, N> Processed<M, N> {
@@ -57,8 +57,8 @@ impl<M, N> Processed<M, N> {
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
 pub struct Processing<M> {
     #[serde(flatten)]
-    from: Pending<M>,
-    started_processing_at: DateTime<Utc>,
+    pub from: Pending<M>,
+    pub started_processing_at: DateTime<Utc>,
 }
 
 impl<M> Processing<M> {

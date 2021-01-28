@@ -11,9 +11,11 @@ use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 use log::warn;
 
-use super::update_store::UpdateStore;
-use super::update_handler::UpdateHandler;
 use crate::option::IndexerOpts;
+use super::update_handler::UpdateHandler;
+use super::{UpdateMeta, UpdateResult};
+
+type UpdateStore = super::update_store::UpdateStore<UpdateMeta, UpdateResult, String>;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct IndexMeta {

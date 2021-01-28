@@ -182,11 +182,12 @@ impl UpdateHandler {
 impl HandleUpdate<UpdateMeta, UpdateResult, String> for UpdateHandler {
     fn handle_update(
         &mut self,
-        update_id: u64,
         meta: Processing<UpdateMeta>,
         content: &[u8]
     ) -> Result<Processed<UpdateMeta, UpdateResult>, Failed<UpdateMeta, String>> {
         use UpdateMeta::*;
+
+        let update_id = meta.id();
 
         let update_builder = self.update_buidler(update_id);
 
@@ -203,4 +204,3 @@ impl HandleUpdate<UpdateMeta, UpdateResult, String> for UpdateHandler {
         }
     }
 }
-
