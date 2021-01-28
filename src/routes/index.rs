@@ -1,7 +1,7 @@
 use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
-//use log::error;
+use log::error;
 use serde::{Deserialize, Serialize};
 
 use crate::Data;
@@ -94,8 +94,8 @@ async fn delete_index(
 
 #[derive(Deserialize)]
 struct UpdateParam {
-    _index_uid: String,
-    _update_id: u64,
+    index_uid: String,
+    update_id: u64,
 }
 
 #[get(
@@ -103,24 +103,23 @@ struct UpdateParam {
     wrap = "Authentication::Private"
 )]
 async fn get_update_status(
-    _data: web::Data<Data>,
-    _path: web::Path<UpdateParam>,
+    data: web::Data<Data>,
+    path: web::Path<UpdateParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
-    //let result = data.get_update_status(&path.index_uid, path.update_id);
-    //match result {
-        //Ok(Some(meta)) => {
-            //let json = serde_json::to_string(&meta).unwrap();
-            //Ok(HttpResponse::Ok().body(json))
-        //}
-        //Ok(None) => {
-            //todo!()
-        //}
-        //Err(e) => {
-            //error!("{}", e);
-            //todo!()
-        //}
-    //}
+    let result = data.get_update_status(&path.index_uid, path.update_id);
+    match result {
+        Ok(Some(meta)) => {
+            let json = serde_json::to_string(&meta).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Ok(None) => {
+            todo!()
+        }
+        Err(e) => {
+            error!("{}", e);
+            todo!()
+        }
+    }
 }
 
 #[get("/indexes/{index_uid}/updates", wrap = "Authentication::Private")]

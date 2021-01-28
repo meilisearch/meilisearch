@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use milli::Index;
+use anyhow::bail;
 
 use crate::option::IndexerOpts;
 use super::IndexController;
@@ -72,5 +73,12 @@ impl IndexController for LocalIndexController {
     fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<Arc<Index>>> {
         let index = self.indexes.index(name)?.map(|(i, _)| i);
         Ok(index)
+    }
+
+    fn update_status(&self, index: impl AsRef<str>, id: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
+        match self.indexes.index(&index)? {
+            Some((_, update_store)) => Ok(update_store.meta(id)?),
+            None => bail!("index {:?} doesn't exist", index.as_ref()),
+        }
     }
 }

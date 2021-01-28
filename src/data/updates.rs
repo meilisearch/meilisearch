@@ -10,7 +10,7 @@ use crate::index_controller::{IndexController, Settings, UpdateResult, UpdateMet
 use crate::index_controller::updates::UpdateStatus;
 
 impl Data {
-        pub async fn add_documents<B, E, S>(
+    pub async fn add_documents<B, E, S>(
         &self,
         index: S,
         method: IndexDocumentsMethod,
@@ -52,24 +52,24 @@ impl Data {
         Ok(update.into())
     }
 
-    //#[inline]
-    //pub fn get_update_status<S: AsRef<str>>(&self, _index: S, uid: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
-        //self.indexes.get_update_status(uid)
-    //}
+    #[inline]
+    pub fn get_update_status<S: AsRef<str>>(&self, index: S, uid: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
+        self.index_controller.update_status(index, uid)
+    }
 
     //pub fn get_updates_status(&self, _index: &str) -> anyhow::Result<Vec<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
-        //let result = self.update_queue.iter_metas(|processing, processed, pending, aborted, failed| {
-            //let mut metas = processing
-            //.map(UpdateStatus::from)
-            //.into_iter()
-            //.chain(processed.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
-            //.chain(pending.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
-            //.chain(aborted.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
-            //.chain(failed.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
-            //.collect::<Vec<_>>();
-            //metas.sort_by(|a, b| a.id().cmp(&b.id()));
-            //Ok(metas)
-        //})?;
-        //Ok(result)
+    //let result = self.update_queue.iter_metas(|processing, processed, pending, aborted, failed| {
+    //let mut metas = processing
+    //.map(UpdateStatus::from)
+    //.into_iter()
+    //.chain(processed.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
+    //.chain(pending.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
+    //.chain(aborted.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
+    //.chain(failed.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
+    //.collect::<Vec<_>>();
+    //metas.sort_by(|a, b| a.id().cmp(&b.id()));
+    //Ok(metas)
+    //})?;
+    //Ok(result)
     //}
 }

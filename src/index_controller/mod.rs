@@ -135,4 +135,6 @@ pub trait IndexController {
 
     /// Returns, if it exists, an `IndexView` to the requested index.
     fn index(&self, uid: impl AsRef<str>) -> anyhow::Result<Option<Arc<Index>>>;
+
+    fn update_status(&self, index: impl AsRef<str>, id: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>>;
 }
