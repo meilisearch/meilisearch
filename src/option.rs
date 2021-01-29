@@ -63,6 +63,24 @@ pub struct IndexerOpts {
     #[structopt(long)]
     pub indexing_jobs: Option<usize>,
 }
+
+#[cfg(test)]
+impl Default for IndexerOpts {
+    fn default() -> Self {
+        Self {
+            log_every_n: 0,
+            max_nb_chunks: None,
+            max_memory: Byte::from_str("0Kb").unwrap(),
+            linked_hash_map_size: 0,
+            chunk_compression_type: CompressionType::None,
+            chunk_compression_level: None,
+            chunk_fusing_shrink_size: Byte::from_str("0Kb").unwrap(),
+            enable_chunk_fusing: false,
+            indexing_jobs: None,
+        }
+    }
+}
+
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 
 #[derive(Debug, Clone, StructOpt)]
