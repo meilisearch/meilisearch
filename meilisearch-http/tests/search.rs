@@ -1945,3 +1945,32 @@ async fn test_filter_nb_hits_search_normal() {
     println!("result: {}", response);
     assert_eq!(response["nbHits"], 1);
 }
+
+#[actix_rt::test]
+async fn test_max_word_query() {
+    use meilisearch_core::MAX_QUERY_LEN;
+
+    let mut server = common::Server::with_uid("test");
+    let body = json!({
+        "uid": "test",
+        "primaryKey": "id",
+    });
+    server.create_index(body).await;
+    let documents = json!([
+        {"id": 1, "value": "1 2 3 4 5 6 7 8 9 10 11"},
+        {"id": 2, "value": "1 2 3 4 5 6 7 8 9 10"}]
+    );
+    server.add_or_update_multiple_documents(documents).await;
+
+    // We want to create a request where the 11 will be ignored. We have 2 documents, where a query
+    // with only one should return both, but a query with 1 and 11 should return only the first.
+    // This is how we know that outstanding query words have been ignored
+    let query = (0..MAX_QUERY_LEN)
+        .map(|_| "1")
+        .chain(std::iter::once("11"))
+        .fold(String::new(), |s, w| s + " " + w);
+    let (response, _) = server.search_post(json!({"q": query})).await;
+    assert_eq!(response["nbHits"], 2);
+    let (response, _) = server.search_post(json!({"q": "1 11"})).await;
+    assert_eq!(response["nbHits"], 1);
+}
