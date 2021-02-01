@@ -382,7 +382,7 @@ async fn main() -> anyhow::Result<()> {
                     });
 
                     match result {
-                        Ok(()) => wtxn.commit().map_err(Into::into),
+                        Ok(_) => wtxn.commit().map_err(Into::into),
                         Err(e) => Err(e.into())
                     }
                 },
