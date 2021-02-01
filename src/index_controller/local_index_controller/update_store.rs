@@ -192,16 +192,6 @@ where
         }
     }
 
-    /// The id and metadata of the update that is currently being processed,
-    /// `None` if no update is being processed.
-    pub fn processing_update(&self) -> heed::Result<Option<Pending<M>>> {
-        let rtxn = self.env.read_txn()?;
-        match self.pending_meta.first(&rtxn)? {
-            Some((_, meta)) => Ok(Some(meta)),
-            None => Ok(None),
-        }
-    }
-
     /// Execute the user defined function with the meta-store iterators, the first
     /// iterator is the *processed* meta one, the second the *aborted* meta one
     /// and, the last is the *pending* meta one.

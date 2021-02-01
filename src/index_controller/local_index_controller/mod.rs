@@ -2,16 +2,15 @@ mod update_store;
 mod index_store;
 mod update_handler;
 
-use index_store::IndexStore;
-
 use std::path::Path;
 use std::sync::Arc;
 
-use milli::Index;
 use anyhow::bail;
 use itertools::Itertools;
+use milli::Index;
 
 use crate::option::IndexerOpts;
+use index_store::IndexStore;
 use super::IndexController;
 use super::updates::UpdateStatus;
 use super::{UpdateMeta, UpdateResult};
@@ -84,7 +83,7 @@ impl IndexController for LocalIndexController {
     }
 
     fn all_update_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
-        match self.indexes.index(index)? {
+        match self.indexes.index(&index)? {
             Some((_, update_store)) => {
                 let updates = update_store.iter_metas(|processing, processed, pending, aborted, failed| {
                     Ok(processing
@@ -99,7 +98,7 @@ impl IndexController for LocalIndexController {
                 })?;
                 Ok(updates)
             }
-            None => Ok(Vec::new())
+            None => bail!("index {} doesn't exist.", index.as_ref()),
         }
 
     }

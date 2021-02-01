@@ -2,11 +2,11 @@ use std::collections::HashSet;
 use std::mem;
 use std::time::Instant;
 
-use serde_json::{Value, Map};
-use serde::{Deserialize, Serialize};
-use milli::{Index, obkv_to_json, FacetCondition};
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use anyhow::bail;
+use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
+use milli::{Index, obkv_to_json, FacetCondition};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, Map};
 
 use crate::index_controller::IndexController;
 use super::Data;
@@ -37,7 +37,6 @@ pub struct SearchQuery {
 impl SearchQuery {
     pub fn perform(&self, index: impl AsRef<Index>) -> anyhow::Result<SearchResult>{
         let index = index.as_ref();
-
         let before_search = Instant::now();
         let rtxn = index.read_txn().unwrap();
 
@@ -47,6 +46,9 @@ impl SearchQuery {
             search.query(query);
         }
 
+        search.limit(self.limit);
+        search.offset(self.offset.unwrap_or_default());
+
         if let Some(ref condition) = self.facet_condition {
             if !condition.trim().is_empty() {
                 let condition = FacetCondition::from_str(&rtxn, &index, &condition).unwrap();
@@ -54,11 +56,7 @@ impl SearchQuery {
             }
         }
 
-        if let Some(offset) = self.offset {
-            search.offset(offset);
-        }
-
-        let milli::SearchResult { documents_ids, found_words, nb_hits, limit, } = search.execute()?;
+        let milli::SearchResult { documents_ids, found_words, candidates } = search.execute()?;
 
         let mut documents = Vec::new();
         let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
@@ -81,9 +79,9 @@ impl SearchQuery {
 
         Ok(SearchResult {
             hits: documents,
-            nb_hits,
+            nb_hits: candidates.len(),
             query: self.q.clone().unwrap_or_default(),
-            limit,
+            limit: self.limit,
             offset: self.offset.unwrap_or_default(),
             processing_time_ms: before_search.elapsed().as_millis(),
         })
@@ -94,7 +92,7 @@ impl SearchQuery {
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     hits: Vec<Map<String, Value>>,
-    nb_hits: usize,
+    nb_hits: u64,
     query: String,
     limit: usize,
     offset: usize,

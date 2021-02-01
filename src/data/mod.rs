@@ -3,14 +3,14 @@ mod updates;
 
 pub use search::{SearchQuery, SearchResult};
 
+use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::sync::Arc;
-use std::fs::create_dir_all;
 
 use sha2::Digest;
 
-use crate::{option::Opt, index_controller::Settings};
 use crate::index_controller::{IndexController, LocalIndexController};
+use crate::{option::Opt, index_controller::Settings};
 
 #[derive(Clone)]
 pub struct Data {
@@ -67,7 +67,7 @@ impl Data {
             options.max_mdb_size.get_bytes(),
             options.max_udb_size.get_bytes(),
         )?;
-        let indexes = Arc::new(index_controller);
+        let index_controller = Arc::new(index_controller);
 
         let mut api_keys = ApiKeys {
             master: options.clone().master_key,
@@ -77,7 +77,7 @@ impl Data {
 
         api_keys.generate_missing_api_keys();
 
-        let inner = DataInner { index_controller: indexes, options, api_keys };
+        let inner = DataInner { index_controller, options, api_keys };
         let inner = Arc::new(inner);
 
         Ok(Data { inner })

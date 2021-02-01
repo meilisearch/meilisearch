@@ -6,21 +6,20 @@ use futures_util::stream::StreamExt;
 use tokio::io::AsyncWriteExt;
 
 use super::Data;
-use crate::index_controller::{IndexController, Settings, UpdateResult, UpdateMeta};
-use crate::index_controller::updates::UpdateStatus;
+use crate::index_controller::{IndexController, Settings};
+use crate::index_controller::UpdateStatus;
 
 impl Data {
-    pub async fn add_documents<B, E, S>(
+    pub async fn add_documents<B, E>(
         &self,
-        index: S,
+        index: impl AsRef<str> + Send + Sync + 'static,
         method: IndexDocumentsMethod,
         format: UpdateFormat,
         mut stream: impl futures::Stream<Item=Result<B, E>> + Unpin,
-    ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>>
+    ) -> anyhow::Result<UpdateStatus>
     where
         B: Deref<Target = [u8]>,
         E: std::error::Error + Send + Sync + 'static,
-        S: AsRef<str> + Send + Sync + 'static,
     {
         let file = tokio::task::spawn_blocking(tempfile::tempfile).await?;
         let file = tokio::fs::File::from_std(file?);
@@ -38,26 +37,26 @@ impl Data {
         let mmap = unsafe { memmap::Mmap::map(&file)? };
 
         let index_controller = self.index_controller.clone();
-        let update = tokio::task::spawn_blocking(move ||index_controller.add_documents(index, method, format, &mmap[..])).await??;
+        let update = tokio::task::spawn_blocking(move || index_controller.add_documents(index, method, format, &mmap[..])).await??;
         Ok(update.into())
     }
 
-    pub async fn update_settings<S: AsRef<str> + Send + Sync + 'static>(
+    pub async fn update_settings(
         &self,
-        index: S,
+        index: impl AsRef<str> + Send + Sync + 'static,
         settings: Settings
-    ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>> {
-        let indexes = self.index_controller.clone();
-        let update = tokio::task::spawn_blocking(move || indexes.update_settings(index, settings)).await??;
+    ) -> anyhow::Result<UpdateStatus> {
+        let index_controller = self.index_controller.clone();
+        let update = tokio::task::spawn_blocking(move || index_controller.update_settings(index, settings)).await??;
         Ok(update.into())
     }
 
     #[inline]
-    pub fn get_update_status<S: AsRef<str>>(&self, index: S, uid: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
+    pub fn get_update_status(&self, index: impl AsRef<str>, uid: u64) -> anyhow::Result<Option<UpdateStatus>> {
         self.index_controller.update_status(index, uid)
     }
 
-    pub fn get_updates_status(&self, index: &str) -> anyhow::Result<Vec<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
+    pub fn get_updates_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>> {
         self.index_controller.all_update_status(index)
     }
 }

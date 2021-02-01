@@ -72,6 +72,7 @@ serde_url_params = "0.2.0"
 tempdir = "0.3.7"
 assert-json-diff = { branch = "master", git = "https://github.com/qdequele/assert-json-diff" }
 tokio = { version = "0.2", features = ["macros", "time"] }
+mockall = "0.9.0"
 
 [features]
 default = ["sentry"]

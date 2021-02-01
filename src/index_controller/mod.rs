@@ -1,5 +1,5 @@
 mod local_index_controller;
-pub mod updates;
+mod updates;
 
 pub use local_index_controller::LocalIndexController;
 
@@ -12,7 +12,9 @@ use milli::Index;
 use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
 use serde::{Serialize, Deserialize, de::Deserializer};
 
-use updates::{Processed, Processing, Failed, UpdateStatus};
+pub use updates::{Processed, Processing, Failed};
+
+pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,9 +87,10 @@ pub enum UpdateResult {
 }
 
 /// The `IndexController` is in charge of the access to the underlying indices. It splits the logic
-/// for read access which is provided, and write access which must be provided. This allows the
-/// implementer to define the behaviour of write accesses to the indices, and abstract the
-/// scheduling of the updates. The implementer must be able to provide an instance of `IndexStore`
+/// for read access which is provided thanks to an handle to the index, and write access which must
+/// be provided. This allows the implementer to define the behaviour of write accesses to the
+/// indices, and abstract the scheduling of the updates. The implementer must be able to provide an
+/// instance of `IndexStore`
 pub trait IndexController {
 
     /*
@@ -106,11 +109,11 @@ pub trait IndexController {
         method: IndexDocumentsMethod,
         format: UpdateFormat,
         data: &[u8],
-    ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>>;
+    ) -> anyhow::Result<UpdateStatus>;
 
     /// Updates an index settings. If the index does not exist, it will be created when the update
     /// is applied to the index.
-    fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>>;
+    fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings) -> anyhow::Result<UpdateStatus>;
 
     /// Create an index with the given `index_uid`.
     fn create_index<S: AsRef<str>>(&self, index_uid: S) -> Result<()>;
@@ -133,9 +136,9 @@ pub trait IndexController {
         todo!()
     }
 
-    /// Returns, if it exists, an `IndexView` to the requested index.
-    fn index(&self, uid: impl AsRef<str>) -> anyhow::Result<Option<Arc<Index>>>;
+    /// Returns, if it exists, the `Index` with the povided name.
+    fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<Arc<Index>>>;
 
-    fn update_status(&self, index: impl AsRef<str>, id: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>>;
-    fn all_update_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus<UpdateMeta, UpdateResult, String>>>;
+    fn update_status(&self, index: impl AsRef<str>, id: u64) -> anyhow::Result<Option<UpdateStatus>>;
+    fn all_update_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>>;
 }
