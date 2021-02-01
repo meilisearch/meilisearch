@@ -1,9 +1,10 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{borrow::Cow, collections::{BTreeMap, BTreeSet}};
 
 use heed::Result as ZResult;
 use fst::{set::OpBuilder, SetBuilder};
 use sdset::SetBuf;
 use meilisearch_schema::Schema;
+use meilisearch_tokenizer::analyzer::{Analyzer, AnalyzerConfig};
 
 use crate::database::{MainT, UpdateT};
 use crate::settings::{UpdateState, SettingsUpdate, RankingRule};
@@ -289,13 +290,24 @@ pub fn apply_synonyms_update(
 
     let main_store = index.main;
     let synonyms_store = index.synonyms;
+    let stop_words = index.main.stop_words_fst(writer)?.map_data(Cow::into_owned)?;
+    let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(&stop_words));
+
+    fn normalize<T: AsRef<[u8]>>(analyzer: &Analyzer<T>, text: &str) -> String {
+        analyzer.analyze(&text)
+            .tokens()
+            .fold(String::new(), |s, t| s + t.text())
+    }
 
     let mut synonyms_builder = SetBuilder::memory();
     synonyms_store.clear(writer)?;
-    for (word, alternatives) in synonyms.clone() {
+    for (word, alternatives) in synonyms {
+        let word = normalize(&analyzer, &word);
+
         synonyms_builder.insert(&word)?;
 
         let alternatives = {
+            let alternatives = alternatives.iter().map(|text| normalize(&analyzer, &text)).collect();
             let alternatives = SetBuf::from_dirty(alternatives);
             let mut alternatives_builder = SetBuilder::memory();
             alternatives_builder.extend_iter(alternatives)?;
