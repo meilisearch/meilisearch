@@ -161,10 +161,10 @@ impl FacetCondition {
         ) -> anyhow::Result<FacetCondition>
         {
             let fid = fields_ids_map.id(key).with_context(|| {
-                format!("{:?} must isn't part of the fields ids map", key)
+                format!("{:?} isn't present in the fields ids map", key)
             })?;
             let ftype = faceted_fields.get(key).copied().with_context(|| {
-                format!("{:?} must isn't a faceted field", key)
+                format!("{:?} isn't a faceted field", key)
             })?;
             let (neg, value) = match value.trim().strip_prefix('-') {
                 Some(value) => (true, value.trim()),
