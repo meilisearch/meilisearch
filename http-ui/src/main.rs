@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::{File, create_dir_all};
 use std::net::SocketAddr;
@@ -11,6 +11,7 @@ use std::{mem, io};
 
 use askama_warp::Template;
 use byte_unit::Byte;
+use either::Either;
 use flate2::read::GzDecoder;
 use futures::stream;
 use futures::{FutureExt, StreamExt};
@@ -28,6 +29,7 @@ use warp::filters::ws::Message;
 use warp::{Filter, http::Response};
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 
+use milli::facet::FacetValue;
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
 use milli::{obkv_to_json, Index, UpdateStore, SearchResult, FacetCondition};
@@ -621,11 +623,37 @@ async fn main() -> anyhow::Result<()> {
         );
 
     #[derive(Debug, Deserialize)]
+    #[serde(untagged)]
+    enum UntaggedEither<L, R> {
+        Left(L),
+        Right(R),
+    }
+
+    impl<L, R> From<UntaggedEither<L, R>> for Either<L, R> {
+        fn from(value: UntaggedEither<L, R>) -> Either<L, R> {
+            match value {
+                UntaggedEither::Left(left) => Either::Left(left),
+                UntaggedEither::Right(right) => Either::Right(right),
+            }
+        }
+    }
+
+    #[derive(Debug, Deserialize)]
     #[serde(deny_unknown_fields)]
     #[serde(rename_all = "camelCase")]
     struct QueryBody {
         query: Option<String>,
-        facet_condition: Option<String>,
+        filters: Option<String>,
+        facet_filters: Option<Vec<UntaggedEither<Vec<String>, String>>>,
+        facet_distribution: Option<bool>,
+    }
+
+    #[derive(Debug, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Answer {
+        documents: Vec<Map<String, Value>>,
+        number_of_candidates: u64,
+        facets: BTreeMap<String, BTreeMap<FacetValue, u64>>,
     }
 
     let disable_highlighting = opt.disable_highlighting;
@@ -642,14 +670,42 @@ async fn main() -> anyhow::Result<()> {
             if let Some(query) = query.query {
                 search.query(query);
             }
-            if let Some(condition) = query.facet_condition {
-                if !condition.trim().is_empty() {
-                    let condition = FacetCondition::from_str(&rtxn, &index, &condition).unwrap();
-                    search.facet_condition(condition);
-                }
+
+            let filters = match query.filters {
+                Some(condition) if !condition.trim().is_empty() => {
+                    Some(FacetCondition::from_str(&rtxn, &index, &condition).unwrap())
+                },
+                _otherwise => None,
+            };
+
+            let facet_filters = match query.facet_filters {
+                Some(array) => {
+                    let eithers = array.into_iter().map(Into::into);
+                    FacetCondition::from_array(&rtxn, &index, eithers).unwrap()
+                },
+                _otherwise => None,
+            };
+
+            let condition = match (filters, facet_filters) {
+                (Some(filters), Some(facet_filters)) => {
+                    Some(FacetCondition::And(Box::new(filters), Box::new(facet_filters)))
+                },
+                (Some(condition), None) | (None, Some(condition)) => Some(condition),
+                _otherwise => None,
+            };
+
+            if let Some(condition) = condition {
+                search.facet_condition(condition);
             }
 
-            let SearchResult { found_words, documents_ids } = search.execute().unwrap();
+            let SearchResult { found_words, candidates, documents_ids } = search.execute().unwrap();
+
+            let number_of_candidates = candidates.len();
+            let facets = if query.facet_distribution == Some(true) {
+                Some(index.facets_distribution(&rtxn).candidates(candidates).execute().unwrap())
+            } else {
+                None
+            };
 
             let mut documents = Vec::new();
             let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
@@ -674,10 +730,16 @@ async fn main() -> anyhow::Result<()> {
                 documents.push(object);
             }
 
+            let answer = Answer {
+                documents,
+                number_of_candidates,
+                facets: facets.unwrap_or_default(),
+            };
+
             Response::builder()
                 .header("Content-Type", "application/json")
                 .header("Time-Ms", before_search.elapsed().as_millis().to_string())
-                .body(serde_json::to_string(&documents).unwrap())
+                .body(serde_json::to_string(&answer).unwrap())
         });
 
     let index_cloned = index.clone();

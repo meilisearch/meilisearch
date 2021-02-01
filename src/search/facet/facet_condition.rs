@@ -3,6 +3,8 @@ use std::fmt::Debug;
 use std::ops::Bound::{self, Included, Excluded};
 use std::str::FromStr;
 
+use anyhow::Context;
+use either::Either;
 use heed::types::{ByteSlice, DecodeIgnore};
 use log::debug;
 use num_traits::Bounded;
@@ -141,6 +143,85 @@ where T: FromStr,
 }
 
 impl FacetCondition {
+    pub fn from_array<I, J, A, B>(
+        rtxn: &heed::RoTxn,
+        index: &Index,
+        array: I,
+    ) -> anyhow::Result<Option<FacetCondition>>
+    where I: IntoIterator<Item=Either<J, B>>,
+          J: IntoIterator<Item=A>,
+          A: AsRef<str>,
+          B: AsRef<str>,
+    {
+        fn facet_condition(
+            fields_ids_map: &FieldsIdsMap,
+            faceted_fields: &HashMap<String, FacetType>,
+            key: &str,
+            value: &str,
+        ) -> anyhow::Result<FacetCondition>
+        {
+            let fid = fields_ids_map.id(key).with_context(|| {
+                format!("{:?} isn't present in the fields ids map", key)
+            })?;
+            let ftype = faceted_fields.get(key).copied().with_context(|| {
+                format!("{:?} isn't a faceted field", key)
+            })?;
+            let (neg, value) = match value.trim().strip_prefix('-') {
+                Some(value) => (true, value.trim()),
+                None => (false, value.trim()),
+            };
+
+            let operator = match ftype {
+                FacetType::String => OperatorString(fid, FacetStringOperator::equal(value)),
+                FacetType::Float => OperatorF64(fid, FacetNumberOperator::Equal(value.parse()?)),
+                FacetType::Integer => OperatorI64(fid, FacetNumberOperator::Equal(value.parse()?)),
+            };
+
+            if neg { Ok(operator.negate()) } else { Ok(operator) }
+        }
+
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let faceted_fields = index.faceted_fields(rtxn)?;
+        let mut ands = None;
+
+        for either in array {
+            match either {
+                Either::Left(array) => {
+                    let mut ors = None;
+                    for rule in array {
+                        let mut iter = rule.as_ref().splitn(2, ':');
+                        let key = iter.next().context("missing facet condition key")?;
+                        let value = iter.next().context("missing facet condition value")?;
+                        let condition = facet_condition(&fields_ids_map, &faceted_fields, key, value)?;
+                        ors = match ors.take() {
+                            Some(ors) => Some(Or(Box::new(ors), Box::new(condition))),
+                            None => Some(condition),
+                        };
+                    }
+
+                    if let Some(rule) = ors {
+                        ands = match ands.take() {
+                            Some(ands) => Some(And(Box::new(ands), Box::new(rule))),
+                            None => Some(rule),
+                        };
+                    }
+                },
+                Either::Right(rule) => {
+                    let mut iter = rule.as_ref().splitn(2, ':');
+                    let key = iter.next().context("missing facet condition key")?;
+                    let value = iter.next().context("missing facet condition value")?;
+                    let condition = facet_condition(&fields_ids_map, &faceted_fields, key, value)?;
+                    ands = match ands.take() {
+                        Some(ands) => Some(And(Box::new(ands), Box::new(condition))),
+                        None => Some(condition),
+                    };
+                }
+            }
+        }
+
+        Ok(ands)
+    }
+
     pub fn from_str(
         rtxn: &heed::RoTxn,
         index: &Index,
@@ -639,6 +720,37 @@ mod tests {
                 Box::new(OperatorString(0, FacetStringOperator::equal("ponce"))),
             )),
         );
+        assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn from_array() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // Set the faceted fields to be the channel.
+        let mut wtxn = index.write_txn().unwrap();
+        let mut builder = Settings::new(&mut wtxn, &index);
+        builder.set_searchable_fields(vec!["channel".into(), "timestamp".into()]); // to keep the fields order
+        builder.set_faceted_fields(hashmap!{
+            "channel".into() => "string".into(),
+            "timestamp".into() => "integer".into(),
+        });
+        builder.execute(|_| ()).unwrap();
+        wtxn.commit().unwrap();
+
+        // Test that the facet condition is correctly generated.
+        let rtxn = index.read_txn().unwrap();
+        let condition = FacetCondition::from_array(
+            &rtxn, &index,
+            vec![Either::Right("channel:gotaga"), Either::Left(vec!["timestamp:44", "channel:-ponce"])],
+        ).unwrap().unwrap();
+        let expected = FacetCondition::from_str(
+            &rtxn, &index,
+            "channel = gotaga AND (timestamp = 44 OR channel != ponce)",
+        ).unwrap();
         assert_eq!(condition, expected);
     }
 }

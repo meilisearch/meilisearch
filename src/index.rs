@@ -9,7 +9,7 @@ use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
-use crate::{default_criteria, Criterion, Search};
+use crate::{default_criteria, Criterion, Search, FacetDistribution};
 use crate::{BEU32, DocumentId, FieldId, ExternalDocumentsIds};
 use crate::{
     RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec, ObkvCodec,
@@ -349,6 +349,10 @@ impl Index {
     /// Returns the number of documents indexed in the database.
     pub fn number_of_documents(&self, rtxn: &RoTxn) -> anyhow::Result<usize> {
         Ok(self.documents_ids(rtxn).map(|docids| docids.len() as usize)?)
+    }
+
+    pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn) -> FacetDistribution<'a> {
+        FacetDistribution::new(rtxn, self)
     }
 
     pub fn search<'a>(&'a self, rtxn: &'a RoTxn) -> Search<'a> {

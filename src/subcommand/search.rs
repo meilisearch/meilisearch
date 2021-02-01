@@ -29,6 +29,10 @@ pub struct Opt {
 
     /// The query string to search for (doesn't support prefix search yet).
     query: Option<String>,
+
+    /// Compute and print the facet distribution of all the faceted fields.
+    #[structopt(long)]
+    print_facet_distribution: bool,
 }
 
 pub fn run(opt: Opt) -> anyhow::Result<()> {
@@ -68,6 +72,12 @@ pub fn run(opt: Opt) -> anyhow::Result<()> {
         for (_id, record) in documents {
             let val = obkv_to_json(&displayed_fields, &fields_ids_map, record)?;
             serde_json::to_writer(&mut stdout, &val)?;
+            let _ = writeln!(&mut stdout);
+        }
+
+        if opt.print_facet_distribution {
+            let facets = index.facets_distribution(&rtxn).candidates(result.candidates).execute()?;
+            serde_json::to_writer(&mut stdout, &facets)?;
             let _ = writeln!(&mut stdout);
         }
 
