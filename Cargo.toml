@@ -47,7 +47,6 @@ regex = "1.4.2"
 rustls = "0.18"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0.59", features = ["preserve_order"] }
-serde_qs = "0.8.1"
 sha2 = "0.9.1"
 siphasher = "0.3.2"
 slice-group-by = "0.2.6"
@@ -55,13 +54,9 @@ structopt = "0.3.20"
 tar = "0.4.29"
 tempfile = "3.1.0"
 tokio = { version = "0.2", features = ["full"] }
-ureq = { version = "1.5.1", default-features = false, features = ["tls"] }
-walkdir = "2.3.1"
-whoami = "1.0.0"
 dashmap = "4.0.2"
 page_size = "0.4.2"
 obkv = "0.1.1"
-ouroboros = "0.8.0"
 uuid = "0.8.2"
 itertools = "0.10.0"
 
