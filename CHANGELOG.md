@@ -1,3 +1,9 @@
+## v0.19.0
+
+  - The snapshots are now created and then renamed in atomically (#1172)
+  - Fix a race condition when an update and a document addition are processed immediately one after the other (#1176)
+  - Latin synonyms are normalized during indexation (#1174)
+
 ## v0.18.1
 
   - Fix unexpected CORS error (#1185)
@@ -64,7 +70,7 @@
 
 ## v0.11.1
 
-  - Fix facet cache on document update (#789) 
+  - Fix facet cache on document update (#789)
   - Improvements on settings consistency (#778)
 
 ## v0.11.0
