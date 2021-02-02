@@ -23,6 +23,7 @@ pub struct Settings<'a, 't, 'u, 'i> {
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) chunk_fusing_shrink_size: Option<u64>,
     pub(crate) thread_pool: Option<&'a ThreadPool>,
+    update_id: u64,
 
     // If a struct field is set to `None` it means that it hasn't been set by the user,
     // however if it is `Some(None)` it means that the user forced a reset of the setting.
@@ -33,7 +34,11 @@ pub struct Settings<'a, 't, 'u, 'i> {
 }
 
 impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> Settings<'a, 't, 'u, 'i> {
+    pub fn new(
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        index: &'i Index,
+        update_id: u64,
+    ) -> Settings<'a, 't, 'u, 'i> {
         Settings {
             wtxn,
             index,
@@ -49,6 +54,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             displayed_fields: None,
             faceted_fields: None,
             criteria: None,
+            update_id,
         }
     }
 
@@ -86,9 +92,11 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     fn reindex<F>(&mut self, cb: &F, old_fields_ids_map: FieldsIdsMap) -> anyhow::Result<()>
     where
-        F: Fn(UpdateIndexingStep) + Sync,
+        F: Fn(UpdateIndexingStep, u64) + Sync
     {
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;
+        let update_id = self.update_id;
+        let cb = |step| cb(step, update_id);
         // if the settings are set before any document update, we don't need to do anything, and
         // will set the primary key during the first document addition.
         if self.index.number_of_documents(&self.wtxn)? == 0 {
@@ -118,11 +126,11 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
             fields_ids_map.clone())?;
 
         // We clear the full database (words-fst, documents ids and documents content).
-        ClearDocuments::new(self.wtxn, self.index).execute()?;
+        ClearDocuments::new(self.wtxn, self.index, self.update_id).execute()?;
 
         // We index the generated `TransformOutput` which must contain
         // all the documents with fields in the newly defined searchable order.
-        let mut indexing_builder = IndexDocuments::new(self.wtxn, self.index);
+        let mut indexing_builder = IndexDocuments::new(self.wtxn, self.index, self.update_id);
         indexing_builder.log_every_n = self.log_every_n;
         indexing_builder.max_nb_chunks = self.max_nb_chunks;
         indexing_builder.max_memory = self.max_memory;
@@ -239,7 +247,7 @@ impl<'a, 't, 'u, 'i> Settings<'a, 't, 'u, 'i> {
 
     pub fn execute<F>(mut self, progress_callback: F) -> anyhow::Result<()>
     where
-        F: Fn(UpdateIndexingStep) + Sync
+        F: Fn(UpdateIndexingStep, u64) + Sync
         {
             let old_fields_ids_map = self.index.fields_ids_map(&self.wtxn)?;
             self.update_displayed()?;
@@ -276,16 +284,16 @@ mod tests {
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // We change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, 1);
         builder.set_searchable_fields(vec!["name".into()]);
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the searchable field is correctly set to "name" only.
@@ -305,9 +313,9 @@ mod tests {
 
         // We change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, 2);
         builder.reset_searchable_fields();
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the searchable field have been reset and documents are found now.
@@ -331,18 +339,18 @@ mod tests {
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // In the same transaction we change the displayed fields to be only the "age".
         // We also change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, 1);
         builder.set_displayed_fields(vec!["age".into()]);
         builder.set_searchable_fields(vec!["name".into()]);
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to `None` (default value).
@@ -353,9 +361,9 @@ mod tests {
 
         // We change the searchable fields to be the "name" field only.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, 2);
         builder.reset_searchable_fields();
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields always contains only the "age" field.
@@ -375,9 +383,9 @@ mod tests {
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to `None` (default value).
@@ -397,14 +405,14 @@ mod tests {
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
 
         // In the same transaction we change the displayed fields to be only the age.
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["age".into()]);
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to only the "age" field.
@@ -415,9 +423,9 @@ mod tests {
 
         // We reset the fields ids to become `None`, the default value.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.reset_displayed_fields();
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set to `None` (default value).
@@ -436,15 +444,15 @@ mod tests {
 
         // Set the faceted fields to be the age.
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_faceted_fields(hashmap!{ "age".into() => "integer".into() });
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_, _| ()).unwrap();
 
         // Then index some documents.
         let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that the displayed fields are correctly set.
@@ -459,9 +467,9 @@ mod tests {
         // Index a little more documents with new and current facets values.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name,age\nkevin2,23\nkevina2,21\nbenoit2,35\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 2);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -480,14 +488,14 @@ mod tests {
 
         // Set all the settings except searchable
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, 0);
         builder.set_displayed_fields(vec!["hello".to_string()]);
         builder.set_faceted_fields(hashmap!{
             "age".into() => "integer".into(),
             "toto".into() => "integer".into(),
         });
         builder.set_criteria(vec!["asc(toto)".to_string()]);
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // check the output
@@ -500,9 +508,9 @@ mod tests {
 
         // We set toto and age as searchable to force reordering of the fields
         let mut wtxn = index.write_txn().unwrap();
-        let mut builder = Settings::new(&mut wtxn, &index);
+        let mut builder = Settings::new(&mut wtxn, &index, 1);
         builder.set_searchable_fields(vec!["toto".to_string(), "age".to_string()]);
-        builder.execute(|_| ()).unwrap();
+        builder.execute(|_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();

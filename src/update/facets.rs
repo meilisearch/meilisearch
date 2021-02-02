@@ -24,10 +24,15 @@ pub struct Facets<'t, 'u, 'i> {
     pub(crate) chunk_fusing_shrink_size: Option<u64>,
     level_group_size: NonZeroUsize,
     min_level_size: NonZeroUsize,
+    _update_id: u64,
 }
 
 impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> Facets<'t, 'u, 'i> {
+    pub fn new(
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        index: &'i Index,
+        update_id: u64,
+    ) -> Facets<'t, 'u, 'i> {
         Facets {
             wtxn,
             index,
@@ -36,6 +41,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
             chunk_fusing_shrink_size: None,
             level_group_size: NonZeroUsize::new(4).unwrap(),
             min_level_size: NonZeroUsize::new(5).unwrap(),
+            _update_id: update_id,
         }
     }
 

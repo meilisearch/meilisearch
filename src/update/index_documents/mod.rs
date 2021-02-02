@@ -12,8 +12,9 @@ use grenad::{Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
 use heed::types::ByteSlice;
 use log::{debug, info, error};
 use memmap::Mmap;
-use rayon::prelude::*;
 use rayon::ThreadPool;
+use rayon::prelude::*;
+use serde::{Serialize, Deserialize};
 
 use crate::index::Index;
 use crate::update::{Facets, UpdateIndexingStep};
@@ -31,6 +32,11 @@ use super::UpdateBuilder;
 mod merge_function;
 mod store;
 mod transform;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DocumentAdditionResult {
+    nb_documents: usize,
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum WriteMethod {
@@ -175,7 +181,7 @@ pub fn write_into_lmdb_database(
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum IndexDocumentsMethod {
     /// Replace the previous document with the new one,
@@ -187,7 +193,7 @@ pub enum IndexDocumentsMethod {
     UpdateDocuments,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum UpdateFormat {
     /// The given update is a real **comma seperated** CSV with headers on the first line.
@@ -214,10 +220,15 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     update_method: IndexDocumentsMethod,
     update_format: UpdateFormat,
     autogenerate_docids: bool,
+    update_id: u64,
 }
 
 impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
-    pub fn new(wtxn: &'t mut heed::RwTxn<'i, 'u>, index: &'i Index) -> IndexDocuments<'t, 'u, 'i, 'a> {
+    pub fn new(
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        index: &'i Index,
+        update_id: u64,
+    ) -> IndexDocuments<'t, 'u, 'i, 'a> {
         IndexDocuments {
             wtxn,
             index,
@@ -234,6 +245,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             update_format: UpdateFormat::Json,
             autogenerate_docids: true,
+            update_id,
         }
     }
 
@@ -253,12 +265,14 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.autogenerate_docids = false;
     }
 
-    pub fn execute<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<()>
+    pub fn execute<R, F>(self, reader: R, progress_callback: F) -> anyhow::Result<DocumentAdditionResult>
     where
         R: io::Read,
-        F: Fn(UpdateIndexingStep) + Sync,
+        F: Fn(UpdateIndexingStep, u64) + Sync,
     {
         let before_transform = Instant::now();
+        let update_id = self.update_id;
+        let progress_callback = |step| progress_callback(step, update_id);
 
         let transform = Transform {
             rtxn: &self.wtxn,
@@ -279,9 +293,12 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             UpdateFormat::JsonStream => transform.output_from_json_stream(reader, &progress_callback)?,
         };
 
+        let nb_documents = output.documents_count;
+
         info!("Update transformed in {:.02?}", before_transform.elapsed());
 
-        self.execute_raw(output, progress_callback)
+        self.execute_raw(output, progress_callback)?;
+        Ok(DocumentAdditionResult { nb_documents })
     }
 
     pub fn execute_raw<F>(self, output: TransformOutput, progress_callback: F) -> anyhow::Result<()>
@@ -312,6 +329,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 chunk_compression_level: self.chunk_compression_level,
                 chunk_fusing_shrink_size: self.chunk_fusing_shrink_size,
                 thread_pool: self.thread_pool,
+                update_id: self.update_id,
             };
             let mut deletion_builder = update_builder.delete_documents(self.wtxn, self.index)?;
             debug!("documents to delete {:?}", replaced_documents_ids);
@@ -607,7 +625,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             });
         }
 
-        let mut builder = Facets::new(self.wtxn, self.index);
+        let mut builder = Facets::new(self.wtxn, self.index, self.update_id);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
@@ -642,9 +660,9 @@ mod tests {
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n1,kevin\n2,kevina\n3,benoit\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -656,9 +674,9 @@ mod tests {
         // Second we send 1 document with id 1, to erase the previous ones.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n1,updated kevin\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 3 documents.
@@ -670,9 +688,9 @@ mod tests {
         // Third we send 3 documents again to replace the existing ones.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n1,updated second kevin\n2,updated kevina\n3,updated benoit\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 2);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 3 documents.
@@ -693,10 +711,10 @@ mod tests {
         // change the index method to merge documents.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n1,kevin\n1,kevina\n1,benoit\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
         builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is only 1 document now.
@@ -720,10 +738,10 @@ mod tests {
         // Second we send 1 document with id 1, to force it to be merged with the previous one.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,age\n1,25\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
         builder.update_format(UpdateFormat::Csv);
         builder.index_documents_method(IndexDocumentsMethod::UpdateDocuments);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 1 document.
@@ -756,10 +774,10 @@ mod tests {
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name\nkevin\nkevina\nbenoit\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.disable_autogenerate_docids();
         builder.update_format(UpdateFormat::Csv);
-        assert!(builder.execute(content, |_| ()).is_err());
+        assert!(builder.execute(content, |_, _| ()).is_err());
         wtxn.commit().unwrap();
 
         // Check that there is no document.
@@ -783,10 +801,10 @@ mod tests {
             { "name": "kevin" },
             { "name": "benoit" }
         ]"#[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.disable_autogenerate_docids();
         builder.update_format(UpdateFormat::Json);
-        assert!(builder.execute(content, |_| ()).is_err());
+        assert!(builder.execute(content, |_, _| ()).is_err());
         wtxn.commit().unwrap();
 
         // Check that there is no document.
@@ -806,9 +824,9 @@ mod tests {
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name\nkevin\nkevina\nbenoit\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -824,9 +842,9 @@ mod tests {
         // Second we send 1 document with the generated uuid, to erase the previous ones.
         let mut wtxn = index.write_txn().unwrap();
         let content = format!("id,name\n{},updated kevin", kevin_uuid);
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content.as_bytes(), |_| ()).unwrap();
+        builder.execute(content.as_bytes(), |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is **always** 3 documents.
@@ -859,9 +877,9 @@ mod tests {
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n1,kevin\n2,kevina\n3,benoit\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -873,9 +891,9 @@ mod tests {
         // Second we send 1 document without specifying the id.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"name\nnew kevin"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 4 documents now.
@@ -895,9 +913,9 @@ mod tests {
         // First we send 0 documents and only headers.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"id,name\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is no documents.
@@ -921,9 +939,9 @@ mod tests {
             { "name": "kevina", "id": 21 },
             { "name": "benoit" }
         ]"#[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Json);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -943,9 +961,9 @@ mod tests {
         // First we send 0 documents.
         let mut wtxn = index.write_txn().unwrap();
         let content = &b"[]"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Json);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is no documents.
@@ -969,9 +987,9 @@ mod tests {
         { "name": "kevina", "id": 21 }
         { "name": "benoit" }
         "#[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::JsonStream);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 3 documents now.
@@ -992,18 +1010,18 @@ mod tests {
         let mut wtxn = index.write_txn().unwrap();
         // There is a space in the document id.
         let content = &b"id,name\nbrume bleue,kevin\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
-        assert!(builder.execute(content, |_| ()).is_err());
+        assert!(builder.execute(content, |_, _| ()).is_err());
         wtxn.commit().unwrap();
 
         // First we send 1 document with a valid id.
         let mut wtxn = index.write_txn().unwrap();
         // There is a space in the document id.
         let content = &b"id,name\n32,kevin\n"[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 1);
         builder.update_format(UpdateFormat::Csv);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 1 document now.
@@ -1027,9 +1045,9 @@ mod tests {
             { "id": 1, "name": "kevina", "array": ["I", "am", "fine"] },
             { "id": 2, "name": "benoit", "array_of_object": [{ "wow": "amazing" }] }
         ]"#[..];
-        let mut builder = IndexDocuments::new(&mut wtxn, &index);
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Json);
-        builder.execute(content, |_| ()).unwrap();
+        builder.execute(content, |_, _| ()).unwrap();
         wtxn.commit().unwrap();
 
         // Check that there is 1 documents now.

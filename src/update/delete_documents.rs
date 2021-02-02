@@ -12,12 +12,14 @@ pub struct DeleteDocuments<'t, 'u, 'i> {
     index: &'i Index,
     external_documents_ids: ExternalDocumentsIds<'static>,
     documents_ids: RoaringBitmap,
+    update_id: u64,
 }
 
 impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
     pub fn new(
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
+        update_id: u64,
     ) -> anyhow::Result<DeleteDocuments<'t, 'u, 'i>>
     {
         let external_documents_ids = index
@@ -29,6 +31,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             index,
             external_documents_ids,
             documents_ids: RoaringBitmap::new(),
+            update_id,
         })
     }
 
@@ -64,7 +67,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         // We can execute a ClearDocuments operation when the number of documents
         // to delete is exactly the number of documents in the database.
         if current_documents_ids_len == self.documents_ids.len() {
-            return ClearDocuments::new(self.wtxn, self.index).execute();
+            return ClearDocuments::new(self.wtxn, self.index, self.update_id).execute();
         }
 
         let fields_ids_map = self.index.fields_ids_map(self.wtxn)?;

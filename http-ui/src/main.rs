@@ -322,7 +322,7 @@ async fn main() -> anyhow::Result<()> {
         // the type hint is necessary: https://github.com/rust-lang/rust/issues/32600
         move |update_id, meta, content:&_| {
             // We prepare the update by using the update builder.
-            let mut update_builder = UpdateBuilder::new();
+            let mut update_builder = UpdateBuilder::new(update_id);
             if let Some(max_nb_chunks) = indexer_opt_cloned.max_nb_chunks {
                 update_builder.max_nb_chunks(max_nb_chunks);
             }
@@ -363,7 +363,7 @@ async fn main() -> anyhow::Result<()> {
                         otherwise => panic!("invalid encoding format {:?}", otherwise),
                     };
 
-                    let result = builder.execute(reader, |indexing_step| {
+                    let result = builder.execute(reader, |indexing_step, update_id| {
                         let (current, total) = match indexing_step {
                             TransformFromUserIntoGenericFormat { documents_seen } => (documents_seen, None),
                             ComputeIdsAndMergeDocuments { documents_seen, total_documents } => (documents_seen, Some(total_documents)),
@@ -382,7 +382,7 @@ async fn main() -> anyhow::Result<()> {
                     });
 
                     match result {
-                        Ok(()) => wtxn.commit().map_err(Into::into),
+                        Ok(_) => wtxn.commit().map_err(Into::into),
                         Err(e) => Err(e.into())
                     }
                 },
@@ -430,7 +430,7 @@ async fn main() -> anyhow::Result<()> {
                         }
                     }
 
-                    let result = builder.execute(|indexing_step| {
+                    let result = builder.execute(|indexing_step, update_id| {
                         let (current, total) = match indexing_step {
                             TransformFromUserIntoGenericFormat { documents_seen } => (documents_seen, None),
                             ComputeIdsAndMergeDocuments { documents_seen, total_documents } => (documents_seen, Some(total_documents)),
