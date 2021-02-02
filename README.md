@@ -11,7 +11,7 @@
   <a href="https://fr.linkedin.com/company/meilisearch">LinkedIn</a> |
   <a href="https://twitter.com/meilisearch">Twitter</a> |
   <a href="https://docs.meilisearch.com">Documentation</a> |
-  <a href="https://docs.meilisearch.com/faq/">FAQ</a>
+  <a href="https://docs.meilisearch.com/create/faq.md/">FAQ</a>
 </h4>
 
 <p align="center">
@@ -195,7 +195,6 @@ This program is optional, you can disable these analytics by using the `MEILI_NO
 
 Feel free to contact us about any questions you may have:
 * At [bonjour@meilisearch.com](mailto:bonjour@meilisearch.com)
-* Via the chat box available on every page of [our documentation](https://docs.meilisearch.com/) and on [our landing page](https://www.meilisearch.com/).
 * 🆕 Join our [GitHub Discussions forum](https://github.com/meilisearch/MeiliSearch/discussions)
 * Join our [Slack community](https://slack.meilisearch.com/).
 * By opening an issue.
