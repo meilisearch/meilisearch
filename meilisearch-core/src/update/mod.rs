@@ -52,16 +52,16 @@ impl Update {
         }
     }
 
-    fn documents_addition(documents: Vec<IndexMap<String, Value>>) -> Update {
+    fn documents_addition(primary_key: Option<String>, documents: Vec<IndexMap<String, Value>>) -> Update {
         Update {
-            data: UpdateData::DocumentsAddition(documents),
+            data: UpdateData::DocumentsAddition{ documents, primary_key },
             enqueued_at: Utc::now(),
         }
     }
 
-    fn documents_partial(documents: Vec<IndexMap<String, Value>>) -> Update {
+    fn documents_partial(primary_key: Option<String>, documents: Vec<IndexMap<String, Value>>) -> Update {
         Update {
-            data: UpdateData::DocumentsPartial(documents),
+            data: UpdateData::DocumentsPartial{ documents, primary_key },
             enqueued_at: Utc::now(),
         }
     }
@@ -85,8 +85,15 @@ impl Update {
 pub enum UpdateData {
     ClearAll,
     Customs(Vec<u8>),
-    DocumentsAddition(Vec<IndexMap<String, Value>>),
-    DocumentsPartial(Vec<IndexMap<String, Value>>),
+    // (primary key, documents)
+    DocumentsAddition {
+        primary_key: Option<String>,
+        documents: Vec<IndexMap<String, Value>>
+    },
+    DocumentsPartial {
+        primary_key: Option<String>,
+        documents: Vec<IndexMap<String, Value>>,
+    },
     DocumentsDeletion(Vec<String>),
     Settings(Box<SettingsUpdate>)
 }
@@ -96,11 +103,11 @@ impl UpdateData {
         match self {
             UpdateData::ClearAll => UpdateType::ClearAll,
             UpdateData::Customs(_) => UpdateType::Customs,
-            UpdateData::DocumentsAddition(addition) => UpdateType::DocumentsAddition {
-                number: addition.len(),
+            UpdateData::DocumentsAddition{ documents, .. } => UpdateType::DocumentsAddition {
+                number: documents.len(),
             },
-            UpdateData::DocumentsPartial(addition) => UpdateType::DocumentsPartial {
-                number: addition.len(),
+            UpdateData::DocumentsPartial{ documents, .. } => UpdateType::DocumentsPartial {
+                number: documents.len(),
             },
             UpdateData::DocumentsDeletion(deletion) => UpdateType::DocumentsDeletion {
                 number: deletion.len(),
@@ -239,25 +246,25 @@ pub fn update_task(
 
             (update_type, result, start.elapsed())
         }
-        UpdateData::DocumentsAddition(documents) => {
+        UpdateData::DocumentsAddition { documents, primary_key } => {
             let start = Instant::now();
 
             let update_type = UpdateType::DocumentsAddition {
                 number: documents.len(),
             };
 
-            let result = apply_documents_addition(writer, index, documents);
+            let result = apply_documents_addition(writer, index, documents, primary_key);
 
             (update_type, result, start.elapsed())
         }
-        UpdateData::DocumentsPartial(documents) => {
+        UpdateData::DocumentsPartial{ documents, primary_key } => {
             let start = Instant::now();
 
             let update_type = UpdateType::DocumentsPartial {
                 number: documents.len(),
             };
 
-            let result = apply_documents_partial_addition(writer, index, documents);
+            let result = apply_documents_partial_addition(writer, index, documents, primary_key);
 
             (update_type, result, start.elapsed())
         }
