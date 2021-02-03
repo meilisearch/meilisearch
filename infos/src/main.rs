@@ -321,6 +321,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
 
     let main_name = "main";
     let word_docids_name = "word_docids";
+    let word_prefix_docids_name = "word_prefix_docids";
     let docid_word_positions_name = "docid_word_positions";
     let word_pair_proximity_docids_name = "word_pair_proximity_docids";
     let facet_field_id_value_docids_name = "facet_field_id_value_docids";
@@ -329,8 +330,16 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     let mut heap = BinaryHeap::with_capacity(limit + 1);
 
     if limit > 0 {
+        // Fetch the words FST
         let words_fst = index.words_fst(rtxn)?;
-        heap.push(Reverse((words_fst.as_fst().as_bytes().len(), format!("words-fst"), main_name)));
+        let length = words_fst.as_fst().as_bytes().len();
+        heap.push(Reverse((length, format!("words-fst"), main_name)));
+        if heap.len() > limit { heap.pop(); }
+
+        // Fetch the word prefix FST
+        let words_prefixes_fst = index.words_prefixes_fst(rtxn)?;
+        let length = words_prefixes_fst.as_fst().as_bytes().len();
+        heap.push(Reverse((length, format!("words-prefixes-fst"), main_name)));
         if heap.len() > limit { heap.pop(); }
 
         if let Some(documents_ids) = main.get::<_, Str, ByteSlice>(rtxn, "documents-ids")? {
@@ -341,6 +350,12 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         for result in word_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let (word, value) = result?;
             heap.push(Reverse((value.len(), word.to_string(), word_docids_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        for result in word_prefix_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let (word, value) = result?;
+            heap.push(Reverse((value.len(), word.to_string(), word_prefix_docids_name)));
             if heap.len() > limit { heap.pop(); }
         }
 
