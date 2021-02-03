@@ -36,6 +36,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
 
         // We clean some of the main engine datastructures.
         self.index.put_words_fst(self.wtxn, &fst::Set::default())?;
+        self.index.put_words_prefixes_fst(self.wtxn, &fst::Set::default())?;
         self.index.put_external_documents_ids(self.wtxn, &ExternalDocumentsIds::default())?;
         self.index.put_documents_ids(self.wtxn, &RoaringBitmap::default())?;
 
@@ -46,6 +47,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
 
         // Clear the other databases.
         word_docids.clear(self.wtxn)?;
+        word_prefix_docids.clear(self.wtxn)?;
         docid_word_positions.clear(self.wtxn)?;
         word_pair_proximity_docids.clear(self.wtxn)?;
         facet_field_id_value_docids.clear(self.wtxn)?;
