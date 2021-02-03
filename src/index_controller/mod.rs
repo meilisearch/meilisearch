@@ -155,3 +155,30 @@ pub trait IndexController {
 
     fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>>;
 }
+
+
+#[cfg(test)]
+#[macro_use]
+pub(crate) mod test {
+    use super::*;
+
+    #[macro_export]
+    macro_rules! make_index_controller_tests {
+        ($controller_buider:block) => {
+            #[test]
+            fn test_create_and_list_indexes() {
+                crate::index_controller::test::create_and_list_indexes($controller_buider);
+            }
+        };
+    }
+
+    pub(crate) fn create_and_list_indexes<S: IndexController>(controller: S) {
+        controller.create_index("test_index").unwrap();
+        controller.create_index("test_index2").unwrap();
+
+        let indexes = controller.list_indexes().unwrap();
+        assert_eq!(indexes.len(), 2);
+        assert_eq!(indexes[0].name, "test_index");
+        assert_eq!(indexes[1].name, "test_index2");
+    }
+}

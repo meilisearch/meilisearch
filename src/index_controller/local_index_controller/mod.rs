@@ -129,3 +129,17 @@ impl IndexController for LocalIndexController {
         Ok(output_meta)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use tempfile::tempdir;
+    use crate::make_index_controller_tests;
+
+    make_index_controller_tests!({
+        let options = IndexerOpts::default();
+        let path = tempdir().unwrap();
+        let size = 4096 * 100;
+        LocalIndexController::new(path, options, size, size).unwrap()
+    });
+}
