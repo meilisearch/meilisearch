@@ -27,6 +27,7 @@ pub const SEARCHABLE_FIELDS_KEY: &str = "searchable-fields";
 pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
 pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
 pub const WORDS_FST_KEY: &str = "words-fst";
+pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
 
 #[derive(Clone)]
 pub struct Index {
@@ -36,6 +37,8 @@ pub struct Index {
     pub main: PolyDatabase,
     /// A word and all the documents ids containing the word.
     pub word_docids: Database<Str, RoaringBitmapCodec>,
+    /// A prefix of word and all the documents ids containing this prefix.
+    pub word_prefix_docids: Database<Str, RoaringBitmapCodec>,
     /// Maps a word and a document id (u32) to all the positions where the given word appears.
     pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
@@ -50,11 +53,12 @@ pub struct Index {
 
 impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> anyhow::Result<Index> {
-        options.max_dbs(7);
+        options.max_dbs(8);
 
         let env = options.open(path)?;
         let main = env.create_poly_database(Some("main"))?;
         let word_docids = env.create_database(Some("word-docids"))?;
+        let word_prefix_docids = env.create_database(Some("word-prefix-docids"))?;
         let docid_word_positions = env.create_database(Some("docid-word-positions"))?;
         let word_pair_proximity_docids = env.create_database(Some("word-pair-proximity-docids"))?;
         let facet_field_id_value_docids = env.create_database(Some("facet-field-id-value-docids"))?;
@@ -65,6 +69,7 @@ impl Index {
             env,
             main,
             word_docids,
+            word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
             facet_field_id_value_docids,
@@ -327,6 +332,23 @@ impl Index {
             None => Ok(fst::Set::default().map_data(Cow::Owned)?),
         }
     }
+
+    /* words prefixes fst */
+
+    /// Writes the FST which is the words prefixes dictionnary of the engine.
+    pub fn put_words_prefixes_fst<A: AsRef<[u8]>>(&self, wtxn: &mut RwTxn, fst: &fst::Set<A>) -> heed::Result<()> {
+        self.main.put::<_, Str, ByteSlice>(wtxn, WORDS_PREFIXES_FST_KEY, fst.as_fst().as_bytes())
+    }
+
+    /// Returns the FST which is the words prefixes dictionnary of the engine.
+    pub fn words_prefixes_fst<'t>(&self, rtxn: &'t RoTxn) -> anyhow::Result<fst::Set<Cow<'t, [u8]>>> {
+        match self.main.get::<_, Str, ByteSlice>(rtxn, WORDS_PREFIXES_FST_KEY)? {
+            Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
+            None => Ok(fst::Set::default().map_data(Cow::Owned)?),
+        }
+    }
+
+    /* documents */
 
     /// Returns a [`Vec`] of the requested documents. Returns an error if a document is missing.
     pub fn documents<'t>(

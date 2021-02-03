@@ -79,6 +79,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             env: _env,
             main: _main,
             word_docids,
+            word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
             facet_field_id_value_docids,

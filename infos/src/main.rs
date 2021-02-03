@@ -311,6 +311,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         env: _env,
         main,
         word_docids,
+        word_prefix_docids,
         docid_word_positions,
         word_pair_proximity_docids,
         facet_field_id_value_docids,
