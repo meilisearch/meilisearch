@@ -2,6 +2,7 @@ use std::fs::{create_dir_all, remove_dir_all};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use anyhow::bail;
 use chrono::{DateTime, Utc};
 use dashmap::{DashMap, mapref::entry::Entry};
 use heed::{Env, EnvOpenOptions, Database, types::{Str, SerdeJson, ByteSlice}, RoTxn, RwTxn};
@@ -141,7 +142,7 @@ impl IndexStore {
             Some(res) => Ok(res),
             None => {
                 let uuid = Uuid::new_v4();
-                let result = self.create_index(&mut txn, uuid, name, update_size, index_size)?;
+                let result = self.create_index_txn(&mut txn, uuid, name, update_size, index_size)?;
                 // If we fail to commit the transaction, we must delete the database from the
                 // file-system.
                 if let Err(e) = txn.commit() {
@@ -164,7 +165,7 @@ impl IndexStore {
         self.uuid_to_index.remove(&uuid);
     }
 
-    fn create_index( &self,
+    fn create_index_txn( &self,
         txn: &mut RwTxn,
         uuid: Uuid,
         name: impl AsRef<str>,
@@ -189,6 +190,30 @@ impl IndexStore {
         self.uuid_to_index.insert(uuid, (index.clone(), update_store.clone()));
 
         Ok((index, update_store))
+    }
+
+    /// Same a get or create, but returns an error if the index already exists.
+    pub fn create_index(
+        &self,
+        name: impl AsRef<str>,
+        update_size: u64,
+        index_size: u64,
+    ) -> anyhow::Result<(Arc<Index>, Arc<UpdateStore>)> {
+        let uuid = Uuid::new_v4();
+        let mut txn = self.env.write_txn()?;
+
+        if self.name_to_uuid_db.get(&txn, name.as_ref())?.is_some() {
+            bail!("cannot create index {:?}: an index with this name already exists.")
+        }
+
+        let result = self.create_index_txn(&mut txn, uuid, name, update_size, index_size)?;
+        // If we fail to commit the transaction, we must delete the database from the
+        // file-system.
+        if let Err(e) = txn.commit() {
+            self.clean_db(uuid);
+            return Err(e)?;
+        }
+        Ok(result)
     }
 
     /// Returns each index associated with it's metadata;
@@ -362,8 +387,8 @@ mod test {
             let index_size = 4096 * 100;
             let uuid = Uuid::new_v4();
             let mut txn = store.env.write_txn().unwrap();
-            store.create_index(&mut txn, uuid, name, update_size, index_size).unwrap();
-            let uuid = store.name_to_uuid_meta.get(&txn, &name).unwrap();
+            store.create_index_txn(&mut txn, uuid, name, update_size, index_size).unwrap();
+            let uuid = store.name_to_uuid.get(&txn, &name).unwrap();
             assert_eq!(store.uuid_to_index.len(), 1);
             assert!(uuid.is_some());
             let uuid = Uuid::from_slice(uuid.unwrap()).unwrap();

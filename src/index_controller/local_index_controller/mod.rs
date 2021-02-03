@@ -58,8 +58,9 @@ impl IndexController for LocalIndexController {
         Ok(pending.into())
     }
 
-    fn create_index<S: AsRef<str>>(&self, _index_uid: S) -> anyhow::Result<()> {
-        todo!()
+    fn create_index<S: AsRef<str>>(&self, index_uid: S) -> anyhow::Result<()> {
+        self.indexes.create_index(index_uid, self.update_db_size, self.index_db_size)?;
+        Ok(())
     }
 
     fn delete_index<S: AsRef<str>>(&self, _index_uid: S) -> anyhow::Result<()> {
