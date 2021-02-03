@@ -19,19 +19,20 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(get_all_updates_status);
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct IndexResponse {
-    pub name: String,
-    pub uid: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    pub primary_key: Option<String>,
-}
 
 #[get("/indexes", wrap = "Authentication::Private")]
-async fn list_indexes(_data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    todo!()
+async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
+    match data.list_indexes() {
+        Ok(indexes) => {
+            let json = serde_json::to_string(&indexes).unwrap();
+            Ok(HttpResponse::Ok().body(&json))
+        }
+        Err(e) => {
+            error!("error listing indexes: {}", e);
+            unimplemented!()
+        }
+    }
+
 }
 
 #[get("/indexes/{index_uid}", wrap = "Authentication::Private")]

@@ -134,6 +134,13 @@ impl<M, N, E> UpdateStatus<M, N, E> {
             UpdateStatus::Failed(u) => u.id(),
         }
     }
+
+    pub fn processed(&self) -> Option<&Processed<M, N>> {
+        match self {
+            UpdateStatus::Processed(p) => Some(p),
+            _ => None,
+        }
+    }
 }
 
 impl<M, N, E> From<Pending<M>> for UpdateStatus<M, N, E> {

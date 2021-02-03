@@ -8,13 +8,25 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use milli::Index;
 use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
 use serde::{Serialize, Deserialize, de::Deserializer};
+use uuid::Uuid;
 
 pub use updates::{Processed, Processing, Failed};
 
 pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexMetadata {
+    pub name: String,
+    uuid: Uuid,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    pub primary_key: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -140,4 +152,6 @@ pub trait IndexController {
 
     fn update_status(&self, index: impl AsRef<str>, id: u64) -> anyhow::Result<Option<UpdateStatus>>;
     fn all_update_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>>;
+
+    fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>>;
 }

@@ -13,7 +13,7 @@ use crate::option::IndexerOpts;
 use index_store::IndexStore;
 use super::IndexController;
 use super::updates::UpdateStatus;
-use super::{UpdateMeta, UpdateResult};
+use super::{UpdateMeta, UpdateResult, IndexMetadata};
 
 pub struct LocalIndexController {
     indexes: IndexStore,
@@ -101,5 +101,30 @@ impl IndexController for LocalIndexController {
             None => bail!("index {} doesn't exist.", index.as_ref()),
         }
 
+    }
+
+    fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
+        let metas = self.indexes.list_indexes()?;
+        let mut output_meta = Vec::new();
+        for (name, meta) in metas {
+            let created_at = meta.created_at;
+            let uuid = meta.uuid;
+            let updated_at = self
+                .all_update_status(&name)?
+                .iter()
+                .filter_map(|u| u.processed().map(|u| u.processed_at))
+                .max()
+                .unwrap_or(created_at);
+
+            let index_meta = IndexMetadata {
+                name,
+                created_at,
+                updated_at,
+                uuid,
+                primary_key: None,
+            };
+            output_meta.push(index_meta);
+        }
+        Ok(output_meta)
     }
 }
