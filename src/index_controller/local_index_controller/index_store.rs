@@ -20,8 +20,8 @@ type UpdateStore = super::update_store::UpdateStore<UpdateMeta, UpdateResult, St
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct IndexMeta {
-    update_size: u64,
-    index_size: u64,
+    update_store_size: u64,
+    index_store_size: u64,
     pub uuid: Uuid,
     pub created_at: DateTime<Utc>,
 }
@@ -54,9 +54,9 @@ impl IndexMeta {
 
 pub struct IndexStore {
     env: Env,
-    name_to_uuid_meta: Database<Str, ByteSlice>,
+    name_to_uuid: Database<Str, ByteSlice>,
     uuid_to_index: DashMap<Uuid, (Arc<Index>, Arc<UpdateStore>)>,
-    uuid_to_index_db: Database<ByteSlice, SerdeJson<IndexMeta>>,
+    uuid_to_index_meta: Database<ByteSlice, SerdeJson<IndexMeta>>,
 
     thread_pool: Arc<ThreadPool>,
     indexer_options: IndexerOpts,
@@ -69,9 +69,9 @@ impl IndexStore {
             .max_dbs(2)
             .open(path)?;
 
-        let uid_to_index = DashMap::new();
-        let name_to_uid_db = open_or_create_database(&env, Some("name_to_uid"))?;
-        let uid_to_index_db = open_or_create_database(&env, Some("uid_to_index_db"))?;
+        let uuid_to_index = DashMap::new();
+        let name_to_uuid = open_or_create_database(&env, Some("name_to_uid"))?;
+        let uuid_to_index_meta = open_or_create_database(&env, Some("uid_to_index_db"))?;
 
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(indexer_options.indexing_jobs.unwrap_or(0))
@@ -80,9 +80,9 @@ impl IndexStore {
 
         Ok(Self {
             env,
-            name_to_uuid_meta: name_to_uid_db,
-            uuid_to_index: uid_to_index,
-            uuid_to_index_db: uid_to_index_db,
+            name_to_uuid,
+            uuid_to_index,
+            uuid_to_index_meta,
 
             thread_pool,
             indexer_options,
@@ -90,7 +90,7 @@ impl IndexStore {
     }
 
     fn index_uuid(&self, txn: &RoTxn, name: impl AsRef<str>) -> anyhow::Result<Option<Uuid>> {
-        match self.name_to_uuid_meta.get(txn, name.as_ref())? {
+        match self.name_to_uuid.get(txn, name.as_ref())? {
             Some(bytes) => {
                 let uuid = Uuid::from_slice(bytes)?;
                 Ok(Some(uuid))
@@ -102,7 +102,7 @@ impl IndexStore {
     fn retrieve_index(&self, txn: &RoTxn, uid: Uuid) -> anyhow::Result<Option<(Arc<Index>, Arc<UpdateStore>)>> {
         match self.uuid_to_index.entry(uid.clone()) {
             Entry::Vacant(entry) => {
-                match self.uuid_to_index_db.get(txn, uid.as_bytes())? {
+                match self.uuid_to_index_meta.get(txn, uid.as_bytes())? {
                     Some(meta) => {
                         let path = self.env.path();
                         let (index, updates) = meta.open(path, self.thread_pool.clone(), &self.indexer_options)?;
@@ -169,14 +169,14 @@ impl IndexStore {
         txn: &mut RwTxn,
         uuid: Uuid,
         name: impl AsRef<str>,
-        update_size: u64,
-        index_size: u64,
+        update_store_size: u64,
+        index_store_size: u64,
     ) -> anyhow::Result<(Arc<Index>, Arc<UpdateStore>)> {
         let created_at = Utc::now();
-        let meta = IndexMeta { update_size, index_size, uuid: uuid.clone(), created_at };
+        let meta = IndexMeta { update_store_size, index_store_size, uuid: uuid.clone(), created_at };
 
-        self.name_to_uuid_meta.put(txn, name.as_ref(), uuid.as_bytes())?;
-        self.uuid_to_index_db.put(txn, uuid.as_bytes(), &meta)?;
+        self.name_to_uuid.put(txn, name.as_ref(), uuid.as_bytes())?;
+        self.uuid_to_index_meta.put(txn, uuid.as_bytes(), &meta)?;
 
         let path = self.env.path();
         let (index, update_store) = match meta.open(path, self.thread_pool.clone(), &self.indexer_options) {
@@ -202,7 +202,7 @@ impl IndexStore {
         let uuid = Uuid::new_v4();
         let mut txn = self.env.write_txn()?;
 
-        if self.name_to_uuid_db.get(&txn, name.as_ref())?.is_some() {
+        if self.name_to_uuid.get(&txn, name.as_ref())?.is_some() {
             bail!("cannot create index {:?}: an index with this name already exists.")
         }
 
@@ -219,7 +219,7 @@ impl IndexStore {
     /// Returns each index associated with it's metadata;
     pub fn list_indexes(&self) -> anyhow::Result<Vec<(String, IndexMeta)>> {
         let txn = self.env.read_txn()?;
-        let indexes = self.name_to_uuid_db
+        let indexes = self.name_to_uuid
             .iter(&txn)?
             .filter_map(|entry| entry
                 .map_err(|e| {
@@ -228,7 +228,7 @@ impl IndexStore {
                 })
                 .ok())
             .map(|(name, uuid)| {
-                let meta = self.uuid_to_index_db
+                let meta = self.uuid_to_index_meta
                     .get(&txn, &uuid)
                     .ok()
                     .flatten()
@@ -299,7 +299,7 @@ mod test {
             // insert an uuid in the the name_to_uuid_db:
             let uuid = Uuid::new_v4();
             let mut txn = store.env.write_txn().unwrap();
-            store.name_to_uuid_meta.put(&mut txn, &name, uuid.as_bytes()).unwrap();
+            store.name_to_uuid.put(&mut txn, &name, uuid.as_bytes()).unwrap();
             txn.commit().unwrap();
 
             // check that the uuid is there
@@ -317,13 +317,13 @@ mod test {
             assert!(store.retrieve_index(&txn, uuid).unwrap().is_none());
 
             let meta = IndexMeta {
-                update_size: 4096 * 100,
-                index_size: 4096 * 100,
+                update_store_size: 4096 * 100,
+                index_store_size: 4096 * 100,
                 uuid: uuid.clone(),
                 created_at: Utc::now(),
             };
             let mut txn = store.env.write_txn().unwrap();
-            store.uuid_to_index_db.put(&mut txn, uuid.as_bytes(), &meta).unwrap();
+            store.uuid_to_index_meta.put(&mut txn, uuid.as_bytes(), &meta).unwrap();
             txn.commit().unwrap();
 
             // the index cache should be empty
@@ -344,14 +344,14 @@ mod test {
 
             let uuid = Uuid::new_v4();
             let meta = IndexMeta {
-                update_size: 4096 * 100,
-                index_size: 4096 * 100,
+                update_store_size: 4096 * 100,
+                index_store_size: 4096 * 100,
                 uuid: uuid.clone(),
                 created_at: Utc::now(),
             };
             let mut txn = store.env.write_txn().unwrap();
-            store.name_to_uuid_meta.put(&mut txn, &name, uuid.as_bytes()).unwrap();
-            store.uuid_to_index_db.put(&mut txn, uuid.as_bytes(), &meta).unwrap();
+            store.name_to_uuid.put(&mut txn, &name, uuid.as_bytes()).unwrap();
+            store.uuid_to_index_meta.put(&mut txn, uuid.as_bytes(), &meta).unwrap();
             txn.commit().unwrap();
 
             assert!(store.index(&name).unwrap().is_some());
@@ -363,17 +363,17 @@ mod test {
             let store = IndexStore::new(temp, IndexerOpts::default()).unwrap();
             let name = "foobar";
 
-            let update_size = 4096 * 100;
-            let index_size = 4096 * 100;
-            store.get_or_create_index(&name, update_size, index_size).unwrap();
+            let update_store_size = 4096 * 100;
+            let index_store_size = 4096 * 100;
+            store.get_or_create_index(&name, update_store_size, index_store_size).unwrap();
             let txn = store.env.read_txn().unwrap();
-            let  uuid = store.name_to_uuid_meta.get(&txn, &name).unwrap();
+            let  uuid = store.name_to_uuid.get(&txn, &name).unwrap();
             assert_eq!(store.uuid_to_index.len(), 1);
             assert!(uuid.is_some());
             let uuid = Uuid::from_slice(uuid.unwrap()).unwrap();
-            let meta = store.uuid_to_index_db.get(&txn, uuid.as_bytes()).unwrap().unwrap();
-            assert_eq!(meta.update_size, update_size);
-            assert_eq!(meta.index_size, index_size);
+            let meta = store.uuid_to_index_meta.get(&txn, uuid.as_bytes()).unwrap().unwrap();
+            assert_eq!(meta.update_store_size, update_store_size);
+            assert_eq!(meta.index_store_size, index_store_size);
             assert_eq!(meta.uuid, uuid);
         }
 
@@ -383,18 +383,18 @@ mod test {
             let store = IndexStore::new(temp, IndexerOpts::default()).unwrap();
             let name = "foobar";
 
-            let update_size = 4096 * 100;
-            let index_size = 4096 * 100;
+            let update_store_size = 4096 * 100;
+            let index_store_size = 4096 * 100;
             let uuid = Uuid::new_v4();
             let mut txn = store.env.write_txn().unwrap();
-            store.create_index_txn(&mut txn, uuid, name, update_size, index_size).unwrap();
+            store.create_index_txn(&mut txn, uuid, name, update_store_size, index_store_size).unwrap();
             let uuid = store.name_to_uuid.get(&txn, &name).unwrap();
             assert_eq!(store.uuid_to_index.len(), 1);
             assert!(uuid.is_some());
             let uuid = Uuid::from_slice(uuid.unwrap()).unwrap();
-            let meta = store.uuid_to_index_db.get(&txn, uuid.as_bytes()).unwrap().unwrap();
-            assert_eq!(meta.update_size, update_size);
-            assert_eq!(meta.index_size, index_size);
+            let meta = store.uuid_to_index_meta.get(&txn, uuid.as_bytes()).unwrap().unwrap();
+            assert_eq!(meta.update_store_size, update_store_size);
+            assert_eq!(meta.index_store_size, index_store_size);
             assert_eq!(meta.uuid, uuid);
         }
     }
