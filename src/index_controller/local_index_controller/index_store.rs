@@ -192,7 +192,7 @@ impl IndexStore {
         Ok((index, update_store))
     }
 
-    /// Same a get or create, but returns an error if the index already exists.
+    /// Same as `get_or_create`, but returns an error if the index already exists.
     pub fn create_index(
         &self,
         name: impl AsRef<str>,
@@ -219,23 +219,17 @@ impl IndexStore {
     /// Returns each index associated with it's metadata;
     pub fn list_indexes(&self) -> anyhow::Result<Vec<(String, IndexMeta)>> {
         let txn = self.env.read_txn()?;
-        let indexes = self.name_to_uuid
+        let metas = self.name_to_uuid
             .iter(&txn)?
             .filter_map(|entry| entry
-                .map_err(|e| {
-                    error!("error decoding entry while listing indexes: {}", e);
-                    e
-                })
-                .ok())
-            .map(|(name, uuid)| {
-                let meta = self.uuid_to_index_meta
-                    .get(&txn, &uuid)
-                    .ok()
-                    .flatten()
-                    .unwrap_or_else(|| panic!("corrupted database, index {} should exist.", name));
-                (name.to_owned(), meta)
-            })
-            .collect();
+                .map_err(|e| { error!("error decoding entry while listing indexes: {}", e); e }).ok());
+        let mut indexes = Vec::new();
+        for (name, uuid) in metas {
+            let meta = self.uuid_to_index_meta
+                .get(&txn, &uuid)?
+                .unwrap_or_else(|| panic!("corrupted database, index {} should exist.", name));
+            indexes.push((name.to_owned(), meta));
+        }
         Ok(indexes)
     }
 }

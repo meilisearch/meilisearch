@@ -25,7 +25,7 @@ pub struct IndexMetadata {
     uuid: Uuid,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
-    pub primary_key: Option<String>,
+    primary_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
