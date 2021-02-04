@@ -51,7 +51,7 @@ impl SearchQuery {
 
         if let Some(ref condition) = self.facet_condition {
             if !condition.trim().is_empty() {
-                let condition = FacetCondition::from_str(&rtxn, &index, &condition).unwrap();
+                let condition = FacetCondition::from_str(&rtxn, &index, &condition)?;
                 search.facet_condition(condition);
             }
         }

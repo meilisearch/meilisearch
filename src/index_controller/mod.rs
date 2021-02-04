@@ -16,7 +16,6 @@ pub use updates::{Processed, Processing, Failed};
 
 pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum UpdateMeta {

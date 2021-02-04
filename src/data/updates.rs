@@ -25,7 +25,9 @@ impl Data {
         let file = tokio::fs::File::from_std(file?);
         let mut encoder = GzipEncoder::new(file);
 
+        let mut empty_update = true;
         while let Some(result) = stream.next().await {
+            empty_update = false;
             let bytes = &*result?;
             encoder.write_all(&bytes[..]).await?;
         }
@@ -34,10 +36,19 @@ impl Data {
         let mut file = encoder.into_inner();
         file.sync_all().await?;
         let file = file.into_std().await;
-        let mmap = unsafe { memmap::Mmap::map(&file)? };
+
 
         let index_controller = self.index_controller.clone();
-        let update = tokio::task::spawn_blocking(move || index_controller.add_documents(index, method, format, &mmap[..])).await??;
+        let update = tokio::task::spawn_blocking(move ||{
+            let mmap;
+            let bytes = if empty_update {
+                &[][..]
+            } else {
+                mmap = unsafe { memmap::Mmap::map(&file)? };
+                &mmap
+            };
+            index_controller.add_documents(index, method, format, &bytes)
+        }).await??;
         Ok(update.into())
     }
 

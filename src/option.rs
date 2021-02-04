@@ -19,11 +19,11 @@ pub struct IndexerOpts {
     #[structopt(long, default_value = "100000")] // 100k
     pub log_every_n: usize,
 
-    /// MTBL max number of chunks in bytes.
+    /// Grenad max number of chunks in bytes.
     #[structopt(long)]
     pub max_nb_chunks: Option<usize>,
 
-    /// The maximum amount of memory to use for the MTBL buffer. It is recommended
+    /// The maximum amount of memory to use for the Grenad buffer. It is recommended
     /// to use something like 80%-90% of the available memory.
     ///
     /// It is automatically split by the number of jobs e.g. if you use 7 jobs
@@ -37,7 +37,7 @@ pub struct IndexerOpts {
     pub linked_hash_map_size: usize,
 
     /// The name of the compression algorithm to use when compressing intermediate
-    /// chunks during indexing documents.
+    /// Grenad chunks while indexing documents.
     ///
     /// Choosing a fast algorithm will make the indexing faster but may consume more memory.
     #[structopt(long, default_value = "snappy", possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"])]
@@ -55,7 +55,7 @@ pub struct IndexerOpts {
     #[structopt(long, default_value = "4 GiB")]
     pub chunk_fusing_shrink_size: Byte,
 
-    /// Enable the chunk fusing or not, this reduces the amount of disk used by a factor of 2.
+    /// Enable the chunk fusing or not, this reduces the amount of disk space used.
     #[structopt(long)]
     pub enable_chunk_fusing: bool,
 
@@ -68,13 +68,13 @@ pub struct IndexerOpts {
 impl Default for IndexerOpts {
     fn default() -> Self {
         Self {
-            log_every_n: 0,
+            log_every_n: 100_000,
             max_nb_chunks: None,
-            max_memory: Byte::from_str("0Kb").unwrap(),
-            linked_hash_map_size: 0,
+            max_memory: Byte::from_str("1GiB").unwrap(),
+            linked_hash_map_size: 500,
             chunk_compression_type: CompressionType::None,
             chunk_compression_level: None,
-            chunk_fusing_shrink_size: Byte::from_str("0Kb").unwrap(),
+            chunk_fusing_shrink_size: Byte::from_str("4GiB").unwrap(),
             enable_chunk_fusing: false,
             indexing_jobs: None,
         }
