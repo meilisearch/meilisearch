@@ -83,15 +83,6 @@ async fn get_all_documents(
     todo!()
 }
 
-//fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
-    //for key in document.keys() {
-        //if key.to_lowercase().contains("id") {
-            //return Some(key.to_string());
-        //}
-    //}
-    //None
-//}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateDocumentsQuery {
@@ -150,6 +141,7 @@ async fn add_documents_default(
     _params: web::Query<UpdateDocumentsQuery>,
     _body: web::Json<Vec<Document>>,
 ) -> Result<HttpResponse, ResponseError> {
+    error!("Unknown document type");
     todo!()
 }
 

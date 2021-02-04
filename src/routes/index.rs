@@ -37,10 +37,18 @@ async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseErr
 
 #[get("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn get_index(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    match data.index(&path.index_uid)? {
+        Some(meta) => {
+            let json = serde_json::to_string(&meta).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        None => {
+            unimplemented!()
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

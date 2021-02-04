@@ -118,6 +118,13 @@ impl Data {
         self.index_controller.list_indexes()
     }
 
+    pub fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<IndexMetadata>> {
+        Ok(self
+            .list_indexes()?
+            .into_iter()
+            .find(|i| i.name == name.as_ref()))
+    }
+
     #[inline]
     pub fn http_payload_size_limit(&self) -> usize {
         self.options.http_payload_size_limit.get_bytes() as usize

@@ -28,6 +28,13 @@ impl fmt::Display for ResponseError {
     }
 }
 
+// TODO: remove this when implementing actual error handling
+impl From<anyhow::Error> for ResponseError {
+    fn from(other: anyhow::Error) -> ResponseError {
+        ResponseError { inner: Box::new(Error::NotFound(other.to_string())) }
+    }
+}
+
 impl From<Error> for ResponseError {
     fn from(error: Error) -> ResponseError {
         ResponseError { inner: Box::new(error) }
