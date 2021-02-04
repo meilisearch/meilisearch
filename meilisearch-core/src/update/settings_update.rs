@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::{BTreeMap, BTreeSet}};
 
 use heed::Result as ZResult;
-use fst::{set::OpBuilder, SetBuilder};
+use fst::{SetBuilder, set::OpBuilder};
 use sdset::SetBuf;
 use meilisearch_schema::Schema;
 use meilisearch_tokenizer::analyzer::{Analyzer, AnalyzerConfig};
@@ -298,16 +298,23 @@ pub fn apply_synonyms_update(
             .tokens()
             .fold(String::new(), |s, t| s + t.text())
     }
+    
+    // normalize synonyms and reorder them creating a BTreeMap
+    let synonyms: BTreeMap<String, Vec<String>> = synonyms.into_iter().map( |(word, alternatives)| {
+        let word = normalize(&analyzer, &word);
+        let alternatives = alternatives.into_iter().map(|text| normalize(&analyzer, &text)).collect();
 
+        (word, alternatives)
+    }).collect();
+
+    // index synonyms,
+    // synyonyms have to be ordered by key before indexation
     let mut synonyms_builder = SetBuilder::memory();
     synonyms_store.clear(writer)?;
     for (word, alternatives) in synonyms {
-        let word = normalize(&analyzer, &word);
-
         synonyms_builder.insert(&word)?;
 
         let alternatives = {
-            let alternatives = alternatives.iter().map(|text| normalize(&analyzer, &text)).collect();
             let alternatives = SetBuf::from_dirty(alternatives);
             let mut alternatives_builder = SetBuilder::memory();
             alternatives_builder.extend_iter(alternatives)?;
