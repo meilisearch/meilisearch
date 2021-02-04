@@ -118,7 +118,7 @@ async fn get_update_status(
         Err(e) => {
             error!("{}", e);
             todo!()
-        } 
+        }
     }
 }
 
@@ -136,6 +136,6 @@ async fn get_all_updates_status(
         Err(e) => {
             error!("{}", e);
             todo!()
-        } 
+        }
     }
 }

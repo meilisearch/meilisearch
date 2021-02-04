@@ -1,39 +1,98 @@
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::mem;
 use std::time::Instant;
 
-use serde_json::{Value, Map};
-use serde::{Deserialize, Serialize};
-use milli::{SearchResult as Results, obkv_to_json};
+use anyhow::bail;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
+use milli::{Index, obkv_to_json, FacetCondition};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, Map};
 
+use crate::index_controller::IndexController;
 use super::Data;
 
 const DEFAULT_SEARCH_LIMIT: usize = 20;
+
+const fn default_search_limit() -> usize { DEFAULT_SEARCH_LIMIT }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[allow(dead_code)]
 pub struct SearchQuery {
-    q: Option<String>,
-    offset: Option<usize>,
-    limit: Option<usize>,
-    attributes_to_retrieve: Option<Vec<String>>,
-    attributes_to_crop: Option<Vec<String>>,
-    crop_length: Option<usize>,
-    attributes_to_highlight: Option<Vec<String>>,
-    filters: Option<String>,
-    matches: Option<bool>,
-    facet_filters: Option<Value>,
-    facets_distribution: Option<Vec<String>>,
+    pub q: Option<String>,
+    pub offset: Option<usize>,
+    #[serde(default = "default_search_limit")]
+    pub limit: usize,
+    pub attributes_to_retrieve: Option<Vec<String>>,
+    pub attributes_to_crop: Option<Vec<String>>,
+    pub crop_length: Option<usize>,
+    pub attributes_to_highlight: Option<HashSet<String>>,
+    pub filters: Option<String>,
+    pub matches: Option<bool>,
+    pub facet_filters: Option<Value>,
+    pub facets_distribution: Option<Vec<String>>,
+    pub facet_condition: Option<String>,
+}
+
+impl SearchQuery {
+    pub fn perform(&self, index: impl AsRef<Index>) -> anyhow::Result<SearchResult>{
+        let index = index.as_ref();
+        let before_search = Instant::now();
+        let rtxn = index.read_txn().unwrap();
+
+        let mut search = index.search(&rtxn);
+
+        if let Some(ref query) = self.q {
+            search.query(query);
+        }
+
+        search.limit(self.limit);
+        search.offset(self.offset.unwrap_or_default());
+
+        if let Some(ref condition) = self.facet_condition {
+            if !condition.trim().is_empty() {
+                let condition = FacetCondition::from_str(&rtxn, &index, &condition)?;
+                search.facet_condition(condition);
+            }
+        }
+
+        let milli::SearchResult { documents_ids, found_words, candidates } = search.execute()?;
+
+        let mut documents = Vec::new();
+        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+        let displayed_fields = match index.displayed_fields_ids(&rtxn).unwrap() {
+            Some(fields) => fields,
+            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
+        };
+
+        let stop_words = fst::Set::default();
+        let highlighter = Highlighter::new(&stop_words);
+
+        for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
+            let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
+            if let Some(ref attributes_to_highlight) = self.attributes_to_highlight {
+                highlighter.highlight_record(&mut object, &found_words, attributes_to_highlight);
+            }
+            documents.push(object);
+        }
+
+        Ok(SearchResult {
+            hits: documents,
+            nb_hits: candidates.len(),
+            query: self.q.clone().unwrap_or_default(),
+            limit: self.limit,
+            offset: self.offset.unwrap_or_default(),
+            processing_time_ms: before_search.elapsed().as_millis(),
+        })
+    }
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     hits: Vec<Map<String, Value>>,
-    nb_hits: usize,
+    nb_hits: u64,
     query: String,
     limit: usize,
     offset: usize,
@@ -100,57 +159,10 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
 }
 
 impl Data {
-        pub fn search<S: AsRef<str>>(&self, _index: S, search_query: SearchQuery) -> anyhow::Result<SearchResult> {
-        let start =  Instant::now();
-        let index = &self.indexes;
-        let rtxn = index.read_txn()?;
-
-        let mut search = index.search(&rtxn);
-        if let Some(query) = &search_query.q {
-            search.query(query);
+    pub fn search<S: AsRef<str>>(&self, index: S, search_query: SearchQuery) -> anyhow::Result<SearchResult> {
+        match self.index_controller.index(&index)? {
+            Some(index) => Ok(search_query.perform(index)?),
+            None => bail!("index {:?} doesn't exists", index.as_ref()),
         }
-
-        if let Some(offset) = search_query.offset {
-            search.offset(offset);
-        }
-
-        let limit = search_query.limit.unwrap_or(DEFAULT_SEARCH_LIMIT);
-            search.limit(limit);
-
-        let Results { found_words, documents_ids, nb_hits, .. } = search.execute().unwrap();
-
-        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
-
-        let displayed_fields = match index.displayed_fields(&rtxn).unwrap() {
-            Some(fields) => Cow::Borrowed(fields),
-            None => Cow::Owned(fields_ids_map.iter().map(|(id, _)| id).collect()),
-        };
-
-        let attributes_to_highlight = match search_query.attributes_to_highlight {
-            Some(fields) => fields.iter().map(ToOwned::to_owned).collect(),
-            None => HashSet::new(),
-        };
-
-        let stop_words = fst::Set::default();
-        let highlighter = Highlighter::new(&stop_words);
-        let mut documents = Vec::new();
-        for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
-            let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
-            highlighter.highlight_record(&mut object, &found_words, &attributes_to_highlight);
-            documents.push(object);
-        }
-
-        let processing_time_ms = start.elapsed().as_millis();
-
-        let result = SearchResult {
-            hits: documents,
-            nb_hits,
-            query: search_query.q.unwrap_or_default(),
-            offset: search_query.offset.unwrap_or(0),
-            limit,
-            processing_time_ms,
-        };
-
-        Ok(result)
     }
 }

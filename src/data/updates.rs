@@ -1,32 +1,33 @@
 use std::ops::Deref;
 
+use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use async_compression::tokio_02::write::GzipEncoder;
 use futures_util::stream::StreamExt;
 use tokio::io::AsyncWriteExt;
-use milli::update::{IndexDocumentsMethod, UpdateFormat};
-use milli::update_store::UpdateStatus;
 
 use super::Data;
-use crate::updates::{UpdateMeta, UpdateResult, UpdateStatusResponse, Settings};
+use crate::index_controller::{IndexController, Settings};
+use crate::index_controller::UpdateStatus;
 
 impl Data {
-        pub async fn add_documents<B, E, S>(
+    pub async fn add_documents<B, E>(
         &self,
-        _index: S,
+        index: impl AsRef<str> + Send + Sync + 'static,
         method: IndexDocumentsMethod,
         format: UpdateFormat,
         mut stream: impl futures::Stream<Item=Result<B, E>> + Unpin,
-    ) -> anyhow::Result<UpdateStatusResponse>
+    ) -> anyhow::Result<UpdateStatus>
     where
         B: Deref<Target = [u8]>,
         E: std::error::Error + Send + Sync + 'static,
-        S: AsRef<str>,
     {
         let file = tokio::task::spawn_blocking(tempfile::tempfile).await?;
         let file = tokio::fs::File::from_std(file?);
         let mut encoder = GzipEncoder::new(file);
 
+        let mut empty_update = true;
         while let Some(result) = stream.next().await {
+            empty_update = false;
             let bytes = &*result?;
             encoder.write_all(&bytes[..]).await?;
         }
@@ -35,45 +36,38 @@ impl Data {
         let mut file = encoder.into_inner();
         file.sync_all().await?;
         let file = file.into_std().await;
-        let mmap = unsafe { memmap::Mmap::map(&file)? };
 
-        let meta = UpdateMeta::DocumentsAddition { method, format };
 
-        let queue = self.update_queue.clone();
-        let update = tokio::task::spawn_blocking(move || queue.register_update(meta, &mmap[..])).await??;
-
+        let index_controller = self.index_controller.clone();
+        let update = tokio::task::spawn_blocking(move ||{
+            let mmap;
+            let bytes = if empty_update {
+                &[][..]
+            } else {
+                mmap = unsafe { memmap::Mmap::map(&file)? };
+                &mmap
+            };
+            index_controller.add_documents(index, method, format, &bytes)
+        }).await??;
         Ok(update.into())
     }
 
-    pub async fn update_settings<S: AsRef<str>>(
+    pub async fn update_settings(
         &self,
-        _index: S,
+        index: impl AsRef<str> + Send + Sync + 'static,
         settings: Settings
-    ) -> anyhow::Result<UpdateStatusResponse> {
-        let meta = UpdateMeta::Settings(settings);
-        let queue = self.update_queue.clone();
-        let update = tokio::task::spawn_blocking(move || queue.register_update(meta, &[])).await??;
+    ) -> anyhow::Result<UpdateStatus> {
+        let index_controller = self.index_controller.clone();
+        let update = tokio::task::spawn_blocking(move || index_controller.update_settings(index, settings)).await??;
         Ok(update.into())
     }
 
     #[inline]
-    pub fn get_update_status(&self, _index: &str, uid: u64) -> anyhow::Result<Option<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
-        self.update_queue.get_update_status(uid)
+    pub fn get_update_status(&self, index: impl AsRef<str>, uid: u64) -> anyhow::Result<Option<UpdateStatus>> {
+        self.index_controller.update_status(index, uid)
     }
 
-    pub fn get_updates_status(&self, _index: &str) -> anyhow::Result<Vec<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
-        let result = self.update_queue.iter_metas(|processing, processed, pending, aborted, failed| {
-            let mut metas = processing
-            .map(UpdateStatus::from)
-            .into_iter()
-            .chain(processed.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
-            .chain(pending.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
-            .chain(aborted.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
-            .chain(failed.filter_map(|i| Some(i.ok()?.1)).map(UpdateStatus::from))
-            .collect::<Vec<_>>();
-            metas.sort_by(|a, b| a.id().cmp(&b.id()));
-            Ok(metas)
-        })?;
-        Ok(result)
+    pub fn get_updates_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>> {
+        self.index_controller.all_update_status(index)
     }
 }

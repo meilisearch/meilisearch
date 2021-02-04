@@ -9,9 +9,77 @@ use rustls::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
     RootCertStore,
 };
+use grenad::CompressionType;
 use structopt::StructOpt;
 
-use crate::updates::IndexerOpts;
+#[derive(Debug, Clone, StructOpt)]
+pub struct IndexerOpts {
+    /// The amount of documents to skip before printing
+    /// a log regarding the indexing advancement.
+    #[structopt(long, default_value = "100000")] // 100k
+    pub log_every_n: usize,
+
+    /// Grenad max number of chunks in bytes.
+    #[structopt(long)]
+    pub max_nb_chunks: Option<usize>,
+
+    /// The maximum amount of memory to use for the Grenad buffer. It is recommended
+    /// to use something like 80%-90% of the available memory.
+    ///
+    /// It is automatically split by the number of jobs e.g. if you use 7 jobs
+    /// and 7 GB of max memory, each thread will use a maximum of 1 GB.
+    #[structopt(long, default_value = "7 GiB")]
+    pub max_memory: Byte,
+
+    /// Size of the linked hash map cache when indexing.
+    /// The bigger it is, the faster the indexing is but the more memory it takes.
+    #[structopt(long, default_value = "500")]
+    pub linked_hash_map_size: usize,
+
+    /// The name of the compression algorithm to use when compressing intermediate
+    /// Grenad chunks while indexing documents.
+    ///
+    /// Choosing a fast algorithm will make the indexing faster but may consume more memory.
+    #[structopt(long, default_value = "snappy", possible_values = &["snappy", "zlib", "lz4", "lz4hc", "zstd"])]
+    pub chunk_compression_type: CompressionType,
+
+    /// The level of compression of the chosen algorithm.
+    #[structopt(long, requires = "chunk-compression-type")]
+    pub chunk_compression_level: Option<u32>,
+
+    /// The number of bytes to remove from the begining of the chunks while reading/sorting
+    /// or merging them.
+    ///
+    /// File fusing must only be enable on file systems that support the `FALLOC_FL_COLLAPSE_RANGE`,
+    /// (i.e. ext4 and XFS). File fusing will only work if the `enable-chunk-fusing` is set.
+    #[structopt(long, default_value = "4 GiB")]
+    pub chunk_fusing_shrink_size: Byte,
+
+    /// Enable the chunk fusing or not, this reduces the amount of disk space used.
+    #[structopt(long)]
+    pub enable_chunk_fusing: bool,
+
+    /// Number of parallel jobs for indexing, defaults to # of CPUs.
+    #[structopt(long)]
+    pub indexing_jobs: Option<usize>,
+}
+
+#[cfg(test)]
+impl Default for IndexerOpts {
+    fn default() -> Self {
+        Self {
+            log_every_n: 100_000,
+            max_nb_chunks: None,
+            max_memory: Byte::from_str("1GiB").unwrap(),
+            linked_hash_map_size: 500,
+            chunk_compression_type: CompressionType::None,
+            chunk_compression_level: None,
+            chunk_fusing_shrink_size: Byte::from_str("4GiB").unwrap(),
+            enable_chunk_fusing: false,
+            indexing_jobs: None,
+        }
+    }
+}
 
 const POSSIBLE_ENV: [&str; 2] = ["development", "production"];
 

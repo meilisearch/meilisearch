@@ -5,10 +5,7 @@ pub mod error;
 pub mod helpers;
 pub mod option;
 pub mod routes;
-mod updates;
-//pub mod analytics;
-//pub mod snapshot;
-//pub mod dump;
+mod index_controller;
 
 use actix_http::Error;
 use actix_service::ServiceFactory;

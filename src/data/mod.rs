@@ -3,16 +3,14 @@ mod updates;
 
 pub use search::{SearchQuery, SearchResult};
 
-use std::collections::HashMap;
 use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use milli::Index;
 use sha2::Digest;
 
-use crate::{option::Opt, updates::Settings};
-use crate::updates::UpdateQueue;
+use crate::index_controller::{IndexController, LocalIndexController};
+use crate::{option::Opt, index_controller::Settings};
 
 #[derive(Clone)]
 pub struct Data {
@@ -29,8 +27,7 @@ impl Deref for Data {
 
 #[derive(Clone)]
 pub struct DataInner {
-    pub indexes: Arc<Index>,
-    pub update_queue: Arc<UpdateQueue>,
+    pub index_controller: Arc<LocalIndexController>,
     api_keys: ApiKeys,
     options: Opt,
 }
@@ -61,13 +58,16 @@ impl ApiKeys {
 
 impl Data {
     pub fn new(options: Opt) -> anyhow::Result<Data> {
-        let db_size = options.max_mdb_size.get_bytes() as usize;
-        let path = options.db_path.join("main");
+        let path = options.db_path.clone();
+        let indexer_opts = options.indexer_options.clone();
         create_dir_all(&path)?;
-        let indexes = Index::new(&path, Some(db_size))?;
-        let indexes = Arc::new(indexes);
-
-        let update_queue = Arc::new(UpdateQueue::new(&options, indexes.clone())?);
+        let index_controller = LocalIndexController::new(
+            &path,
+            indexer_opts,
+            options.max_mdb_size.get_bytes(),
+            options.max_udb_size.get_bytes(),
+        )?;
+        let index_controller = Arc::new(index_controller);
 
         let mut api_keys = ApiKeys {
             master: options.clone().master_key,
@@ -77,41 +77,39 @@ impl Data {
 
         api_keys.generate_missing_api_keys();
 
-        let inner = DataInner { indexes, options, update_queue, api_keys };
+        let inner = DataInner { index_controller, options, api_keys };
         let inner = Arc::new(inner);
 
         Ok(Data { inner })
     }
 
-    pub fn settings<S: AsRef<str>>(&self, _index: S) -> anyhow::Result<Settings> {
-        let txn = self.indexes.env.read_txn()?;
-        let fields_map = self.indexes.fields_ids_map(&txn)?;
-        println!("fields_map: {:?}", fields_map);
+    pub fn settings<S: AsRef<str>>(&self, index_uid: S) -> anyhow::Result<Settings> {
+        let index = self.index_controller
+            .index(&index_uid)?
+            .ok_or_else(|| anyhow::anyhow!("Index {} does not exist.", index_uid.as_ref()))?;
 
-        let displayed_attributes = self.indexes
+        let txn = index.read_txn()?;
+
+        let displayed_attributes = index
             .displayed_fields(&txn)?
-            .map(|fields| {println!("{:?}", fields); fields.iter().filter_map(|f| fields_map.name(*f).map(String::from)).collect()})
+            .map(|fields| fields.into_iter().map(String::from).collect())
             .unwrap_or_else(|| vec!["*".to_string()]);
 
-        let searchable_attributes = self.indexes
+        let searchable_attributes = index
             .searchable_fields(&txn)?
-            .map(|fields| fields
-                .iter()
-                .filter_map(|f| fields_map.name(*f).map(String::from))
-                .collect())
+            .map(|fields| fields.into_iter().map(String::from).collect())
             .unwrap_or_else(|| vec!["*".to_string()]);
 
-        let faceted_attributes = self.indexes
+        let faceted_attributes = index
             .faceted_fields(&txn)?
-            .iter()
-            .filter_map(|(f, t)| Some((fields_map.name(*f)?.to_string(), t.to_string())))
-            .collect::<HashMap<_, _>>()
-            .into();
+            .into_iter()
+            .map(|(k, v)| (k, v.to_string()))
+            .collect();
 
         Ok(Settings {
             displayed_attributes: Some(Some(displayed_attributes)),
             searchable_attributes: Some(Some(searchable_attributes)),
-            faceted_attributes: Some(faceted_attributes),
+            faceted_attributes: Some(Some(faceted_attributes)),
             criteria: None,
         })
     }
