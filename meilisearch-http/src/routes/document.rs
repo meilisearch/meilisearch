@@ -175,7 +175,6 @@ async fn update_multiple_documents(
             .ok_or(meilisearch_core::Error::SchemaMissing)?;
 
         match (params.into_inner().primary_key, schema.primary_key()) {
-            (Some(_), Some(_)) => return Err(meilisearch_schema::Error::PrimaryKeyAlreadyPresent)?,
             (Some(key), None) => document_addition.set_primary_key(key),
             (None, None) => {
                 let key = body
@@ -184,7 +183,7 @@ async fn update_multiple_documents(
                     .ok_or(meilisearch_core::Error::MissingPrimaryKey)?;
                 document_addition.set_primary_key(key);
             }
-            (None, Some(_)) => ()
+            _ => ()
         }
 
         for document in body.into_inner() {
