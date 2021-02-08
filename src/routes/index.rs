@@ -54,17 +54,25 @@ async fn get_index(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct IndexCreateRequest {
-    name: Option<String>,
-    uid: Option<String>,
+    name: String,
     primary_key: Option<String>,
 }
 
 #[post("/indexes", wrap = "Authentication::Private")]
 async fn create_index(
-    _data: web::Data<Data>,
-    _body: web::Json<IndexCreateRequest>,
+    data: web::Data<Data>,
+    body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    match data.create_index(&body.name, body.primary_key.clone()) {
+        Ok(meta) => {
+            let json = serde_json::to_string(&meta).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            error!("error creating index: {}", e);
+            unimplemented!()
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

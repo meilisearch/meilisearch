@@ -125,6 +125,11 @@ impl Data {
             .find(|i| i.name == name.as_ref()))
     }
 
+    pub fn create_index(&self, name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
+        let meta = self.index_controller.create_index(name, primary_key)?;
+        Ok(meta)
+    }
+
     #[inline]
     pub fn http_payload_size_limit(&self) -> usize {
         self.options.http_payload_size_limit.get_bytes() as usize

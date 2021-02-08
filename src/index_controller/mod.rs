@@ -127,7 +127,7 @@ pub trait IndexController {
     fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings) -> anyhow::Result<UpdateStatus>;
 
     /// Create an index with the given `index_uid`.
-    fn create_index<S: AsRef<str>>(&self, index_uid: S) -> Result<()>;
+    fn create_index(&self, index_uid: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> Result<IndexMetadata>;
 
     /// Delete index with the given `index_uid`, attempting to close it beforehand.
     fn delete_index<S: AsRef<str>>(&self, index_uid: S) -> Result<()>;

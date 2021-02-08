@@ -2,7 +2,7 @@ use std::fs::{create_dir_all, remove_dir_all};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use chrono::{DateTime, Utc};
 use dashmap::{DashMap, mapref::entry::Entry};
 use heed::{Env, EnvOpenOptions, Database, types::{Str, SerdeJson, ByteSlice}, RoTxn, RwTxn};
@@ -142,14 +142,14 @@ impl IndexStore {
             Some(res) => Ok(res),
             None => {
                 let uuid = Uuid::new_v4();
-                let result = self.create_index_txn(&mut txn, uuid, name, update_size, index_size)?;
+                let (index, updates, _) = self.create_index_txn(&mut txn, uuid, name, update_size, index_size)?;
                 // If we fail to commit the transaction, we must delete the database from the
                 // file-system.
                 if let Err(e) = txn.commit() {
                     self.clean_db(uuid);
                     return Err(e)?;
                 }
-                Ok(result)
+                Ok((index, updates))
             },
         }
     }
@@ -171,7 +171,7 @@ impl IndexStore {
         name: impl AsRef<str>,
         update_store_size: u64,
         index_store_size: u64,
-    ) -> anyhow::Result<(Arc<Index>, Arc<UpdateStore>)> {
+    ) -> anyhow::Result<(Arc<Index>, Arc<UpdateStore>, IndexMeta)> {
         let created_at = Utc::now();
         let meta = IndexMeta { update_store_size, index_store_size, uuid: uuid.clone(), created_at };
 
@@ -189,7 +189,7 @@ impl IndexStore {
 
         self.uuid_to_index.insert(uuid, (index.clone(), update_store.clone()));
 
-        Ok((index, update_store))
+        Ok((index, update_store, meta))
     }
 
     /// Same as `get_or_create`, but returns an error if the index already exists.
@@ -198,7 +198,7 @@ impl IndexStore {
         name: impl AsRef<str>,
         update_size: u64,
         index_size: u64,
-    ) -> anyhow::Result<(Arc<Index>, Arc<UpdateStore>)> {
+    ) -> anyhow::Result<(Arc<Index>, Arc<UpdateStore>, IndexMeta)> {
         let uuid = Uuid::new_v4();
         let mut txn = self.env.write_txn()?;
 
@@ -216,8 +216,10 @@ impl IndexStore {
         Ok(result)
     }
 
-    /// Returns each index associated with it's metadata;
-    pub fn list_indexes(&self) -> anyhow::Result<Vec<(String, IndexMeta)>> {
+    /// Returns each index associated with its metadata:
+    /// (index_name, IndexMeta, primary_key)
+    /// This method will force all the indexes to be loaded.
+    pub fn list_indexes(&self) -> anyhow::Result<Vec<(String, IndexMeta, Option<String>)>> {
         let txn = self.env.read_txn()?;
         let metas = self.name_to_uuid
             .iter(&txn)?
@@ -225,10 +227,16 @@ impl IndexStore {
                 .map_err(|e| { error!("error decoding entry while listing indexes: {}", e); e }).ok());
         let mut indexes = Vec::new();
         for (name, uuid) in metas {
+            // get index to retrieve primary key
+            let (index, _) = self.get_index_txn(&txn, name)?
+                .with_context(|| format!("could not load index {:?}", name))?;
+            let primary_key = index.primary_key(&index.read_txn()?)?
+                .map(String::from);
+            // retieve meta
             let meta = self.uuid_to_index_meta
                 .get(&txn, &uuid)?
-                .unwrap_or_else(|| panic!("corrupted database, index {} should exist.", name));
-            indexes.push((name.to_owned(), meta));
+                .with_context(|| format!("could not retieve meta for index {:?}", name))?;
+            indexes.push((name.to_owned(), meta, primary_key));
         }
         Ok(indexes)
     }

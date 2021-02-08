@@ -5,7 +5,7 @@ mod update_handler;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use itertools::Itertools;
 use milli::Index;
 
@@ -58,9 +58,24 @@ impl IndexController for LocalIndexController {
         Ok(pending.into())
     }
 
-    fn create_index<S: AsRef<str>>(&self, index_uid: S) -> anyhow::Result<()> {
-        self.indexes.create_index(index_uid, self.update_db_size, self.index_db_size)?;
-        Ok(())
+    fn create_index(&self, index_name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
+        let (index, _, meta) = self.indexes.create_index(&index_name, self.update_db_size, self.index_db_size)?;
+        if let Some(ref primary_key) = primary_key {
+            if let Err(e) = update_primary_key(index, primary_key).context("error creating index") {
+                // TODO: creating index could not be completed, delete everything.
+                Err(e)?
+            }
+        }
+
+        let meta = IndexMetadata {
+            name: index_name.as_ref().to_owned(),
+            uuid: meta.uuid.clone(),
+            created_at: meta.created_at,
+            updated_at: meta.created_at,
+            primary_key: primary_key.map(|n| n.as_ref().to_owned()),
+        };
+
+        Ok(meta)
     }
 
     fn delete_index<S: AsRef<str>>(&self, _index_uid: S) -> anyhow::Result<()> {
@@ -107,7 +122,7 @@ impl IndexController for LocalIndexController {
     fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
         let metas = self.indexes.list_indexes()?;
         let mut output_meta = Vec::new();
-        for (name, meta) in metas {
+        for (name, meta, primary_key) in metas {
             let created_at = meta.created_at;
             let uuid = meta.uuid;
             let updated_at = self
@@ -122,12 +137,23 @@ impl IndexController for LocalIndexController {
                 created_at,
                 updated_at,
                 uuid,
-                primary_key: None,
+                primary_key,
             };
             output_meta.push(index_meta);
         }
         Ok(output_meta)
     }
+}
+
+fn update_primary_key(index: impl AsRef<Index>, primary_key: impl AsRef<str>) -> anyhow::Result<()> {
+    let index = index.as_ref();
+    let mut txn = index.write_txn()?;
+    if index.primary_key(&txn)?.is_some() {
+        bail!("primary key already set.")
+    }
+    index.put_primary_key(&mut txn, primary_key.as_ref())?;
+    txn.commit()?;
+    Ok(())
 }
 
 #[cfg(test)]
