@@ -257,7 +257,7 @@ impl IndexStore {
         let mut txn = self.env.write_txn()?;
 
         if self.name_to_uuid.get(&txn, name.as_ref())?.is_some() {
-            bail!("cannot create index {:?}: an index with this name already exists.")
+            bail!("index {:?} already exists", name.as_ref())
         }
 
         let result = self.create_index_txn(&mut txn, uuid, name, update_size, index_size)?;
