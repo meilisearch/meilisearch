@@ -13,7 +13,7 @@ use crate::option::IndexerOpts;
 use index_store::IndexStore;
 use super::IndexController;
 use super::updates::UpdateStatus;
-use super::{UpdateMeta, UpdateResult, IndexMetadata};
+use super::{UpdateMeta, UpdateResult, IndexMetadata, IndexSettings};
 
 pub struct LocalIndexController {
     indexes: IndexStore,
@@ -58,9 +58,10 @@ impl IndexController for LocalIndexController {
         Ok(pending.into())
     }
 
-    fn create_index(&self, index_name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
+    fn create_index(&self, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
+        let index_name = index_settings.name.context("Missing name for index")?;
         let (index, _, meta) = self.indexes.create_index(&index_name, self.update_db_size, self.index_db_size)?;
-        if let Some(ref primary_key) = primary_key {
+        if let Some(ref primary_key) = index_settings.primary_key {
             if let Err(e) = update_primary_key(index, primary_key).context("error creating index") {
                 // TODO: creating index could not be completed, delete everything.
                 Err(e)?
@@ -68,11 +69,11 @@ impl IndexController for LocalIndexController {
         }
 
         let meta = IndexMetadata {
-            name: index_name.as_ref().to_owned(),
+            name: index_name,
             uuid: meta.uuid.clone(),
             created_at: meta.created_at,
             updated_at: meta.created_at,
-            primary_key: primary_key.map(|n| n.as_ref().to_owned()),
+            primary_key: index_settings.primary_key,
         };
 
         Ok(meta)

@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use sha2::Digest;
 
-use crate::index_controller::{IndexController, LocalIndexController, IndexMetadata, Settings};
+use crate::index_controller::{IndexController, LocalIndexController, IndexMetadata, Settings, IndexSettings};
 use crate::option::Opt;
 
 #[derive(Clone)]
@@ -126,7 +126,12 @@ impl Data {
     }
 
     pub fn create_index(&self, name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
-        let meta = self.index_controller.create_index(name, primary_key)?;
+        let settings = IndexSettings {
+            name: Some(name.as_ref().to_string()),
+            primary_key: primary_key.map(|s| s.as_ref().to_string()),
+        };
+
+        let meta = self.index_controller.create_index(settings)?;
         Ok(meta)
     }
 

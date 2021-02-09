@@ -97,6 +97,11 @@ pub enum UpdateResult {
     Other,
 }
 
+pub struct IndexSettings {
+    pub name: Option<String>,
+    pub primary_key: Option<String>,
+}
+
 /// The `IndexController` is in charge of the access to the underlying indices. It splits the logic
 /// for read access which is provided thanks to an handle to the index, and write access which must
 /// be provided. This allows the implementer to define the behaviour of write accesses to the
@@ -127,7 +132,7 @@ pub trait IndexController {
     fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings) -> anyhow::Result<UpdateStatus>;
 
     /// Create an index with the given `index_uid`.
-    fn create_index(&self, index_uid: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> Result<IndexMetadata>;
+    fn create_index(&self, index_settings: IndexSettings) -> Result<IndexMetadata>;
 
     /// Delete index with the given `index_uid`, attempting to close it beforehand.
     fn delete_index<S: AsRef<str>>(&self, index_uid: S) -> Result<()>;
@@ -169,16 +174,40 @@ pub(crate) mod test {
             fn test_create_and_list_indexes() {
                 crate::index_controller::test::create_and_list_indexes($controller_buider);
             }
+
+            #[test]
+            fn test_create_index_with_no_name_is_error() {
+                crate::index_controller::test::create_index_with_no_name_is_error($controller_buider);
+            }
         };
     }
 
     pub(crate) fn create_and_list_indexes<S: IndexController>(controller: S) {
-        controller.create_index("test_index").unwrap();
-        controller.create_index("test_index2").unwrap();
+        let settings1 = IndexSettings {
+            name: Some(String::from("test_index")),
+            primary_key: None,
+        };
+
+        let settings2 = IndexSettings {
+            name: Some(String::from("test_index2")),
+            primary_key: Some(String::from("foo")),
+        };
+
+        controller.create_index(settings1).unwrap();
+        controller.create_index(settings2).unwrap();
 
         let indexes = controller.list_indexes().unwrap();
         assert_eq!(indexes.len(), 2);
         assert_eq!(indexes[0].name, "test_index");
         assert_eq!(indexes[1].name, "test_index2");
+        assert_eq!(indexes[1].primary_key.clone().unwrap(), "foo");
+    }
+
+    pub(crate) fn create_index_with_no_name_is_error<S: IndexController>(controller: S) {
+        let settings = IndexSettings {
+            name: None,
+            primary_key: None,
+        };
+        assert!(controller.create_index(settings).is_err());
     }
 }
