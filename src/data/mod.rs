@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use sha2::Digest;
 
-use crate::index_controller::{IndexController, LocalIndexController};
-use crate::{option::Opt, index_controller::Settings};
+use crate::index_controller::{IndexController, LocalIndexController, IndexMetadata, Settings, IndexSettings};
+use crate::option::Opt;
 
 #[derive(Clone)]
 pub struct Data {
@@ -112,6 +112,27 @@ impl Data {
             faceted_attributes: Some(Some(faceted_attributes)),
             criteria: None,
         })
+    }
+
+    pub fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
+        self.index_controller.list_indexes()
+    }
+
+    pub fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<IndexMetadata>> {
+        Ok(self
+            .list_indexes()?
+            .into_iter()
+            .find(|i| i.name == name.as_ref()))
+    }
+
+    pub fn create_index(&self, name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
+        let settings = IndexSettings {
+            name: Some(name.as_ref().to_string()),
+            primary_key: primary_key.map(|s| s.as_ref().to_string()),
+        };
+
+        let meta = self.index_controller.create_index(settings)?;
+        Ok(meta)
     }
 
     #[inline]

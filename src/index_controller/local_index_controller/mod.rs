@@ -5,7 +5,7 @@ mod update_handler;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use itertools::Itertools;
 use milli::Index;
 
@@ -13,7 +13,7 @@ use crate::option::IndexerOpts;
 use index_store::IndexStore;
 use super::IndexController;
 use super::updates::UpdateStatus;
-use super::{UpdateMeta, UpdateResult};
+use super::{UpdateMeta, UpdateResult, IndexMetadata, IndexSettings};
 
 pub struct LocalIndexController {
     indexes: IndexStore,
@@ -58,8 +58,25 @@ impl IndexController for LocalIndexController {
         Ok(pending.into())
     }
 
-    fn create_index<S: AsRef<str>>(&self, _index_uid: S) -> anyhow::Result<()> {
-        todo!()
+    fn create_index(&self, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
+        let index_name = index_settings.name.context("Missing name for index")?;
+        let (index, _, meta) = self.indexes.create_index(&index_name, self.update_db_size, self.index_db_size)?;
+        if let Some(ref primary_key) = index_settings.primary_key {
+            if let Err(e) = update_primary_key(index, primary_key).context("error creating index") {
+                // TODO: creating index could not be completed, delete everything.
+                Err(e)?
+            }
+        }
+
+        let meta = IndexMetadata {
+            name: index_name,
+            uuid: meta.uuid.clone(),
+            created_at: meta.created_at,
+            updated_at: meta.created_at,
+            primary_key: index_settings.primary_key,
+        };
+
+        Ok(meta)
     }
 
     fn delete_index<S: AsRef<str>>(&self, _index_uid: S) -> anyhow::Result<()> {
@@ -102,4 +119,54 @@ impl IndexController for LocalIndexController {
         }
 
     }
+
+    fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
+        let metas = self.indexes.list_indexes()?;
+        let mut output_meta = Vec::new();
+        for (name, meta, primary_key) in metas {
+            let created_at = meta.created_at;
+            let uuid = meta.uuid;
+            let updated_at = self
+                .all_update_status(&name)?
+                .iter()
+                .filter_map(|u| u.processed().map(|u| u.processed_at))
+                .max()
+                .unwrap_or(created_at);
+
+            let index_meta = IndexMetadata {
+                name,
+                created_at,
+                updated_at,
+                uuid,
+                primary_key,
+            };
+            output_meta.push(index_meta);
+        }
+        Ok(output_meta)
+    }
+}
+
+fn update_primary_key(index: impl AsRef<Index>, primary_key: impl AsRef<str>) -> anyhow::Result<()> {
+    let index = index.as_ref();
+    let mut txn = index.write_txn()?;
+    if index.primary_key(&txn)?.is_some() {
+        bail!("primary key already set.")
+    }
+    index.put_primary_key(&mut txn, primary_key.as_ref())?;
+    txn.commit()?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use tempfile::tempdir;
+    use crate::make_index_controller_tests;
+
+    make_index_controller_tests!({
+        let options = IndexerOpts::default();
+        let path = tempdir().unwrap();
+        let size = 4096 * 100;
+        LocalIndexController::new(path, options, size, size).unwrap()
+    });
 }

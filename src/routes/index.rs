@@ -19,43 +19,60 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(get_all_updates_status);
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct IndexResponse {
-    pub name: String,
-    pub uid: String,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    pub primary_key: Option<String>,
-}
 
 #[get("/indexes", wrap = "Authentication::Private")]
-async fn list_indexes(_data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    todo!()
+async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
+    match data.list_indexes() {
+        Ok(indexes) => {
+            let json = serde_json::to_string(&indexes).unwrap();
+            Ok(HttpResponse::Ok().body(&json))
+        }
+        Err(e) => {
+            error!("error listing indexes: {}", e);
+            unimplemented!()
+        }
+    }
+
 }
 
 #[get("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn get_index(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    match data.index(&path.index_uid)? {
+        Some(meta) => {
+            let json = serde_json::to_string(&meta).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        None => {
+            unimplemented!()
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct IndexCreateRequest {
-    name: Option<String>,
-    uid: Option<String>,
+    name: String,
     primary_key: Option<String>,
 }
 
 #[post("/indexes", wrap = "Authentication::Private")]
 async fn create_index(
-    _data: web::Data<Data>,
-    _body: web::Json<IndexCreateRequest>,
+    data: web::Data<Data>,
+    body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    match data.create_index(&body.name, body.primary_key.clone()) {
+        Ok(meta) => {
+            let json = serde_json::to_string(&meta).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            error!("error creating index: {}", e);
+            unimplemented!()
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
