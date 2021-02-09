@@ -10,7 +10,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use milli::Index;
-use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult}; use serde::{Serialize, Deserialize, de::Deserializer}; use uuid::Uuid;
+use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
+use serde::{Serialize, Deserialize, de::Deserializer};
+use uuid::Uuid;
 
 pub use updates::{Processed, Processing, Failed};
 
@@ -95,6 +97,7 @@ pub enum UpdateResult {
     Other,
 }
 
+#[derive(Clone, Debug)]
 pub struct IndexSettings {
     pub name: Option<String>,
     pub primary_key: Option<String>,
@@ -183,10 +186,15 @@ pub(crate) mod test {
             fn test_create_index_with_no_name_is_error() {
                 crate::index_controller::test::create_index_with_no_name_is_error($controller_buider);
             }
+
+            #[test]
+            fn test_update_index() {
+                crate::index_controller::test::update_index($controller_buider);
+            }
         };
     }
 
-    pub(crate) fn create_and_list_indexes<S: IndexController>(controller: S) {
+    pub(crate) fn create_and_list_indexes(controller: impl IndexController) {
         let settings1 = IndexSettings {
             name: Some(String::from("test_index")),
             primary_key: None,
@@ -207,11 +215,54 @@ pub(crate) mod test {
         assert_eq!(indexes[1].primary_key.clone().unwrap(), "foo");
     }
 
-    pub(crate) fn create_index_with_no_name_is_error<S: IndexController>(controller: S) {
+    pub(crate) fn create_index_with_no_name_is_error(controller: impl IndexController) {
         let settings = IndexSettings {
             name: None,
             primary_key: None,
         };
         assert!(controller.create_index(settings).is_err());
+    }
+
+    pub(crate) fn update_index(controller: impl IndexController) {
+
+        let settings = IndexSettings {
+            name: Some(String::from("test")),
+            primary_key: None,
+        };
+
+        assert!(controller.create_index(settings).is_ok());
+
+        // perform empty update returns index meta unchanged
+        let settings = IndexSettings {
+            name: None,
+            primary_key: None,
+        };
+
+        let result = controller.update_index("test", settings).unwrap();
+        assert_eq!(result.name, "test");
+        assert_eq!(result.created_at, result.updated_at);
+        assert!(result.primary_key.is_none());
+
+        // Changing the name trigger an error
+        let settings = IndexSettings {
+            name: Some(String::from("bar")),
+            primary_key: None,
+        };
+
+        assert!(controller.update_index("test", settings).is_err());
+
+        // Update primary key
+        let settings = IndexSettings {
+            name: None,
+            primary_key: Some(String::from("foo")),
+        };
+
+        let result = controller.update_index("test", settings.clone()).unwrap();
+        assert_eq!(result.name, "test");
+        assert!(result.created_at < result.updated_at);
+        assert_eq!(result.primary_key.unwrap(), "foo");
+
+        // setting the primary key again is an error
+        assert!(controller.update_index("test", settings).is_err());
     }
 }

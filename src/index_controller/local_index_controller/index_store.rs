@@ -133,7 +133,7 @@ impl IndexStore {
     }
 
     /// Use this function to perform an update on an index.
-    /// This function also puts a lock on what index in allowed to perform an update.
+    /// This function also puts a lock on what index is allowed to perform an update.
     pub fn update_index<F, T>(&self, name: impl AsRef<str>, f: F) -> anyhow::Result<(T, IndexMeta)>
     where
         F: FnOnce(&Index) -> anyhow::Result<T>,
@@ -167,7 +167,10 @@ impl IndexStore {
         }
     }
 
-    fn update_meta(&self, txn: &mut RwTxn, name: impl AsRef<str>, f: impl FnOnce(&mut IndexMeta)) -> anyhow::Result<IndexMeta> {
+    fn update_meta<F>(&self, txn: &mut RwTxn, name: impl AsRef<str>, f: F) -> anyhow::Result<IndexMeta>
+    where
+        F: FnOnce(&mut IndexMeta)
+    {
         let uuid = self.index_uuid(txn, &name)?
                     .with_context(|| format!("Index {:?} doesn't exist", name.as_ref()))?;
         let mut meta = self.uuid_to_index_meta
