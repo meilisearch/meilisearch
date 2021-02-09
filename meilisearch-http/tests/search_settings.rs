@@ -200,6 +200,89 @@ async fn search_with_settings_synonyms() {
       ],
       "stopWords": null,
       "synonyms": {
+          "Application": [
+              "Exercitation"
+          ]
+      },
+    });
+
+    server.update_all_settings(config).await;
+
+    let query = "q=application&limit=3";
+    let expect = json!([
+      {
+        "balance": "$1,921.58",
+        "age": 31,
+        "color": "Green",
+        "name": "Harper Carson",
+        "gender": "male",
+        "email": "harpercarson@chorizon.com",
+        "phone": "+1 (912) 430-3243",
+        "address": "883 Dennett Place, Knowlton, New Mexico, 9219"
+      },
+      {
+        "balance": "$1,706.13",
+        "age": 27,
+        "color": "Green",
+        "name": "Cherry Orr",
+        "gender": "female",
+        "email": "cherryorr@chorizon.com",
+        "phone": "+1 (995) 479-3174",
+        "address": "442 Beverly Road, Ventress, New Mexico, 3361"
+      },
+      {
+        "balance": "$1,476.39",
+        "age": 28,
+        "color": "brown",
+        "name": "Maureen Dale",
+        "gender": "female",
+        "email": "maureendale@chorizon.com",
+        "phone": "+1 (984) 538-3684",
+        "address": "817 Newton Street, Bannock, Wyoming, 1468"
+      }
+    ]);
+
+    let (response, _status_code) = server.search_get(query).await;
+    assert_json_eq!(expect, response["hits"].clone(), ordered: false);
+}
+
+#[actix_rt::test]
+async fn search_with_settings_normalized_synonyms() {
+    let mut server = common::Server::test_server().await;
+
+    let config = json!({
+      "rankingRules": [
+        "typo",
+        "words",
+        "proximity",
+        "attribute",
+        "wordsPosition",
+        "desc(age)",
+        "exactness",
+        "desc(balance)"
+      ],
+      "distinctAttribute": null,
+      "searchableAttributes": [
+        "name",
+        "age",
+        "color",
+        "gender",
+        "email",
+        "address",
+        "about"
+      ],
+      "displayedAttributes": [
+        "name",
+        "age",
+        "gender",
+        "color",
+        "email",
+        "phone",
+        "address",
+        "balance"
+      ],
+      "stopWords": null,
+      "synonyms": {
           "application": [
               "exercitation"
           ]

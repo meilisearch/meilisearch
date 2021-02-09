@@ -1639,7 +1639,7 @@ checksum = "7ffc5c5338469d4d3ea17d269fa8ea3512ad247247c30bd2df69e68309ed0a08"
 
 [[package]]
 name = "meilisearch-core"
-version = "0.18.1"
+version = "0.19.0"
 dependencies = [
  "arc-swap",
  "assert_matches",
@@ -1686,14 +1686,14 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-error"
-version = "0.18.1"
+version = "0.19.0"
 dependencies = [
  "actix-http",
 ]
 
 [[package]]
 name = "meilisearch-http"
-version = "0.18.1"
+version = "0.19.0"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -1734,6 +1734,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "ureq",
+ "uuid",
  "vergen",
  "walkdir",
  "whoami",
@@ -1741,7 +1742,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-schema"
-version = "0.18.1"
+version = "0.19.0"
 dependencies = [
  "indexmap",
  "meilisearch-error",
@@ -1753,7 +1754,7 @@ dependencies = [
 [[package]]
 name = "meilisearch-tokenizer"
 version = "0.1.1"
-source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.1.2#8d91cd52f30aa4b651a085c15056938f7b599646"
+source = "git+https://github.com/meilisearch/Tokenizer.git?tag=v0.1.3#d3fe5311a66c1f31682a297df8a8b6b8916f4252"
 dependencies = [
  "character_converter",
  "cow-utils",
@@ -1768,7 +1769,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "0.18.1"
+version = "0.19.0"
 dependencies = [
  "serde",
  "zerocopy",

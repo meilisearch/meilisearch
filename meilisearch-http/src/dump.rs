@@ -128,15 +128,15 @@ fn import_index_v1(
         // push document in buffer
         values.push(document?);
         // if buffer is full, create and apply a batch, and clean buffer
-        if values.len() == document_batch_size { 
+        if values.len() == document_batch_size {
             let batch = std::mem::replace(&mut values, Vec::with_capacity(document_batch_size));
-            apply_documents_addition(write_txn, &index, batch)?;
+            apply_documents_addition(write_txn, &index, batch, None)?;
         }
     }
 
-    // apply documents remaining in the buffer 
-    if !values.is_empty() { 
-        apply_documents_addition(write_txn, &index, values)?;
+    // apply documents remaining in the buffer
+    if !values.is_empty() {
+        apply_documents_addition(write_txn, &index, values, None)?;
     }
 
     // sync index information: stats, updated_at, last_update
@@ -289,7 +289,6 @@ fn dump_index_documents(data: &web::Data<Data>, reader: &MainReader, dir_path: &
 /// Write error with a context.
 fn fail_dump_process<E: std::error::Error>(data: &web::Data<Data>, dump_info: DumpInfo, context: &str, error: E) {
         let error_message = format!("{}; {}", context, error);
-        
         error!("Something went wrong during dump process: {}", &error_message);
         data.set_current_dump_info(dump_info.with_error(Error::dump_failed(error_message).into()))
 }
@@ -405,7 +404,7 @@ pub fn init_dump_process(data: &web::Data<Data>, dumps_dir: &Path) -> Result<Dum
     let dumps_dir = dumps_dir.to_path_buf();
     let info_cloned = info.clone();
     // run dump process in a new thread
-    thread::spawn(move || 
+    thread::spawn(move ||
         dump_process(data, dumps_dir, info_cloned)
     );
 

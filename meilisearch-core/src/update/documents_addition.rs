@@ -23,6 +23,8 @@ pub struct DocumentsAddition<D> {
     updates_store: store::Updates,
     updates_results_store: store::UpdatesResults,
     updates_notifier: UpdateEventsEmitter,
+    // Whether the user explicitly set the primary key in the update
+    primary_key: Option<String>,
     documents: Vec<D>,
     is_partial: bool,
 }
@@ -39,6 +41,7 @@ impl<D> DocumentsAddition<D> {
             updates_notifier,
             documents: Vec::new(),
             is_partial: false,
+            primary_key: None,
         }
     }
 
@@ -53,7 +56,12 @@ impl<D> DocumentsAddition<D> {
             updates_notifier,
             documents: Vec::new(),
             is_partial: true,
+            primary_key: None,
         }
+    }
+
+    pub fn set_primary_key(&mut self, primary_key: String) {
+        self.primary_key = Some(primary_key);
     }
 
     pub fn update_document(&mut self, document: D) {
@@ -71,6 +79,7 @@ impl<D> DocumentsAddition<D> {
             self.updates_results_store,
             self.documents,
             self.is_partial,
+            self.primary_key,
         )?;
         Ok(update_id)
     }
@@ -88,6 +97,7 @@ pub fn push_documents_addition<D: serde::Serialize>(
     updates_results_store: store::UpdatesResults,
     addition: Vec<D>,
     is_partial: bool,
+    primary_key: Option<String>,
 ) -> MResult<u64> {
     let mut values = Vec::with_capacity(addition.len());
     for add in addition {
@@ -99,9 +109,9 @@ pub fn push_documents_addition<D: serde::Serialize>(
     let last_update_id = next_update_id(writer, updates_store, updates_results_store)?;
 
     let update = if is_partial {
-        Update::documents_partial(values)
+        Update::documents_partial(primary_key, values)
     } else {
-        Update::documents_addition(values)
+        Update::documents_addition(primary_key, values)
     };
 
     updates_store.put_update(writer, last_update_id, &update)?;
@@ -149,7 +159,8 @@ pub fn apply_addition(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     new_documents: Vec<IndexMap<String, Value>>,
-    partial: bool
+    partial: bool,
+    primary_key: Option<String>,
 ) -> MResult<()>
 {
     let mut schema = match index.main.schema(writer)? {
@@ -162,7 +173,14 @@ pub fn apply_addition(
     let internal_docids = index.main.internal_docids(writer)?;
     let mut available_ids = DiscoverIds::new(&internal_docids);
 
-    let primary_key = schema.primary_key().ok_or(Error::MissingPrimaryKey)?;
+    let primary_key = match schema.primary_key() {
+        Some(primary_key) => primary_key.to_string(),
+        None => {
+            let name = primary_key.ok_or(Error::MissingPrimaryKey)?;
+            schema.set_primary_key(&name)?;
+            name
+        }
+    };
 
     // 1. store documents ids for future deletion
     let mut documents_additions = HashMap::new();
@@ -275,16 +293,18 @@ pub fn apply_documents_partial_addition(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     new_documents: Vec<IndexMap<String, Value>>,
+    primary_key: Option<String>,
 ) -> MResult<()> {
-    apply_addition(writer, index, new_documents, true)
+    apply_addition(writer, index, new_documents, true, primary_key)
 }
 
 pub fn apply_documents_addition(
     writer: &mut heed::RwTxn<MainT>,
     index: &store::Index,
     new_documents: Vec<IndexMap<String, Value>>,
+    primary_key: Option<String>,
 ) -> MResult<()> {
-    apply_addition(writer, index, new_documents, false)
+    apply_addition(writer, index, new_documents, false, primary_key)
 }
 
 pub fn reindex_all_documents(writer: &mut heed::RwTxn<MainT>, index: &store::Index) -> MResult<()> {

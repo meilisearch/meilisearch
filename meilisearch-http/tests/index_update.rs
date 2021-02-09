@@ -94,13 +94,21 @@ async fn return_update_status_of_pushed_documents() {
     ];
 
     let mut update_ids = Vec::new();
-    
+    let mut bodies = bodies.into_iter();
+
     let url = "/indexes/test/documents?primaryKey=title";
+    let (response, status_code) = server.post_request(&url, bodies.next().unwrap()).await;
+    assert_eq!(status_code, 202);
+    let update_id = response["updateId"].as_u64().unwrap();
+    update_ids.push(update_id);
+    server.wait_update_id(update_id).await;
+
+    let url = "/indexes/test/documents";
     for body in bodies {
-      let (response, status_code) = server.post_request(&url, body).await;
-      assert_eq!(status_code, 202);
-      let update_id = response["updateId"].as_u64().unwrap();
-      update_ids.push(update_id);
+        let (response, status_code) = server.post_request(&url, body).await;
+        assert_eq!(status_code, 202);
+        let update_id = response["updateId"].as_u64().unwrap();
+        update_ids.push(update_id);
     }
 
     // 2. Fetch the status of index.
@@ -173,7 +181,7 @@ async fn should_return_existing_update() {
     let (response, status_code) = server.create_index(body).await;
     assert_eq!(status_code, 201);
     assert_eq!(response["primaryKey"], json!(null));
-    
+
     let body = json!([{
         "title": "Test",
         "comment": "comment test"
