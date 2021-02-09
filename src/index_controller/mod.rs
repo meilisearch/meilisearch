@@ -10,9 +10,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use milli::Index;
-use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
-use serde::{Serialize, Deserialize, de::Deserializer};
-use uuid::Uuid;
+use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult}; use serde::{Serialize, Deserialize, de::Deserializer}; use uuid::Uuid;
 
 pub use updates::{Processed, Processing, Failed};
 
@@ -155,10 +153,16 @@ pub trait IndexController {
     /// Returns, if it exists, the `Index` with the povided name.
     fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<Arc<Index>>>;
 
+    /// Returns the udpate status an update
     fn update_status(&self, index: impl AsRef<str>, id: u64) -> anyhow::Result<Option<UpdateStatus>>;
+
+    /// Returns all the udpate status for an index
     fn all_update_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>>;
 
+    /// List all the indexes
     fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>>;
+
+    fn update_index(&self, name: impl AsRef<str>, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata>;
 }
 
 

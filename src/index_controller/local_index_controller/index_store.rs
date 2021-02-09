@@ -24,6 +24,7 @@ pub struct IndexMeta {
     index_store_size: u64,
     pub uuid: Uuid,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl IndexMeta {
@@ -131,6 +132,52 @@ impl IndexStore {
         self.get_index_txn(&txn, name)
     }
 
+    /// Use this function to perform an update on an index.
+    /// This function also puts a lock on what index in allowed to perform an update.
+    pub fn update_index<F, T>(&self, name: impl AsRef<str>, f: F) -> anyhow::Result<(T, IndexMeta)>
+    where
+        F: FnOnce(&Index) -> anyhow::Result<T>,
+    {
+        let mut txn = self.env.write_txn()?;
+        let (index, _) = self.get_index_txn(&txn, &name)?
+            .with_context(|| format!("Index {:?} doesn't exist", name.as_ref()))?;
+        let result = f(index.as_ref());
+        match result {
+            Ok(ret) => {
+                let meta = self.update_meta(&mut txn, name, |meta| meta.updated_at = Utc::now())?;
+                txn.commit()?;
+                Ok((ret, meta))
+            }
+            Err(e) => Err(e)
+        }
+    }
+
+    pub fn index_with_meta(&self, name: impl AsRef<str>) -> anyhow::Result<Option<(Arc<Index>, IndexMeta)>> {
+        let txn = self.env.read_txn()?;
+        let uuid = self.index_uuid(&txn, &name)?;
+        match uuid {
+            Some(uuid) => {
+                let meta = self.uuid_to_index_meta.get(&txn, uuid.as_bytes())?
+                    .with_context(|| format!("unable to retrieve metadata for index {:?}", name.as_ref()))?;
+                let (index, _) = self.retrieve_index(&txn, uuid)?
+                    .with_context(|| format!("unable to retrieve index {:?}", name.as_ref()))?;
+                Ok(Some((index, meta)))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn update_meta(&self, txn: &mut RwTxn, name: impl AsRef<str>, f: impl FnOnce(&mut IndexMeta)) -> anyhow::Result<IndexMeta> {
+        let uuid = self.index_uuid(txn, &name)?
+                    .with_context(|| format!("Index {:?} doesn't exist", name.as_ref()))?;
+        let mut meta = self.uuid_to_index_meta
+            .get(txn, uuid.as_bytes())?
+            .with_context(|| format!("couldn't retrieve metadata for index {:?}", name.as_ref()))?;
+        f(&mut meta);
+        self.uuid_to_index_meta.put(txn, uuid.as_bytes(), &meta)?;
+        Ok(meta)
+    }
+
     pub fn get_or_create_index(
         &self,
         name: impl AsRef<str>,
@@ -173,7 +220,14 @@ impl IndexStore {
         index_store_size: u64,
     ) -> anyhow::Result<(Arc<Index>, Arc<UpdateStore>, IndexMeta)> {
         let created_at = Utc::now();
-        let meta = IndexMeta { update_store_size, index_store_size, uuid: uuid.clone(), created_at };
+        let updated_at = created_at;
+        let meta = IndexMeta {
+            update_store_size,
+            index_store_size,
+            uuid: uuid.clone(),
+            created_at,
+            updated_at,
+        };
 
         self.name_to_uuid.put(txn, name.as_ref(), uuid.as_bytes())?;
         self.uuid_to_index_meta.put(txn, uuid.as_bytes(), &meta)?;
@@ -318,11 +372,15 @@ mod test {
             let txn = store.env.read_txn().unwrap();
             assert!(store.retrieve_index(&txn, uuid).unwrap().is_none());
 
+            let created_at = Utc::now();
+            let updated_at = created_at;
+
             let meta = IndexMeta {
                 update_store_size: 4096 * 100,
                 index_store_size: 4096 * 100,
                 uuid: uuid.clone(),
-                created_at: Utc::now(),
+                created_at,
+                updated_at,
             };
             let mut txn = store.env.write_txn().unwrap();
             store.uuid_to_index_meta.put(&mut txn, uuid.as_bytes(), &meta).unwrap();
@@ -344,12 +402,16 @@ mod test {
 
             assert!(store.index(&name).unwrap().is_none());
 
+            let created_at = Utc::now();
+            let updated_at = created_at;
+
             let uuid = Uuid::new_v4();
             let meta = IndexMeta {
                 update_store_size: 4096 * 100,
                 index_store_size: 4096 * 100,
                 uuid: uuid.clone(),
-                created_at: Utc::now(),
+                created_at,
+                updated_at,
             };
             let mut txn = store.env.write_txn().unwrap();
             store.name_to_uuid.put(&mut txn, &name, uuid.as_bytes()).unwrap();
