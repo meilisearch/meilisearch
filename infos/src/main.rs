@@ -153,6 +153,12 @@ enum Command {
     /// you can install it using `cargo install fst-bin`.
     ExportWordsFst,
 
+    /// Outputs the words prefix FST to standard output.
+    ///
+    /// One can use the FST binary helper to dissect and analyze it,
+    /// you can install it using `cargo install fst-bin`.
+    ExportWordsPrefixFst,
+
     /// Outputs the documents as JSON lines to the standard output.
     ///
     /// All of the fields are extracted, not just the displayed ones.
@@ -207,6 +213,7 @@ fn run(opt: Opt) -> anyhow::Result<()> {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
         },
         ExportWordsFst => export_words_fst(&index, &rtxn),
+        ExportWordsPrefixFst => export_words_prefix_fst(&index, &rtxn),
         ExportDocuments => export_documents(&index, &rtxn),
         PatchToNewExternalIds => {
             drop(rtxn);
@@ -544,6 +551,16 @@ fn export_words_fst(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     let mut stdout = io::stdout();
     let words_fst = index.words_fst(rtxn)?;
     stdout.write_all(words_fst.as_fst().as_bytes())?;
+
+    Ok(())
+}
+
+fn export_words_prefix_fst(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+    use std::io::Write as _;
+
+    let mut stdout = io::stdout();
+    let words_prefixes_fst = index.words_prefixes_fst(rtxn)?;
+    stdout.write_all(words_prefixes_fst.as_fst().as_bytes())?;
 
     Ok(())
 }
