@@ -18,6 +18,7 @@ const MAIN_DB_NAME: &str = "main";
 const WORD_DOCIDS_DB_NAME: &str = "word-docids";
 const DOCID_WORD_POSITIONS_DB_NAME: &str = "docid-word-positions";
 const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
+const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-prefix-pair-proximity-docids";
 const DOCUMENTS_DB_NAME: &str = "documents";
 const USERS_IDS_DOCUMENTS_IDS: &[u8] = b"users-ids-documents-ids";
 
@@ -314,6 +315,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         word_prefix_docids,
         docid_word_positions,
         word_pair_proximity_docids,
+        word_prefix_pair_proximity_docids,
         facet_field_id_value_docids,
         field_id_docid_facet_values: _,
         documents,
@@ -323,6 +325,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     let word_docids_name = "word_docids";
     let word_prefix_docids_name = "word_prefix_docids";
     let docid_word_positions_name = "docid_word_positions";
+    let word_prefix_pair_proximity_docids_name = "word_prefix_pair_proximity_docids";
     let word_pair_proximity_docids_name = "word_pair_proximity_docids";
     let facet_field_id_value_docids_name = "facet_field_id_value_docids";
     let documents_name = "documents";
@@ -370,6 +373,13 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             let ((word1, word2, prox), value) = result?;
             let key = format!("{} {} {}", word1, word2, prox);
             heap.push(Reverse((value.len(), key, word_pair_proximity_docids_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        for result in word_prefix_pair_proximity_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let ((word, prefix, prox), value) = result?;
+            let key = format!("{} {} {}", word, prefix, prox);
+            heap.push(Reverse((value.len(), key, word_prefix_pair_proximity_docids_name)));
             if heap.len() > limit { heap.pop(); }
         }
 

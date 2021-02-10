@@ -82,6 +82,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
+            word_prefix_pair_proximity_docids,
             facet_field_id_value_docids,
             field_id_docid_facet_values,
             documents,
@@ -160,6 +161,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         // FIXME we must recompute the words prefixes docids.
         todo!("recompute words prefixes docids");
+        todo!("recompute words prefixes pairs proximity docids");
 
         // We construct an FST set that contains the words to delete from the words FST.
         let words_to_delete = words.iter().filter_map(|(word, must_remove)| {

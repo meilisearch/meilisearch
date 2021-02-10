@@ -43,6 +43,8 @@ pub struct Index {
     pub docid_word_positions: Database<BEU32StrCodec, BoRoaringBitmapCodec>,
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
     pub word_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
+    /// Maps the proximity between a pair of word and prefix with all the docids where this relation appears.
+    pub word_prefix_pair_proximity_docids: Database<StrStrU8Codec, CboRoaringBitmapCodec>,
     /// Maps the facet field id and the globally ordered value with the docids that corresponds to it.
     pub facet_field_id_value_docids: Database<ByteSlice, CboRoaringBitmapCodec>,
     /// Maps the document id, the facet field id and the globally ordered value.
@@ -53,7 +55,7 @@ pub struct Index {
 
 impl Index {
     pub fn new<P: AsRef<Path>>(mut options: heed::EnvOpenOptions, path: P) -> anyhow::Result<Index> {
-        options.max_dbs(8);
+        options.max_dbs(9);
 
         let env = options.open(path)?;
         let main = env.create_poly_database(Some("main"))?;
@@ -61,6 +63,7 @@ impl Index {
         let word_prefix_docids = env.create_database(Some("word-prefix-docids"))?;
         let docid_word_positions = env.create_database(Some("docid-word-positions"))?;
         let word_pair_proximity_docids = env.create_database(Some("word-pair-proximity-docids"))?;
+        let word_prefix_pair_proximity_docids = env.create_database(Some("word-prefix-pair-proximity-docids"))?;
         let facet_field_id_value_docids = env.create_database(Some("facet-field-id-value-docids"))?;
         let field_id_docid_facet_values = env.create_database(Some("field-id-docid-facet-values"))?;
         let documents = env.create_database(Some("documents"))?;
@@ -72,6 +75,7 @@ impl Index {
             word_prefix_docids,
             docid_word_positions,
             word_pair_proximity_docids,
+            word_prefix_pair_proximity_docids,
             facet_field_id_value_docids,
             field_id_docid_facet_values,
             documents,
