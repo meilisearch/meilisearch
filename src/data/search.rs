@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 use std::mem;
 use std::time::Instant;
+use std::ops::RangeBounds;
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use milli::{Index, obkv_to_json, FacetCondition};
 use serde::{Deserialize, Serialize};
@@ -70,7 +71,7 @@ impl SearchQuery {
         let highlighter = Highlighter::new(&stop_words);
 
         for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
-            let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
+            let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv)?;
             if let Some(ref attributes_to_highlight) = self.attributes_to_highlight {
                 highlighter.highlight_record(&mut object, &found_words, attributes_to_highlight);
             }
@@ -164,5 +165,43 @@ impl Data {
             Some(index) => Ok(search_query.perform(index)?),
             None => bail!("index {:?} doesn't exists", index.as_ref()),
         }
+    }
+
+    pub fn retrieve_documents(
+        &self,
+        index: impl AsRef<str>,
+        offset: usize,
+        count: usize,
+        attributes_to_retrieve: Option<&[&str]>,
+    ) -> anyhow::Result<Vec<Map<String, Value>>> {
+        let index = self.index_controller
+            .index(&index)?
+            .with_context(|| format!("Index {:?} doesn't exist", index.as_ref()))?;
+        let txn = index.read_txn()?;
+
+        let mut documents = Vec::new();
+
+        let fields_ids_map = index.fields_ids_map(&txn)?;
+
+        let attributes_to_retrieve_ids = match attributes_to_retrieve {
+            Some(attrs) => attrs
+                .as_ref()
+                .iter()
+                .filter_map(|f| fields_ids_map.id(f))
+                .collect::<Vec<_>>(),
+            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
+        };
+
+        let iter = index.documents.range(&txn, &(..))?
+            .skip(offset)
+            .take(count);
+
+        for entry in iter {
+            let (_id, obkv) = entry?;
+            let object = obkv_to_json(&attributes_to_retrieve_ids, &fields_ids_map, obkv)?;
+            documents.push(object);
+        }
+
+        Ok(documents)
     }
 }
