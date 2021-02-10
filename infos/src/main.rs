@@ -91,6 +91,16 @@ enum Command {
         words: Vec<String>,
     },
 
+    /// Outputs a CSV with the documents ids where the given words prefixes appears.
+    WordsPrefixesDocids {
+        /// Display the whole documents ids in details.
+        #[structopt(long)]
+        full_display: bool,
+
+        /// The prefixes to display the documents ids of.
+        prefixes: Vec<String>,
+    },
+
     /// Outputs a CSV with the documents ids along with the facet values where it appears.
     FacetValuesDocids {
         /// Display the whole documents ids in details.
@@ -198,6 +208,9 @@ fn run(opt: Opt) -> anyhow::Result<()> {
         MostCommonWords { limit } => most_common_words(&index, &rtxn, limit),
         BiggestValues { limit } => biggest_value_sizes(&index, &rtxn, limit),
         WordsDocids { full_display, words } => words_docids(&index, &rtxn, !full_display, words),
+        WordsPrefixesDocids { full_display, prefixes } => {
+            words_prefixes_docids(&index, &rtxn, !full_display, prefixes)
+        },
         FacetValuesDocids { full_display, field_name } => {
             facet_values_docids(&index, &rtxn, !full_display, field_name)
         },
@@ -458,6 +471,43 @@ fn words_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: Vec<Strin
                 format!("{:?}", docids.iter().collect::<Vec<_>>())
             };
             wtr.write_record(&[word, docids])?;
+        }
+    }
+
+    Ok(wtr.flush()?)
+}
+
+fn words_prefixes_docids(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+    debug: bool,
+    prefixes: Vec<String>,
+) -> anyhow::Result<()>
+{
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["prefix", "documents_ids"])?;
+
+    if prefixes.is_empty() {
+        for result in index.word_prefix_docids.iter(rtxn)? {
+            let (prefix, docids) = result?;
+            let docids = if debug {
+                format!("{:?}", docids)
+            } else {
+                format!("{:?}", docids.iter().collect::<Vec<_>>())
+            };
+            wtr.write_record(&[prefix, &docids])?;
+        }
+    } else {
+        for prefix in prefixes {
+            if let Some(docids) = index.word_prefix_docids.get(rtxn, &prefix)? {
+                let docids = if debug {
+                    format!("{:?}", docids)
+                } else {
+                    format!("{:?}", docids.iter().collect::<Vec<_>>())
+                };
+                wtr.write_record(&[prefix, docids])?;
+            }
         }
     }
 
