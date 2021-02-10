@@ -219,8 +219,22 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             self.index.put_words_prefixes_fst(self.wtxn, &new_words_prefixes_fst)?;
         }
 
-        // FIXME we must recompute the words prefixes docids.
-        todo!("recompute words prefixes pairs proximity docids");
+        // We delete the documents ids from the word prefix pair proximity database docids
+        // and remove the empty pairs too.
+        let db = word_prefix_pair_proximity_docids.remap_key_type::<ByteSlice>();
+        let mut iter = db.iter_mut(self.wtxn)?;
+        while let Some(result) = iter.next() {
+            let (key, mut docids) = result?;
+            let previous_len = docids.len();
+            docids.difference_with(&self.documents_ids);
+            if docids.is_empty() {
+                iter.del_current()?;
+            } else if docids.len() != previous_len {
+                iter.put_current(key, &docids)?;
+            }
+        }
+
+        drop(iter);
 
         // We delete the documents ids that are under the pairs of words,
         // it is faster and use no memory to iterate over all the words pairs than
