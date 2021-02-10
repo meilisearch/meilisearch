@@ -725,17 +725,14 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
         }
 
         values_length.sort_unstable();
+        let len = values_length.len();
 
-        let median = values_length.len() / 2;
-        let quartile = values_length.len() / 4;
-        let percentile = values_length.len() / 100;
-
-        let twenty_five_percentile = values_length.get(quartile).unwrap_or(&0);
-        let fifty_percentile = values_length.get(median).unwrap_or(&0);
-        let seventy_five_percentile = values_length.get(quartile * 3).unwrap_or(&0);
-        let ninety_percentile = values_length.get(percentile * 90).unwrap_or(&0);
-        let ninety_five_percentile = values_length.get(percentile * 95).unwrap_or(&0);
-        let ninety_nine_percentile = values_length.get(percentile * 99).unwrap_or(&0);
+        let twenty_five_percentile = values_length.get(len / 4).unwrap_or(&0);
+        let fifty_percentile = values_length.get(len / 2).unwrap_or(&0);
+        let seventy_five_percentile = values_length.get(len * 3 / 4).unwrap_or(&0);
+        let ninety_percentile = values_length.get(len * 90 / 100).unwrap_or(&0);
+        let ninety_five_percentile = values_length.get(len * 95 / 100).unwrap_or(&0);
+        let ninety_nine_percentile = values_length.get(len * 99 / 100).unwrap_or(&0);
         let minimum = values_length.first().unwrap_or(&0);
         let maximum = values_length.last().unwrap_or(&0);
         let count = values_length.len();
