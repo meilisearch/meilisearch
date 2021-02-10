@@ -17,7 +17,7 @@ use rayon::prelude::*;
 use serde::{Serialize, Deserialize};
 
 use crate::index::Index;
-use crate::update::{Facets, UpdateIndexingStep};
+use crate::update::{Facets, WordsPrefixes, UpdateIndexingStep};
 use self::store::{Store, Readers};
 pub use self::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
@@ -259,6 +259,8 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     pub(crate) thread_pool: Option<&'a ThreadPool>,
     facet_level_group_size: Option<NonZeroUsize>,
     facet_min_level_size: Option<NonZeroUsize>,
+    words_prefix_threshold: Option<f64>,
+    max_prefix_length: Option<usize>,
     update_method: IndexDocumentsMethod,
     update_format: UpdateFormat,
     autogenerate_docids: bool,
@@ -284,6 +286,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             thread_pool: None,
             facet_level_group_size: None,
             facet_min_level_size: None,
+            words_prefix_threshold: None,
+            max_prefix_length: None,
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             update_format: UpdateFormat::Json,
             autogenerate_docids: true,
@@ -667,6 +671,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             });
         }
 
+        // Run the facets update operation.
         let mut builder = Facets::new(self.wtxn, self.index, self.update_id);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
@@ -676,6 +681,19 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         }
         if let Some(value) = self.facet_min_level_size {
             builder.min_level_size(value);
+        }
+        builder.execute()?;
+
+        // Run the words prefixes update operation.
+        let mut builder = WordsPrefixes::new(self.wtxn, self.index, self.update_id);
+        builder.chunk_compression_type = self.chunk_compression_type;
+        builder.chunk_compression_level = self.chunk_compression_level;
+        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+        if let Some(value) = self.words_prefix_threshold {
+            builder.threshold(value);
+        }
+        if let Some(value) = self.max_prefix_length {
+            builder.max_prefix_length(value);
         }
         builder.execute()?;
 
