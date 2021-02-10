@@ -16,6 +16,7 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 const MAIN_DB_NAME: &str = "main";
 const WORD_DOCIDS_DB_NAME: &str = "word-docids";
+const WORD_PREFIX_DOCIDS_DB_NAME: &str = "word-prefix-docids";
 const DOCID_WORD_POSITIONS_DB_NAME: &str = "docid-word-positions";
 const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
 const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-prefix-pair-proximity-docids";
@@ -25,15 +26,19 @@ const USERS_IDS_DOCUMENTS_IDS: &[u8] = b"users-ids-documents-ids";
 const ALL_DATABASE_NAMES: &[&str] = &[
     MAIN_DB_NAME,
     WORD_DOCIDS_DB_NAME,
+    WORD_PREFIX_DOCIDS_DB_NAME,
     DOCID_WORD_POSITIONS_DB_NAME,
     WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
+    WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
     DOCUMENTS_DB_NAME,
 ];
 
 const POSTINGS_DATABASE_NAMES: &[&str] = &[
     WORD_DOCIDS_DB_NAME,
+    WORD_PREFIX_DOCIDS_DB_NAME,
     DOCID_WORD_POSITIONS_DB_NAME,
     WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
+    WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
 ];
 
 #[derive(Debug, StructOpt)]
@@ -653,9 +658,11 @@ fn size_of_database(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Re
 
     let database = match name {
         MAIN_DB_NAME => &index.main,
+        WORD_PREFIX_DOCIDS_DB_NAME => index.word_prefix_docids.as_polymorph(),
         WORD_DOCIDS_DB_NAME => index.word_docids.as_polymorph(),
         DOCID_WORD_POSITIONS_DB_NAME => index.docid_word_positions.as_polymorph(),
         WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_pair_proximity_docids.as_polymorph(),
+        WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_prefix_pair_proximity_docids.as_polymorph(),
         DOCUMENTS_DB_NAME => index.documents.as_polymorph(),
         unknown => anyhow::bail!("unknown database {:?}", unknown),
     };
@@ -718,7 +725,7 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
         let sum = values_length.iter().map(|l| *l as u64).sum::<u64>();
 
         println!("The {} database stats on the lengths", name);
-        println!("\tnumber of proximity pairs: {}", count);
+        println!("\tnumber of entries: {}", count);
         println!("\t25th percentile (first quartile): {}", twenty_five_percentile);
         println!("\t50th percentile (median): {}", fifty_percentile);
         println!("\t75th percentile (third quartile): {}", seventy_five_percentile);
@@ -740,12 +747,20 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
             let db = index.word_docids.as_polymorph();
             compute_stats::<RoaringBitmapCodec>(*db, rtxn, name)
         },
+        WORD_PREFIX_DOCIDS_DB_NAME => {
+            let db = index.word_prefix_docids.as_polymorph();
+            compute_stats::<RoaringBitmapCodec>(*db, rtxn, name)
+        },
         DOCID_WORD_POSITIONS_DB_NAME => {
             let db = index.docid_word_positions.as_polymorph();
             compute_stats::<BoRoaringBitmapCodec>(*db, rtxn, name)
         },
         WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => {
             let db = index.word_pair_proximity_docids.as_polymorph();
+            compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
+        },
+        WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => {
+            let db = index.word_prefix_pair_proximity_docids.as_polymorph();
             compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
         },
         unknown => anyhow::bail!("unknown database {:?}", unknown),
