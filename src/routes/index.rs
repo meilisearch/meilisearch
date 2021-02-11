@@ -94,11 +94,17 @@ struct UpdateIndexResponse {
 
 #[put("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn update_index(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
-    _body: web::Json<IndexCreateRequest>,
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<UpdateIndexRequest>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    match data.update_index(&path.index_uid, body.primary_key.as_ref(),  body.name.as_ref()) {
+        Ok(meta) => {
+            let json = serde_json::to_string(&meta).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(_) => { todo!() }
+    }
 }
 
 #[delete("/indexes/{index_uid}", wrap = "Authentication::Private")]

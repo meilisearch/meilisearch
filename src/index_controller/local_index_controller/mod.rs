@@ -144,6 +144,44 @@ impl IndexController for LocalIndexController {
         }
         Ok(output_meta)
     }
+
+    fn update_index(&self, name: impl AsRef<str>, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
+        if index_settings.name.is_some() {
+            bail!("can't udpate an index name.")
+        }
+
+        let (primary_key, meta) = match index_settings.primary_key {
+            Some(ref primary_key) => {
+                self.indexes
+                    .update_index(&name, |index| {
+                        let mut txn = index.write_txn()?;
+                        if index.primary_key(&txn)?.is_some() {
+                            bail!("primary key already exists.")
+                        }
+                        index.put_primary_key(&mut txn, primary_key)?;
+                        txn.commit()?;
+                        Ok(Some(primary_key.clone()))
+                    })?
+            },
+            None => {
+                let (index, meta) = self.indexes
+                    .index_with_meta(&name)?
+                    .with_context(|| format!("index {:?} doesn't exist.", name.as_ref()))?;
+                let primary_key = index
+                    .primary_key(&index.read_txn()?)?
+                    .map(String::from);
+                (primary_key, meta)
+            },
+        };
+
+        Ok(IndexMetadata {
+            name: name.as_ref().to_string(),
+            uuid: meta.uuid.clone(),
+            created_at: meta.created_at,
+            updated_at: meta.updated_at,
+            primary_key,
+        })
+    }
 }
 
 fn update_primary_key(index: impl AsRef<Index>, primary_key: impl AsRef<str>) -> anyhow::Result<()> {

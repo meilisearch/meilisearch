@@ -6,7 +6,7 @@ use futures_util::stream::StreamExt;
 use tokio::io::AsyncWriteExt;
 
 use super::Data;
-use crate::index_controller::{IndexController, Settings};
+use crate::index_controller::{IndexController, Settings, IndexSettings, IndexMetadata};
 use crate::index_controller::UpdateStatus;
 
 impl Data {
@@ -69,5 +69,19 @@ impl Data {
 
     pub fn get_updates_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>> {
         self.index_controller.all_update_status(index)
+    }
+
+    pub fn update_index(
+        &self,
+        name: impl AsRef<str>,
+        primary_key: Option<impl AsRef<str>>,
+        new_name: Option<impl AsRef<str>>
+    ) -> anyhow::Result<IndexMetadata> {
+        let settings = IndexSettings {
+            name: new_name.map(|s| s.as_ref().to_string()),
+            primary_key: primary_key.map(|s| s.as_ref().to_string()),
+        };
+
+        self.index_controller.update_index(name, settings)
     }
 }
