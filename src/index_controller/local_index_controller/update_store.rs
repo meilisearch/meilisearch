@@ -254,6 +254,7 @@ where
     /// Trying to abort an update that is currently being processed, an update
     /// that as already been processed or which doesn't actually exist, will
     /// return `None`.
+    #[allow(dead_code)]
     pub fn abort_update(&self, update_id: u64) -> heed::Result<Option<Aborted<M>>> {
         let mut wtxn = self.env.write_txn()?;
         let key = BEU64::new(update_id);
@@ -281,6 +282,7 @@ where
 
     /// Aborts all the pending updates, and not the one being currently processed.
     /// Returns the update metas and ids that were successfully aborted.
+    #[allow(dead_code)]
     pub fn abort_pendings(&self) -> heed::Result<Vec<(u64, Aborted<M>)>> {
         let mut wtxn = self.env.write_txn()?;
         let mut aborted_updates = Vec::new();

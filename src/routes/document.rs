@@ -169,8 +169,17 @@ async fn delete_documents(
 
 #[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn clear_all_documents(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    match data.clear_documents(&path.index_uid).await {
+        Ok(update) => {
+            let json = serde_json::to_string(&update).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            error!("{}", e);
+            unimplemented!();
+        }
+    }
 }

@@ -62,6 +62,16 @@ impl Data {
         Ok(update.into())
     }
 
+    pub async fn clear_documents(
+        &self,
+        index: impl AsRef<str>,
+    ) -> anyhow::Result<UpdateStatus> {
+        let index_controller = self.index_controller.clone();
+        let index = index.as_ref().to_string();
+        let update = tokio::task::spawn_blocking(move || index_controller.clear_documents(index)).await??;
+        Ok(update.into())
+    }
+
     #[inline]
     pub fn get_update_status(&self, index: impl AsRef<str>, uid: u64) -> anyhow::Result<Option<UpdateStatus>> {
         self.index_controller.update_status(index, uid)

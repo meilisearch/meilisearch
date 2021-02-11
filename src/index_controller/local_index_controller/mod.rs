@@ -182,6 +182,14 @@ impl IndexController for LocalIndexController {
             primary_key,
         })
     }
+
+    fn clear_documents(&self, index: impl AsRef<str>) -> anyhow::Result<super::UpdateStatus> {
+        let (_, update_store) = self.indexes.index(&index)?
+            .with_context(|| format!("Index {:?} doesn't exist", index.as_ref()))?;
+        let meta = UpdateMeta::ClearDocuments;
+        let pending = update_store.register_update(meta, &[]).unwrap();
+        Ok(pending.into())
+    }
 }
 
 fn update_primary_key(index: impl AsRef<Index>, primary_key: impl AsRef<str>) -> anyhow::Result<()> {

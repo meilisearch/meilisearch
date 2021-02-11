@@ -128,6 +128,9 @@ pub trait IndexController {
         data: &[u8],
     ) -> anyhow::Result<UpdateStatus>;
 
+    /// Clear all documents in the given index.
+    fn clear_documents(&self, index: impl AsRef<str>) -> anyhow::Result<UpdateStatus>;
+
     /// Updates an index settings. If the index does not exist, it will be created when the update
     /// is applied to the index.
     fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings) -> anyhow::Result<UpdateStatus>;
