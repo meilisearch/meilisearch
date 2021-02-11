@@ -33,8 +33,8 @@ type Document = IndexMap<String, Value>;
 
 #[derive(Deserialize)]
 struct DocumentParam {
-    _index_uid: String,
-    _document_id: String,
+    index_uid: String,
+    document_id: String,
 }
 
 pub fn services(cfg: &mut web::ServiceConfig) {
@@ -52,10 +52,21 @@ pub fn services(cfg: &mut web::ServiceConfig) {
     wrap = "Authentication::Public"
 )]
 async fn get_document(
-    _data: web::Data<Data>,
-    _path: web::Path<DocumentParam>,
+    data: web::Data<Data>,
+    path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    let index = &path.index_uid;
+    let id = &path.document_id;
+    match data.retrieve_document(index, id, None) {
+        Ok(document) => {
+            let json = serde_json::to_string(&document).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            error!("{}", e);
+            unimplemented!()
+        }
+    }
 }
 
 #[delete(

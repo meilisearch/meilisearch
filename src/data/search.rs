@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::mem;
 use std::time::Instant;
-use std::ops::RangeBounds;
 
 use anyhow::{bail, Context};
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
@@ -171,15 +170,14 @@ impl Data {
         &self,
         index: impl AsRef<str>,
         offset: usize,
-        count: usize,
+        limit: usize,
         attributes_to_retrieve: Option<&[&str]>,
     ) -> anyhow::Result<Vec<Map<String, Value>>> {
         let index = self.index_controller
             .index(&index)?
             .with_context(|| format!("Index {:?} doesn't exist", index.as_ref()))?;
-        let txn = index.read_txn()?;
 
-        let mut documents = Vec::new();
+        let txn = index.read_txn()?;
 
         let fields_ids_map = index.fields_ids_map(&txn)?;
 
@@ -194,7 +192,9 @@ impl Data {
 
         let iter = index.documents.range(&txn, &(..))?
             .skip(offset)
-            .take(count);
+            .take(limit);
+
+        let mut documents = Vec::new();
 
         for entry in iter {
             let (_id, obkv) = entry?;
@@ -203,5 +203,43 @@ impl Data {
         }
 
         Ok(documents)
+    }
+
+    pub fn retrieve_document(
+        &self,
+        index: impl AsRef<str>,
+        document_id: impl AsRef<str>,
+        attributes_to_retrieve: Option<&[&str]>,
+    ) -> anyhow::Result<Map<String, Value>> {
+        let index = self.index_controller
+            .index(&index)?
+            .with_context(|| format!("Index {:?} doesn't exist", index.as_ref()))?;
+        let txn = index.read_txn()?;
+
+        let fields_ids_map = index.fields_ids_map(&txn)?;
+
+        let attributes_to_retrieve_ids = match attributes_to_retrieve {
+            Some(attrs) => attrs
+                .as_ref()
+                .iter()
+                .filter_map(|f| fields_ids_map.id(f))
+                .collect::<Vec<_>>(),
+            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
+        };
+
+        let internal_id = index
+            .external_documents_ids(&txn)?
+            .get(document_id.as_ref().as_bytes())
+            .with_context(|| format!("Document with id {} not found", document_id.as_ref()))?;
+
+        let document = index.documents(&txn, std::iter::once(internal_id))?
+            .into_iter()
+            .next()
+            .map(|(_, d)| d);
+
+        match document {
+            Some(document) => Ok(obkv_to_json(&attributes_to_retrieve_ids, &fields_ids_map, document)?),
+            None => bail!("Document with id {} not found", document_id.as_ref()),
+        }
     }
 }
