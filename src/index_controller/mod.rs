@@ -33,6 +33,7 @@ pub struct IndexMetadata {
 pub enum UpdateMeta {
     DocumentsAddition { method: IndexDocumentsMethod, format: UpdateFormat },
     ClearDocuments,
+    DeleteDocuments,
     Settings(Settings),
     Facets(Facets),
 }
@@ -94,6 +95,7 @@ impl Settings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateResult {
     DocumentsAddition(DocumentAdditionResult),
+    DocumentDeletion { deleted: usize },
     Other,
 }
 
@@ -130,6 +132,9 @@ pub trait IndexController {
 
     /// Clear all documents in the given index.
     fn clear_documents(&self, index: impl AsRef<str>) -> anyhow::Result<UpdateStatus>;
+
+    /// Clear all documents in the given index.
+    fn delete_documents(&self, index: impl AsRef<str>, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus>;
 
     /// Updates an index settings. If the index does not exist, it will be created when the update
     /// is applied to the index.

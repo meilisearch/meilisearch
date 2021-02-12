@@ -43,7 +43,7 @@ impl IndexController for LocalIndexController {
     ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>> {
         let (_, update_store) = self.indexes.get_or_create_index(&index, self.update_db_size, self.index_db_size)?;
         let meta = UpdateMeta::DocumentsAddition { method, format };
-        let pending = update_store.register_update(meta, data).unwrap();
+        let pending = update_store.register_update(meta, data)?;
         Ok(pending.into())
     }
 
@@ -54,7 +54,7 @@ impl IndexController for LocalIndexController {
     ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>> {
         let (_, update_store) = self.indexes.get_or_create_index(&index, self.update_db_size, self.index_db_size)?;
         let meta = UpdateMeta::Settings(settings);
-        let pending = update_store.register_update(meta, &[]).unwrap();
+        let pending = update_store.register_update(meta, &[])?;
         Ok(pending.into())
     }
 
@@ -187,7 +187,16 @@ impl IndexController for LocalIndexController {
         let (_, update_store) = self.indexes.index(&index)?
             .with_context(|| format!("Index {:?} doesn't exist", index.as_ref()))?;
         let meta = UpdateMeta::ClearDocuments;
-        let pending = update_store.register_update(meta, &[]).unwrap();
+        let pending = update_store.register_update(meta, &[])?;
+        Ok(pending.into())
+    }
+
+    fn delete_documents(&self, index: impl AsRef<str>, document_ids: Vec<String>) -> anyhow::Result<super::UpdateStatus> {
+        let (_, update_store) = self.indexes.index(&index)?
+            .with_context(|| format!("Index {:?} doesn't exist", index.as_ref()))?;
+        let meta = UpdateMeta::DeleteDocuments;
+        let content = serde_json::to_vec(&document_ids)?;
+        let pending = update_store.register_update(meta, &content)?;
         Ok(pending.into())
     }
 }
