@@ -2,9 +2,6 @@
 /target
 /Cargo.lock
 
-# the sub target folder
-http-ui/target
-
 # datasets
 *.csv
 *.mmdb
