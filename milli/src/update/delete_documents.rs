@@ -248,3 +248,39 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         Ok(self.documents_ids.len() as usize)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use heed::EnvOpenOptions;
+
+    use crate::update::{IndexDocuments, UpdateFormat};
+    use super::*;
+
+    #[test]
+    fn delete_documents_with_numbers_as_primary_key() {
+        let path = tempfile::tempdir().unwrap();
+        let mut options = EnvOpenOptions::new();
+        options.map_size(10 * 1024 * 1024); // 10 MB
+        let index = Index::new(options, &path).unwrap();
+
+        // First we send 3 documents with an id for only one of them.
+        let mut wtxn = index.write_txn().unwrap();
+        let content = &br#"[
+            { "id": 0, "name": "kevin", "object": { "key1": "value1", "key2": "value2" } },
+            { "id": 1, "name": "kevina", "array": ["I", "am", "fine"] },
+            { "id": 2, "name": "benoit", "array_of_object": [{ "wow": "amazing" }] }
+        ]"#[..];
+        let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
+        builder.update_format(UpdateFormat::Json);
+        builder.execute(content, |_, _| ()).unwrap();
+
+        // delete those documents, ids are synchronous therefore 0, 1, and 2.
+        let mut builder = DeleteDocuments::new(&mut wtxn, &index, 1).unwrap();
+        builder.delete_document(0);
+        builder.delete_document(1);
+        builder.delete_document(2);
+        builder.execute().unwrap();
+
+        wtxn.commit().unwrap();
+    }
+}
