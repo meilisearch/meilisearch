@@ -1,19 +1,19 @@
+use std::collections::HashMap;
 use std::io;
 use std::sync::Arc;
-use std::collections::HashMap;
 
 use anyhow::Result;
 use flate2::read::GzDecoder;
 use grenad::CompressionType;
 use log::info;
+use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
 use milli::Index;
-use milli::update::{UpdateBuilder, UpdateFormat, IndexDocumentsMethod};
 use rayon::ThreadPool;
 
-use crate::index_controller::updates::{Processing, Processed, Failed};
-use crate::index_controller::{UpdateResult, UpdateMeta, Settings, Facets};
-use crate::option::IndexerOpts;
 use super::update_store::HandleUpdate;
+use crate::index_controller::updates::{Failed, Processed, Processing};
+use crate::index_controller::{Facets, Settings, UpdateMeta, UpdateResult};
+use crate::option::IndexerOpts;
 
 pub struct UpdateHandler {
     index: Arc<Index>,
@@ -70,9 +70,19 @@ impl UpdateHandler {
         method: IndexDocumentsMethod,
         content: &[u8],
         update_builder: UpdateBuilder,
+        primary_key: Option<&str>,
     ) -> anyhow::Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.index.write_txn()?;
+
+        // Set the primary key if not set already, ignore if already set.
+        match (self.index.primary_key(&wtxn)?, primary_key) {
+            (None, Some(ref primary_key)) => {
+                self.index.put_primary_key(&mut wtxn, primary_key)?;
+            }
+            _ => (),
+        }
+
         let mut builder = update_builder.index_documents(&mut wtxn, &self.index);
         builder.update_format(format);
         builder.index_documents_method(method);
@@ -84,14 +94,16 @@ impl UpdateHandler {
             Box::new(content) as Box<dyn io::Read>
         };
 
-        let result = builder.execute(reader, |indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step));
+        let result = builder.execute(reader, |indexing_step, update_id| {
+            info!("update {}: {:?}", update_id, indexing_step)
+        });
 
         match result {
             Ok(addition_result) => wtxn
                 .commit()
                 .and(Ok(UpdateResult::DocumentsAddition(addition_result)))
                 .map_err(Into::into),
-            Err(e) => Err(e.into())
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -105,11 +117,15 @@ impl UpdateHandler {
                 .commit()
                 .and(Ok(UpdateResult::Other))
                 .map_err(Into::into),
-            Err(e) => Err(e.into())
+            Err(e) => Err(e.into()),
         }
     }
 
-    fn update_settings(&self, settings: &Settings, update_builder: UpdateBuilder) -> anyhow::Result<UpdateResult> {
+    fn update_settings(
+        &self,
+        settings: &Settings,
+        update_builder: UpdateBuilder,
+    ) -> anyhow::Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.index.write_txn()?;
         let mut builder = update_builder.settings(&mut wtxn, &self.index);
@@ -144,21 +160,22 @@ impl UpdateHandler {
             }
         }
 
-        let result = builder.execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step));
+        let result = builder
+            .execute(|indexing_step, update_id| info!("update {}: {:?}", update_id, indexing_step));
 
         match result {
             Ok(()) => wtxn
                 .commit()
                 .and(Ok(UpdateResult::Other))
                 .map_err(Into::into),
-            Err(e) => Err(e.into())
+            Err(e) => Err(e.into()),
         }
     }
 
     fn update_facets(
         &self,
         levels: &Facets,
-        update_builder: UpdateBuilder
+        update_builder: UpdateBuilder,
     ) -> anyhow::Result<UpdateResult> {
         // We must use the write transaction of the update here.
         let mut wtxn = self.index.write_txn()?;
@@ -174,7 +191,7 @@ impl UpdateHandler {
                 .commit()
                 .and(Ok(UpdateResult::Other))
                 .map_err(Into::into),
-            Err(e) => Err(e.into())
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -204,7 +221,7 @@ impl HandleUpdate<UpdateMeta, UpdateResult, String> for UpdateHandler {
     fn handle_update(
         &mut self,
         meta: Processing<UpdateMeta>,
-        content: &[u8]
+        content: &[u8],
     ) -> Result<Processed<UpdateMeta, UpdateResult>, Failed<UpdateMeta, String>> {
         use UpdateMeta::*;
 
@@ -213,7 +230,17 @@ impl HandleUpdate<UpdateMeta, UpdateResult, String> for UpdateHandler {
         let update_builder = self.update_buidler(update_id);
 
         let result = match meta.meta() {
-            DocumentsAddition { method, format } => self.update_documents(*format, *method, content, update_builder),
+            DocumentsAddition {
+                method,
+                format,
+                primary_key,
+            } => self.update_documents(
+                *format,
+                *method,
+                content,
+                update_builder,
+                primary_key.as_deref(),
+            ),
             ClearDocuments => self.clear_documents(update_builder),
             DeleteDocuments => self.delete_documents(content, update_builder),
             Settings(settings) => self.update_settings(settings, update_builder),

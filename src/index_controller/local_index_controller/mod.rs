@@ -40,9 +40,10 @@ impl IndexController for LocalIndexController {
         method: milli::update::IndexDocumentsMethod,
         format: milli::update::UpdateFormat,
         data: &[u8],
+        primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>> {
         let (_, update_store) = self.indexes.get_or_create_index(&index, self.update_db_size, self.index_db_size)?;
-        let meta = UpdateMeta::DocumentsAddition { method, format };
+        let meta = UpdateMeta::DocumentsAddition { method, format, primary_key };
         let pending = update_store.register_update(meta, data)?;
         Ok(pending.into())
     }

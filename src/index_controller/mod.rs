@@ -31,7 +31,11 @@ pub struct IndexMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum UpdateMeta {
-    DocumentsAddition { method: IndexDocumentsMethod, format: UpdateFormat },
+    DocumentsAddition {
+        method: IndexDocumentsMethod,
+        format: UpdateFormat,
+        primary_key: Option<String>,
+    },
     ClearDocuments,
     DeleteDocuments,
     Settings(Settings),
@@ -128,6 +132,7 @@ pub trait IndexController {
         method: IndexDocumentsMethod,
         format: UpdateFormat,
         data: &[u8],
+        primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus>;
 
     /// Clear all documents in the given index.
