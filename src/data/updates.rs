@@ -64,21 +64,19 @@ impl Data {
 
     pub async fn clear_documents(
         &self,
-        index: impl AsRef<str>,
+        index: impl AsRef<str> + Sync + Send + 'static,
     ) -> anyhow::Result<UpdateStatus> {
         let index_controller = self.index_controller.clone();
-        let index = index.as_ref().to_string();
         let update = tokio::task::spawn_blocking(move || index_controller.clear_documents(index)).await??;
         Ok(update.into())
     }
 
     pub async fn delete_documents(
         &self,
-        index: impl AsRef<str>,
+        index: impl AsRef<str> + Sync + Send + 'static,
         document_ids: Vec<String>,
     ) -> anyhow::Result<UpdateStatus> {
         let index_controller = self.index_controller.clone();
-        let index = index.as_ref().to_string();
         let update = tokio::task::spawn_blocking(move || index_controller.delete_documents(index, document_ids)).await??;
         Ok(update.into())
     }

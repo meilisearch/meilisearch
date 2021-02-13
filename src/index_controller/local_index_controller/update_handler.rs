@@ -187,7 +187,7 @@ impl UpdateHandler {
         let mut txn = self.index.write_txn()?;
         let mut builder = update_builder.delete_documents(&mut txn, &self.index)?;
 
-        // we ignore unexisting document ids
+        // We ignore unexisting document ids
         ids.iter().for_each(|id| { builder.delete_external_id(id); });
 
         match builder.execute() {
@@ -215,7 +215,7 @@ impl HandleUpdate<UpdateMeta, UpdateResult, String> for UpdateHandler {
         let result = match meta.meta() {
             DocumentsAddition { method, format } => self.update_documents(*format, *method, content, update_builder),
             ClearDocuments => self.clear_documents(update_builder),
-            DeleteDocuments => self.delete_documents(content, update_builder,),
+            DeleteDocuments => self.delete_documents(content, update_builder),
             Settings(settings) => self.update_settings(settings, update_builder),
             Facets(levels) => self.update_facets(levels, update_builder),
         };
