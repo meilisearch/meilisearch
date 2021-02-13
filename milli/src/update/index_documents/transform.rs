@@ -178,16 +178,10 @@ impl Transform<'_, '_> {
                     serde_json::to_writer(&mut json_buffer, value)?;
                     writer.insert(field_id, &json_buffer)?;
                 }
-                else if field_id == primary_key_id {
-                    // We validate the document id [a-zA-Z0-9\-_].
-                    let external_id = match validate_document_id(&external_id) {
-                        Some(valid) => valid,
-                        None => return Err(anyhow!("invalid document id: {:?}", external_id)),
-                    };
 
-                    // We serialize the document id.
-                    serde_json::to_writer(&mut json_buffer, &external_id)?;
-                    writer.insert(field_id, &json_buffer)?;
+                // We validate the document id [a-zA-Z0-9\-_].
+                if field_id == primary_key_id && validate_document_id(&external_id).is_none() {
+                    return Err(anyhow!("invalid document id: {:?}", external_id));
                 }
             }
 
