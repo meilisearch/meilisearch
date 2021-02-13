@@ -1,6 +1,8 @@
+use anyhow::anyhow;
 use fst::IntoStreamer;
 use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
+use serde_json::Value;
 
 use crate::facet::FacetType;
 use crate::{Index, BEU32, SmallString32, ExternalDocumentsIds};
@@ -95,7 +97,11 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             let mut iter = documents.range_mut(self.wtxn, &(key..=key))?;
             if let Some((_key, obkv)) = iter.next().transpose()? {
                 if let Some(content) = obkv.get(id_field) {
-                    let external_id: SmallString32 = serde_json::from_slice(content).unwrap();
+                    let external_id = match serde_json::from_slice(content).unwrap() {
+                        Value::String(string) => SmallString32::from(string.as_str()),
+                        Value::Number(number) => SmallString32::from(number.to_string()),
+                        _ => return Err(anyhow!("documents ids must be either strings or numbers")),
+                    };
                     external_ids.push(external_id);
                 }
                 iter.del_current()?;
