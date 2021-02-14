@@ -8,7 +8,11 @@ use heed::EnvOpenOptions;
 use log::debug;
 use structopt::StructOpt;
 
-use crate::{Index, obkv_to_json};
+use milli::{Index, obkv_to_json};
+
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 #[derive(Debug, StructOpt)]
 /// A simple search helper binary for the milli project.
@@ -35,7 +39,18 @@ pub struct Opt {
     print_facet_distribution: bool,
 }
 
-pub fn run(opt: Opt) -> anyhow::Result<()> {
+fn main() -> Result<(), ()> {
+    let opt = Opt::from_args();
+    match run(opt) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            eprintln!("{}", e);
+            Err(())
+        },
+    }
+}
+
+fn run(opt: Opt) -> anyhow::Result<()> {
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)
