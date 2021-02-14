@@ -533,6 +533,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs_extra"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2022715d62ab30faffd124d40b76f4134a550a87792276512b18d63272333394"
+
+[[package]]
 name = "fst"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -556,9 +562,9 @@ checksum = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
 
 [[package]]
 name = "funty"
-version = "1.2.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1847abb9cb65d566acd5942e94aea9c8f547ad02c98e1649326fc0e8910b8b1e"
+checksum = "fed34cd105917e91daa4da6b3728c47b068749d6a62c59811f06ed2ac71d9da7"
 
 [[package]]
 name = "futures"
@@ -881,6 +887,7 @@ dependencies = [
  "either",
  "flate2",
  "fst",
+ "funty",
  "futures",
  "grenad",
  "heed",
@@ -969,6 +976,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "infos"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "byte-unit",
+ "csv",
+ "heed",
+ "jemallocator",
+ "milli",
+ "roaring",
+ "serde_json",
+ "stderrlog",
+ "structopt",
+]
+
+[[package]]
 name = "input_buffer"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1009,6 +1032,27 @@ name = "itoa"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd25036021b0de88a0aff6b850051563c6516d0bf53f8638938edbb9de732736"
+
+[[package]]
+name = "jemalloc-sys"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d3b9f3f5c9b31aa0f5ed3260385ac205db665baa41d49bb8338008ae94ede45"
+dependencies = [
+ "cc",
+ "fs_extra",
+ "libc",
+]
+
+[[package]]
+name = "jemallocator"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43ae63fcfc45e99ab3d1b29a46782ad679e98436c3169d15a167a1108a724b69"
+dependencies = [
+ "jemalloc-sys",
+ "libc",
+]
 
 [[package]]
 name = "jieba-rs"
@@ -1172,7 +1216,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bstr",
- "byte-unit",
  "byteorder",
  "criterion",
  "crossbeam-channel",
@@ -1204,8 +1247,6 @@ dependencies = [
  "serde_json",
  "smallstr",
  "smallvec",
- "stderrlog",
- "structopt",
  "tempfile",
  "uuid",
 ]
@@ -1901,6 +1942,21 @@ name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
+
+[[package]]
+name = "search"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "byte-unit",
+ "heed",
+ "jemallocator",
+ "log",
+ "milli",
+ "serde_json",
+ "stderrlog",
+ "structopt",
+]
 
 [[package]]
 name = "semver"

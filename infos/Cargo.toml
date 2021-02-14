@@ -1,0 +1,17 @@
+[package]
+name = "infos"
+version = "0.1.0"
+authors = ["Clément Renault <clement@meilisearch.com>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.28"
+byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
+csv = "1.1.3"
+heed = "0.10.5"
+jemallocator = "0.3.2"
+milli = { path = "../milli" }
+roaring = "0.6.4"
+serde_json = "1.0.59"
+stderrlog = "0.5.0"
+structopt = { version = "0.3.14", default-features = false }

@@ -1,5 +1,5 @@
 [workspace]
-members = ["milli", "http-ui"]
+members = ["milli", "http-ui", "infos", "search"]
 default-members = ["milli"]
 
 [profile.release]

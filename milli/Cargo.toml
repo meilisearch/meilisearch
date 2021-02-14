@@ -7,7 +7,6 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0.28"
 bstr = "0.2.13"
-byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
 byteorder = "1.3.4"
 crossbeam-channel = "0.5.0"
 csv = "1.1.3"
@@ -33,7 +32,6 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0.59", features = ["preserve_order"] }
 smallstr =  { version = "0.2.0", features = ["serde"] }
 smallvec = "1.4.0"
-structopt = { version = "0.3.14", default-features = false, features = ["wrap_help"] }
 tempfile = "3.1.0"
 uuid = { version = "0.8.1", features = ["v4"] }
 
@@ -46,7 +44,6 @@ itertools = "0.9.0"
 
 # logging
 log = "0.4.11"
-stderrlog = "0.5.0"
 
 [dev-dependencies]
 criterion = "0.3.3"

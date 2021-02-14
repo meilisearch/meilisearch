@@ -3,15 +3,14 @@
 mod criterion;
 mod external_documents_ids;
 mod fields_ids_map;
-mod index;
 mod mdfs;
 mod query_tokens;
 mod search;
 mod update_store;
 pub mod facet;
 pub mod heed_codec;
+pub mod index;
 pub mod proximity;
-pub mod subcommand;
 pub mod update;
 
 use std::borrow::Cow;

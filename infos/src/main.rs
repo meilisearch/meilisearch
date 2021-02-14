@@ -4,11 +4,15 @@ use std::{str, io, fmt};
 
 use anyhow::Context;
 use byte_unit::Byte;
-use crate::Index;
 use heed::EnvOpenOptions;
+use milli::Index;
 use structopt::StructOpt;
 
 use Command::*;
+
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 const MAIN_DB_NAME: &str = "main";
 const WORD_DOCIDS_DB_NAME: &str = "word-docids";
@@ -153,7 +157,18 @@ enum Command {
     PatchToNewExternalIds,
 }
 
-pub fn run(opt: Opt) -> anyhow::Result<()> {
+fn main() -> Result<(), ()> {
+    let opt = Opt::from_args();
+    match run(opt) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            eprintln!("{}", e);
+            Err(())
+        },
+    }
+}
+
+fn run(opt: Opt) -> anyhow::Result<()> {
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)
@@ -204,7 +219,7 @@ fn patch_to_new_external_ids(index: &Index, wtxn: &mut heed::RwTxn) -> anyhow::R
         let documents_ids = documents_ids.to_owned();
         index.main.put::<_, ByteSlice, ByteSlice>(
             wtxn,
-            crate::index::HARD_EXTERNAL_DOCUMENTS_IDS_KEY.as_bytes(),
+            milli::index::HARD_EXTERNAL_DOCUMENTS_IDS_KEY.as_bytes(),
             &documents_ids,
         )?;
         index.main.delete::<_, ByteSlice>(wtxn, USERS_IDS_DOCUMENTS_IDS)?;
@@ -242,7 +257,7 @@ fn facet_values_iter<'txn, DC: 'txn, T>(
     rtxn: &'txn heed::RoTxn,
     db: heed::Database<heed::types::ByteSlice, DC>,
     field_id: u8,
-    facet_type: crate::facet::FacetType,
+    facet_type: milli::facet::FacetType,
     string_fn: impl Fn(&str) -> T + 'txn,
     float_fn: impl Fn(u8, f64, f64) -> T + 'txn,
     integer_fn: impl Fn(u8, i64, i64) -> T + 'txn,
@@ -250,8 +265,8 @@ fn facet_values_iter<'txn, DC: 'txn, T>(
 where
     DC: heed::BytesDecode<'txn>,
 {
-    use crate::facet::FacetType;
-    use crate::heed_codec::facet::{
+    use milli::facet::FacetType;
+    use milli::heed_codec::facet::{
         FacetValueStringCodec, FacetLevelValueF64Codec, FacetLevelValueI64Codec,
     };
 
@@ -504,7 +519,7 @@ fn export_words_fst(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
 
 fn export_documents(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use std::io::{BufWriter, Write as _};
-    use crate::obkv_to_json;
+    use milli::obkv_to_json;
 
     let stdout = io::stdout();
     let mut out = BufWriter::new(stdout);
@@ -548,7 +563,7 @@ fn total_docid_word_positions_size(index: &Index, rtxn: &heed::RoTxn) -> anyhow:
 
 fn average_number_of_words_by_doc(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use heed::types::DecodeIgnore;
-    use crate::{DocumentId, BEU32StrCodec};
+    use milli::{DocumentId, BEU32StrCodec};
 
     let mut words_counts = Vec::new();
     let mut count = 0;
@@ -587,7 +602,7 @@ fn average_number_of_words_by_doc(index: &Index, rtxn: &heed::RoTxn) -> anyhow::
 
 fn average_number_of_positions_by_word(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     use heed::types::DecodeIgnore;
-    use crate::BoRoaringBitmapCodec;
+    use milli::BoRoaringBitmapCodec;
 
     let mut values_length = Vec::new();
     let mut count = 0;
@@ -639,7 +654,7 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
     use heed::types::ByteSlice;
     use heed::{Error, BytesDecode};
     use roaring::RoaringBitmap;
-    use crate::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, RoaringBitmapCodec};
+    use milli::{BoRoaringBitmapCodec, CboRoaringBitmapCodec, RoaringBitmapCodec};
 
     fn compute_stats<'a, DC: BytesDecode<'a, DItem = RoaringBitmap>>(
         db: heed::PolyDatabase,
@@ -720,7 +735,7 @@ fn word_pair_proximities_docids(
 ) -> anyhow::Result<()>
 {
     use heed::types::ByteSlice;
-    use crate::RoaringBitmapCodec;
+    use milli::RoaringBitmapCodec;
 
     let stdout = io::stdout();
     let mut wtr = csv::Writer::from_writer(stdout.lock());

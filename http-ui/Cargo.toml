@@ -34,3 +34,6 @@ warp = "0.2.2"
 log = "0.4.11"
 stderrlog = "0.5.0"
 fst = "0.4.5"
+
+# Temporary fix for bitvec, remove once fixed. (https://github.com/bitvecto-rs/bitvec/issues/105)
+funty = "=1.1.0"
