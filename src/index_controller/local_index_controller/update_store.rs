@@ -66,7 +66,7 @@ where
             processing,
         });
 
-        // We need a week reference so we can take ownership on the arc later when we
+        // We need a weak reference so we can take ownership on the arc later when we
         // want to close the index.
         let update_store_weak = Arc::downgrade(&update_store);
         std::thread::spawn(move || {
@@ -81,7 +81,7 @@ where
                                 Err(e) => eprintln!("error while processing update: {}", e),
                             }
                         }
-                        // the ownership on the arc has been taken, we need to exit
+                        // the ownership on the arc has been taken, we need to exit.
                         None => break 'outer,
                     }
                 }
@@ -92,9 +92,7 @@ where
     }
 
     pub fn prepare_for_closing(self) -> heed::EnvClosingEvent {
-        // We ignore this error, since that would mean the event loop is already closed.
-        let closing_event = self.env.prepare_for_closing();
-        closing_event
+        self.env.prepare_for_closing()
     }
 
     /// Returns the new biggest id to use to store the new update.
