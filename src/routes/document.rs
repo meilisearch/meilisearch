@@ -55,9 +55,9 @@ async fn get_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let index = &path.index_uid;
-    let id = &path.document_id;
-    match data.retrieve_document(index, id, None) {
+    let index = path.index_uid.clone();
+    let id = path.document_id.clone();
+    match data.retrieve_document(index, id, None as Option<Vec<String>>).await {
         Ok(document) => {
             let json = serde_json::to_string(&document).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -99,13 +99,14 @@ async fn get_all_documents(
         .as_ref()
         .map(|attrs| attrs
             .split(",")
+            .map(String::from)
             .collect::<Vec<_>>());
 
     match data.retrieve_documents(
-        &path.index_uid,
+        path.index_uid.clone(),
         params.offset.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_OFFSET),
         params.limit.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_LIMIT),
-        attributes_to_retrieve.as_deref()) {
+        attributes_to_retrieve).await {
         Ok(docs) => {
             let json = serde_json::to_string(&docs).unwrap();
             Ok(HttpResponse::Ok().body(json))
