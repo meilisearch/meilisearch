@@ -127,17 +127,7 @@ async fn get_all_documents(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateDocumentsQuery {
-    _primary_key: Option<String>,
-}
-
-async fn update_multiple_documents(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
-    _params: web::Query<UpdateDocumentsQuery>,
-    _body: web::Json<Vec<Document>>,
-    _is_partial: bool,
-) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    primary_key: Option<String>,
 }
 
 /// Route used when the payload type is "application/json"
@@ -149,15 +139,16 @@ async fn update_multiple_documents(
 async fn add_documents_json(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
-    _params: web::Query<UpdateDocumentsQuery>,
+    params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
     let addition_result = data
         .add_documents(
             path.into_inner().index_uid,
-            IndexDocumentsMethod::UpdateDocuments,
+            IndexDocumentsMethod::ReplaceDocuments,
             UpdateFormat::Json,
-            body
+            body,
+            params.primary_key.clone(),
         ).await;
 
     match addition_result {
@@ -174,7 +165,7 @@ async fn add_documents_json(
 }
 
 
-/// Default route for addign documents, this should return an error en redirect to the docuentation
+/// Default route for adding documents, this should return an error and redirect to the documentation
 #[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn add_documents_default(
     _data: web::Data<Data>,
@@ -186,14 +177,49 @@ async fn add_documents_default(
     todo!()
 }
 
+/// Default route for adding documents, this should return an error and redirect to the documentation
 #[put("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
+async fn update_documents_default(
+    _data: web::Data<Data>,
+    _path: web::Path<IndexParam>,
+    _params: web::Query<UpdateDocumentsQuery>,
+    _body: web::Json<Vec<Document>>,
+) -> Result<HttpResponse, ResponseError> {
+    error!("Unknown document type");
+    todo!()
+}
+
+#[put(
+    "/indexes/{index_uid}/documents",
+    wrap = "Authentication::Private",
+    guard = "guard_json",
+)]
 async fn update_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
     params: web::Query<UpdateDocumentsQuery>,
-    body: web::Json<Vec<Document>>,
+    body: web::Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    update_multiple_documents(data, path, params, body, true).await
+    let addition_result = data
+        .add_documents(
+            path.into_inner().index_uid,
+            IndexDocumentsMethod::UpdateDocuments,
+            UpdateFormat::Json,
+            body,
+            params.primary_key.clone(),
+        ).await;
+
+    match addition_result {
+        Ok(update) => {
+            let value = serde_json::to_string(&update).unwrap();
+            let response = HttpResponse::Ok().body(value);
+            Ok(response)
+        }
+        Err(e) => {
+            error!("{}", e);
+            todo!()
+        }
+    }
 }
 
 #[post(

@@ -16,6 +16,7 @@ impl Data {
         method: IndexDocumentsMethod,
         format: UpdateFormat,
         mut stream: impl futures::Stream<Item=Result<B, E>> + Unpin,
+        primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus>
     where
         B: Deref<Target = [u8]>,
@@ -47,7 +48,7 @@ impl Data {
                 mmap = unsafe { memmap::Mmap::map(&file)? };
                 &mmap
             };
-            index_controller.add_documents(index, method, format, &bytes)
+            index_controller.add_documents(index, method, format, &bytes, primary_key)
         }).await??;
         Ok(update.into())
     }
