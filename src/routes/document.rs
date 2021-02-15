@@ -30,8 +30,8 @@ type Document = IndexMap<String, Value>;
 
 #[derive(Deserialize)]
 struct DocumentParam {
-    _index_uid: String,
-    _document_id: String,
+    index_uid: String,
+    document_id: String,
 }
 
 pub fn services(cfg: &mut web::ServiceConfig) {
@@ -60,10 +60,19 @@ async fn get_document(
     wrap = "Authentication::Private"
 )]
 async fn delete_document(
-    _data: web::Data<Data>,
-    _path: web::Path<DocumentParam>,
+    data: web::Data<Data>,
+    path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    match data.delete_documents(path.index_uid.clone(), vec![path.document_id.clone()]).await {
+        Ok(result) => {
+            let json = serde_json::to_string(&result).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            error!("{}", e);
+            unimplemented!()
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -160,17 +169,40 @@ async fn update_documents(
     wrap = "Authentication::Private"
 )]
 async fn delete_documents(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
-    _body: web::Json<Vec<Value>>,
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    let ids = body
+        .iter()
+        .map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
+        .collect();
+
+    match data.delete_documents(path.index_uid.clone(), ids).await {
+        Ok(result) => {
+            let json = serde_json::to_string(&result).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            error!("{}", e);
+            unimplemented!()
+        }
+    }
 }
 
 #[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
 async fn clear_all_documents(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    match data.clear_documents(path.index_uid.clone()).await {
+        Ok(update) => {
+            let json = serde_json::to_string(&update).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            error!("{}", e);
+            unimplemented!();
+        }
+    }
 }
