@@ -108,10 +108,16 @@ async fn update_index(
 
 #[delete("/indexes/{index_uid}", wrap = "Authentication::Private")]
 async fn delete_index(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    match data.delete_index(path.index_uid.clone()).await {
+        Ok(_) => Ok(HttpResponse::Ok().finish()),
+        Err(e) => {
+            error!("{}", e);
+            todo!()
+        }
+    }
 }
 
 #[derive(Deserialize)]

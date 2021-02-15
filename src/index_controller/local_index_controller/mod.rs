@@ -80,8 +80,8 @@ impl IndexController for LocalIndexController {
         Ok(meta)
     }
 
-    fn delete_index<S: AsRef<str>>(&self, _index_uid: S) -> anyhow::Result<()> {
-        todo!()
+    fn delete_index<S: AsRef<str>>(&self, index_uid: S) -> anyhow::Result<()> {
+        self.indexes.delete(index_uid)
     }
 
     fn swap_indices<S1: AsRef<str>, S2: AsRef<str>>(&self, _index1_uid: S1, _index2_uid: S2) -> anyhow::Result<()> {

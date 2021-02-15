@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::fs::{create_dir_all, remove_dir_all};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -6,7 +7,7 @@ use anyhow::{bail, Context};
 use chrono::{DateTime, Utc};
 use dashmap::{DashMap, mapref::entry::Entry};
 use heed::{Env, EnvOpenOptions, Database, types::{Str, SerdeJson, ByteSlice}, RoTxn, RwTxn};
-use log::error;
+use log::{error, info};
 use milli::Index;
 use rayon::ThreadPool;
 use serde::{Serialize, Deserialize};
@@ -88,6 +89,52 @@ impl IndexStore {
             thread_pool,
             indexer_options,
         })
+    }
+
+    pub fn delete(&self, index_uid: impl AsRef<str>) -> anyhow::Result<()> {
+        // we remove the references to the index from the index map so it is not accessible anymore
+        let mut txn = self.env.write_txn()?;
+        let uuid = self.index_uuid(&txn, &index_uid)?
+            .with_context(|| format!("Index {:?} doesn't exist", index_uid.as_ref()))?;
+        self.name_to_uuid.delete(&mut txn, index_uid.as_ref())?;
+        self.uuid_to_index_meta.delete(&mut txn, uuid.as_bytes())?;
+        txn.commit()?;
+        // If the index was loaded, we need to close it. Since we already removed references to it
+        // from the index_store, the only that can still get a reference to it is the update store.
+        //
+        // First, we want to remove any pending updates from the store.
+        // Second, we try to get ownership on the update store so we can close it. It may take a
+        // couple of tries, but since the update store event loop only has a weak reference to
+        // itself, and we are the only other function holding a reference to it otherwise, we will
+        // get it eventually.
+        // Fourth, we request a closing of the update store.
+        // Fifth, we can take ownership on the index, and close it.
+        // Lastly, remove all the files from the file system.
+        let index_uid = index_uid.as_ref().to_string();
+        if let Some((_, (index, updates))) = self.uuid_to_index.remove(&uuid) {
+            std::thread::spawn(move || {
+                info!("Preparing for {:?} deletion.", index_uid);
+                // this error is non fatal, but may delay the deletion.
+                if let Err(e) = updates.abort_pendings() {
+                    error!(
+                        "error aborting pending updates when deleting index {:?}: {}",
+                        index_uid,
+                        e
+                    );
+                }
+                let updates = get_arc_ownership_blocking(updates);
+                let close_event = updates.prepare_for_closing();
+                close_event.wait();
+                info!("closed update store for {:?}", index_uid);
+
+                let index = get_arc_ownership_blocking(index);
+                let close_event = index.prepare_for_closing();
+                close_event.wait();
+                info!("index {:?} deleted.", index_uid);
+            });
+        }
+
+        Ok(())
     }
 
     fn index_uuid(&self, txn: &RoTxn, name: impl AsRef<str>) -> anyhow::Result<Option<Uuid>> {
@@ -296,6 +343,20 @@ impl IndexStore {
             indexes.push((name.to_owned(), meta, primary_key));
         }
         Ok(indexes)
+    }
+}
+
+// Loops on an arc to get ownership on the wrapped value. This method sleeps 100ms before retrying.
+fn get_arc_ownership_blocking<T>(mut item: Arc<T>) -> T {
+    loop {
+        match Arc::try_unwrap(item) {
+            Ok(item) => return item,
+            Err(item_arc) => {
+                item = item_arc;
+                std::thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+        }
     }
 }
 
