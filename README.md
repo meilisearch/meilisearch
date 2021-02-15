@@ -194,7 +194,6 @@ This program is optional, you can disable these analytics by using the `MEILI_NO
 ## 💌 Contact
 
 Feel free to contact us about any questions you may have:
-* At [bonjour@meilisearch.com](mailto:bonjour@meilisearch.com)
 * 🆕 Join our [GitHub Discussions forum](https://github.com/meilisearch/MeiliSearch/discussions)
 * Join our [Slack community](https://slack.meilisearch.com/).
 * By opening an issue.
