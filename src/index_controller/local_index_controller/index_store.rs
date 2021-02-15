@@ -99,18 +99,19 @@ impl IndexStore {
         self.name_to_uuid.delete(&mut txn, index_uid.as_ref())?;
         self.uuid_to_index_meta.delete(&mut txn, uuid.as_bytes())?;
         txn.commit()?;
-        // If the index was loaded, we need to close it. Since we already removed references to it
-        // from the index_store, the only that can still get a reference to it is the update store.
+        // If the index was loaded (i.e it is present in the uuid_to_index map), then we need to
+        // close it. The process goes as follow:
         //
-        // First, we want to remove any pending updates from the store.
-        // Second, we try to get ownership on the update store so we can close it. It may take a
+        // 1) We want to remove any pending updates from the store.
+        // 2) We try to get ownership on the update store so we can close it. It may take a
         // couple of tries, but since the update store event loop only has a weak reference to
         // itself, and we are the only other function holding a reference to it otherwise, we will
         // get it eventually.
-        // Fourth, we request a closing of the update store.
-        // Fifth, we can take ownership on the index, and close it.
-        // Lastly, remove all the files from the file system.
+        // 3) We request a closing of the update store.
+        // 4) We can take ownership on the index, and close it.
+        // 5) We remove all the files from the file system.
         let index_uid = index_uid.as_ref().to_string();
+        let path = self.env.path().to_owned();
         if let Some((_, (index, updates))) = self.uuid_to_index.remove(&uuid) {
             std::thread::spawn(move || {
                 info!("Preparing for {:?} deletion.", index_uid);
@@ -130,6 +131,18 @@ impl IndexStore {
                 let index = get_arc_ownership_blocking(index);
                 let close_event = index.prepare_for_closing();
                 close_event.wait();
+
+                let update_path = make_update_db_path(&path, &uuid);
+                let index_path = make_index_db_path(&path, &uuid);
+
+                if let Err(e) = remove_dir_all(index_path) {
+                    error!("error removing index {:?}: {}", index_uid, e);
+                }
+
+                if let Err(e) = remove_dir_all(update_path) {
+                    error!("error removing index {:?}: {}", index_uid, e);
+                }
+
                 info!("index {:?} deleted.", index_uid);
             });
         }
