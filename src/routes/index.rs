@@ -32,7 +32,6 @@ async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseErr
             unimplemented!()
         }
     }
-
 }
 
 #[get("/indexes/{index_uid}", wrap = "Authentication::Private")]

@@ -12,6 +12,9 @@ use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 
+const DEFAULT_RETRIEVE_DOCUMENTS_OFFSET: usize = 0;
+const DEFAULT_RETRIEVE_DOCUMENTS_LIMIT: usize = 20;
+
 macro_rules! guard_content_type {
     ($fn_name:ident, $guard_value:literal) => {
         fn $fn_name(head: &actix_web::dev::RequestHead) -> bool {
@@ -49,10 +52,21 @@ pub fn services(cfg: &mut web::ServiceConfig) {
     wrap = "Authentication::Public"
 )]
 async fn get_document(
-    _data: web::Data<Data>,
-    _path: web::Path<DocumentParam>,
+    data: web::Data<Data>,
+    path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    let index = path.index_uid.clone();
+    let id = path.document_id.clone();
+    match data.retrieve_document(index, id, None as Option<Vec<String>>).await {
+        Ok(document) => {
+            let json = serde_json::to_string(&document).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            error!("{}", e);
+            unimplemented!()
+        }
+    }
 }
 
 #[delete(
@@ -78,18 +92,36 @@ async fn delete_document(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BrowseQuery {
-    _offset: Option<usize>,
-    _limit: Option<usize>,
-    _attributes_to_retrieve: Option<String>,
+    offset: Option<usize>,
+    limit: Option<usize>,
+    attributes_to_retrieve: Option<String>,
 }
 
 #[get("/indexes/{index_uid}/documents", wrap = "Authentication::Public")]
 async fn get_all_documents(
-    _data: web::Data<Data>,
-    _path: web::Path<IndexParam>,
-    _params: web::Query<BrowseQuery>,
+    data: web::Data<Data>,
+    path: web::Path<IndexParam>,
+    params: web::Query<BrowseQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
+    let attributes_to_retrieve = params
+        .attributes_to_retrieve
+        .as_ref()
+        .map(|attrs| attrs
+            .split(",")
+            .map(String::from)
+            .collect::<Vec<_>>());
+
+    match data.retrieve_documents(
+        path.index_uid.clone(),
+        params.offset.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_OFFSET),
+        params.limit.unwrap_or(DEFAULT_RETRIEVE_DOCUMENTS_LIMIT),
+        attributes_to_retrieve).await {
+        Ok(docs) => {
+            let json = serde_json::to_string(&docs).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(_) => { todo!() }
+    }
 }
 
 #[derive(Deserialize)]
