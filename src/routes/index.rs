@@ -1,7 +1,6 @@
 use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
-use log::error;
 use serde::{Deserialize, Serialize};
 
 use crate::Data;
@@ -28,8 +27,7 @@ async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseErr
             Ok(HttpResponse::Ok().body(&json))
         }
         Err(e) => {
-            error!("error listing indexes: {}", e);
-            unimplemented!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -45,7 +43,8 @@ async fn get_index(
             Ok(HttpResponse::Ok().body(json))
         }
         None => {
-            unimplemented!()
+            let e = format!("Index {:?} doesn't exist.", path.index_uid);
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -68,8 +67,7 @@ async fn create_index(
             Ok(HttpResponse::Ok().body(json))
         }
         Err(e) => {
-            error!("error creating index: {}", e);
-            unimplemented!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -102,7 +100,9 @@ async fn update_index(
             let json = serde_json::to_string(&meta).unwrap();
             Ok(HttpResponse::Ok().body(json))
         }
-        Err(_) => { todo!() }
+        Err(e) => {
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+        }
     }
 }
 
@@ -114,8 +114,7 @@ async fn delete_index(
     match data.delete_index(path.index_uid.clone()).await {
         Ok(_) => Ok(HttpResponse::Ok().finish()),
         Err(e) => {
-            error!("{}", e);
-            todo!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -141,11 +140,11 @@ async fn get_update_status(
             Ok(HttpResponse::Ok().body(json))
         }
         Ok(None) => {
-            todo!()
+            let e = format!("udpate {} for index {:?} doesn't exists.", path.update_id, path.index_uid);
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
         Err(e) => {
-            error!("{}", e);
-            todo!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -162,8 +161,7 @@ async fn get_all_updates_status(
             Ok(HttpResponse::Ok().body(json))
         }
         Err(e) => {
-            error!("{}", e);
-            todo!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
