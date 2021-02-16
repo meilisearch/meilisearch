@@ -11,7 +11,7 @@ use serde_json::{Value, Map};
 use crate::index_controller::IndexController;
 use super::Data;
 
-const DEFAULT_SEARCH_LIMIT: usize = 20;
+pub const DEFAULT_SEARCH_LIMIT: usize = 20;
 
 const fn default_search_limit() -> usize { DEFAULT_SEARCH_LIMIT }
 
