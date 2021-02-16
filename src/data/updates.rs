@@ -82,6 +82,15 @@ impl Data {
         Ok(update.into())
     }
 
+    pub async fn delete_index(
+        &self,
+        index: impl AsRef<str> + Send + Sync + 'static,
+    ) -> anyhow::Result<()> {
+        let index_controller = self.index_controller.clone();
+        tokio::task::spawn_blocking(move || { index_controller.delete_index(index) }).await??;
+        Ok(())
+    }
+
     #[inline]
     pub fn get_update_status(&self, index: impl AsRef<str>, uid: u64) -> anyhow::Result<Option<UpdateStatus>> {
         self.index_controller.update_status(index, uid)

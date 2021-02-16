@@ -66,21 +66,33 @@ where
             processing,
         });
 
-        let update_store_cloned = update_store.clone();
+        // We need a weak reference so we can take ownership on the arc later when we
+        // want to close the index.
+        let update_store_weak = Arc::downgrade(&update_store);
         std::thread::spawn(move || {
             // Block and wait for something to process.
-            for () in notification_receiver {
+            'outer: for _ in notification_receiver {
                 loop {
-                    match update_store_cloned.process_pending_update(&mut update_handler) {
-                        Ok(Some(_)) => (),
-                        Ok(None) => break,
-                        Err(e) => eprintln!("error while processing update: {}", e),
+                    match update_store_weak.upgrade() {
+                        Some(update_store) => {
+                            match update_store.process_pending_update(&mut update_handler) {
+                                Ok(Some(_)) => (),
+                                Ok(None) => break,
+                                Err(e) => eprintln!("error while processing update: {}", e),
+                            }
+                        }
+                        // the ownership on the arc has been taken, we need to exit.
+                        None => break 'outer,
                     }
                 }
             }
         });
 
         Ok(update_store)
+    }
+
+    pub fn prepare_for_closing(self) -> heed::EnvClosingEvent {
+        self.env.prepare_for_closing()
     }
 
     /// Returns the new biggest id to use to store the new update.
