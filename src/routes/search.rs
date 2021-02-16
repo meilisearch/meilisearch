@@ -1,5 +1,4 @@
 use actix_web::{get, post, web, HttpResponse};
-use log::error;
 
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
@@ -49,8 +48,7 @@ async fn search_with_post(
             Ok(HttpResponse::Ok().body(docs))
         }
         Err(e) => {
-            error!("{}", e);
-            todo!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }

@@ -63,8 +63,7 @@ async fn get_document(
             Ok(HttpResponse::Ok().body(json))
         }
         Err(e) => {
-            error!("{}", e);
-            unimplemented!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -83,8 +82,7 @@ async fn delete_document(
             Ok(HttpResponse::Ok().body(json))
         }
         Err(e) => {
-            error!("{}", e);
-            unimplemented!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -120,7 +118,9 @@ async fn get_all_documents(
             let json = serde_json::to_string(&docs).unwrap();
             Ok(HttpResponse::Ok().body(json))
         }
-        Err(_) => { todo!() }
+        Err(e) => {
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+        }
     }
 }
 
@@ -158,8 +158,7 @@ async fn add_documents_json(
             Ok(response)
         }
         Err(e) => {
-            error!("{}", e);
-            todo!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -216,8 +215,7 @@ async fn update_documents(
             Ok(response)
         }
         Err(e) => {
-            error!("{}", e);
-            todo!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -242,8 +240,7 @@ async fn delete_documents(
             Ok(HttpResponse::Ok().body(json))
         }
         Err(e) => {
-            error!("{}", e);
-            unimplemented!()
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -259,8 +256,7 @@ async fn clear_all_documents(
             Ok(HttpResponse::Ok().body(json))
         }
         Err(e) => {
-            error!("{}", e);
-            unimplemented!();
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
