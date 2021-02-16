@@ -1,7 +1,7 @@
 mod search;
 mod updates;
 
-pub use search::{SearchQuery, SearchResult};
+pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
 
 use std::fs::create_dir_all;
 use std::ops::Deref;
@@ -28,7 +28,7 @@ impl Deref for Data {
 #[derive(Clone)]
 pub struct DataInner {
     pub index_controller: Arc<LocalIndexController>,
-    api_keys: ApiKeys,
+    pub api_keys: ApiKeys,
     options: Opt,
 }
 
