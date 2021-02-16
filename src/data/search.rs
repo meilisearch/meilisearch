@@ -38,7 +38,7 @@ impl SearchQuery {
     pub fn perform(&self, index: impl AsRef<Index>) -> anyhow::Result<SearchResult>{
         let index = index.as_ref();
         let before_search = Instant::now();
-        let rtxn = index.read_txn().unwrap();
+        let rtxn = index.read_txn()?;
 
         let mut search = index.search(&rtxn);
 
@@ -59,18 +59,31 @@ impl SearchQuery {
         let milli::SearchResult { documents_ids, found_words, candidates } = search.execute()?;
 
         let mut documents = Vec::new();
-        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
 
-        let displayed_fields = match index.displayed_fields_ids(&rtxn).unwrap() {
-            Some(fields) => fields,
-            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
+        let displayed_fields_ids = index.displayed_fields_ids(&rtxn)?;
+
+        let attributes_to_retrieve_ids = match self.attributes_to_retrieve {
+            Some(ref attrs) if attrs.iter().any(|f| f == "*") => None,
+            Some(ref attrs) => attrs
+                    .iter()
+                    .filter_map(|f| fields_ids_map.id(f))
+                    .collect::<Vec<_>>()
+                    .into(),
+            None => None,
+        };
+
+        let displayed_fields_ids = match (displayed_fields_ids, attributes_to_retrieve_ids)  {
+            (_, Some(ids)) => ids,
+            (Some(ids), None) => ids,
+            (None, None) => fields_ids_map.iter().map(|(id, _)| id).collect(),
         };
 
         let stop_words = fst::Set::default();
         let highlighter = Highlighter::new(&stop_words);
 
-        for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
-            let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv)?;
+        for (_id, obkv) in index.documents(&rtxn, documents_ids)? {
+            let mut object = obkv_to_json(&displayed_fields_ids, &fields_ids_map, obkv)?;
             if let Some(ref attributes_to_highlight) = self.attributes_to_highlight {
                 highlighter.highlight_record(&mut object, &found_words, attributes_to_highlight);
             }
