@@ -146,7 +146,7 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
     );
 
     eprintln!(
-        "Amplitude Analytics:\t{:?}",
+        "Anonymous telemetry on:\t{:?}",
         if !opt.no_analytics {
             "Enabled"
         } else {
