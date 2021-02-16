@@ -634,7 +634,6 @@ dependencies = [
  "atty",
  "bitflags",
  "strsim",
- "term_size",
  "textwrap",
  "unicode-width",
  "vec_map",
@@ -1634,6 +1633,7 @@ dependencies = [
  "chrono",
  "crossbeam-channel",
  "dashmap",
+ "either",
  "env_logger 0.8.2",
  "flate2",
  "fst",
@@ -1720,7 +1720,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bstr",
- "byte-unit",
  "byteorder",
  "crossbeam-channel",
  "csv",
@@ -1732,13 +1731,11 @@ dependencies = [
  "heed",
  "human_format",
  "itertools 0.9.0",
- "jemallocator",
  "levenshtein_automata",
  "linked-hash-map",
  "log",
  "meilisearch-tokenizer",
  "memmap",
- "near-proximity",
  "num-traits",
  "obkv",
  "once_cell",
@@ -1747,15 +1744,11 @@ dependencies = [
  "pest_derive",
  "rayon",
  "regex",
- "ringtail",
  "roaring",
  "serde",
  "serde_json",
- "slice-group-by",
  "smallstr",
  "smallvec",
- "stderrlog",
- "structopt",
  "tempfile",
  "uuid",
 ]
@@ -1848,14 +1841,6 @@ checksum = "5a33c1b55807fbed163481b5ba66db4b2fa6cde694a5027be10fb724206c5897"
 dependencies = [
  "socket2",
  "winapi 0.3.9",
-]
-
-[[package]]
-name = "near-proximity"
-version = "0.1.0"
-source = "git+https://github.com/Kerollmops/plane-sweep-proximity?rev=6608205#66082058537f6fe7709adc4690048d62f3c0e9b7"
-dependencies = [
- "tinyvec",
 ]
 
 [[package]]
@@ -2436,12 +2421,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ringtail"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21215c1b9d8f7832b433255bd9eea3e2779aa55b21b2f8e13aad62c74749b237"
-
-[[package]]
 name = "roaring"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2738,19 +2717,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stderrlog"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b02f316286ae558d83acc93dd81eaba096e746987a7961d4a9ae026842bae67f"
-dependencies = [
- "atty",
- "chrono",
- "log",
- "termcolor",
- "thread_local",
-]
-
-[[package]]
 name = "stdweb"
 version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2898,16 +2864,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "term_size"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e4129646ca0ed8f45d09b929036bafad5377103edd06e50bf574b353d2b08d9"
-dependencies = [
- "libc",
- "winapi 0.3.9",
-]
-
-[[package]]
 name = "termcolor"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2922,7 +2878,6 @@ version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 dependencies = [
- "term_size",
  "unicode-width",
 ]
 

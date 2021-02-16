@@ -67,7 +67,6 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             matches: other.matches,
             facet_filters,
             facets_distribution,
-            facet_condition: None,
         })
     }
 }
