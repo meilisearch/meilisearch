@@ -186,9 +186,12 @@ Hey! We're glad you're thinking about contributing to MeiliSearch! If you think 
 ## Telemetry
 
 MeiliSearch collects anonymous data regarding general usage.
-This helps us better understand developers usage of MeiliSearch features.<br/>
-To see what information we're retrieving, please see the complete list [on the dedicated issue](https://github.com/meilisearch/MeiliSearch/issues/720).<br/>
-We also use Sentry to make us crash and error reports. If you want to know more about what Sentry collects, please visit their [privacy policy website](https://sentry.io/privacy/).<br/>
+This helps us better understand developers usage of MeiliSearch features.
+
+To see what information we're retrieving, please see the complete list [on the dedicated issue](https://github.com/meilisearch/MeiliSearch/issues/720).
+
+We also use Sentry to make us crash and error reports. If you want to know more about what Sentry collects, please visit their [privacy policy website](https://sentry.io/privacy/).
+
 This program is optional, you can disable these analytics by using the `MEILI_NO_ANALYTICS` env variable.
 
 ## 💌 Contact
