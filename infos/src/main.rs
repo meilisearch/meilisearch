@@ -16,23 +16,29 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 const MAIN_DB_NAME: &str = "main";
 const WORD_DOCIDS_DB_NAME: &str = "word-docids";
+const WORD_PREFIX_DOCIDS_DB_NAME: &str = "word-prefix-docids";
 const DOCID_WORD_POSITIONS_DB_NAME: &str = "docid-word-positions";
 const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
+const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-prefix-pair-proximity-docids";
 const DOCUMENTS_DB_NAME: &str = "documents";
 const USERS_IDS_DOCUMENTS_IDS: &[u8] = b"users-ids-documents-ids";
 
 const ALL_DATABASE_NAMES: &[&str] = &[
     MAIN_DB_NAME,
     WORD_DOCIDS_DB_NAME,
+    WORD_PREFIX_DOCIDS_DB_NAME,
     DOCID_WORD_POSITIONS_DB_NAME,
     WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
+    WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
     DOCUMENTS_DB_NAME,
 ];
 
 const POSTINGS_DATABASE_NAMES: &[&str] = &[
     WORD_DOCIDS_DB_NAME,
+    WORD_PREFIX_DOCIDS_DB_NAME,
     DOCID_WORD_POSITIONS_DB_NAME,
     WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
+    WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
 ];
 
 #[derive(Debug, StructOpt)]
@@ -83,6 +89,16 @@ enum Command {
 
         /// The words to display the documents ids of.
         words: Vec<String>,
+    },
+
+    /// Outputs a CSV with the documents ids where the given words prefixes appears.
+    WordsPrefixesDocids {
+        /// Display the whole documents ids in details.
+        #[structopt(long)]
+        full_display: bool,
+
+        /// The prefixes to display the documents ids of.
+        prefixes: Vec<String>,
     },
 
     /// Outputs a CSV with the documents ids along with the facet values where it appears.
@@ -147,6 +163,12 @@ enum Command {
     /// you can install it using `cargo install fst-bin`.
     ExportWordsFst,
 
+    /// Outputs the words prefix FST to standard output.
+    ///
+    /// One can use the FST binary helper to dissect and analyze it,
+    /// you can install it using `cargo install fst-bin`.
+    ExportWordsPrefixFst,
+
     /// Outputs the documents as JSON lines to the standard output.
     ///
     /// All of the fields are extracted, not just the displayed ones.
@@ -186,6 +208,9 @@ fn run(opt: Opt) -> anyhow::Result<()> {
         MostCommonWords { limit } => most_common_words(&index, &rtxn, limit),
         BiggestValues { limit } => biggest_value_sizes(&index, &rtxn, limit),
         WordsDocids { full_display, words } => words_docids(&index, &rtxn, !full_display, words),
+        WordsPrefixesDocids { full_display, prefixes } => {
+            words_prefixes_docids(&index, &rtxn, !full_display, prefixes)
+        },
         FacetValuesDocids { full_display, field_name } => {
             facet_values_docids(&index, &rtxn, !full_display, field_name)
         },
@@ -201,6 +226,7 @@ fn run(opt: Opt) -> anyhow::Result<()> {
             word_pair_proximities_docids(&index, &rtxn, !full_display, word1, word2)
         },
         ExportWordsFst => export_words_fst(&index, &rtxn),
+        ExportWordsPrefixFst => export_words_prefix_fst(&index, &rtxn),
         ExportDocuments => export_documents(&index, &rtxn),
         PatchToNewExternalIds => {
             drop(rtxn);
@@ -311,8 +337,10 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         env: _env,
         main,
         word_docids,
+        word_prefix_docids,
         docid_word_positions,
         word_pair_proximity_docids,
+        word_prefix_pair_proximity_docids,
         facet_field_id_value_docids,
         field_id_docid_facet_values: _,
         documents,
@@ -320,7 +348,9 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
 
     let main_name = "main";
     let word_docids_name = "word_docids";
+    let word_prefix_docids_name = "word_prefix_docids";
     let docid_word_positions_name = "docid_word_positions";
+    let word_prefix_pair_proximity_docids_name = "word_prefix_pair_proximity_docids";
     let word_pair_proximity_docids_name = "word_pair_proximity_docids";
     let facet_field_id_value_docids_name = "facet_field_id_value_docids";
     let documents_name = "documents";
@@ -328,8 +358,16 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
     let mut heap = BinaryHeap::with_capacity(limit + 1);
 
     if limit > 0 {
+        // Fetch the words FST
         let words_fst = index.words_fst(rtxn)?;
-        heap.push(Reverse((words_fst.as_fst().as_bytes().len(), format!("words-fst"), main_name)));
+        let length = words_fst.as_fst().as_bytes().len();
+        heap.push(Reverse((length, format!("words-fst"), main_name)));
+        if heap.len() > limit { heap.pop(); }
+
+        // Fetch the word prefix FST
+        let words_prefixes_fst = index.words_prefixes_fst(rtxn)?;
+        let length = words_prefixes_fst.as_fst().as_bytes().len();
+        heap.push(Reverse((length, format!("words-prefixes-fst"), main_name)));
         if heap.len() > limit { heap.pop(); }
 
         if let Some(documents_ids) = main.get::<_, Str, ByteSlice>(rtxn, "documents-ids")? {
@@ -340,6 +378,12 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         for result in word_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
             let (word, value) = result?;
             heap.push(Reverse((value.len(), word.to_string(), word_docids_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        for result in word_prefix_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let (word, value) = result?;
+            heap.push(Reverse((value.len(), word.to_string(), word_prefix_docids_name)));
             if heap.len() > limit { heap.pop(); }
         }
 
@@ -354,6 +398,13 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
             let ((word1, word2, prox), value) = result?;
             let key = format!("{} {} {}", word1, word2, prox);
             heap.push(Reverse((value.len(), key, word_pair_proximity_docids_name)));
+            if heap.len() > limit { heap.pop(); }
+        }
+
+        for result in word_prefix_pair_proximity_docids.remap_data_type::<ByteSlice>().iter(rtxn)? {
+            let ((word, prefix, prox), value) = result?;
+            let key = format!("{} {} {}", word, prefix, prox);
+            heap.push(Reverse((value.len(), key, word_prefix_pair_proximity_docids_name)));
             if heap.len() > limit { heap.pop(); }
         }
 
@@ -420,6 +471,43 @@ fn words_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, words: Vec<Strin
                 format!("{:?}", docids.iter().collect::<Vec<_>>())
             };
             wtr.write_record(&[word, docids])?;
+        }
+    }
+
+    Ok(wtr.flush()?)
+}
+
+fn words_prefixes_docids(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+    debug: bool,
+    prefixes: Vec<String>,
+) -> anyhow::Result<()>
+{
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["prefix", "documents_ids"])?;
+
+    if prefixes.is_empty() {
+        for result in index.word_prefix_docids.iter(rtxn)? {
+            let (prefix, docids) = result?;
+            let docids = if debug {
+                format!("{:?}", docids)
+            } else {
+                format!("{:?}", docids.iter().collect::<Vec<_>>())
+            };
+            wtr.write_record(&[prefix, &docids])?;
+        }
+    } else {
+        for prefix in prefixes {
+            if let Some(docids) = index.word_prefix_docids.get(rtxn, &prefix)? {
+                let docids = if debug {
+                    format!("{:?}", docids)
+                } else {
+                    format!("{:?}", docids.iter().collect::<Vec<_>>())
+                };
+                wtr.write_record(&[prefix, docids])?;
+            }
         }
     }
 
@@ -513,6 +601,16 @@ fn export_words_fst(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     let mut stdout = io::stdout();
     let words_fst = index.words_fst(rtxn)?;
     stdout.write_all(words_fst.as_fst().as_bytes())?;
+
+    Ok(())
+}
+
+fn export_words_prefix_fst(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+    use std::io::Write as _;
+
+    let mut stdout = io::stdout();
+    let words_prefixes_fst = index.words_prefixes_fst(rtxn)?;
+    stdout.write_all(words_prefixes_fst.as_fst().as_bytes())?;
 
     Ok(())
 }
@@ -627,9 +725,11 @@ fn size_of_database(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Re
 
     let database = match name {
         MAIN_DB_NAME => &index.main,
+        WORD_PREFIX_DOCIDS_DB_NAME => index.word_prefix_docids.as_polymorph(),
         WORD_DOCIDS_DB_NAME => index.word_docids.as_polymorph(),
         DOCID_WORD_POSITIONS_DB_NAME => index.docid_word_positions.as_polymorph(),
         WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_pair_proximity_docids.as_polymorph(),
+        WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => index.word_prefix_pair_proximity_docids.as_polymorph(),
         DOCUMENTS_DB_NAME => index.documents.as_polymorph(),
         unknown => anyhow::bail!("unknown database {:?}", unknown),
     };
@@ -675,24 +775,21 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
         }
 
         values_length.sort_unstable();
+        let len = values_length.len();
 
-        let median = values_length.len() / 2;
-        let quartile = values_length.len() / 4;
-        let percentile = values_length.len() / 100;
-
-        let twenty_five_percentile = values_length.get(quartile).unwrap_or(&0);
-        let fifty_percentile = values_length.get(median).unwrap_or(&0);
-        let seventy_five_percentile = values_length.get(quartile * 3).unwrap_or(&0);
-        let ninety_percentile = values_length.get(percentile * 90).unwrap_or(&0);
-        let ninety_five_percentile = values_length.get(percentile * 95).unwrap_or(&0);
-        let ninety_nine_percentile = values_length.get(percentile * 99).unwrap_or(&0);
+        let twenty_five_percentile = values_length.get(len / 4).unwrap_or(&0);
+        let fifty_percentile = values_length.get(len / 2).unwrap_or(&0);
+        let seventy_five_percentile = values_length.get(len * 3 / 4).unwrap_or(&0);
+        let ninety_percentile = values_length.get(len * 90 / 100).unwrap_or(&0);
+        let ninety_five_percentile = values_length.get(len * 95 / 100).unwrap_or(&0);
+        let ninety_nine_percentile = values_length.get(len * 99 / 100).unwrap_or(&0);
         let minimum = values_length.first().unwrap_or(&0);
         let maximum = values_length.last().unwrap_or(&0);
         let count = values_length.len();
         let sum = values_length.iter().map(|l| *l as u64).sum::<u64>();
 
         println!("The {} database stats on the lengths", name);
-        println!("\tnumber of proximity pairs: {}", count);
+        println!("\tnumber of entries: {}", count);
         println!("\t25th percentile (first quartile): {}", twenty_five_percentile);
         println!("\t50th percentile (median): {}", fifty_percentile);
         println!("\t75th percentile (third quartile): {}", seventy_five_percentile);
@@ -714,12 +811,20 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
             let db = index.word_docids.as_polymorph();
             compute_stats::<RoaringBitmapCodec>(*db, rtxn, name)
         },
+        WORD_PREFIX_DOCIDS_DB_NAME => {
+            let db = index.word_prefix_docids.as_polymorph();
+            compute_stats::<RoaringBitmapCodec>(*db, rtxn, name)
+        },
         DOCID_WORD_POSITIONS_DB_NAME => {
             let db = index.docid_word_positions.as_polymorph();
             compute_stats::<BoRoaringBitmapCodec>(*db, rtxn, name)
         },
         WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME => {
             let db = index.word_pair_proximity_docids.as_polymorph();
+            compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
+        },
+        WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME => {
+            let db = index.word_prefix_pair_proximity_docids.as_polymorph();
             compute_stats::<CboRoaringBitmapCodec>(*db, rtxn, name)
         },
         unknown => anyhow::bail!("unknown database {:?}", unknown),

@@ -32,7 +32,8 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
         wtxn: &'t mut heed::RwTxn<'i, 'u>,
         index: &'i Index,
         update_id: u64,
-    ) -> Facets<'t, 'u, 'i> {
+    ) -> Facets<'t, 'u, 'i>
+    {
         Facets {
             wtxn,
             index,

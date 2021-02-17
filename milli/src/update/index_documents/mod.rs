@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use anyhow::Context;
 use bstr::ByteSlice as _;
-use grenad::{Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
+use grenad::{MergerIter, Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
 use heed::types::ByteSlice;
 use log::{debug, info, error};
 use memmap::Mmap;
@@ -17,9 +17,9 @@ use rayon::prelude::*;
 use serde::{Serialize, Deserialize};
 
 use crate::index::Index;
-use crate::update::{Facets, UpdateIndexingStep};
+use crate::update::{Facets, WordsPrefixes, UpdateIndexingStep};
 use self::store::{Store, Readers};
-use self::merge_function::{
+pub use self::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
     docid_word_positions_merge, documents_merge, facet_field_value_docids_merge,
     field_id_docid_facet_values_merge,
@@ -102,39 +102,19 @@ pub fn merge_into_lmdb_database(
     sources: Vec<Reader<FileFuse>>,
     merge: MergeFn,
     method: WriteMethod,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+{
     debug!("Merging {} MTBL stores...", sources.len());
     let before = Instant::now();
 
     let merger = merge_readers(sources, merge);
-    let mut in_iter = merger.into_merge_iter()?;
-
-    match method {
-        WriteMethod::Append => {
-            let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-            while let Some((k, v)) = in_iter.next()? {
-                out_iter.append(k, v).with_context(|| {
-                    format!("writing {:?} into LMDB", k.as_bstr())
-                })?;
-            }
-        },
-        WriteMethod::GetMergePut => {
-            while let Some((k, v)) = in_iter.next()? {
-                let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
-                match iter.next().transpose()? {
-                    Some((key, old_val)) if key == k => {
-                        let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
-                        let val = merge(k, &vals).expect("merge failed");
-                        iter.put_current(k, &val)?;
-                    },
-                    _ => {
-                        drop(iter);
-                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-                    },
-                }
-            }
-        },
-    }
+    merger_iter_into_lmdb_database(
+        wtxn,
+        database,
+        merger.into_merge_iter()?,
+        merge,
+        method,
+    )?;
 
     debug!("MTBL stores merged in {:.02?}!", before.elapsed());
     Ok(())
@@ -146,7 +126,8 @@ pub fn write_into_lmdb_database(
     mut reader: Reader<FileFuse>,
     merge: MergeFn,
     method: WriteMethod,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+{
     debug!("Writing MTBL stores...");
     let before = Instant::now();
 
@@ -178,6 +159,67 @@ pub fn write_into_lmdb_database(
     }
 
     debug!("MTBL stores merged in {:.02?}!", before.elapsed());
+    Ok(())
+}
+
+pub fn sorter_into_lmdb_database(
+    wtxn: &mut heed::RwTxn,
+    database: heed::PolyDatabase,
+    sorter: Sorter<MergeFn>,
+    merge: MergeFn,
+    method: WriteMethod,
+) -> anyhow::Result<()>
+{
+    debug!("Writing MTBL sorter...");
+    let before = Instant::now();
+
+    merger_iter_into_lmdb_database(
+        wtxn,
+        database,
+        sorter.into_iter()?,
+        merge,
+        method,
+    )?;
+
+    debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
+    Ok(())
+}
+
+fn merger_iter_into_lmdb_database<R: io::Read>(
+    wtxn: &mut heed::RwTxn,
+    database: heed::PolyDatabase,
+    mut sorter: MergerIter<R, MergeFn>,
+    merge: MergeFn,
+    method: WriteMethod,
+) -> anyhow::Result<()>
+{
+    match method {
+        WriteMethod::Append => {
+            let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
+            while let Some((k, v)) = sorter.next()? {
+                out_iter.append(k, v).with_context(|| {
+                    format!("writing {:?} into LMDB", k.as_bstr())
+                })?;
+            }
+        },
+        WriteMethod::GetMergePut => {
+            while let Some((k, v)) = sorter.next()? {
+                let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
+                match iter.next().transpose()? {
+                    Some((key, old_val)) if key == k => {
+                        let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
+                        let val = merge(k, &vals).expect("merge failed");
+                        iter.put_current(k, &val)?;
+                    },
+                    _ => {
+                        drop(iter);
+                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
+                    },
+                }
+            }
+        },
+    }
+
     Ok(())
 }
 
@@ -217,6 +259,8 @@ pub struct IndexDocuments<'t, 'u, 'i, 'a> {
     pub(crate) thread_pool: Option<&'a ThreadPool>,
     facet_level_group_size: Option<NonZeroUsize>,
     facet_min_level_size: Option<NonZeroUsize>,
+    words_prefix_threshold: Option<f64>,
+    max_prefix_length: Option<usize>,
     update_method: IndexDocumentsMethod,
     update_format: UpdateFormat,
     autogenerate_docids: bool,
@@ -242,6 +286,8 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             thread_pool: None,
             facet_level_group_size: None,
             facet_min_level_size: None,
+            words_prefix_threshold: None,
+            max_prefix_length: None,
             update_method: IndexDocumentsMethod::ReplaceDocuments,
             update_format: UpdateFormat::Json,
             autogenerate_docids: true,
@@ -625,6 +671,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             });
         }
 
+        // Run the facets update operation.
         let mut builder = Facets::new(self.wtxn, self.index, self.update_id);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
@@ -634,6 +681,19 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         }
         if let Some(value) = self.facet_min_level_size {
             builder.min_level_size(value);
+        }
+        builder.execute()?;
+
+        // Run the words prefixes update operation.
+        let mut builder = WordsPrefixes::new(self.wtxn, self.index, self.update_id);
+        builder.chunk_compression_type = self.chunk_compression_type;
+        builder.chunk_compression_level = self.chunk_compression_level;
+        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+        if let Some(value) = self.words_prefix_threshold {
+            builder.threshold(value);
+        }
+        if let Some(value) = self.max_prefix_length {
+            builder.max_prefix_length(value);
         }
         builder.execute()?;
 
