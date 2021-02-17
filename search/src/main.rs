@@ -57,7 +57,11 @@ fn run(opt: Opt) -> anyhow::Result<()> {
         .timestamp(stderrlog::Timestamp::Off)
         .init()?;
 
-    std::fs::create_dir_all(&opt.database)?;
+    // Return an error if the database does not exist.
+    if !opt.database.exists() {
+        anyhow::bail!("The database ({}) does not exist.", opt.database.display());
+    }
+
     let mut options = EnvOpenOptions::new();
     options.map_size(opt.database_size.get_bytes() as usize);
 
