@@ -5,7 +5,7 @@ use roaring::RoaringBitmap;
 
 use crate::search::query_tree::{Operation, Query, QueryKind};
 use crate::search::word_typos;
-use super::{Candidates, Criterion, CriterionResult, Context};
+use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
 
 // FIXME we must stop when the number of typos is equal to
 // the maximum number of typos for this query tree.
@@ -206,7 +206,7 @@ fn resolve_candidates<'t>(
                 for slice in ops.windows(2) {
                     match (&slice[0], &slice[1]) {
                         (Operation::Query(left), Operation::Query(right)) => {
-                            match ctx.query_pair_proximity_docids(left, right, 1)? {
+                            match query_pair_proximity_docids(ctx, left, right, 1)? {
                                 pair_docids if pair_docids.is_empty() => {
                                     return Ok(RoaringBitmap::new())
                                 },
@@ -233,7 +233,7 @@ fn resolve_candidates<'t>(
                 Ok(candidates)
             },
             Query(q) => if q.kind.typo() == number_typos {
-                Ok(ctx.query_docids(q)?)
+                Ok(query_docids(ctx, q)?)
             } else {
                 Ok(RoaringBitmap::new())
             },
