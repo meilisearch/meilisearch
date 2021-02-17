@@ -181,6 +181,7 @@ fn alterate_query_tree(
                 ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, typo_cache))
             },
             Operation::Query(q) => {
+                // TODO may be optimized when number_typos == 0
                 if let QueryKind::Tolerant { typo, word } = &q.kind {
                     // if no typo is allowed we don't call word_derivations function,
                     // and directly create an Exact query
