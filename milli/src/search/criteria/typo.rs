@@ -180,17 +180,17 @@ fn resolve_candidates<'t>(
                     match (&slice[0], &slice[1]) {
                         (Operation::Query(left), Operation::Query(right)) => {
                             match ctx.query_pair_proximity_docids(left, right, 1)? {
-                                Some(pair_docids) => {
-                                    if first_loop {
-                                        candidates = pair_docids;
-                                        first_loop = false;
-                                    } else {
-                                        candidates.intersect_with(&pair_docids)
-                                    }
+                                pair_docids if pair_docids.is_empty() => {
+                                    return Ok(RoaringBitmap::new())
                                 },
-                                None => return Ok(RoaringBitmap::new()),
+                                pair_docids if first_loop => {
+                                    candidates = pair_docids;
+                                    first_loop = false;
+                                },
+                                pair_docids => {
+                                    candidates.intersect_with(&pair_docids);
+                                },
                             }
-
                         },
                         _ => bail!("invalid consecutive query type"),
                     }
@@ -206,7 +206,7 @@ fn resolve_candidates<'t>(
                 Ok(candidates)
             },
             Query(q) => if q.kind.typo() == number_typos {
-                Ok(ctx.query_docids(q)?.unwrap_or_default())
+                Ok(ctx.query_docids(q)?)
             } else {
                 Ok(RoaringBitmap::new())
             },
