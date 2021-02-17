@@ -294,19 +294,24 @@ impl<'a> Search<'a> {
         let mut offset = self.offset;
         let mut limit = self.limit;
         let mut documents_ids = Vec::new();
-        while let Some(CriterionResult { candidates: docids, .. }) = criteria.next()? {
+        let mut initial_candidates = RoaringBitmap::new();
+        while let Some(CriterionResult { candidates, bucket_candidates, .. }) = criteria.next()? {
 
-            let mut len = docids.len() as usize;
-            let mut docids = docids.into_iter();
+            let mut len = candidates.len() as usize;
+            let mut candidates = candidates.into_iter();
+
+            if let Some(docids) = bucket_candidates {
+                initial_candidates.union_with(&docids);
+            }
 
             if offset != 0 {
-                docids.by_ref().skip(offset).for_each(drop);
+                candidates.by_ref().skip(offset).for_each(drop);
                 offset = offset.saturating_sub(len.min(offset));
                 len = len.saturating_sub(len.min(offset));
             }
 
             if len != 0 {
-                documents_ids.extend(docids.take(limit));
+                documents_ids.extend(candidates.take(limit));
                 limit = limit.saturating_sub(len.min(limit));
             }
 
@@ -314,8 +319,7 @@ impl<'a> Search<'a> {
         }
 
         let found_words = HashSet::new();
-        let candidates = RoaringBitmap::new();
-        Ok(SearchResult { found_words, candidates, documents_ids })
+        Ok(SearchResult { found_words, candidates: initial_candidates, documents_ids })
 
         // let order_by_facet = {
         //     let criteria = self.index.criteria(self.rtxn)?;
