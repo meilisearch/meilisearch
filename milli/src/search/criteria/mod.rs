@@ -10,7 +10,17 @@ use super::query_tree::{Operation, Query, QueryKind};
 pub mod typo;
 
 pub trait Criterion {
-    fn next(&mut self) -> anyhow::Result<Option<(Option<Operation>, RoaringBitmap)>>;
+    fn next(&mut self) -> anyhow::Result<Option<CriterionResult>>;
+}
+
+/// The result of a call to the parent criterion.
+pub struct CriterionResult {
+    /// The query tree that must be used by the children criterion to fetch candidates.
+    pub query_tree: Option<Operation>,
+    /// The candidates that this criterion is allowed to return subsets of.
+    pub candidates: RoaringBitmap,
+    /// Candidates that comes from the current bucket of the initial criterion.
+    pub bucket_candidates: Option<RoaringBitmap>,
 }
 
 /// Either a set of candidates that defines the candidates

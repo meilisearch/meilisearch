@@ -5,7 +5,7 @@ use roaring::RoaringBitmap;
 
 use crate::search::query_tree::{Operation, Query, QueryKind};
 use crate::search::word_typos;
-use super::{Candidates, Criterion, Context};
+use super::{Candidates, Criterion, CriterionResult, Context};
 
 // FIXME we must stop when the number of typos is equal to
 // the maximum number of typos for this query tree.
@@ -51,7 +51,7 @@ impl<'t> Typo<'t> {
 }
 
 impl<'t> Criterion for Typo<'t> {
-    fn next(&mut self) -> anyhow::Result<Option<(Option<Operation>, RoaringBitmap)>> {
+    fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         while self.number_typos < MAX_NUM_TYPOS {
             match (&mut self.query_tree, &mut self.candidates) {
@@ -68,7 +68,11 @@ impl<'t> Criterion for Typo<'t> {
                     candidates.difference_with(&new_candidates);
                     self.number_typos += 1;
 
-                    return Ok(Some((Some(new_query_tree), new_candidates)));
+                    return Ok(Some(CriterionResult {
+                        query_tree: Some(new_query_tree),
+                        candidates: new_candidates,
+                        bucket_candidates: None,
+                    }));
                 },
                 (Some(query_tree), Forbidden(candidates)) => {
                     // TODO if number_typos >= 2 the generated query_tree will allways be the same,
@@ -79,16 +83,24 @@ impl<'t> Criterion for Typo<'t> {
                     candidates.union_with(&new_candidates);
                     self.number_typos += 1;
 
-                    return Ok(Some((Some(new_query_tree), new_candidates)));
+                    return Ok(Some(CriterionResult {
+                        query_tree: Some(new_query_tree),
+                        candidates: new_candidates,
+                        bucket_candidates: None,
+                    }));
                 },
                 (None, Allowed(_)) => {
-                    return Ok(Some((None, take(&mut self.candidates).into_inner())));
+                    return Ok(Some(CriterionResult {
+                        query_tree: None,
+                        candidates: take(&mut self.candidates).into_inner(),
+                        bucket_candidates: None,
+                    }));
                 },
                 (None, Forbidden(_)) => {
                     match self.parent.as_mut() {
                         Some(parent) => {
                             match parent.next()? {
-                                Some((query_tree, candidates)) => {
+                                Some(CriterionResult { query_tree, candidates, .. }) => {
                                     self.query_tree = query_tree;
                                     self.candidates = Candidates::Allowed(candidates);
                                 },

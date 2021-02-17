@@ -18,7 +18,7 @@ use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetLevelValueI64Codec}
 use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
 use crate::mdfs::Mdfs;
 use crate::query_tokens::{query_tokens, QueryToken};
-use crate::search::criteria::Criterion;
+use crate::search::criteria::{Criterion, CriterionResult};
 use crate::search::criteria::typo::Typo;
 use crate::{Index, FieldId, DocumentId};
 
@@ -294,7 +294,7 @@ impl<'a> Search<'a> {
         let mut offset = self.offset;
         let mut limit = self.limit;
         let mut documents_ids = Vec::new();
-        while let Some((_qt, docids)) = criteria.next()? {
+        while let Some(CriterionResult { candidates: docids, .. }) = criteria.next()? {
 
             let mut len = docids.len() as usize;
             let mut docids = docids.into_iter();
