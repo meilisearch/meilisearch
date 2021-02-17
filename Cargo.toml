@@ -57,6 +57,7 @@ tokio = { version = "0.2", features = ["full"] }
 dashmap = "4.0.2"
 uuid = "0.8.2"
 itertools = "0.10.0"
+either = "1.6.1"
 
 [dependencies.sentry]
 default-features = false

@@ -3,17 +3,21 @@ use std::mem;
 use std::time::Instant;
 
 use anyhow::{bail, Context};
+use either::Either;
+use heed::RoTxn;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
-use milli::{Index, obkv_to_json, FacetCondition};
+use milli::{obkv_to_json, FacetCondition, Index};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, Map};
+use serde_json::{Map, Value};
 
-use crate::index_controller::IndexController;
 use super::Data;
+use crate::index_controller::IndexController;
 
 pub const DEFAULT_SEARCH_LIMIT: usize = 20;
 
-const fn default_search_limit() -> usize { DEFAULT_SEARCH_LIMIT }
+const fn default_search_limit() -> usize {
+    DEFAULT_SEARCH_LIMIT
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -31,11 +35,10 @@ pub struct SearchQuery {
     pub matches: Option<bool>,
     pub facet_filters: Option<Value>,
     pub facets_distribution: Option<Vec<String>>,
-    pub facet_condition: Option<String>,
 }
 
 impl SearchQuery {
-    pub fn perform(&self, index: impl AsRef<Index>) -> anyhow::Result<SearchResult>{
+    pub fn perform(&self, index: impl AsRef<Index>) -> anyhow::Result<SearchResult> {
         let index = index.as_ref();
         let before_search = Instant::now();
         let rtxn = index.read_txn()?;
@@ -49,14 +52,17 @@ impl SearchQuery {
         search.limit(self.limit);
         search.offset(self.offset.unwrap_or_default());
 
-        if let Some(ref condition) = self.facet_condition {
-            if !condition.trim().is_empty() {
-                let condition = FacetCondition::from_str(&rtxn, &index, &condition)?;
-                search.facet_condition(condition);
+        if let Some(ref facets) = self.facet_filters {
+            if let Some(facets) = parse_facets(facets, index, &rtxn)? {
+                search.facet_condition(facets);
             }
         }
 
-        let milli::SearchResult { documents_ids, found_words, candidates } = search.execute()?;
+        let milli::SearchResult {
+            documents_ids,
+            found_words,
+            candidates,
+        } = search.execute()?;
 
         let mut documents = Vec::new();
         let fields_ids_map = index.fields_ids_map(&rtxn)?;
@@ -66,14 +72,14 @@ impl SearchQuery {
         let attributes_to_retrieve_ids = match self.attributes_to_retrieve {
             Some(ref attrs) if attrs.iter().any(|f| f == "*") => None,
             Some(ref attrs) => attrs
-                    .iter()
-                    .filter_map(|f| fields_ids_map.id(f))
-                    .collect::<Vec<_>>()
-                    .into(),
+                .iter()
+                .filter_map(|f| fields_ids_map.id(f))
+                .collect::<Vec<_>>()
+                .into(),
             None => None,
         };
 
-        let displayed_fields_ids = match (displayed_fields_ids, attributes_to_retrieve_ids)  {
+        let displayed_fields_ids = match (displayed_fields_ids, attributes_to_retrieve_ids) {
             (_, Some(ids)) => ids,
             (Some(ids), None) => ids,
             (None, None) => fields_ids_map.iter().map(|(id, _)| id).collect(),
@@ -133,25 +139,31 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
                 for (word, token) in analyzed.reconstruct() {
                     if token.is_word() {
                         let to_highlight = words_to_highlight.contains(token.text());
-                        if to_highlight { string.push_str("<mark>") }
+                        if to_highlight {
+                            string.push_str("<mark>")
+                        }
                         string.push_str(word);
-                        if to_highlight { string.push_str("</mark>") }
+                        if to_highlight {
+                            string.push_str("</mark>")
+                        }
                     } else {
                         string.push_str(word);
                     }
                 }
                 Value::String(string)
-            },
-            Value::Array(values) => {
-                Value::Array(values.into_iter()
+            }
+            Value::Array(values) => Value::Array(
+                values
+                    .into_iter()
                     .map(|v| self.highlight_value(v, words_to_highlight))
-                    .collect())
-            },
-            Value::Object(object) => {
-                Value::Object(object.into_iter()
+                    .collect(),
+            ),
+            Value::Object(object) => Value::Object(
+                object
+                    .into_iter()
                     .map(|(k, v)| (k, self.highlight_value(v, words_to_highlight)))
-                    .collect())
-            },
+                    .collect(),
+            ),
         }
     }
 
@@ -172,7 +184,11 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
 }
 
 impl Data {
-    pub fn search<S: AsRef<str>>(&self, index: S, search_query: SearchQuery) -> anyhow::Result<SearchResult> {
+    pub fn search<S: AsRef<str>>(
+        &self,
+        index: S,
+        search_query: SearchQuery,
+    ) -> anyhow::Result<SearchResult> {
         match self.index_controller.index(&index)? {
             Some(index) => Ok(search_query.perform(index)?),
             None => bail!("index {:?} doesn't exists", index.as_ref()),
@@ -187,7 +203,7 @@ impl Data {
         attributes_to_retrieve: Option<Vec<S>>,
     ) -> anyhow::Result<Vec<Map<String, Value>>>
     where
-        S: AsRef<str> + Send + Sync + 'static
+        S: AsRef<str> + Send + Sync + 'static,
     {
         let index_controller = self.index_controller.clone();
         let documents: anyhow::Result<_> = tokio::task::spawn_blocking(move || {
@@ -207,9 +223,7 @@ impl Data {
                 None => fields_ids_map.iter().map(|(id, _)| id).collect(),
             };
 
-            let iter = index.documents.range(&txn, &(..))?
-                .skip(offset)
-                .take(limit);
+            let iter = index.documents.range(&txn, &(..))?.skip(offset).take(limit);
 
             let mut documents = Vec::new();
 
@@ -220,7 +234,8 @@ impl Data {
             }
 
             Ok(documents)
-        }).await?;
+        })
+        .await?;
         documents
     }
 
@@ -255,16 +270,68 @@ impl Data {
                 .get(document_id.as_ref().as_bytes())
                 .with_context(|| format!("Document with id {} not found", document_id.as_ref()))?;
 
-            let document = index.documents(&txn, std::iter::once(internal_id))?
+            let document = index
+                .documents(&txn, std::iter::once(internal_id))?
                 .into_iter()
                 .next()
                 .map(|(_, d)| d);
 
             match document {
-                Some(document) => Ok(obkv_to_json(&attributes_to_retrieve_ids, &fields_ids_map, document)?),
+                Some(document) => Ok(obkv_to_json(
+                    &attributes_to_retrieve_ids,
+                    &fields_ids_map,
+                    document,
+                )?),
                 None => bail!("Document with id {} not found", document_id.as_ref()),
             }
-        }).await?;
+        })
+        .await?;
         document
     }
 }
+
+fn parse_facets_array(
+    txn: &RoTxn,
+    index: &Index,
+    arr: &Vec<Value>,
+) -> anyhow::Result<Option<FacetCondition>> {
+    let mut ands = Vec::new();
+    for value in arr {
+        match value {
+            Value::String(s) => ands.push(Either::Right(s.clone())),
+            Value::Array(arr) => {
+                let mut ors = Vec::new();
+                for value in arr {
+                    match value {
+                        Value::String(s) => ors.push(s.clone()),
+                        v => bail!("Invalid facet expression, expected String, found: {:?}", v),
+                    }
+                }
+                ands.push(Either::Left(ors));
+            }
+            v => bail!(
+                "Invalid facet expression, expected String or [String], found: {:?}",
+                v
+            ),
+        }
+    }
+
+    FacetCondition::from_array(txn, index, ands)
+}
+
+fn parse_facets(
+    facets: &Value,
+    index: &Index,
+    txn: &RoTxn,
+) -> anyhow::Result<Option<FacetCondition>> {
+    match facets {
+        // Disabled for now
+        //Value::String(expr) => Ok(Some(FacetCondition::from_str(txn, index, expr)?)),
+        Value::Array(arr) => parse_facets_array(txn, index, arr),
+        v => bail!(
+            "Invalid facet expression, expected Array, found: {:?}",
+            v
+        ),
+    }
+}
+

@@ -1633,6 +1633,7 @@ dependencies = [
  "chrono",
  "crossbeam-channel",
  "dashmap",
+ "either",
  "env_logger 0.8.2",
  "flate2",
  "fst",
