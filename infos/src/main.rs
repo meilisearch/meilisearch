@@ -200,6 +200,11 @@ fn run(opt: Opt) -> anyhow::Result<()> {
     let mut options = EnvOpenOptions::new();
     options.map_size(opt.database_size.get_bytes() as usize);
 
+    // Return an error if the database does not exist.
+    if !opt.database.exists() {
+        anyhow::bail!("The database ({}) does not exist.", opt.database.display());
+    }
+
     // Open the LMDB database.
     let index = Index::new(options, opt.database)?;
     let rtxn = index.read_txn()?;
