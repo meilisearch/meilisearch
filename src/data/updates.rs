@@ -38,7 +38,6 @@ impl Data {
         file.sync_all().await?;
         let file = file.into_std().await;
 
-
         let index_controller = self.index_controller.clone();
         let update = tokio::task::spawn_blocking(move ||{
             let mmap;

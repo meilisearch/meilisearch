@@ -88,7 +88,7 @@ impl UpdateHandler {
         builder.index_documents_method(method);
 
         let gzipped = true;
-        let reader = if gzipped {
+        let reader = if gzipped && !content.is_empty() {
             Box::new(GzDecoder::new(content))
         } else {
             Box::new(content) as Box<dyn io::Read>
