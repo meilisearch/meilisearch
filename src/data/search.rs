@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, BTreeMap};
 use std::mem;
 use std::time::Instant;
 
@@ -6,7 +6,7 @@ use anyhow::{bail, Context};
 use either::Either;
 use heed::RoTxn;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
-use milli::{obkv_to_json, FacetCondition, Index};
+use milli::{obkv_to_json, FacetCondition, Index, facet::FacetValue};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -34,7 +34,7 @@ pub struct SearchQuery {
     pub filters: Option<String>,
     pub matches: Option<bool>,
     pub facet_filters: Option<Value>,
-    pub facets_distribution: Option<Vec<String>>,
+    pub facet_distributions: Option<Vec<String>>,
 }
 
 impl SearchQuery {
@@ -96,13 +96,27 @@ impl SearchQuery {
             documents.push(object);
         }
 
+        let nb_hits = candidates.len();
+
+        let facet_distributions = match self.facet_distributions {
+            Some(ref fields) => {
+                let mut facet_distribution = index.facets_distribution(&rtxn);
+                if fields.iter().all(|f| f != "*") {
+                    facet_distribution.facets(fields);
+                }
+                Some(facet_distribution.candidates(candidates).execute()?)
+            }
+            None => None,
+        };
+
         Ok(SearchResult {
             hits: documents,
-            nb_hits: candidates.len(),
+            nb_hits,
             query: self.q.clone().unwrap_or_default(),
             limit: self.limit,
             offset: self.offset.unwrap_or_default(),
             processing_time_ms: before_search.elapsed().as_millis(),
+            facet_distributions,
         })
     }
 }
@@ -116,6 +130,8 @@ pub struct SearchResult {
     limit: usize,
     offset: usize,
     processing_time_ms: u128,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    facet_distributions: Option<BTreeMap<String, BTreeMap<FacetValue, u64>>>,
 }
 
 struct Highlighter<'a, A> {
