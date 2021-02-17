@@ -179,18 +179,9 @@ enum Command {
     PatchToNewExternalIds,
 }
 
-fn main() -> Result<(), ()> {
+fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
-    match run(opt) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            eprintln!("{}", e);
-            Err(())
-        },
-    }
-}
 
-fn run(opt: Opt) -> anyhow::Result<()> {
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)
