@@ -18,10 +18,13 @@ use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetLevelValueI64Codec}
 use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetI64Codec};
 use crate::mdfs::Mdfs;
 use crate::query_tokens::{query_tokens, QueryToken};
-use crate::{Index, FieldId, DocumentId, Criterion};
+use crate::search::criteria::Criterion;
+use crate::search::criteria::typo::Typo;
+use crate::{Index, FieldId, DocumentId};
 
 pub use self::facet::{FacetCondition, FacetDistribution, FacetNumberOperator, FacetStringOperator};
 pub use self::facet::{FacetIter};
+use self::query_tree::QueryTreeBuilder;
 
 // Building these factories is not free.
 static LEVDIST0: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(0, true));
@@ -30,6 +33,7 @@ static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
 mod facet;
 mod query_tree;
+mod criteria;
 
 pub struct Search<'a> {
     query: Option<String>,
@@ -258,14 +262,21 @@ impl<'a> Search<'a> {
     }
 
     pub fn execute(&self) -> anyhow::Result<SearchResult> {
-        let limit = self.limit;
-        let fst = self.index.words_fst(self.rtxn)?;
-
-        // Construct the DFAs related to the query words.
-        let derived_words = match self.query.as_deref().map(Self::generate_query_dfas) {
-            Some(dfas) if !dfas.is_empty() => Some(self.fetch_words_docids(&fst, dfas)?),
-            _otherwise => None,
+        // We create the query tree by spliting the query into tokens.
+        let before = Instant::now();
+        let query_tree = match self.query.as_ref() {
+            Some(query) => {
+                let builder = QueryTreeBuilder::new(self.rtxn, self.index);
+                let stop_words = &Set::default();
+                let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+                let result = analyzer.analyze(query);
+                let tokens = result.tokens();
+                builder.build(false, true, tokens)
+            },
+            None => None,
         };
+
+        debug!("query tree: {:?} took {:.02?}", query_tree, before.elapsed());
 
         // We create the original candidates with the facet conditions results.
         let before = Instant::now();
@@ -276,100 +287,129 @@ impl<'a> Search<'a> {
 
         debug!("facet candidates: {:?} took {:.02?}", facet_candidates, before.elapsed());
 
-        let order_by_facet = {
-            let criteria = self.index.criteria(self.rtxn)?;
-            let result = criteria.into_iter().flat_map(|criterion| {
-                match criterion {
-                    Criterion::Asc(fid) => Some((fid, true)),
-                    Criterion::Desc(fid) => Some((fid, false)),
-                    _ => None
-                }
-            }).next();
-            match result {
-                Some((attr_name, is_ascending)) => {
-                    let field_id_map = self.index.fields_ids_map(self.rtxn)?;
-                    let fid = field_id_map.id(&attr_name).with_context(|| format!("unknown field: {:?}", attr_name))?;
-                    let faceted_fields = self.index.faceted_fields_ids(self.rtxn)?;
-                    let ftype = *faceted_fields.get(&fid)
-                        .with_context(|| format!("{:?} not found in the faceted fields.", attr_name))
-                        .expect("corrupted data: ");
-                    Some((fid, ftype, is_ascending))
-                },
-                None => None,
+        // We aretesting the typo criteria but there will be more of them soon.
+        let mut criteria = Typo::initial(self.index, self.rtxn, query_tree, facet_candidates)?;
+
+        let mut offset = self.offset;
+        let mut limit = self.limit;
+        let mut documents_ids = Vec::new();
+        while let Some((_qt, docids)) = criteria.next()? {
+
+            let mut len = docids.len() as usize;
+            let mut docids = docids.into_iter();
+
+            if offset != 0 {
+                docids.by_ref().skip(offset).for_each(drop);
+                offset = offset.saturating_sub(len.min(offset));
+                len = len.saturating_sub(len.min(offset));
             }
-        };
 
-        let before = Instant::now();
-        let (candidates, derived_words) = match (facet_candidates, derived_words) {
-            (Some(mut facet_candidates), Some(derived_words)) => {
-                let words_candidates = Self::compute_candidates(&derived_words);
-                facet_candidates.intersect_with(&words_candidates);
-                (facet_candidates, derived_words)
-            },
-            (None, Some(derived_words)) => {
-                (Self::compute_candidates(&derived_words), derived_words)
-            },
-            (Some(facet_candidates), None) => {
-                // If the query is not set or results in no DFAs but
-                // there is some facet conditions we return a placeholder.
-                let documents_ids = match order_by_facet {
-                    Some((fid, ftype, is_ascending)) => {
-                        self.facet_ordered(fid, ftype, is_ascending, facet_candidates.clone(), limit)?
-                    },
-                    None => facet_candidates.iter().take(limit).collect(),
-                };
-                return Ok(SearchResult {
-                    documents_ids,
-                    candidates: facet_candidates,
-                    ..Default::default()
-                })
-            },
-            (None, None) => {
-                // If the query is not set or results in no DFAs we return a placeholder.
-                let all_docids = self.index.documents_ids(self.rtxn)?;
-                let documents_ids = match order_by_facet {
-                    Some((fid, ftype, is_ascending)) => {
-                        self.facet_ordered(fid, ftype, is_ascending, all_docids.clone(), limit)?
-                    },
-                    None => all_docids.iter().take(limit).collect(),
-                };
-                return Ok(SearchResult { documents_ids, candidates: all_docids,..Default::default() })
-            },
-        };
-
-        debug!("candidates: {:?} took {:.02?}", candidates, before.elapsed());
-
-        // The mana depth first search is a revised DFS that explore
-        // solutions in the order of their proximities.
-        let mut mdfs = Mdfs::new(self.index, self.rtxn, &derived_words, candidates.clone());
-        let mut documents = Vec::new();
-
-        // We execute the Mdfs iterator until we find enough documents.
-        while documents.iter().map(RoaringBitmap::len).sum::<u64>() < limit as u64 {
-            match mdfs.next().transpose()? {
-                Some((proximity, answer)) => {
-                    debug!("answer with a proximity of {}: {:?}", proximity, answer);
-                    documents.push(answer);
-                },
-                None => break,
+            if len != 0 {
+                documents_ids.extend(docids.take(limit));
+                limit = limit.saturating_sub(len.min(limit));
             }
+
+            if limit == 0 { break }
         }
 
-        let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
-        let documents_ids = match order_by_facet {
-            Some((fid, ftype, order)) => {
-                let mut ordered_documents = Vec::new();
-                for documents_ids in documents {
-                    let docids = self.facet_ordered(fid, ftype, order, documents_ids, limit)?;
-                    ordered_documents.push(docids);
-                    if ordered_documents.iter().map(Vec::len).sum::<usize>() >= limit { break }
-                }
-                ordered_documents.into_iter().flatten().take(limit).collect()
-            },
-            None => documents.into_iter().flatten().take(limit).collect(),
-        };
-
+        let found_words = HashSet::new();
+        let candidates = RoaringBitmap::new();
         Ok(SearchResult { found_words, candidates, documents_ids })
+
+        // let order_by_facet = {
+        //     let criteria = self.index.criteria(self.rtxn)?;
+        //     let result = criteria.into_iter().flat_map(|criterion| {
+        //         match criterion {
+        //             Criterion::Asc(fid) => Some((fid, true)),
+        //             Criterion::Desc(fid) => Some((fid, false)),
+        //             _ => None
+        //         }
+        //     }).next();
+        //     match result {
+        //         Some((attr_name, is_ascending)) => {
+        //             let field_id_map = self.index.fields_ids_map(self.rtxn)?;
+        //             let fid = field_id_map.id(&attr_name).with_context(|| format!("unknown field: {:?}", attr_name))?;
+        //             let faceted_fields = self.index.faceted_fields_ids(self.rtxn)?;
+        //             let ftype = *faceted_fields.get(&fid)
+        //                 .with_context(|| format!("{:?} not found in the faceted fields.", attr_name))
+        //                 .expect("corrupted data: ");
+        //             Some((fid, ftype, is_ascending))
+        //         },
+        //         None => None,
+        //     }
+        // };
+
+        // let before = Instant::now();
+        // let (candidates, derived_words) = match (facet_candidates, derived_words) {
+        //     (Some(mut facet_candidates), Some(derived_words)) => {
+        //         let words_candidates = Self::compute_candidates(&derived_words);
+        //         facet_candidates.intersect_with(&words_candidates);
+        //         (facet_candidates, derived_words)
+        //     },
+        //     (None, Some(derived_words)) => {
+        //         (Self::compute_candidates(&derived_words), derived_words)
+        //     },
+        //     (Some(facet_candidates), None) => {
+        //         // If the query is not set or results in no DFAs but
+        //         // there is some facet conditions we return a placeholder.
+        //         let documents_ids = match order_by_facet {
+        //             Some((fid, ftype, is_ascending)) => {
+        //                 self.facet_ordered(fid, ftype, is_ascending, facet_candidates.clone(), limit)?
+        //             },
+        //             None => facet_candidates.iter().take(limit).collect(),
+        //         };
+        //         return Ok(SearchResult {
+        //             documents_ids,
+        //             candidates: facet_candidates,
+        //             ..Default::default()
+        //         })
+        //     },
+        //     (None, None) => {
+        //         // If the query is not set or results in no DFAs we return a placeholder.
+        //         let all_docids = self.index.documents_ids(self.rtxn)?;
+        //         let documents_ids = match order_by_facet {
+        //             Some((fid, ftype, is_ascending)) => {
+        //                 self.facet_ordered(fid, ftype, is_ascending, all_docids.clone(), limit)?
+        //             },
+        //             None => all_docids.iter().take(limit).collect(),
+        //         };
+        //         return Ok(SearchResult { documents_ids, candidates: all_docids,..Default::default() })
+        //     },
+        // };
+
+        // debug!("candidates: {:?} took {:.02?}", candidates, before.elapsed());
+
+        // // The mana depth first search is a revised DFS that explore
+        // // solutions in the order of their proximities.
+        // let mut mdfs = Mdfs::new(self.index, self.rtxn, &derived_words, candidates.clone());
+        // let mut documents = Vec::new();
+
+        // // We execute the Mdfs iterator until we find enough documents.
+        // while documents.iter().map(RoaringBitmap::len).sum::<u64>() < limit as u64 {
+        //     match mdfs.next().transpose()? {
+        //         Some((proximity, answer)) => {
+        //             debug!("answer with a proximity of {}: {:?}", proximity, answer);
+        //             documents.push(answer);
+        //         },
+        //         None => break,
+        //     }
+        // }
+
+        // let found_words = derived_words.into_iter().flat_map(|(w, _)| w).map(|(w, _)| w).collect();
+        // let documents_ids = match order_by_facet {
+        //     Some((fid, ftype, order)) => {
+        //         let mut ordered_documents = Vec::new();
+        //         for documents_ids in documents {
+        //             let docids = self.facet_ordered(fid, ftype, order, documents_ids, limit)?;
+        //             ordered_documents.push(docids);
+        //             if ordered_documents.iter().map(Vec::len).sum::<usize>() >= limit { break }
+        //         }
+        //         ordered_documents.into_iter().flatten().take(limit).collect()
+        //     },
+        //     None => documents.into_iter().flatten().take(limit).collect(),
+        // };
+
+        // Ok(SearchResult { found_words, candidates, documents_ids })
     }
 }
 
