@@ -489,19 +489,21 @@ fn calculate_highlights(
                     .filter(move |m| m.start >= index);
 
                 for m in longest_matches {
-                    let before = value.get(index..m.start);
-                    let highlighted = value.get(m.start..(m.start + m.length));
-                    if let (Some(before), Some(highlighted)) = (before, highlighted) {
-                        highlighted_value.push_str(before);
+                    let before: String = value.chars().take(m.start).skip(index).collect();
+                    let highlighted: String = value.chars().take(m.start + m.length).skip(m.start).collect();
+
+                    if !before.is_empty() && !highlighted.is_empty() {
+                        highlighted_value.push_str(before.as_str());
                         highlighted_value.push_str("<em>");
-                        highlighted_value.push_str(highlighted);
+                        highlighted_value.push_str(highlighted.as_str());
                         highlighted_value.push_str("</em>");
                         index = m.start + m.length;
                     } else {
                         error!("value: {:?}; index: {:?}, match: {:?}", value, index, m);
                     }
                 }
-                highlighted_value.push_str(&value[index..]);
+
+                highlighted_value.push_str(value.chars().skip(index).collect::<String>().as_str());
                 highlight_result.insert(attribute.to_string(), Value::String(highlighted_value));
             };
         }
