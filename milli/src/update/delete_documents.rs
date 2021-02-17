@@ -159,10 +159,6 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             }
         }
 
-        // FIXME we must recompute the words prefixes docids.
-        todo!("recompute words prefixes docids");
-        todo!("recompute words prefixes pairs proximity docids");
-
         // We construct an FST set that contains the words to delete from the words FST.
         let words_to_delete = words.iter().filter_map(|(word, must_remove)| {
             if *must_remove { Some(word.as_ref()) } else { None }
@@ -184,6 +180,47 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         // We write the new words FST into the main database.
         self.index.put_words_fst(self.wtxn, &new_words_fst)?;
+
+        // We iterate over the word prefix docids database and remove the deleted documents ids
+        // from every docids lists. We register the empty prefixes in an fst Set for futur deletion.
+        let mut prefixes_to_delete = fst::SetBuilder::memory();
+        let mut iter = word_prefix_docids.iter_mut(self.wtxn)?;
+        while let Some(result) = iter.next() {
+            let (prefix, mut docids) = result?;
+            let previous_len = docids.len();
+            docids.difference_with(&self.documents_ids);
+            if docids.is_empty() {
+                iter.del_current()?;
+                prefixes_to_delete.insert(prefix)?;
+            } else if docids.len() != previous_len {
+                iter.put_current(prefix, &docids)?;
+            }
+        }
+
+        drop(iter);
+
+        // We compute the new prefix FST and write it only if there is a change.
+        let prefixes_to_delete = prefixes_to_delete.into_set();
+        if !prefixes_to_delete.is_empty() {
+            let new_words_prefixes_fst = {
+                // We retrieve the current words prefixes FST from the database.
+                let words_prefixes_fst = self.index.words_prefixes_fst(self.wtxn)?;
+                let difference = words_prefixes_fst.op().add(&prefixes_to_delete).difference();
+
+                // We stream the new external ids that does no more contains the to-delete external ids.
+                let mut new_words_prefixes_fst_builder = fst::SetBuilder::memory();
+                new_words_prefixes_fst_builder.extend_stream(difference.into_stream())?;
+
+                // We create an words FST set from the above builder.
+                new_words_prefixes_fst_builder.into_set()
+            };
+
+            // We write the new words prefixes FST into the main database.
+            self.index.put_words_prefixes_fst(self.wtxn, &new_words_prefixes_fst)?;
+        }
+
+        // FIXME we must recompute the words prefixes docids.
+        todo!("recompute words prefixes pairs proximity docids");
 
         // We delete the documents ids that are under the pairs of words,
         // it is faster and use no memory to iterate over all the words pairs than
