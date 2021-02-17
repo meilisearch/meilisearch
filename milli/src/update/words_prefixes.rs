@@ -1,14 +1,17 @@
 use std::iter::FromIterator;
 use std::str;
 
-use fst::Streamer;
+use fst::automaton::Str;
+use fst::{Automaton, Streamer, IntoStreamer};
 use grenad::CompressionType;
+use heed::BytesEncode;
 use heed::types::ByteSlice;
 
-use crate::{Index, SmallString32};
+use crate::heed_codec::StrStrU8Codec;
 use crate::update::index_documents::WriteMethod;
-use crate::update::index_documents::{create_sorter, create_writer, writer_into_reader};
-use crate::update::index_documents::{word_docids_merge, write_into_lmdb_database};
+use crate::update::index_documents::{create_sorter, create_writer, writer_into_reader, write_into_lmdb_database};
+use crate::update::index_documents::{word_docids_merge, words_pairs_proximities_docids_merge};
+use crate::{Index, SmallString32};
 
 pub struct WordsPrefixes<'t, 'u, 'i> {
     wtxn: &'t mut heed::RwTxn<'i, 'u>,
@@ -67,6 +70,7 @@ impl<'t, 'u, 'i> WordsPrefixes<'t, 'u, 'i> {
     pub fn execute(self) -> anyhow::Result<()> {
         // Clear the words prefixes datastructures.
         self.index.word_prefix_docids.clear(self.wtxn)?;
+        self.index.word_prefix_pair_proximity_docids.clear(self.wtxn)?;
 
         let words_fst = self.index.words_fst(&self.wtxn)?;
         let number_of_words = words_fst.len();
@@ -74,7 +78,7 @@ impl<'t, 'u, 'i> WordsPrefixes<'t, 'u, 'i> {
 
         // It is forbidden to keep a mutable reference into the database
         // and write into it at the same time, therefore we write into another file.
-        let mut docids_sorter = create_sorter(
+        let mut prefix_docids_sorter = create_sorter(
             word_docids_merge,
             self.chunk_compression_type,
             self.chunk_compression_level,
@@ -133,7 +137,7 @@ impl<'t, 'u, 'i> WordsPrefixes<'t, 'u, 'i> {
             let db = self.index.word_docids.remap_data_type::<ByteSlice>();
             for result in db.prefix_iter(self.wtxn, prefix)? {
                 let (_word, data) = result?;
-                docids_sorter.insert(prefix, data)?;
+                prefix_docids_sorter.insert(prefix, data)?;
             }
         }
 
@@ -141,18 +145,68 @@ impl<'t, 'u, 'i> WordsPrefixes<'t, 'u, 'i> {
         self.index.put_words_prefixes_fst(self.wtxn, &prefix_fst)?;
 
         // We write the sorter into a reader to be able to read it back.
-        let mut docids_writer = tempfile::tempfile().and_then(|file| {
+        let mut prefix_docids_writer = tempfile::tempfile().and_then(|file| {
             create_writer(self.chunk_compression_type, self.chunk_compression_level, file)
         })?;
-        docids_sorter.write_into(&mut docids_writer)?;
-        let docids_reader = writer_into_reader(docids_writer, self.chunk_fusing_shrink_size)?;
+        prefix_docids_sorter.write_into(&mut prefix_docids_writer)?;
+        let prefix_docids_reader = writer_into_reader(
+            prefix_docids_writer,
+            self.chunk_fusing_shrink_size,
+        )?;
 
         // We finally write the word prefix docids into the LMDB database.
         write_into_lmdb_database(
             self.wtxn,
             *self.index.word_prefix_docids.as_polymorph(),
-            docids_reader,
+            prefix_docids_reader,
             word_docids_merge,
+            WriteMethod::Append,
+        )?;
+
+        // We compute the word prefix pair proximity database.
+
+        // Here we create a sorter akin to the previous one.
+        let mut word_prefix_pair_proximity_docids_sorter = create_sorter(
+            words_pairs_proximities_docids_merge,
+            self.chunk_compression_type,
+            self.chunk_compression_level,
+            self.chunk_fusing_shrink_size,
+            self.max_nb_chunks,
+            self.max_memory,
+        );
+
+        // We insert all the word pairs corresponding to the word-prefix pairs
+        // where the prefixes appears in the prefix FST previously constructed.
+        let db = self.index.word_pair_proximity_docids.remap_data_type::<ByteSlice>();
+        for result in db.iter(self.wtxn)? {
+            let ((word1, word2, prox), data) = result?;
+            let automaton = Str::new(word2).starts_with();
+            let mut matching_prefixes = prefix_fst.search(automaton).into_stream();
+            while let Some(prefix) = matching_prefixes.next() {
+                let prefix = str::from_utf8(prefix)?;
+                let pair = (word1, prefix, prox);
+                let bytes = StrStrU8Codec::bytes_encode(&pair).unwrap();
+                word_prefix_pair_proximity_docids_sorter.insert(bytes, data)?;
+            }
+        }
+
+        // FIXME we should create a sorter_into_lmdb_database function
+        // We write the sorter into a reader to be able to read it back.
+        let mut word_prefix_pair_prox_docids_writer = tempfile::tempfile().and_then(|file| {
+            create_writer(self.chunk_compression_type, self.chunk_compression_level, file)
+        })?;
+        word_prefix_pair_proximity_docids_sorter.write_into(&mut word_prefix_pair_prox_docids_writer)?;
+        let word_prefix_pair_docids_reader = writer_into_reader(
+            word_prefix_pair_prox_docids_writer,
+            self.chunk_fusing_shrink_size,
+        )?;
+
+        // We finally write the word prefix pair proximity docids into the LMDB database.
+        write_into_lmdb_database(
+            self.wtxn,
+            *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
+            word_prefix_pair_docids_reader,
+            words_pairs_proximities_docids_merge,
             WriteMethod::Append,
         )?;
 
