@@ -19,7 +19,7 @@ use serde::{Serialize, Deserialize};
 use crate::index::Index;
 use crate::update::{Facets, UpdateIndexingStep};
 use self::store::{Store, Readers};
-use self::merge_function::{
+pub use self::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
     docid_word_positions_merge, documents_merge, facet_field_value_docids_merge,
     field_id_docid_facet_values_merge,

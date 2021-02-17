@@ -158,6 +158,9 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
             }
         }
 
+        // FIXME we must recompute the words prefixes docids.
+        todo!("recompute words prefixes docids");
+
         // We construct an FST set that contains the words to delete from the words FST.
         let words_to_delete = words.iter().filter_map(|(word, must_remove)| {
             if *must_remove { Some(word.as_ref()) } else { None }
