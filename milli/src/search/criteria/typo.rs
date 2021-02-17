@@ -16,6 +16,7 @@ pub struct Typo<'t> {
     query_tree: Option<Operation>,
     number_typos: u8,
     candidates: Candidates,
+    bucket_candidates: Option<RoaringBitmap>,
     parent: Option<Box<dyn Criterion>>,
 }
 
@@ -31,6 +32,7 @@ impl<'t> Typo<'t> {
             query_tree,
             number_typos: 0,
             candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
+            bucket_candidates: None,
             parent: None,
         })
     }
@@ -45,6 +47,7 @@ impl<'t> Typo<'t> {
             query_tree: None,
             number_typos: 0,
             candidates: Candidates::default(),
+            bucket_candidates: None,
             parent: Some(parent),
         })
     }
@@ -68,10 +71,15 @@ impl<'t> Criterion for Typo<'t> {
                     candidates.difference_with(&new_candidates);
                     self.number_typos += 1;
 
+                    let bucket_candidates = match self.parent {
+                        Some(_) => self.bucket_candidates.take(),
+                        None => Some(new_candidates.clone()),
+                    };
+
                     return Ok(Some(CriterionResult {
                         query_tree: Some(new_query_tree),
                         candidates: new_candidates,
-                        bucket_candidates: None,
+                        bucket_candidates,
                     }));
                 },
                 (Some(query_tree), Forbidden(candidates)) => {
@@ -83,26 +91,33 @@ impl<'t> Criterion for Typo<'t> {
                     candidates.union_with(&new_candidates);
                     self.number_typos += 1;
 
+                    let bucket_candidates = match self.parent {
+                        Some(_) => self.bucket_candidates.take(),
+                        None => Some(new_candidates.clone()),
+                    };
+
                     return Ok(Some(CriterionResult {
                         query_tree: Some(new_query_tree),
                         candidates: new_candidates,
-                        bucket_candidates: None,
+                        bucket_candidates,
                     }));
                 },
                 (None, Allowed(_)) => {
+                    let candidates = take(&mut self.candidates).into_inner();
                     return Ok(Some(CriterionResult {
                         query_tree: None,
-                        candidates: take(&mut self.candidates).into_inner(),
-                        bucket_candidates: None,
+                        candidates: candidates.clone(),
+                        bucket_candidates: Some(candidates),
                     }));
                 },
                 (None, Forbidden(_)) => {
                     match self.parent.as_mut() {
                         Some(parent) => {
                             match parent.next()? {
-                                Some(CriterionResult { query_tree, candidates, .. }) => {
+                                Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     self.query_tree = query_tree;
                                     self.candidates = Candidates::Allowed(candidates);
+                                    self.bucket_candidates = bucket_candidates;
                                 },
                                 None => return Ok(None),
                             }
