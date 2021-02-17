@@ -288,7 +288,8 @@ impl<'a> Search<'a> {
         debug!("facet candidates: {:?} took {:.02?}", facet_candidates, before.elapsed());
 
         // We aretesting the typo criteria but there will be more of them soon.
-        let mut criteria = Typo::initial(self.index, self.rtxn, query_tree, facet_candidates)?;
+        let criteria_ctx = criteria::HeedContext::new(self.rtxn, self.index)?;
+        let mut criteria = Typo::initial(&criteria_ctx, query_tree, facet_candidates)?;
 
         let mut offset = self.offset;
         let mut limit = self.limit;

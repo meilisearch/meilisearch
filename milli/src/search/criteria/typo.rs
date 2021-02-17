@@ -3,19 +3,16 @@ use std::{borrow::Cow, mem::take};
 use anyhow::bail;
 use roaring::RoaringBitmap;
 
-use crate::Index;
 use crate::search::query_tree::{Operation, Query, QueryKind};
 use crate::search::word_typos;
-use super::{Candidates, Criterion};
+use super::{Candidates, Criterion, Context};
 
 // FIXME we must stop when the number of typos is equal to
 // the maximum number of typos for this query tree.
 const MAX_NUM_TYPOS: u8 = 8;
 
 pub struct Typo<'t> {
-    index: &'t Index,
-    rtxn: &'t heed::RoTxn<'t>,
-    words_fst: fst::Set<Cow<'t, [u8]>>,
+    ctx: &'t dyn Context,
     query_tree: Option<Operation>,
     number_typos: u8,
     candidates: Candidates,
@@ -24,16 +21,13 @@ pub struct Typo<'t> {
 
 impl<'t> Typo<'t> {
     pub fn initial(
-        index: &'t Index,
-        rtxn: &'t heed::RoTxn<'t>,
+        ctx: &'t dyn Context,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
     ) -> anyhow::Result<Self> where Self: Sized
     {
         Ok(Typo {
-            index,
-            rtxn,
-            words_fst: index.words_fst(rtxn)?,
+            ctx,
             query_tree,
             number_typos: 0,
             candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
@@ -42,15 +36,12 @@ impl<'t> Typo<'t> {
     }
 
     pub fn new(
-        index: &'t Index,
-        rtxn: &'t heed::RoTxn<'t>,
+        ctx: &'t dyn Context,
         parent: Box<dyn Criterion>,
     ) -> anyhow::Result<Self> where Self: Sized
     {
         Ok(Typo {
-            index,
-            rtxn,
-            words_fst: index.words_fst(rtxn)?,
+            ctx,
             query_tree: None,
             number_typos: 0,
             candidates: Candidates::default(),
@@ -69,8 +60,10 @@ impl<'t> Criterion for Typo<'t> {
                     self.candidates = Candidates::default();
                 },
                 (Some(query_tree), Allowed(candidates)) => {
-                    let new_query_tree = alterate_query_tree(&self.words_fst, query_tree.clone(), self.number_typos)?;
-                    let mut new_candidates = resolve_candidates(&self.index, &self.rtxn, &new_query_tree, self.number_typos)?;
+                    // TODO if number_typos >= 2 the generated query_tree will allways be the same,
+                    // generate a new one on each iteration is a waste of time.
+                    let new_query_tree = alterate_query_tree(&self.ctx.words_fst(), query_tree.clone(), self.number_typos)?;
+                    let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos)?;
                     new_candidates.intersect_with(&candidates);
                     candidates.difference_with(&new_candidates);
                     self.number_typos += 1;
@@ -78,8 +71,10 @@ impl<'t> Criterion for Typo<'t> {
                     return Ok(Some((Some(new_query_tree), new_candidates)));
                 },
                 (Some(query_tree), Forbidden(candidates)) => {
-                    let new_query_tree = alterate_query_tree(&self.words_fst, query_tree.clone(), self.number_typos)?;
-                    let mut new_candidates = resolve_candidates(&self.index, &self.rtxn, &new_query_tree, self.number_typos)?;
+                    // TODO if number_typos >= 2 the generated query_tree will allways be the same,
+                    // generate a new one on each iteration is a waste of time.
+                    let new_query_tree = alterate_query_tree(&self.ctx.words_fst(), query_tree.clone(), self.number_typos)?;
+                    let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos)?;
                     new_candidates.difference_with(&candidates);
                     candidates.union_with(&new_candidates);
                     self.number_typos += 1;
@@ -132,6 +127,7 @@ fn alterate_query_tree(
                 ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos))
             },
             Operation::Query(q) => {
+                // TODO may be optimized when number_typos == 0
                 if let QueryKind::Tolerant { typo, word } = &q.kind {
                     let typo = *typo.min(&number_typos);
                     let words = word_typos(word, q.prefix, typo, words_fst)?;
@@ -155,9 +151,8 @@ fn alterate_query_tree(
     Ok(query_tree)
 }
 
-fn resolve_candidates(
-    index: &Index,
-    rtxn: &heed::RoTxn,
+fn resolve_candidates<'t>(
+    ctx: &'t dyn Context,
     query_tree: &Operation,
     number_typos: u8,
 ) -> anyhow::Result<RoaringBitmap>
@@ -166,9 +161,8 @@ fn resolve_candidates(
     // FIXME keep the cache between typos iterations
     // cache: HashMap<(&Operation, u8), RoaringBitmap>,
 
-    fn resolve_operation(
-        index: &Index,
-        rtxn: &heed::RoTxn,
+    fn resolve_operation<'t>(
+        ctx: &'t dyn Context,
         query_tree: &Operation,
         number_typos: u8,
     ) -> anyhow::Result<RoaringBitmap>
@@ -177,7 +171,7 @@ fn resolve_candidates(
 
         match query_tree {
             And(ops) => {
-                mdfs(index, rtxn, ops, number_typos)
+                mdfs(ctx, ops, number_typos)
             },
             Consecutive(ops) => {
                 let mut candidates = RoaringBitmap::new();
@@ -185,8 +179,7 @@ fn resolve_candidates(
                 for slice in ops.windows(2) {
                     match (&slice[0], &slice[1]) {
                         (Operation::Query(left), Operation::Query(right)) => {
-                            let key_pair = &(left.kind.word(), right.kind.word(), 1);
-                            match index.word_pair_proximity_docids.get(rtxn, key_pair)? {
+                            match ctx.query_pair_proximity_docids(left, right, 1)? {
                                 Some(pair_docids) => {
                                     if first_loop {
                                         candidates = pair_docids;
@@ -207,14 +200,13 @@ fn resolve_candidates(
             Or(_, ops) => {
                 let mut candidates = RoaringBitmap::new();
                 for op in ops {
-                    let docids = resolve_operation(index, rtxn, op, number_typos)?;
+                    let docids = resolve_operation(ctx, op, number_typos)?;
                     candidates.union_with(&docids);
                 }
                 Ok(candidates)
             },
             Query(q) => if q.kind.typo() == number_typos {
-                let word = q.kind.word();
-                Ok(index.word_docids.get(rtxn, word)?.unwrap_or_default())
+                Ok(ctx.query_docids(q)?.unwrap_or_default())
             } else {
                 Ok(RoaringBitmap::new())
             },
@@ -222,22 +214,21 @@ fn resolve_candidates(
     }
 
     /// FIXME Make this function generic and mutualize it between Typo and proximity criterion
-    fn mdfs(
-        index: &Index,
-        rtxn: &heed::RoTxn,
+    fn mdfs<'t>(
+        ctx: &'t dyn Context,
         branches: &[Operation],
         mana: u8,
     ) -> anyhow::Result<RoaringBitmap>
     {
         match branches.split_first() {
-            Some((head, [])) => resolve_operation(index, rtxn, head, mana),
+            Some((head, [])) => resolve_operation(ctx, head, mana),
             Some((head, tail)) => {
                 let mut candidates = RoaringBitmap::new();
 
                 for m in 0..=mana {
-                    let mut head_candidates = resolve_operation(index, rtxn, head, m)?;
+                    let mut head_candidates = resolve_operation(ctx, head, m)?;
                     if !head_candidates.is_empty() {
-                        let tail_candidates = mdfs(index, rtxn, tail, mana - m)?;
+                        let tail_candidates = mdfs(ctx, tail, mana - m)?;
                         head_candidates.intersect_with(&tail_candidates);
                         candidates.union_with(&head_candidates);
                     }
@@ -249,5 +240,5 @@ fn resolve_candidates(
         }
     }
 
-    resolve_operation(index, rtxn, query_tree, number_typos)
+    resolve_operation(ctx, query_tree, number_typos)
 }
