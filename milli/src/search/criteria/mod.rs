@@ -44,15 +44,15 @@ pub struct HeedContext<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     index: &'t Index,
     words_fst: fst::Set<Cow<'t, [u8]>>,
+    words_prefixes_fst: fst::Set<Cow<'t, [u8]>>,
 }
 
 impl<'a> Context for HeedContext<'a> {
     fn query_docids(&self, query: &Query) -> anyhow::Result<Option<RoaringBitmap>> {
         match (&query.kind, query.prefix) {
-            // TODO de-comment when ~ready
-            // (QueryKind::Exact { word, .. }, true) if in_prefix_cache(&word) => {
-            //     Ok(self.index.prefix_docids.get(self.rtxn, &word)?)
-            // },
+            (QueryKind::Exact { word, .. }, true) if self.in_prefix_cache(&word) => {
+                Ok(self.index.word_prefix_docids.get(self.rtxn, &word)?)
+            },
             (QueryKind::Exact { word, .. }, true) => {
                 let words = word_typos(&word, true, 0, &self.words_fst)?;
                 let mut docids = RoaringBitmap::new();
@@ -78,6 +78,19 @@ impl<'a> Context for HeedContext<'a> {
     fn query_pair_proximity_docids(&self, left: &Query, right: &Query, distance: u8) -> anyhow::Result<Option<RoaringBitmap>> {
         // TODO add prefix cache for Tolerant-Exact-true and Exact-Exact-true
         match (&left.kind, &right.kind, right.prefix) {
+            (QueryKind::Exact { word: left, .. }, QueryKind::Exact { word: right, .. }, true) if self.in_prefix_cache(&right) => {
+                let key = (left.as_str(), right.as_str(), distance);
+                Ok(self.index.word_prefix_pair_proximity_docids.get(self.rtxn, &key)?)
+            },
+            (QueryKind::Tolerant { typo, word: left }, QueryKind::Exact { word: right, .. }, true) if self.in_prefix_cache(&right) => {
+                let words = word_typos(&left, false, *typo, &self.words_fst)?;
+                let mut docids = RoaringBitmap::new();
+                for (word, _typo) in words {
+                    let key = (word.as_str(), right.as_str(), distance);
+                    docids.union_with(&self.index.word_prefix_pair_proximity_docids.get(self.rtxn, &key)?.unwrap_or_default());
+                }
+                Ok(Some(docids))
+            },
             (QueryKind::Exact { word: left, .. }, QueryKind::Exact { word: right, .. }, true) => {
                 let words = word_typos(&right, true, 0, &self.words_fst)?;
                 let mut docids = RoaringBitmap::new();
@@ -144,11 +157,17 @@ impl<'a> Context for HeedContext<'a> {
 impl<'t> HeedContext<'t> {
     pub fn new(rtxn: &'t heed::RoTxn<'t>, index: &'t Index) -> anyhow::Result<Self> {
         let words_fst = index.words_fst(rtxn)?;
+        let words_prefixes_fst = index.words_prefixes_fst(rtxn)?;
 
         Ok(Self {
             rtxn,
             index,
             words_fst,
+            words_prefixes_fst,
         })
+    }
+
+    fn in_prefix_cache(&self, word: &str) -> bool {
+        self.words_prefixes_fst.contains(word)
     }
 }
