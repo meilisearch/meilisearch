@@ -37,7 +37,7 @@ impl Default for Candidates {
 }
 pub trait Context {
     fn query_docids(&self, query: &Query) -> anyhow::Result<RoaringBitmap>;
-    fn query_pair_proximity_docids(&self, left: &Query, right: &Query, distance: u8) ->anyhow::Result<RoaringBitmap>;
+    fn query_pair_proximity_docids(&self, left: &Query, right: &Query, proximity: u8) ->anyhow::Result<RoaringBitmap>;
     fn words_fst<'t>(&self) -> &'t fst::Set<Cow<[u8]>>;
 }
 pub struct HeedContext<'t> {
@@ -77,19 +77,19 @@ impl<'a> Context for HeedContext<'a> {
         }
     }
 
-    fn query_pair_proximity_docids(&self, left: &Query, right: &Query, distance: u8) -> anyhow::Result<RoaringBitmap> {
+    fn query_pair_proximity_docids(&self, left: &Query, right: &Query, proximity: u8) -> anyhow::Result<RoaringBitmap> {
         let prefix = right.prefix;
 
         match (&left.kind, &right.kind) {
             (QueryKind::Exact { word: left, .. }, QueryKind::Exact { word: right, .. }) => {
                 if prefix && self.in_prefix_cache(&right) {
-                    let key = (left.as_str(), right.as_str(), distance);
+                    let key = (left.as_str(), right.as_str(), proximity);
                     Ok(self.index.word_prefix_pair_proximity_docids.get(self.rtxn, &key)?.unwrap_or_default())
                 } else if prefix {
                     let r_words = word_typos(&right, true, 0, &self.words_fst)?;
-                    self.all_word_pair_proximity_docids(&[(left, 0)], &r_words, distance)
+                    self.all_word_pair_proximity_docids(&[(left, 0)], &r_words, proximity)
                 } else {
-                    let key = (left.as_str(), right.as_str(), distance);
+                    let key = (left.as_str(), right.as_str(), proximity);
                     Ok(self.index.word_pair_proximity_docids.get(self.rtxn, &key)?.unwrap_or_default())
                 }
             },
@@ -98,26 +98,26 @@ impl<'a> Context for HeedContext<'a> {
                 if prefix && self.in_prefix_cache(&right) {
                     let mut docids = RoaringBitmap::new();
                     for (left, _) in l_words {
-                        let key = (left.as_ref(), right.as_ref(), distance);
+                        let key = (left.as_ref(), right.as_ref(), proximity);
                         let current_docids = self.index.word_prefix_pair_proximity_docids.get(self.rtxn, &key)?.unwrap_or_default();
                         docids.union_with(&current_docids);
                     }
                     Ok(docids)
                 } else if prefix {
                     let r_words = word_typos(&right, true, 0, &self.words_fst)?;
-                    self.all_word_pair_proximity_docids(&l_words, &r_words, distance)
+                    self.all_word_pair_proximity_docids(&l_words, &r_words, proximity)
                 } else {
-                    self.all_word_pair_proximity_docids(&l_words, &[(right, 0)], distance)
+                    self.all_word_pair_proximity_docids(&l_words, &[(right, 0)], proximity)
                 }
             },
             (QueryKind::Exact { word: left, .. }, QueryKind::Tolerant { typo, word: right }) => {
                 let r_words = word_typos(&right, prefix, *typo, &self.words_fst)?;
-                self.all_word_pair_proximity_docids(&[(left, 0)], &r_words, distance)
+                self.all_word_pair_proximity_docids(&[(left, 0)], &r_words, proximity)
             },
             (QueryKind::Tolerant { typo: l_typo, word: left }, QueryKind::Tolerant { typo: r_typo, word: right }) => {
                 let l_words = word_typos(&left, false, *l_typo, &self.words_fst)?;
                 let r_words = word_typos(&right, prefix, *r_typo, &self.words_fst)?;
-                self.all_word_pair_proximity_docids(&l_words, &r_words, distance)
+                self.all_word_pair_proximity_docids(&l_words, &r_words, proximity)
             },
         }
     }
@@ -144,11 +144,16 @@ impl<'t> HeedContext<'t> {
         self.words_prefixes_fst.contains(word)
     }
 
-    fn all_word_pair_proximity_docids<T: AsRef<str>, U: AsRef<str>>(&self, left_words: &[(T, u8)], right_words: &[(U, u8)], distance: u8) -> anyhow::Result<RoaringBitmap> {
+    fn all_word_pair_proximity_docids<T: AsRef<str>, U: AsRef<str>>(
+        &self,
+        left_words: &[(T, u8)],
+        right_words: &[(U, u8)],
+        proximity: u8
+    ) -> anyhow::Result<RoaringBitmap> {
         let mut docids = RoaringBitmap::new();
         for (left, _l_typo) in left_words {
             for (right, _r_typo) in right_words {
-                let key = (left.as_ref(), right.as_ref(), distance);
+                let key = (left.as_ref(), right.as_ref(), proximity);
                 let current_docids = self.index.word_pair_proximity_docids.get(self.rtxn, &key)?.unwrap_or_default();
                 docids.union_with(&current_docids);
             }
