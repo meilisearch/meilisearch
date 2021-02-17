@@ -27,7 +27,7 @@ pub struct SearchQueryGet {
     filters: Option<String>,
     matches: Option<bool>,
     facet_filters: Option<String>,
-    facets_distribution: Option<String>,
+    facet_distributions: Option<String>,
 }
 
 impl TryFrom<SearchQueryGet> for SearchQuery {
@@ -46,8 +46,8 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             .attributes_to_highlight
             .map(|attrs| attrs.split(",").map(String::from).collect::<HashSet<_>>());
 
-        let facets_distribution = other
-            .facets_distribution
+        let facet_distributions = other
+            .facet_distributions
             .map(|attrs| attrs.split(",").map(String::from).collect::<Vec<_>>());
 
         let facet_filters = match other.facet_filters {
@@ -66,7 +66,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             filters: other.filters,
             matches: other.matches,
             facet_filters,
-            facets_distribution,
+            facet_distributions,
         })
     }
 }
