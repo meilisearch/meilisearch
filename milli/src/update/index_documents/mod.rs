@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use anyhow::Context;
 use bstr::ByteSlice as _;
-use grenad::{Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
+use grenad::{MergerIter, Writer, Sorter, Merger, Reader, FileFuse, CompressionType};
 use heed::types::ByteSlice;
 use log::{debug, info, error};
 use memmap::Mmap;
@@ -102,39 +102,19 @@ pub fn merge_into_lmdb_database(
     sources: Vec<Reader<FileFuse>>,
     merge: MergeFn,
     method: WriteMethod,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+{
     debug!("Merging {} MTBL stores...", sources.len());
     let before = Instant::now();
 
     let merger = merge_readers(sources, merge);
-    let mut in_iter = merger.into_merge_iter()?;
-
-    match method {
-        WriteMethod::Append => {
-            let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
-            while let Some((k, v)) = in_iter.next()? {
-                out_iter.append(k, v).with_context(|| {
-                    format!("writing {:?} into LMDB", k.as_bstr())
-                })?;
-            }
-        },
-        WriteMethod::GetMergePut => {
-            while let Some((k, v)) = in_iter.next()? {
-                let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
-                match iter.next().transpose()? {
-                    Some((key, old_val)) if key == k => {
-                        let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
-                        let val = merge(k, &vals).expect("merge failed");
-                        iter.put_current(k, &val)?;
-                    },
-                    _ => {
-                        drop(iter);
-                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
-                    },
-                }
-            }
-        },
-    }
+    merger_iter_into_lmdb_database(
+        wtxn,
+        database,
+        merger.into_merge_iter()?,
+        merge,
+        method,
+    )?;
 
     debug!("MTBL stores merged in {:.02?}!", before.elapsed());
     Ok(())
@@ -146,7 +126,8 @@ pub fn write_into_lmdb_database(
     mut reader: Reader<FileFuse>,
     merge: MergeFn,
     method: WriteMethod,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+{
     debug!("Writing MTBL stores...");
     let before = Instant::now();
 
@@ -178,6 +159,67 @@ pub fn write_into_lmdb_database(
     }
 
     debug!("MTBL stores merged in {:.02?}!", before.elapsed());
+    Ok(())
+}
+
+pub fn sorter_into_lmdb_database(
+    wtxn: &mut heed::RwTxn,
+    database: heed::PolyDatabase,
+    sorter: Sorter<MergeFn>,
+    merge: MergeFn,
+    method: WriteMethod,
+) -> anyhow::Result<()>
+{
+    debug!("Writing MTBL sorter...");
+    let before = Instant::now();
+
+    merger_iter_into_lmdb_database(
+        wtxn,
+        database,
+        sorter.into_iter()?,
+        merge,
+        method,
+    )?;
+
+    debug!("MTBL sorter writen in {:.02?}!", before.elapsed());
+    Ok(())
+}
+
+fn merger_iter_into_lmdb_database<R: io::Read>(
+    wtxn: &mut heed::RwTxn,
+    database: heed::PolyDatabase,
+    mut sorter: MergerIter<R, MergeFn>,
+    merge: MergeFn,
+    method: WriteMethod,
+) -> anyhow::Result<()>
+{
+    match method {
+        WriteMethod::Append => {
+            let mut out_iter = database.iter_mut::<_, ByteSlice, ByteSlice>(wtxn)?;
+            while let Some((k, v)) = sorter.next()? {
+                out_iter.append(k, v).with_context(|| {
+                    format!("writing {:?} into LMDB", k.as_bstr())
+                })?;
+            }
+        },
+        WriteMethod::GetMergePut => {
+            while let Some((k, v)) = sorter.next()? {
+                let mut iter = database.prefix_iter_mut::<_, ByteSlice, ByteSlice>(wtxn, k)?;
+                match iter.next().transpose()? {
+                    Some((key, old_val)) if key == k => {
+                        let vals = vec![Cow::Borrowed(old_val), Cow::Borrowed(v)];
+                        let val = merge(k, &vals).expect("merge failed");
+                        iter.put_current(k, &val)?;
+                    },
+                    _ => {
+                        drop(iter);
+                        database.put::<_, ByteSlice, ByteSlice>(wtxn, k, v)?;
+                    },
+                }
+            }
+        },
+    }
+
     Ok(())
 }
 

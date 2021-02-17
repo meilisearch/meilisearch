@@ -9,7 +9,7 @@ use heed::types::ByteSlice;
 
 use crate::heed_codec::StrStrU8Codec;
 use crate::update::index_documents::WriteMethod;
-use crate::update::index_documents::{create_sorter, create_writer, writer_into_reader, write_into_lmdb_database};
+use crate::update::index_documents::{create_sorter, sorter_into_lmdb_database};
 use crate::update::index_documents::{word_docids_merge, words_pairs_proximities_docids_merge};
 use crate::{Index, SmallString32};
 
@@ -144,21 +144,11 @@ impl<'t, 'u, 'i> WordsPrefixes<'t, 'u, 'i> {
         // Set the words prefixes FST in the dtabase.
         self.index.put_words_prefixes_fst(self.wtxn, &prefix_fst)?;
 
-        // We write the sorter into a reader to be able to read it back.
-        let mut prefix_docids_writer = tempfile::tempfile().and_then(|file| {
-            create_writer(self.chunk_compression_type, self.chunk_compression_level, file)
-        })?;
-        prefix_docids_sorter.write_into(&mut prefix_docids_writer)?;
-        let prefix_docids_reader = writer_into_reader(
-            prefix_docids_writer,
-            self.chunk_fusing_shrink_size,
-        )?;
-
         // We finally write the word prefix docids into the LMDB database.
-        write_into_lmdb_database(
+        sorter_into_lmdb_database(
             self.wtxn,
             *self.index.word_prefix_docids.as_polymorph(),
-            prefix_docids_reader,
+            prefix_docids_sorter,
             word_docids_merge,
             WriteMethod::Append,
         )?;
@@ -190,22 +180,11 @@ impl<'t, 'u, 'i> WordsPrefixes<'t, 'u, 'i> {
             }
         }
 
-        // FIXME we should create a sorter_into_lmdb_database function
-        // We write the sorter into a reader to be able to read it back.
-        let mut word_prefix_pair_prox_docids_writer = tempfile::tempfile().and_then(|file| {
-            create_writer(self.chunk_compression_type, self.chunk_compression_level, file)
-        })?;
-        word_prefix_pair_proximity_docids_sorter.write_into(&mut word_prefix_pair_prox_docids_writer)?;
-        let word_prefix_pair_docids_reader = writer_into_reader(
-            word_prefix_pair_prox_docids_writer,
-            self.chunk_fusing_shrink_size,
-        )?;
-
         // We finally write the word prefix pair proximity docids into the LMDB database.
-        write_into_lmdb_database(
+        sorter_into_lmdb_database(
             self.wtxn,
             *self.index.word_prefix_pair_proximity_docids.as_polymorph(),
-            word_prefix_pair_docids_reader,
+            word_prefix_pair_proximity_docids_sorter,
             words_pairs_proximities_docids_merge,
             WriteMethod::Append,
         )?;
