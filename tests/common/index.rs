@@ -33,4 +33,9 @@ impl Index<'_> {
 
         self.service.put(url, body).await
     }
+
+    pub async fn delete(&self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}", self.uid);
+        self.service.delete(url).await
+    }
 }

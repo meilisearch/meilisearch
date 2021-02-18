@@ -51,5 +51,18 @@ impl Service {
         let response = serde_json::from_slice(&body).unwrap_or_default();
         (response, status_code)
     }
+
+    pub async fn delete(&self, url: impl AsRef<str>) -> (Value, StatusCode) {
+        let mut app =
+            test::init_service(meilisearch_http::create_app(&self.0, true).wrap(NormalizePath)).await;
+
+        let req = test::TestRequest::delete().uri(url.as_ref()).to_request();
+        let res = test::call_service(&mut app, req).await;
+        let status_code = res.status();
+
+        let body = test::read_body(res).await;
+        let response = serde_json::from_slice(&body).unwrap_or_default();
+        (response, status_code)
+    }
 }
 

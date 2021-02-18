@@ -138,22 +138,6 @@ impl Server {
 
     // Global Http request GET/POST/DELETE async or sync
 
-    //pub async fn get_request(&mut self, url: &str) -> (Value, StatusCode) {
-        //eprintln!("get_request: {}", url);
-
-        //let mut app =
-            //test::init_service(meilisearch_http::create_app(&self.data, true).wrap(NormalizePath)).await;
-
-        //let req = test::TestRequest::get().uri(url).to_request();
-        //let res = test::call_service(&mut app, req).await;
-        //let status_code = res.status();
-
-        //let body = test::read_body(res).await;
-        //let response = serde_json::from_slice(&body).unwrap_or_default();
-        //(response, status_code)
-    //}
-
-
     //pub async fn post_request_async(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         //eprintln!("post_request_async: {}", url);
 
@@ -177,20 +161,6 @@ impl Server {
         //(response, status_code)
     //}
 
-    //pub async fn delete_request(&mut self, url: &str) -> (Value, StatusCode) {
-        //eprintln!("delete_request: {}", url);
-
-        //let mut app =
-            //test::init_service(meilisearch_http::create_app(&self.data, true).wrap(NormalizePath)).await;
-
-        //let req = test::TestRequest::delete().uri(url).to_request();
-        //let res = test::call_service(&mut app, req).await;
-        //let status_code = res.status();
-
-        //let body = test::read_body(res).await;
-        //let response = serde_json::from_slice(&body).unwrap_or_default();
-        //(response, status_code)
-    //}
 
     //pub async fn delete_request_async(&mut self, url: &str) -> (Value, StatusCode) {
         //eprintln!("delete_request_async: {}", url);
