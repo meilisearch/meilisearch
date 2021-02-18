@@ -12,8 +12,8 @@ use crate::fields_ids_map::FieldsIdsMap;
 use crate::{default_criteria, Criterion, Search, FacetDistribution};
 use crate::{BEU32, DocumentId, FieldId, ExternalDocumentsIds};
 use crate::{
-    RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec, ObkvCodec,
-    BoRoaringBitmapCodec, CboRoaringBitmapCodec,
+    RoaringBitmapCodec, RoaringBitmapLenCodec, BEU32StrCodec,
+    StrStrU8Codec, ObkvCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
 };
 
 pub const CRITERIA_KEY: &str = "criteria";

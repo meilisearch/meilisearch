@@ -1,5 +1,5 @@
 mod bo_roaring_bitmap_codec;
-mod cbo_roaring_bitmap_codec;
+pub mod cbo_roaring_bitmap_codec;
 mod roaring_bitmap_codec;
 
 pub use self::bo_roaring_bitmap_codec::BoRoaringBitmapCodec;
