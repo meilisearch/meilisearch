@@ -1,6 +1,8 @@
 mod common;
-mod search;
 mod index;
+mod search;
+mod settings;
+mod documents;
 
 // Tests are isolated by features in different modules to allow better readability, test
 // targetability, and improved incremental compilation times.

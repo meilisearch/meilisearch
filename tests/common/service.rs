@@ -64,5 +64,6 @@ impl Service {
         let response = serde_json::from_slice(&body).unwrap_or_default();
         (response, status_code)
     }
+
 }
 

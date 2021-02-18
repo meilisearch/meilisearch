@@ -1,5 +1,8 @@
+use std::time::Duration;
+
 use actix_web::http::StatusCode;
 use serde_json::{json, Value};
+use tokio::time::delay_for;
 
 use super::service::Service;
 
@@ -14,10 +17,7 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
-    pub async fn create<'a>(
-        &'a self,
-        primary_key: Option<&str>,
-    ) -> (Value, StatusCode) {
+    pub async fn create<'a>(&'a self, primary_key: Option<&str>) -> (Value, StatusCode) {
         let body = json!({
             "uid": self.uid,
             "primaryKey": primary_key,
@@ -37,5 +37,44 @@ impl Index<'_> {
     pub async fn delete(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}", self.uid);
         self.service.delete(url).await
+    }
+
+    pub async fn add_documents(
+        &self,
+        documents: Value,
+        primary_key: Option<&str>,
+    ) -> (Value, StatusCode) {
+        let url = match primary_key {
+            Some(key) => format!("/indexes/{}/documents?primaryKey={}", self.uid, key),
+            None => format!("/indexes/{}/documents", self.uid),
+        };
+        self.service.post(url, documents).await
+    }
+
+    pub async fn wait_update_id(&self, update_id: u64) {
+        // try 10 times to get status, or panic to not wait forever
+        let url = format!("/indexes/{}/updates/{}", self.uid, update_id);
+        for _ in 0..10 {
+            let (response, status_code) = self.service.get(&url).await;
+            assert_eq!(status_code, 200);
+
+            if response["status"] == "processed" || response["status"] == "failed" {
+                return;
+            }
+
+            delay_for(Duration::from_secs(1)).await;
+        }
+        panic!("Timeout waiting for update id");
+    }
+
+    pub async fn get_update(&self, udpate_id: usize) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/updates/{}", self.uid, udpate_id);
+        self.service.get(url).await
+    }
+
+    #[allow(dead_code)]
+    pub async fn list_updates(&self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/updates", self.uid);
+        self.service.get(url).await
     }
 }

@@ -42,6 +42,7 @@ impl<M> Pending<M> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Processed<M, N> {
     pub success: N,
     pub processed_at: DateTime<Utc>,
@@ -56,6 +57,7 @@ impl<M, N> Processed<M, N> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Processing<M> {
     #[serde(flatten)]
     pub from: Pending<M>,
@@ -89,6 +91,7 @@ impl<M> Processing<M> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Aborted<M> {
     #[serde(flatten)]
     from: Pending<M>,
@@ -102,6 +105,7 @@ impl<M> Aborted<M> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Failed<M, E> {
     #[serde(flatten)]
     from: Processing<M>,
