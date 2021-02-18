@@ -2,7 +2,7 @@ use grenad::CompressionType;
 use rayon::ThreadPool;
 
 use crate::Index;
-use super::{ClearDocuments, DeleteDocuments, IndexDocuments, Settings, Facets};
+use super::{ClearDocuments, DeleteDocuments, IndexDocuments, Settings, Facets, WordsPrefixes};
 
 pub struct UpdateBuilder<'a> {
     pub(crate) log_every_n: Option<usize>,
@@ -128,6 +128,21 @@ impl<'a> UpdateBuilder<'a> {
     ) -> Facets<'t, 'u, 'i>
     {
         let mut builder = Facets::new(wtxn, index, self.update_id);
+
+        builder.chunk_compression_type = self.chunk_compression_type;
+        builder.chunk_compression_level = self.chunk_compression_level;
+        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+
+        builder
+    }
+
+    pub fn words_prefixes<'t, 'u, 'i>(
+        self,
+        wtxn: &'t mut heed::RwTxn<'i, 'u>,
+        index: &'i Index,
+    ) -> WordsPrefixes<'t, 'u, 'i>
+    {
+        let mut builder = WordsPrefixes::new(wtxn, index, self.update_id);
 
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
