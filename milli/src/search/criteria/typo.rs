@@ -171,19 +171,27 @@ fn alterate_query_tree(
                 ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos))
             },
             Operation::Query(q) => {
-                // TODO may be optimized when number_typos == 0
                 if let QueryKind::Tolerant { typo, word } = &q.kind {
-                    let typo = *typo.min(&number_typos);
-                    let words = word_typos(word, q.prefix, typo, words_fst)?;
+                    // if no typo is allowed we don't call word_typos(..),
+                    // and directly create an Exact query
+                    if number_typos == 0 {
+                        *operation = Operation::Query(Query {
+                            prefix: q.prefix,
+                            kind: QueryKind::Exact { original_typo: 0, word: word.clone() },
+                        });
+                    } else {
+                        let typo = *typo.min(&number_typos);
+                        let words = word_typos(word, q.prefix, typo, words_fst)?;
 
-                    let queries = words.into_iter().map(|(word, _typo)| {
-                        Operation::Query(Query {
-                            prefix: false,
-                            kind: QueryKind::Exact { original_typo: typo, word },
-                        })
-                    }).collect();
+                        let queries = words.into_iter().map(|(word, _typo)| {
+                            Operation::Query(Query {
+                                prefix: false,
+                                kind: QueryKind::Exact { original_typo: typo, word },
+                            })
+                        }).collect();
 
-                    *operation = Operation::or(false, queries);
+                        *operation = Operation::or(false, queries);
+                    }
                 }
 
                 Ok(())
