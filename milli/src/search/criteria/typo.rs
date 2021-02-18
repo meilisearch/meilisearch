@@ -4,7 +4,7 @@ use anyhow::bail;
 use roaring::RoaringBitmap;
 
 use crate::search::query_tree::{Operation, Query, QueryKind};
-use crate::search::word_typos;
+use crate::search::word_derivations;
 use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
 
 // FIXME we must stop when the number of typos is equal to
@@ -177,7 +177,7 @@ fn alterate_query_tree(
             },
             Operation::Query(q) => {
                 if let QueryKind::Tolerant { typo, word } = &q.kind {
-                    // if no typo is allowed we don't call word_typos(..),
+                    // if no typo is allowed we don't call word_derivations function,
                     // and directly create an Exact query
                     if number_typos == 0 {
                         *operation = Operation::Query(Query {
@@ -190,7 +190,7 @@ fn alterate_query_tree(
                         let words = if let Some(derivations) = typo_cache.get(&cache_key) {
                             derivations.clone()
                         } else {
-                            let derivations = word_typos(word, q.prefix, typo, words_fst)?;
+                            let derivations = word_derivations(word, q.prefix, typo, words_fst)?;
                             typo_cache.insert(cache_key, derivations.clone());
                             derivations
                         };
@@ -222,10 +222,6 @@ fn resolve_candidates<'t>(
     cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
 ) -> anyhow::Result<RoaringBitmap>
 {
-    // FIXME add a cache
-    // FIXME keep the cache between typos iterations
-    // cache: HashMap<(&Operation, u8), RoaringBitmap>,
-
     fn resolve_operation<'t>(
         ctx: &'t dyn Context,
         query_tree: &Operation,

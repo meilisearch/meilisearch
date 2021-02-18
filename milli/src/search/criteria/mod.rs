@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use crate::Index;
-use crate::search::word_typos;
+use crate::search::word_derivations;
 
 use roaring::RoaringBitmap;
 
@@ -124,7 +124,7 @@ fn query_docids(ctx: &dyn Context, query: &Query) -> anyhow::Result<RoaringBitma
             if query.prefix && ctx.in_prefix_cache(&word) {
                 Ok(ctx.word_prefix_docids(&word)?.unwrap_or_default())
             } else if query.prefix {
-                let words = word_typos(&word, true, 0, ctx.words_fst())?;
+                let words = word_derivations(&word, true, 0, ctx.words_fst())?;
                 let mut docids = RoaringBitmap::new();
                 for (word, _typo) in words {
                     let current_docids = ctx.word_docids(&word)?.unwrap_or_default();
@@ -136,7 +136,7 @@ fn query_docids(ctx: &dyn Context, query: &Query) -> anyhow::Result<RoaringBitma
             }
         },
         QueryKind::Tolerant { typo, word } => {
-            let words = word_typos(&word, query.prefix, *typo, ctx.words_fst())?;
+            let words = word_derivations(&word, query.prefix, *typo, ctx.words_fst())?;
             let mut docids = RoaringBitmap::new();
             for (word, _typo) in words {
                 let current_docids = ctx.word_docids(&word)?.unwrap_or_default();
@@ -155,14 +155,14 @@ fn query_pair_proximity_docids(ctx: &dyn Context, left: &Query, right: &Query, p
             if prefix && ctx.in_prefix_cache(&right) {
                 Ok(ctx.word_prefix_pair_proximity_docids(left.as_str(), right.as_str(), proximity)?.unwrap_or_default())
             } else if prefix {
-                let r_words = word_typos(&right, true, 0, ctx.words_fst())?;
+                let r_words = word_derivations(&right, true, 0, ctx.words_fst())?;
                 all_word_pair_proximity_docids(ctx, &[(left, 0)], &r_words, proximity)
             } else {
                 Ok(ctx.word_pair_proximity_docids(left.as_str(), right.as_str(), proximity)?.unwrap_or_default())
             }
         },
         (QueryKind::Tolerant { typo, word: left }, QueryKind::Exact { word: right, .. }) => {
-            let l_words = word_typos(&left, false, *typo, ctx.words_fst())?;
+            let l_words = word_derivations(&left, false, *typo, ctx.words_fst())?;
             if prefix && ctx.in_prefix_cache(&right) {
                 let mut docids = RoaringBitmap::new();
                 for (left, _) in l_words {
@@ -171,19 +171,19 @@ fn query_pair_proximity_docids(ctx: &dyn Context, left: &Query, right: &Query, p
                 }
                 Ok(docids)
             } else if prefix {
-                let r_words = word_typos(&right, true, 0, ctx.words_fst())?;
+                let r_words = word_derivations(&right, true, 0, ctx.words_fst())?;
                 all_word_pair_proximity_docids(ctx, &l_words, &r_words, proximity)
             } else {
                 all_word_pair_proximity_docids(ctx, &l_words, &[(right, 0)], proximity)
             }
         },
         (QueryKind::Exact { word: left, .. }, QueryKind::Tolerant { typo, word: right }) => {
-            let r_words = word_typos(&right, prefix, *typo, ctx.words_fst())?;
+            let r_words = word_derivations(&right, prefix, *typo, ctx.words_fst())?;
             all_word_pair_proximity_docids(ctx, &[(left, 0)], &r_words, proximity)
         },
         (QueryKind::Tolerant { typo: l_typo, word: left }, QueryKind::Tolerant { typo: r_typo, word: right }) => {
-            let l_words = word_typos(&left, false, *l_typo, ctx.words_fst())?;
-            let r_words = word_typos(&right, prefix, *r_typo, ctx.words_fst())?;
+            let l_words = word_derivations(&left, false, *l_typo, ctx.words_fst())?;
+            let r_words = word_derivations(&right, prefix, *r_typo, ctx.words_fst())?;
             all_word_pair_proximity_docids(ctx, &l_words, &r_words, proximity)
         },
     }

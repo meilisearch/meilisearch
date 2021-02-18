@@ -303,7 +303,7 @@ fn fetch_words(tree: &Operation, fst: &fst::Set<Cow<[u8]>>) -> FetchedWords {
         match query.kind.clone() {
             QueryKind::Exact { word, .. } => vec![(word, query.prefix)],
             QueryKind::Tolerant { typo, word } => {
-                if let Ok(words) = super::word_typos(&word, query.prefix, typo, fst) {
+                if let Ok(words) = super::word_derivations(&word, query.prefix, typo, fst) {
                     words.into_iter().map(|(w, _)| (w, query.prefix)).collect()
                 } else {
                     vec![(word, query.prefix)]
