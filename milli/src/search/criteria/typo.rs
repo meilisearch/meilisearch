@@ -1,4 +1,4 @@
-use std::{borrow::Cow, mem::take};
+use std::{borrow::Cow, collections::HashMap, mem::take};
 
 use anyhow::bail;
 use roaring::RoaringBitmap;
@@ -18,6 +18,7 @@ pub struct Typo<'t> {
     candidates: Candidates,
     bucket_candidates: Option<RoaringBitmap>,
     parent: Option<Box<dyn Criterion>>,
+    cache: HashMap<(Operation, u8), RoaringBitmap>,
 }
 
 impl<'t> Typo<'t> {
@@ -34,6 +35,7 @@ impl<'t> Typo<'t> {
             candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
             bucket_candidates: None,
             parent: None,
+            cache: HashMap::new(),
         })
     }
 
@@ -49,6 +51,7 @@ impl<'t> Typo<'t> {
             candidates: Candidates::default(),
             bucket_candidates: None,
             parent: Some(parent),
+            cache: HashMap::new(),
         })
     }
 }
@@ -73,7 +76,7 @@ impl<'t> Criterion for Typo<'t> {
                         query_tree.clone()
                     };
 
-                    let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos)?;
+                    let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos, &mut self.cache)?;
                     new_candidates.intersect_with(&candidates);
                     candidates.difference_with(&new_candidates);
                     self.number_typos += 1;
@@ -100,7 +103,7 @@ impl<'t> Criterion for Typo<'t> {
                         query_tree.clone()
                     };
 
-                    let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos)?;
+                    let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos, &mut self.cache)?;
                     new_candidates.difference_with(&candidates);
                     candidates.union_with(&new_candidates);
                     self.number_typos += 1;
@@ -196,6 +199,7 @@ fn resolve_candidates<'t>(
     ctx: &'t dyn Context,
     query_tree: &Operation,
     number_typos: u8,
+    cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
 ) -> anyhow::Result<RoaringBitmap>
 {
     // FIXME add a cache
@@ -206,13 +210,14 @@ fn resolve_candidates<'t>(
         ctx: &'t dyn Context,
         query_tree: &Operation,
         number_typos: u8,
+        cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
     ) -> anyhow::Result<RoaringBitmap>
     {
         use Operation::{And, Consecutive, Or, Query};
 
         match query_tree {
             And(ops) => {
-                mdfs(ctx, ops, number_typos)
+                mdfs(ctx, ops, number_typos, cache)
             },
             Consecutive(ops) => {
                 let mut candidates = RoaringBitmap::new();
@@ -241,7 +246,7 @@ fn resolve_candidates<'t>(
             Or(_, ops) => {
                 let mut candidates = RoaringBitmap::new();
                 for op in ops {
-                    let docids = resolve_operation(ctx, op, number_typos)?;
+                    let docids = resolve_operation(ctx, op, number_typos, cache)?;
                     candidates.union_with(&docids);
                 }
                 Ok(candidates)
@@ -259,17 +264,34 @@ fn resolve_candidates<'t>(
         ctx: &'t dyn Context,
         branches: &[Operation],
         mana: u8,
+        cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
     ) -> anyhow::Result<RoaringBitmap>
     {
         match branches.split_first() {
-            Some((head, [])) => resolve_operation(ctx, head, mana),
+            Some((head, [])) => {
+                if let Some(candidates) = cache.get(&(head.clone(), mana)) {
+                    Ok(candidates.clone())
+                } else {
+                    let candidates = resolve_operation(ctx, head, mana, cache)?;
+                    cache.insert((head.clone(), mana), candidates.clone());
+                    Ok(candidates)
+                }
+            },
             Some((head, tail)) => {
                 let mut candidates = RoaringBitmap::new();
 
                 for m in 0..=mana {
-                    let mut head_candidates = resolve_operation(ctx, head, m)?;
+                    let mut head_candidates = {
+                        if let Some(candidates) = cache.get(&(head.clone(), m)) {
+                            candidates.clone()
+                        } else {
+                            let candidates = resolve_operation(ctx, head, m, cache)?;
+                            cache.insert((head.clone(), m), candidates.clone());
+                            candidates
+                        }
+                    };
                     if !head_candidates.is_empty() {
-                        let tail_candidates = mdfs(ctx, tail, mana - m)?;
+                        let tail_candidates = mdfs(ctx, tail, mana - m, cache)?;
                         head_candidates.intersect_with(&tail_candidates);
                         candidates.union_with(&head_candidates);
                     }
@@ -281,5 +303,5 @@ fn resolve_candidates<'t>(
         }
     }
 
-    resolve_operation(ctx, query_tree, number_typos)
+    resolve_operation(ctx, query_tree, number_typos, cache)
 }
