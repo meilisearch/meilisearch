@@ -64,7 +64,6 @@ pub struct IndexerOpts {
     pub indexing_jobs: Option<usize>,
 }
 
-#[cfg(test)]
 impl Default for IndexerOpts {
     fn default() -> Self {
         Self {

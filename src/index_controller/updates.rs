@@ -2,6 +2,7 @@ use chrono::{Utc, DateTime};
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Pending<M> {
     pub update_id: u64,
     pub meta: M,
@@ -115,7 +116,7 @@ impl<M, E> Failed<M, E> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize)]
-#[serde(tag = "status")]
+#[serde(tag = "status", rename_all = "camelCase")]
 pub enum UpdateStatus<M, N, E> {
     Processing(Processing<M>),
     Pending(Pending<M>),
