@@ -63,9 +63,16 @@ impl<'t> Criterion for Typo<'t> {
                     self.candidates = Candidates::default();
                 },
                 (Some(query_tree), Allowed(candidates)) => {
-                    // TODO if number_typos >= 2 the generated query_tree will allways be the same,
-                    // generate a new one on each iteration is a waste of time.
-                    let new_query_tree = alterate_query_tree(&self.ctx.words_fst(), query_tree.clone(), self.number_typos)?;
+                    let fst = self.ctx.words_fst();
+                    let new_query_tree = if self.number_typos < 2 {
+                        alterate_query_tree(&fst, query_tree.clone(), self.number_typos)?
+                    } else if self.number_typos == 2 {
+                        *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos)?;
+                        query_tree.clone()
+                    } else {
+                        query_tree.clone()
+                    };
+
                     let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos)?;
                     new_candidates.intersect_with(&candidates);
                     candidates.difference_with(&new_candidates);
@@ -83,9 +90,16 @@ impl<'t> Criterion for Typo<'t> {
                     }));
                 },
                 (Some(query_tree), Forbidden(candidates)) => {
-                    // TODO if number_typos >= 2 the generated query_tree will allways be the same,
-                    // generate a new one on each iteration is a waste of time.
-                    let new_query_tree = alterate_query_tree(&self.ctx.words_fst(), query_tree.clone(), self.number_typos)?;
+                    let fst = self.ctx.words_fst();
+                    let new_query_tree = if self.number_typos < 2 {
+                        alterate_query_tree(&fst, query_tree.clone(), self.number_typos)?
+                    } else if self.number_typos == 2 {
+                        *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos)?;
+                        query_tree.clone()
+                    } else {
+                        query_tree.clone()
+                    };
+
                     let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos)?;
                     new_candidates.difference_with(&candidates);
                     candidates.union_with(&new_candidates);
