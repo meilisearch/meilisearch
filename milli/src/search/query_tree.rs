@@ -419,22 +419,26 @@ fn create_query_tree(
         query: PrimitiveQuery,
     ) -> anyhow::Result<Operation>
     {
-        let word_count = query.iter().filter(|part| !part.is_phrase()).count();
+        let number_phrases = query.iter().filter(|p| p.is_phrase()).count();
         let mut operation_children = Vec::new();
 
-        for count in (1..=word_count).rev() {
-            let mut tmp_count = 0;
+        let start = number_phrases + (number_phrases == 0) as usize;
+        for len in start..=query.len() {
+            let mut word_count = len - number_phrases;
+            let query: Vec<_> = query.iter().filter_map(|p| {
+                if p.is_phrase() {
+                    Some(p)
+                } else if word_count != 0 {
+                    word_count -= 1;
+                    Some(p)
+                } else {
+                    None
+                }
+            })
+            .cloned()
+            .collect();
 
-            // keep only the N firsts non-quoted words, where N = count
-            // quoted words are allways kept
-            let query: Vec<_> = query.iter().cloned().filter(|part| {
-                if !part.is_phrase()  {
-                    tmp_count += 1;
-                    tmp_count <= count
-                } else { true }
-            }).collect();
-
-            let ngrams = ngrams(ctx, authorize_typos, query.as_slice())?;
+            let ngrams = ngrams(ctx, authorize_typos, &query)?;
             operation_children.push(ngrams);
         }
 
@@ -810,6 +814,14 @@ mod test {
         let tokens = result.tokens();
 
         let expected = Operation::Or(true, vec![
+            Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
+            Operation::Or(false, vec![
+                Operation::And(vec![
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("my".to_string()) }),
+                ]),
+                Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(1, "heymy".to_string()) }),
+            ]),
             Operation::Or(false, vec![
                 Operation::And(vec![
                     Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
@@ -827,14 +839,58 @@ mod test {
                 ]),
                 Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(2, "heymyfriend".to_string()) }),
             ]),
-            Operation::Or(false, vec![
-                Operation::And(vec![
-                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
-                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("my".to_string()) }),
-                ]),
-                Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(1, "heymy".to_string()) }),
-            ]),
+        ]);
+        let query_tree = TestContext::default().build(true, true, tokens).unwrap().unwrap();
+
+        assert_eq!(expected, query_tree);
+    }
+
+    #[test]
+    fn optional_word_phrase() {
+        let query = "\"hey my\"";
+        let stop_words = &Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let result = analyzer.analyze(query);
+        let tokens = result.tokens();
+
+        let expected = Operation::Consecutive(vec![
             Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
+            Operation::Query(Query { prefix: false, kind: QueryKind::exact("my".to_string()) }),
+        ]);
+        let query_tree = TestContext::default().build(true, true, tokens).unwrap().unwrap();
+
+        assert_eq!(expected, query_tree);
+    }
+
+    #[test]
+    fn optional_word_multiple_phrases() {
+        let query = r#""hey" my good "friend""#;
+        let stop_words = &Set::default();
+        let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
+        let result = analyzer.analyze(query);
+        let tokens = result.tokens();
+
+        let expected = Operation::Or(true, vec![
+            Operation::And(vec![
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("friend".to_string()) }),
+            ]),
+            Operation::And(vec![
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("my".to_string()) }),
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("friend".to_string()) }),
+            ]),
+            Operation::And(vec![
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("hey".to_string()) }),
+                Operation::Or(false, vec![
+                    Operation::And(vec![
+                        Operation::Query(Query { prefix: false, kind: QueryKind::exact("my".to_string()) }),
+                        Operation::Query(Query { prefix: false, kind: QueryKind::exact("good".to_string()) }),
+                    ]),
+                    Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(1, "mygood".to_string()) }),
+                ]),
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("friend".to_string()) }),
+            ]),
         ]);
         let query_tree = TestContext::default().build(true, true, tokens).unwrap().unwrap();
 
