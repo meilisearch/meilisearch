@@ -46,3 +46,13 @@ async fn create_existing_index() {
     let (_response, code) = index.create(Some("primary")).await;
     assert_eq!(code, 400);
 }
+
+// test fails (issue #46)
+#[actix_rt::test]
+#[ignore]
+async fn create_with_invalid_index_uid() {
+    let server = Server::new().await;
+    let index = server.index("test test");
+    let (_, code) = index.create(None).await;
+    assert_eq!(code, 400);
+}
