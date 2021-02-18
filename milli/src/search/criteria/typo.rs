@@ -18,7 +18,8 @@ pub struct Typo<'t> {
     candidates: Candidates,
     bucket_candidates: Option<RoaringBitmap>,
     parent: Option<Box<dyn Criterion>>,
-    cache: HashMap<(Operation, u8), RoaringBitmap>,
+    candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
+    typo_cache: HashMap<(String, bool, u8), Vec<(String, u8)>>,
 }
 
 impl<'t> Typo<'t> {
@@ -35,7 +36,8 @@ impl<'t> Typo<'t> {
             candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
             bucket_candidates: None,
             parent: None,
-            cache: HashMap::new(),
+            candidates_cache: HashMap::new(),
+            typo_cache: HashMap::new(),
         })
     }
 
@@ -51,7 +53,8 @@ impl<'t> Typo<'t> {
             candidates: Candidates::default(),
             bucket_candidates: None,
             parent: Some(parent),
-            cache: HashMap::new(),
+            candidates_cache: HashMap::new(),
+            typo_cache: HashMap::new(),
         })
     }
 }
@@ -68,15 +71,15 @@ impl<'t> Criterion for Typo<'t> {
                 (Some(query_tree), Allowed(candidates)) => {
                     let fst = self.ctx.words_fst();
                     let new_query_tree = if self.number_typos < 2 {
-                        alterate_query_tree(&fst, query_tree.clone(), self.number_typos)?
+                        alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache)?
                     } else if self.number_typos == 2 {
-                        *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos)?;
+                        *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache)?;
                         query_tree.clone()
                     } else {
                         query_tree.clone()
                     };
 
-                    let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos, &mut self.cache)?;
+                    let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos, &mut self.candidates_cache)?;
                     new_candidates.intersect_with(&candidates);
                     candidates.difference_with(&new_candidates);
                     self.number_typos += 1;
@@ -95,15 +98,15 @@ impl<'t> Criterion for Typo<'t> {
                 (Some(query_tree), Forbidden(candidates)) => {
                     let fst = self.ctx.words_fst();
                     let new_query_tree = if self.number_typos < 2 {
-                        alterate_query_tree(&fst, query_tree.clone(), self.number_typos)?
+                        alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache)?
                     } else if self.number_typos == 2 {
-                        *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos)?;
+                        *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache)?;
                         query_tree.clone()
                     } else {
                         query_tree.clone()
                     };
 
-                    let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos, &mut self.cache)?;
+                    let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos, &mut self.candidates_cache)?;
                     new_candidates.difference_with(&candidates);
                     candidates.union_with(&new_candidates);
                     self.number_typos += 1;
@@ -156,19 +159,21 @@ fn alterate_query_tree(
     words_fst: &fst::Set<Cow<[u8]>>,
     mut query_tree: Operation,
     number_typos: u8,
+    typo_cache: &mut HashMap<(String, bool, u8), Vec<(String, u8)>>,
 ) -> anyhow::Result<Operation>
 {
     fn recurse(
         words_fst: &fst::Set<Cow<[u8]>>,
         operation: &mut Operation,
         number_typos: u8,
+        typo_cache: &mut HashMap<(String, bool, u8), Vec<(String, u8)>>,
     ) -> anyhow::Result<()>
     {
         use Operation::{And, Consecutive, Or};
 
         match operation {
             And(ops) | Consecutive(ops) | Or(_, ops) => {
-                ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos))
+                ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, typo_cache))
             },
             Operation::Query(q) => {
                 if let QueryKind::Tolerant { typo, word } = &q.kind {
@@ -181,9 +186,16 @@ fn alterate_query_tree(
                         });
                     } else {
                         let typo = *typo.min(&number_typos);
-                        let words = word_typos(word, q.prefix, typo, words_fst)?;
+                        let cache_key = (word.clone(), q.prefix, typo);
+                        let words = if let Some(derivations) = typo_cache.get(&cache_key) {
+                            derivations.clone()
+                        } else {
+                            let derivations = word_typos(word, q.prefix, typo, words_fst)?;
+                            typo_cache.insert(cache_key, derivations.clone());
+                            derivations
+                        };
 
-                        let queries = words.into_iter().map(|(word, _typo)| {
+                        let queries = words.into_iter().map(|(word, typo)| {
                             Operation::Query(Query {
                                 prefix: false,
                                 kind: QueryKind::Exact { original_typo: typo, word },
@@ -199,7 +211,7 @@ fn alterate_query_tree(
         }
     }
 
-    recurse(words_fst, &mut query_tree, number_typos)?;
+    recurse(words_fst, &mut query_tree, number_typos, typo_cache)?;
     Ok(query_tree)
 }
 
@@ -277,11 +289,12 @@ fn resolve_candidates<'t>(
     {
         match branches.split_first() {
             Some((head, [])) => {
-                if let Some(candidates) = cache.get(&(head.clone(), mana)) {
+                let cache_key = (head.clone(), mana);
+                if let Some(candidates) = cache.get(&cache_key) {
                     Ok(candidates.clone())
                 } else {
                     let candidates = resolve_operation(ctx, head, mana, cache)?;
-                    cache.insert((head.clone(), mana), candidates.clone());
+                    cache.insert(cache_key, candidates.clone());
                     Ok(candidates)
                 }
             },
@@ -290,11 +303,12 @@ fn resolve_candidates<'t>(
 
                 for m in 0..=mana {
                     let mut head_candidates = {
-                        if let Some(candidates) = cache.get(&(head.clone(), m)) {
+                        let cache_key = (head.clone(), m);
+                        if let Some(candidates) = cache.get(&cache_key) {
                             candidates.clone()
                         } else {
                             let candidates = resolve_operation(ctx, head, m, cache)?;
-                            cache.insert((head.clone(), m), candidates.clone());
+                            cache.insert(cache_key, candidates.clone());
                             candidates
                         }
                     };
