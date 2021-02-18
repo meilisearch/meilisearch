@@ -1,13 +1,13 @@
 use std::ops::Deref;
 
-use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use async_compression::tokio_02::write::GzipEncoder;
 use futures_util::stream::StreamExt;
+use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use tokio::io::AsyncWriteExt;
 
-use super::Data;
-use crate::index_controller::{IndexController, Settings, IndexSettings, IndexMetadata};
 use crate::index_controller::UpdateStatus;
+use crate::index_controller::{IndexController, Settings, IndexSettings, IndexMetadata};
+use super::Data;
 
 impl Data {
     pub async fn add_documents<B, E>(

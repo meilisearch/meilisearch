@@ -24,4 +24,13 @@ impl Index<'_> {
         });
         self.service.post("/indexes", body).await
     }
+
+    pub async fn update(&self, primary_key: Option<&str>) -> (Value, StatusCode) {
+        let body = json!({
+            "primaryKey": primary_key,
+        });
+        let url = format!("/indexes/{}", self.uid);
+
+        self.service.put(url, body).await
+    }
 }

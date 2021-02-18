@@ -165,23 +165,6 @@ impl Server {
         //(response, status_code)
     //}
 
-    //pub async fn put_request(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
-        //eprintln!("put_request: {}", url);
-
-        //let mut app =
-            //test::init_service(meilisearch_http::create_app(&self.data, true).wrap(NormalizePath)).await;
-
-        //let req = test::TestRequest::put()
-            //.uri(url)
-            //.set_json(&body)
-            //.to_request();
-        //let res = test::call_service(&mut app, req).await;
-        //let status_code = res.status();
-
-        //let body = test::read_body(res).await;
-        //let response = serde_json::from_slice(&body).unwrap_or_default();
-        //(response, status_code)
-    //}
 
     //pub async fn put_request_async(&mut self, url: &str, body: Value) -> (Value, StatusCode) {
         //eprintln!("put_request_async: {}", url);
