@@ -356,11 +356,8 @@ impl Index {
 
     /// Returns the number of documents ids associated with the given word,
     /// it is much faster than deserializing the bitmap and getting the length of it.
-    pub fn word_documents_count(&self, rtxn: &RoTxn, word: &str) -> anyhow::Result<Option<u64>> {
-        self.word_docids
-            .remap_data_type::<RoaringBitmapLenCodec>()
-            .get(rtxn, word)
-            .map_err(Into::into)
+    pub fn word_documents_count(&self, rtxn: &RoTxn, word: &str) -> heed::Result<Option<u64>> {
+        self.word_docids.remap_data_type::<RoaringBitmapLenCodec>().get(rtxn, word)
     }
 
     /* documents */
