@@ -145,6 +145,12 @@ impl fmt::Debug for Query {
 trait Context {
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn synonyms<S: AsRef<str>>(&self, words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>>;
+    fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
+        match self.word_docids(word)? {
+            Some(rb) => Ok(Some(rb.len())),
+            None => Ok(None),
+        }
+    }
 }
 
 /// The query tree builder is the interface to build a query tree.
@@ -156,6 +162,10 @@ pub struct QueryTreeBuilder<'a> {
 impl<'a> Context for QueryTreeBuilder<'a> {
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
         self.index.word_docids.get(self.rtxn, word)
+    }
+
+    fn word_documents_count(&self, word: &str) -> heed::Result<Option<u64>> {
+        self.index.word_documents_count(self.rtxn, word)
     }
 
     fn synonyms<S: AsRef<str>>(&self, _words: &[S]) -> heed::Result<Option<Vec<Vec<String>>>> {
@@ -201,8 +211,8 @@ fn split_best_frequency<'a>(ctx: &impl Context, word: &'a str) -> heed::Result<O
     for (i, _) in chars {
         let (left, right) = word.split_at(i);
 
-        let left_freq = ctx.word_docids(left)?.map(|docids| docids.len()).unwrap_or(0);
-        let right_freq = ctx.word_docids(right)?.map(|docids| docids.len()).unwrap_or(0);
+        let left_freq = ctx.word_documents_count(left)?.unwrap_or(0);
+        let right_freq = ctx.word_documents_count(right)?.unwrap_or(0);
 
         let min_freq = cmp::min(left_freq, right_freq);
         if min_freq != 0 && best.map_or(true, |(old, _, _)| min_freq > old) {
