@@ -8,7 +8,7 @@ use roaring::RoaringBitmap;
 /// This is the limit where using a byteorder became less size efficient
 /// than using a direct roaring encoding, it is also the point where we are able
 /// to determine the encoding used only by using the array of bytes length.
-const THRESHOLD: usize = 7;
+pub const THRESHOLD: usize = 7;
 
 /// A conditionnal codec that either use the RoaringBitmap
 /// or a lighter ByteOrder en/decoding method.

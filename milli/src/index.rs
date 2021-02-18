@@ -12,8 +12,8 @@ use crate::fields_ids_map::FieldsIdsMap;
 use crate::{default_criteria, Criterion, Search, FacetDistribution};
 use crate::{BEU32, DocumentId, FieldId, ExternalDocumentsIds};
 use crate::{
-    RoaringBitmapCodec, BEU32StrCodec, StrStrU8Codec, ObkvCodec,
-    BoRoaringBitmapCodec, CboRoaringBitmapCodec,
+    RoaringBitmapCodec, RoaringBitmapLenCodec, BEU32StrCodec,
+    StrStrU8Codec, ObkvCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec,
 };
 
 pub const CRITERIA_KEY: &str = "criteria";
@@ -350,6 +350,17 @@ impl Index {
             Some(bytes) => Ok(fst::Set::new(bytes)?.map_data(Cow::Borrowed)?),
             None => Ok(fst::Set::default().map_data(Cow::Owned)?),
         }
+    }
+
+    /* word documents count */
+
+    /// Returns the number of documents ids associated with the given word,
+    /// it is much faster than deserializing the bitmap and getting the length of it.
+    pub fn word_documents_count(&self, rtxn: &RoTxn, word: &str) -> anyhow::Result<Option<u64>> {
+        self.word_docids
+            .remap_data_type::<RoaringBitmapLenCodec>()
+            .get(rtxn, word)
+            .map_err(Into::into)
     }
 
     /* documents */
