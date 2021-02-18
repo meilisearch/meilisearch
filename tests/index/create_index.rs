@@ -56,3 +56,21 @@ async fn create_with_invalid_index_uid() {
     let (_, code) = index.create(None).await;
     assert_eq!(code, 400);
 }
+
+#[actix_rt::test]
+async fn test_create_multiple_indexes() {
+    let server = Server::new().await;
+    let index1 = server.index("test1");
+    let index2 = server.index("test2");
+    let index3 = server.index("test3");
+    let index4 = server.index("test4");
+
+    index1.create(None).await;
+    index2.create(None).await;
+    index3.create(None).await;
+
+    assert_eq!(index1.get().await.1, 200);
+    assert_eq!(index2.get().await.1, 200);
+    assert_eq!(index3.get().await.1, 200);
+    assert_eq!(index4.get().await.1, 400);
+}
