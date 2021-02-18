@@ -11,8 +11,8 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 use crate::search::criteria::{Criterion, CriterionResult};
-use crate::search::criteria::typo::Typo;
-use crate::{Index, DocumentId};
+use crate::search::criteria::{typo::Typo, words::Words};
+use crate::{Index, FieldId, DocumentId};
 
 pub use self::facet::{FacetCondition, FacetDistribution, FacetNumberOperator, FacetStringOperator};
 pub use self::facet::{FacetIter};
@@ -71,7 +71,7 @@ impl<'a> Search<'a> {
                 let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
                 let result = analyzer.analyze(query);
                 let tokens = result.tokens();
-                builder.optional_words(false).build(tokens)
+                builder.build(tokens)
             },
             None => None,
         };
@@ -89,7 +89,8 @@ impl<'a> Search<'a> {
 
         // We aretesting the typo criteria but there will be more of them soon.
         let criteria_ctx = criteria::HeedContext::new(self.rtxn, self.index)?;
-        let mut criteria = Typo::initial(&criteria_ctx, query_tree, facet_candidates)?;
+        let typo_criterion = Typo::initial(&criteria_ctx, query_tree, facet_candidates)?;
+        let mut criteria = Words::new(&criteria_ctx, Box::new(typo_criterion))?;
 
         let mut offset = self.offset;
         let mut limit = self.limit;

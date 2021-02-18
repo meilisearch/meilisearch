@@ -70,7 +70,7 @@ impl<'t> Criterion for Words<'t> {
                         bucket_candidates,
                     }));
                 },
-                (Some(_qt), Forbidden(candidates)) => {
+                (Some(_qt), Forbidden(_candidates)) => {
                     todo!()
                 },
                 (None, Allowed(_)) => {
