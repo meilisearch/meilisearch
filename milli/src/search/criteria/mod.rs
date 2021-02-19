@@ -9,6 +9,7 @@ use super::query_tree::{Operation, Query, QueryKind};
 
 pub mod typo;
 pub mod words;
+pub mod asc_desc;
 
 pub trait Criterion {
     fn next(&mut self) -> anyhow::Result<Option<CriterionResult>>;
@@ -28,6 +29,7 @@ pub struct CriterionResult {
 /// Either a set of candidates that defines the candidates
 /// that are allowed to be returned,
 /// or the candidates that must never be returned.
+#[derive(Debug)]
 enum Candidates {
     Allowed(RoaringBitmap),
     Forbidden(RoaringBitmap)

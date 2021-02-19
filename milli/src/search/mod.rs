@@ -11,11 +11,11 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 use crate::search::criteria::{Criterion, CriterionResult};
-use crate::search::criteria::{typo::Typo, words::Words};
-use crate::{Index, FieldId, DocumentId};
+use crate::search::criteria::{typo::Typo, words::Words, asc_desc::AscDesc};
+use crate::{Index, DocumentId};
 
 pub use self::facet::{FacetCondition, FacetDistribution, FacetNumberOperator, FacetStringOperator};
-pub use self::facet::{FacetIter};
+pub use self::facet::FacetIter;
 use self::query_tree::QueryTreeBuilder;
 
 // Building these factories is not free.
@@ -90,7 +90,14 @@ impl<'a> Search<'a> {
         // We aretesting the typo criteria but there will be more of them soon.
         let criteria_ctx = criteria::HeedContext::new(self.rtxn, self.index)?;
         let typo_criterion = Typo::initial(&criteria_ctx, query_tree, facet_candidates)?;
-        let mut criteria = Words::new(&criteria_ctx, Box::new(typo_criterion))?;
+        let words_criterion = Words::new(&criteria_ctx, Box::new(typo_criterion))?;
+
+        // We sort in descending order on a specific field *by hand*, don't do that at home.
+        let attr_name = "released-timestamp";
+        let fid = self.index.fields_ids_map(self.rtxn)?.id(attr_name).unwrap();
+        let ftype = *self.index.faceted_fields(self.rtxn)?.get(attr_name).unwrap();
+        let desc_criterion = AscDesc::desc(self.index, self.rtxn, Box::new(words_criterion), fid, ftype)?;
+        let mut criteria = desc_criterion;
 
         let mut offset = self.offset;
         let mut limit = self.limit;
