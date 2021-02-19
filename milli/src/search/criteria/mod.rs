@@ -8,6 +8,7 @@ use roaring::RoaringBitmap;
 use super::query_tree::{Operation, Query, QueryKind};
 
 pub mod typo;
+pub mod words;
 
 pub trait Criterion {
     fn next(&mut self) -> anyhow::Result<Option<CriterionResult>>;

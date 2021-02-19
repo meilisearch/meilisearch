@@ -13,7 +13,7 @@ pub struct Typo<'t> {
     number_typos: u8,
     candidates: Candidates,
     bucket_candidates: RoaringBitmap,
-    parent: Option<Box<dyn Criterion>>,
+    parent: Option<Box<dyn Criterion + 't>>,
     candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
     typo_cache: HashMap<(String, bool, u8), Vec<(String, u8)>>,
 }
@@ -39,7 +39,7 @@ impl<'t> Typo<'t> {
 
     pub fn new(
         ctx: &'t dyn Context,
-        parent: Box<dyn Criterion>,
+        parent: Box<dyn Criterion + 't>,
     ) -> anyhow::Result<Self> where Self: Sized
     {
         Ok(Typo {
