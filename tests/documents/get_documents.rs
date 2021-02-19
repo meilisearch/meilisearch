@@ -22,3 +22,15 @@ async fn get_unexisting_index_all_documents() {
         .await;
     assert_eq!(code, 400);
 }
+
+#[actix_rt::test]
+async fn get_no_documents() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    let (_, code) = index.create(None).await;
+    assert_eq!(code, 200);
+
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+    assert_eq!(code, 200);
+    assert!(response.as_array().unwrap().is_empty());
+}
