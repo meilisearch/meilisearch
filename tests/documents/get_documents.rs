@@ -34,3 +34,15 @@ async fn get_no_documents() {
     assert_eq!(code, 200);
     assert!(response.as_array().unwrap().is_empty());
 }
+
+#[actix_rt::test]
+async fn get_all_documents_no_options() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.load_test_set().await;
+
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+    assert_eq!(code, 200);
+    let arr = response.as_array().unwrap();
+    assert_eq!(arr.len(), 20);
+}

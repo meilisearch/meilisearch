@@ -17,6 +17,15 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
+    pub async fn load_test_set(&self) -> u64 {
+        let url = format!("/indexes/{}/documents", self.uid);
+        let (response, code) = self.service.post_str(url, include_str!("../assets/test_set.json")).await;
+        assert_eq!(code, 200);
+        let update_id = response["updateId"].as_i64().unwrap();
+        self.wait_update_id(update_id as u64).await;
+        update_id as u64
+    }
+
     pub async fn create<'a>(&'a self, primary_key: Option<&str>) -> (Value, StatusCode) {
         let body = json!({
             "uid": self.uid,
@@ -51,6 +60,14 @@ impl Index<'_> {
         self.service.post(url, documents).await
     }
 
+    pub async fn update_documents(&self, documents: Value, primary_key: Option<&str>) -> (Value, StatusCode) {
+        let url = match primary_key {
+            Some(key) => format!("/indexes/{}/documents?primaryKey={}", self.uid, key),
+            None => format!("/indexes/{}/documents", self.uid),
+        };
+        self.service.put(url, documents).await
+    }
+
     pub async fn wait_update_id(&self, update_id: u64) {
         // try 10 times to get status, or panic to not wait forever
         let url = format!("/indexes/{}/updates/{}", self.uid, update_id);
@@ -67,7 +84,7 @@ impl Index<'_> {
         panic!("Timeout waiting for update id");
     }
 
-    pub async fn get_update(&self, udpate_id: usize) -> (Value, StatusCode) {
+    pub async fn get_update(&self, udpate_id: u64) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/updates/{}", self.uid, udpate_id);
         self.service.get(url).await
     }
@@ -77,4 +94,19 @@ impl Index<'_> {
         let url = format!("/indexes/{}/updates", self.uid);
         self.service.get(url).await
     }
+
+    pub async fn get_document(&self, id: u64, _options: Option<GetDocumentOptions>) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents/{}", self.uid, id);
+        self.service.get(url).await
+    }
+
+    pub async fn get_all_documents(&self, _options: GetAllDocumentsOptions) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents", self.uid);
+        self.service.get(url).await
+    }
 }
+
+pub struct GetDocumentOptions;
+
+#[derive(Debug, Default)]
+pub struct GetAllDocumentsOptions;
