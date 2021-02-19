@@ -41,3 +41,19 @@ async fn no_index_return_empty_list() {
     assert!(response.is_array());
     assert!(response.as_array().unwrap().is_empty());
 }
+
+#[actix_rt::test]
+async fn list_multiple_indexes() {
+    let server = Server::new().await;
+    server.index("test").create(None).await;
+    server.index("test1").create(Some("key")).await;
+
+    let (response, code) = server.list_indexes().await;
+    assert_eq!(code, 200);
+    assert!(response.is_array());
+    let arr = response.as_array().unwrap();
+    assert_eq!(arr.len(), 2);
+    assert!(arr.iter().find(|entry| entry["uid"] == "test" && entry["primaryKey"] == Value::Null).is_some());
+    assert!(arr.iter().find(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key").is_some());
+
+}
