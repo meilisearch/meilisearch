@@ -32,3 +32,12 @@ async fn get_unexisting_index() {
 
     assert_eq!(code, 400);
 }
+
+#[actix_rt::test]
+async fn no_index_return_empty_list() {
+    let server = Server::new().await;
+    let (response, code) = server.list_indexes().await;
+    assert_eq!(code, 200);
+    assert!(response.is_array());
+    assert!(response.as_array().unwrap().is_empty());
+}
