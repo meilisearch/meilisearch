@@ -5,12 +5,12 @@ authors = ["Clément Renault <clement@meilisearch.com>"]
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.28"
+anyhow = "1.0.38"
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
-heed = "0.10.5"
+heed = "0.10.6"
 jemallocator = "0.3.2"
-log = "0.4.11"
+log = "0.4.14"
 milli = { path = "../milli" }
-serde_json = "1.0.59"
-stderrlog = "0.5.0"
-structopt = { version = "0.3.14", default-features = false }
+serde_json = "1.0.62"
+stderrlog = "0.5.1"
+structopt = { version = "0.3.21", default-features = false }
