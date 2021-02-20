@@ -170,7 +170,7 @@
     <section>
       <div class="container">
         <ol id="results" class="content">
-          <!-- documents matching resquests -->
+          <!-- documents matching requests -->
         </ol>
       </div>
     </section>
@@ -216,6 +216,20 @@
 
     let lastRequest = undefined;
 
+    // Fixes issue #1240
+    function truncate(text, limit){
+      let truncated = "";
+      let addDots = false;
+      for(var i = 0; i < text.length; i++){
+        truncated += text[i];
+        if(truncated.length == limit && limit != text.length){
+          addDots = true;
+          break;
+        }
+      }
+      return addDots ? truncated + "... (text truncated)" : truncated;
+    }
+    
     function triggerSearch() {
         var e = document.getElementById("index");
         if (e.selectedIndex == -1) { return }
@@ -275,9 +289,9 @@
                         content.classList.add("content", "column");
                         
                         if (typeof (element[prop]) === "object") {
-                          content.innerHTML = JSON.stringify(element[prop]);
+                          content.innerHTML = truncate(JSON.stringify(element[prop]), 250);
                         } else {
-                          content.innerHTML = element[prop];
+                          content.innerHTML = truncate(element[prop], 250);
                         }
 
                         field.appendChild(attribute);
