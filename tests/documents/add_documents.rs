@@ -208,3 +208,21 @@ async fn add_larger_dataset() {
     assert_eq!(response["status"], "processed");
     assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 77);
 }
+
+#[actix_rt::test]
+async fn add_documents_bad_primary_key() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.create(Some("docid")).await;
+    let documents = json!([
+        {
+            "docid": "foo & bar",
+            "content": "foobar"
+        }
+    ]);
+    index.add_documents(documents, None).await;
+    index.wait_update_id(0).await;
+    let (response, code) = index.get_update(0).await;
+    assert_eq!(code, 200);
+    assert_eq!(response["status"], "failed");
+}
