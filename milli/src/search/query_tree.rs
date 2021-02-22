@@ -79,6 +79,13 @@ impl Operation {
             Self::Consecutive(ops)
         }
     }
+
+    pub fn query(&self) -> Option<&Query> {
+        match self {
+            Operation::Query(query) => Some(query),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash)]

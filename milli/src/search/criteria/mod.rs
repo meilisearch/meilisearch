@@ -10,6 +10,7 @@ use super::query_tree::{Operation, Query, QueryKind};
 pub mod typo;
 pub mod words;
 pub mod asc_desc;
+pub mod proximity;
 
 pub trait Criterion {
     fn next(&mut self) -> anyhow::Result<Option<CriterionResult>>;
