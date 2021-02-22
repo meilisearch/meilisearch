@@ -68,7 +68,7 @@ impl Index<'_> {
         self.service.put(url, documents).await
     }
 
-    pub async fn wait_update_id(&self, update_id: u64) {
+    pub async fn wait_update_id(&self, update_id: u64) -> Value {
         // try 10 times to get status, or panic to not wait forever
         let url = format!("/indexes/{}/updates/{}", self.uid, update_id);
         for _ in 0..10 {
@@ -76,7 +76,7 @@ impl Index<'_> {
             assert_eq!(status_code, 200);
 
             if response["status"] == "processed" || response["status"] == "failed" {
-                return;
+                return response;
             }
 
             delay_for(Duration::from_secs(1)).await;
@@ -115,6 +115,16 @@ impl Index<'_> {
         }
 
         self.service.get(url).await
+    }
+
+    pub async fn delete_document(&self, id: u64) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents/{}", self.uid, id);
+        self.service.delete(url).await
+    }
+
+    pub async fn clear_all_documents(&self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/documents", self.uid);
+        self.service.delete(url).await
     }
 }
 
