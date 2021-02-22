@@ -100,8 +100,20 @@ impl Index<'_> {
         self.service.get(url).await
     }
 
-    pub async fn get_all_documents(&self, _options: GetAllDocumentsOptions) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/documents", self.uid);
+    pub async fn get_all_documents(&self, options: GetAllDocumentsOptions) -> (Value, StatusCode) {
+        let mut url = format!("/indexes/{}/documents?", self.uid);
+        if let Some(limit) = options.limit {
+            url.push_str(&format!("limit={}&", limit));
+        }
+
+        if let Some(offset) = options.offset {
+            url.push_str(&format!("offset={}&", offset));
+        }
+
+        if let Some(attributes_to_retrieve) = options.attributes_to_retrieve {
+            url.push_str(&format!("attributesToRetrieve={}&", attributes_to_retrieve.join(",")));
+        }
+
         self.service.get(url).await
     }
 }
@@ -109,4 +121,8 @@ impl Index<'_> {
 pub struct GetDocumentOptions;
 
 #[derive(Debug, Default)]
-pub struct GetAllDocumentsOptions;
+pub struct GetAllDocumentsOptions {
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+    pub attributes_to_retrieve: Option<Vec<&'static str>>,
+}

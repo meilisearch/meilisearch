@@ -23,6 +23,24 @@ impl Service {
         (response, status_code)
     }
 
+    /// Send a test post request from a text body, with a `content-type:application/json` header.
+    pub async fn post_str(&self, url: impl AsRef<str>, body: impl AsRef<str>) -> (Value, StatusCode) {
+        let mut app =
+            test::init_service(meilisearch_http::create_app(&self.0, true).wrap(NormalizePath)).await;
+
+        let req = test::TestRequest::post()
+            .uri(url.as_ref())
+            .set_payload(body.as_ref().to_string())
+            .header("content-type", "application/json")
+            .to_request();
+        let res = test::call_service(&mut app, req).await;
+        let status_code = res.status();
+
+        let body = test::read_body(res).await;
+        let response = serde_json::from_slice(&body).unwrap_or_default();
+        (response, status_code)
+    }
+
     pub async fn get(&self, url: impl AsRef<str>) -> (Value, StatusCode) {
         let mut app =
             test::init_service(meilisearch_http::create_app(&self.0, true).wrap(NormalizePath)).await;
@@ -64,6 +82,4 @@ impl Service {
         let response = serde_json::from_slice(&body).unwrap_or_default();
         (response, status_code)
     }
-
 }
-
