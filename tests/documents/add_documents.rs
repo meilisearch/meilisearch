@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 use chrono::DateTime;
 
-use crate::common::Server;
+use crate::common::{Server, GetAllDocumentsOptions};
 
 #[actix_rt::test]
 async fn add_documents_no_index_creation() {
@@ -56,8 +56,33 @@ async fn document_addition_with_primary_key() {
             "content": "foo",
         }
     ]);
-    let (_response, code) = index.add_documents(documents, Some("primary")).await;
+    let (_response, code) = index.add_documents(documents, Some("primary")).await; assert_eq!(code, 200);
+
+    index.wait_update_id(0).await;
+
+    let (response, code) = index.get_update(0).await;
     assert_eq!(code, 200);
+    assert_eq!(response["status"], "processed");
+    assert_eq!(response["updateId"], 0);
+    assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 1);
+
+    let (response, code) = index.get().await;
+    assert_eq!(code, 200);
+    assert_eq!(response["primaryKey"], "primary");
+}
+
+#[actix_rt::test]
+async fn document_update_with_primary_key() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    let documents = json!([
+        {
+            "primary": 1,
+            "content": "foo",
+        }
+    ]);
+    let (_response, code) = index.update_documents(documents, Some("primary")).await; assert_eq!(code, 200);
 
     index.wait_update_id(0).await;
 
@@ -91,6 +116,34 @@ async fn add_documents_with_primary_key_and_primary_key_already_exists() {
     index.wait_update_id(0).await;
 
     let (response, code) = index.get_update(0).await;
+    assert_eq!(code, 200);
+    assert_eq!(response["status"], "processed");
+    assert_eq!(response["updateId"], 0);
+    assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 1);
+
+    let (response, code) = index.get().await;
+    assert_eq!(code, 200);
+    assert_eq!(response["primaryKey"], "primary");
+}
+
+#[actix_rt::test]
+async fn update_documents_with_primary_key_and_primary_key_already_exists() {
+    let server = Server::new().await;
+    let index = server.index("test");
+
+    index.create(Some("primary")).await;
+    let documents = json!([
+        {
+            "id": 1,
+            "content": "foo",
+        }
+    ]);
+
+    let (_response, code) = index.update_documents(documents, Some("id")).await;
+    assert_eq!(code, 200);
+
+    index.wait_update_id(0).await;
+let (response, code) = index.get_update(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["updateId"], 0);
@@ -207,6 +260,25 @@ async fn add_larger_dataset() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 77);
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions { limit: Some(1000), ..Default::default() }).await;
+    assert_eq!(code, 200);
+    assert_eq!(response.as_array().unwrap().len(), 77);
+}
+
+#[actix_rt::test]
+async fn update_larger_dataset() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    let documents = serde_json::from_str(include_str!("../assets/test_set.json")).unwrap();
+    index.update_documents(documents, None).await;
+    index.wait_update_id(0).await;
+    let (response, code) = index.get_update(0).await;
+    assert_eq!(code, 200);
+    assert_eq!(response["status"], "processed");
+    assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 77);
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions { limit: Some(1000), ..Default::default() }).await;
+    assert_eq!(code, 200);
+    assert_eq!(response.as_array().unwrap().len(), 77);
 }
 
 #[actix_rt::test]
@@ -221,6 +293,24 @@ async fn add_documents_bad_primary_key() {
         }
     ]);
     index.add_documents(documents, None).await;
+    index.wait_update_id(0).await;
+    let (response, code) = index.get_update(0).await;
+    assert_eq!(code, 200);
+    assert_eq!(response["status"], "failed");
+}
+
+#[actix_rt::test]
+async fn update_documents_bad_primary_key() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.create(Some("docid")).await;
+    let documents = json!([
+        {
+            "docid": "foo & bar",
+            "content": "foobar"
+        }
+    ]);
+    index.update_documents(documents, None).await;
     index.wait_update_id(0).await;
     let (response, code) = index.get_update(0).await;
     assert_eq!(code, 200);
