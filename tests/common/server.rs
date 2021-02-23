@@ -43,6 +43,10 @@ impl Server {
             snapshot_interval_sec: None,
             import_dump: None,
             indexer_options: IndexerOpts::default(),
+            #[cfg(all(not(debug_assertions), feature = "sentry"))]
+            sentry_dsn: String::from(""),
+            #[cfg(all(not(debug_assertions), feature = "sentry"))]
+            no_sentry: true,
         };
 
         let data = Data::new(opt).unwrap();
