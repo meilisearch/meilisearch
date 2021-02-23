@@ -186,7 +186,7 @@ Hey! We're glad you're thinking about contributing to MeiliSearch! If you think 
 ## Telemetry
 
 MeiliSearch collects anonymous data regarding general usage.
-This helps us better understand developers usage of MeiliSearch features.
+This helps us better understand developers' usage of MeiliSearch features.
 
 To see what information we're retrieving, please see the complete list [on the dedicated issue](https://github.com/meilisearch/MeiliSearch/issues/720).
 
@@ -196,7 +196,7 @@ This program is optional, you can disable these analytics by using the `MEILI_NO
 
 ## 💌 Contact
 
-Feel free to contact us about any questions you may have:
+Feel free to contact us with any questions you may have:
 * 🆕 Join our [GitHub Discussions forum](https://github.com/meilisearch/MeiliSearch/discussions)
 * Join our [Slack community](https://slack.meilisearch.com/).
 * By opening an issue.
