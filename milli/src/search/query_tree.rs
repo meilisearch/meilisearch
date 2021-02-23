@@ -514,6 +514,16 @@ fn create_primitive_query(query: TokenStream) -> PrimitiveQuery {
     primitive_query
 }
 
+/// Returns the maximum number of typos that this Operation allows.
+pub fn maximum_typo(operation: &Operation) -> usize {
+    use Operation::{Or, And, Query, Consecutive};
+    match operation {
+        Or(_, ops) => ops.iter().map(maximum_typo).max().unwrap_or(0),
+        And(ops) | Consecutive(ops) => ops.iter().map(maximum_typo).sum::<usize>(),
+        Query(q) => q.kind.typo() as usize,
+    }
+}
+
 #[cfg(test)]
 mod test {
     use fst::Set;
