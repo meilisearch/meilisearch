@@ -1,5 +1,4 @@
 use actix_web::{web, HttpResponse, delete, get, post};
-use log::error;
 
 use crate::Data;
 use crate::error::ResponseError;
@@ -33,8 +32,7 @@ macro_rules! make_setting_route {
                         Ok(HttpResponse::Ok().body(json))
                     }
                     Err(e) => {
-                        log::error!("{}", e);
-                        unimplemented!();
+                        Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
                     }
                 }
             }
@@ -56,8 +54,7 @@ macro_rules! make_setting_route {
                         Ok(HttpResponse::Ok().body(json))
                     }
                     Err(e) => {
-                        log::error!("{}", e);
-                        unimplemented!();
+                        Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
                     }
                 }
             }
@@ -74,8 +71,7 @@ macro_rules! make_setting_route {
                         Ok(HttpResponse::Ok().body(json))
                     }
                     Err(e) => {
-                        log::error!("{}", e);
-                        unimplemented!();
+                        Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
                     }
                 }
             }
@@ -147,8 +143,7 @@ async fn update_all(
             Ok(HttpResponse::Ok().body(json))
         }
         Err(e) => {
-            error!("{}", e);
-            unimplemented!();
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -164,8 +159,7 @@ async fn get_all(
             Ok(HttpResponse::Ok().body(json))
         }
         Err(e) => {
-            error!("{}", e);
-            unimplemented!();
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
@@ -182,8 +176,7 @@ async fn delete_all(
             Ok(HttpResponse::Ok().body(json))
         }
         Err(e) => {
-            error!("{}", e);
-            unimplemented!();
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
 }
