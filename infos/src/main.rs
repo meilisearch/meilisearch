@@ -171,7 +171,10 @@ enum Command {
     /// Outputs the documents as JSON lines to the standard output.
     ///
     /// All of the fields are extracted, not just the displayed ones.
-    ExportDocuments,
+    ExportDocuments {
+        /// If defined, only retrieve the documents that corresponds to these internal ids.
+        internal_documents_ids: Vec<u32>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -218,7 +221,9 @@ fn main() -> anyhow::Result<()> {
         },
         ExportWordsFst => export_words_fst(&index, &rtxn),
         ExportWordsPrefixFst => export_words_prefix_fst(&index, &rtxn),
-        ExportDocuments => export_documents(&index, &rtxn),
+        ExportDocuments { internal_documents_ids } => {
+            export_documents(&index, &rtxn, internal_documents_ids)
+        },
     }
 }
 
@@ -583,9 +588,9 @@ fn export_words_prefix_fst(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<
     Ok(())
 }
 
-fn export_documents(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+fn export_documents(index: &Index, rtxn: &heed::RoTxn, internal_ids: Vec<u32>) -> anyhow::Result<()> {
     use std::io::{BufWriter, Write as _};
-    use milli::obkv_to_json;
+    use milli::{BEU32, obkv_to_json};
 
     let stdout = io::stdout();
     let mut out = BufWriter::new(stdout);
@@ -593,8 +598,18 @@ fn export_documents(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     let fields_ids_map = index.fields_ids_map(rtxn)?;
     let displayed_fields: Vec<_> = fields_ids_map.iter().map(|(id, _name)| id).collect();
 
-    for result in index.documents.iter(rtxn)? {
-        let (_id, obkv) = result?;
+    let iter: Box<Iterator<Item = _>> = if internal_ids.is_empty() {
+        Box::new(index.documents.iter(rtxn)?.map(|result| {
+            result.map(|(_id, obkv)| obkv)
+        }))
+    } else {
+        Box::new(internal_ids.into_iter().flat_map(|id| {
+            index.documents.get(rtxn, &BEU32::new(id)).transpose()
+        }))
+    };
+
+    for result in iter {
+        let obkv = result?;
         let document = obkv_to_json(&displayed_fields, &fields_ids_map, obkv)?;
         serde_json::to_writer(&mut out, &document)?;
         writeln!(&mut out)?;
