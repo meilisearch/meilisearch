@@ -3,6 +3,7 @@ mod index;
 mod search;
 mod settings;
 mod documents;
+mod updates;
 
 // Tests are isolated by features in different modules to allow better readability, test
 // targetability, and improved incremental compilation times.
