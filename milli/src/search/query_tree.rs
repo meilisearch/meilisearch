@@ -524,6 +524,16 @@ pub fn maximum_typo(operation: &Operation) -> usize {
     }
 }
 
+/// Returns the maximum proximity that this Operation allows.
+pub fn maximum_proximity(operation: &Operation) -> usize {
+    use Operation::{Or, And, Query, Consecutive};
+    match operation {
+        Or(_, ops) => ops.iter().map(maximum_proximity).max().unwrap_or(0),
+        And(ops) => ops.len().saturating_sub(1) * 8,
+        Query(_) | Consecutive(_) => 0,
+    }
+}
+
 #[cfg(test)]
 mod test {
     use fst::Set;
