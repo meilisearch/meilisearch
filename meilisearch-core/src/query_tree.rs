@@ -16,6 +16,8 @@ use crate::{store, DocumentId, DocIndex, MResult, FstSetCow};
 use crate::automaton::{build_dfa, build_prefix_dfa, build_exact_dfa};
 use crate::QueryWordsMapper;
 
+pub const MAX_QUERY_LEN: usize = 10;
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Operation {
     And(Vec<Operation>),
@@ -181,6 +183,7 @@ fn split_query_string<'a, A: AsRef<[u8]>>(s: &str, stop_words: &'a fst::Set<A>) 
         .tokens()
         .filter(|t| t.is_word())
         .map(|t| t.word.to_string())
+        .take(MAX_QUERY_LEN)
         .enumerate()
         .collect()
 }

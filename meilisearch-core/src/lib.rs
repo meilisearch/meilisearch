@@ -39,6 +39,7 @@ pub use self::update::{EnqueuedUpdateResult, ProcessedUpdateResult, UpdateStatus
 pub use meilisearch_types::{DocIndex, DocumentId, Highlight};
 pub use meilisearch_schema::Schema;
 pub use query_words_mapper::QueryWordsMapper;
+pub use query_tree::MAX_QUERY_LEN;
 
 use compact_arena::SmallArena;
 use log::{error, trace};

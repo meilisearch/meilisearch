@@ -82,13 +82,15 @@ async fn main() -> Result<(), MainError> {
 
     let enable_frontend = opt.env != "production";
     let http_server = HttpServer::new(move || {
-        create_app(&data, enable_frontend)
-            .wrap(
-                Cors::default()
+        let cors = Cors::default()
                     .send_wildcard()
                     .allowed_headers(vec!["content-type", "x-meili-api-key"])
-                    .max_age(86_400) // 24h
-            )
+                    .allow_any_origin()
+                    .allow_any_method()
+                    .max_age(86_400); // 24h
+
+        create_app(&data, enable_frontend)
+            .wrap(cors)
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .wrap(NormalizePath)
@@ -164,6 +166,6 @@ pub fn print_launch_resume(opt: &Opt, data: &Data) {
     eprintln!();
     eprintln!("Documentation:\t\thttps://docs.meilisearch.com");
     eprintln!("Source code:\t\thttps://github.com/meilisearch/meilisearch");
-    eprintln!("Contact:\t\thttps://docs.meilisearch.com/resources/contact.html or bonjour@meilisearch.com");
+    eprintln!("Contact:\t\thttps://docs.meilisearch.com/learn/what_is_meilisearch/contact.html or bonjour@meilisearch.com");
     eprintln!();
 }

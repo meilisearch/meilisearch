@@ -132,7 +132,7 @@ async fn get_all_documents(
     let limit = params.limit.unwrap_or(20);
     let index_uid = &path.index_uid;
     let reader = data.db.main_read_txn()?;
-    
+
     let documents = get_all_documents_sync(
         &data,
         &reader,
@@ -143,15 +143,6 @@ async fn get_all_documents(
     )?;
 
     Ok(HttpResponse::Ok().json(documents))
-}
-
-fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
-    for key in document.keys() {
-        if key.to_lowercase().contains("id") {
-            return Some(key.to_string());
-        }
-    }
-    None
 }
 
 #[derive(Deserialize)]
@@ -168,32 +159,33 @@ async fn update_multiple_documents(
     is_partial: bool,
 ) -> Result<HttpResponse, ResponseError> {
     let update_id = data.get_or_create_index(&path.index_uid, |index| {
-        let reader = data.db.main_read_txn()?;
-
-        let mut schema = index
-            .main
-            .schema(&reader)?
-            .ok_or(meilisearch_core::Error::SchemaMissing)?;
-
-        if schema.primary_key().is_none() {
-            let id = match &params.primary_key {
-                Some(id) => id.to_string(),
-                None => body
-                    .first()
-                    .and_then(find_primary_key)
-                    .ok_or(meilisearch_core::Error::MissingPrimaryKey)?,
-            };
-
-            schema.set_primary_key(&id).map_err(Error::bad_request)?;
-
-            data.db.main_write(|w| index.main.put_schema(w, &schema))?;
-        }
 
         let mut document_addition = if is_partial {
             index.documents_partial_addition()
         } else {
             index.documents_addition()
         };
+
+        // Return an early error if primary key is already set, otherwise, try to set it up in the
+        // update later.
+        let reader = data.db.main_read_txn()?;
+        let schema = index
+            .main
+            .schema(&reader)?
+            .ok_or(meilisearch_core::Error::SchemaMissing)?;
+
+        match (params.into_inner().primary_key, schema.primary_key()) {
+            (Some(_), Some(_)) => return Err(meilisearch_schema::Error::PrimaryKeyAlreadyPresent)?,
+            (Some(key), None) => document_addition.set_primary_key(key),
+            (None, None) => {
+                let key = body
+                    .first()
+                    .and_then(find_primary_key)
+                    .ok_or(meilisearch_core::Error::MissingPrimaryKey)?;
+                document_addition.set_primary_key(key);
+            }
+            (None, Some(_)) => ()
+        }
 
         for document in body.into_inner() {
             document_addition.update_document(document);
@@ -202,6 +194,15 @@ async fn update_multiple_documents(
         Ok(data.db.update_write(|w| document_addition.finalize(w))?)
     })?;
     return Ok(HttpResponse::Accepted().json(IndexUpdateResponse::with_id(update_id)));
+}
+
+fn find_primary_key(document: &IndexMap<String, Value>) -> Option<String> {
+    for key in document.keys() {
+        if key.to_lowercase().contains("id") {
+            return Some(key.to_string());
+        }
+    }
+    None
 }
 
 #[post("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]

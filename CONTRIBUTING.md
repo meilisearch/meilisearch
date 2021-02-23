@@ -32,7 +32,7 @@ expanding into more specifics.
 1. **You're familiar with [Github](https://github.com) and the [pull request](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests)
    workflow.**
 2. **You've read the MeiliSearch [docs](https://docs.meilisearch.com).**
-3. **You know about the [MeiliSearch community](https://docs.meilisearch.com/resources/contact.html).
+3. **You know about the [MeiliSearch community](https://docs.meilisearch.com/learn/what_is_meilisearch/contact.html).
    Please use this for help.**
 
 ## Your First Contribution
@@ -91,7 +91,7 @@ aligns better with our process.
 
 ### Setup
 
-See the [MeiliSearch Docs](https://docs.meilisearch.com/guides/advanced_guides/installation.html) for how to set up a development environment.
+See the [MeiliSearch Docs](https://docs.meilisearch.com/reference/features/installation.html) for how to set up a development environment.
 
 ### Benchmarking & Profiling
 

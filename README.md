@@ -48,7 +48,7 @@ For more information about features go to [our documentation](https://docs.meili
 
 ### Deploy the Server
 
-#### Brew (Mac OS)
+#### Homebrew (Mac OS)
 
 ```bash
 brew update && brew install meilisearch
@@ -186,16 +186,17 @@ Hey! We're glad you're thinking about contributing to MeiliSearch! If you think 
 ## Telemetry
 
 MeiliSearch collects anonymous data regarding general usage.
-This helps us better understand developers usage of MeiliSearch features.<br/>
-To see what information we're retrieving, please see the complete list [on the dedicated issue](https://github.com/meilisearch/MeiliSearch/issues/720).<br/>
-We also use Sentry to make us crash and error reports. If you want to know more about what Sentry collects, please visit their [privacy policy website](https://sentry.io/privacy/).<br/>
+This helps us better understand developers' usage of MeiliSearch features.
+
+To see what information we're retrieving, please see the complete list [on the dedicated issue](https://github.com/meilisearch/MeiliSearch/issues/720).
+
+We also use Sentry to make us crash and error reports. If you want to know more about what Sentry collects, please visit their [privacy policy website](https://sentry.io/privacy/).
+
 This program is optional, you can disable these analytics by using the `MEILI_NO_ANALYTICS` env variable.
 
 ## 💌 Contact
 
-Feel free to contact us about any questions you may have:
-* At [bonjour@meilisearch.com](mailto:bonjour@meilisearch.com)
-* Via the chat box available on every page of [our documentation](https://docs.meilisearch.com/) and on [our landing page](https://www.meilisearch.com/).
+Feel free to contact us with any questions you may have:
 * 🆕 Join our [GitHub Discussions forum](https://github.com/meilisearch/MeiliSearch/discussions)
 * Join our [Slack community](https://slack.meilisearch.com/).
 * By opening an issue.

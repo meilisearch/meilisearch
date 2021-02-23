@@ -6,6 +6,8 @@ use std::task::{Context, Poll};
 use actix_service::{Service, Transform};
 use actix_web::{dev::ServiceRequest, dev::ServiceResponse, web};
 use futures::future::{err, ok, Future, Ready};
+use actix_web::error::ResponseError as _;
+use actix_web::dev::Body;
 
 use crate::error::{Error, ResponseError};
 use crate::Data;
@@ -17,14 +19,13 @@ pub enum Authentication {
     Admin,
 }
 
-impl<S: 'static, B> Transform<S> for Authentication
+impl<S: 'static> Transform<S> for Authentication
 where
-    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error>,
+    S: Service<Request = ServiceRequest, Response = ServiceResponse<Body>, Error = actix_web::Error>,
     S::Future: 'static,
-    B: 'static,
 {
     type Request = ServiceRequest;
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<Body>;
     type Error = actix_web::Error;
     type InitError = ();
     type Transform = LoggingMiddleware<S>;
@@ -44,14 +45,13 @@ pub struct LoggingMiddleware<S> {
 }
 
 #[allow(clippy::type_complexity)]
-impl<S, B> Service for LoggingMiddleware<S>
+impl<S> Service for LoggingMiddleware<S>
 where
-    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
+    S: Service<Request = ServiceRequest, Response = ServiceResponse<Body>, Error = actix_web::Error> + 'static,
     S::Future: 'static,
-    B: 'static,
 {
     type Request = ServiceRequest;
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<Body>;
     type Error = actix_web::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
 
@@ -72,7 +72,11 @@ where
         let auth_header = match req.headers().get("X-Meili-API-Key") {
             Some(auth) => match auth.to_str() {
                 Ok(auth) => auth,
-                Err(_) => return Box::pin(err(ResponseError::from(Error::MissingAuthorizationHeader).into())),
+                Err(_) => {
+                    let error = ResponseError::from(Error::MissingAuthorizationHeader).error_response();
+                    let (request, _) = req.into_parts();
+                    return Box::pin(ok(ServiceResponse::new(request, error)))
+                }
             },
             None => {
                 return Box::pin(err(ResponseError::from(Error::MissingAuthorizationHeader).into()));
@@ -95,9 +99,9 @@ where
         if authenticated {
             Box::pin(svc.call(req))
         } else {
-            Box::pin(err(
-                ResponseError::from(Error::InvalidToken(auth_header.to_string())).into()
-            ))
+            let error = ResponseError::from(Error::InvalidToken(auth_header.to_string())).error_response();
+            let (request, _) = req.into_parts();
+            return Box::pin(ok(ServiceResponse::new(request, error)))
         }
     }
 }
