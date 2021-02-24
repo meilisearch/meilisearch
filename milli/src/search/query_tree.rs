@@ -546,7 +546,10 @@ pub fn maximum_proximity(operation: &Operation) -> usize {
     use Operation::{Or, And, Query, Consecutive};
     match operation {
         Or(_, ops) => ops.iter().map(maximum_proximity).max().unwrap_or(0),
-        And(ops) => ops.len().saturating_sub(1) * 8,
+        And(ops) => {
+            ops.iter().map(maximum_proximity).sum::<usize>()
+            + ops.len().saturating_sub(1) * 7
+        },
         Query(_) | Consecutive(_) => 0,
     }
 }

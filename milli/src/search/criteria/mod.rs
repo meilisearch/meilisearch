@@ -153,8 +153,14 @@ fn query_docids(ctx: &dyn Context, query: &Query) -> anyhow::Result<RoaringBitma
 }
 
 fn query_pair_proximity_docids(ctx: &dyn Context, left: &Query, right: &Query, proximity: u8) -> anyhow::Result<RoaringBitmap> {
-    let prefix = right.prefix;
+    if proximity >= 8 {
+        let mut candidates = query_docids(ctx, left)?;
+        let right_candidates = query_docids(ctx, right)?;
+        candidates.intersect_with(&right_candidates);
+        return Ok(candidates);
+    }
 
+    let prefix = right.prefix;
     match (&left.kind, &right.kind) {
         (QueryKind::Exact { word: left, .. }, QueryKind::Exact { word: right, .. }) => {
             if prefix && ctx.in_prefix_cache(&right) {
