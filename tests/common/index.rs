@@ -131,6 +131,16 @@ impl Index<'_> {
         let url = format!("/indexes/{}/documents/delete-batch", self.uid);
         self.service.post(url, serde_json::to_value(&ids).unwrap()).await
     }
+
+    pub async fn settings(&self) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings", self.uid);
+        self.service.get(url).await
+    }
+
+    pub async fn update_settings(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings", self.uid);
+        self.service.post(url, settings).await
+    }
 }
 
 pub struct GetDocumentOptions;

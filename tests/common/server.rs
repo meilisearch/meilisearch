@@ -10,7 +10,7 @@ use super::index::Index;
 use super::service::Service;
 
 pub struct Server {
-    service: Service,
+    pub service: Service,
 }
 
 impl Server {
