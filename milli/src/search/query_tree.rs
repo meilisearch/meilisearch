@@ -94,11 +94,15 @@ pub enum QueryKind {
 }
 
 impl QueryKind {
-    fn exact(word: String) -> Self {
+    pub fn exact(word: String) -> Self {
         QueryKind::Exact { original_typo: 0, word }
     }
 
-    fn tolerant(typo: u8, word: String) -> Self {
+    pub fn exact_with_typo(original_typo: u8, word: String) -> Self {
+        QueryKind::Exact { original_typo, word }
+    }
+
+    pub fn tolerant(typo: u8, word: String) -> Self {
         QueryKind::Tolerant { typo, word }
     }
 

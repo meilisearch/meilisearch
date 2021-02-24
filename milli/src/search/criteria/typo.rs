@@ -328,3 +328,153 @@ fn resolve_candidates<'t>(
 
     resolve_operation(ctx, query_tree, number_typos, cache)
 }
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+    use super::super::test::TestContext;
+
+    #[test]
+    fn initial_placeholder_no_facets() {
+        let context = TestContext::default();
+        let query_tree = None;
+        let facet_candidates = None;
+
+        let mut criteria = Typo::initial(&context, query_tree, facet_candidates).unwrap();
+
+        assert!(criteria.next().unwrap().is_none());
+    }
+
+    #[test]
+    fn initial_query_tree_no_facets() {
+        let context = TestContext::default();
+        let query_tree = Operation::Or(false, vec![
+            Operation::And(vec![
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("split".to_string()) }),
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("this".to_string()) }),
+                Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(1, "world".to_string()) }),
+            ])
+        ]);
+
+        let facet_candidates = None;
+
+        let mut criteria = Typo::initial(&context, Some(query_tree), facet_candidates).unwrap();
+
+        let candidates_1 = context.word_docids("split").unwrap().unwrap()
+            & context.word_docids("this").unwrap().unwrap()
+            & context.word_docids("world").unwrap().unwrap();
+        let expected_1 = CriterionResult {
+            query_tree: Some(Operation::Or(false, vec![
+                Operation::And(vec![
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("split".to_string()) }),
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("this".to_string()) }),
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("world".to_string()) }),
+                ]),
+            ])),
+            candidates: candidates_1.clone(),
+            bucket_candidates: Some(candidates_1),
+        };
+
+        assert_eq!(criteria.next().unwrap(), Some(expected_1));
+
+        let candidates_2 = (
+                context.word_docids("split").unwrap().unwrap()
+                & context.word_docids("this").unwrap().unwrap()
+                & context.word_docids("word").unwrap().unwrap()
+            ) - context.word_docids("world").unwrap().unwrap();
+        let expected_2 = CriterionResult {
+            query_tree: Some(Operation::Or(false, vec![
+                Operation::And(vec![
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("split".to_string()) }),
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("this".to_string()) }),
+                    Operation::Or(false, vec![
+                        Operation::Query(Query { prefix: false, kind: QueryKind::exact_with_typo(1, "word".to_string()) }),
+                        Operation::Query(Query { prefix: false, kind: QueryKind::exact("world".to_string()) }),
+                    ]),
+                ]),
+            ])),
+            candidates: candidates_2.clone(),
+            bucket_candidates: Some(candidates_2),
+        };
+
+        assert_eq!(criteria.next().unwrap(), Some(expected_2));
+    }
+
+    #[test]
+    fn initial_placeholder_with_facets() {
+        let context = TestContext::default();
+        let query_tree = None;
+        let facet_candidates = context.word_docids("earth").unwrap();
+
+        let mut criteria = Typo::initial(&context, query_tree, facet_candidates.clone()).unwrap();
+
+        let expected = CriterionResult {
+            query_tree: None,
+            candidates: facet_candidates.clone().unwrap(),
+            bucket_candidates: facet_candidates,
+        };
+
+        // first iteration, returns the facet candidates
+        assert_eq!(criteria.next().unwrap(), Some(expected));
+
+        // second iteration, returns None because there is no more things to do
+        assert!(criteria.next().unwrap().is_none());
+    }
+
+    #[test]
+    fn initial_query_tree_with_facets() {
+        let context = TestContext::default();
+        let query_tree = Operation::Or(false, vec![
+            Operation::And(vec![
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("split".to_string()) }),
+                Operation::Query(Query { prefix: false, kind: QueryKind::exact("this".to_string()) }),
+                Operation::Query(Query { prefix: false, kind: QueryKind::tolerant(1, "world".to_string()) }),
+            ])
+        ]);
+
+        let facet_candidates = context.word_docids("earth").unwrap().unwrap();
+
+        let mut criteria = Typo::initial(&context, Some(query_tree), Some(facet_candidates.clone())).unwrap();
+
+        let candidates_1 = context.word_docids("split").unwrap().unwrap()
+            & context.word_docids("this").unwrap().unwrap()
+            & context.word_docids("world").unwrap().unwrap();
+        let expected_1 = CriterionResult {
+            query_tree: Some(Operation::Or(false, vec![
+                Operation::And(vec![
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("split".to_string()) }),
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("this".to_string()) }),
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("world".to_string()) }),
+                ]),
+            ])),
+            candidates: &candidates_1 & &facet_candidates,
+            bucket_candidates: Some(candidates_1 & &facet_candidates),
+        };
+
+        assert_eq!(criteria.next().unwrap(), Some(expected_1));
+
+        let candidates_2 = (
+                context.word_docids("split").unwrap().unwrap()
+                & context.word_docids("this").unwrap().unwrap()
+                & context.word_docids("word").unwrap().unwrap()
+            ) - context.word_docids("world").unwrap().unwrap();
+        let expected_2 = CriterionResult {
+            query_tree: Some(Operation::Or(false, vec![
+                Operation::And(vec![
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("split".to_string()) }),
+                    Operation::Query(Query { prefix: false, kind: QueryKind::exact("this".to_string()) }),
+                    Operation::Or(false, vec![
+                        Operation::Query(Query { prefix: false, kind: QueryKind::exact_with_typo(1, "word".to_string()) }),
+                        Operation::Query(Query { prefix: false, kind: QueryKind::exact("world".to_string()) }),
+                    ]),
+                ]),
+            ])),
+            candidates: &candidates_2 & &facet_candidates,
+            bucket_candidates: Some(candidates_2 & &facet_candidates),
+        };
+
+        assert_eq!(criteria.next().unwrap(), Some(expected_2));
+    }
+
+}
