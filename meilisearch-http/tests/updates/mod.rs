@@ -50,9 +50,7 @@ async fn list_no_updates() {
     assert!(response.as_array().unwrap().is_empty());
 }
 
-// TODO: fix #32
 #[actix_rt::test]
-#[ignore]
 async fn list_updates() {
     let server = Server::new().await;
     let index = server.index("test");

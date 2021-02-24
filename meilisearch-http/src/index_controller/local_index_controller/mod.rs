@@ -112,17 +112,12 @@ impl IndexController for LocalIndexController {
                         .map(UpdateStatus::from)
                         .into_iter()
                         .chain(pending.
-                            filter_map(|p| p.ok())
-                            // if an update is processing, filter out this update from the pending
+                            filter_map(Result::ok)
+                            // If an update is processing, filter out this update from the pending
                             // updates.
-                            .filter(|(_, u)| {
-                                println!("processing: {:?}", processing_id);
-                                processing_id
-                                .map(|id| {
-                                    println!("id: {}, pending: {}", id, u.id());
-                                    id != u.id()
-                                })
-                                .unwrap_or(true)})
+                            .filter(|(_, u)| processing_id
+                                .map(|id| id != u.id())
+                                .unwrap_or(true))
                             .map(|(_, u)| UpdateStatus::from(u)))
                         .chain(aborted.filter_map(Result::ok).map(|(_, u)| UpdateStatus::from(u)))
                         .chain(processed.filter_map(Result::ok).map(|(_, u)| UpdateStatus::from(u)))
