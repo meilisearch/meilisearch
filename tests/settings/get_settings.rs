@@ -51,6 +51,16 @@ async fn test_partial_update() {
 }
 
 #[actix_rt::test]
+#[ignore]
+// need fix #54
+async fn delete_settings_unexisting_index() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    let (_response, code) = index.delete_settings().await;
+    assert_eq!(code, 400);
+}
+
+#[actix_rt::test]
 async fn update_setting_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
