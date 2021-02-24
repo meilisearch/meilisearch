@@ -55,10 +55,11 @@ impl Data {
     pub async fn update_settings(
         &self,
         index: impl AsRef<str> + Send + Sync + 'static,
-        settings: Settings
+        settings: Settings,
+        create: bool,
     ) -> anyhow::Result<UpdateStatus> {
         let index_controller = self.index_controller.clone();
-        let update = tokio::task::spawn_blocking(move || index_controller.update_settings(index, settings)).await??;
+        let update = tokio::task::spawn_blocking(move || index_controller.update_settings(index, settings, create)).await??;
         Ok(update.into())
     }
 

@@ -142,8 +142,9 @@ pub trait IndexController {
     fn delete_documents(&self, index: impl AsRef<str>, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus>;
 
     /// Updates an index settings. If the index does not exist, it will be created when the update
-    /// is applied to the index.
-    fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings) -> anyhow::Result<UpdateStatus>;
+    /// is applied to the index. `create` specifies whether an index should be created if not
+    /// existing.
+    fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings, create: bool) -> anyhow::Result<UpdateStatus>;
 
     /// Create an index with the given `index_uid`.
     fn create_index(&self, index_settings: IndexSettings) -> Result<IndexMetadata>;
