@@ -1,8 +1,8 @@
 use std::{borrow::Cow, collections::HashMap, mem::take};
 
 use anyhow::bail;
-use roaring::RoaringBitmap;
 use log::debug;
+use roaring::RoaringBitmap;
 
 use crate::search::query_tree::{maximum_typo, Operation, Query, QueryKind};
 use crate::search::word_derivations;

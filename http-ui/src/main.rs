@@ -32,7 +32,7 @@ use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
 use milli::facet::FacetValue;
 use milli::update::UpdateIndexingStep::*;
 use milli::update::{UpdateBuilder, IndexDocumentsMethod, UpdateFormat};
-use milli::{obkv_to_json, Index, UpdateStore, SearchResult, FacetCondition};
+use milli::{obkv_to_json, Index, UpdateStore, SearchResult, MatchingWords, FacetCondition};
 
 static GLOBAL_THREAD_POOL: OnceCell<ThreadPool> = OnceCell::new();
 
@@ -132,7 +132,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
         Self { analyzer }
     }
 
-    fn highlight_value(&self, value: Value, words_to_highlight: &HashSet<String>) -> Value {
+    fn highlight_value(&self, value: Value, matching_words: &MatchingWords) -> Value {
         match value {
             Value::Null => Value::Null,
             Value::Bool(boolean) => Value::Bool(boolean),
@@ -142,7 +142,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
                 let analyzed = self.analyzer.analyze(&old_string);
                 for (word, token) in analyzed.reconstruct() {
                     if token.is_word() {
-                        let to_highlight = words_to_highlight.contains(token.text());
+                        let to_highlight = matching_words.matches(token.text());
                         if to_highlight { string.push_str("<mark>") }
                         string.push_str(word);
                         if to_highlight { string.push_str("</mark>") }
@@ -154,12 +154,12 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
             },
             Value::Array(values) => {
                 Value::Array(values.into_iter()
-                    .map(|v| self.highlight_value(v, words_to_highlight))
+                    .map(|v| self.highlight_value(v, matching_words))
                     .collect())
             },
             Value::Object(object) => {
                 Value::Object(object.into_iter()
-                    .map(|(k, v)| (k, self.highlight_value(v, words_to_highlight)))
+                    .map(|(k, v)| (k, self.highlight_value(v, matching_words)))
                     .collect())
             },
         }
@@ -168,14 +168,14 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
     fn highlight_record(
         &self,
         object: &mut Map<String, Value>,
-        words_to_highlight: &HashSet<String>,
+        matching_words: &MatchingWords,
         attributes_to_highlight: &HashSet<String>,
     ) {
         // TODO do we need to create a string for element that are not and needs to be highlight?
         for (key, value) in object.iter_mut() {
             if attributes_to_highlight.contains(key) {
                 let old_value = mem::take(value);
-                *value = self.highlight_value(old_value, words_to_highlight);
+                *value = self.highlight_value(old_value, matching_words);
             }
         }
     }
@@ -722,7 +722,7 @@ async fn main() -> anyhow::Result<()> {
                 search.facet_condition(condition);
             }
 
-            let SearchResult { found_words, candidates, documents_ids } = search.execute().unwrap();
+            let SearchResult { matching_words, candidates, documents_ids } = search.execute().unwrap();
 
             let number_of_candidates = candidates.len();
             let facets = if query.facet_distribution == Some(true) {
@@ -748,7 +748,7 @@ async fn main() -> anyhow::Result<()> {
             for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
                 let mut object = obkv_to_json(&displayed_fields, &fields_ids_map, obkv).unwrap();
                 if !disable_highlighting {
-                    highlighter.highlight_record(&mut object, &found_words, &attributes_to_highlight);
+                    highlighter.highlight_record(&mut object, &matching_words, &attributes_to_highlight);
                 }
 
                 documents.push(object);

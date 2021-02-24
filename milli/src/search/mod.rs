@@ -1,10 +1,9 @@
 use std::borrow::Cow;
-use std::collections::HashSet;
 use std::fmt;
 use std::time::Instant;
 
 use fst::{IntoStreamer, Streamer, Set};
-use levenshtein_automata::LevenshteinAutomatonBuilder as LevBuilder;
+use levenshtein_automata::{DFA, LevenshteinAutomatonBuilder as LevBuilder};
 use log::debug;
 use meilisearch_tokenizer::{AnalyzerConfig, Analyzer};
 use once_cell::sync::Lazy;
@@ -14,8 +13,9 @@ use crate::search::criteria::{Criterion, CriterionResult};
 use crate::search::criteria::{typo::Typo, words::Words, proximity::Proximity};
 use crate::{Index, DocumentId};
 
-pub use self::facet::{FacetCondition, FacetDistribution, FacetNumberOperator, FacetStringOperator};
 pub use self::facet::FacetIter;
+pub use self::facet::{FacetCondition, FacetDistribution, FacetNumberOperator, FacetStringOperator};
+pub use self::query_tree::MatchingWords;
 use self::query_tree::QueryTreeBuilder;
 
 // Building these factories is not free.
@@ -87,6 +87,11 @@ impl<'a> Search<'a> {
 
         debug!("facet candidates: {:?} took {:.02?}", facet_candidates, before.elapsed());
 
+        let matching_words = match query_tree.as_ref() {
+            Some(query_tree) => MatchingWords::from_query_tree(&query_tree),
+            None => MatchingWords::default(),
+        };
+
         // We are testing the typo criteria but there will be more of them soon.
         let criteria_ctx = criteria::HeedContext::new(self.rtxn, self.index)?;
         let typo_criterion = Typo::initial(&criteria_ctx, query_tree, facet_candidates)?;
@@ -128,8 +133,7 @@ impl<'a> Search<'a> {
             if limit == 0 { break }
         }
 
-        let found_words = HashSet::new();
-        Ok(SearchResult { found_words, candidates: initial_candidates, documents_ids })
+        Ok(SearchResult { matching_words, candidates: initial_candidates, documents_ids })
     }
 }
 
@@ -147,26 +151,21 @@ impl fmt::Debug for Search<'_> {
 
 #[derive(Default)]
 pub struct SearchResult {
-    pub found_words: HashSet<String>,
+    pub matching_words: MatchingWords,
     pub candidates: RoaringBitmap,
     // TODO those documents ids should be associated with their criteria scores.
     pub documents_ids: Vec<DocumentId>,
 }
 
-pub fn word_derivations(word: &str, is_prefix: bool, max_typo: u8, fst: &fst::Set<Cow<[u8]>>) -> anyhow::Result<Vec<(String, u8)>> {
-    let lev = match max_typo {
-        0 => &LEVDIST0,
-        1 => &LEVDIST1,
-        _ => &LEVDIST2,
-    };
-
-    let dfa = if is_prefix {
-        lev.build_prefix_dfa(&word)
-    } else {
-        lev.build_dfa(&word)
-    };
-
+pub fn word_derivations(
+    word: &str,
+    is_prefix: bool,
+    max_typo: u8,
+    fst: &fst::Set<Cow<[u8]>>,
+) -> anyhow::Result<Vec<(String, u8)>>
+{
     let mut derived_words = Vec::new();
+    let dfa = build_dfa(word, max_typo, is_prefix);
     let mut stream = fst.search_with_state(&dfa).into_stream();
 
     while let Some((word, state)) = stream.next() {
@@ -176,4 +175,18 @@ pub fn word_derivations(word: &str, is_prefix: bool, max_typo: u8, fst: &fst::Se
     }
 
     Ok(derived_words)
+}
+
+pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
+    let lev = match typos {
+        0 => &LEVDIST0,
+        1 => &LEVDIST1,
+        _ => &LEVDIST2,
+    };
+
+    if is_prefix {
+        lev.build_prefix_dfa(word)
+    } else {
+        lev.build_dfa(word)
+    }
 }
