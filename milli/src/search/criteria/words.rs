@@ -60,14 +60,14 @@ impl<'t> Criterion for Words<'t> {
                     self.candidates = Candidates::default();
                 },
                 (Some(qt), Allowed(candidates)) => {
-                    let bucket_candidates = match self.parent {
-                        Some(_) => take(&mut self.bucket_candidates),
-                        None => candidates.clone(),
-                    };
-
                     let mut found_candidates = resolve_candidates(self.ctx, &qt, &mut self.candidates_cache)?;
                     found_candidates.intersect_with(&candidates);
                     candidates.difference_with(&found_candidates);
+
+                    let bucket_candidates = match self.parent {
+                        Some(_) => take(&mut self.bucket_candidates),
+                        None => found_candidates.clone(),
+                    };
 
                     return Ok(Some(CriterionResult {
                         query_tree: Some(qt),
@@ -75,8 +75,21 @@ impl<'t> Criterion for Words<'t> {
                         bucket_candidates,
                     }));
                 },
-                (Some(_qt), Forbidden(_candidates)) => {
-                    todo!()
+                (Some(qt), Forbidden(candidates)) => {
+                    let mut found_candidates = resolve_candidates(self.ctx, &qt, &mut self.candidates_cache)?;
+                    found_candidates.difference_with(&candidates);
+                    candidates.union_with(&found_candidates);
+
+                    let bucket_candidates = match self.parent {
+                        Some(_) => take(&mut self.bucket_candidates),
+                        None => found_candidates.clone(),
+                    };
+
+                    return Ok(Some(CriterionResult {
+                        query_tree: Some(qt),
+                        candidates: found_candidates,
+                        bucket_candidates,
+                    }));
                 },
                 (None, Allowed(_)) => {
                     let candidates = take(&mut self.candidates).into_inner();
