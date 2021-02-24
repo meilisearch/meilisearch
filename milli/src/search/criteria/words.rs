@@ -129,10 +129,15 @@ fn resolve_candidates<'t>(
 
         match query_tree {
             And(ops) => {
+                let mut ops = ops.iter().map(|op| {
+                    resolve_operation(ctx, op, cache)
+                }).collect::<anyhow::Result<Vec<_>>>()?;
+
+                ops.sort_unstable_by_key(|cds| cds.len());
+
                 let mut candidates = RoaringBitmap::new();
                 let mut first_loop = true;
-                for op in ops {
-                    let docids = resolve_operation(ctx, op, cache)?;
+                for docids in ops {
                     if first_loop {
                         candidates = docids;
                         first_loop = false;
