@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::mem::take;
 
 use roaring::RoaringBitmap;
+use log::debug;
 
 use crate::search::query_tree::{maximum_proximity, Operation, Query};
 use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
@@ -55,6 +56,12 @@ impl<'t> Criterion for Proximity<'t> {
     fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         loop {
+            debug!("Proximity at iteration {} (max {:?}) ({:?})",
+                self.proximity,
+                self.query_tree.as_ref().map(|(mp, _)| mp),
+                self.candidates,
+            );
+
             match (&mut self.query_tree, &mut self.candidates) {
                 (_, Allowed(candidates)) if candidates.is_empty() => {
                     self.query_tree = None;

@@ -107,6 +107,8 @@ impl<'a> Search<'a> {
         let mut initial_candidates = RoaringBitmap::new();
         while let Some(CriterionResult { candidates, bucket_candidates, .. }) = criteria.next()? {
 
+            debug!("Number of candidates found {}", candidates.len());
+
             let mut len = candidates.len() as usize;
             let mut candidates = candidates.into_iter();
 

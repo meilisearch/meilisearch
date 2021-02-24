@@ -2,6 +2,7 @@ use std::{borrow::Cow, collections::HashMap, mem::take};
 
 use anyhow::bail;
 use roaring::RoaringBitmap;
+use log::debug;
 
 use crate::search::query_tree::{maximum_typo, Operation, Query, QueryKind};
 use crate::search::word_derivations;
@@ -59,6 +60,8 @@ impl<'t> Criterion for Typo<'t> {
     fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         loop {
+            debug!("Typo at iteration {} ({:?})", self.number_typos, self.candidates);
+
             match (&mut self.query_tree, &mut self.candidates) {
                 (_, Allowed(candidates)) if candidates.is_empty() => {
                     self.query_tree = None;

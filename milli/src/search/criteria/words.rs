@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::mem::take;
 
 use anyhow::bail;
+use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::search::query_tree::Operation;
@@ -52,8 +53,9 @@ impl<'t> Words<'t> {
 impl<'t> Criterion for Words<'t> {
     fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
-
         loop {
+            debug!("Words at iteration {} ({:?})", self.query_trees.len(), self.candidates);
+
             match (self.query_trees.pop(), &mut self.candidates) {
                 (_, Allowed(candidates)) if candidates.is_empty() => {
                     self.query_trees = Vec::new();
