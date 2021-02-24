@@ -1,13 +1,13 @@
 use std::ops::Deref;
 
+use anyhow::bail;
 use async_compression::tokio_02::write::GzipEncoder;
 use futures_util::stream::StreamExt;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use tokio::io::AsyncWriteExt;
 
-use crate::index_controller::UpdateStatus;
-use crate::index_controller::{IndexController, Settings, IndexSettings, IndexMetadata};
-use super::Data;
+use super::{Data, is_index_uid_valid};
+use crate::index_controller::{UpdateStatus, IndexController, Settings, IndexSettings, IndexMetadata};
 
 impl Data {
     pub async fn add_documents<B, E>(
@@ -22,6 +22,10 @@ impl Data {
         B: Deref<Target = [u8]>,
         E: std::error::Error + Send + Sync + 'static,
     {
+        if !is_index_uid_valid(index.as_ref()) {
+            bail!("invalid index uid: {:?}", index.as_ref())
+        }
+
         let file = tokio::task::spawn_blocking(tempfile::tempfile).await?;
         let file = tokio::fs::File::from_std(file?);
         let mut encoder = GzipEncoder::new(file);
@@ -57,6 +61,9 @@ impl Data {
         index: impl AsRef<str> + Send + Sync + 'static,
         settings: Settings
     ) -> anyhow::Result<UpdateStatus> {
+        if !is_index_uid_valid(index.as_ref()) {
+            bail!("invalid index uid: {:?}", index.as_ref())
+        }
         let index_controller = self.index_controller.clone();
         let update = tokio::task::spawn_blocking(move || index_controller.update_settings(index, settings)).await??;
         Ok(update.into())

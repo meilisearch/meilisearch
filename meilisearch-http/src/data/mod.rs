@@ -8,6 +8,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use sha2::Digest;
+use anyhow::bail;
 
 use crate::index_controller::{IndexController, LocalIndexController, IndexMetadata, Settings, IndexSettings};
 use crate::option::Opt;
@@ -126,6 +127,9 @@ impl Data {
     }
 
     pub fn create_index(&self, name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
+        if !is_index_uid_valid(name.as_ref()) {
+            bail!("invalid index uid: {:?}", name.as_ref())
+        }
         let settings = IndexSettings {
             name: Some(name.as_ref().to_string()),
             primary_key: primary_key.map(|s| s.as_ref().to_string()),
@@ -145,3 +149,8 @@ impl Data {
         &self.api_keys
     }
 }
+
+fn is_index_uid_valid(uid: &str) -> bool {
+    uid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
+}
+
