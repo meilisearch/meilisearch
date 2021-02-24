@@ -78,6 +78,7 @@ pub struct Opt {
     #[structopt(
         long,
         env = "MEILI_HTTP_PAYLOAD_SIZE_LIMIT",
+        parse(try_from_str=parse_size),
         default_value = "104857600"
     )] // 100MB
     pub http_payload_size_limit: usize,
