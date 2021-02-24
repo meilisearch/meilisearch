@@ -23,6 +23,34 @@ async fn get_settings() {
 }
 
 #[actix_rt::test]
+async fn update_settings_unknown_field() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    let (_response, code) = index.update_settings(json!({"foo": 12})).await;
+    assert_eq!(code, 400);
+}
+
+#[actix_rt::test]
+async fn test_partial_update() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
+    index.wait_update_id(0).await;
+    let (response, code) = index.settings().await;
+    assert_eq!(code, 200);
+    assert_eq!(response["displayedAttributes"],json!(["foo"]));
+    assert_eq!(response["searchableAttributes"],json!(["*"]));
+
+    index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
+    index.wait_update_id(1).await;
+
+    let (response, code) = index.settings().await;
+    assert_eq!(code, 200);
+    assert_eq!(response["displayedAttributes"],json!(["foo"]));
+    assert_eq!(response["searchableAttributes"],json!(["bar"]));
+}
+
+#[actix_rt::test]
 async fn update_setting_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
