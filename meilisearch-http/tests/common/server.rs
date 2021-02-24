@@ -1,7 +1,8 @@
-use tempdir::TempDir;
+use actix_web::http::StatusCode;
 use byte_unit::{Byte, ByteUnit};
 use serde_json::Value;
-use actix_web::http::StatusCode;
+use tempdir::TempDir;
+use urlencoding::encode;
 
 use meilisearch_http::data::Data;
 use meilisearch_http::option::{Opt, IndexerOpts};
@@ -60,7 +61,7 @@ impl Server {
     /// Returns a view to an index. There is no guarantee that the index exists.
     pub fn index<'a>(&'a self, uid: impl AsRef<str>) -> Index<'a> {
         Index {
-            uid: uid.as_ref().to_string(),
+            uid: encode(uid.as_ref()),
             service: &self.service,
         }
     }

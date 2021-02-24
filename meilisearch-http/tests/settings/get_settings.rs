@@ -90,6 +90,15 @@ async fn update_setting_unexisting_index() {
     assert_eq!(code, 200);
 }
 
+#[actix_rt::test]
+async fn update_setting_unexisting_index_invalid_uid() {
+    let server = Server::new().await;
+    let index = server.index("test##!  ");
+    let (_response, code) = index.update_settings(json!({})).await;
+    println!("response: {}", _response);
+    assert_eq!(code, 400);
+}
+
 macro_rules! test_setting_routes {
     ($($setting:ident), *) => {
         $(

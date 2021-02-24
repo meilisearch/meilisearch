@@ -46,6 +46,22 @@ async fn add_documents_no_index_creation() {
 }
 
 #[actix_rt::test]
+async fn document_add_create_index_bad_uid() {
+    let server = Server::new().await;
+    let index = server.index("883  fj!");
+    let (_response, code) = index.add_documents(json!([]), None).await;
+    assert_eq!(code, 400);
+}
+
+#[actix_rt::test]
+async fn document_update_create_index_bad_uid() {
+    let server = Server::new().await;
+    let index = server.index("883  fj!");
+    let (_response, code) = index.update_documents(json!([]), None).await;
+    assert_eq!(code, 400);
+}
+
+#[actix_rt::test]
 async fn document_addition_with_primary_key() {
     let server = Server::new().await;
     let index = server.index("test");
