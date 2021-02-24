@@ -61,6 +61,26 @@ async fn delete_settings_unexisting_index() {
 }
 
 #[actix_rt::test]
+async fn reset_all_settings() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.update_settings(json!({"displayedAttributes": ["foo"], "searchableAttributes": ["bar"]})).await;
+    index.wait_update_id(0).await;
+    let (response, code) = index.settings().await;
+    assert_eq!(code, 200);
+    assert_eq!(response["displayedAttributes"],json!(["foo"]));
+    assert_eq!(response["searchableAttributes"],json!(["bar"]));
+
+    index.delete_settings().await;
+    index.wait_update_id(1).await;
+
+    let (response, code) = index.settings().await;
+    assert_eq!(code, 200);
+    assert_eq!(response["displayedAttributes"],json!(["*"]));
+    assert_eq!(response["searchableAttributes"],json!(["*"]));
+}
+
+#[actix_rt::test]
 async fn update_setting_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
