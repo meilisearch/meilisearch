@@ -122,7 +122,7 @@ impl Data {
         Ok(self
             .list_indexes()?
             .into_iter()
-            .find(|i| i.name == name.as_ref()))
+            .find(|i| i.uid == name.as_ref()))
     }
 
     pub fn create_index(&self, name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {

@@ -2,6 +2,7 @@ use chrono::{Utc, DateTime};
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Pending<M> {
     pub update_id: u64,
     pub meta: M,
@@ -41,6 +42,7 @@ impl<M> Pending<M> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Processed<M, N> {
     pub success: N,
     pub processed_at: DateTime<Utc>,
@@ -55,6 +57,7 @@ impl<M, N> Processed<M, N> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Processing<M> {
     #[serde(flatten)]
     pub from: Pending<M>,
@@ -88,6 +91,7 @@ impl<M> Processing<M> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Aborted<M> {
     #[serde(flatten)]
     from: Pending<M>,
@@ -101,6 +105,7 @@ impl<M> Aborted<M> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Failed<M, E> {
     #[serde(flatten)]
     from: Processing<M>,
@@ -115,7 +120,7 @@ impl<M, E> Failed<M, E> {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize)]
-#[serde(tag = "status")]
+#[serde(tag = "status", rename_all = "camelCase")]
 pub enum UpdateStatus<M, N, E> {
     Processing(Processing<M>),
     Pending(Pending<M>),

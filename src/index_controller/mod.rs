@@ -21,7 +21,7 @@ pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMetadata {
-    pub name: String,
+    pub uid: String,
     uuid: Uuid,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -223,8 +223,8 @@ pub(crate) mod test {
 
         let indexes = controller.list_indexes().unwrap();
         assert_eq!(indexes.len(), 2);
-        assert_eq!(indexes[0].name, "test_index");
-        assert_eq!(indexes[1].name, "test_index2");
+        assert_eq!(indexes[0].uid, "test_index");
+        assert_eq!(indexes[1].uid, "test_index2");
         assert_eq!(indexes[1].primary_key.clone().unwrap(), "foo");
     }
 
@@ -252,7 +252,7 @@ pub(crate) mod test {
         };
 
         let result = controller.update_index("test", settings).unwrap();
-        assert_eq!(result.name, "test");
+        assert_eq!(result.uid, "test");
         assert_eq!(result.created_at, result.updated_at);
         assert!(result.primary_key.is_none());
 
@@ -271,7 +271,7 @@ pub(crate) mod test {
         };
 
         let result = controller.update_index("test", settings.clone()).unwrap();
-        assert_eq!(result.name, "test");
+        assert_eq!(result.uid, "test");
         assert!(result.created_at < result.updated_at);
         assert_eq!(result.primary_key.unwrap(), "foo");
 

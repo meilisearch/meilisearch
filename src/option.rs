@@ -64,7 +64,6 @@ pub struct IndexerOpts {
     pub indexing_jobs: Option<usize>,
 }
 
-#[cfg(test)]
 impl Default for IndexerOpts {
     fn default() -> Self {
         Self {
@@ -104,8 +103,8 @@ pub struct Opt {
     pub sentry_dsn: String,
 
     /// Disable Sentry error reporting.
-    #[cfg(all(not(debug_assertions), feature = "sentry"))]
     #[structopt(long, env = "MEILI_NO_SENTRY")]
+    #[cfg(all(not(debug_assertions), feature = "sentry"))]
     pub no_sentry: bool,
 
     /// This environment variable must be set to `production` if you are running in production.
