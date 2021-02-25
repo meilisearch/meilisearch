@@ -63,7 +63,7 @@ impl<'t> Criterion for Fetcher<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.clone(),
                         candidates: candidates.clone(),
-                        bucket_candidates: Some(candidates),
+                        bucket_candidates: candidates,
                     }));
                 },
                 Forbidden(_) => {
@@ -81,7 +81,7 @@ impl<'t> Criterion for Fetcher<'t> {
                                     return Ok(Some(CriterionResult {
                                         query_tree: self.query_tree.clone(),
                                         candidates: candidates.clone(),
-                                        bucket_candidates: Some(candidates),
+                                        bucket_candidates: candidates,
                                     }));
                                 },
                             }
@@ -95,7 +95,7 @@ impl<'t> Criterion for Fetcher<'t> {
                             return Ok(Some(CriterionResult {
                                 query_tree: self.query_tree.clone(),
                                 candidates: candidates.clone(),
-                                bucket_candidates: Some(candidates),
+                                bucket_candidates: candidates,
                             }));
                         },
                     }
