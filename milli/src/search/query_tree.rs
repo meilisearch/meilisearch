@@ -157,6 +157,8 @@ trait Context {
 pub struct QueryTreeBuilder<'a> {
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
+    optional_words: bool,
+    authorize_typos: bool,
 }
 
 impl<'a> Context for QueryTreeBuilder<'a> {
@@ -177,7 +179,25 @@ impl<'a> QueryTreeBuilder<'a> {
     /// Create a `QueryTreeBuilder` from a heed ReadOnly transaction `rtxn`
     /// and an Index `index`.
     pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index) -> Self {
-        Self { rtxn, index }
+        Self { rtxn, index, optional_words: true, authorize_typos: true }
+    }
+
+    /// if `optional_words` is set to `false` the query tree will be
+    /// generated forcing all query words to be present in each matching documents
+    /// (the criterion `words` will be ignored).
+    /// default value if not called: `true`
+    pub fn optional_words(&mut self, optional_words: bool) -> &mut Self {
+        self.optional_words = optional_words;
+        self
+    }
+
+    /// if `authorize_typos` is set to `false` the query tree will be generated
+    /// forcing all query words to match documents without any typo
+    /// (the criterion `typo` will be ignored).
+    /// default value if not called: `true`
+    pub fn authorize_typos(&mut self, authorize_typos: bool) -> &mut Self {
+        self.authorize_typos = authorize_typos;
+        self
     }
 
     /// Build the query tree:
@@ -187,16 +207,10 @@ impl<'a> QueryTreeBuilder<'a> {
     /// - if `authorize_typos` is set to `false` the query tree will be generated
     ///   forcing all query words to match documents without any typo
     ///   (the criterion `typo` will be ignored)
-    pub fn build(
-        &self,
-        optional_words: bool,
-        authorize_typos: bool,
-        query: TokenStream,
-    ) -> anyhow::Result<Option<Operation>>
-    {
+    pub fn build(&self, query: TokenStream) -> anyhow::Result<Option<Operation>> {
         let primitive_query = create_primitive_query(query);
         if !primitive_query.is_empty() {
-            create_query_tree(self, optional_words, authorize_typos, primitive_query).map(Some)
+            create_query_tree(self, self.optional_words, self.authorize_typos, primitive_query).map(Some)
         } else {
             Ok(None)
         }
