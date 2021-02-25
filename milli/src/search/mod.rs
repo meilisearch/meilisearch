@@ -66,12 +66,12 @@ impl<'a> Search<'a> {
         let before = Instant::now();
         let query_tree = match self.query.as_ref() {
             Some(query) => {
-                let builder = QueryTreeBuilder::new(self.rtxn, self.index);
+                let mut builder = QueryTreeBuilder::new(self.rtxn, self.index);
                 let stop_words = &Set::default();
                 let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
                 let result = analyzer.analyze(query);
                 let tokens = result.tokens();
-                builder.build(false, true, tokens)
+                builder.optional_words(false).build(tokens)
             },
             None => None,
         };
