@@ -174,7 +174,7 @@
         
         xmlHttp.onload = function () {
             let apiKeyContainer = document.getElementById('apiKeyContainer');
-            if (xmlHttp.status !== 200) {
+            if (xmlHttp.status === 401) {
                 document.getElementById('apiKey').remove();
                 let inputNode = document.createElement('input');
                 inputNode.setAttribute('id', 'apiKey');
