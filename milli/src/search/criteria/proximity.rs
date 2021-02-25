@@ -12,7 +12,7 @@ pub struct Proximity<'t> {
     query_tree: Option<(usize, Operation)>,
     proximity: u8,
     candidates: Candidates,
-    bucket_candidates: Option<RoaringBitmap>,
+    bucket_candidates: RoaringBitmap,
     parent: Option<Box<dyn Criterion + 't>>,
     candidates_cache: HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>,
 }
@@ -29,7 +29,7 @@ impl<'t> Proximity<'t> {
             query_tree: query_tree.map(|op| (maximum_proximity(&op), op)),
             proximity: 0,
             candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
-            bucket_candidates: None,
+            bucket_candidates: RoaringBitmap::new(),
             parent: None,
             candidates_cache: HashMap::new(),
         })
@@ -45,7 +45,7 @@ impl<'t> Proximity<'t> {
             query_tree: None,
             proximity: 0,
             candidates: Candidates::default(),
-            bucket_candidates: None,
+            bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
             candidates_cache: HashMap::new(),
         })
@@ -84,8 +84,8 @@ impl<'t> Criterion for Proximity<'t> {
                         self.proximity += 1;
 
                         let bucket_candidates = match self.parent {
-                            Some(_) => self.bucket_candidates.take(),
-                            None => Some(new_candidates.clone()),
+                            Some(_) => take(&mut self.bucket_candidates),
+                            None => new_candidates.clone(),
                         };
 
                         return Ok(Some(CriterionResult {
@@ -112,8 +112,8 @@ impl<'t> Criterion for Proximity<'t> {
                         self.proximity += 1;
 
                         let bucket_candidates = match self.parent {
-                            Some(_) => self.bucket_candidates.take(),
-                            None => Some(new_candidates.clone()),
+                            Some(_) => take(&mut self.bucket_candidates),
+                            None => new_candidates.clone(),
                         };
 
                         return Ok(Some(CriterionResult {
@@ -128,7 +128,7 @@ impl<'t> Criterion for Proximity<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: None,
                         candidates: candidates.clone(),
-                        bucket_candidates: Some(candidates),
+                        bucket_candidates: candidates,
                     }));
                 },
                 (None, Forbidden(_)) => {
