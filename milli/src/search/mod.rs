@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 use crate::search::criteria::{Criterion, CriterionResult};
-use crate::search::criteria::{typo::Typo, words::Words, proximity::Proximity};
+use crate::search::criteria::{typo::Typo, words::Words, proximity::Proximity, fetcher::Fetcher};
 use crate::{Index, DocumentId};
 
 pub use self::facet::FacetIter;
@@ -92,13 +92,12 @@ impl<'a> Search<'a> {
             None => MatchingWords::default(),
         };
 
-        // We are testing the typo criteria but there will be more of them soon.
         let criteria_ctx = criteria::HeedContext::new(self.rtxn, self.index)?;
         let typo_criterion = Typo::initial(&criteria_ctx, query_tree, facet_candidates)?;
         let words_criterion = Words::new(&criteria_ctx, Box::new(typo_criterion))?;
         let proximity_criterion = Proximity::new(&criteria_ctx, Box::new(words_criterion))?;
-        // let proximity_criterion = Proximity::initial(&criteria_ctx, query_tree, facet_candidates)?;
-        let mut criteria = proximity_criterion;
+        let fetcher_criterion = Fetcher::new(&criteria_ctx, Box::new(proximity_criterion));
+        let mut criteria = fetcher_criterion;
 
         // // We sort in descending order on a specific field *by hand*, don't do that at home.
         // let attr_name = "released-timestamp";

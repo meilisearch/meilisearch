@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::borrow::Cow;
+
+use anyhow::bail;
+use roaring::RoaringBitmap;
 
 use crate::Index;
 use crate::search::word_derivations;
-
-use roaring::RoaringBitmap;
 
 use super::query_tree::{Operation, Query, QueryKind};
 
@@ -11,6 +13,7 @@ pub mod typo;
 pub mod words;
 pub mod asc_desc;
 pub mod proximity;
+pub mod fetcher;
 
 pub trait Criterion {
     fn next(&mut self) -> anyhow::Result<Option<CriterionResult>>;
@@ -51,6 +54,7 @@ impl Default for Candidates {
     }
 }
 pub trait Context {
+    fn documents_ids(&self) -> heed::Result<RoaringBitmap>;
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn word_prefix_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>>;
     fn word_pair_proximity_docids(&self, left: &str, right: &str, proximity: u8) -> heed::Result<Option<RoaringBitmap>>;
@@ -66,6 +70,10 @@ pub struct HeedContext<'t> {
 }
 
 impl<'a> Context for HeedContext<'a> {
+    fn documents_ids(&self) -> heed::Result<RoaringBitmap> {
+        self.index.documents_ids(self.rtxn)
+    }
+
     fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
         self.index.word_docids.get(self.rtxn, &word)
     }
@@ -106,6 +114,80 @@ impl<'t> HeedContext<'t> {
         })
     }
 }
+
+pub fn resolve_query_tree<'t>(
+    ctx: &'t dyn Context,
+    query_tree: &Operation,
+    cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
+) -> anyhow::Result<RoaringBitmap>
+{
+    fn resolve_operation<'t>(
+        ctx: &'t dyn Context,
+        query_tree: &Operation,
+        cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
+    ) -> anyhow::Result<RoaringBitmap>
+    {
+        use Operation::{And, Consecutive, Or, Query};
+
+        match query_tree {
+            And(ops) => {
+                let mut ops = ops.iter().map(|op| {
+                    resolve_operation(ctx, op, cache)
+                }).collect::<anyhow::Result<Vec<_>>>()?;
+
+                ops.sort_unstable_by_key(|cds| cds.len());
+
+                let mut candidates = RoaringBitmap::new();
+                let mut first_loop = true;
+                for docids in ops {
+                    if first_loop {
+                        candidates = docids;
+                        first_loop = false;
+                    } else {
+                        candidates.intersect_with(&docids);
+                    }
+                }
+                Ok(candidates)
+            },
+            Consecutive(ops) => {
+                let mut candidates = RoaringBitmap::new();
+                let mut first_loop = true;
+                for slice in ops.windows(2) {
+                    match (&slice[0], &slice[1]) {
+                        (Operation::Query(left), Operation::Query(right)) => {
+                            match query_pair_proximity_docids(ctx, left, right, 1)? {
+                                pair_docids if pair_docids.is_empty() => {
+                                    return Ok(RoaringBitmap::new())
+                                },
+                                pair_docids if first_loop => {
+                                    candidates = pair_docids;
+                                    first_loop = false;
+                                },
+                                pair_docids => {
+                                    candidates.intersect_with(&pair_docids);
+                                },
+                            }
+                        },
+                        _ => bail!("invalid consecutive query type"),
+                    }
+                }
+                Ok(candidates)
+            },
+            Or(_, ops) => {
+                let mut candidates = RoaringBitmap::new();
+                for op in ops {
+                    let docids = resolve_operation(ctx, op, cache)?;
+                    candidates.union_with(&docids);
+                }
+                Ok(candidates)
+            },
+            Query(q) => Ok(query_docids(ctx, q)?),
+        }
+    }
+
+    resolve_operation(ctx, query_tree, cache)
+}
+
 
 fn all_word_pair_proximity_docids<T: AsRef<str>, U: AsRef<str>>(
     ctx: &dyn Context,
@@ -218,6 +300,10 @@ pub mod test {
     }
 
     impl<'a> Context for TestContext<'a> {
+        fn documents_ids(&self) -> heed::Result<RoaringBitmap> {
+            Ok(self.word_docids.iter().fold(RoaringBitmap::new(), |acc, (_, docids)| acc | docids))
+        }
+
         fn word_docids(&self, word: &str) -> heed::Result<Option<RoaringBitmap>> {
             Ok(self.word_docids.get(&word.to_string()).cloned())
         }
