@@ -97,13 +97,6 @@ If you have the latest stable Rust toolchain installed on your local system, clo
 ```bash
 git clone https://github.com/meilisearch/MeiliSearch.git
 cd MeiliSearch
-```
-
-In the cloned repository, compile MeiliSearch.
-
-```bash
-rustup override set stable
-rustup update stable
 cargo run --release
 ```
 
