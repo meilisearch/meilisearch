@@ -21,7 +21,7 @@ pub struct AscDesc<'t> {
     ascending: bool,
     query_tree: Option<Operation>,
     candidates: Candidates,
-    bucket_candidates: Option<RoaringBitmap>,
+    bucket_candidates: RoaringBitmap,
     faceted_candidates: RoaringBitmap,
     parent: Option<Box<dyn Criterion + 't>>,
 }
@@ -92,7 +92,7 @@ impl<'t> AscDesc<'t> {
             query_tree,
             candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
             faceted_candidates: index.faceted_documents_ids(rtxn, field_id)?,
-            bucket_candidates: None,
+            bucket_candidates: RoaringBitmap::new(),
             parent: None,
         })
     }
@@ -115,7 +115,7 @@ impl<'t> AscDesc<'t> {
             query_tree: None,
             candidates: Candidates::default(),
             faceted_candidates: index.faceted_documents_ids(rtxn, field_id)?,
-            bucket_candidates: None,
+            bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
         })
     }
@@ -133,8 +133,8 @@ impl<'t> Criterion for AscDesc<'t> {
                 },
                 (Some(qt), Allowed(candidates)) => {
                     let bucket_candidates = match self.parent {
-                        Some(_) => self.bucket_candidates.take(),
-                        None => Some(candidates.clone()),
+                        Some(_) => take(&mut self.bucket_candidates),
+                        None => candidates.clone(),
                     };
 
                     let mut found_candidates = facet_ordered(
@@ -163,7 +163,7 @@ impl<'t> Criterion for AscDesc<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: None,
                         candidates: candidates.clone(),
-                        bucket_candidates: Some(candidates),
+                        bucket_candidates: candidates,
                     }));
                 },
                 (None, Forbidden(_)) => {
