@@ -139,7 +139,7 @@ impl<'t> Criterion for Proximity<'t> {
                                     self.query_tree = query_tree.map(|op| (maximum_proximity(&op), op));
                                     self.proximity = 0;
                                     self.candidates = Candidates::Allowed(candidates);
-                                    self.bucket_candidates = bucket_candidates;
+                                    self.bucket_candidates.union_with(&bucket_candidates);
                                 },
                                 None => return Ok(None),
                             }

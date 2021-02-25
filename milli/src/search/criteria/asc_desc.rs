@@ -174,7 +174,7 @@ impl<'t> Criterion for AscDesc<'t> {
                                     self.query_tree = query_tree;
                                     candidates.intersect_with(&self.faceted_candidates);
                                     self.candidates = Candidates::Allowed(candidates);
-                                    self.bucket_candidates = bucket_candidates;
+                                    self.bucket_candidates.union_with(&bucket_candidates);
                                 },
                                 None => return Ok(None),
                             }

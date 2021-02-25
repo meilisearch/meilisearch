@@ -107,7 +107,7 @@ impl<'t> Criterion for Words<'t> {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     self.query_trees = query_tree.map(explode_query_tree).unwrap_or_default();
                                     self.candidates = Candidates::Allowed(candidates);
-                                    self.bucket_candidates = bucket_candidates;
+                                    self.bucket_candidates.union_with(&bucket_candidates);
                                 },
                                 None => return Ok(None),
                             }
