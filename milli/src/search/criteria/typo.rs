@@ -12,7 +12,7 @@ pub struct Typo<'t> {
     query_tree: Option<(usize, Operation)>,
     number_typos: u8,
     candidates: Candidates,
-    bucket_candidates: Option<RoaringBitmap>,
+    bucket_candidates: RoaringBitmap,
     parent: Option<Box<dyn Criterion>>,
     candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
     typo_cache: HashMap<(String, bool, u8), Vec<(String, u8)>>,
@@ -30,7 +30,7 @@ impl<'t> Typo<'t> {
             query_tree: query_tree.map(|op| (maximum_typo(&op), op)),
             number_typos: 0,
             candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
-            bucket_candidates: None,
+            bucket_candidates: RoaringBitmap::new(),
             parent: None,
             candidates_cache: HashMap::new(),
             typo_cache: HashMap::new(),
@@ -47,7 +47,7 @@ impl<'t> Typo<'t> {
             query_tree: None,
             number_typos: 0,
             candidates: Candidates::default(),
-            bucket_candidates: None,
+            bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
             candidates_cache: HashMap::new(),
             typo_cache: HashMap::new(),
@@ -85,8 +85,8 @@ impl<'t> Criterion for Typo<'t> {
                         self.number_typos += 1;
 
                         let bucket_candidates = match self.parent {
-                            Some(_) => self.bucket_candidates.take(),
-                            None => Some(new_candidates.clone()),
+                            Some(_) => take(&mut self.bucket_candidates),
+                            None => new_candidates.clone(),
                         };
 
                         return Ok(Some(CriterionResult {
@@ -117,8 +117,8 @@ impl<'t> Criterion for Typo<'t> {
                         self.number_typos += 1;
 
                         let bucket_candidates = match self.parent {
-                            Some(_) => self.bucket_candidates.take(),
-                            None => Some(new_candidates.clone()),
+                            Some(_) => take(&mut self.bucket_candidates),
+                            None => new_candidates.clone(),
                         };
 
                         return Ok(Some(CriterionResult {
@@ -133,7 +133,7 @@ impl<'t> Criterion for Typo<'t> {
                     return Ok(Some(CriterionResult {
                         query_tree: None,
                         candidates: candidates.clone(),
-                        bucket_candidates: Some(candidates),
+                        bucket_candidates: candidates,
                     }));
                 },
                 (None, Forbidden(_)) => {
@@ -373,7 +373,7 @@ mod test {
                 ]),
             ])),
             candidates: candidates_1.clone(),
-            bucket_candidates: Some(candidates_1),
+            bucket_candidates: candidates_1,
         };
 
         assert_eq!(criteria.next().unwrap(), Some(expected_1));
@@ -395,7 +395,7 @@ mod test {
                 ]),
             ])),
             candidates: candidates_2.clone(),
-            bucket_candidates: Some(candidates_2),
+            bucket_candidates: candidates_2,
         };
 
         assert_eq!(criteria.next().unwrap(), Some(expected_2));
@@ -405,13 +405,13 @@ mod test {
     fn initial_placeholder_with_facets() {
         let context = TestContext::default();
         let query_tree = None;
-        let facet_candidates = context.word_docids("earth").unwrap();
+        let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
-        let mut criteria = Typo::initial(&context, query_tree, facet_candidates.clone()).unwrap();
+        let mut criteria = Typo::initial(&context, query_tree, Some(facet_candidates.clone())).unwrap();
 
         let expected = CriterionResult {
             query_tree: None,
-            candidates: facet_candidates.clone().unwrap(),
+            candidates: facet_candidates.clone(),
             bucket_candidates: facet_candidates,
         };
 
@@ -449,7 +449,7 @@ mod test {
                 ]),
             ])),
             candidates: &candidates_1 & &facet_candidates,
-            bucket_candidates: Some(candidates_1 & &facet_candidates),
+            bucket_candidates: candidates_1 & &facet_candidates,
         };
 
         assert_eq!(criteria.next().unwrap(), Some(expected_1));
@@ -471,7 +471,7 @@ mod test {
                 ]),
             ])),
             candidates: &candidates_2 & &facet_candidates,
-            bucket_candidates: Some(candidates_2 & &facet_candidates),
+            bucket_candidates: candidates_2 & &facet_candidates,
         };
 
         assert_eq!(criteria.next().unwrap(), Some(expected_2));

@@ -21,7 +21,7 @@ pub struct CriterionResult {
     /// The candidates that this criterion is allowed to return subsets of.
     pub candidates: RoaringBitmap,
     /// Candidates that comes from the current bucket of the initial criterion.
-    pub bucket_candidates: Option<RoaringBitmap>,
+    pub bucket_candidates: RoaringBitmap,
 }
 
 /// Either a set of candidates that defines the candidates

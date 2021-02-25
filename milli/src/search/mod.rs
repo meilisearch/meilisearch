@@ -100,9 +100,7 @@ impl<'a> Search<'a> {
             let mut len = candidates.len() as usize;
             let mut candidates = candidates.into_iter();
 
-            if let Some(docids) = bucket_candidates {
-                initial_candidates.union_with(&docids);
-            }
+            initial_candidates.union_with(&bucket_candidates);
 
             if offset != 0 {
                 candidates.by_ref().skip(offset).for_each(drop);
