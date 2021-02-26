@@ -14,6 +14,10 @@ enum UuidResolveMsg {
         name: String,
         ret: oneshot::Sender<Result<Option<Uuid>>>,
     },
+    GetOrCreate {
+        name: String,
+        ret: oneshot::Sender<Result<Uuid>>,
+    },
     Create {
         name: String,
         ret: oneshot::Sender<Result<Uuid>>,
@@ -41,15 +45,21 @@ impl<S: UuidStore> UuidResolverActor<S> {
         loop {
             match self.inbox.recv().await {
                 Some(Create { name, ret }) => self.handle_create(name, ret).await,
-                Some(_) => (),
-                // all senders have ned dropped, need to quit.
+                Some(GetOrCreate { name, ret }) => self.handle_get_or_create(name, ret).await,
+                Some(_) => {}
+                // all senders have been dropped, need to quit.
                 None => break,
             }
         }
     }
 
     async fn handle_create(&self, name: String, ret: oneshot::Sender<Result<Uuid>>) {
-        let result = self.store.create_uuid(name).await;
+        let result = self.store.create_uuid(name, true).await;
+        let _ = ret.send(result);
+    }
+
+    async fn handle_get_or_create(&self, name: String, ret: oneshot::Sender<Result<Uuid>>) {
+        let result = self.store.create_uuid(name, false).await;
         let _ = ret.send(result);
     }
 }
@@ -75,6 +85,13 @@ impl UuidResolverHandle {
         Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
     }
 
+    pub async fn get_or_create(&self, name: String) -> Result<Uuid> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UuidResolveMsg::GetOrCreate { name, ret };
+        let _ = self.sender.send(msg).await;
+        Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
+    }
+
     pub async fn create(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::Create { name, ret };
@@ -91,7 +108,9 @@ pub enum UuidError {
 
 #[async_trait::async_trait]
 trait UuidStore {
-    async fn create_uuid(&self, name: String) -> Result<Uuid>;
+    // Create a new entry for `name`. Return an error if `err` and the entry already exists, return
+    // the uuid otherwise.
+    async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid>;
     async fn get_uuid(&self, name: String) -> Result<Option<Uuid>>;
 }
 
@@ -99,9 +118,15 @@ struct MapUuidStore(Arc<RwLock<HashMap<String, Uuid>>>);
 
 #[async_trait::async_trait]
 impl UuidStore for MapUuidStore {
-    async fn create_uuid(&self, name: String) -> Result<Uuid> {
+    async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> {
         match self.0.write().await.entry(name) {
-            Entry::Occupied(_) => Err(UuidError::NameAlreadyExist),
+            Entry::Occupied(entry) => {
+                if err {
+                    Err(UuidError::NameAlreadyExist)
+                } else {
+                    Ok(entry.get().clone())
+                }
+            },
             Entry::Vacant(entry) => {
                 let uuid = Uuid::new_v4();
                 let uuid = entry.insert(uuid);

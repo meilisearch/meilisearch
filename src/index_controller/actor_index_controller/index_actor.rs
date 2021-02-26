@@ -9,13 +9,15 @@ use milli::Index;
 use std::collections::hash_map::Entry;
 use std::fs::create_dir_all;
 use heed::EnvOpenOptions;
-use crate::index_controller::IndexMetadata;
+use crate::index_controller::{IndexMetadata, UpdateMeta, updates::{Processed, Failed, Processing}, UpdateResult as UResult};
 
 pub type Result<T> = std::result::Result<T, IndexError>;
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
+type UpdateResult = std::result::Result<Processed<UpdateMeta, UResult>, Failed<UpdateMeta, String>>;
 
 enum IndexMsg {
     CreateIndex { uuid: Uuid, primary_key: Option<String>, ret: oneshot::Sender<Result<IndexMetadata>> },
+    Update { meta: Processing<UpdateMeta>, data: std::fs::File, ret:  oneshot::Sender<UpdateResult>},
 }
 
 struct IndexActor<S> {
@@ -45,6 +47,7 @@ impl<S: IndexStore> IndexActor<S> {
         loop {
             match self.inbox.recv().await {
                 Some(IndexMsg::CreateIndex { uuid, primary_key, ret }) => self.handle_create_index(uuid, primary_key, ret).await,
+                Some(IndexMsg::Update { ret, meta, data }) => self.handle_update().await,
                 None => break,
             }
         }
@@ -53,6 +56,10 @@ impl<S: IndexStore> IndexActor<S> {
     async fn handle_create_index(&self, uuid: Uuid, primary_key: Option<String>, ret: oneshot::Sender<Result<IndexMetadata>>) {
         let result = self.store.create_index(uuid, primary_key).await;
         let _ = ret.send(result);
+    }
+
+    async fn handle_update(&self) {
+        println!("processing update!!!");
     }
 }
 
@@ -74,6 +81,13 @@ impl IndexActorHandle {
     pub async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMetadata> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::CreateIndex { ret, uuid, primary_key };
+        let _ = self.sender.send(msg).await;
+        receiver.await.expect("IndexActor has been killed")
+    }
+
+    pub async fn update(&self, meta: Processing<UpdateMeta>, data: std::fs::File) -> UpdateResult {
+        let (ret, receiver) = oneshot::channel();
+        let msg = IndexMsg::Update { ret, meta, data };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("IndexActor has been killed")
     }
@@ -103,8 +117,6 @@ impl IndexStore for MapIndexStore {
 
         let db_path = self.root.join(format!("index-{}", meta.uuid));
 
-
-        println!("before blocking");
         let index: Result<Index> = tokio::task::spawn_blocking(move || {
             create_dir_all(&db_path).expect("can't create db");
             let mut options = EnvOpenOptions::new();
@@ -113,7 +125,6 @@ impl IndexStore for MapIndexStore {
                 .map_err(|e| IndexError::Error(e))?;
             Ok(index)
         }).await.expect("thread died");
-        println!("after blocking");
 
         self.index_store.write().await.insert(meta.uuid.clone(), index?);
 

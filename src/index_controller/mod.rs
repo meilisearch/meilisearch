@@ -12,7 +12,7 @@ use milli::Index;
 use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
 use serde::{Serialize, Deserialize, de::Deserializer};
 use uuid::Uuid;
-use actix_web::web::Payload;
+use tokio::fs::File;
 
 pub use updates::{Processed, Processing, Failed};
 
@@ -113,7 +113,7 @@ pub struct IndexSettings {
 /// be provided. This allows the implementer to define the behaviour of write accesses to the
 /// indices, and abstract the scheduling of the updates. The implementer must be able to provide an
 /// instance of `IndexStore`
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 pub trait IndexController {
 
     /*
@@ -131,7 +131,7 @@ pub trait IndexController {
         index: String,
         method: IndexDocumentsMethod,
         format: UpdateFormat,
-        data: Payload,
+        data: File,
         primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus>;
 

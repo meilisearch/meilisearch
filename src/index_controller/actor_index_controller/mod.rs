@@ -1,24 +1,28 @@
 mod index_actor;
 mod update_actor;
 mod uuid_resolver;
+mod update_store;
 
-use tokio::fs::File;
 use tokio::sync::oneshot;
 use super::IndexController;
 use uuid::Uuid;
 use super::IndexMetadata;
+use tokio::fs::File;
+use super::UpdateMeta;
 
 
 pub struct ActorIndexController {
     uuid_resolver: uuid_resolver::UuidResolverHandle,
-    index_actor: index_actor::IndexActorHandle,
+    index_handle: index_actor::IndexActorHandle,
+    update_handle: update_actor::UpdateActorHandle,
 }
 
 impl ActorIndexController {
     pub fn new() -> Self {
         let uuid_resolver = uuid_resolver::UuidResolverHandle::new();
         let index_actor = index_actor::IndexActorHandle::new();
-        Self { uuid_resolver, index_actor }
+        let update_handle = update_actor::UpdateActorHandle::new(index_actor.clone());
+        Self { uuid_resolver, index_handle: index_actor, update_handle }
     }
 }
 
@@ -31,7 +35,7 @@ enum IndexControllerMsg {
     Shutdown,
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 impl IndexController for ActorIndexController {
     async fn add_documents(
         &self,
@@ -41,7 +45,10 @@ impl IndexController for ActorIndexController {
         data: File,
         primary_key: Option<String>,
     ) -> anyhow::Result<super::UpdateStatus> {
-        todo!()
+        let uuid = self.uuid_resolver.get_or_create(index).await?;
+        let meta = UpdateMeta::DocumentsAddition { method, format, primary_key };
+        let status = self.update_handle.update(meta, Some(data), uuid).await?;
+        Ok(status)
     }
 
     fn clear_documents(&self, index: String) -> anyhow::Result<super::UpdateStatus> {
@@ -59,7 +66,7 @@ impl IndexController for ActorIndexController {
     async fn create_index(&self, index_settings: super::IndexSettings) -> anyhow::Result<super::IndexMetadata> {
         let super::IndexSettings { name, primary_key } = index_settings;
         let uuid = self.uuid_resolver.create(name.unwrap()).await?;
-        let index_meta = self.index_actor.create_index(uuid, primary_key).await?;
+        let index_meta = self.index_handle.create_index(uuid, primary_key).await?;
         Ok(index_meta)
     }
 

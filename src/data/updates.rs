@@ -1,29 +1,33 @@
-use std::ops::Deref;
-
 //use async_compression::tokio_02::write::GzipEncoder;
 //use futures_util::stream::StreamExt;
-//use milli::update::{IndexDocumentsMethod, UpdateFormat};
+use milli::update::{IndexDocumentsMethod, UpdateFormat};
 //use tokio::io::AsyncWriteExt;
 use actix_web::web::Payload;
+use tokio::fs::File;
+use tokio::io::{AsyncWriteExt, AsyncSeekExt};
+use futures::prelude::stream::StreamExt;
 
 use crate::index_controller::UpdateStatus;
 use crate::index_controller::{Settings, IndexMetadata};
 use super::Data;
 
 impl Data {
-    pub async fn add_documents<B, E>(
+    pub async fn add_documents(
         &self,
         index: impl AsRef<str> + Send + Sync + 'static,
         method: IndexDocumentsMethod,
         format: UpdateFormat,
-        stream: Payload,
+        mut stream: Payload,
         primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus>
-    where
-        B: Deref<Target = [u8]>,
-        E: std::error::Error + Send + Sync + 'static,
     {
-        let update_status = self.index_controller.add_documents(index.as_ref().to_string(), method, format, stream, primary_key).await?;
+        let file = tempfile::tempfile_in(".")?;
+        let mut file = File::from_std(file);
+        while let Some(Ok(bytes)) = stream.next().await {
+            file.write(bytes.as_ref()).await;
+        }
+        file.seek(std::io::SeekFrom::Start(0)).await?;
+        let update_status = self.index_controller.add_documents(index.as_ref().to_string(), method, format, file, primary_key).await?;
         Ok(update_status)
     }
 
