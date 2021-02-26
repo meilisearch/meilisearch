@@ -53,11 +53,11 @@ impl UpdateActor {
         }
     }
 
-    async fn handle_update(&self, _uuid: Uuid, meta: UpdateMeta, payload: Option<File>, ret: oneshot::Sender<Result<UpdateStatus>>) {
+    async fn handle_update(&self, uuid: Uuid, meta: UpdateMeta, payload: Option<File>, ret: oneshot::Sender<Result<UpdateStatus>>) {
         let mut buf = Vec::new();
         let mut payload = payload.unwrap();
         payload.read_to_end(&mut buf).await.unwrap();
-        let result = self.store.register_update(meta, &buf).unwrap();
+        let result = self.store.register_update(meta, &buf, uuid).unwrap();
         let _ = ret.send(Ok(UpdateStatus::Pending(result)));
     }
 }

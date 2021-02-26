@@ -2,6 +2,7 @@ mod index_actor;
 mod update_actor;
 mod uuid_resolver;
 mod update_store;
+mod update_handler;
 
 use tokio::sync::oneshot;
 use super::IndexController;
@@ -9,7 +10,6 @@ use uuid::Uuid;
 use super::IndexMetadata;
 use tokio::fs::File;
 use super::UpdateMeta;
-
 
 pub struct ActorIndexController {
     uuid_resolver: uuid_resolver::UuidResolverHandle,
