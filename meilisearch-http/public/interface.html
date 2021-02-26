@@ -122,17 +122,8 @@
               This dashboard will help you check the search results with ease.
             </p>
           </div>
-          <div class="columns">
-            <div class="column is-4">
-              <div class="field">
-                  <!-- API Key -->
-                    <label class="label" for="apiKey">API Key (optional)</label>
-                    <div class="control">
-                      <input id="apiKey" class="input is-small" type="password" placeholder="Enter your API key">
-                    </div>
-                    <p class="help">At least a private API key is required for the dashboard to access the indexes list.</p>
-              </div>
-            </div>
+          <div id="apiKeyContainer" class="columns">
+            <input type="hidden" id="apiKey">
           </div>
           <div class="columns">
             <div class="column is-8">
@@ -177,6 +168,45 @@
   </body>
 
   <script>
+    function setApiKeyField () {
+        var xmlHttp = new XMLHttpRequest();
+        xmlHttp.open("GET", `${baseUrl}/version`, false);
+        
+        xmlHttp.onload = function () {
+            let apiKeyContainer = document.getElementById('apiKeyContainer');
+            if (xmlHttp.status === 401) {
+                document.getElementById('apiKey').remove();
+                let inputNode = document.createElement('input');
+                inputNode.setAttribute('id', 'apiKey');
+                inputNode.setAttribute('type', 'password');
+                inputNode.setAttribute('placeholder', 'Enter your API key');
+                inputNode.classList.add('input', 'is-small');
+
+                let controlNode = document.createElement('div');
+                controlNode.classList.add('control');
+                controlNode.appendChild(inputNode);
+
+                let labelNode = document.createElement('label');
+                labelNode.classList.add('label')
+                labelNode.setAttribute('for', 'apiKey');
+                let textNode = document.createTextNode('API Key');
+                labelNode.appendChild(textNode);
+
+                let fieldNode = document.createElement('div');
+                fieldNode.classList.add('field');
+                fieldNode.appendChild(labelNode);
+                fieldNode.append(controlNode);
+
+                let columnNode = document.createElement('div');
+                columnNode.classList.add('column', 'is-4');
+                columnNode.appendChild(fieldNode);
+                apiKeyContainer.appendChild(columnNode);
+            }
+        }
+        
+        xmlHttp.send(null);
+    }
+
     function sanitizeHTMLEntities(str) {
         if (str && typeof str === 'string') {
             str = str.replace(/</g,"&lt;");
@@ -321,6 +351,7 @@
     }, false);
 
     let baseUrl = window.location.origin;
+    setApiKeyField();
     refreshIndexList();
 
     search.oninput = triggerSearch;
