@@ -3,27 +3,26 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context, Poll};
 
-use actix_service::{Service, Transform};
-use actix_web::{dev::ServiceRequest, dev::ServiceResponse, web};
+use actix_web::dev::{Transform, Service, ServiceResponse, ServiceRequest};
+use actix_web::web;
 use futures::future::{err, ok, Future, Ready};
 
 use crate::error::{Error, ResponseError};
 use crate::Data;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Authentication {
     Public,
     Private,
     Admin,
 }
 
-impl<S: 'static, B> Transform<S> for Authentication
+impl<S: 'static, B> Transform<S, ServiceRequest> for Authentication
 where
-    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error>,
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error>,
     S::Future: 'static,
     B: 'static,
 {
-    type Request = ServiceRequest;
     type Response = ServiceResponse<B>;
     type Error = actix_web::Error;
     type InitError = ();
@@ -32,7 +31,7 @@ where
 
     fn new_transform(&self, service: S) -> Self::Future {
         ok(LoggingMiddleware {
-            acl: self.clone(),
+            acl: *self,
             service: Rc::new(RefCell::new(service)),
         })
     }
@@ -44,23 +43,22 @@ pub struct LoggingMiddleware<S> {
 }
 
 #[allow(clippy::type_complexity)]
-impl<S, B> Service for LoggingMiddleware<S>
+impl<S, B> Service<ServiceRequest> for LoggingMiddleware<S>
 where
-    S: Service<Request = ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
+    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = actix_web::Error> + 'static,
     S::Future: 'static,
     B: 'static,
 {
-    type Request = ServiceRequest;
     type Response = ServiceResponse<B>;
     type Error = actix_web::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>>>>;
 
-    fn poll_ready(&mut self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(&self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         self.service.poll_ready(cx)
     }
 
-    fn call(&mut self, req: ServiceRequest) -> Self::Future {
-        let mut svc = self.service.clone();
+    fn call(&self, req: ServiceRequest) -> Self::Future {
+        let svc = self.service.clone();
         // This unwrap is left because this error should never appear. If that's the case, then
         // it means that actix-web has an issue or someone changes the type `Data`.
         let data = req.app_data::<web::Data<Data>>().unwrap();

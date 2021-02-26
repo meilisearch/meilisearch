@@ -19,7 +19,7 @@ struct KeysResponse {
 #[get("/keys", wrap = "Authentication::Admin")]
 async fn list(data: web::Data<Data>) -> HttpResponse {
     let api_keys = data.api_keys.clone();
-    HttpResponse::Ok().json(KeysResponse {
+    HttpResponse::Ok().json(&KeysResponse {
         private: api_keys.private,
         public: api_keys.public,
     })

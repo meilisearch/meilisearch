@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use sha2::Digest;
 
-use crate::index_controller::{IndexController, LocalIndexController, IndexMetadata, Settings, IndexSettings};
+use crate::index_controller::{IndexController, IndexMetadata, Settings, IndexSettings};
+use crate::index_controller::actor_index_controller::ActorIndexController;
 use crate::option::Opt;
 
 #[derive(Clone)]
@@ -27,7 +28,7 @@ impl Deref for Data {
 
 #[derive(Clone)]
 pub struct DataInner {
-    pub index_controller: Arc<LocalIndexController>,
+    pub index_controller: Arc<dyn IndexController + Send + Sync>,
     pub api_keys: ApiKeys,
     options: Opt,
 }
@@ -59,14 +60,9 @@ impl ApiKeys {
 impl Data {
     pub fn new(options: Opt) -> anyhow::Result<Data> {
         let path = options.db_path.clone();
-        let indexer_opts = options.indexer_options.clone();
+        //let indexer_opts = options.indexer_options.clone();
         create_dir_all(&path)?;
-        let index_controller = LocalIndexController::new(
-            &path,
-            indexer_opts,
-            options.max_mdb_size.get_bytes(),
-            options.max_udb_size.get_bytes(),
-        )?;
+        let index_controller = ActorIndexController::new();
         let index_controller = Arc::new(index_controller);
 
         let mut api_keys = ApiKeys {
@@ -85,7 +81,7 @@ impl Data {
 
     pub fn settings<S: AsRef<str>>(&self, index_uid: S) -> anyhow::Result<Settings> {
         let index = self.index_controller
-            .index(&index_uid)?
+            .index(index_uid.as_ref().to_string())?
             .ok_or_else(|| anyhow::anyhow!("Index {} does not exist.", index_uid.as_ref()))?;
 
         let txn = index.read_txn()?;
@@ -119,19 +115,20 @@ impl Data {
     }
 
     pub fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<IndexMetadata>> {
-        Ok(self
-            .list_indexes()?
-            .into_iter()
-            .find(|i| i.uid == name.as_ref()))
+        todo!()
+        //Ok(self
+            //.list_indexes()?
+            //.into_iter()
+            //.find(|i| i.uid == name.as_ref()))
     }
 
-    pub fn create_index(&self, name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
+    pub async fn create_index(&self, name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
         let settings = IndexSettings {
             name: Some(name.as_ref().to_string()),
             primary_key: primary_key.map(|s| s.as_ref().to_string()),
         };
 
-        let meta = self.index_controller.create_index(settings)?;
+        let meta = self.index_controller.create_index(settings).await?;
         Ok(meta)
     }
 

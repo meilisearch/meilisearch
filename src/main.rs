@@ -1,11 +1,13 @@
 use std::env;
 
 use actix_cors::Cors;
-use actix_web::{middleware, HttpServer};
+use actix_web::{middleware, HttpServer, web, web::ServiceConfig};
 use main_error::MainError;
-use meilisearch_http::helpers::NormalizePath;
-use meilisearch_http::{create_app, Data, Opt};
+use meilisearch::{Data, Opt};
 use structopt::StructOpt;
+use actix_web::App;
+use meilisearch::error::payload_error_handler;
+use actix_web::middleware::TrailingSlash;
 
 //mod analytics;
 
@@ -74,9 +76,34 @@ async fn main() -> Result<(), MainError> {
     print_launch_resume(&opt, &data);
 
     let enable_frontend = opt.env != "production";
+
+    run_http(data, opt, enable_frontend).await?;
+
+    Ok(())
+}
+
+async fn run_http(data: Data, opt: Opt, enable_frontend: bool) -> Result<(), Box<dyn std::error::Error>> {
     let http_server = HttpServer::new(move || {
-        create_app(&data, enable_frontend)
-            .wrap(
+        let app = App::new()
+            .configure(|c| configure_data(c, &data))
+            .configure(meilisearch::routes::document::services)
+            .configure(meilisearch::routes::index::services)
+            .configure(meilisearch::routes::search::services)
+            .configure(meilisearch::routes::settings::services)
+            .configure(meilisearch::routes::stop_words::services)
+            .configure(meilisearch::routes::synonym::services)
+            .configure(meilisearch::routes::health::services)
+            .configure(meilisearch::routes::stats::services)
+            .configure(meilisearch::routes::key::services);
+        //.configure(routes::dump::services);
+        let app = if enable_frontend {
+            app
+                .service(meilisearch::routes::load_html)
+                .service(meilisearch::routes::load_css)
+        } else {
+            app
+        };
+        app.wrap(
                 Cors::default()
                     .send_wildcard()
                     .allowed_headers(vec!["content-type", "x-meili-api-key"])
@@ -84,7 +111,7 @@ async fn main() -> Result<(), MainError> {
             )
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
-            .wrap(NormalizePath)
+            .wrap(middleware::NormalizePath::new(TrailingSlash::Trim))
     });
 
     if let Some(config) = opt.get_ssl_config()? {
@@ -95,8 +122,22 @@ async fn main() -> Result<(), MainError> {
     } else {
         http_server.bind(opt.http_addr)?.run().await?;
     }
-
     Ok(())
+}
+
+fn configure_data(config: &mut ServiceConfig, data: &Data) {
+    config
+        .data(data.clone())
+        .app_data(
+            web::JsonConfig::default()
+            .limit(data.http_payload_size_limit())
+            .content_type(|_mime| true) // Accept all mime types
+            .error_handler(|err, _req| payload_error_handler(err).into()),
+        )
+        .app_data(
+            web::QueryConfig::default()
+            .error_handler(|err, _req| payload_error_handler(err).into())
+        );
 }
 
 pub fn print_launch_resume(opt: &Opt, data: &Data) {

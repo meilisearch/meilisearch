@@ -3,7 +3,7 @@ use actix_web::{delete, get, post, put};
 use actix_web::{web, HttpResponse};
 use indexmap::IndexMap;
 use log::error;
-use milli::update::{IndexDocumentsMethod, UpdateFormat};
+//use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -142,25 +142,26 @@ async fn add_documents_json(
     params: web::Query<UpdateDocumentsQuery>,
     body: Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    let addition_result = data
-        .add_documents(
-            path.into_inner().index_uid,
-            IndexDocumentsMethod::ReplaceDocuments,
-            UpdateFormat::Json,
-            body,
-            params.primary_key.clone(),
-        ).await;
+    todo!()
+    //let addition_result = data
+        //.add_documents(
+            //path.into_inner().index_uid,
+            //IndexDocumentsMethod::ReplaceDocuments,
+            //UpdateFormat::Json,
+            //body,
+            //params.primary_key.clone(),
+        //).await;
 
-    match addition_result {
-        Ok(update) => {
-            let value = serde_json::to_string(&update).unwrap();
-            let response = HttpResponse::Ok().body(value);
-            Ok(response)
-        }
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    //match addition_result {
+        //Ok(update) => {
+            //let value = serde_json::to_string(&update).unwrap();
+            //let response = HttpResponse::Ok().body(value);
+            //Ok(response)
+        //}
+        //Err(e) => {
+            //Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+        //}
+    //}
 }
 
 
@@ -199,25 +200,26 @@ async fn update_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    let addition_result = data
-        .add_documents(
-            path.into_inner().index_uid,
-            IndexDocumentsMethod::UpdateDocuments,
-            UpdateFormat::Json,
-            body,
-            params.primary_key.clone(),
-        ).await;
+    todo!()
+    //let addition_result = data
+        //.add_documents(
+            //path.into_inner().index_uid,
+            //IndexDocumentsMethod::UpdateDocuments,
+            //UpdateFormat::Json,
+            //body,
+            //params.primary_key.clone(),
+        //).await;
 
-    match addition_result {
-        Ok(update) => {
-            let value = serde_json::to_string(&update).unwrap();
-            let response = HttpResponse::Ok().body(value);
-            Ok(response)
-        }
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    //match addition_result {
+        //Ok(update) => {
+            //let value = serde_json::to_string(&update).unwrap();
+            //let response = HttpResponse::Ok().body(value);
+            //Ok(response)
+        //}
+        //Err(e) => {
+            //Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+        //}
+    //}
 }
 
 #[post(
@@ -229,20 +231,21 @@ async fn delete_documents(
     path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
-    let ids = body
-        .iter()
-        .map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
-        .collect();
+    todo!()
+    //let ids = body
+        //.iter()
+        //.map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
+        //.collect();
 
-    match data.delete_documents(path.index_uid.clone(), ids).await {
-        Ok(result) => {
-            let json = serde_json::to_string(&result).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    //match data.delete_documents(path.index_uid.clone(), ids).await {
+        //Ok(result) => {
+            //let json = serde_json::to_string(&result).unwrap();
+            //Ok(HttpResponse::Ok().body(json))
+        //}
+        //Err(e) => {
+            //Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+        //}
+    //}
 }
 
 #[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
@@ -250,13 +253,14 @@ async fn clear_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.clear_documents(path.index_uid.clone()).await {
-        Ok(update) => {
-            let json = serde_json::to_string(&update).unwrap();
-            Ok(HttpResponse::Ok().body(json))
-        }
-        Err(e) => {
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
-        }
-    }
+    todo!()
+    //match data.clear_documents(path.index_uid.clone()).await {
+        //Ok(update) => {
+            //let json = serde_json::to_string(&update).unwrap();
+            //Ok(HttpResponse::Ok().body(json))
+        //}
+        //Err(e) => {
+            //Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+        //}
+    //}
 }

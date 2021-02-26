@@ -3,7 +3,7 @@ authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement
 description = "MeiliSearch HTTP server"
 edition = "2018"
 license = "MIT"
-name = "meilisearch-http"
+name = "meilisearch"
 version = "0.17.0"
 [[bin]]
 name = "meilisearch"
@@ -13,11 +13,11 @@ path = "src/main.rs"
 vergen = "3.1.0"
 
 [dependencies]
-actix-cors = "0.5.3"
-actix-http = "2"
-actix-rt = "1"
+actix-cors = { path = "../actix-extras/actix-cors" }
+#actix-http = "2"
 actix-service = "1.0.6"
-actix-web = { version = "3.3.2", features = ["rustls"] }
+actix-web = { version = "4.0.0-beta.3", features = ["rustls"] }
+#actix-web = { version = "3", features = ["rustls"] }
 anyhow = "1.0.36"
 async-compression = { version = "0.3.6", features = ["gzip", "tokio-02"] }
 byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
@@ -44,7 +44,7 @@ once_cell = "1.5.2"
 rand = "0.7.3"
 rayon = "1.5.0"
 regex = "1.4.2"
-rustls = "0.18"
+rustls = "0.19"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0.59", features = ["preserve_order"] }
 sha2 = "0.9.1"
@@ -53,11 +53,13 @@ slice-group-by = "0.2.6"
 structopt = "0.3.20"
 tar = "0.4.29"
 tempfile = "3.1.0"
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
 dashmap = "4.0.2"
 uuid = "0.8.2"
 itertools = "0.10.0"
 either = "1.6.1"
+async-trait = "0.1.42"
+thiserror = "1.0.24"
 
 [dependencies.sentry]
 default-features = false

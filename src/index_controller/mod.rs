@@ -1,7 +1,6 @@
-mod local_index_controller;
+pub mod actor_index_controller;
+//mod local_index_controller;
 mod updates;
-
-pub use local_index_controller::LocalIndexController;
 
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
@@ -13,6 +12,7 @@ use milli::Index;
 use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
 use serde::{Serialize, Deserialize, de::Deserializer};
 use uuid::Uuid;
+use actix_web::web::Payload;
 
 pub use updates::{Processed, Processing, Failed};
 
@@ -21,7 +21,6 @@ pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMetadata {
-    pub uid: String,
     uuid: Uuid,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -114,6 +113,7 @@ pub struct IndexSettings {
 /// be provided. This allows the implementer to define the behaviour of write accesses to the
 /// indices, and abstract the scheduling of the updates. The implementer must be able to provide an
 /// instance of `IndexStore`
+#[async_trait::async_trait]
 pub trait IndexController {
 
     /*
@@ -126,59 +126,47 @@ pub trait IndexController {
 
     /// Perform document addition on the database. If the provided index does not exist, it will be
     /// created when the addition is applied to the index.
-    fn add_documents<S: AsRef<str>>(
+    async fn add_documents(
         &self,
-        index: S,
+        index: String,
         method: IndexDocumentsMethod,
         format: UpdateFormat,
-        data: &[u8],
+        data: Payload,
         primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus>;
 
     /// Clear all documents in the given index.
-    fn clear_documents(&self, index: impl AsRef<str>) -> anyhow::Result<UpdateStatus>;
+    fn clear_documents(&self, index: String) -> anyhow::Result<UpdateStatus>;
 
     /// Delete all documents in `document_ids`.
-    fn delete_documents(&self, index: impl AsRef<str>, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus>;
+    fn delete_documents(&self, index: String, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus>;
 
     /// Updates an index settings. If the index does not exist, it will be created when the update
     /// is applied to the index.
-    fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings) -> anyhow::Result<UpdateStatus>;
+    fn update_settings(&self, index_uid: String, settings: Settings) -> anyhow::Result<UpdateStatus>;
 
     /// Create an index with the given `index_uid`.
-    fn create_index(&self, index_settings: IndexSettings) -> Result<IndexMetadata>;
+    async fn create_index(&self, index_settings: IndexSettings) -> Result<IndexMetadata>;
 
     /// Delete index with the given `index_uid`, attempting to close it beforehand.
-    fn delete_index<S: AsRef<str>>(&self, index_uid: S) -> Result<()>;
+    fn delete_index(&self, index_uid: String) -> Result<()>;
 
     /// Swap two indexes, concretely, it simply swaps the index the names point to.
-    fn swap_indices<S1: AsRef<str>, S2: AsRef<str>>(&self, index1_uid: S1, index2_uid: S2) -> Result<()>;
-
-    /// Apply an update to the given index. This method can be called when an update is ready to be
-    /// processed
-    fn handle_update<S: AsRef<str>>(
-        &self,
-        _index: S,
-        _update_id: u64,
-        _meta: Processing<UpdateMeta>,
-        _content: &[u8]
-    ) -> Result<Processed<UpdateMeta, UpdateResult>, Failed<UpdateMeta, String>> {
-        todo!()
-    }
+    fn swap_indices(&self, index1_uid: String, index2_uid: String) -> Result<()>;
 
     /// Returns, if it exists, the `Index` with the povided name.
-    fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<Arc<Index>>>;
+    fn index(&self, name: String) -> anyhow::Result<Option<Arc<Index>>>;
 
     /// Returns the udpate status an update
-    fn update_status(&self, index: impl AsRef<str>, id: u64) -> anyhow::Result<Option<UpdateStatus>>;
+    fn update_status(&self, index: String, id: u64) -> anyhow::Result<Option<UpdateStatus>>;
 
     /// Returns all the udpate status for an index
-    fn all_update_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>>;
+    fn all_update_status(&self, index: String) -> anyhow::Result<Vec<UpdateStatus>>;
 
     /// List all the indexes
     fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>>;
 
-    fn update_index(&self, name: impl AsRef<str>, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata>;
+    fn update_index(&self, name: String, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata>;
 }
 
 

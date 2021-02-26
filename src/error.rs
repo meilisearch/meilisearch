@@ -1,7 +1,8 @@
 use std::error;
 use std::fmt;
 
-use actix_http::ResponseBuilder;
+use actix_web::dev::HttpResponseBuilder;
+use actix_web::http::Error as HttpError;
 use actix_web as aweb;
 use actix_web::error::{JsonPayloadError, QueryPayloadError};
 use actix_web::http::StatusCode;
@@ -66,7 +67,7 @@ impl Serialize for ResponseError {
 
 impl aweb::error::ResponseError for ResponseError {
     fn error_response(&self) -> aweb::HttpResponse {
-        ResponseBuilder::new(self.status_code()).json(&self)
+        HttpResponseBuilder::new(self.status_code()).json(&self)
     }
 
     fn status_code(&self) -> StatusCode {
@@ -260,8 +261,8 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<actix_http::Error> for Error {
-    fn from(err: actix_http::Error) -> Error {
+impl From<HttpError> for Error {
+    fn from(err: HttpError) -> Error {
         Error::Internal(err.to_string())
     }
 }

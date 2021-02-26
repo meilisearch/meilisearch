@@ -1,5 +1,5 @@
 /// From https://docs.rs/actix-web/3.0.0-alpha.2/src/actix_web/middleware/normalize.rs.html#34
-use actix_http::Error;
+use actix_web::http::Error;
 use actix_service::{Service, Transform};
 use actix_web::{
     dev::ServiceRequest,
