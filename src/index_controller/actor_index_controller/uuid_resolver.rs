@@ -4,7 +4,7 @@ use uuid::Uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::collections::hash_map::Entry;
-use log::info;
+use log::{info, warn};
 
 pub type Result<T> = std::result::Result<T, UuidError>;
 
@@ -22,8 +22,6 @@ enum UuidResolveMsg {
         name: String,
         ret: oneshot::Sender<Result<Uuid>>,
     },
-    Shutdown,
-
 }
 
 struct UuidResolverActor<S> {
@@ -46,11 +44,13 @@ impl<S: UuidStore> UuidResolverActor<S> {
             match self.inbox.recv().await {
                 Some(Create { name, ret }) => self.handle_create(name, ret).await,
                 Some(GetOrCreate { name, ret }) => self.handle_get_or_create(name, ret).await,
-                Some(_) => {}
+                Some(Resolve { name, ret }) => self.handle_resolve(name, ret).await,
                 // all senders have been dropped, need to quit.
                 None => break,
             }
         }
+
+        warn!("exiting uuid resolver loop");
     }
 
     async fn handle_create(&self, name: String, ret: oneshot::Sender<Result<Uuid>>) {
@@ -60,6 +60,11 @@ impl<S: UuidStore> UuidResolverActor<S> {
 
     async fn handle_get_or_create(&self, name: String, ret: oneshot::Sender<Result<Uuid>>) {
         let result = self.store.create_uuid(name, false).await;
+        let _ = ret.send(result);
+    }
+
+    async fn handle_resolve(&self, name: String, ret: oneshot::Sender<Result<Option<Uuid>>>) {
+        let result = self.store.get_uuid(name).await;
         let _ = ret.send(result);
     }
 }

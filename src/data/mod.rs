@@ -1,4 +1,4 @@
-mod search;
+pub mod search;
 mod updates;
 
 pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};

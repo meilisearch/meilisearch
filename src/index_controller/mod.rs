@@ -13,6 +13,8 @@ use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
 use serde::{Serialize, Deserialize, de::Deserializer};
 use uuid::Uuid;
 use tokio::fs::File;
+use crate::data::SearchResult;
+use crate::data::SearchQuery;
 
 pub use updates::{Processed, Processing, Failed};
 
@@ -134,6 +136,8 @@ pub trait IndexController {
         data: File,
         primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus>;
+
+    async fn search(&self, name: String, query: SearchQuery) -> Result<SearchResult>;
 
     /// Clear all documents in the given index.
     fn clear_documents(&self, index: String) -> anyhow::Result<UpdateStatus>;

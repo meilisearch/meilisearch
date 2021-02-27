@@ -10,6 +10,7 @@ use uuid::Uuid;
 use super::IndexMetadata;
 use tokio::fs::File;
 use super::UpdateMeta;
+use crate::data::{SearchResult, SearchQuery};
 
 pub struct ActorIndexController {
     uuid_resolver: uuid_resolver::UuidResolverHandle,
@@ -96,5 +97,11 @@ impl IndexController for ActorIndexController {
 
     fn update_index(&self, name: String, index_settings: super::IndexSettings) -> anyhow::Result<super::IndexMetadata> {
         todo!()
+    }
+
+    async fn search(&self, name: String, query: SearchQuery) -> anyhow::Result<SearchResult> {
+        let uuid = self.uuid_resolver.resolve(name).await.unwrap().unwrap();
+        let result = self.index_handle.search(uuid, query).await?;
+        Ok(result)
     }
 }

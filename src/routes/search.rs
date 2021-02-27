@@ -83,7 +83,7 @@ async fn search_with_url_query(
             return Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     };
-    let search_result = data.search(&path.index_uid, query);
+    let search_result = data.search(&path.index_uid, query).await;
     match search_result {
         Ok(docs) => {
             let docs = serde_json::to_string(&docs).unwrap();
@@ -101,7 +101,7 @@ async fn search_with_post(
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_result = data.search(&path.index_uid, params.into_inner());
+    let search_result = data.search(&path.index_uid, params.into_inner()).await;
     match search_result {
         Ok(docs) => {
             let docs = serde_json::to_string(&docs).unwrap();

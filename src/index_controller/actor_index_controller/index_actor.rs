@@ -1,6 +1,7 @@
 use std::fs::{File, create_dir_all};
 use std::path::{PathBuf, Path};
 use std::sync::Arc;
+use std::time::Instant;
 
 use chrono::Utc;
 use heed::EnvOpenOptions;
@@ -11,8 +12,12 @@ use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
 use log::info;
+use crate::data::SearchQuery;
+use futures::stream::{StreamExt, Stream};
 
 use super::update_handler::UpdateHandler;
+use async_stream::stream;
+use crate::data::SearchResult;
 use crate::index_controller::{IndexMetadata, UpdateMeta, updates::{Processed, Failed, Processing}, UpdateResult as UResult};
 use crate::option::IndexerOpts;
 
@@ -22,7 +27,8 @@ type UpdateResult = std::result::Result<Processed<UpdateMeta, UResult>, Failed<U
 
 enum IndexMsg {
     CreateIndex { uuid: Uuid, primary_key: Option<String>, ret: oneshot::Sender<Result<IndexMetadata>> },
-    Update { meta: Processing<UpdateMeta>, data: std::fs::File, ret:  oneshot::Sender<UpdateResult>},
+    Update { meta: Processing<UpdateMeta>, data: std::fs::File, ret: oneshot::Sender<UpdateResult>},
+    Search { uuid: Uuid, query: SearchQuery, ret: oneshot::Sender<anyhow::Result<SearchResult>> },
 }
 
 struct IndexActor<S> {
@@ -43,6 +49,7 @@ pub enum IndexError {
 trait IndexStore {
     async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMetadata>;
     async fn get_or_create(&self, uuid: Uuid) -> Result<Arc<Index>>;
+    async fn get(&self, uuid: Uuid) -> Result<Option<Arc<Index>>>;
 }
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
@@ -54,13 +61,109 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
     }
 
     async fn run(mut self) {
-        loop {
-            match self.inbox.recv().await {
-                Some(IndexMsg::CreateIndex { uuid, primary_key, ret }) => self.handle_create_index(uuid, primary_key, ret).await,
-                Some(IndexMsg::Update { ret, meta, data }) => self.handle_update(meta, data, ret).await,
-                None => break,
+        let stream = stream! {
+            loop {
+                match self.inbox.recv().await {
+                    Some(msg) => yield msg,
+                    None => break,
+                }
             }
-        }
+        };
+
+        stream.for_each_concurent(Some(10), |msg| {
+            match msg {
+                IndexMsg::CreateIndex { uuid, primary_key, ret } => self.handle_create_index(uuid, primary_key, ret),
+                IndexMsg::Update { ret, meta, data } => self.handle_update(meta, data, ret),
+                IndexMsg::Search { ret, query, uuid } => self.handle_search(uuid, query, ret),
+            }
+        })
+    }
+
+    async fn handle_search(&self, uuid: Uuid, query: SearchQuery, ret: oneshot::Sender<anyhow::Result<SearchResult>>) {
+        let index = self.store.get(uuid).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || {
+
+            let before_search = Instant::now();
+            let rtxn = index.read_txn().unwrap();
+
+            let mut search = index.search(&rtxn);
+
+            if let Some(ref query) = query.q {
+                search.query(query);
+            }
+
+            search.limit(query.limit);
+            search.offset(query.offset.unwrap_or_default());
+
+            //if let Some(ref facets) = query.facet_filters {
+            //if let Some(facets) = parse_facets(facets, index, &rtxn)? {
+            //search.facet_condition(facets);
+            //}
+            //}
+            let milli::SearchResult {
+                documents_ids,
+                found_words,
+                candidates,
+                ..
+            } = search.execute().unwrap();
+            let mut documents = Vec::new();
+            let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
+
+            let displayed_fields_ids = index.displayed_fields_ids(&rtxn).unwrap();
+
+            let attributes_to_retrieve_ids = match query.attributes_to_retrieve {
+                Some(ref attrs) if attrs.iter().any(|f| f == "*") => None,
+                Some(ref attrs) => attrs
+                    .iter()
+                    .filter_map(|f| fields_ids_map.id(f))
+                    .collect::<Vec<_>>()
+                    .into(),
+                None => None,
+            };
+
+            let displayed_fields_ids = match (displayed_fields_ids, attributes_to_retrieve_ids) {
+                (_, Some(ids)) => ids,
+                (Some(ids), None) => ids,
+                (None, None) => fields_ids_map.iter().map(|(id, _)| id).collect(),
+            };
+
+            let stop_words = fst::Set::default();
+            let highlighter = crate::data::search::Highlighter::new(&stop_words);
+
+            for (_id, obkv) in index.documents(&rtxn, documents_ids).unwrap() {
+                let mut object = milli::obkv_to_json(&displayed_fields_ids, &fields_ids_map, obkv).unwrap();
+                if let Some(ref attributes_to_highlight) = query.attributes_to_highlight {
+                    highlighter.highlight_record(&mut object, &found_words, attributes_to_highlight);
+                }
+                documents.push(object);
+            }
+
+            let nb_hits = candidates.len();
+
+            let facet_distributions = match query.facet_distributions {
+                Some(ref fields) => {
+                    let mut facet_distribution = index.facets_distribution(&rtxn);
+                    if fields.iter().all(|f| f != "*") {
+                        facet_distribution.facets(fields);
+                    }
+                    Some(facet_distribution.candidates(candidates).execute().unwrap())
+                }
+                None => None,
+            };
+
+            let result = Ok(SearchResult {
+                hits: documents,
+                nb_hits,
+                query: query.q.clone().unwrap_or_default(),
+                limit: query.limit,
+                offset: query.offset.unwrap_or_default(),
+                processing_time_ms: before_search.elapsed().as_millis(),
+                facet_distributions,
+            });
+
+            ret.send(result)
+        });
+
     }
 
     async fn handle_create_index(&self, uuid: Uuid, primary_key: Option<String>, ret: oneshot::Sender<Result<IndexMetadata>>) {
@@ -106,6 +209,13 @@ impl IndexActorHandle {
         let msg = IndexMsg::Update { ret, meta, data };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("IndexActor has been killed")
+    }
+
+    pub async fn search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = IndexMsg::Search { uuid, query, ret };
+        let _ = self.sender.send(msg).await;
+        Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 }
 
@@ -161,6 +271,10 @@ impl IndexStore for MapIndexStore {
             }
             Entry::Occupied(entry) => Ok(entry.get().clone()),
         }
+    }
+
+    async fn get(&self, uuid: Uuid) -> Result<Option<Arc<Index>>> {
+        Ok(self.index_store.read().await.get(&uuid).cloned())
     }
 }
 

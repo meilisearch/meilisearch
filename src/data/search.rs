@@ -123,27 +123,27 @@ impl SearchQuery {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
-    hits: Vec<Map<String, Value>>,
-    nb_hits: u64,
-    query: String,
-    limit: usize,
-    offset: usize,
-    processing_time_ms: u128,
+    pub hits: Vec<Map<String, Value>>,
+    pub nb_hits: u64,
+    pub query: String,
+    pub limit: usize,
+    pub offset: usize,
+    pub processing_time_ms: u128,
     #[serde(skip_serializing_if = "Option::is_none")]
-    facet_distributions: Option<BTreeMap<String, BTreeMap<FacetValue, u64>>>,
+    pub facet_distributions: Option<BTreeMap<String, BTreeMap<FacetValue, u64>>>,
 }
 
-struct Highlighter<'a, A> {
+pub struct Highlighter<'a, A> {
     analyzer: Analyzer<'a, A>,
 }
 
 impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
-    fn new(stop_words: &'a fst::Set<A>) -> Self {
+    pub fn new(stop_words: &'a fst::Set<A>) -> Self {
         let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
         Self { analyzer }
     }
 
-    fn highlight_value(&self, value: Value, words_to_highlight: &HashSet<String>) -> Value {
+    pub fn highlight_value(&self, value: Value, words_to_highlight: &HashSet<String>) -> Value {
         match value {
             Value::Null => Value::Null,
             Value::Bool(boolean) => Value::Bool(boolean),
@@ -182,7 +182,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
         }
     }
 
-    fn highlight_record(
+    pub fn highlight_record(
         &self,
         object: &mut Map<String, Value>,
         words_to_highlight: &HashSet<String>,
@@ -199,16 +199,12 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
 }
 
 impl Data {
-    pub fn search<S: AsRef<str>>(
+    pub async fn search<S: AsRef<str>>(
         &self,
-        _index: S,
-        _search_query: SearchQuery,
+        index: S,
+        search_query: SearchQuery,
     ) -> anyhow::Result<SearchResult> {
-        todo!()
-        //match self.index_controller.index(&index)? {
-            //Some(index) => Ok(search_query.perform(index)?),
-            //None => bail!("index {:?} doesn't exists", index.as_ref()),
-        //}
+        self.index_controller.search(index.as_ref().to_string(), search_query).await
     }
 
     pub async fn retrieve_documents<S>(
