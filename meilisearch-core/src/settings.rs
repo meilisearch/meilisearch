@@ -9,10 +9,6 @@ use self::RankingRule::*;
 
 pub const DEFAULT_RANKING_RULES: [RankingRule; 6] = [Typo, Words, Proximity, Attribute, WordsPosition, Exactness];
 
-static RANKING_RULE_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
-    regex::Regex::new(r"(asc|desc)\(([a-zA-Z0-9-_]*)\)").unwrap()
-});
-
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Settings {
@@ -128,11 +124,44 @@ impl FromStr for RankingRule {
             "wordsPosition" => RankingRule::WordsPosition,
             "exactness" => RankingRule::Exactness,
             _ => {
-                let captures = RANKING_RULE_REGEX.captures(s).ok_or(RankingRuleConversionError)?;
-                match (captures.get(1).map(|m| m.as_str()), captures.get(2)) {
-                    (Some("asc"), Some(field)) => RankingRule::Asc(field.as_str().to_string()),
-                    (Some("desc"), Some(field)) => RankingRule::Desc(field.as_str().to_string()),
-                    _ => return Err(RankingRuleConversionError)
+                // Match the ranking direction
+                let asc: bool = match s.starts_with("asc(") {
+                    // It's ascendent
+                    true => true,
+
+                    // It's descendent
+                    false if s.starts_with("desc(") => false,
+
+                    // It's neither ascendent nor descendent
+                    false => return Err(RankingRuleConversionError),
+                };
+                if !s.ends_with(')') {
+                    return Err(RankingRuleConversionError)
+                }
+
+                // Retrieve the field name
+                let field: &str = match asc {
+                    true => &s[4..s.len() - 1],
+                    false => &s[5..s.len() - 1],
+                };
+                if field.is_empty() {
+                    return Err(RankingRuleConversionError)
+                }
+
+                // Check that all characters are valid
+                for character in field.as_bytes() {
+                    if  !((b'a'..=b'z').contains(character)) &&
+                        !((b'0'..=b'9').contains(character)) &&
+                        !((b'A'..=b'Z').contains(character)) &&
+                        *character != b'_' &&
+                        *character != b'-' {
+                        return Err(RankingRuleConversionError)
+                    }
+                }
+
+                match asc {
+                    true => RankingRule::Asc(field.to_string()),
+                    false => RankingRule::Desc(field.to_string())
                 }
             }
         };
