@@ -210,3 +210,30 @@ impl Default for SettingsUpdate {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ranking_rule_parsing() {
+        assert_matches!("typo".parse().unwrap(), RankingRule::Typo);
+        assert_matches!("words".parse().unwrap(), RankingRule::Words);
+        assert_matches!("proximity".parse().unwrap(), RankingRule::Proximity);
+        assert_matches!("attribute".parse().unwrap(), RankingRule::Attribute);
+        assert_matches!("wordsPosition".parse().unwrap(), RankingRule::WordsPosition);
+        assert_matches!("exactness".parse().unwrap(), RankingRule::Exactness);
+
+        let rules = ["asc(mAchIn)", "desc(TruC)", "asc(bi-du_le)", "desc(agent_007)", "asc(AZ-az_09)"];
+        for rule in &rules {
+            let parsed_rule = rule.parse::<RankingRule>().unwrap();
+            assert_eq!(&parsed_rule.to_string(), rule)
+        }
+
+        let invalid_rules = ["asc()", "desc(école)", "asc((sqrt(5)+1)/2)", "rand(machin)", "asc(bidule"];
+        for invalid_rule in &invalid_rules {
+            let parsed_invalid_rule = invalid_rule.parse::<RankingRule>().unwrap_err();
+            assert_matches!(parsed_invalid_rule, RankingRuleConversionError)
+        }
+    }
+}
