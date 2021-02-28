@@ -1,5 +1,5 @@
 [package]
-authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>"]
+authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>", "Marin Postma <marin@meilisearch.com>"]
 description = "MeiliSearch HTTP server"
 edition = "2018"
 license = "MIT"
