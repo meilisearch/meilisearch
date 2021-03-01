@@ -64,8 +64,11 @@ impl<'t> Criterion for Typo<'t> {
 
             match (&mut self.query_tree, &mut self.candidates) {
                 (_, Allowed(candidates)) if candidates.is_empty() => {
-                    self.query_tree = None;
-                    self.candidates = Candidates::default();
+                    return Ok(Some(CriterionResult {
+                        query_tree: self.query_tree.take().map(|(_, qt)| qt),
+                        candidates: take(&mut self.candidates).into_inner(),
+                        bucket_candidates: take(&mut self.bucket_candidates),
+                    }));
                 },
                 (Some((max_typos, query_tree)), Allowed(candidates)) => {
                     if self.number_typos as usize > *max_typos {

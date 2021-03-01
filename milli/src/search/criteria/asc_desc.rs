@@ -128,8 +128,11 @@ impl<'t> Criterion for AscDesc<'t> {
         loop {
             match (&mut self.query_tree, &mut self.candidates) {
                 (_, Allowed(candidates)) if candidates.is_empty() => {
-                    self.query_tree = None;
-                    self.candidates = Candidates::default();
+                    return Ok(Some(CriterionResult {
+                        query_tree: self.query_tree.take(),
+                        candidates: take(&mut self.candidates).into_inner(),
+                        bucket_candidates: take(&mut self.bucket_candidates),
+                    }));
                 },
                 (Some(qt), Allowed(candidates)) => {
                     let bucket_candidates = match self.parent {

@@ -54,20 +54,26 @@ impl<'t> Criterion for Fetcher<'t> {
                 self.should_get_documents_ids, self.candidates,
             );
 
+            let should_get_documents_ids = take(&mut self.should_get_documents_ids);
             match &mut self.candidates {
-                Allowed(candidates) => if candidates.is_empty() {
-                    self.candidates = Candidates::default();
-                } else {
-                    self.should_get_documents_ids = false;
+                Allowed(candidates) => {
                     let candidates = take(&mut self.candidates).into_inner();
+                    let candidates = match &self.query_tree {
+                        Some(qt) if should_get_documents_ids => {
+                            let mut docids = resolve_query_tree(self.ctx, &qt, &mut HashMap::new())?;
+                            docids.intersect_with(&candidates);
+                            docids
+                        },
+                        _ => candidates,
+                    };
+
                     return Ok(Some(CriterionResult {
-                        query_tree: self.query_tree.clone(),
+                        query_tree: self.query_tree.take(),
                         candidates: candidates.clone(),
                         bucket_candidates: candidates,
                     }));
                 },
                 Forbidden(_) => {
-                    let should_get_documents_ids = take(&mut self.should_get_documents_ids);
                     match self.parent.as_mut() {
                         Some(parent) => {
                             match parent.next()? {

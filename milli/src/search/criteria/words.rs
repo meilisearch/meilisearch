@@ -56,9 +56,13 @@ impl<'t> Criterion for Words<'t> {
             debug!("Words at iteration {} ({:?})", self.query_trees.len(), self.candidates);
 
             match (self.query_trees.pop(), &mut self.candidates) {
-                (_, Allowed(candidates)) if candidates.is_empty() => {
+                (query_tree, Allowed(candidates)) if candidates.is_empty() => {
                     self.query_trees = Vec::new();
-                    self.candidates = Candidates::default();
+                    return Ok(Some(CriterionResult {
+                        query_tree,
+                        candidates: take(&mut self.candidates).into_inner(),
+                        bucket_candidates: take(&mut self.bucket_candidates),
+                    }));
                 },
                 (Some(qt), Allowed(candidates)) => {
                     let mut found_candidates = resolve_query_tree(self.ctx, &qt, &mut self.candidates_cache)?;
