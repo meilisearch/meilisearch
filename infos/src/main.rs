@@ -21,7 +21,6 @@ const DOCID_WORD_POSITIONS_DB_NAME: &str = "docid-word-positions";
 const WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-pair-proximity-docids";
 const WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME: &str = "word-prefix-pair-proximity-docids";
 const DOCUMENTS_DB_NAME: &str = "documents";
-const USERS_IDS_DOCUMENTS_IDS: &[u8] = b"users-ids-documents-ids";
 
 const ALL_DATABASE_NAMES: &[&str] = &[
     MAIN_DB_NAME,
@@ -172,25 +171,15 @@ enum Command {
     /// Outputs the documents as JSON lines to the standard output.
     ///
     /// All of the fields are extracted, not just the displayed ones.
-    ExportDocuments,
-
-    /// A command that patches the old external ids
-    /// into the new external ids format.
-    PatchToNewExternalIds,
+    ExportDocuments {
+        /// If defined, only retrieve the documents that corresponds to these internal ids.
+        internal_documents_ids: Vec<u32>,
+    },
 }
 
-fn main() -> Result<(), ()> {
+fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
-    match run(opt) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            eprintln!("{}", e);
-            Err(())
-        },
-    }
-}
 
-fn run(opt: Opt) -> anyhow::Result<()> {
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)
@@ -199,6 +188,11 @@ fn run(opt: Opt) -> anyhow::Result<()> {
 
     let mut options = EnvOpenOptions::new();
     options.map_size(opt.database_size.get_bytes() as usize);
+
+    // Return an error if the database does not exist.
+    if !opt.database.exists() {
+        anyhow::bail!("The database ({}) does not exist.", opt.database.display());
+    }
 
     // Open the LMDB database.
     let index = Index::new(options, opt.database)?;
@@ -227,31 +221,10 @@ fn run(opt: Opt) -> anyhow::Result<()> {
         },
         ExportWordsFst => export_words_fst(&index, &rtxn),
         ExportWordsPrefixFst => export_words_prefix_fst(&index, &rtxn),
-        ExportDocuments => export_documents(&index, &rtxn),
-        PatchToNewExternalIds => {
-            drop(rtxn);
-            let mut wtxn = index.write_txn()?;
-            let result = patch_to_new_external_ids(&index, &mut wtxn);
-            wtxn.commit()?;
-            result
+        ExportDocuments { internal_documents_ids } => {
+            export_documents(&index, &rtxn, internal_documents_ids)
         },
     }
-}
-
-fn patch_to_new_external_ids(index: &Index, wtxn: &mut heed::RwTxn) -> anyhow::Result<()> {
-    use heed::types::ByteSlice;
-
-    if let Some(documents_ids) = index.main.get::<_, ByteSlice, ByteSlice>(wtxn, USERS_IDS_DOCUMENTS_IDS)? {
-        let documents_ids = documents_ids.to_owned();
-        index.main.put::<_, ByteSlice, ByteSlice>(
-            wtxn,
-            milli::index::HARD_EXTERNAL_DOCUMENTS_IDS_KEY.as_bytes(),
-            &documents_ids,
-        )?;
-        index.main.delete::<_, ByteSlice>(wtxn, USERS_IDS_DOCUMENTS_IDS)?;
-    }
-
-    Ok(())
 }
 
 fn most_common_words(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyhow::Result<()> {
@@ -615,9 +588,9 @@ fn export_words_prefix_fst(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<
     Ok(())
 }
 
-fn export_documents(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
+fn export_documents(index: &Index, rtxn: &heed::RoTxn, internal_ids: Vec<u32>) -> anyhow::Result<()> {
     use std::io::{BufWriter, Write as _};
-    use milli::obkv_to_json;
+    use milli::{BEU32, obkv_to_json};
 
     let stdout = io::stdout();
     let mut out = BufWriter::new(stdout);
@@ -625,8 +598,18 @@ fn export_documents(index: &Index, rtxn: &heed::RoTxn) -> anyhow::Result<()> {
     let fields_ids_map = index.fields_ids_map(rtxn)?;
     let displayed_fields: Vec<_> = fields_ids_map.iter().map(|(id, _name)| id).collect();
 
-    for result in index.documents.iter(rtxn)? {
-        let (_id, obkv) = result?;
+    let iter: Box<Iterator<Item = _>> = if internal_ids.is_empty() {
+        Box::new(index.documents.iter(rtxn)?.map(|result| {
+            result.map(|(_id, obkv)| obkv)
+        }))
+    } else {
+        Box::new(internal_ids.into_iter().flat_map(|id| {
+            index.documents.get(rtxn, &BEU32::new(id)).transpose()
+        }))
+    };
+
+    for result in iter {
+        let obkv = result?;
         let document = obkv_to_json(&displayed_fields, &fields_ids_map, obkv)?;
         serde_json::to_writer(&mut out, &document)?;
         writeln!(&mut out)?;

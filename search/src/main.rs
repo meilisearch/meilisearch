@@ -39,25 +39,20 @@ pub struct Opt {
     print_facet_distribution: bool,
 }
 
-fn main() -> Result<(), ()> {
+fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
-    match run(opt) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            eprintln!("{}", e);
-            Err(())
-        },
-    }
-}
 
-fn run(opt: Opt) -> anyhow::Result<()> {
     stderrlog::new()
         .verbosity(opt.verbose)
         .show_level(false)
         .timestamp(stderrlog::Timestamp::Off)
         .init()?;
 
-    std::fs::create_dir_all(&opt.database)?;
+    // Return an error if the database does not exist.
+    if !opt.database.exists() {
+        anyhow::bail!("The database ({}) does not exist.", opt.database.display());
+    }
+
     let mut options = EnvOpenOptions::new();
     options.map_size(opt.database_size.get_bytes() as usize);
 
