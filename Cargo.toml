@@ -60,6 +60,7 @@ itertools = "0.10.0"
 either = "1.6.1"
 async-trait = "0.1.42"
 thiserror = "1.0.24"
+async-stream = "0.3.0"
 
 [dependencies.sentry]
 default-features = false

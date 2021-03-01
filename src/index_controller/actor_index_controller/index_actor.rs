@@ -13,7 +13,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
 use log::info;
 use crate::data::SearchQuery;
-use futures::stream::{StreamExt, Stream};
+use futures::stream::StreamExt;
 
 use super::update_handler::UpdateHandler;
 use async_stream::stream;
@@ -32,7 +32,7 @@ enum IndexMsg {
 }
 
 struct IndexActor<S> {
-    inbox: mpsc::Receiver<IndexMsg>,
+    inbox: Option<mpsc::Receiver<IndexMsg>>,
     update_handler: Arc<UpdateHandler>,
     store: S,
 }
@@ -57,26 +57,31 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         let options = IndexerOpts::default();
         let update_handler = UpdateHandler::new(&options).unwrap();
         let update_handler = Arc::new(update_handler);
+        let inbox = Some(inbox);
         Self { inbox, store, update_handler }
     }
 
     async fn run(mut self) {
+        let mut inbox = self.inbox.take().expect("Index Actor must have a inbox at this point.");
+
         let stream = stream! {
             loop {
-                match self.inbox.recv().await {
+                match inbox.recv().await {
                     Some(msg) => yield msg,
                     None => break,
                 }
             }
         };
 
-        stream.for_each_concurent(Some(10), |msg| {
+        let fut = stream.for_each_concurrent(Some(10), |msg| async {
             match msg {
-                IndexMsg::CreateIndex { uuid, primary_key, ret } => self.handle_create_index(uuid, primary_key, ret),
-                IndexMsg::Update { ret, meta, data } => self.handle_update(meta, data, ret),
-                IndexMsg::Search { ret, query, uuid } => self.handle_search(uuid, query, ret),
+                IndexMsg::CreateIndex { uuid, primary_key, ret } => self.handle_create_index(uuid, primary_key, ret).await,
+                IndexMsg::Update { ret, meta, data } => self.handle_update(meta, data, ret).await,
+                IndexMsg::Search { ret, query, uuid } => self.handle_search(uuid, query, ret).await,
             }
-        })
+        });
+
+        fut.await;
     }
 
     async fn handle_search(&self, uuid: Uuid, query: SearchQuery, ret: oneshot::Sender<anyhow::Result<SearchResult>>) {

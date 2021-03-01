@@ -41,7 +41,6 @@ impl UpdateActor {
     }
 
     async fn run(mut self) {
-
         info!("started update actor.");
 
         loop {

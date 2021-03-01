@@ -1,6 +1,6 @@
 use std::path::Path;
 use std::sync::{Arc, RwLock};
-use std::io::{Cursor, SeekFrom, Seek};
+use std::io::{Cursor, SeekFrom, Seek, Write};
 
 use crossbeam_channel::Sender;
 use heed::types::{OwnedType, DecodeIgnore, SerdeJson, ByteSlice};
@@ -192,7 +192,9 @@ where
                     .replace(processing.clone());
                 let mut cursor = Cursor::new(first_content);
                 let mut file = tempfile::tempfile()?;
-                std::io::copy(&mut cursor, &mut file)?;
+                let n = std::io::copy(&mut cursor, &mut file)?;
+                println!("copied count: {}", n);
+                file.flush()?;
                 file.seek(SeekFrom::Start(0))?;
                 // Process the pending update using the provided user function.
                 let result = handler.handle_update(processing, file);

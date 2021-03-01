@@ -23,10 +23,11 @@ impl Data {
     {
         let file = tempfile::tempfile_in(".")?;
         let mut file = File::from_std(file);
-        while let Some(Ok(bytes)) = stream.next().await {
-            file.write(bytes.as_ref()).await;
+        while let Some(item) = stream.next().await {
+            file.write_all(&item?).await?;
         }
         file.seek(std::io::SeekFrom::Start(0)).await?;
+        file.flush().await?;
         let update_status = self.index_controller.add_documents(index.as_ref().to_string(), method, format, file, primary_key).await?;
         Ok(update_status)
     }
