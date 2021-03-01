@@ -516,7 +516,7 @@ fn compute_primary_key_pair(
 ) -> anyhow::Result<(FieldId, String)> {
     match primary_key {
         Some(primary_key) => {
-            let id = fields_ids_map.id(primary_key).expect("primary key must be present in the fields id map");
+            let id = fields_ids_map.insert(primary_key).ok_or(anyhow!("Maximum number of fields exceeded"))?;
             Ok((id, primary_key.to_string()))
         }
         None => {
@@ -571,17 +571,6 @@ mod test {
     mod compute_primary_key {
         use super::compute_primary_key_pair;
         use super::FieldsIdsMap;
-
-        #[test]
-        #[should_panic]
-        fn should_panic_primary_key_not_in_map() {
-            let mut fields_map = FieldsIdsMap::new();
-            let _result = compute_primary_key_pair(
-                Some("toto"),
-                &mut fields_map,
-                None,
-                false);
-        }
 
         #[test]
         fn should_return_primary_key_if_is_some() {
