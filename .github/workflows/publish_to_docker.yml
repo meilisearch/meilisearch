@@ -1,0 +1,19 @@
+name: Publish to dockerhub
+
+on:
+  push:
+    tags:
+      - v*-alpha.*
+
+jobs:
+  publish:
+    name: Publishing to dockerhub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish to Registry
+        uses: elgohr/Publish-Docker-Github-Action@master
+        with:
+          name: getmeili/meilisearch
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          tag_names: true
