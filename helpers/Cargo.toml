@@ -1,0 +1,14 @@
+[package]
+name = "helpers"
+version = "0.1.0"
+authors = ["Clément Renault <clement@meilisearch.com>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.38"
+byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
+heed = "0.10.6"
+jemallocator = "0.3.2"
+milli = { path = "../milli" }
+stderrlog = "0.5.1"
+structopt = { version = "0.3.21", default-features = false }
