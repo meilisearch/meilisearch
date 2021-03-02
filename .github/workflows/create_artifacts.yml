@@ -14,13 +14,13 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - os: ubuntu-latest
-            artifact_name: meilisearch-alpha
+            artifact_name: meilisearch
             asset_name: meilisearch-alpha-linux-amd64
           - os: macos-latest
-            artifact_name: meilisearch-alpha
+            artifact_name: meilisearch
             asset_name: meilisearch-alpha-macos-amd64
           - os: windows-latest
-            artifact_name: meilisearch-alpha.exe
+            artifact_name: meilisearch.exe
             asset_name: meilisearch-alpha-windows-amd64.exe
     steps:
       - uses: hecrj/setup-rust-action@master
