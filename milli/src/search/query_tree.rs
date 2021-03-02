@@ -50,14 +50,6 @@ impl fmt::Debug for Operation {
 }
 
 impl Operation {
-    fn tolerant(prefix: IsPrefix, s: &str) -> Operation {
-        Operation::Query(Query { prefix, kind: QueryKind::tolerant(2, s.to_string()) })
-    }
-
-    fn exact(prefix: IsPrefix, s: &str) -> Operation {
-        Operation::Query(Query { prefix, kind: QueryKind::exact(s.to_string()) })
-    }
-
     fn phrase(words: Vec<String>) -> Operation {
         Operation::consecutive(
             words.into_iter().map(|s| {
@@ -186,6 +178,7 @@ impl<'a> QueryTreeBuilder<'a> {
     /// generated forcing all query words to be present in each matching documents
     /// (the criterion `words` will be ignored).
     /// default value if not called: `true`
+    #[allow(unused)]
     pub fn optional_words(&mut self, optional_words: bool) -> &mut Self {
         self.optional_words = optional_words;
         self
@@ -195,6 +188,7 @@ impl<'a> QueryTreeBuilder<'a> {
     /// forcing all query words to match documents without any typo
     /// (the criterion `typo` will be ignored).
     /// default value if not called: `true`
+    #[allow(unused)]
     pub fn authorize_typos(&mut self, authorize_typos: bool) -> &mut Self {
         self.authorize_typos = authorize_typos;
         self
@@ -550,13 +544,15 @@ pub fn maximum_proximity(operation: &Operation) -> usize {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
     use fst::Set;
     use maplit::hashmap;
     use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
     use rand::{Rng, SeedableRng, rngs::StdRng};
 
     use super::*;
-    use std::collections::HashMap;
+
     #[derive(Debug)]
     struct TestContext {
         synonyms: HashMap<Vec<String>, Vec<Vec<String>>>,
