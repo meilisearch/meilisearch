@@ -10,6 +10,7 @@ jobs:
     name: Publishing to dockerhub
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v1
       - name: Publish to Registry
         uses: elgohr/Publish-Docker-Github-Action@master
         with:
