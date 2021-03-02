@@ -3,8 +3,6 @@
 mod criterion;
 mod external_documents_ids;
 mod fields_ids_map;
-mod mdfs;
-mod query_tokens;
 mod search;
 mod update_store;
 pub mod facet;
