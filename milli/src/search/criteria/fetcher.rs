@@ -56,7 +56,7 @@ impl<'t> Criterion for Fetcher<'t> {
 
             let should_get_documents_ids = take(&mut self.should_get_documents_ids);
             match &mut self.candidates {
-                Allowed(candidates) => {
+                Allowed(_) => {
                     let candidates = take(&mut self.candidates).into_inner();
                     let candidates = match &self.query_tree {
                         Some(qt) if should_get_documents_ids => {

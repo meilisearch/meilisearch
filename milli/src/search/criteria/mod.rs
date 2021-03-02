@@ -1,13 +1,19 @@
 use std::collections::HashMap;
 use std::borrow::Cow;
 
-use anyhow::bail;
+use anyhow::{bail, Context as _};
 use roaring::RoaringBitmap;
 
-use crate::Index;
+use crate::facet::FacetType;
 use crate::search::word_derivations;
+use crate::{Index, FieldId};
 
 use super::query_tree::{Operation, Query, QueryKind};
+use self::typo::Typo;
+use self::words::Words;
+use self::asc_desc::AscDesc;
+use self::proximity::Proximity;
+use self::fetcher::Fetcher;
 
 pub mod typo;
 pub mod words;
@@ -62,14 +68,14 @@ pub trait Context {
     fn words_fst<'t>(&self) -> &'t fst::Set<Cow<[u8]>>;
     fn in_prefix_cache(&self, word: &str) -> bool;
 }
-pub struct HeedContext<'t> {
+pub struct CriteriaBuilder<'t> {
     rtxn: &'t heed::RoTxn<'t>,
     index: &'t Index,
     words_fst: fst::Set<Cow<'t, [u8]>>,
     words_prefixes_fst: fst::Set<Cow<'t, [u8]>>,
 }
 
-impl<'a> Context for HeedContext<'a> {
+impl<'a> Context for CriteriaBuilder<'a> {
     fn documents_ids(&self) -> heed::Result<RoaringBitmap> {
         self.index.documents_ids(self.rtxn)
     }
@@ -101,17 +107,71 @@ impl<'a> Context for HeedContext<'a> {
     }
 }
 
-impl<'t> HeedContext<'t> {
+impl<'t> CriteriaBuilder<'t> {
     pub fn new(rtxn: &'t heed::RoTxn<'t>, index: &'t Index) -> anyhow::Result<Self> {
         let words_fst = index.words_fst(rtxn)?;
         let words_prefixes_fst = index.words_prefixes_fst(rtxn)?;
+        Ok(Self { rtxn, index, words_fst, words_prefixes_fst })
+    }
 
-        Ok(Self {
-            rtxn,
-            index,
-            words_fst,
-            words_prefixes_fst,
-        })
+    pub fn build(
+        &'t self,
+        mut query_tree: Option<Operation>,
+        mut facet_candidates: Option<RoaringBitmap>,
+    ) -> anyhow::Result<Fetcher<'t>>
+    {
+        use crate::criterion::Criterion as Name;
+
+        let fields_ids_map = self.index.fields_ids_map(&self.rtxn)?;
+        let faceted_fields = self.index.faceted_fields(&self.rtxn)?;
+        let field_id_facet_type = |field: &str| -> anyhow::Result<(FieldId, FacetType)> {
+            let id = fields_ids_map.id(field).with_context(|| {
+                format!("field {:?} isn't registered", field)
+            })?;
+            let facet_type = faceted_fields.get(field).with_context(|| {
+                format!("field {:?} isn't faceted", field)
+            })?;
+            Ok((id, *facet_type))
+        };
+
+        let mut criterion = None as Option<Box<dyn Criterion>>;
+        for name in self.index.criteria(&self.rtxn)? {
+            criterion = Some(match criterion.take() {
+                Some(father) => match name {
+                    Name::Typo => Box::new(Typo::new(self, father)?),
+                    Name::Words => Box::new(Words::new(self, father)?),
+                    Name::Proximity => Box::new(Proximity::new(self, father)?),
+                    Name::Asc(field) => {
+                        let (id, facet_type) = field_id_facet_type(&field)?;
+                        Box::new(AscDesc::asc(&self.index, &self.rtxn, father, id, facet_type)?)
+                    },
+                    Name::Desc(field) => {
+                        let (id, facet_type) = field_id_facet_type(&field)?;
+                        Box::new(AscDesc::desc(&self.index, &self.rtxn, father, id, facet_type)?)
+                    },
+                    _otherwise => father,
+                },
+                None => match name {
+                    Name::Typo => Box::new(Typo::initial(self, query_tree.take(), facet_candidates.take())?),
+                    Name::Words => Box::new(Words::initial(self, query_tree.take(), facet_candidates.take())?),
+                    Name::Proximity => Box::new(Proximity::initial(self, query_tree.take(), facet_candidates.take())?),
+                    Name::Asc(field) => {
+                        let (id, facet_type) = field_id_facet_type(&field)?;
+                        Box::new(AscDesc::initial_asc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), id, facet_type)?)
+                    },
+                    Name::Desc(field) => {
+                        let (id, facet_type) = field_id_facet_type(&field)?;
+                        Box::new(AscDesc::initial_desc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), id, facet_type)?)
+                    },
+                    _otherwise => continue,
+                },
+            });
+        }
+
+        match criterion {
+            Some(criterion) => Ok(Fetcher::new(self, criterion)),
+            None => Ok(Fetcher::initial(self, query_tree, facet_candidates)),
+        }
     }
 }
 
