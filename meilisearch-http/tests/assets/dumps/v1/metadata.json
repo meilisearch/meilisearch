@@ -1,0 +1,12 @@
+{
+    "indices": [{
+            "uid": "test",
+            "primaryKey": "id"
+        }, {
+            "uid": "test2",
+            "primaryKey": "test2_id"
+        }
+    ],
+    "dbVersion": "0.13.0",
+    "dumpVersion": "1"
+}

@@ -1,0 +1,79 @@
+[package]
+authors = ["Quentin de Quelen <quentin@dequelen.me>", "Clément Renault <clement@meilisearch.com>"]
+description = "MeiliSearch HTTP server"
+edition = "2018"
+license = "MIT"
+name = "meilisearch-http"
+version = "0.17.0"
+[[bin]]
+name = "meilisearch"
+path = "src/main.rs"
+
+[build-dependencies]
+vergen = "3.1.0"
+
+[dependencies]
+actix-cors = "0.5.3"
+actix-http = "2"
+actix-rt = "1"
+actix-service = "1.0.6"
+actix-web = { version = "3.3.2", features = ["rustls"] }
+anyhow = "1.0.38"
+async-compression = { version = "0.3.6", features = ["gzip", "tokio-02"] }
+byte-unit = { version = "4.0.9", default-features = false, features = ["std"] }
+bytes = "0.6.0"
+chrono = { version = "0.4.19", features = ["serde"] }
+crossbeam-channel = "0.5.0"
+env_logger = "0.8.2"
+flate2 = "1.0.19"
+fst = "0.4.5"
+futures = "0.3.7"
+futures-util = "0.3.8"
+grenad = { git = "https://github.com/Kerollmops/grenad.git", rev = "3adcb26" }
+heed = "0.10.6"
+http = "0.2.1"
+indexmap =  { version = "1.3.2", features = ["serde-1"] }
+log = "0.4.8"
+main_error = "0.1.0"
+meilisearch-error = { path = "../meilisearch-error" }
+meilisearch-tokenizer = { git = "https://github.com/meilisearch/Tokenizer.git", branch = "main" }
+memmap = "0.7.0"
+milli = { git = "https://github.com/meilisearch/milli.git", rev = "794fce7" }
+mime = "0.3.16"
+once_cell = "1.5.2"
+rand = "0.7.3"
+rayon = "1.5.0"
+regex = "1.4.2"
+rustls = "0.18"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0.59", features = ["preserve_order"] }
+sha2 = "0.9.1"
+siphasher = "0.3.2"
+slice-group-by = "0.2.6"
+structopt = "0.3.20"
+tar = "0.4.29"
+tempfile = "3.1.0"
+tokio = { version = "0.2", features = ["full"] }
+dashmap = "4.0.2"
+uuid = "0.8.2"
+itertools = "0.10.0"
+either = "1.6.1"
+
+[dependencies.sentry]
+default-features = false
+features = ["with_client_implementation", "with_panic", "with_failure", "with_device_info", "with_rust_info", "with_reqwest_transport", "with_rustls", "with_env_logger"]
+optional = true
+version = "0.18.1"
+
+
+[dev-dependencies]
+serde_url_params = "0.2.0"
+tempdir = "0.3.7"
+assert-json-diff = { branch = "master", git = "https://github.com/qdequele/assert-json-diff" }
+tokio = { version = "0.2", features = ["macros", "time"] }
+
+[features]
+default = ["sentry"]
+
+[target.'cfg(unix)'.dependencies]
+jemallocator = "0.3.2"

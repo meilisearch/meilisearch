@@ -1,0 +1,8 @@
+[package]
+name = "meilisearch-error"
+version = "0.19.0"
+authors = ["marin <postma.marin@protonmail.com>"]
+edition = "2018"
+
+[dependencies]
+actix-http = "2.2.0"
