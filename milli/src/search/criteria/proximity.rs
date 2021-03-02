@@ -205,14 +205,16 @@ fn resolve_candidates<'t>(
         cache: &mut HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>,
     ) -> anyhow::Result<Vec<(Query, Query, RoaringBitmap)>>
     {
-        fn pair_combinations(mana: u8) -> impl Iterator<Item = (u8, u8)> {
-            (0..=mana).map(move |m| (mana - m, m))
+        fn pair_combinations(mana: u8, left_max: u8) -> impl Iterator<Item = (u8, u8)> {
+            (0..=mana.min(left_max)).map(move |m| (m, mana - m))
         }
+
+        let pair_max_proximity = 7;
 
         let mut output = Vec::new();
 
-        for (pair_p, left_right_p) in pair_combinations(proximity) {
-            for (left_p, right_p) in pair_combinations(left_right_p) {
+        for (pair_p, left_right_p) in pair_combinations(proximity, pair_max_proximity) {
+            for (left_p, right_p) in pair_combinations(left_right_p, left_right_p) {
                 let left_key = (left.clone(), left_p);
                 if !cache.contains_key(&left_key) {
                     let candidates = resolve_operation(ctx, left, left_p, cache)?;
