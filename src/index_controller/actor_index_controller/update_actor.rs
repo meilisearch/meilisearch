@@ -112,9 +112,12 @@ where D: AsRef<[u8]> + Sized + 'static,
         let (sender, receiver) = mpsc::channel(100);
         let mut options = heed::EnvOpenOptions::new();
         options.map_size(4096 * 100_000);
-        let mut path = PathBuf::new();
-        path.push("data.ms");
-        path.push("updates");
+
+        let path = path
+            .as_ref()
+            .to_owned()
+            .join("updates");
+
         create_dir_all(&path).unwrap();
         let index_handle_clone = index_handle.clone();
         let store = UpdateStore::open(options, &path, move |meta, file| {

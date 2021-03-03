@@ -33,7 +33,7 @@ enum IndexControllerMsg {
 impl IndexController {
     pub fn new(path: impl AsRef<Path>) -> Self {
         let uuid_resolver = uuid_resolver::UuidResolverHandle::new();
-        let index_actor = index_actor::IndexActorHandle::new();
+        let index_actor = index_actor::IndexActorHandle::new(&path);
         let update_handle = update_actor::UpdateActorHandle::new(index_actor.clone(), &path);
         Self { uuid_resolver, index_handle: index_actor, update_handle }
     }

@@ -196,10 +196,10 @@ pub struct IndexActorHandle {
 }
 
 impl IndexActorHandle {
-    pub fn new() -> Self {
+    pub fn new(path: impl AsRef<Path>) -> Self {
         let (sender, receiver) = mpsc::channel(100);
 
-        let store = MapIndexStore::new("data.ms");
+        let store = MapIndexStore::new(path);
         let actor = IndexActor::new(receiver, store);
         tokio::task::spawn(actor.run());
         Self { sender }
