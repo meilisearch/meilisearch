@@ -598,7 +598,7 @@ fn export_documents(index: &Index, rtxn: &heed::RoTxn, internal_ids: Vec<u32>) -
     let fields_ids_map = index.fields_ids_map(rtxn)?;
     let displayed_fields: Vec<_> = fields_ids_map.iter().map(|(id, _name)| id).collect();
 
-    let iter: Box<Iterator<Item = _>> = if internal_ids.is_empty() {
+    let iter: Box<dyn Iterator<Item = _>> = if internal_ids.is_empty() {
         Box::new(index.documents.iter(rtxn)?.map(|result| {
             result.map(|(_id, obkv)| obkv)
         }))
