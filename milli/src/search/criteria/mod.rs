@@ -5,7 +5,7 @@ use anyhow::bail;
 use roaring::RoaringBitmap;
 
 use crate::search::word_derivations;
-use crate::Index;
+use crate::{DocumentId, Index};
 
 use super::query_tree::{Operation, Query, QueryKind};
 use self::typo::Typo;
@@ -66,6 +66,7 @@ pub trait Context {
     fn word_prefix_pair_proximity_docids(&self, left: &str, right: &str, proximity: u8) -> heed::Result<Option<RoaringBitmap>>;
     fn words_fst<'t>(&self) -> &'t fst::Set<Cow<[u8]>>;
     fn in_prefix_cache(&self, word: &str) -> bool;
+    fn docid_word_positions(&self, docid: DocumentId, word: &str) -> heed::Result<Option<RoaringBitmap>>;
 }
 pub struct CriteriaBuilder<'t> {
     rtxn: &'t heed::RoTxn<'t>,
@@ -103,6 +104,11 @@ impl<'a> Context for CriteriaBuilder<'a> {
 
     fn in_prefix_cache(&self, word: &str) -> bool {
         self.words_prefixes_fst.contains(word)
+    }
+
+    fn docid_word_positions(&self, docid: DocumentId, word: &str) -> heed::Result<Option<RoaringBitmap>> {
+        let key = (docid, word);
+        self.index.docid_word_positions.get(self.rtxn, &key)
     }
 }
 
@@ -367,6 +373,10 @@ pub mod test {
 
         fn in_prefix_cache(&self, word: &str) -> bool {
             self.word_prefix_docids.contains_key(&word.to_string())
+        }
+
+        fn docid_word_positions(&self, _docid: DocumentId, _word: &str) -> heed::Result<Option<RoaringBitmap>> {
+            todo!()
         }
     }
 

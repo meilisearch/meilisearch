@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::mem::take;
 
 use roaring::RoaringBitmap;
 use log::debug;
 
+use crate::{DocumentId, Position, search::{query_tree::QueryKind, word_derivations}};
 use crate::search::query_tree::{maximum_proximity, Operation, Query};
 use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
 
@@ -287,5 +288,180 @@ fn resolve_candidates<'t>(
     for (_, _, cds) in resolve_operation(ctx, query_tree, proximity, cache)? {
         candidates.union_with(&cds);
     }
+    Ok(candidates)
+}
+
+fn resolve_plane_sweep_candidates<'t>(
+    ctx: &'t dyn Context,
+    query_tree: &Operation,
+    allowed_candidates: &RoaringBitmap,
+) -> anyhow::Result<BTreeMap<u8, RoaringBitmap>>
+{
+    /// FIXME may be buggy with query like "new new york"
+    fn plane_sweep<'t>(
+        ctx: &'t dyn Context,
+        operations: &[Operation],
+        docid: DocumentId,
+        consecutive: bool,
+    ) -> anyhow::Result<Vec<(Position, u8, Position)>> {
+        fn compute_groups_proximity(groups: &Vec<(usize, (Position, u8, Position))>, consecutive: bool) -> Option<(Position, u8, Position)> {
+            // take the inner proximity of the first group as initial
+            let mut proximity = groups.first()?.1.1;
+            let left_most_pos = groups.first()?.1.0;
+            let right_most_pos = groups.last()?.1.2;
+
+            for pair in groups.windows(2) {
+                if let [(i1, (_, _, rpos1)), (i2, (lpos2, prox2, _))] = pair {
+                    // if a pair overlap, meaning that they share at least a word, we return None
+                    if rpos1 >= lpos2 { return None }
+                    // if groups are in the good order (query order) we remove 1 to the proximity
+                    // the proximity is clamped to 7
+                    let pair_proximity = if i1 < i2 {
+                        (*lpos2 - *rpos1 - 1).min(7)
+                    } else {
+                        (*lpos2 - *rpos1).min(7)
+                    };
+
+                    proximity += pair_proximity as u8 + prox2;
+                }
+            }
+
+            // if groups should be consecutives, we will only accept groups with a proximity of 0
+            if !consecutive || proximity == 0 {
+                Some((left_most_pos, proximity, right_most_pos))
+            } else { None }
+        }
+
+        let groups_len = operations.len();
+        let mut groups_positions = Vec::with_capacity(groups_len);
+
+        for operation in operations {
+            let positions = resolve_operation(ctx, operation, docid)?;
+            groups_positions.push(positions.into_iter());
+        }
+
+        // Pop top elements of each list.
+        let mut current = Vec::with_capacity(groups_len);
+        for (i, positions) in groups_positions.iter_mut().enumerate() {
+            match positions.next() {
+                Some(p) => current.push((i, p)),
+                // if a group return None, it means that the document does not contain all the words,
+                // we return an empty result.
+                None => return Ok(Vec::new()),
+            }
+        }
+
+        // Sort k elements by their positions.
+        current.sort_unstable_by_key(|(_, p)| *p);
+
+        // Find leftmost and rightmost group and their positions.
+        let mut leftmost = *current.first().unwrap();
+        let mut rightmost = *current.last().unwrap();
+
+        let mut output = Vec::new();
+        loop {
+            // Find the position p of the next elements of a list of the leftmost group.
+            // If the list is empty, break the loop.
+            let p = groups_positions[leftmost.0].next().map(|p| (leftmost.0, p));
+
+            // let q be the position q of second group of the interval.
+            let q = current[1];
+
+            let mut leftmost_index = 0;
+
+            // If p > r, then the interval [l, r] is minimal and
+            // we insert it into the heap according to its size.
+            if p.map_or(true, |p| p.1 > rightmost.1) {
+                leftmost_index = current[0].0;
+                if let Some(group) = compute_groups_proximity(&current, consecutive) {
+                    output.push(group);
+                }
+            }
+
+            // TODO not sure about breaking here or when the p list is found empty.
+            let p = match p {
+                Some(p) => p,
+                None => break,
+            };
+
+            // Remove the leftmost group P in the interval,
+            // and pop the same group from a list.
+            current[leftmost_index] = p;
+
+            if p.1 > rightmost.1 {
+                // if [l, r] is minimal, let r = p and l = q.
+                rightmost = p;
+                leftmost = q;
+            } else {
+                // Ohterwise, let l = min{p,q}.
+                leftmost = if p.1 < q.1 { p } else { q };
+            }
+
+            // Then update the interval and order of groups_positions in the interval.
+            current.sort_unstable_by_key(|(_, p)| *p);
+        }
+
+        // Sort the list according to the size and the positions.
+        output.sort_unstable();
+
+        Ok(output)
+    }
+
+    fn resolve_operation<'t>(
+        ctx: &'t dyn Context,
+        query_tree: &Operation,
+        docid: DocumentId,
+    ) -> anyhow::Result<Vec<(Position, u8, Position)>> {
+        use Operation::{And, Consecutive, Or};
+
+        match query_tree {
+            And(ops) => plane_sweep(ctx, ops, docid, false),
+            Consecutive(ops) => plane_sweep(ctx, ops, docid, true),
+            Or(_, ops) => {
+                let mut result = Vec::new();
+                for op in ops {
+                    result.extend(resolve_operation(ctx, op, docid)?)
+                }
+
+                result.sort_unstable();
+                Ok(result)
+            },
+            Operation::Query(Query {prefix, kind}) => {
+                let fst = ctx.words_fst();
+                let words = match kind {
+                    QueryKind::Exact { word, .. } => {
+                        if *prefix {
+                            word_derivations(word, true, 0, fst)?
+                        } else {
+                            vec![(word.to_string(), 0)]
+                        }
+                    },
+                    QueryKind::Tolerant { typo, word } => {
+                        word_derivations(word, *prefix, *typo, fst)?
+                    }
+                };
+
+                let mut result = Vec::new();
+                for (word, _) in words {
+                    if let Some(positions) = ctx.docid_word_positions(docid, &word)? {
+                        let iter = positions.iter().map(|p| (p, 0, p));
+                        result.extend(iter);
+                    }
+                }
+
+                result.sort_unstable();
+                Ok(result)
+            }
+        }
+    }
+
+    let mut candidates = BTreeMap::new();
+    for docid in allowed_candidates {
+        let positions =  resolve_operation(ctx, query_tree, docid)?;
+        let best_proximity = positions.into_iter().min_by_key(|(_, proximity, _)| *proximity);
+        let best_proximity = best_proximity.map(|(_, proximity, _)| proximity).unwrap_or(7);
+        candidates.entry(best_proximity).or_insert_with(RoaringBitmap::new).insert(docid);
+    }
+
     Ok(candidates)
 }
