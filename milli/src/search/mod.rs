@@ -94,12 +94,6 @@ impl<'a> Search<'a> {
         let criteria_builder = criteria::CriteriaBuilder::new(self.rtxn, self.index)?;
         let mut criteria = criteria_builder.build(query_tree, facet_candidates)?;
 
-        // // We sort in descending order on a specific field *by hand*, don't do that at home.
-        // let attr_name = "released-timestamp";
-        // let fid = self.index.fields_ids_map(self.rtxn)?.id(attr_name).unwrap();
-        // let ftype = *self.index.faceted_fields(self.rtxn)?.get(attr_name).unwrap();
-        // let desc_criterion = AscDesc::desc(self.index, self.rtxn, Box::new(words_criterion), fid, ftype)?;
-
         let mut offset = self.offset;
         let mut limit = self.limit;
         let mut documents_ids = Vec::new();

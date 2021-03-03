@@ -283,7 +283,6 @@ fn resolve_candidates<'t>(
         }
     }
 
-    /// FIXME Make this function generic and mutualize it between Typo and proximity criterion
     fn mdfs<'t>(
         ctx: &'t dyn Context,
         branches: &[Operation],
