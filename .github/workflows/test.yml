@@ -14,7 +14,10 @@ jobs:
         rust:
           - stable
           - beta
-          - nightly
+          # We temporarily stop building on nightly just to fix this issue
+          # https://github.com/bheisler/TinyTemplate/pull/17
+          # Reenable it when the fix has been merged.
+          # - nightly
 
     steps:
       - uses: actions/checkout@v2
