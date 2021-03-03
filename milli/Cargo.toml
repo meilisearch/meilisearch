@@ -46,6 +46,10 @@ itertools = "0.10.0"
 # logging
 log = "0.4.14"
 
+# We temporarily depend on this crate just to fix this issue
+# https://github.com/bheisler/TinyTemplate/pull/17
+tinytemplate = "=1.1.0"
+
 [dev-dependencies]
 criterion = "0.3.4"
 maplit = "1.0.2"
