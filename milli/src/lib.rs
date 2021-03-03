@@ -3,8 +3,6 @@
 mod criterion;
 mod external_documents_ids;
 mod fields_ids_map;
-mod mdfs;
-mod query_tokens;
 mod search;
 mod update_store;
 pub mod facet;
@@ -28,7 +26,7 @@ pub use self::heed_codec::{BEU32StrCodec, StrStrU8Codec, ObkvCodec};
 pub use self::heed_codec::{RoaringBitmapCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 pub use self::heed_codec::{RoaringBitmapLenCodec, BoRoaringBitmapLenCodec, CboRoaringBitmapLenCodec};
 pub use self::index::Index;
-pub use self::search::{Search, FacetDistribution, FacetCondition, SearchResult};
+pub use self::search::{Search, FacetDistribution, FacetCondition, SearchResult, MatchingWords};
 pub use self::update_store::UpdateStore;
 
 pub type FastMap4<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;

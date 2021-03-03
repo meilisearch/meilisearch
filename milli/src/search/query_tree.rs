@@ -1,14 +1,13 @@
-#![allow(unused)]
-
-use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::HashSet;
 use std::{fmt, cmp, mem};
 
+use levenshtein_automata::{DFA, Distance};
 use meilisearch_tokenizer::{TokenKind, tokenizer::TokenStream};
 use roaring::RoaringBitmap;
 use slice_group_by::GroupBy;
 
 use crate::Index;
+use super::build_dfa;
 
 type IsOptionalWord = bool;
 type IsPrefix = bool;
@@ -81,6 +80,13 @@ impl Operation {
             Self::Consecutive(ops)
         }
     }
+
+    pub fn query(&self) -> Option<&Query> {
+        match self {
+            Operation::Query(query) => Some(query),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash)]
@@ -96,12 +102,24 @@ pub enum QueryKind {
 }
 
 impl QueryKind {
-    fn exact(word: String) -> Self {
+    pub fn exact(word: String) -> Self {
         QueryKind::Exact { original_typo: 0, word }
     }
 
-    fn tolerant(typo: u8, word: String) -> Self {
+    pub fn exact_with_typo(original_typo: u8, word: String) -> Self {
+        QueryKind::Exact { original_typo, word }
+    }
+
+    pub fn tolerant(typo: u8, word: String) -> Self {
         QueryKind::Tolerant { typo, word }
+    }
+
+    pub fn is_tolerant(&self) -> bool {
+        matches!(self, QueryKind::Tolerant { .. })
+    }
+
+    pub fn is_exact(&self) -> bool {
+        matches!(self, QueryKind::Exact { .. })
     }
 
     pub fn typo(&self) -> u8 {
@@ -266,69 +284,45 @@ fn synonyms(ctx: &impl Context, word: &[&str]) -> heed::Result<Option<Vec<Operat
 }
 
 /// The query tree builder is the interface to build a query tree.
+#[derive(Default)]
 pub struct MatchingWords {
-    inner: BTreeMap<String, IsPrefix>
+    dfas: Vec<(DFA, u8)>,
 }
 
 impl MatchingWords {
     /// List all words which can be considered as a match for the query tree.
-    pub fn from_query_tree(tree: &Operation, fst: &fst::Set<Cow<[u8]>>) -> Self {
-        Self { inner: fetch_words(tree, fst).into_iter().collect() }
+    pub fn from_query_tree(tree: &Operation) -> Self {
+        Self {
+            dfas: fetch_queries(tree).into_iter().map(|(w, t, p)| (build_dfa(w, t, p), t)).collect()
+        }
     }
 
     /// Return true if the word match.
-    pub fn is_match(&self, word: &str) -> bool {
-        fn first_char(s: &str) -> Option<&str> {
-            s.chars().next().map(|c| &s[..c.len_utf8()])
-        }
-
-        match first_char(word) {
-            Some(first) => {
-                let left = first.to_owned();
-                let right = word.to_owned();
-                self.inner.range(left..=right).any(|(w, is_prefix)| *is_prefix || *w == word)
-            },
-            None => false
-        }
+    pub fn matches(&self, word: &str) -> bool {
+        self.dfas.iter().any(|(dfa, typo)| match dfa.eval(word) {
+            Distance::Exact(t) => t <= *typo,
+            Distance::AtLeast(_) => false,
+        })
     }
 }
 
-type FetchedWords = Vec<(String, IsPrefix)>;
-
 /// Lists all words which can be considered as a match for the query tree.
-fn fetch_words(tree: &Operation, fst: &fst::Set<Cow<[u8]>>) -> FetchedWords {
-    fn resolve_branch(tree: &[Operation], fst: &fst::Set<Cow<[u8]>>) -> FetchedWords {
-        tree.iter().map(|op| resolve_ops(op, fst)).flatten().collect()
-    }
-
-    fn resolve_query(query: &Query, fst: &fst::Set<Cow<[u8]>>) -> FetchedWords {
-        match query.kind.clone() {
-            QueryKind::Exact { word, .. } => vec![(word, query.prefix)],
-            QueryKind::Tolerant { typo, word } => {
-                if let Ok(words) = super::word_typos(&word, query.prefix, typo, fst) {
-                    words.into_iter().map(|(w, _)| (w, query.prefix)).collect()
-                } else {
-                    vec![(word, query.prefix)]
-                }
-            }
-        }
-    }
-
-    fn resolve_ops(tree: &Operation, fst: &fst::Set<Cow<[u8]>>) -> FetchedWords {
+fn fetch_queries(tree: &Operation) -> HashSet<(&str, u8, IsPrefix)> {
+    fn resolve_ops<'a>(tree: &'a Operation, out: &mut HashSet<(&'a str, u8, IsPrefix)>) {
         match tree {
             Operation::Or(_, ops) | Operation::And(ops) | Operation::Consecutive(ops) => {
-                resolve_branch(ops.as_slice(), fst)
+                ops.as_slice().iter().for_each(|op| resolve_ops(op, out));
             },
-            Operation::Query(ops) => {
-                resolve_query(ops, fst)
+            Operation::Query(Query { prefix, kind }) => {
+                let typo = if kind.is_exact() { 0 } else { kind.typo() };
+                out.insert((kind.word(), typo, *prefix));
             },
         }
     }
 
-    let mut words = resolve_ops(tree, fst);
-    words.sort_unstable();
-    words.dedup();
-    words
+    let mut queries = HashSet::new();
+    resolve_ops(tree, &mut queries);
+    queries
 }
 
 /// Main function that creates the final query tree from the primitive query.
@@ -537,7 +531,10 @@ pub fn maximum_proximity(operation: &Operation) -> usize {
     use Operation::{Or, And, Query, Consecutive};
     match operation {
         Or(_, ops) => ops.iter().map(maximum_proximity).max().unwrap_or(0),
-        And(ops) => ops.len().saturating_sub(1) * 8,
+        And(ops) => {
+            ops.iter().map(maximum_proximity).sum::<usize>()
+            + ops.len().saturating_sub(1) * 7
+        },
         Query(_) | Consecutive(_) => 0,
     }
 }
@@ -547,7 +544,7 @@ mod test {
     use std::collections::HashMap;
 
     use fst::Set;
-    use maplit::hashmap;
+    use maplit::{hashmap, hashset};
     use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
     use rand::{Rng, SeedableRng, rngs::StdRng};
 
@@ -958,26 +955,26 @@ mod test {
         let context = TestContext::default();
         let query_tree = context.build(false, true, tokens).unwrap().unwrap();
 
-        let expected = vec![
-            ("city".to_string(), false),
-            ("earth".to_string(), false),
-            ("nature".to_string(), false),
-            ("new".to_string(), false),
-            ("nyc".to_string(), false),
-            ("split".to_string(), false),
-            ("word".to_string(), false),
-            ("word".to_string(), true),
-            ("world".to_string(), true),
-            ("york".to_string(), false),
-
-        ];
+        let expected = hashset!{
+            ("word",                0, false),
+            ("nyc",                 0, false),
+            ("wordsplit",           2, false),
+            ("wordsplitnycworld",   2, true),
+            ("nature",              0, false),
+            ("new",                 0, false),
+            ("city",                0, false),
+            ("world",               1, true),
+            ("york",                0, false),
+            ("split",               0, false),
+            ("nycworld",            1, true),
+            ("earth",               0, false),
+            ("wordsplitnyc",        2, false),
+        };
 
         let mut keys = context.postings.keys().collect::<Vec<_>>();
         keys.sort_unstable();
-        let set = fst::Set::from_iter(keys).unwrap().map_data(|v| Cow::Owned(v)).unwrap();
 
-        let words = fetch_words(&query_tree, &set);
-
+        let words = fetch_queries(&query_tree);
         assert_eq!(expected, words);
     }
 }

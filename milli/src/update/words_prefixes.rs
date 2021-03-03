@@ -41,7 +41,7 @@ impl<'t, 'u, 'i> WordsPrefixes<'t, 'u, 'i> {
             chunk_fusing_shrink_size: None,
             max_nb_chunks: None,
             max_memory: None,
-            threshold: 0.01, // 1%
+            threshold: 0.1 / 100.0, // .01%
             max_prefix_length: 4,
             _update_id: update_id,
         }

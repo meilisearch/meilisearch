@@ -866,6 +866,7 @@ dependencies = [
  "anyhow",
  "byte-unit",
  "heed",
+ "jemallocator",
  "milli",
  "stderrlog",
  "structopt",

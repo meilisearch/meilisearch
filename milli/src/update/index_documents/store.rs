@@ -13,7 +13,7 @@ use grenad::{Reader, FileFuse, Writer, Sorter, CompressionType};
 use heed::BytesEncode;
 use linked_hash_map::LinkedHashMap;
 use log::{debug, info};
-use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
+use meilisearch_tokenizer::{Analyzer, AnalyzerConfig, Token, TokenKind, token::SeparatorKind};
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 use serde_json::Value;
@@ -274,12 +274,14 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         self.insert_words_pairs_proximities_docids(words_pair_proximities, document_id)?;
 
         // We store document_id associated with all the words the record contains.
-        for (word, _) in words_positions.drain() {
-            self.insert_word_docid(&word, document_id)?;
+        for (word, _) in words_positions.iter() {
+            self.insert_word_docid(word, document_id)?;
         }
 
         self.documents_writer.insert(document_id.to_be_bytes(), record)?;
         Self::write_docid_word_positions(&mut self.docid_word_positions_writer, document_id, words_positions)?;
+
+        words_positions.clear();
 
         // We store document_id associated with all the field id and values.
         for (field, values) in facet_values.drain() {
@@ -471,14 +473,11 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
                             };
 
                             let analyzed = self.analyzer.analyze(&content);
-                            let tokens = analyzed
-                                .tokens()
-                                .filter(|t| t.is_word())
-                                .map(|t| t.text().to_string());
+                            let tokens = process_tokens(analyzed.tokens());
 
-                            for (pos, word) in tokens.enumerate().take(MAX_POSITION) {
+                            for (pos, token) in tokens.take_while(|(pos, _)| *pos < MAX_POSITION) {
                                 let position = (attr as usize * MAX_POSITION + pos) as u32;
-                                words_positions.entry(word).or_insert_with(SmallVec32::new).push(position);
+                                words_positions.entry(token.text().to_string()).or_insert_with(SmallVec32::new).push(position);
                             }
                         }
                     }
@@ -607,6 +606,36 @@ enum FacetValue {
     String(SmallString32),
     Float(OrderedFloat<f64>),
     Integer(i64),
+}
+
+/// take an iterator on tokens and compute their relative position depending on separator kinds
+/// if it's an `Hard` separator we add an additional relative proximity of 8 between words,
+/// else we keep the standart proximity of 1 between words.
+fn process_tokens<'a>(tokens: impl Iterator<Item = Token<'a>>) -> impl Iterator<Item = (usize, Token<'a>)> {
+    tokens
+        .skip_while(|token| token.is_separator().is_some())
+        .scan((0, None), |(offset, prev_kind), token| {
+                match token.kind {
+                    TokenKind::Word | TokenKind::StopWord | TokenKind::Unknown => {
+                        *offset += match *prev_kind {
+                            Some(TokenKind::Separator(SeparatorKind::Hard)) => 8,
+                            Some(_) => 1,
+                            None => 0,
+                        };
+                        *prev_kind = Some(token.kind)
+                    }
+                    TokenKind::Separator(SeparatorKind::Hard) => {
+                        *prev_kind = Some(token.kind);
+                    }
+                    TokenKind::Separator(SeparatorKind::Soft)
+                        if *prev_kind != Some(TokenKind::Separator(SeparatorKind::Hard)) => {
+                        *prev_kind = Some(token.kind);
+                    }
+                    _ => (),
+                }
+            Some((*offset, token))
+        })
+    .filter(|(_, t)| t.is_word())
 }
 
 fn parse_facet_value(ftype: FacetType, value: &Value) -> anyhow::Result<SmallVec8<FacetValue>> {
