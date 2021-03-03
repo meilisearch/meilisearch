@@ -30,6 +30,7 @@ regex = "1.4.3"
 roaring = "0.6.5"
 serde = { version = "1.0.123", features = ["derive"] }
 serde_json = { version = "1.0.62", features = ["preserve_order"] }
+slice-group-by = "0.2.6"
 smallstr =  { version = "0.2.0", features = ["serde"] }
 smallvec = "1.6.1"
 tempfile = "3.2.0"
@@ -48,6 +49,7 @@ log = "0.4.14"
 [dev-dependencies]
 criterion = "0.3.4"
 maplit = "1.0.2"
+rand = "0.8.3"
 
 [build-dependencies]
 fst = "0.4.5"
