@@ -112,7 +112,9 @@ async fn run_http(data: Data, opt: Opt, enable_frontend: bool) -> Result<(), Box
             .wrap(middleware::Logger::default())
             .wrap(middleware::Compress::default())
             .wrap(middleware::NormalizePath::new(TrailingSlash::Trim))
-    });
+    })
+    // Disable signals allows the server to terminate immediately when a user enter CTRL-C
+    .disable_signals();
 
     if let Some(config) = opt.get_ssl_config()? {
         http_server
