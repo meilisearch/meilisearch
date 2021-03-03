@@ -22,7 +22,7 @@ impl<'t> Proximity<'t> {
         ctx: &'t dyn Context,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
-    ) -> anyhow::Result<Self> where Self: Sized
+    ) -> anyhow::Result<Self>
     {
         Ok(Proximity {
             ctx,
@@ -38,7 +38,7 @@ impl<'t> Proximity<'t> {
     pub fn new(
         ctx: &'t dyn Context,
         parent: Box<dyn Criterion + 't>,
-    ) -> anyhow::Result<Self> where Self: Sized
+    ) -> anyhow::Result<Self>
     {
         Ok(Proximity {
             ctx,

@@ -37,7 +37,7 @@ impl<'t> AscDesc<'t> {
         candidates: Option<RoaringBitmap>,
         field_id: FieldId,
         facet_type: FacetType,
-    ) -> anyhow::Result<Self> where Self: Sized
+    ) -> anyhow::Result<Self>
     {
         Self::initial(index, rtxn, query_tree, candidates, field_id, facet_type, true)
     }
@@ -49,7 +49,7 @@ impl<'t> AscDesc<'t> {
         candidates: Option<RoaringBitmap>,
         field_id: FieldId,
         facet_type: FacetType,
-    ) -> anyhow::Result<Self> where Self: Sized
+    ) -> anyhow::Result<Self>
     {
         Self::initial(index, rtxn, query_tree, candidates, field_id, facet_type, false)
     }
@@ -60,7 +60,7 @@ impl<'t> AscDesc<'t> {
         parent: Box<dyn Criterion + 't>,
         field_id: FieldId,
         facet_type: FacetType,
-    ) -> anyhow::Result<Self> where Self: Sized
+    ) -> anyhow::Result<Self>
     {
         Self::new(index, rtxn, parent, field_id, facet_type, true)
     }
@@ -71,7 +71,7 @@ impl<'t> AscDesc<'t> {
         parent: Box<dyn Criterion + 't>,
         field_id: FieldId,
         facet_type: FacetType,
-    ) -> anyhow::Result<Self> where Self: Sized
+    ) -> anyhow::Result<Self>
     {
         Self::new(index, rtxn, parent, field_id, facet_type, false)
     }
@@ -84,7 +84,7 @@ impl<'t> AscDesc<'t> {
         field_id: FieldId,
         facet_type: FacetType,
         ascending: bool,
-    ) -> anyhow::Result<Self> where Self: Sized
+    ) -> anyhow::Result<Self>
     {
         let faceted_candidates = index.faceted_documents_ids(rtxn, field_id)?;
         let candidates = match &query_tree {
@@ -120,7 +120,7 @@ impl<'t> AscDesc<'t> {
         field_id: FieldId,
         facet_type: FacetType,
         ascending: bool,
-    ) -> anyhow::Result<Self> where Self: Sized
+    ) -> anyhow::Result<Self>
     {
         Ok(AscDesc {
             index,
