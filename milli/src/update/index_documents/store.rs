@@ -274,12 +274,14 @@ impl<'s, A: AsRef<[u8]>> Store<'s, A> {
         self.insert_words_pairs_proximities_docids(words_pair_proximities, document_id)?;
 
         // We store document_id associated with all the words the record contains.
-        for (word, _) in words_positions.drain() {
-            self.insert_word_docid(&word, document_id)?;
+        for (word, _) in words_positions.iter() {
+            self.insert_word_docid(word, document_id)?;
         }
 
         self.documents_writer.insert(document_id.to_be_bytes(), record)?;
         Self::write_docid_word_positions(&mut self.docid_word_positions_writer, document_id, words_positions)?;
+
+        words_positions.clear();
 
         // We store document_id associated with all the field id and values.
         for (field, values) in facet_values.drain() {
