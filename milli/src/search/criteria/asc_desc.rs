@@ -1,17 +1,20 @@
+use std::collections::HashMap;
 use std::mem::take;
 
 use anyhow::bail;
 use itertools::Itertools;
+use log::debug;
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{FacetLevelValueF64Codec, FacetLevelValueI64Codec};
 use crate::heed_codec::facet::{FieldDocIdFacetI64Codec, FieldDocIdFacetF64Codec};
+use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::FacetIter;
 use crate::search::query_tree::Operation;
 use crate::{FieldId, Index};
-use super::{Candidates, Criterion, CriterionResult};
+use super::{Criterion, CriterionResult};
 
 pub struct AscDesc<'t> {
     index: &'t Index,
@@ -20,7 +23,7 @@ pub struct AscDesc<'t> {
     facet_type: FacetType,
     ascending: bool,
     query_tree: Option<Operation>,
-    candidates: Candidates,
+    candidates: RoaringBitmap,
     bucket_candidates: RoaringBitmap,
     faceted_candidates: RoaringBitmap,
     parent: Option<Box<dyn Criterion + 't>>,
@@ -83,6 +86,19 @@ impl<'t> AscDesc<'t> {
         ascending: bool,
     ) -> anyhow::Result<Self> where Self: Sized
     {
+        let faceted_candidates = index.faceted_documents_ids(rtxn, field_id)?;
+        let candidates = match &query_tree {
+            Some(qt) => {
+                let context = CriteriaBuilder::new(rtxn, index)?;
+                let mut qt_candidates = resolve_query_tree(&context, qt, &mut HashMap::new())?;
+                if let Some(candidates) = candidates {
+                    qt_candidates.intersect_with(&candidates);
+                }
+                qt_candidates
+            },
+            None => candidates.unwrap_or(faceted_candidates.clone()),
+        };
+
         Ok(AscDesc {
             index,
             rtxn,
@@ -90,8 +106,8 @@ impl<'t> AscDesc<'t> {
             facet_type,
             ascending,
             query_tree,
-            candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
-            faceted_candidates: index.faceted_documents_ids(rtxn, field_id)?,
+            candidates,
+            faceted_candidates,
             bucket_candidates: RoaringBitmap::new(),
             parent: None,
         })
@@ -113,7 +129,7 @@ impl<'t> AscDesc<'t> {
             facet_type,
             ascending,
             query_tree: None,
-            candidates: Candidates::default(),
+            candidates: RoaringBitmap::new(),
             faceted_candidates: index.faceted_documents_ids(rtxn, field_id)?,
             bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
@@ -123,24 +139,43 @@ impl<'t> AscDesc<'t> {
 
 impl<'t> Criterion for AscDesc<'t> {
     fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
-        use Candidates::{Allowed, Forbidden};
-
         loop {
-            match (&mut self.query_tree, &mut self.candidates) {
-                (_, Allowed(candidates)) if candidates.is_empty() => {
-                    return Ok(Some(CriterionResult {
-                        query_tree: self.query_tree.take(),
-                        candidates: take(&mut self.candidates).into_inner(),
-                        bucket_candidates: take(&mut self.bucket_candidates),
-                    }));
+            debug!("Facet {} iteration ({:?})",
+                if self.ascending { "Asc" } else { "Desc" }, self.candidates,
+            );
+
+            match &mut self.candidates {
+                candidates if candidates.is_empty() => {
+                    let query_tree = self.query_tree.take();
+                    let candidates = take(&mut self.candidates);
+                    let bucket_candidates = take(&mut self.bucket_candidates);
+
+                    match self.parent.as_mut() {
+                        Some(parent) => {
+                            match parent.next()? {
+                                Some(CriterionResult { query_tree, mut candidates, bucket_candidates }) => {
+                                    self.query_tree = query_tree;
+                                    candidates.intersect_with(&self.faceted_candidates);
+                                    self.candidates = candidates;
+                                    self.bucket_candidates = bucket_candidates;
+                                },
+                                None => return Ok(None),
+                            }
+                        },
+                        None => if query_tree.is_none() && bucket_candidates.is_empty() {
+                            return Ok(None)
+                        },
+                    }
+
+                    return Ok(Some(CriterionResult { query_tree, candidates, bucket_candidates }));
                 },
-                (Some(qt), Allowed(candidates)) => {
+                candidates => {
                     let bucket_candidates = match self.parent {
                         Some(_) => take(&mut self.bucket_candidates),
                         None => candidates.clone(),
                     };
 
-                    let mut found_candidates = facet_ordered(
+                    let found_candidates = facet_ordered(
                         self.index,
                         self.rtxn,
                         self.field_id,
@@ -149,41 +184,13 @@ impl<'t> Criterion for AscDesc<'t> {
                         candidates.clone(),
                     )?;
 
-                    found_candidates.intersect_with(&candidates);
                     candidates.difference_with(&found_candidates);
 
                     return Ok(Some(CriterionResult {
-                        query_tree: Some(qt.clone()),
+                        query_tree: self.query_tree.clone(),
                         candidates: found_candidates,
                         bucket_candidates,
                     }));
-                },
-                (Some(_qt), Forbidden(_candidates)) => {
-                    todo!()
-                },
-                (None, Allowed(_)) => {
-                    let candidates = take(&mut self.candidates).into_inner();
-                    return Ok(Some(CriterionResult {
-                        query_tree: None,
-                        candidates: candidates.clone(),
-                        bucket_candidates: candidates,
-                    }));
-                },
-                (None, Forbidden(_)) => {
-                    match self.parent.as_mut() {
-                        Some(parent) => {
-                            match parent.next()? {
-                                Some(CriterionResult { query_tree, mut candidates, bucket_candidates }) => {
-                                    self.query_tree = query_tree;
-                                    candidates.intersect_with(&self.faceted_candidates);
-                                    self.candidates = Candidates::Allowed(candidates);
-                                    self.bucket_candidates.union_with(&bucket_candidates);
-                                },
-                                None => return Ok(None),
-                            }
-                        },
-                        None => return Ok(None),
-                    }
                 },
             }
         }
