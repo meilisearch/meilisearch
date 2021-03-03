@@ -62,7 +62,7 @@ impl Data {
         let path = options.db_path.clone();
         //let indexer_opts = options.indexer_options.clone();
         create_dir_all(&path)?;
-        let index_controller = ActorIndexController::new();
+        let index_controller = ActorIndexController::new(&path);
         let index_controller = Arc::new(index_controller);
 
         let mut api_keys = ApiKeys {

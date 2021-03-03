@@ -1,9 +1,9 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use std::io::{Cursor, SeekFrom, Seek, Write};
+use std::fs::remove_file;
 
 use crossbeam_channel::Sender;
-use heed::types::{OwnedType, DecodeIgnore, SerdeJson, ByteSlice};
+use heed::types::{OwnedType, DecodeIgnore, SerdeJson};
 use heed::{EnvOpenOptions, Env, Database};
 use serde::{Serialize, Deserialize};
 use std::fs::File;
@@ -17,7 +17,7 @@ type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 pub struct UpdateStore<M, N, E> {
     env: Env,
     pending_meta: Database<OwnedType<BEU64>, SerdeJson<Pending<M>>>,
-    pending: Database<OwnedType<BEU64>, ByteSlice>,
+    pending: Database<OwnedType<BEU64>, SerdeJson<PathBuf>>,
     processed_meta: Database<OwnedType<BEU64>, SerdeJson<Processed<M, N>>>,
     failed_meta: Database<OwnedType<BEU64>, SerdeJson<Failed<M, E>>>,
     aborted_meta: Database<OwnedType<BEU64>, SerdeJson<Aborted<M>>>,
@@ -140,7 +140,7 @@ where
     pub fn register_update(
         &self,
         meta: M,
-        content: &[u8],
+        content: impl AsRef<Path>,
         index_uuid: Uuid,
     ) -> heed::Result<Pending<M>> {
         let mut wtxn = self.env.write_txn()?;
@@ -154,7 +154,7 @@ where
 
         let meta = Pending::new(meta, update_id, index_uuid);
         self.pending_meta.put(&mut wtxn, &update_key, &meta)?;
-        self.pending.put(&mut wtxn, &update_key, content)?;
+        self.pending.put(&mut wtxn, &update_key, &content.as_ref().to_owned())?;
 
         wtxn.commit()?;
 
@@ -178,7 +178,7 @@ where
         // a reader while processing it, not a writer.
         match first_meta {
             Some((first_id, pending)) => {
-                let first_content = self.pending
+                let content_path = self.pending
                     .get(&rtxn, &first_id)?
                     .expect("associated update content");
 
@@ -190,12 +190,7 @@ where
                     .write()
                     .unwrap()
                     .replace(processing.clone());
-                let mut cursor = Cursor::new(first_content);
-                let mut file = tempfile::tempfile()?;
-                let n = std::io::copy(&mut cursor, &mut file)?;
-                println!("copied count: {}", n);
-                file.flush()?;
-                file.seek(SeekFrom::Start(0))?;
+                let file = File::open(&content_path)?;
                 // Process the pending update using the provided user function.
                 let result = handler.handle_update(processing, file);
                 drop(rtxn);
@@ -209,6 +204,7 @@ where
                     .unwrap()
                     .take();
                 self.pending_meta.delete(&mut wtxn, &first_id)?;
+                remove_file(&content_path)?;
                 self.pending.delete(&mut wtxn, &first_id)?;
                 match result {
                     Ok(processed) => self.processed_meta.put(&mut wtxn, &first_id, &processed)?,

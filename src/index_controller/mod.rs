@@ -12,7 +12,7 @@ use milli::Index;
 use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
 use serde::{Serialize, Deserialize, de::Deserializer};
 use uuid::Uuid;
-use tokio::fs::File;
+use actix_web::web::Payload;
 use crate::data::SearchResult;
 use crate::data::SearchQuery;
 
@@ -133,7 +133,7 @@ pub trait IndexController {
         index: String,
         method: IndexDocumentsMethod,
         format: UpdateFormat,
-        data: File,
+        data: Payload,
         primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus>;
 

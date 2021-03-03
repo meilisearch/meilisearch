@@ -3,9 +3,6 @@
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 //use tokio::io::AsyncWriteExt;
 use actix_web::web::Payload;
-use tokio::fs::File;
-use tokio::io::{AsyncWriteExt, AsyncSeekExt};
-use futures::prelude::stream::StreamExt;
 
 use crate::index_controller::UpdateStatus;
 use crate::index_controller::{Settings, IndexMetadata};
@@ -17,18 +14,11 @@ impl Data {
         index: impl AsRef<str> + Send + Sync + 'static,
         method: IndexDocumentsMethod,
         format: UpdateFormat,
-        mut stream: Payload,
+        stream: Payload,
         primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus>
     {
-        let file = tempfile::tempfile_in(".")?;
-        let mut file = File::from_std(file);
-        while let Some(item) = stream.next().await {
-            file.write_all(&item?).await?;
-        }
-        file.seek(std::io::SeekFrom::Start(0)).await?;
-        file.flush().await?;
-        let update_status = self.index_controller.add_documents(index.as_ref().to_string(), method, format, file, primary_key).await?;
+        let update_status = self.index_controller.add_documents(index.as_ref().to_string(), method, format, stream, primary_key).await?;
         Ok(update_status)
     }
 

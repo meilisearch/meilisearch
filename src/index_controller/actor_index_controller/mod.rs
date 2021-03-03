@@ -4,25 +4,29 @@ mod uuid_resolver;
 mod update_store;
 mod update_handler;
 
-use tokio::sync::oneshot;
+use std::path::Path;
+
+use tokio::sync::{mpsc, oneshot};
 use super::IndexController;
 use uuid::Uuid;
 use super::IndexMetadata;
-use tokio::fs::File;
+use futures::stream::StreamExt;
+use actix_web::web::Payload;
 use super::UpdateMeta;
 use crate::data::{SearchResult, SearchQuery};
+use actix_web::web::Bytes;
 
 pub struct ActorIndexController {
     uuid_resolver: uuid_resolver::UuidResolverHandle,
     index_handle: index_actor::IndexActorHandle,
-    update_handle: update_actor::UpdateActorHandle,
+    update_handle: update_actor::UpdateActorHandle<Bytes>,
 }
 
 impl ActorIndexController {
-    pub fn new() -> Self {
+    pub fn new(path: impl AsRef<Path>) -> Self {
         let uuid_resolver = uuid_resolver::UuidResolverHandle::new();
         let index_actor = index_actor::IndexActorHandle::new();
-        let update_handle = update_actor::UpdateActorHandle::new(index_actor.clone());
+        let update_handle = update_actor::UpdateActorHandle::new(index_actor.clone(), &path);
         Self { uuid_resolver, index_handle: index_actor, update_handle }
     }
 }
@@ -43,12 +47,22 @@ impl IndexController for ActorIndexController {
         index: String,
         method: milli::update::IndexDocumentsMethod,
         format: milli::update::UpdateFormat,
-        data: File,
+        mut payload: Payload,
         primary_key: Option<String>,
     ) -> anyhow::Result<super::UpdateStatus> {
         let uuid = self.uuid_resolver.get_or_create(index).await?;
         let meta = UpdateMeta::DocumentsAddition { method, format, primary_key };
-        let status = self.update_handle.update(meta, Some(data), uuid).await?;
+        let (sender, receiver) = mpsc::channel(10);
+
+        // It is necessary to spawn a local task to senf the payload to the update handle to
+        // prevent dead_locking between the update_handle::update that waits for the update to be
+        // registered and the update_actor that waits for the the payload to be sent to it.
+        tokio::task::spawn_local(async move {
+            while let Some(bytes) = payload.next().await {
+                sender.send(bytes.unwrap()).await;
+            }
+        });
+        let status = self.update_handle.update(meta, receiver, uuid).await?;
         Ok(status)
     }
 
