@@ -29,6 +29,7 @@ static LEVDIST1: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(1, true));
 static LEVDIST2: Lazy<LevBuilder> = Lazy::new(|| LevBuilder::new(2, true));
 
 mod facet;
+mod query_tree;
 
 pub struct Search<'a> {
     query: Option<String>,
@@ -390,4 +391,31 @@ pub struct SearchResult {
     pub candidates: RoaringBitmap,
     // TODO those documents ids should be associated with their criteria scores.
     pub documents_ids: Vec<DocumentId>,
+}
+
+pub fn word_typos(word: &str, is_prefix: bool, max_typo: u8, fst: &fst::Set<Cow<[u8]>>) -> anyhow::Result<Vec<(String, u8)>> {
+    let dfa = {
+        let lev = match max_typo {
+            0 => &LEVDIST0,
+            1 => &LEVDIST1,
+            _ => &LEVDIST2,
+        };
+
+        if is_prefix {
+            lev.build_prefix_dfa(&word)
+        } else {
+            lev.build_dfa(&word)
+        }
+    };
+
+    let mut derived_words = Vec::new();
+    let mut stream = fst.search_with_state(&dfa).into_stream();
+
+    while let Some((word, state)) = stream.next() {
+        let word = std::str::from_utf8(word)?;
+        let distance = dfa.distance(state);
+        derived_words.push((word.to_string(), distance.to_u8()));
+    }
+
+    Ok(derived_words)
 }
