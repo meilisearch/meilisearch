@@ -7,7 +7,6 @@ mod update_handler;
 use std::path::Path;
 
 use tokio::sync::{mpsc, oneshot};
-use super::IndexController;
 use uuid::Uuid;
 use super::IndexMetadata;
 use futures::stream::StreamExt;
@@ -16,19 +15,10 @@ use super::UpdateMeta;
 use crate::data::{SearchResult, SearchQuery};
 use actix_web::web::Bytes;
 
-pub struct ActorIndexController {
+pub struct IndexController {
     uuid_resolver: uuid_resolver::UuidResolverHandle,
     index_handle: index_actor::IndexActorHandle,
     update_handle: update_actor::UpdateActorHandle<Bytes>,
-}
-
-impl ActorIndexController {
-    pub fn new(path: impl AsRef<Path>) -> Self {
-        let uuid_resolver = uuid_resolver::UuidResolverHandle::new();
-        let index_actor = index_actor::IndexActorHandle::new();
-        let update_handle = update_actor::UpdateActorHandle::new(index_actor.clone(), &path);
-        Self { uuid_resolver, index_handle: index_actor, update_handle }
-    }
 }
 
 enum IndexControllerMsg {
@@ -40,9 +30,15 @@ enum IndexControllerMsg {
     Shutdown,
 }
 
-#[async_trait::async_trait(?Send)]
-impl IndexController for ActorIndexController {
-    async fn add_documents(
+impl IndexController {
+    pub fn new(path: impl AsRef<Path>) -> Self {
+        let uuid_resolver = uuid_resolver::UuidResolverHandle::new();
+        let index_actor = index_actor::IndexActorHandle::new();
+        let update_handle = update_actor::UpdateActorHandle::new(index_actor.clone(), &path);
+        Self { uuid_resolver, index_handle: index_actor, update_handle }
+    }
+
+    pub async fn add_documents(
         &self,
         index: String,
         method: milli::update::IndexDocumentsMethod,
@@ -78,7 +74,7 @@ impl IndexController for ActorIndexController {
         todo!()
     }
 
-    async fn create_index(&self, index_settings: super::IndexSettings) -> anyhow::Result<super::IndexMetadata> {
+    pub async fn create_index(&self, index_settings: super::IndexSettings) -> anyhow::Result<super::IndexMetadata> {
         let super::IndexSettings { name, primary_key } = index_settings;
         let uuid = self.uuid_resolver.create(name.unwrap()).await?;
         let index_meta = self.index_handle.create_index(uuid, primary_key).await?;
@@ -93,7 +89,7 @@ impl IndexController for ActorIndexController {
         todo!()
     }
 
-    fn index(&self, name: String) -> anyhow::Result<Option<std::sync::Arc<milli::Index>>> {
+    pub fn index(&self, name: String) -> anyhow::Result<Option<std::sync::Arc<milli::Index>>> {
         todo!()
     }
 
@@ -105,7 +101,7 @@ impl IndexController for ActorIndexController {
         todo!()
     }
 
-    fn list_indexes(&self) -> anyhow::Result<Vec<super::IndexMetadata>> {
+    pub fn list_indexes(&self) -> anyhow::Result<Vec<super::IndexMetadata>> {
         todo!()
     }
 
@@ -113,7 +109,7 @@ impl IndexController for ActorIndexController {
         todo!()
     }
 
-    async fn search(&self, name: String, query: SearchQuery) -> anyhow::Result<SearchResult> {
+    pub async fn search(&self, name: String, query: SearchQuery) -> anyhow::Result<SearchResult> {
         let uuid = self.uuid_resolver.resolve(name).await.unwrap().unwrap();
         let result = self.index_handle.search(uuid, query).await?;
         Ok(result)

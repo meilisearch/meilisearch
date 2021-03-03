@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use sha2::Digest;
 
-use crate::index_controller::{IndexController, IndexMetadata, Settings, IndexSettings};
-use crate::index_controller::actor_index_controller::ActorIndexController;
+use crate::index_controller::{IndexMetadata, Settings, IndexSettings};
+use crate::index_controller::actor_index_controller::IndexController;
 use crate::option::Opt;
 
 #[derive(Clone)]
@@ -26,9 +26,8 @@ impl Deref for Data {
     }
 }
 
-#[derive(Clone)]
 pub struct DataInner {
-    pub index_controller: Arc<dyn IndexController + Send + Sync>,
+    pub index_controller: IndexController,
     pub api_keys: ApiKeys,
     options: Opt,
 }
@@ -62,8 +61,7 @@ impl Data {
         let path = options.db_path.clone();
         //let indexer_opts = options.indexer_options.clone();
         create_dir_all(&path)?;
-        let index_controller = ActorIndexController::new(&path);
-        let index_controller = Arc::new(index_controller);
+        let index_controller = IndexController::new(&path);
 
         let mut api_keys = ApiKeys {
             master: options.clone().master_key,
