@@ -10,13 +10,17 @@ use uuid::Uuid;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
-use crate::index_controller::{UpdateMeta, UpdateStatus, UpdateResult, updates::Pending};
+use crate::index_controller::{UpdateMeta, UpdateStatus, UpdateResult};
 
 pub type Result<T> = std::result::Result<T, UpdateError>;
 type UpdateStore = super::update_store::UpdateStore<UpdateMeta, UpdateResult, String>;
+type PayloadData<D> = std::result::Result<D, Box<dyn std::error::Error + Sync + Send + 'static>>;
 
 #[derive(Debug, Error)]
-pub enum UpdateError {}
+pub enum UpdateError {
+    #[error("error with update: {0}")]
+    Error(Box<dyn std::error::Error + Sync + Send + 'static>),
+}
 
 enum UpdateMsg<D> {
     CreateIndex{
@@ -26,7 +30,7 @@ enum UpdateMsg<D> {
     Update {
         uuid: Uuid,
         meta: UpdateMeta,
-        data: mpsc::Receiver<D>,
+        data: mpsc::Receiver<PayloadData<D>>,
         ret: oneshot::Sender<Result<UpdateStatus>>
     }
 }
@@ -64,24 +68,35 @@ where D: AsRef<[u8]> + Sized + 'static,
         }
     }
 
-    async fn handle_update(&self, uuid: Uuid, meta: UpdateMeta, mut payload: mpsc::Receiver<D>, ret: oneshot::Sender<Result<UpdateStatus>>) {
+    async fn handle_update(&self, uuid: Uuid, meta: UpdateMeta, mut payload: mpsc::Receiver<PayloadData<D>>, ret: oneshot::Sender<Result<UpdateStatus>>) {
         let store = self.store.clone();
         let update_file_id = uuid::Uuid::new_v4();
         let path = self.path.join(format!("update_{}", update_file_id));
         let mut file = File::create(&path).await.unwrap();
 
         while let Some(bytes) = payload.recv().await {
-            file.write_all(bytes.as_ref()).await;
+            match bytes {
+                Ok(bytes) => {
+                    file.write_all(bytes.as_ref()).await;
+                }
+                Err(e) => {
+                    ret.send(Err(UpdateError::Error(e)));
+                    return
+                }
+            }
         }
 
         file.flush().await;
 
         let file = file.into_std().await;
 
-        let result = tokio::task::spawn_blocking(move || -> anyhow::Result<Pending<UpdateMeta>> {
-            Ok(store.register_update(meta, path, uuid)?)
-        }).await.unwrap().unwrap();
-        let _ = ret.send(Ok(UpdateStatus::Pending(result)));
+        let result = tokio::task::spawn_blocking(move || {
+            let result = store
+                .register_update(meta, path, uuid)
+                .map(|pending| UpdateStatus::Pending(pending))
+                .map_err(|e| UpdateError::Error(Box::new(e)));
+            let _ = ret.send(result);
+        }).await;
     }
 }
 
@@ -110,7 +125,7 @@ where D: AsRef<[u8]> + Sized + 'static,
         Self { sender }
     }
 
-    pub async fn update(&self, meta: UpdateMeta, data: mpsc::Receiver<D>, uuid: Uuid) -> Result<UpdateStatus> {
+    pub async fn update(&self, meta: UpdateMeta, data: mpsc::Receiver<PayloadData<D>>, uuid: Uuid) -> Result<UpdateStatus> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::Update {
             uuid,

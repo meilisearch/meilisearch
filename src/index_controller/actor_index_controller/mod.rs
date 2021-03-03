@@ -55,9 +55,16 @@ impl IndexController {
         // registered and the update_actor that waits for the the payload to be sent to it.
         tokio::task::spawn_local(async move {
             while let Some(bytes) = payload.next().await {
-                sender.send(bytes.unwrap()).await;
+                match bytes {
+                    Ok(bytes) => { sender.send(Ok(bytes)).await; },
+                    Err(e) => {
+                        let error: Box<dyn std::error::Error + Sync + Send + 'static> = Box::new(e);
+                        sender.send(Err(error)).await; },
+                }
             }
         });
+
+        // This must be done *AFTER* spawning the task.
         let status = self.update_handle.update(meta, receiver, uuid).await?;
         Ok(status)
     }
