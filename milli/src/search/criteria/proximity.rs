@@ -22,9 +22,9 @@ impl<'t> Proximity<'t> {
         ctx: &'t dyn Context,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
-    ) -> anyhow::Result<Self>
+    ) -> Self
     {
-        Ok(Proximity {
+        Proximity {
             ctx,
             query_tree: query_tree.map(|op| (maximum_proximity(&op), op)),
             proximity: 0,
@@ -32,15 +32,11 @@ impl<'t> Proximity<'t> {
             bucket_candidates: RoaringBitmap::new(),
             parent: None,
             candidates_cache: HashMap::new(),
-        })
+        }
     }
 
-    pub fn new(
-        ctx: &'t dyn Context,
-        parent: Box<dyn Criterion + 't>,
-    ) -> anyhow::Result<Self>
-    {
-        Ok(Proximity {
+    pub fn new(ctx: &'t dyn Context, parent: Box<dyn Criterion + 't>) -> Self {
+        Proximity {
             ctx,
             query_tree: None,
             proximity: 0,
@@ -48,7 +44,7 @@ impl<'t> Proximity<'t> {
             bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
             candidates_cache: HashMap::new(),
-        })
+        }
     }
 }
 

@@ -24,9 +24,9 @@ impl<'t> Typo<'t> {
         ctx: &'t dyn Context,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
-    ) -> anyhow::Result<Self>
+    ) -> Self
     {
-        Ok(Typo {
+        Typo {
             ctx,
             query_tree: query_tree.map(|op| (maximum_typo(&op), op)),
             number_typos: 0,
@@ -35,15 +35,11 @@ impl<'t> Typo<'t> {
             parent: None,
             candidates_cache: HashMap::new(),
             typo_cache: HashMap::new(),
-        })
+        }
     }
 
-    pub fn new(
-        ctx: &'t dyn Context,
-        parent: Box<dyn Criterion + 't>,
-    ) -> anyhow::Result<Self>
-    {
-        Ok(Typo {
+    pub fn new(ctx: &'t dyn Context, parent: Box<dyn Criterion + 't>) -> Self {
+        Typo {
             ctx,
             query_tree: None,
             number_typos: 0,
@@ -52,7 +48,7 @@ impl<'t> Typo<'t> {
             parent: Some(parent),
             candidates_cache: HashMap::new(),
             typo_cache: HashMap::new(),
-        })
+        }
     }
 }
 
@@ -348,7 +344,7 @@ mod test {
         let query_tree = None;
         let facet_candidates = None;
 
-        let mut criteria = Typo::initial(&context, query_tree, facet_candidates).unwrap();
+        let mut criteria = Typo::initial(&context, query_tree, facet_candidates);
 
         assert!(criteria.next().unwrap().is_none());
     }
@@ -366,7 +362,7 @@ mod test {
 
         let facet_candidates = None;
 
-        let mut criteria = Typo::initial(&context, Some(query_tree), facet_candidates).unwrap();
+        let mut criteria = Typo::initial(&context, Some(query_tree), facet_candidates);
 
         let candidates_1 = context.word_docids("split").unwrap().unwrap()
             & context.word_docids("this").unwrap().unwrap()
@@ -414,7 +410,7 @@ mod test {
         let query_tree = None;
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
-        let mut criteria = Typo::initial(&context, query_tree, Some(facet_candidates.clone())).unwrap();
+        let mut criteria = Typo::initial(&context, query_tree, Some(facet_candidates.clone()));
 
         let expected = CriterionResult {
             query_tree: None,
@@ -442,7 +438,7 @@ mod test {
 
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
-        let mut criteria = Typo::initial(&context, Some(query_tree), Some(facet_candidates.clone())).unwrap();
+        let mut criteria = Typo::initial(&context, Some(query_tree), Some(facet_candidates.clone()));
 
         let candidates_1 = context.word_docids("split").unwrap().unwrap()
             & context.word_docids("this").unwrap().unwrap()

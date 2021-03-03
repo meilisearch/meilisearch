@@ -138,9 +138,9 @@ impl<'t> CriteriaBuilder<'t> {
         for name in self.index.criteria(&self.rtxn)? {
             criterion = Some(match criterion.take() {
                 Some(father) => match name {
-                    Name::Typo => Box::new(Typo::new(self, father)?),
-                    Name::Words => Box::new(Words::new(self, father)?),
-                    Name::Proximity => Box::new(Proximity::new(self, father)?),
+                    Name::Typo => Box::new(Typo::new(self, father)),
+                    Name::Words => Box::new(Words::new(self, father)),
+                    Name::Proximity => Box::new(Proximity::new(self, father)),
                     Name::Asc(field) => {
                         let (id, facet_type) = field_id_facet_type(&field)?;
                         Box::new(AscDesc::asc(&self.index, &self.rtxn, father, id, facet_type)?)
@@ -152,9 +152,9 @@ impl<'t> CriteriaBuilder<'t> {
                     _otherwise => father,
                 },
                 None => match name {
-                    Name::Typo => Box::new(Typo::initial(self, query_tree.take(), facet_candidates.take())?),
-                    Name::Words => Box::new(Words::initial(self, query_tree.take(), facet_candidates.take())?),
-                    Name::Proximity => Box::new(Proximity::initial(self, query_tree.take(), facet_candidates.take())?),
+                    Name::Typo => Box::new(Typo::initial(self, query_tree.take(), facet_candidates.take())),
+                    Name::Words => Box::new(Words::initial(self, query_tree.take(), facet_candidates.take())),
+                    Name::Proximity => Box::new(Proximity::initial(self, query_tree.take(), facet_candidates.take())),
                     Name::Asc(field) => {
                         let (id, facet_type) = field_id_facet_type(&field)?;
                         Box::new(AscDesc::initial_asc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), id, facet_type)?)

@@ -21,31 +21,27 @@ impl<'t> Words<'t> {
         ctx: &'t dyn Context,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
-    ) -> anyhow::Result<Self>
+    ) -> Self
     {
-        Ok(Words {
+        Words {
             ctx,
             query_trees: query_tree.map(explode_query_tree).unwrap_or_default(),
             candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
             bucket_candidates: RoaringBitmap::new(),
             parent: None,
             candidates_cache: HashMap::default(),
-        })
+        }
     }
 
-    pub fn new(
-        ctx: &'t dyn Context,
-        parent: Box<dyn Criterion + 't>,
-    ) -> anyhow::Result<Self>
-    {
-        Ok(Words {
+    pub fn new(ctx: &'t dyn Context, parent: Box<dyn Criterion + 't>) -> Self {
+        Words {
             ctx,
             query_trees: Vec::default(),
             candidates: Candidates::default(),
             bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
             candidates_cache: HashMap::default(),
-        })
+        }
     }
 }
 
