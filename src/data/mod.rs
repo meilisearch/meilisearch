@@ -8,7 +8,7 @@ use std::sync::Arc;
 use sha2::Digest;
 
 use crate::index_controller::{IndexMetadata, IndexSettings};
-use crate::index_controller::actor_index_controller::IndexController;
+use crate::index_controller::IndexController;
 use crate::index::Settings;
 use crate::option::Opt;
 
