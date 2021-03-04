@@ -11,6 +11,8 @@ use log::info;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
+use std::future::Future;
+use futures::pin_mut;
 
 use super::update_handler::UpdateHandler;
 use crate::index::UpdateResult as UResult;
@@ -61,7 +63,8 @@ enum IndexMsg {
 }
 
 struct IndexActor<S> {
-    inbox: Option<mpsc::Receiver<IndexMsg>>,
+    read_receiver: Option<mpsc::Receiver<IndexMsg>>,
+    write_receiver: Option<mpsc::Receiver<IndexMsg>>,
     update_handler: Arc<UpdateHandler>,
     store: S,
 }
@@ -82,60 +85,96 @@ trait IndexStore {
 }
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
-    fn new(inbox: mpsc::Receiver<IndexMsg>, store: S) -> Self {
+    fn new(
+        read_receiver: mpsc::Receiver<IndexMsg>,
+        write_receiver: mpsc::Receiver<IndexMsg>,
+        store: S
+    ) -> Self {
         let options = IndexerOpts::default();
         let update_handler = UpdateHandler::new(&options).unwrap();
         let update_handler = Arc::new(update_handler);
-        let inbox = Some(inbox);
+        let read_receiver = Some(read_receiver);
+        let write_receiver = Some(write_receiver);
         Self {
-            inbox,
+            read_receiver,
+            write_receiver,
             store,
             update_handler,
         }
     }
 
+    /// `run` poll the write_receiver and read_receiver concurrently, but while messages send
+    /// through the read channel are processed concurrently, the messages sent through the write
+    /// channel are processed one at a time.
     async fn run(mut self) {
-        use IndexMsg::*;
-
-        let mut inbox = self
-            .inbox
+        let mut read_receiver = self
+            .read_receiver
             .take()
             .expect("Index Actor must have a inbox at this point.");
 
-        let stream = stream! {
+        let read_stream = stream! {
             loop {
-                match inbox.recv().await {
+                match read_receiver.recv().await {
                     Some(msg) => yield msg,
                     None => break,
                 }
             }
         };
 
-        let fut = stream.for_each_concurrent(Some(10), |msg| async {
-            match msg {
-                CreateIndex {
-                    uuid,
-                    primary_key,
-                    ret,
-                } => self.handle_create_index(uuid, primary_key, ret).await,
-                Update { ret, meta, data } => self.handle_update(meta, data, ret).await,
-                Search { ret, query, uuid } => self.handle_search(uuid, query, ret).await,
-                Settings { ret, uuid } => self.handle_settings(uuid, ret).await,
-                Documents {
-                    ret,
-                    uuid,
-                    attributes_to_retrieve,
-                    offset,
-                    limit,
-                } => {
-                    self.handle_fetch_documents(uuid, offset, limit, attributes_to_retrieve, ret)
-                        .await
-                }
-                Document { uuid, attributes_to_retrieve, doc_id, ret } => self.handle_fetch_document(uuid, doc_id, attributes_to_retrieve, ret).await,
-            }
-        });
+        let mut write_receiver = self
+            .write_receiver
+            .take()
+            .expect("Index Actor must have a inbox at this point.");
 
-        fut.await;
+        let write_stream = stream! {
+            loop {
+                match write_receiver.recv().await {
+                    Some(msg) => yield msg,
+                    None => break,
+                }
+            }
+        };
+
+        pin_mut!(write_stream);
+        pin_mut!(read_stream);
+
+        let fut1 = read_stream.for_each_concurrent(Some(10), |msg| self.handle_message(msg));
+        let fut2 = write_stream.for_each_concurrent(Some(1), |msg| self.handle_message(msg));
+
+        let fut1: Box<dyn Future<Output = ()> + Unpin + Send> = Box::new(fut1);
+        let fut2: Box<dyn Future<Output = ()> + Unpin + Send> = Box::new(fut2);
+
+        //let futures = futures::stream::futures_unordered::FuturesUnordered::new();
+        //futures.push(fut1);
+        //futures.push(fut2);
+        //futures.for_each(f)
+        tokio::join!(fut1, fut2);
+
+    }
+
+    async fn handle_message(&self, msg: IndexMsg) {
+        use IndexMsg::*;
+        match msg {
+            CreateIndex {
+                uuid,
+                primary_key,
+                ret,
+            } => self.handle_create_index(uuid, primary_key, ret).await,
+            Update { ret, meta, data } => self.handle_update(meta, data, ret).await,
+            Search { ret, query, uuid } => self.handle_search(uuid, query, ret).await,
+            Settings { ret, uuid } => self.handle_settings(uuid, ret).await,
+            Documents {
+                ret,
+                uuid,
+                attributes_to_retrieve,
+                offset,
+                limit,
+            } => {
+                self.handle_fetch_documents(uuid, offset, limit, attributes_to_retrieve, ret)
+                    .await
+            }
+            Document { uuid, attributes_to_retrieve, doc_id, ret } => self.handle_fetch_document(uuid, doc_id, attributes_to_retrieve, ret).await,
+        }
     }
 
     async fn handle_search(
@@ -221,17 +260,19 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
 #[derive(Clone)]
 pub struct IndexActorHandle {
-    sender: mpsc::Sender<IndexMsg>,
+    read_sender: mpsc::Sender<IndexMsg>,
+    write_sender: mpsc::Sender<IndexMsg>,
 }
 
 impl IndexActorHandle {
     pub fn new(path: impl AsRef<Path>) -> Self {
-        let (sender, receiver) = mpsc::channel(100);
+        let (read_sender, read_receiver) = mpsc::channel(100);
+        let (write_sender, write_receiver) = mpsc::channel(100);
 
         let store = MapIndexStore::new(path);
-        let actor = IndexActor::new(receiver, store);
+        let actor = IndexActor::new(read_receiver, write_receiver, store);
         tokio::task::spawn(actor.run());
-        Self { sender }
+        Self { read_sender, write_sender }
     }
 
     pub async fn create_index(
@@ -245,28 +286,28 @@ impl IndexActorHandle {
             uuid,
             primary_key,
         };
-        let _ = self.sender.send(msg).await;
+        let _ = self.read_sender.send(msg).await;
         receiver.await.expect("IndexActor has been killed")
     }
 
     pub async fn update(&self, meta: Processing<UpdateMeta>, data: std::fs::File) -> UpdateResult {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Update { ret, meta, data };
-        let _ = self.sender.send(msg).await;
+        let _ = self.read_sender.send(msg).await;
         receiver.await.expect("IndexActor has been killed")
     }
 
     pub async fn search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Search { uuid, query, ret };
-        let _ = self.sender.send(msg).await;
+        let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
     pub async fn settings(&self, uuid: Uuid) -> Result<Settings> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Settings { uuid, ret };
-        let _ = self.sender.send(msg).await;
+        let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
@@ -285,7 +326,7 @@ impl IndexActorHandle {
             attributes_to_retrieve,
             limit,
         };
-        let _ = self.sender.send(msg).await;
+        let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 
@@ -302,7 +343,7 @@ impl IndexActorHandle {
             doc_id,
             attributes_to_retrieve,
         };
-        let _ = self.sender.send(msg).await;
+        let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
 }
