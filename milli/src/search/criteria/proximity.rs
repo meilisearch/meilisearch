@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, btree_map};
 use std::mem::take;
 
 use roaring::RoaringBitmap;
@@ -16,6 +16,7 @@ pub struct Proximity<'t> {
     bucket_candidates: RoaringBitmap,
     parent: Option<Box<dyn Criterion + 't>>,
     candidates_cache: HashMap<(Operation, u8), Vec<(Query, Query, RoaringBitmap)>>,
+    plane_sweep_cache: Option<btree_map::IntoIter<u8, RoaringBitmap>>,
 }
 
 impl<'t> Proximity<'t> {
@@ -33,6 +34,7 @@ impl<'t> Proximity<'t> {
             bucket_candidates: RoaringBitmap::new(),
             parent: None,
             candidates_cache: HashMap::new(),
+            plane_sweep_cache: None,
         }
     }
 
@@ -45,6 +47,7 @@ impl<'t> Proximity<'t> {
             bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
             candidates_cache: HashMap::new(),
+            plane_sweep_cache: None,
         }
     }
 }
@@ -69,15 +72,42 @@ impl<'t> Criterion for Proximity<'t> {
                 },
                 (Some((max_prox, query_tree)), Allowed(candidates)) => {
                     if self.proximity as usize > *max_prox {
+                        // reset state to (None, Forbidden(_))
                         self.query_tree = None;
                         self.candidates = Candidates::default();
                     } else {
-                        let mut new_candidates = resolve_candidates(
-                            self.ctx,
-                            &query_tree,
-                            self.proximity,
-                            &mut self.candidates_cache,
-                        )?;
+                        let mut new_candidates = if candidates.len() <= 1000 {
+                            if let Some(cache) = self.plane_sweep_cache.as_mut() {
+                                match cache.next() {
+                                    Some((p, candidates)) => {
+                                        self.proximity = p;
+                                        candidates
+                                    },
+                                    None => {
+                                        // reset state to (None, Forbidden(_))
+                                        self.query_tree = None;
+                                        self.candidates = Candidates::default();
+                                        continue
+                                    },
+                                }
+                            } else {
+                                let cache = resolve_plane_sweep_candidates(
+                                    self.ctx,
+                                    query_tree,
+                                    candidates
+                                )?;
+                                self.plane_sweep_cache = Some(cache.into_iter());
+
+                                continue
+                            }
+                        } else { // use set theory based algorithm
+                            resolve_candidates(
+                               self.ctx,
+                               &query_tree,
+                               self.proximity,
+                               &mut self.candidates_cache,
+                           )?
+                        };
 
                         new_candidates.intersect_with(&candidates);
                         candidates.difference_with(&new_candidates);
@@ -140,6 +170,7 @@ impl<'t> Criterion for Proximity<'t> {
                                     self.proximity = 0;
                                     self.candidates = Candidates::Allowed(candidates);
                                     self.bucket_candidates.union_with(&bucket_candidates);
+                                    self.plane_sweep_cache = None;
                                 },
                                 None => return Ok(None),
                             }
