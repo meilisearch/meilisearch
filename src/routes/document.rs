@@ -199,26 +199,25 @@ async fn update_documents(
     params: web::Query<UpdateDocumentsQuery>,
     body: web::Payload,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
-    //let addition_result = data
-        //.add_documents(
-            //path.into_inner().index_uid,
-            //IndexDocumentsMethod::UpdateDocuments,
-            //UpdateFormat::Json,
-            //body,
-            //params.primary_key.clone(),
-        //).await;
+    let addition_result = data
+        .add_documents(
+            path.into_inner().index_uid,
+            IndexDocumentsMethod::UpdateDocuments,
+            UpdateFormat::Json,
+            body,
+            params.primary_key.clone(),
+        ).await;
 
-    //match addition_result {
-        //Ok(update) => {
-            //let value = serde_json::to_string(&update).unwrap();
-            //let response = HttpResponse::Ok().body(value);
-            //Ok(response)
-        //}
-        //Err(e) => {
-            //Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
-        //}
-    //}
+    match addition_result {
+        Ok(update) => {
+            let value = serde_json::to_string(&update).unwrap();
+            let response = HttpResponse::Ok().body(value);
+            Ok(response)
+        }
+        Err(e) => {
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+        }
+    }
 }
 
 #[post(
