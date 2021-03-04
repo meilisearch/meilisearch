@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use std::borrow::Cow;
 
-use anyhow::{bail, Context as _};
+use anyhow::bail;
 use roaring::RoaringBitmap;
 
-use crate::facet::FacetType;
 use crate::search::word_derivations;
-use crate::{Index, FieldId};
+use crate::Index;
 
 use super::query_tree::{Operation, Query, QueryKind};
 use self::typo::Typo;
