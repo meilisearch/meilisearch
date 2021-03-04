@@ -1,23 +1,24 @@
+use std::collections::{HashMap, hash_map::Entry};
 use std::fs::{File, create_dir_all};
 use std::path::{PathBuf, Path};
 use std::sync::Arc;
 use std::time::Instant;
 
+use anyhow::bail;
+use either::Either;
+use async_stream::stream;
 use chrono::Utc;
-use heed::EnvOpenOptions;
-use milli::Index;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
+use futures::stream::StreamExt;
+use heed::{EnvOpenOptions, RoTxn};
+use log::info;
+use milli::{FacetCondition, Index};
+use serde_json::Value;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
-use log::info;
-use crate::data::SearchQuery;
-use futures::stream::StreamExt;
 
 use super::update_handler::UpdateHandler;
-use async_stream::stream;
-use crate::data::SearchResult;
+use crate::data::{SearchQuery, SearchResult};
 use crate::index_controller::{IndexMetadata, UpdateMeta, updates::{Processed, Failed, Processing}, UpdateResult as UResult};
 use crate::option::IndexerOpts;
 
@@ -99,7 +100,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
     }
 
     async fn handle_update(&self, meta: Processing<UpdateMeta>, data: File, ret: oneshot::Sender<UpdateResult>) {
-        info!("processing update {}", meta.id());
+        info!("Processing update {}", meta.id());
         let uuid = meta.index_uuid().clone();
         let index = self.store.get_or_create(uuid).await.unwrap();
         let update_handler = self.update_handler.clone();
@@ -122,11 +123,12 @@ fn perform_search(index: &Index, query: SearchQuery) -> anyhow::Result<SearchRes
     search.limit(query.limit);
     search.offset(query.offset.unwrap_or_default());
 
-    //if let Some(ref facets) = query.facet_filters {
-    //if let Some(facets) = parse_facets(facets, index, &rtxn)? {
-    //search.facet_condition(facets);
-    //}
-    //}
+    if let Some(ref facets) = query.facet_filters {
+        if let Some(facets) = parse_facets(facets, index, &rtxn)? {
+            search.facet_condition(facets);
+        }
+    }
+
     let milli::SearchResult {
         documents_ids,
         found_words,
@@ -190,6 +192,50 @@ fn perform_search(index: &Index, query: SearchQuery) -> anyhow::Result<SearchRes
     Ok(result)
 }
 
+fn parse_facets_array(
+    txn: &RoTxn,
+    index: &Index,
+    arr: &Vec<Value>,
+) -> anyhow::Result<Option<FacetCondition>> {
+    let mut ands = Vec::new();
+    for value in arr {
+        match value {
+            Value::String(s) => ands.push(Either::Right(s.clone())),
+            Value::Array(arr) => {
+                let mut ors = Vec::new();
+                for value in arr {
+                    match value {
+                        Value::String(s) => ors.push(s.clone()),
+                        v => bail!("Invalid facet expression, expected String, found: {:?}", v),
+                    }
+                }
+                ands.push(Either::Left(ors));
+            }
+            v => bail!(
+                "Invalid facet expression, expected String or [String], found: {:?}",
+                v
+            ),
+        }
+    }
+
+    FacetCondition::from_array(txn, index, ands)
+}
+
+fn parse_facets(
+    facets: &Value,
+    index: &Index,
+    txn: &RoTxn,
+) -> anyhow::Result<Option<FacetCondition>> {
+    match facets {
+        // Disabled for now
+        //Value::String(expr) => Ok(Some(FacetCondition::from_str(txn, index, expr)?)),
+        Value::Array(arr) => parse_facets_array(txn, index, arr),
+        v => bail!(
+            "Invalid facet expression, expected Array, found: {:?}",
+            v
+        ),
+    }
+}
 #[derive(Clone)]
 pub struct IndexActorHandle {
     sender: mpsc::Sender<IndexMsg>,
