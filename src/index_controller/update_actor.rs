@@ -140,7 +140,7 @@ pub struct UpdateActorHandle<D> {
 
 impl<D> UpdateActorHandle<D>
 where
-    D: AsRef<[u8]> + Sized + 'static,
+    D: AsRef<[u8]> + Sized + 'static + Sync + Send,
 {
     pub fn new(index_handle: IndexActorHandle, path: impl AsRef<Path>) -> Self {
         let path = path.as_ref().to_owned().join("updates");
@@ -148,7 +148,7 @@ where
         let store = MapUpdateStoreStore::new(index_handle, &path);
         let actor = UpdateActor::new(store, receiver, path);
 
-        tokio::task::spawn_local(actor.run());
+        tokio::task::spawn(actor.run());
 
         Self { sender }
     }
@@ -207,5 +207,3 @@ impl UpdateStoreStore for MapUpdateStoreStore {
         }
     }
 }
-
-
