@@ -1,8 +1,6 @@
 pub mod search;
 mod updates;
 
-pub use search::{SearchQuery, SearchResult, DEFAULT_SEARCH_LIMIT};
-
 use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::sync::Arc;

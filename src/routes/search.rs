@@ -4,11 +4,11 @@ use std::convert::{TryFrom, TryInto};
 use actix_web::{get, post, web, HttpResponse};
 use serde::Deserialize;
 
-use crate::data::{SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
 use crate::Data;
+use crate::index::{SearchQuery, DEFAULT_SEARCH_LIMIT};
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(search_with_post).service(search_with_url_query);

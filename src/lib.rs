@@ -8,6 +8,7 @@ pub mod error;
 pub mod helpers;
 pub mod option;
 pub mod routes;
+mod index;
 mod index_controller;
 
 pub use option::Opt;

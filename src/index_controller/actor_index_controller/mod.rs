@@ -12,7 +12,7 @@ use super::IndexMetadata;
 use futures::stream::StreamExt;
 use actix_web::web::Payload;
 use super::UpdateMeta;
-use crate::data::{SearchResult, SearchQuery};
+use crate::index::{SearchResult, SearchQuery};
 use actix_web::web::Bytes;
 
 pub struct IndexController {

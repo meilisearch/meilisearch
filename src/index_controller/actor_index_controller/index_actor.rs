@@ -2,25 +2,20 @@ use std::collections::{HashMap, hash_map::Entry};
 use std::fs::{File, create_dir_all};
 use std::path::{PathBuf, Path};
 use std::sync::Arc;
-use std::time::Instant;
 
-use anyhow::bail;
-use either::Either;
 use async_stream::stream;
 use chrono::Utc;
 use futures::stream::StreamExt;
-use heed::{EnvOpenOptions, RoTxn};
+use heed::EnvOpenOptions;
 use log::info;
-use milli::{FacetCondition, Index};
-use serde_json::Value;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
 
 use super::update_handler::UpdateHandler;
-use crate::data::{SearchQuery, SearchResult};
 use crate::index_controller::{IndexMetadata, UpdateMeta, updates::{Processed, Failed, Processing}, UpdateResult as UResult};
 use crate::option::IndexerOpts;
+use crate::index::{Index, SearchQuery, SearchResult};
 
 pub type Result<T> = std::result::Result<T, IndexError>;
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
@@ -49,8 +44,8 @@ pub enum IndexError {
 #[async_trait::async_trait]
 trait IndexStore {
     async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMetadata>;
-    async fn get_or_create(&self, uuid: Uuid) -> Result<Arc<Index>>;
-    async fn get(&self, uuid: Uuid) -> Result<Option<Arc<Index>>>;
+    async fn get_or_create(&self, uuid: Uuid) -> Result<Index>;
+    async fn get(&self, uuid: Uuid) -> Result<Option<Index>>;
 }
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
@@ -88,7 +83,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
     async fn handle_search(&self, uuid: Uuid, query: SearchQuery, ret: oneshot::Sender<anyhow::Result<SearchResult>>) {
         let index = self.store.get(uuid).await.unwrap().unwrap();
         tokio::task::spawn_blocking(move || {
-            let result = perform_search(&index, query);
+            let result = index.perform_search(query);
             ret.send(result)
         });
 
@@ -104,138 +99,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         let uuid = meta.index_uuid().clone();
         let index = self.store.get_or_create(uuid).await.unwrap();
         let update_handler = self.update_handler.clone();
-        let result = tokio::task::spawn_blocking(move || update_handler.handle_update(meta, data, index.as_ref())).await;
+        let result = tokio::task::spawn_blocking(move || update_handler.handle_update(meta, data, index)).await;
         let result = result.unwrap();
         let _ = ret.send(result);
     }
 }
 
-fn perform_search(index: &Index, query: SearchQuery) -> anyhow::Result<SearchResult> {
-    let before_search = Instant::now();
-    let rtxn = index.read_txn()?;
-
-    let mut search = index.search(&rtxn);
-
-    if let Some(ref query) = query.q {
-        search.query(query);
-    }
-
-    search.limit(query.limit);
-    search.offset(query.offset.unwrap_or_default());
-
-    if let Some(ref facets) = query.facet_filters {
-        if let Some(facets) = parse_facets(facets, index, &rtxn)? {
-            search.facet_condition(facets);
-        }
-    }
-
-    let milli::SearchResult {
-        documents_ids,
-        found_words,
-        candidates,
-        ..
-    } = search.execute()?;
-    let mut documents = Vec::new();
-    let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
-
-    let displayed_fields_ids = index.displayed_fields_ids(&rtxn).unwrap();
-
-    let attributes_to_retrieve_ids = match query.attributes_to_retrieve {
-        Some(ref attrs) if attrs.iter().any(|f| f == "*") => None,
-        Some(ref attrs) => attrs
-            .iter()
-            .filter_map(|f| fields_ids_map.id(f))
-            .collect::<Vec<_>>()
-            .into(),
-        None => None,
-    };
-
-    let displayed_fields_ids = match (displayed_fields_ids, attributes_to_retrieve_ids) {
-        (_, Some(ids)) => ids,
-        (Some(ids), None) => ids,
-        (None, None) => fields_ids_map.iter().map(|(id, _)| id).collect(),
-    };
-
-    let stop_words = fst::Set::default();
-    let highlighter = crate::data::search::Highlighter::new(&stop_words);
-
-    for (_id, obkv) in index.documents(&rtxn, documents_ids)? {
-        let mut object = milli::obkv_to_json(&displayed_fields_ids, &fields_ids_map, obkv).unwrap();
-        if let Some(ref attributes_to_highlight) = query.attributes_to_highlight {
-            highlighter.highlight_record(&mut object, &found_words, attributes_to_highlight);
-        }
-        documents.push(object);
-    }
-
-    let nb_hits = candidates.len();
-
-    let facet_distributions = match query.facet_distributions {
-        Some(ref fields) => {
-            let mut facet_distribution = index.facets_distribution(&rtxn);
-            if fields.iter().all(|f| f != "*") {
-                facet_distribution.facets(fields);
-            }
-            Some(facet_distribution.candidates(candidates).execute()?)
-        }
-        None => None,
-    };
-
-    let result = SearchResult {
-        hits: documents,
-        nb_hits,
-        query: query.q.clone().unwrap_or_default(),
-        limit: query.limit,
-        offset: query.offset.unwrap_or_default(),
-        processing_time_ms: before_search.elapsed().as_millis(),
-        facet_distributions,
-    };
-    Ok(result)
-}
-
-fn parse_facets_array(
-    txn: &RoTxn,
-    index: &Index,
-    arr: &Vec<Value>,
-) -> anyhow::Result<Option<FacetCondition>> {
-    let mut ands = Vec::new();
-    for value in arr {
-        match value {
-            Value::String(s) => ands.push(Either::Right(s.clone())),
-            Value::Array(arr) => {
-                let mut ors = Vec::new();
-                for value in arr {
-                    match value {
-                        Value::String(s) => ors.push(s.clone()),
-                        v => bail!("Invalid facet expression, expected String, found: {:?}", v),
-                    }
-                }
-                ands.push(Either::Left(ors));
-            }
-            v => bail!(
-                "Invalid facet expression, expected String or [String], found: {:?}",
-                v
-            ),
-        }
-    }
-
-    FacetCondition::from_array(txn, index, ands)
-}
-
-fn parse_facets(
-    facets: &Value,
-    index: &Index,
-    txn: &RoTxn,
-) -> anyhow::Result<Option<FacetCondition>> {
-    match facets {
-        // Disabled for now
-        //Value::String(expr) => Ok(Some(FacetCondition::from_str(txn, index, expr)?)),
-        Value::Array(arr) => parse_facets_array(txn, index, arr),
-        v => bail!(
-            "Invalid facet expression, expected Array, found: {:?}",
-            v
-        ),
-    }
-}
 #[derive(Clone)]
 pub struct IndexActorHandle {
     sender: mpsc::Sender<IndexMsg>,
@@ -276,7 +145,7 @@ impl IndexActorHandle {
 struct MapIndexStore {
     root: PathBuf,
     meta_store: AsyncMap<Uuid, IndexMetadata>,
-    index_store: AsyncMap<Uuid, Arc<Index>>,
+    index_store: AsyncMap<Uuid, Index>,
 }
 
 #[async_trait::async_trait]
@@ -301,17 +170,18 @@ impl IndexStore for MapIndexStore {
             create_dir_all(&db_path).expect("can't create db");
             let mut options = EnvOpenOptions::new();
             options.map_size(4096 * 100_000);
-            let index = Index::new(options, &db_path)
+            let index = milli::Index::new(options, &db_path)
                 .map_err(|e| IndexError::Error(e))?;
+            let index = Index(Arc::new(index));
             Ok(index)
         }).await.expect("thread died");
 
-        self.index_store.write().await.insert(meta.uuid.clone(), Arc::new(index?));
+        self.index_store.write().await.insert(meta.uuid.clone(), index?);
 
         Ok(meta)
     }
 
-    async fn get_or_create(&self, uuid: Uuid) -> Result<Arc<Index>> {
+    async fn get_or_create(&self, uuid: Uuid) -> Result<Index> {
         match self.index_store.write().await.entry(uuid.clone()) {
             Entry::Vacant(entry) => {
                 match self.meta_store.write().await.entry(uuid.clone()) {
@@ -327,7 +197,7 @@ impl IndexStore for MapIndexStore {
         }
     }
 
-    async fn get(&self, uuid: Uuid) -> Result<Option<Arc<Index>>> {
+    async fn get(&self, uuid: Uuid) -> Result<Option<Index>> {
         Ok(self.index_store.read().await.get(&uuid).cloned())
     }
 }

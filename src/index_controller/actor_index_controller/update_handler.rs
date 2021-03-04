@@ -7,7 +7,7 @@ use flate2::read::GzDecoder;
 use grenad::CompressionType;
 use log::info;
 use milli::update::{IndexDocumentsMethod, UpdateBuilder, UpdateFormat};
-use milli::Index;
+use crate::index::Index;
 use rayon::ThreadPool;
 
 use crate::index_controller::updates::{Failed, Processed, Processing};
@@ -225,7 +225,7 @@ impl UpdateHandler {
         &self,
         meta: Processing<UpdateMeta>,
         content: File,
-        index: &Index,
+        index: Index,
     ) -> Result<Processed<UpdateMeta, UpdateResult>, Failed<UpdateMeta, String>> {
         use UpdateMeta::*;
 
@@ -244,12 +244,12 @@ impl UpdateHandler {
                 content,
                 update_builder,
                 primary_key.as_deref(),
-                index,
+                &index,
             ),
-            ClearDocuments => self.clear_documents(update_builder, index),
-            DeleteDocuments => self.delete_documents(content, update_builder, index),
-            Settings(settings) => self.update_settings(settings, update_builder, index),
-            Facets(levels) => self.update_facets(levels, update_builder, index),
+            ClearDocuments => self.clear_documents(update_builder, &index),
+            DeleteDocuments => self.delete_documents(content, update_builder, &index),
+            Settings(settings) => self.update_settings(settings, update_builder, &index),
+            Facets(levels) => self.update_facets(levels, update_builder, &index),
         };
 
         match result {
