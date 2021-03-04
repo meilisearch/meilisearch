@@ -172,6 +172,20 @@ impl IndexController {
         Ok(documents)
     }
 
+    pub async fn document(
+        &self,
+        index: String,
+        doc_id: String,
+        attributes_to_retrieve: Option<Vec<String>>,
+    ) -> anyhow::Result<Document> {
+        let uuid = self.uuid_resolver
+            .resolve(index.clone())
+            .await?
+            .with_context(|| format!("Index {:?} doesn't exist", index))?;
+        let document = self.index_handle.document(uuid, doc_id, attributes_to_retrieve).await?;
+        Ok(document)
+    }
+
     fn update_index(&self, name: String, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
         todo!()
     }

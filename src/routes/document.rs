@@ -55,18 +55,17 @@ async fn get_document(
     data: web::Data<Data>,
     path: web::Path<DocumentParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
-    //let index = path.index_uid.clone();
-    //let id = path.document_id.clone();
-    //match data.retrieve_document(index, id, None as Option<Vec<String>>).await {
-        //Ok(document) => {
-            //let json = serde_json::to_string(&document).unwrap();
-            //Ok(HttpResponse::Ok().body(json))
-        //}
-        //Err(e) => {
-            //Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
-        //}
-    //}
+    let index = path.index_uid.clone();
+    let id = path.document_id.clone();
+    match data.retrieve_document(index, id, None as Option<Vec<String>>).await {
+        Ok(document) => {
+            let json = serde_json::to_string(&document).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+        }
+    }
 }
 
 #[delete(

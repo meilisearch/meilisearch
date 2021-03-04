@@ -8,7 +8,6 @@ use chrono::Utc;
 use futures::stream::StreamExt;
 use heed::EnvOpenOptions;
 use log::info;
-use serde_json::{Map, Value};
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
@@ -51,8 +50,14 @@ enum IndexMsg {
         attributes_to_retrieve: Option<Vec<String>>,
         offset: usize,
         limit: usize,
-        ret: oneshot::Sender<Result<Vec<Map<String, Value>>>>,
+        ret: oneshot::Sender<Result<Vec<Document>>>,
     },
+    Document {
+        uuid: Uuid,
+        attributes_to_retrieve: Option<Vec<String>>,
+        doc_id: String,
+        ret: oneshot::Sender<Result<Document>>,
+    }
 }
 
 struct IndexActor<S> {
@@ -126,6 +131,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                     self.handle_fetch_documents(uuid, offset, limit, attributes_to_retrieve, ret)
                         .await
                 }
+                Document { uuid, attributes_to_retrieve, doc_id, ret } => self.handle_fetch_document(uuid, doc_id, attributes_to_retrieve, ret).await,
             }
         });
 
@@ -192,6 +198,21 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         let index = self.store.get(uuid).await.unwrap().unwrap();
         tokio::task::spawn_blocking(move || {
             let result = index.retrieve_documents(offset, limit, attributes_to_retrieve)
+                .map_err(|e| IndexError::Error(e));
+            let _ = ret.send(result);
+        }).await;
+    }
+
+    async fn handle_fetch_document(
+        &self,
+        uuid: Uuid,
+        doc_id: String,
+        attributes_to_retrieve: Option<Vec<String>>,
+        ret: oneshot::Sender<Result<Document>>,
+    ) {
+        let index = self.store.get(uuid).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || {
+            let result = index.retrieve_document(doc_id, attributes_to_retrieve)
                 .map_err(|e| IndexError::Error(e));
             let _ = ret.send(result);
         }).await;
@@ -263,6 +284,23 @@ impl IndexActorHandle {
             offset,
             attributes_to_retrieve,
             limit,
+        };
+        let _ = self.sender.send(msg).await;
+        Ok(receiver.await.expect("IndexActor has been killed")?)
+    }
+
+    pub async fn document(
+        &self,
+        uuid: Uuid,
+        doc_id: String,
+        attributes_to_retrieve: Option<Vec<String>>,
+    ) -> Result<Document> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = IndexMsg::Document {
+            uuid,
+            ret,
+            doc_id,
+            attributes_to_retrieve,
         };
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
