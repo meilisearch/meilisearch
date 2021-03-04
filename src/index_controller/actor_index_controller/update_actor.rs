@@ -10,7 +10,8 @@ use uuid::Uuid;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 
-use crate::index_controller::{UpdateMeta, UpdateStatus, UpdateResult};
+use crate::index_controller::{UpdateMeta, UpdateStatus};
+use crate::index::UpdateResult;
 
 pub type Result<T> = std::result::Result<T, UpdateError>;
 type UpdateStore = super::update_store::UpdateStore<UpdateMeta, UpdateResult, String>;

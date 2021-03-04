@@ -15,6 +15,9 @@ use super::UpdateMeta;
 use crate::index::{SearchResult, SearchQuery};
 use actix_web::web::Bytes;
 
+use crate::index::Settings;
+use super::UpdateStatus;
+
 pub struct IndexController {
     uuid_resolver: uuid_resolver::UuidResolverHandle,
     index_handle: index_actor::IndexActorHandle,
@@ -69,7 +72,7 @@ impl IndexController {
         Ok(status)
     }
 
-    fn clear_documents(&self, index: String) -> anyhow::Result<super::UpdateStatus> {
+    fn clear_documents(&self, index: String) -> anyhow::Result<UpdateStatus> {
         todo!()
     }
 
@@ -77,7 +80,7 @@ impl IndexController {
         todo!()
     }
 
-    fn update_settings(&self, index_uid: String, settings: super::Settings) -> anyhow::Result<super::UpdateStatus> {
+    fn update_settings(&self, index_uid: String, settings: Settings) -> anyhow::Result<super::UpdateStatus> {
         todo!()
     }
 
@@ -100,7 +103,7 @@ impl IndexController {
         todo!()
     }
 
-    fn update_status(&self, index: String, id: u64) -> anyhow::Result<Option<super::UpdateStatus>> {
+    fn update_status(&self, index: String, id: u64) -> anyhow::Result<Option<UpdateStatus>> {
         todo!()
     }
 

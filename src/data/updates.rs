@@ -4,9 +4,10 @@ use milli::update::{IndexDocumentsMethod, UpdateFormat};
 //use tokio::io::AsyncWriteExt;
 use actix_web::web::Payload;
 
-use crate::index_controller::UpdateStatus;
-use crate::index_controller::{Settings, IndexMetadata};
+use crate::index_controller::{UpdateStatus, IndexMetadata};
+use crate::index::Settings;
 use super::Data;
+
 
 impl Data {
     pub async fn add_documents(

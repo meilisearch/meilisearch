@@ -2,7 +2,7 @@ use actix_web::{web, HttpResponse, delete, get, post};
 
 use crate::Data;
 use crate::error::ResponseError;
-use crate::index_controller::Settings;
+use crate::index::Settings;
 use crate::helpers::Authentication;
 
 #[macro_export]
@@ -14,14 +14,14 @@ macro_rules! make_setting_route {
             use crate::data;
             use crate::error::ResponseError;
             use crate::helpers::Authentication;
-            use crate::index_controller::Settings;
+            use crate::index::Settings;
 
             #[actix_web::delete($route, wrap = "Authentication::Private")]
             pub async fn delete(
                 data: web::Data<data::Data>,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
-                use crate::index_controller::Settings;
+                use crate::index::Settings;
                 let settings = Settings {
                     $attr: Some(None),
                     ..Default::default()

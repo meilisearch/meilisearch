@@ -13,7 +13,8 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
 
 use super::update_handler::UpdateHandler;
-use crate::index_controller::{IndexMetadata, UpdateMeta, updates::{Processed, Failed, Processing}, UpdateResult as UResult};
+use crate::index_controller::{IndexMetadata, UpdateMeta, updates::{Processed, Failed, Processing}};
+use crate::index::UpdateResult as UResult;
 use crate::option::IndexerOpts;
 use crate::index::{Index, SearchQuery, SearchResult};
 
