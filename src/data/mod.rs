@@ -78,35 +78,8 @@ impl Data {
         Ok(Data { inner })
     }
 
-    pub fn settings<S: AsRef<str>>(&self, index_uid: S) -> anyhow::Result<Settings> {
-        let index = self.index_controller
-            .index(index_uid.as_ref().to_string())?
-            .ok_or_else(|| anyhow::anyhow!("Index {} does not exist.", index_uid.as_ref()))?;
-
-        let txn = index.read_txn()?;
-
-        let displayed_attributes = index
-            .displayed_fields(&txn)?
-            .map(|fields| fields.into_iter().map(String::from).collect())
-            .unwrap_or_else(|| vec!["*".to_string()]);
-
-        let searchable_attributes = index
-            .searchable_fields(&txn)?
-            .map(|fields| fields.into_iter().map(String::from).collect())
-            .unwrap_or_else(|| vec!["*".to_string()]);
-
-        let faceted_attributes = index
-            .faceted_fields(&txn)?
-            .into_iter()
-            .map(|(k, v)| (k, v.to_string()))
-            .collect();
-
-        Ok(Settings {
-            displayed_attributes: Some(Some(displayed_attributes)),
-            searchable_attributes: Some(Some(searchable_attributes)),
-            faceted_attributes: Some(Some(faceted_attributes)),
-            criteria: None,
-        })
+    pub async fn settings<S: AsRef<str>>(&self, index_uid: S) -> anyhow::Result<Settings> {
+        self.index_controller.settings(index_uid.as_ref().to_string()).await
     }
 
     pub fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {

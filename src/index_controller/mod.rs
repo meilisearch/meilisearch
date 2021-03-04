@@ -7,14 +7,15 @@ mod update_handler;
 
 use std::path::Path;
 
-use tokio::sync::{mpsc, oneshot};
-use futures::stream::StreamExt;
-use actix_web::web::Payload;
-use crate::index::{SearchResult, SearchQuery};
 use actix_web::web::Bytes;
+use actix_web::web::Payload;
+use anyhow::Context;
 use chrono::{DateTime, Utc};
+use crate::index::{SearchResult, SearchQuery};
+use futures::stream::StreamExt;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::{Serialize, Deserialize};
+use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 pub use updates::{Processed, Processing, Failed};
@@ -135,14 +136,6 @@ impl IndexController {
         todo!()
     }
 
-    fn swap_indices(&self, index1_uid: String, index2_uid: String) -> anyhow::Result<()> {
-        todo!()
-    }
-
-    pub fn index(&self, name: String) -> anyhow::Result<Option<std::sync::Arc<milli::Index>>> {
-        todo!()
-    }
-
     fn update_status(&self, index: String, id: u64) -> anyhow::Result<Option<UpdateStatus>> {
         todo!()
     }
@@ -153,6 +146,15 @@ impl IndexController {
 
     pub fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
         todo!()
+    }
+
+    pub async fn settings(&self, index: String) -> anyhow::Result<Settings> {
+        let uuid = self.uuid_resolver
+            .resolve(index.clone())
+            .await?
+            .with_context(|| format!("Index {:?} doesn't exist", index))?;
+        let settings = self.index_handle.settings(uuid).await?;
+        Ok(settings)
     }
 
     fn update_index(&self, name: String, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {

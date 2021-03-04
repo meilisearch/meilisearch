@@ -16,7 +16,7 @@ use super::update_handler::UpdateHandler;
 use crate::index_controller::{IndexMetadata, UpdateMeta, updates::{Processed, Failed, Processing}};
 use crate::index::UpdateResult as UResult;
 use crate::option::IndexerOpts;
-use crate::index::{Index, SearchQuery, SearchResult};
+use crate::index::{Index, SearchQuery, SearchResult, Settings};
 
 pub type Result<T> = std::result::Result<T, IndexError>;
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
@@ -26,6 +26,7 @@ enum IndexMsg {
     CreateIndex { uuid: Uuid, primary_key: Option<String>, ret: oneshot::Sender<Result<IndexMetadata>> },
     Update { meta: Processing<UpdateMeta>, data: std::fs::File, ret: oneshot::Sender<UpdateResult>},
     Search { uuid: Uuid, query: SearchQuery, ret: oneshot::Sender<anyhow::Result<SearchResult>> },
+    Settings { uuid: Uuid, ret: oneshot::Sender<Result<Settings>> },
 }
 
 struct IndexActor<S> {
@@ -75,6 +76,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                 IndexMsg::CreateIndex { uuid, primary_key, ret } => self.handle_create_index(uuid, primary_key, ret).await,
                 IndexMsg::Update { ret, meta, data } => self.handle_update(meta, data, ret).await,
                 IndexMsg::Search { ret, query, uuid } => self.handle_search(uuid, query, ret).await,
+                IndexMsg::Settings { ret, uuid } => self.handle_settings(uuid, ret).await,
             }
         });
 
@@ -100,9 +102,19 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         let uuid = meta.index_uuid().clone();
         let index = self.store.get_or_create(uuid).await.unwrap();
         let update_handler = self.update_handler.clone();
-        let result = tokio::task::spawn_blocking(move || update_handler.handle_update(meta, data, index)).await;
-        let result = result.unwrap();
-        let _ = ret.send(result);
+        tokio::task::spawn_blocking(move || {
+            let result = update_handler.handle_update(meta, data, index);
+            let _ = ret.send(result);
+        }).await;
+    }
+
+    async fn handle_settings(&self, uuid: Uuid, ret: oneshot::Sender<Result<Settings>>) {
+        let index = self.store.get(uuid).await.unwrap().unwrap();
+        tokio::task::spawn_blocking(move || {
+            let result = index.settings()
+                .map_err(|e| IndexError::Error(e));
+            let _ = ret.send(result);
+        }).await;
     }
 }
 
@@ -138,6 +150,13 @@ impl IndexActorHandle {
     pub async fn search(&self, uuid: Uuid, query: SearchQuery) -> Result<SearchResult> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::Search { uuid, query, ret };
+        let _ = self.sender.send(msg).await;
+        Ok(receiver.await.expect("IndexActor has been killed")?)
+    }
+
+    pub async fn settings(&self, uuid: Uuid) -> Result<Settings> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = IndexMsg::Settings { uuid, ret };
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
