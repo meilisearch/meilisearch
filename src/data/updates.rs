@@ -25,13 +25,11 @@ impl Data {
 
     pub async fn update_settings(
         &self,
-        _index: impl AsRef<str> + Send + Sync + 'static,
-        _settings: Settings
+        index: String,
+        settings: Settings
     ) -> anyhow::Result<UpdateStatus> {
-        todo!()
-        //let index_controller = self.index_controller.clone();
-        //let update = tokio::task::spawn_blocking(move || index_controller.update_settings(index, settings)).await??;
-        //Ok(update.into())
+        let update = self.index_controller.update_settings(index, settings).await?;
+        Ok(update.into())
     }
 
     pub async fn clear_documents(

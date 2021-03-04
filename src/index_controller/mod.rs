@@ -114,8 +114,14 @@ impl IndexController {
         todo!()
     }
 
-    fn update_settings(&self, index_uid: String, settings: Settings) -> anyhow::Result<UpdateStatus> {
-        todo!()
+    pub async fn update_settings(&self, index_uid: String, settings: Settings) -> anyhow::Result<UpdateStatus> {
+        let uuid = self.uuid_resolver.get_or_create(index_uid).await?;
+        let meta = UpdateMeta::Settings(settings);
+        // Nothing so send, drop the sender right away, as not to block the update actor.
+        let (_, receiver) = mpsc::channel(1);
+
+        let status = self.update_handle.update(meta, receiver, uuid).await?;
+        Ok(status)
     }
 
     pub async fn create_index(&self, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
