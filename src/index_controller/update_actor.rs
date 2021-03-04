@@ -24,15 +24,15 @@ pub enum UpdateError {
 }
 
 enum UpdateMsg<D> {
-    CreateIndex{
-        uuid: Uuid,
-        ret: oneshot::Sender<Result<()>>,
-    },
     Update {
         uuid: Uuid,
         meta: UpdateMeta,
         data: mpsc::Receiver<PayloadData<D>>,
         ret: oneshot::Sender<Result<UpdateStatus>>
+    },
+    ListUpdates {
+        uuid: Uuid,
+        ret: oneshot::Sender<Result<Vec<UpdateStatus>>>,
     }
 }
 
@@ -58,12 +58,14 @@ where D: AsRef<[u8]> + Sized + 'static,
     }
 
     async fn run(mut self) {
+        use UpdateMsg::*;
+
         info!("started update actor.");
 
         loop {
             match self.inbox.recv().await {
-                Some(UpdateMsg::Update { uuid, meta, data, ret }) => self.handle_update(uuid, meta, data, ret).await,
-                Some(_) => {}
+                Some(Update { uuid, meta, data, ret }) => self.handle_update(uuid, meta, data, ret).await,
+                Some(ListUpdates { uuid, ret }) => self.handle_list_updates(uuid, ret).await,
                 None => {}
             }
         }
@@ -98,6 +100,10 @@ where D: AsRef<[u8]> + Sized + 'static,
                 .map_err(|e| UpdateError::Error(Box::new(e)));
             let _ = ret.send(result);
         }).await;
+    }
+
+    async fn handle_list_updates(&self, uuid: Uuid, ret: oneshot::Sender<Result<Vec<UpdateStatus>>>) {
+        todo!()
     }
 }
 
