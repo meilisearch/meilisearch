@@ -34,12 +34,10 @@ impl Data {
 
     pub async fn clear_documents(
         &self,
-        _index: impl AsRef<str> + Sync + Send + 'static,
+        index: impl AsRef<str> + Sync + Send + 'static,
     ) -> anyhow::Result<UpdateStatus> {
-        todo!()
-        //let index_controller = self.index_controller.clone();
-        //let update = tokio::task::spawn_blocking(move || index_controller.clear_documents(index)).await??;
-        //Ok(update.into())
+        let update = self.index_controller.clear_documents(index.as_ref().to_string()).await?;
+        Ok(update)
     }
 
     pub async fn delete_documents(

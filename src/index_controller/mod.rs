@@ -106,8 +106,12 @@ impl IndexController {
         Ok(status)
     }
 
-    fn clear_documents(&self, index: String) -> anyhow::Result<UpdateStatus> {
-        todo!()
+    pub async fn clear_documents(&self, index: String) -> anyhow::Result<UpdateStatus> {
+        let uuid = self.uuid_resolver.resolve(index).await.unwrap().unwrap();
+        let meta = UpdateMeta::ClearDocuments;
+        let (_, receiver) = mpsc::channel(1);
+        let status = self.update_handle.update(meta, receiver, uuid).await?;
+        Ok(status)
     }
 
     pub async fn delete_documents(&self, index: String, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus> {

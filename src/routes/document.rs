@@ -250,14 +250,13 @@ async fn clear_all_documents(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
-    //match data.clear_documents(path.index_uid.clone()).await {
-        //Ok(update) => {
-            //let json = serde_json::to_string(&update).unwrap();
-            //Ok(HttpResponse::Ok().body(json))
-        //}
-        //Err(e) => {
-            //Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
-        //}
-    //}
+    match data.clear_documents(path.index_uid.clone()).await {
+        Ok(update) => {
+            let json = serde_json::to_string(&update).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+        }
+    }
 }
