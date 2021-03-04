@@ -11,7 +11,6 @@ use actix_web::web::Bytes;
 use actix_web::web::Payload;
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use crate::index::{SearchResult, SearchQuery};
 use futures::stream::StreamExt;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::{Serialize, Deserialize};
@@ -19,6 +18,7 @@ use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 pub use updates::{Processed, Processing, Failed};
+use crate::index::{SearchResult, SearchQuery, Document};
 use crate::index::{UpdateResult, Settings, Facets};
 
 pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
@@ -155,6 +155,21 @@ impl IndexController {
             .with_context(|| format!("Index {:?} doesn't exist", index))?;
         let settings = self.index_handle.settings(uuid).await?;
         Ok(settings)
+    }
+
+    pub async fn documents(
+        &self,
+        index: String,
+        offset: usize,
+        limit: usize,
+        attributes_to_retrieve: Option<Vec<String>>,
+    ) -> anyhow::Result<Vec<Document>> {
+        let uuid = self.uuid_resolver
+            .resolve(index.clone())
+            .await?
+            .with_context(|| format!("Index {:?} doesn't exist", index))?;
+        let documents = self.index_handle.documents(uuid, offset, limit, attributes_to_retrieve).await?;
+        Ok(documents)
     }
 
     fn update_index(&self, name: String, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {

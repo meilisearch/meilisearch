@@ -12,59 +12,22 @@ impl Data {
         self.index_controller.search(index.as_ref().to_string(), search_query).await
     }
 
-    pub async fn retrieve_documents<S>(
+    pub async fn retrieve_documents(
         &self,
-        _index: String,
-        _offset: usize,
-        _limit: usize,
-        _attributes_to_retrieve: Option<Vec<S>>,
-    ) -> anyhow::Result<Vec<Map<String, Value>>>
-    where
-        S: AsRef<str> + Send + Sync + 'static,
-    {
-         todo!()
-        //let index_controller = self.index_controller.clone();
-        //let documents: anyhow::Result<_> = tokio::task::spawn_blocking(move || {
-            //let index = index_controller
-                //.index(index.clone())?
-                //.with_context(|| format!("Index {:?} doesn't exist", index))?;
-
-            //let txn = index.read_txn()?;
-
-            //let fields_ids_map = index.fields_ids_map(&txn)?;
-
-            //let attributes_to_retrieve_ids = match attributes_to_retrieve {
-                //Some(attrs) => attrs
-                    //.iter()
-                    //.filter_map(|f| fields_ids_map.id(f.as_ref()))
-                    //.collect::<Vec<_>>(),
-                //None => fields_ids_map.iter().map(|(id, _)| id).collect(),
-            //};
-
-            //let iter = index.documents.range(&txn, &(..))?.skip(offset).take(limit);
-
-            //let mut documents = Vec::new();
-
-            //for entry in iter {
-                //let (_id, obkv) = entry?;
-                //let object = obkv_to_json(&attributes_to_retrieve_ids, &fields_ids_map, obkv)?;
-                //documents.push(object);
-            //}
-
-            //Ok(documents)
-        //})
-        //.await?;
-        //documents
+        index: String,
+        offset: usize,
+        limit: usize,
+        attributes_to_retrieve: Option<Vec<String>>,
+    ) -> anyhow::Result<Vec<Map<String, Value>>> {
+        self.index_controller.documents(index, offset, limit, attributes_to_retrieve).await
     }
 
     pub async fn retrieve_document<S>(
         &self,
         _index: impl AsRef<str> + Sync + Send + 'static,
         _document_id: impl AsRef<str> + Sync + Send + 'static,
-        _attributes_to_retrieve: Option<Vec<S>>,
+        _attributes_to_retrieve: Option<Vec<String>>,
     ) -> anyhow::Result<Map<String, Value>>
-    where
-        S: AsRef<str> + Sync + Send + 'static,
     {
         todo!()
         //let index_controller = self.index_controller.clone();
