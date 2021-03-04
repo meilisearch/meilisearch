@@ -7,8 +7,7 @@ mod update_handler;
 
 use std::path::Path;
 
-use actix_web::web::Bytes;
-use actix_web::web::Payload;
+use actix_web::web::{Bytes, Payload};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
@@ -111,8 +110,19 @@ impl IndexController {
         todo!()
     }
 
-    fn delete_documents(&self, index: String, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus> {
-        todo!()
+    pub async fn delete_documents(&self, index: String, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus> {
+        let uuid = self.uuid_resolver.resolve(index).await.unwrap().unwrap();
+        let meta = UpdateMeta::DeleteDocuments;
+        let (sender, receiver) = mpsc::channel(10);
+
+        tokio::task::spawn(async move {
+            let json = serde_json::to_vec(&document_ids).unwrap();
+            let bytes = Bytes::from(json);
+            let _ = sender.send(Ok(bytes)).await;
+        });
+
+        let status = self.update_handle.update(meta, receiver, uuid).await?;
+        Ok(status)
     }
 
     pub async fn update_settings(&self, index_uid: String, settings: Settings) -> anyhow::Result<UpdateStatus> {

@@ -44,13 +44,11 @@ impl Data {
 
     pub async fn delete_documents(
         &self,
-        _index: impl AsRef<str> + Sync + Send + 'static,
-        _document_ids: Vec<String>,
+        index: impl AsRef<str> + Sync + Send + 'static,
+        document_ids: Vec<String>,
     ) -> anyhow::Result<UpdateStatus> {
-        todo!()
-        //let index_controller = self.index_controller.clone();
-        //let update = tokio::task::spawn_blocking(move || index_controller.delete_documents(index, document_ids)).await??;
-        //Ok(update.into())
+        let update = self.index_controller.delete_documents(index.as_ref().to_string(), document_ids).await?;
+        Ok(update.into())
     }
 
     pub async fn delete_index(

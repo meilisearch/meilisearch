@@ -229,21 +229,20 @@ async fn delete_documents(
     path: web::Path<IndexParam>,
     body: web::Json<Vec<Value>>,
 ) -> Result<HttpResponse, ResponseError> {
-    todo!()
-    //let ids = body
-        //.iter()
-        //.map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
-        //.collect();
+    let ids = body
+        .iter()
+        .map(|v| v.as_str().map(String::from).unwrap_or_else(|| v.to_string()))
+        .collect();
 
-    //match data.delete_documents(path.index_uid.clone(), ids).await {
-        //Ok(result) => {
-            //let json = serde_json::to_string(&result).unwrap();
-            //Ok(HttpResponse::Ok().body(json))
-        //}
-        //Err(e) => {
-            //Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
-        //}
-    //}
+    match data.delete_documents(path.index_uid.clone(), ids).await {
+        Ok(result) => {
+            let json = serde_json::to_string(&result).unwrap();
+            Ok(HttpResponse::Ok().body(json))
+        }
+        Err(e) => {
+            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+        }
+    }
 }
 
 #[delete("/indexes/{index_uid}/documents", wrap = "Authentication::Private")]
