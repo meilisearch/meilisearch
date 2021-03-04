@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::mem::take;
 
-use anyhow::bail;
+use anyhow::{bail, Context as _};
 use itertools::Itertools;
 use log::debug;
 use ordered_float::OrderedFloat;
@@ -13,12 +13,13 @@ use crate::heed_codec::facet::{FieldDocIdFacetI64Codec, FieldDocIdFacetF64Codec}
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::FacetIter;
 use crate::search::query_tree::Operation;
-use crate::{FieldId, Index};
+use crate::{FieldsIdsMap, FieldId, Index};
 use super::{Criterion, CriterionResult};
 
 pub struct AscDesc<'t> {
     index: &'t Index,
     rtxn: &'t heed::RoTxn<'t>,
+    field_name: String,
     field_id: FieldId,
     facet_type: FacetType,
     ascending: bool,
@@ -35,11 +36,10 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
     ) -> anyhow::Result<Self>
     {
-        Self::initial(index, rtxn, query_tree, candidates, field_id, facet_type, true)
+        Self::initial(index, rtxn, query_tree, candidates, field_name, true)
     }
 
     pub fn initial_desc(
@@ -47,33 +47,30 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
     ) -> anyhow::Result<Self>
     {
-        Self::initial(index, rtxn, query_tree, candidates, field_id, facet_type, false)
+        Self::initial(index, rtxn, query_tree, candidates, field_name, false)
     }
 
     pub fn asc(
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
     ) -> anyhow::Result<Self>
     {
-        Self::new(index, rtxn, parent, field_id, facet_type, true)
+        Self::new(index, rtxn, parent, field_name, true)
     }
 
     pub fn desc(
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
     ) -> anyhow::Result<Self>
     {
-        Self::new(index, rtxn, parent, field_id, facet_type, false)
+        Self::new(index, rtxn, parent, field_name, false)
     }
 
     fn initial(
@@ -81,11 +78,14 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
         ascending: bool,
     ) -> anyhow::Result<Self>
     {
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let faceted_fields = index.faceted_fields(rtxn)?;
+        let (field_id, facet_type) = field_id_facet_type(&fields_ids_map, &faceted_fields, &field_name)?;
+
         let faceted_candidates = index.faceted_documents_ids(rtxn, field_id)?;
         let candidates = match &query_tree {
             Some(qt) => {
@@ -102,6 +102,7 @@ impl<'t> AscDesc<'t> {
         Ok(AscDesc {
             index,
             rtxn,
+            field_name,
             field_id,
             facet_type,
             ascending,
@@ -117,14 +118,18 @@ impl<'t> AscDesc<'t> {
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
         ascending: bool,
     ) -> anyhow::Result<Self>
     {
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let faceted_fields = index.faceted_fields(rtxn)?;
+        let (field_id, facet_type) = field_id_facet_type(&fields_ids_map, &faceted_fields, &field_name)?;
+
         Ok(AscDesc {
             index,
             rtxn,
+            field_name,
             field_id,
             facet_type,
             ascending,
@@ -140,8 +145,8 @@ impl<'t> AscDesc<'t> {
 impl<'t> Criterion for AscDesc<'t> {
     fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
         loop {
-            debug!("Facet {} iteration ({:?})",
-                if self.ascending { "Asc" } else { "Desc" }, self.candidates,
+            debug!("Facet {}({}) iteration ({:?})",
+                if self.ascending { "Asc" } else { "Desc" }, self.field_name, self.candidates,
             );
 
             match &mut self.candidates {
@@ -195,6 +200,21 @@ impl<'t> Criterion for AscDesc<'t> {
             }
         }
     }
+}
+
+fn field_id_facet_type(
+    fields_ids_map: &FieldsIdsMap,
+    faceted_fields: &HashMap<String, FacetType>,
+    field: &str,
+) -> anyhow::Result<(FieldId, FacetType)>
+{
+    let id = fields_ids_map.id(field).with_context(|| {
+        format!("field {:?} isn't registered", field)
+    })?;
+    let facet_type = faceted_fields.get(field).with_context(|| {
+        format!("field {:?} isn't faceted", field)
+    })?;
+    Ok((id, *facet_type))
 }
 
 fn facet_ordered(

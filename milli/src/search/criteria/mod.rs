@@ -122,18 +122,6 @@ impl<'t> CriteriaBuilder<'t> {
     {
         use crate::criterion::Criterion as Name;
 
-        let fields_ids_map = self.index.fields_ids_map(&self.rtxn)?;
-        let faceted_fields = self.index.faceted_fields(&self.rtxn)?;
-        let field_id_facet_type = |field: &str| -> anyhow::Result<(FieldId, FacetType)> {
-            let id = fields_ids_map.id(field).with_context(|| {
-                format!("field {:?} isn't registered", field)
-            })?;
-            let facet_type = faceted_fields.get(field).with_context(|| {
-                format!("field {:?} isn't faceted", field)
-            })?;
-            Ok((id, *facet_type))
-        };
-
         let mut criterion = None as Option<Box<dyn Criterion>>;
         for name in self.index.criteria(&self.rtxn)? {
             criterion = Some(match criterion.take() {
@@ -141,14 +129,8 @@ impl<'t> CriteriaBuilder<'t> {
                     Name::Typo => Box::new(Typo::new(self, father)),
                     Name::Words => Box::new(Words::new(self, father)),
                     Name::Proximity => Box::new(Proximity::new(self, father)),
-                    Name::Asc(field) => {
-                        let (id, facet_type) = field_id_facet_type(&field)?;
-                        Box::new(AscDesc::asc(&self.index, &self.rtxn, father, id, facet_type)?)
-                    },
-                    Name::Desc(field) => {
-                        let (id, facet_type) = field_id_facet_type(&field)?;
-                        Box::new(AscDesc::desc(&self.index, &self.rtxn, father, id, facet_type)?)
-                    },
+                    Name::Asc(field) => Box::new(AscDesc::asc(&self.index, &self.rtxn, father, field)?),
+                    Name::Desc(field) => Box::new(AscDesc::desc(&self.index, &self.rtxn, father, field)?),
                     _otherwise => father,
                 },
                 None => match name {
@@ -156,12 +138,10 @@ impl<'t> CriteriaBuilder<'t> {
                     Name::Words => Box::new(Words::initial(self, query_tree.take(), facet_candidates.take())),
                     Name::Proximity => Box::new(Proximity::initial(self, query_tree.take(), facet_candidates.take())),
                     Name::Asc(field) => {
-                        let (id, facet_type) = field_id_facet_type(&field)?;
-                        Box::new(AscDesc::initial_asc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), id, facet_type)?)
+                        Box::new(AscDesc::initial_asc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), field)?)
                     },
                     Name::Desc(field) => {
-                        let (id, facet_type) = field_id_facet_type(&field)?;
-                        Box::new(AscDesc::initial_desc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), id, facet_type)?)
+                        Box::new(AscDesc::initial_desc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), field)?)
                     },
                     _otherwise => continue,
                 },
