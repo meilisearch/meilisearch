@@ -30,9 +30,9 @@ const ALL_DATABASE_NAMES: &[&str] = &[
     WORD_PREFIX_DOCIDS_DB_NAME,
     DOCID_WORD_POSITIONS_DB_NAME,
     WORD_PAIR_PROXIMITY_DOCIDS_DB_NAME,
+    WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
     FACET_FIELD_ID_VALUE_DOCIDS_NAME,
     FIELD_ID_DOCID_FACET_VALUES_NAME,
-    WORD_PREFIX_PAIR_PROXIMITY_DOCIDS_DB_NAME,
     DOCUMENTS_DB_NAME,
 ];
 
@@ -145,6 +145,8 @@ enum Command {
 
     /// Outputs the size in bytes of the specified databases names.
     SizeOfDatabase {
+        /// The name of the database to measure the size of, if not specified it's equivalent
+        /// to specifying all the databases names.
         #[structopt(possible_values = ALL_DATABASE_NAMES)]
         databases: Vec<String>,
     },
@@ -730,6 +732,12 @@ fn average_number_of_positions_by_word(index: &Index, rtxn: &heed::RoTxn) -> any
 fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> anyhow::Result<()> {
     use heed::types::ByteSlice;
 
+    let names = if names.is_empty() {
+        ALL_DATABASE_NAMES.iter().map(|s| s.to_string()).collect()
+    } else {
+        names
+    };
+
     for name in names {
         let database = match name.as_str() {
             MAIN_DB_NAME => &index.main,
@@ -753,9 +761,9 @@ fn size_of_databases(index: &Index, rtxn: &heed::RoTxn, names: Vec<String>) -> a
         }
 
         println!("The {} database weigh:", name);
-        println!("\ttotal key size: {} bytes", key_size);
-        println!("\ttotal val size: {} bytes", val_size);
-        println!("\ttotal size: {} bytes", key_size + val_size);
+        println!("\ttotal key size: {}", Byte::from(key_size).get_appropriate_unit(true));
+        println!("\ttotal val size: {}", Byte::from(val_size).get_appropriate_unit(true));
+        println!("\ttotal size: {}", Byte::from(key_size + val_size).get_appropriate_unit(true));
     }
 
     Ok(())
@@ -810,9 +818,9 @@ fn database_stats(index: &Index, rtxn: &heed::RoTxn, name: &str) -> anyhow::Resu
         println!("\tminimum: {}", minimum);
         println!("\tmaximum: {}", maximum);
         println!("\taverage: {}", sum as f64 / count as f64);
-        println!("\ttotal key size: {} bytes", key_size);
-        println!("\ttotal val size: {} bytes", val_size);
-        println!("\ttotal size: {} bytes", key_size + val_size);
+        println!("\ttotal key size: {}", Byte::from(key_size).get_appropriate_unit(true));
+        println!("\ttotal val size: {}", Byte::from(val_size).get_appropriate_unit(true));
+        println!("\ttotal size: {}", Byte::from(key_size + val_size).get_appropriate_unit(true));
 
         Ok(())
     }
