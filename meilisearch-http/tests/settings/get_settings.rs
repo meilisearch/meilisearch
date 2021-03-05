@@ -51,8 +51,6 @@ async fn test_partial_update() {
 }
 
 #[actix_rt::test]
-#[ignore]
-// need fix #54
 async fn delete_settings_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -132,7 +130,6 @@ macro_rules! test_setting_routes {
                 }
 
                 #[actix_rt::test]
-                #[ignore]
                 async fn delete_unexisting_index() {
                     let server = Server::new().await;
                     let url = format!("/indexes/test/settings/{}",

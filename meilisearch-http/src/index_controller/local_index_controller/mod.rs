@@ -5,7 +5,7 @@ mod update_handler;
 use std::path::Path;
 use std::sync::Arc;
 
-use anyhow::{bail, Context};
+use anyhow::{bail, Context, anyhow};
 use itertools::Itertools;
 use milli::Index;
 
@@ -51,9 +51,14 @@ impl IndexController for LocalIndexController {
     fn update_settings<S: AsRef<str>>(
         &self,
         index: S,
-        settings: super::Settings
+        settings: super::Settings,
+        create: bool,
     ) -> anyhow::Result<UpdateStatus<UpdateMeta, UpdateResult, String>> {
-        let (_, update_store) = self.indexes.get_or_create_index(&index, self.update_db_size, self.index_db_size)?;
+        let (_, update_store) = if create {
+            self.indexes.get_or_create_index(&index, self.update_db_size, self.index_db_size)?
+        } else {
+            self.indexes.index(&index)?.ok_or_else(|| anyhow!("Index {:?} doesn't exist", index.as_ref()))?
+        };
         let meta = UpdateMeta::Settings(settings);
         let pending = update_store.register_update(meta, &[])?;
         Ok(pending.into())
