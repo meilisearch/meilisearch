@@ -5,7 +5,7 @@ use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::search::query_tree::{maximum_typo, Operation, Query, QueryKind};
-use crate::search::word_derivations;
+use crate::search::{word_derivations, WordDerivationsCache};
 use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
 
 pub struct Typo<'t> {
@@ -53,7 +53,7 @@ impl<'t> Typo<'t> {
 }
 
 impl<'t> Criterion for Typo<'t> {
-    fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         loop {
             debug!("Typo at iteration {} ({:?})", self.number_typos, self.candidates);
@@ -73,15 +73,21 @@ impl<'t> Criterion for Typo<'t> {
                     } else {
                         let fst = self.ctx.words_fst();
                         let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache)?
+                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?
                         } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache)?;
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?;
                             query_tree.clone()
                         } else {
                             query_tree.clone()
                         };
 
-                        let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos, &mut self.candidates_cache)?;
+                        let mut new_candidates = resolve_candidates(
+                            self.ctx,
+                            &new_query_tree,
+                            self.number_typos,
+                            &mut self.candidates_cache,
+                            wdcache,
+                        )?;
                         new_candidates.intersect_with(&candidates);
                         candidates.difference_with(&new_candidates);
                         self.number_typos += 1;
@@ -105,15 +111,21 @@ impl<'t> Criterion for Typo<'t> {
                     } else {
                         let fst = self.ctx.words_fst();
                         let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache)?
+                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?
                         } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache)?;
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?;
                             query_tree.clone()
                         } else {
                             query_tree.clone()
                         };
 
-                        let mut new_candidates = resolve_candidates(self.ctx, &new_query_tree, self.number_typos, &mut self.candidates_cache)?;
+                        let mut new_candidates = resolve_candidates(
+                            self.ctx,
+                            &new_query_tree,
+                            self.number_typos,
+                            &mut self.candidates_cache,
+                            wdcache,
+                        )?;
                         new_candidates.difference_with(&candidates);
                         candidates.union_with(&new_candidates);
                         self.number_typos += 1;
@@ -141,7 +153,7 @@ impl<'t> Criterion for Typo<'t> {
                 (None, Forbidden(_)) => {
                     match self.parent.as_mut() {
                         Some(parent) => {
-                            match parent.next()? {
+                            match parent.next(wdcache)? {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     self.query_tree = query_tree.map(|op| (maximum_typo(&op), op));
                                     self.number_typos = 0;
@@ -167,6 +179,7 @@ fn alterate_query_tree(
     mut query_tree: Operation,
     number_typos: u8,
     typo_cache: &mut HashMap<(String, bool, u8), Vec<(String, u8)>>,
+    wdcache: &mut WordDerivationsCache,
 ) -> anyhow::Result<Operation>
 {
     fn recurse(
@@ -174,13 +187,14 @@ fn alterate_query_tree(
         operation: &mut Operation,
         number_typos: u8,
         typo_cache: &mut HashMap<(String, bool, u8), Vec<(String, u8)>>,
+        wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<()>
     {
         use Operation::{And, Consecutive, Or};
 
         match operation {
             And(ops) | Consecutive(ops) | Or(_, ops) => {
-                ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, typo_cache))
+                ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, typo_cache, wdcache))
             },
             Operation::Query(q) => {
                 // TODO may be optimized when number_typos == 0
@@ -198,7 +212,7 @@ fn alterate_query_tree(
                         let words = if let Some(derivations) = typo_cache.get(&cache_key) {
                             derivations.clone()
                         } else {
-                            let derivations = word_derivations(word, q.prefix, typo, words_fst)?;
+                            let derivations = word_derivations(word, q.prefix, typo, words_fst, wdcache)?.to_vec();
                             typo_cache.insert(cache_key, derivations.clone());
                             derivations
                         };
@@ -219,7 +233,7 @@ fn alterate_query_tree(
         }
     }
 
-    recurse(words_fst, &mut query_tree, number_typos, typo_cache)?;
+    recurse(words_fst, &mut query_tree, number_typos, typo_cache, wdcache)?;
     Ok(query_tree)
 }
 
@@ -228,6 +242,7 @@ fn resolve_candidates<'t>(
     query_tree: &Operation,
     number_typos: u8,
     cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
+    wdcache: &mut WordDerivationsCache,
 ) -> anyhow::Result<RoaringBitmap>
 {
     fn resolve_operation<'t>(
@@ -235,13 +250,14 @@ fn resolve_candidates<'t>(
         query_tree: &Operation,
         number_typos: u8,
         cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
+        wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<RoaringBitmap>
     {
         use Operation::{And, Consecutive, Or, Query};
 
         match query_tree {
             And(ops) => {
-                mdfs(ctx, ops, number_typos, cache)
+                mdfs(ctx, ops, number_typos, cache, wdcache)
             },
             Consecutive(ops) => {
                 let mut candidates = RoaringBitmap::new();
@@ -249,7 +265,7 @@ fn resolve_candidates<'t>(
                 for slice in ops.windows(2) {
                     match (&slice[0], &slice[1]) {
                         (Operation::Query(left), Operation::Query(right)) => {
-                            match query_pair_proximity_docids(ctx, left, right, 1)? {
+                            match query_pair_proximity_docids(ctx, left, right, 1, wdcache)? {
                                 pair_docids if pair_docids.is_empty() => {
                                     return Ok(RoaringBitmap::new())
                                 },
@@ -270,13 +286,13 @@ fn resolve_candidates<'t>(
             Or(_, ops) => {
                 let mut candidates = RoaringBitmap::new();
                 for op in ops {
-                    let docids = resolve_operation(ctx, op, number_typos, cache)?;
+                    let docids = resolve_operation(ctx, op, number_typos, cache, wdcache)?;
                     candidates.union_with(&docids);
                 }
                 Ok(candidates)
             },
             Query(q) => if q.kind.typo() == number_typos {
-                Ok(query_docids(ctx, q)?)
+                Ok(query_docids(ctx, q, wdcache)?)
             } else {
                 Ok(RoaringBitmap::new())
             },
@@ -288,6 +304,7 @@ fn resolve_candidates<'t>(
         branches: &[Operation],
         mana: u8,
         cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
+        wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<RoaringBitmap>
     {
         match branches.split_first() {
@@ -296,7 +313,7 @@ fn resolve_candidates<'t>(
                 if let Some(candidates) = cache.get(&cache_key) {
                     Ok(candidates.clone())
                 } else {
-                    let candidates = resolve_operation(ctx, head, mana, cache)?;
+                    let candidates = resolve_operation(ctx, head, mana, cache, wdcache)?;
                     cache.insert(cache_key, candidates.clone());
                     Ok(candidates)
                 }
@@ -310,13 +327,13 @@ fn resolve_candidates<'t>(
                         if let Some(candidates) = cache.get(&cache_key) {
                             candidates.clone()
                         } else {
-                            let candidates = resolve_operation(ctx, head, m, cache)?;
+                            let candidates = resolve_operation(ctx, head, m, cache, wdcache)?;
                             cache.insert(cache_key, candidates.clone());
                             candidates
                         }
                     };
                     if !head_candidates.is_empty() {
-                        let tail_candidates = mdfs(ctx, tail, mana - m, cache)?;
+                        let tail_candidates = mdfs(ctx, tail, mana - m, cache, wdcache)?;
                         head_candidates.intersect_with(&tail_candidates);
                         candidates.union_with(&head_candidates);
                     }
@@ -328,7 +345,7 @@ fn resolve_candidates<'t>(
         }
     }
 
-    resolve_operation(ctx, query_tree, number_typos, cache)
+    resolve_operation(ctx, query_tree, number_typos, cache, wdcache)
 }
 
 #[cfg(test)]
@@ -343,9 +360,10 @@ mod test {
         let query_tree = None;
         let facet_candidates = None;
 
+        let mut wdcache = WordDerivationsCache::new();
         let mut criteria = Typo::initial(&context, query_tree, facet_candidates);
 
-        assert!(criteria.next().unwrap().is_none());
+        assert!(criteria.next(&mut wdcache).unwrap().is_none());
     }
 
     #[test]
@@ -361,6 +379,7 @@ mod test {
 
         let facet_candidates = None;
 
+let mut wdcache = WordDerivationsCache::new();
         let mut criteria = Typo::initial(&context, Some(query_tree), facet_candidates);
 
         let candidates_1 = context.word_docids("split").unwrap().unwrap()
@@ -378,7 +397,7 @@ mod test {
             bucket_candidates: candidates_1,
         };
 
-        assert_eq!(criteria.next().unwrap(), Some(expected_1));
+        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_1));
 
         let candidates_2 = (
                 context.word_docids("split").unwrap().unwrap()
@@ -400,7 +419,7 @@ mod test {
             bucket_candidates: candidates_2,
         };
 
-        assert_eq!(criteria.next().unwrap(), Some(expected_2));
+        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_2));
     }
 
     #[test]
@@ -409,6 +428,7 @@ mod test {
         let query_tree = None;
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
+let mut wdcache = WordDerivationsCache::new();
         let mut criteria = Typo::initial(&context, query_tree, Some(facet_candidates.clone()));
 
         let expected = CriterionResult {
@@ -418,10 +438,10 @@ mod test {
         };
 
         // first iteration, returns the facet candidates
-        assert_eq!(criteria.next().unwrap(), Some(expected));
+        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected));
 
         // second iteration, returns None because there is no more things to do
-        assert!(criteria.next().unwrap().is_none());
+        assert!(criteria.next(&mut wdcache).unwrap().is_none());
     }
 
     #[test]
@@ -437,6 +457,7 @@ mod test {
 
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
+let mut wdcache = WordDerivationsCache::new();
         let mut criteria = Typo::initial(&context, Some(query_tree), Some(facet_candidates.clone()));
 
         let candidates_1 = context.word_docids("split").unwrap().unwrap()
@@ -454,7 +475,7 @@ mod test {
             bucket_candidates: candidates_1 & &facet_candidates,
         };
 
-        assert_eq!(criteria.next().unwrap(), Some(expected_1));
+        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_1));
 
         let candidates_2 = (
                 context.word_docids("split").unwrap().unwrap()
@@ -476,7 +497,7 @@ mod test {
             bucket_candidates: candidates_2 & &facet_candidates,
         };
 
-        assert_eq!(criteria.next().unwrap(), Some(expected_2));
+        assert_eq!(criteria.next(&mut wdcache).unwrap(), Some(expected_2));
     }
 
 }

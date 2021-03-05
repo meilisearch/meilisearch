@@ -5,6 +5,7 @@ use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::search::query_tree::Operation;
+use crate::search::WordDerivationsCache;
 use super::{resolve_query_tree, Candidates, Criterion, CriterionResult, Context};
 
 pub struct Fetcher<'t> {
@@ -47,7 +48,7 @@ impl<'t> Fetcher<'t> {
 }
 
 impl<'t> Criterion for Fetcher<'t> {
-    fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
+    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         loop {
             debug!("Fetcher iteration (should_get_documents_ids: {}) ({:?})",
@@ -60,7 +61,7 @@ impl<'t> Criterion for Fetcher<'t> {
                     let candidates = take(&mut self.candidates).into_inner();
                     let candidates = match &self.query_tree {
                         Some(qt) if should_get_documents_ids => {
-                            let mut docids = resolve_query_tree(self.ctx, &qt, &mut HashMap::new())?;
+                            let mut docids = resolve_query_tree(self.ctx, &qt, &mut HashMap::new(), wdcache)?;
                             docids.intersect_with(&candidates);
                             docids
                         },
@@ -76,11 +77,11 @@ impl<'t> Criterion for Fetcher<'t> {
                 Forbidden(_) => {
                     match self.parent.as_mut() {
                         Some(parent) => {
-                            match parent.next()? {
+                            match parent.next(wdcache)? {
                                 Some(result) => return Ok(Some(result)),
                                 None => if should_get_documents_ids {
                                     let candidates = match &self.query_tree {
-                                        Some(qt) => resolve_query_tree(self.ctx, &qt, &mut HashMap::new())?,
+                                        Some(qt) => resolve_query_tree(self.ctx, &qt, &mut HashMap::new(), wdcache)?,
                                         None => self.ctx.documents_ids()?,
                                     };
 
@@ -94,7 +95,7 @@ impl<'t> Criterion for Fetcher<'t> {
                         },
                         None => if should_get_documents_ids {
                             let candidates = match &self.query_tree {
-                                Some(qt) => resolve_query_tree(self.ctx, &qt, &mut HashMap::new())?,
+                                Some(qt) => resolve_query_tree(self.ctx, &qt, &mut HashMap::new(), wdcache)?,
                                 None => self.ctx.documents_ids()?,
                             };
 
