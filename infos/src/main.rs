@@ -114,6 +114,16 @@ enum Command {
         field_name: String,
     },
 
+    /// Outputs a CSV with the documents ids, words and the positions where this word appears.
+    DocidsWordsPositions {
+        /// Display the whole positions in detail.
+        #[structopt(long)]
+        full_display: bool,
+
+        /// If defined, only retrieve the documents that corresponds to these internal ids.
+        internal_documents_ids: Vec<u32>,
+    },
+
     /// Outputs some facets statistics for the given facet name.
     FacetStats {
         /// The field name in the document.
@@ -208,6 +218,9 @@ fn main() -> anyhow::Result<()> {
         },
         FacetValuesDocids { full_display, field_name } => {
             facet_values_docids(&index, &rtxn, !full_display, field_name)
+        },
+        DocidsWordsPositions { full_display, internal_documents_ids } => {
+            docids_words_positions(&index, &rtxn, !full_display, internal_documents_ids)
         },
         FacetStats { field_name } => facet_stats(&index, &rtxn, field_name),
         AverageNumberOfWordsByDoc => average_number_of_words_by_doc(&index, &rtxn),
@@ -520,6 +533,39 @@ fn facet_values_docids(index: &Index, rtxn: &heed::RoTxn, debug: bool, field_nam
             format!("{:?}", docids.iter().collect::<Vec<_>>())
         };
         wtr.write_record(&[value, level.to_string(), count.to_string(), docids])?;
+    }
+
+    Ok(wtr.flush()?)
+}
+
+fn docids_words_positions(
+    index: &Index,
+    rtxn: &heed::RoTxn,
+    debug: bool,
+    internal_ids: Vec<u32>,
+) -> anyhow::Result<()>
+{
+    let stdout = io::stdout();
+    let mut wtr = csv::Writer::from_writer(stdout.lock());
+    wtr.write_record(&["document_id", "word", "positions"])?;
+
+    let iter: Box<dyn Iterator<Item = _>> = if internal_ids.is_empty() {
+        Box::new(index.docid_word_positions.iter(rtxn)?)
+    } else {
+        let vec: heed::Result<Vec<_>> = internal_ids.into_iter().map(|id| {
+            index.docid_word_positions.prefix_iter(rtxn, &(id, ""))
+        }).collect();
+        Box::new(vec?.into_iter().flatten())
+    };
+
+    for result in iter {
+        let ((id, word), positions) = result?;
+        let positions = if debug {
+            format!("{:?}", positions)
+        } else {
+            format!("{:?}", positions.iter().collect::<Vec<_>>())
+        };
+        wtr.write_record(&[&id.to_string(), word, &positions])?;
     }
 
     Ok(wtr.flush()?)
