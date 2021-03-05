@@ -62,6 +62,7 @@ impl SearchQuery {
             documents_ids,
             found_words,
             candidates,
+            ..
         } = search.execute()?;
 
         let mut documents = Vec::new();
