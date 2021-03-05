@@ -103,11 +103,21 @@ impl IndexController for LocalIndexController {
     fn all_update_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus<UpdateMeta, UpdateResult, String>>> {
         match self.indexes.index(&index)? {
             Some((_, update_store)) => {
-                let updates = update_store.iter_metas(|processing, processed, pending, aborted, failed| {
+                let updates = update_store.iter_metas(|processing, processed, aborted, pending, failed| {
+                    let processing_id = processing
+                        .as_ref()
+                        .map(|p| p.id());
+
                     Ok(processing
                         .map(UpdateStatus::from)
                         .into_iter()
-                        .chain(pending.filter_map(|p| p.ok()).map(|(_, u)| UpdateStatus::from(u)))
+                        .chain(pending.
+                            filter_map(Result::ok)
+                            // If an update is processing, filter out this update from the pending
+                            // updates.
+                            .filter(|(_, u)| processing_id
+                                .map_or(true, |id| id != u.id()))
+                            .map(|(_, u)| UpdateStatus::from(u)))
                         .chain(aborted.filter_map(Result::ok).map(|(_, u)| UpdateStatus::from(u)))
                         .chain(processed.filter_map(Result::ok).map(|(_, u)| UpdateStatus::from(u)))
                         .chain(failed.filter_map(Result::ok).map(|(_, u)| UpdateStatus::from(u)))
