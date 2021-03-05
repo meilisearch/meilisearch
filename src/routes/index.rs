@@ -154,7 +154,7 @@ async fn get_all_updates_status(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let result = data.get_updates_status(&path.index_uid);
+    let result = data.get_updates_status(&path.index_uid).await;
     match result {
         Ok(metas) => {
             let json = serde_json::to_string(&metas).unwrap();

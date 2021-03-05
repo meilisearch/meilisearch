@@ -107,7 +107,7 @@ impl IndexController {
     }
 
     pub async fn clear_documents(&self, index: String) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.resolve(index).await.unwrap().unwrap();
+        let uuid = self.uuid_resolver.resolve(index).await?.unwrap();
         let meta = UpdateMeta::ClearDocuments;
         let (_, receiver) = mpsc::channel(1);
         let status = self.update_handle.update(meta, receiver, uuid).await?;
@@ -154,8 +154,12 @@ impl IndexController {
         todo!()
     }
 
-    fn all_update_status(&self, index: String) -> anyhow::Result<Vec<UpdateStatus>> {
-        todo!()
+    pub async fn all_update_status(&self, index: String) -> anyhow::Result<Vec<UpdateStatus>> {
+        let uuid = self.uuid_resolver
+            .resolve(index).await?
+            .context("index not found")?;
+        let result = self.update_handle.get_all_updates_status(uuid).await?;
+        Ok(result)
     }
 
     pub fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {

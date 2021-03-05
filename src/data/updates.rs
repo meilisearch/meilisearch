@@ -65,9 +65,8 @@ impl Data {
         //self.index_controller.update_status(index, uid)
     }
 
-    pub fn get_updates_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>> {
-        todo!()
-        //self.index_controller.all_update_status(index)
+    pub async fn get_updates_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>> {
+        self.index_controller.all_update_status(index.as_ref().to_string()).await
     }
 
     pub fn update_index(
