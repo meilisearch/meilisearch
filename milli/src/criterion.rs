@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 
 use anyhow::{Context, bail};
 use regex::Regex;
@@ -62,4 +63,21 @@ pub fn default_criteria() -> Vec<Criterion> {
         Criterion::WordsPosition,
         Criterion::Exactness,
     ]
+}
+
+impl fmt::Display for Criterion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Criterion::*;
+
+        match self {
+            Typo            => f.write_str("typo"),
+            Words           => f.write_str("words"),
+            Proximity       => f.write_str("proximity"),
+            Attribute       => f.write_str("attribute"),
+            WordsPosition   => f.write_str("wordsPosition"),
+            Exactness       => f.write_str("exactness"),
+            Asc(attr)       => write!(f, "asc({:?})", attr),
+            Desc(attr)      => write!(f, "desc({:?})", attr),
+        }
+    }
 }
