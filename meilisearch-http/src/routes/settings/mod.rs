@@ -103,11 +103,11 @@ make_setting_route!(
     //distinct_attribute
 //);
 
-//make_setting_route!(
-    //"/indexes/{index_uid}/settings/ranking-rules",
-    //Vec<String>,
-    //ranking_rules
-//);
+make_setting_route!(
+    "/indexes/{index_uid}/settings/ranking-rules",
+    Vec<String>,
+    ranking_rules
+);
 
 macro_rules! create_services {
     ($($mod:ident),*) => {
@@ -128,7 +128,8 @@ macro_rules! create_services {
 create_services!(
     faceted_attributes,
     displayed_attributes,
-    searchable_attributes
+    searchable_attributes,
+    ranking_rules
 );
 
 #[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]

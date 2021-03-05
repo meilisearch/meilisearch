@@ -153,7 +153,7 @@ impl UpdateHandler {
         }
 
         // We transpose the settings JSON struct into a real setting update.
-        if let Some(ref criteria) = settings.criteria {
+        if let Some(ref criteria) = settings.ranking_rules {
             match criteria {
                 Some(criteria) => builder.set_criteria(criteria.clone()),
                 None => builder.reset_criteria(),

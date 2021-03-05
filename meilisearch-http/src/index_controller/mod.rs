@@ -83,7 +83,7 @@ pub struct Settings {
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none",
     )]
-    pub criteria: Option<Option<Vec<String>>>,
+    pub ranking_rules: Option<Option<Vec<String>>>,
 }
 
 impl Settings {
@@ -92,7 +92,7 @@ impl Settings {
             displayed_attributes: Some(None),
             searchable_attributes: Some(None),
             faceted_attributes: Some(None),
-            criteria: Some(None),
+            ranking_rules: Some(None),
         }
     }
 }
