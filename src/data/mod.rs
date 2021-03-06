@@ -86,12 +86,8 @@ impl Data {
         self.index_controller.list_indexes().await
     }
 
-    pub fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<IndexMetadata>> {
-        todo!()
-        //Ok(self
-            //.list_indexes()?
-            //.into_iter()
-            //.find(|i| i.uid == name.as_ref()))
+    pub async fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<IndexMetadata>> {
+        self.index_controller.get_index(name.as_ref().to_string()).await
     }
 
     pub async fn create_index(&self, name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {

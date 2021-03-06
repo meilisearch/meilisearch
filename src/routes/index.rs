@@ -37,7 +37,7 @@ async fn get_index(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.index(&path.index_uid)? {
+    match data.index(&path.index_uid).await? {
         Some(meta) => {
             let json = serde_json::to_string(&meta).unwrap();
             Ok(HttpResponse::Ok().body(json))

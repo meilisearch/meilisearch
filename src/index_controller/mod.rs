@@ -239,6 +239,18 @@ impl IndexController {
         let result = self.index_handle.search(uuid, query).await?;
         Ok(result)
     }
+
+    pub async fn get_index(&self, name: String) -> anyhow::Result<Option<IndexMetadata>> {
+        let uuid = self.uuid_resolver.resolve(name.clone()).await?;
+        if let Some(uuid) = uuid {
+            let result = self.index_handle
+                .get_index_meta(uuid)
+                .await?
+                .map(|meta| IndexMetadata { name, meta });
+            return Ok(result)
+        }
+        Ok(None)
+    }
 }
 
 pub async fn get_arc_ownership_blocking<T>(mut item: Arc<T>) -> T {
