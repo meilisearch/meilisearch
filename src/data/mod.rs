@@ -82,8 +82,8 @@ impl Data {
         self.index_controller.settings(index_uid.as_ref().to_string()).await
     }
 
-    pub fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
-        self.index_controller.list_indexes()
+    pub async fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
+        self.index_controller.list_indexes().await
     }
 
     pub fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<IndexMetadata>> {

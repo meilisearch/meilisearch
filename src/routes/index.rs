@@ -21,7 +21,7 @@ pub fn services(cfg: &mut web::ServiceConfig) {
 
 #[get("/indexes", wrap = "Authentication::Private")]
 async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    match data.list_indexes() {
+    match data.list_indexes().await {
         Ok(indexes) => {
             let json = serde_json::to_string(&indexes).unwrap();
             Ok(HttpResponse::Ok().body(&json))

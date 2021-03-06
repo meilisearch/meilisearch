@@ -11,7 +11,6 @@ use std::time::Duration;
 
 use actix_web::web::{Bytes, Payload};
 use anyhow::Context;
-use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::{Serialize, Deserialize};
@@ -28,10 +27,9 @@ pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMetadata {
-    uuid: Uuid,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    primary_key: Option<String>,
+    name: String,
+    #[serde(flatten)]
+    meta: index_actor::IndexMeta,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,9 +142,12 @@ impl IndexController {
 
     pub async fn create_index(&self, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
         let IndexSettings { name, primary_key } = index_settings;
-        let uuid = self.uuid_resolver.create(name.unwrap()).await?;
-        let index_meta = self.index_handle.create_index(uuid, primary_key).await?;
-        Ok(index_meta)
+        let name = name.unwrap();
+        let uuid = self.uuid_resolver.create(name.clone()).await?;
+        let meta = self.index_handle.create_index(uuid, primary_key).await?;
+        let meta = IndexMetadata { name, meta };
+
+        Ok(meta)
     }
 
     pub async fn delete_index(&self, index_uid: String) -> anyhow::Result<()> {
@@ -176,8 +177,19 @@ impl IndexController {
         Ok(result)
     }
 
-    pub fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
-        todo!()
+    pub async fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
+        let uuids = self.uuid_resolver.list().await?;
+
+        let mut ret = Vec::new();
+
+        for (name, uuid) in uuids {
+            if let Some(meta) = self.index_handle.get_index_meta(uuid).await? {
+                let meta = IndexMetadata { name, meta };
+                ret.push(meta);
+            }
+        }
+
+        Ok(ret)
     }
 
     pub async fn settings(&self, index: String) -> anyhow::Result<Settings> {

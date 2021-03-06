@@ -26,6 +26,9 @@ enum UuidResolveMsg {
         name: String,
         ret: oneshot::Sender<Result<Option<Uuid>>>,
     },
+    List {
+        ret: oneshot::Sender<Result<Vec<(String, Uuid)>>>,
+    },
 }
 
 struct UuidResolverActor<S> {
@@ -50,6 +53,9 @@ impl<S: UuidStore> UuidResolverActor<S> {
                 Some(GetOrCreate { name, ret }) => self.handle_get_or_create(name, ret).await,
                 Some(Resolve { name, ret }) => self.handle_resolve(name, ret).await,
                 Some(Delete { name, ret }) => self.handle_delete(name, ret).await,
+                Some(List { ret }) => {
+                    let _ = ret.send(self.handle_list().await);
+                }
                 // all senders have been dropped, need to quit.
                 None => break,
             }
@@ -76,6 +82,11 @@ impl<S: UuidStore> UuidResolverActor<S> {
     async fn handle_delete(&self, name: String, ret: oneshot::Sender<Result<Option<Uuid>>>) {
         let result = self.store.delete(&name).await;
         let _ = ret.send(result);
+    }
+
+    async fn handle_list(&self) -> Result<Vec<(String, Uuid)>> {
+        let result = self.store.list().await?;
+        Ok(result)
     }
 }
 
@@ -120,6 +131,13 @@ impl UuidResolverHandle {
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
     }
+
+    pub async fn list(&self) -> anyhow::Result<Vec<(String, Uuid)>> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UuidResolveMsg::List { ret };
+        let _ = self.sender.send(msg).await;
+        Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
+    }
 }
 
 #[derive(Clone, Debug, Error)]
@@ -135,6 +153,7 @@ trait UuidStore {
     async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid>;
     async fn get_uuid(&self, name: &str) -> Result<Option<Uuid>>;
     async fn delete(&self, name: &str) -> Result<Option<Uuid>>;
+    async fn list(&self) -> Result<Vec<(String, Uuid)>>;
 }
 
 struct MapUuidStore(Arc<RwLock<HashMap<String, Uuid>>>);
@@ -164,5 +183,10 @@ impl UuidStore for MapUuidStore {
 
     async fn delete(&self, name: &str) -> Result<Option<Uuid>> {
         Ok(self.0.write().await.remove(name))
+    }
+
+    async fn list(&self) -> Result<Vec<(String, Uuid)>> {
+        let list = self.0.read().await.iter().map(|(name, uuid)| (name.to_owned(), uuid.clone())).collect();
+        Ok(list)
     }
 }

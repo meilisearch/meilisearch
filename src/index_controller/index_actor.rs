@@ -1,18 +1,19 @@
 use std::collections::{hash_map::Entry, HashMap};
-use std::fs::{create_dir_all, File, remove_dir_all};
+use std::fs::{create_dir_all, remove_dir_all, File};
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_stream::stream;
-use chrono::Utc;
+use chrono::{Utc, DateTime};
 use futures::pin_mut;
 use futures::stream::StreamExt;
 use heed::EnvOpenOptions;
 use log::info;
-use std::future::Future;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
+use serde::{Serialize, Deserialize};
 
 use super::get_arc_ownership_blocking;
 use super::update_handler::UpdateHandler;
@@ -20,7 +21,7 @@ use crate::index::UpdateResult as UResult;
 use crate::index::{Document, Index, SearchQuery, SearchResult, Settings};
 use crate::index_controller::{
     updates::{Failed, Processed, Processing},
-    IndexMetadata, UpdateMeta,
+    UpdateMeta,
 };
 use crate::option::IndexerOpts;
 
@@ -28,11 +29,20 @@ pub type Result<T> = std::result::Result<T, IndexError>;
 type AsyncMap<K, V> = Arc<RwLock<HashMap<K, V>>>;
 type UpdateResult = std::result::Result<Processed<UpdateMeta, UResult>, Failed<UpdateMeta, String>>;
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexMeta{
+    uuid: Uuid,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    primary_key: Option<String>,
+}
+
 enum IndexMsg {
     CreateIndex {
         uuid: Uuid,
         primary_key: Option<String>,
-        ret: oneshot::Sender<Result<IndexMetadata>>,
+        ret: oneshot::Sender<Result<IndexMeta>>,
     },
     Update {
         meta: Processing<UpdateMeta>,
@@ -65,6 +75,10 @@ enum IndexMsg {
         uuid: Uuid,
         ret: oneshot::Sender<Result<()>>,
     },
+    GetMeta {
+        uuid: Uuid,
+        ret: oneshot::Sender<Result<Option<IndexMeta>>>,
+    },
 }
 
 struct IndexActor<S> {
@@ -84,10 +98,11 @@ pub enum IndexError {
 
 #[async_trait::async_trait]
 trait IndexStore {
-    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMetadata>;
+    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta>;
     async fn get_or_create(&self, uuid: Uuid) -> Result<Index>;
     async fn get(&self, uuid: Uuid) -> Result<Option<Index>>;
     async fn delete(&self, uuid: &Uuid) -> Result<Option<Index>>;
+    async fn get_meta(&self, uuid: &Uuid) -> Result<Option<IndexMeta>>;
 }
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
@@ -150,10 +165,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         let fut1: Box<dyn Future<Output = ()> + Unpin + Send> = Box::new(fut1);
         let fut2: Box<dyn Future<Output = ()> + Unpin + Send> = Box::new(fut2);
 
-        //let futures = futures::stream::futures_unordered::FuturesUnordered::new();
-        //futures.push(fut1);
-        //futures.push(fut2);
-        //futures.for_each(f)
         tokio::join!(fut1, fut2);
     }
 
@@ -189,7 +200,10 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             }
             Delete { uuid, ret } => {
                 let _ = ret.send(self.handle_delete(uuid).await);
-            },
+            }
+            GetMeta { uuid, ret } => {
+                let _ = ret.send(self.handle_get_meta(uuid).await);
+            }
         }
     }
 
@@ -210,7 +224,7 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         &self,
         uuid: Uuid,
         primary_key: Option<String>,
-        ret: oneshot::Sender<Result<IndexMetadata>>,
+        ret: oneshot::Sender<Result<IndexMeta>>,
     ) {
         let result = self.store.create_index(uuid, primary_key).await;
         let _ = ret.send(result);
@@ -293,6 +307,11 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
 
         Ok(())
     }
+
+    async fn handle_get_meta(&self, uuid: Uuid) -> Result<Option<IndexMeta>> {
+        let result = self.store.get_meta(&uuid).await?;
+        Ok(result)
+    }
 }
 
 #[derive(Clone)]
@@ -319,7 +338,7 @@ impl IndexActorHandle {
         &self,
         uuid: Uuid,
         primary_key: Option<String>,
-    ) -> Result<IndexMetadata> {
+    ) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::CreateIndex {
             ret,
@@ -393,20 +412,27 @@ impl IndexActorHandle {
         let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
+
+    pub async fn get_index_meta(&self, uuid: Uuid) -> Result<Option<IndexMeta>> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = IndexMsg::GetMeta { uuid, ret };
+        let _ = self.read_sender.send(msg).await;
+        Ok(receiver.await.expect("IndexActor has been killed")?)
+    }
 }
 
 struct MapIndexStore {
     root: PathBuf,
-    meta_store: AsyncMap<Uuid, IndexMetadata>,
+    meta_store: AsyncMap<Uuid, IndexMeta>,
     index_store: AsyncMap<Uuid, Index>,
 }
 
 #[async_trait::async_trait]
 impl IndexStore for MapIndexStore {
-    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMetadata> {
+    async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
         let meta = match self.meta_store.write().await.entry(uuid.clone()) {
             Entry::Vacant(entry) => {
-                let meta = IndexMetadata {
+                let meta = IndexMeta{
                     uuid,
                     created_at: Utc::now(),
                     updated_at: Utc::now(),
@@ -463,6 +489,10 @@ impl IndexStore for MapIndexStore {
             remove_dir_all(db_path).unwrap();
         }
         Ok(index)
+    }
+
+    async fn get_meta(&self, uuid: &Uuid) -> Result<Option<IndexMeta>> {
+        Ok(self.meta_store.read().await.get(uuid).cloned())
     }
 }
 
