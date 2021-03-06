@@ -53,6 +53,7 @@ impl<'t> Typo<'t> {
 }
 
 impl<'t> Criterion for Typo<'t> {
+    #[logging_timer::time("Typo::{}")]
     fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         loop {

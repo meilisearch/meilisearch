@@ -47,6 +47,7 @@ impl<'t> Words<'t> {
 }
 
 impl<'t> Criterion for Words<'t> {
+    #[logging_timer::time("Words::{}")]
     fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         loop {

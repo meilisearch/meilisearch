@@ -146,6 +146,7 @@ impl<'t> AscDesc<'t> {
 }
 
 impl<'t> Criterion for AscDesc<'t> {
+    #[logging_timer::time("AscDesc::{}")]
     fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
         loop {
             debug!("Facet {}({}) iteration",

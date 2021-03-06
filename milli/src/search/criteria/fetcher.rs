@@ -48,6 +48,7 @@ impl<'t> Fetcher<'t> {
 }
 
 impl<'t> Criterion for Fetcher<'t> {
+    #[logging_timer::time("Fetcher::{}")]
     fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         loop {

@@ -56,6 +56,7 @@ impl<'t> Proximity<'t> {
 }
 
 impl<'t> Criterion for Proximity<'t> {
+    #[logging_timer::time("Proximity::{}")]
     fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         loop {
