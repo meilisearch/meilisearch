@@ -22,6 +22,10 @@ enum UuidResolveMsg {
         name: String,
         ret: oneshot::Sender<Result<Uuid>>,
     },
+    Delete {
+        name: String,
+        ret: oneshot::Sender<Result<Option<Uuid>>>,
+    },
 }
 
 struct UuidResolverActor<S> {
@@ -45,6 +49,7 @@ impl<S: UuidStore> UuidResolverActor<S> {
                 Some(Create { name, ret }) => self.handle_create(name, ret).await,
                 Some(GetOrCreate { name, ret }) => self.handle_get_or_create(name, ret).await,
                 Some(Resolve { name, ret }) => self.handle_resolve(name, ret).await,
+                Some(Delete { name, ret }) => self.handle_delete(name, ret).await,
                 // all senders have been dropped, need to quit.
                 None => break,
             }
@@ -64,7 +69,12 @@ impl<S: UuidStore> UuidResolverActor<S> {
     }
 
     async fn handle_resolve(&self, name: String, ret: oneshot::Sender<Result<Option<Uuid>>>) {
-        let result = self.store.get_uuid(name).await;
+        let result = self.store.get_uuid(&name).await;
+        let _ = ret.send(result);
+    }
+
+    async fn handle_delete(&self, name: String, ret: oneshot::Sender<Result<Option<Uuid>>>) {
+        let result = self.store.delete(&name).await;
         let _ = ret.send(result);
     }
 }
@@ -103,6 +113,13 @@ impl UuidResolverHandle {
         let _ = self.sender.send(msg).await;
         Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
     }
+
+    pub async fn delete(&self, name: String) -> anyhow::Result<Option<Uuid>> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UuidResolveMsg::Delete { name, ret };
+        let _ = self.sender.send(msg).await;
+        Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
+    }
 }
 
 #[derive(Clone, Debug, Error)]
@@ -116,7 +133,8 @@ trait UuidStore {
     // Create a new entry for `name`. Return an error if `err` and the entry already exists, return
     // the uuid otherwise.
     async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid>;
-    async fn get_uuid(&self, name: String) -> Result<Option<Uuid>>;
+    async fn get_uuid(&self, name: &str) -> Result<Option<Uuid>>;
+    async fn delete(&self, name: &str) -> Result<Option<Uuid>>;
 }
 
 struct MapUuidStore(Arc<RwLock<HashMap<String, Uuid>>>);
@@ -140,7 +158,11 @@ impl UuidStore for MapUuidStore {
         }
     }
 
-    async fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
-        Ok(self.0.read().await.get(&name).cloned())
+    async fn get_uuid(&self, name: &str) -> Result<Option<Uuid>> {
+        Ok(self.0.read().await.get(name).cloned())
+    }
+
+    async fn delete(&self, name: &str) -> Result<Option<Uuid>> {
+        Ok(self.0.write().await.remove(name))
     }
 }

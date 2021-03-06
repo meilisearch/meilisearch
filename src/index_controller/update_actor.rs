@@ -1,19 +1,20 @@
 use std::collections::{hash_map::Entry, HashMap};
-use std::fs::create_dir_all;
+use std::fs::{create_dir_all, remove_dir_all};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use super::index_actor::IndexActorHandle;
+use itertools::Itertools;
 use log::info;
+use super::index_actor::IndexActorHandle;
 use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
-use itertools::Itertools;
 
 use crate::index::UpdateResult;
 use crate::index_controller::{UpdateMeta, UpdateStatus};
+use super::get_arc_ownership_blocking;
 
 pub type Result<T> = std::result::Result<T, UpdateError>;
 type UpdateStore = super::update_store::UpdateStore<UpdateMeta, UpdateResult, String>;
@@ -42,7 +43,11 @@ enum UpdateMsg<D> {
         uuid: Uuid,
         ret: oneshot::Sender<Result<Option<UpdateStatus>>>,
         id: u64,
-    }
+    },
+    Delete {
+        uuid: Uuid,
+        ret: oneshot::Sender<Result<()>>,
+    },
 }
 
 struct UpdateActor<D, S> {
@@ -54,6 +59,7 @@ struct UpdateActor<D, S> {
 #[async_trait::async_trait]
 trait UpdateStoreStore {
     async fn get_or_create(&self, uuid: Uuid) -> Result<Arc<UpdateStore>>;
+    async fn delete(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>>;
     async fn get(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>>;
 }
 
@@ -88,6 +94,9 @@ where
                 } ,
                 Some(GetUpdate { uuid, ret, id }) => {
                     let _ = ret.send(self.handle_get_update(uuid, id).await);
+                }
+                Some(Delete { uuid, ret }) => {
+                    let _ = ret.send(self.handle_delete(uuid).await);
                 }
                 None => {}
             }
@@ -173,6 +182,24 @@ where
             .map_err(|e| UpdateError::Error(Box::new(e)))?;
         Ok(result)
     }
+
+    async fn handle_delete(&self, uuid: Uuid) -> Result<()> {
+        let store = self.store
+            .delete(&uuid)
+            .await?;
+
+        if let Some(store) = store {
+            tokio::task::spawn(async move {
+                let store = get_arc_ownership_blocking(store).await;
+                tokio::task::spawn_blocking(move || {
+                    store.prepare_for_closing().wait();
+                    info!("Update store {} was closed.", uuid);
+                });
+            });
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -225,6 +252,13 @@ where
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }
+
+    pub async fn delete(&self, uuid: Uuid) -> Result<()> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UpdateMsg::Delete { uuid, ret };
+        let _ = self.sender.send(msg).await;
+        receiver.await.expect("update actor killed.")
+    }
 }
 
 struct MapUpdateStoreStore {
@@ -268,5 +302,14 @@ impl UpdateStoreStore for MapUpdateStoreStore {
 
     async fn get(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>> {
         Ok(self.db.read().await.get(uuid).cloned())
+    }
+
+    async fn delete(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>> {
+        let store = self.db.write().await.remove(&uuid);
+        if store.is_some() {
+            let path = self.path.clone().join(format!("updates-{}", uuid));
+            remove_dir_all(path).unwrap();
+        }
+        Ok(store)
     }
 }

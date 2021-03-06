@@ -1,19 +1,20 @@
 use std::collections::{hash_map::Entry, HashMap};
-use std::fs::{create_dir_all, File};
+use std::fs::{create_dir_all, File, remove_dir_all};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_stream::stream;
 use chrono::Utc;
+use futures::pin_mut;
 use futures::stream::StreamExt;
 use heed::EnvOpenOptions;
 use log::info;
+use std::future::Future;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
-use std::future::Future;
-use futures::pin_mut;
 
+use super::get_arc_ownership_blocking;
 use super::update_handler::UpdateHandler;
 use crate::index::UpdateResult as UResult;
 use crate::index::{Document, Index, SearchQuery, SearchResult, Settings};
@@ -59,7 +60,11 @@ enum IndexMsg {
         attributes_to_retrieve: Option<Vec<String>>,
         doc_id: String,
         ret: oneshot::Sender<Result<Document>>,
-    }
+    },
+    Delete {
+        uuid: Uuid,
+        ret: oneshot::Sender<Result<()>>,
+    },
 }
 
 struct IndexActor<S> {
@@ -82,13 +87,14 @@ trait IndexStore {
     async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMetadata>;
     async fn get_or_create(&self, uuid: Uuid) -> Result<Index>;
     async fn get(&self, uuid: Uuid) -> Result<Option<Index>>;
+    async fn delete(&self, uuid: &Uuid) -> Result<Option<Index>>;
 }
 
 impl<S: IndexStore + Sync + Send> IndexActor<S> {
     fn new(
         read_receiver: mpsc::Receiver<IndexMsg>,
         write_receiver: mpsc::Receiver<IndexMsg>,
-        store: S
+        store: S,
     ) -> Self {
         let options = IndexerOpts::default();
         let update_handler = UpdateHandler::new(&options).unwrap();
@@ -149,7 +155,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
         //futures.push(fut2);
         //futures.for_each(f)
         tokio::join!(fut1, fut2);
-
     }
 
     async fn handle_message(&self, msg: IndexMsg) {
@@ -173,7 +178,18 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
                 self.handle_fetch_documents(uuid, offset, limit, attributes_to_retrieve, ret)
                     .await
             }
-            Document { uuid, attributes_to_retrieve, doc_id, ret } => self.handle_fetch_document(uuid, doc_id, attributes_to_retrieve, ret).await,
+            Document {
+                uuid,
+                attributes_to_retrieve,
+                doc_id,
+                ret,
+            } => {
+                self.handle_fetch_document(uuid, doc_id, attributes_to_retrieve, ret)
+                    .await
+            }
+            Delete { uuid, ret } => {
+                let _ = ret.send(self.handle_delete(uuid).await);
+            },
         }
     }
 
@@ -236,10 +252,12 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
     ) {
         let index = self.store.get(uuid).await.unwrap().unwrap();
         tokio::task::spawn_blocking(move || {
-            let result = index.retrieve_documents(offset, limit, attributes_to_retrieve)
+            let result = index
+                .retrieve_documents(offset, limit, attributes_to_retrieve)
                 .map_err(|e| IndexError::Error(e));
             let _ = ret.send(result);
-        }).await;
+        })
+        .await;
     }
 
     async fn handle_fetch_document(
@@ -251,10 +269,29 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
     ) {
         let index = self.store.get(uuid).await.unwrap().unwrap();
         tokio::task::spawn_blocking(move || {
-            let result = index.retrieve_document(doc_id, attributes_to_retrieve)
+            let result = index
+                .retrieve_document(doc_id, attributes_to_retrieve)
                 .map_err(|e| IndexError::Error(e));
             let _ = ret.send(result);
-        }).await;
+        })
+        .await;
+    }
+
+    async fn handle_delete(&self, uuid: Uuid) -> Result<()> {
+        let index = self.store.delete(&uuid).await?;
+
+        if let Some(index) = index {
+            tokio::task::spawn(async move {
+                let index = index.0;
+                let store = get_arc_ownership_blocking(index).await;
+                tokio::task::spawn_blocking(move || {
+                    store.prepare_for_closing().wait();
+                    info!("Index {} was closed.", uuid);
+                });
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -272,7 +309,10 @@ impl IndexActorHandle {
         let store = MapIndexStore::new(path);
         let actor = IndexActor::new(read_receiver, write_receiver, store);
         tokio::task::spawn(actor.run());
-        Self { read_sender, write_sender }
+        Self {
+            read_sender,
+            write_sender,
+        }
     }
 
     pub async fn create_index(
@@ -346,6 +386,13 @@ impl IndexActorHandle {
         let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }
+
+    pub async fn delete(&self, uuid: Uuid) -> Result<()> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = IndexMsg::Delete { uuid, ret };
+        let _ = self.read_sender.send(msg).await;
+        Ok(receiver.await.expect("IndexActor has been killed")?)
+    }
 }
 
 struct MapIndexStore {
@@ -407,6 +454,15 @@ impl IndexStore for MapIndexStore {
 
     async fn get(&self, uuid: Uuid) -> Result<Option<Index>> {
         Ok(self.index_store.read().await.get(&uuid).cloned())
+    }
+
+    async fn delete(&self, uuid: &Uuid) -> Result<Option<Index>> {
+        let index = self.index_store.write().await.remove(&uuid);
+        if index.is_some() {
+            let db_path = self.root.join(format!("index-{}", uuid));
+            remove_dir_all(db_path).unwrap();
+        }
+        Ok(index)
     }
 }
 

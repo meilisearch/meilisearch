@@ -1,11 +1,13 @@
-mod updates;
 mod index_actor;
 mod update_actor;
-mod uuid_resolver;
-mod update_store;
 mod update_handler;
+mod update_store;
+mod updates;
+mod uuid_resolver;
 
 use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
 
 use actix_web::web::{Bytes, Payload};
 use anyhow::Context;
@@ -14,6 +16,7 @@ use futures::stream::StreamExt;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::{Serialize, Deserialize};
 use tokio::sync::{mpsc, oneshot};
+use tokio::time::sleep;
 use uuid::Uuid;
 
 pub use updates::{Processed, Processing, Failed};
@@ -146,8 +149,14 @@ impl IndexController {
         Ok(index_meta)
     }
 
-    fn delete_index(&self, index_uid: String) -> anyhow::Result<()> {
-        todo!()
+    pub async fn delete_index(&self, index_uid: String) -> anyhow::Result<()> {
+        let uuid = self.uuid_resolver
+            .delete(index_uid)
+            .await?
+            .context("index not found")?;
+        self.update_handle.delete(uuid.clone()).await?;
+        self.index_handle.delete(uuid).await?;
+        Ok(())
     }
 
     pub async fn update_status(&self, index: String, id: u64) -> anyhow::Result<Option<UpdateStatus>> {
@@ -217,5 +226,18 @@ impl IndexController {
         let uuid = self.uuid_resolver.resolve(name).await.unwrap().unwrap();
         let result = self.index_handle.search(uuid, query).await?;
         Ok(result)
+    }
+}
+
+pub async fn get_arc_ownership_blocking<T>(mut item: Arc<T>) -> T {
+    loop {
+        match Arc::try_unwrap(item) {
+            Ok(item) => return item,
+            Err(item_arc) => {
+                item = item_arc;
+                sleep(Duration::from_millis(100)).await;
+                continue;
+            }
+        }
     }
 }
