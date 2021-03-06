@@ -83,18 +83,20 @@ async fn main() -> Result<(), MainError> {
 }
 
 async fn run_http(data: Data, opt: Opt, enable_frontend: bool) -> Result<(), Box<dyn std::error::Error>> {
+    use meilisearch::routes::*;
+
     let http_server = HttpServer::new(move || {
         let app = App::new()
             .configure(|c| configure_data(c, &data))
-            .configure(meilisearch::routes::document::services)
-            .configure(meilisearch::routes::index::services)
-            .configure(meilisearch::routes::search::services)
-            .configure(meilisearch::routes::settings::services)
-            .configure(meilisearch::routes::stop_words::services)
-            .configure(meilisearch::routes::synonym::services)
-            .configure(meilisearch::routes::health::services)
-            .configure(meilisearch::routes::stats::services)
-            .configure(meilisearch::routes::key::services);
+            .configure(document::services)
+            .configure(index::services)
+            .configure(search::services)
+            .configure(settings::services)
+            .configure(stop_words::services)
+            .configure(synonym::services)
+            .configure(health::services)
+            .configure(stats::services)
+            .configure(key::services);
         //.configure(routes::dump::services);
         let app = if enable_frontend {
             app
