@@ -38,6 +38,11 @@ enum UpdateMsg<D> {
         uuid: Uuid,
         ret: oneshot::Sender<Result<Vec<UpdateStatus>>>,
     },
+    GetUpdate {
+        uuid: Uuid,
+        ret: oneshot::Sender<Result<Option<UpdateStatus>>>,
+        id: u64,
+    }
 }
 
 struct UpdateActor<D, S> {
@@ -81,6 +86,9 @@ where
                 Some(ListUpdates { uuid, ret }) => {
                     let _ = ret.send(self.handle_list_updates(uuid).await);
                 } ,
+                Some(GetUpdate { uuid, ret, id }) => {
+                    let _ = ret.send(self.handle_get_update(uuid, id).await);
+                }
                 None => {}
             }
         }
@@ -154,6 +162,17 @@ where
         }).await
         .map_err(|e| UpdateError::Error(Box::new(e)))?
     }
+
+
+    async fn handle_get_update(&self, uuid: Uuid, id: u64) -> Result<Option<UpdateStatus>> {
+        let store = self.store
+            .get(&uuid)
+            .await?
+            .ok_or(UpdateError::UnexistingIndex(uuid))?;
+        let result = store.meta(id)
+            .map_err(|e| UpdateError::Error(Box::new(e)))?;
+        Ok(result)
+    }
 }
 
 #[derive(Clone)]
@@ -196,6 +215,13 @@ where
     pub async fn get_all_updates_status(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
         let (ret, receiver) = oneshot::channel();
         let msg = UpdateMsg::ListUpdates { uuid, ret };
+        let _ = self.sender.send(msg).await;
+        receiver.await.expect("update actor killed.")
+    }
+
+    pub async fn update_status(&self, uuid: Uuid, id: u64) -> Result<Option<UpdateStatus>> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UpdateMsg::GetUpdate { uuid, id, ret };
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }

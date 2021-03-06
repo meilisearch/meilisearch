@@ -150,8 +150,13 @@ impl IndexController {
         todo!()
     }
 
-    fn update_status(&self, index: String, id: u64) -> anyhow::Result<Option<UpdateStatus>> {
-        todo!()
+    pub async fn update_status(&self, index: String, id: u64) -> anyhow::Result<Option<UpdateStatus>> {
+        let uuid = self.uuid_resolver
+            .resolve(index)
+            .await?
+            .context("index not found")?;
+        let result = self.update_handle.update_status(uuid, id).await?;
+        Ok(result)
     }
 
     pub async fn all_update_status(&self, index: String) -> anyhow::Result<Vec<UpdateStatus>> {

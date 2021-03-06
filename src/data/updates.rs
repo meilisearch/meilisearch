@@ -59,10 +59,8 @@ impl Data {
         //Ok(())
     }
 
-    #[inline]
-    pub fn get_update_status(&self, index: impl AsRef<str>, uid: u64) -> anyhow::Result<Option<UpdateStatus>> {
-        todo!()
-        //self.index_controller.update_status(index, uid)
+    pub async fn get_update_status(&self, index: impl AsRef<str>, uid: u64) -> anyhow::Result<Option<UpdateStatus>> {
+        self.index_controller.update_status(index.as_ref().to_string(), uid).await
     }
 
     pub async fn get_updates_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>> {
