@@ -283,7 +283,7 @@ mod tests {
 
         // First we send 3 documents with ids from 1 to 3.
         let mut wtxn = index.write_txn().unwrap();
-        let content = &b"name,age\nkevin,23\nkevina,21\nbenoit,34\n"[..];
+        let content = &b"id,name,age\n0,kevin,23\n1,kevina,21\n2,benoit,34\n"[..];
         let mut builder = IndexDocuments::new(&mut wtxn, &index, 0);
         builder.update_format(UpdateFormat::Csv);
         builder.execute(content, |_, _| ()).unwrap();
