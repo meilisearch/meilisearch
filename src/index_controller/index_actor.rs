@@ -104,7 +104,7 @@ trait IndexStore {
     async fn update_index<R, F>(&self, uuid: Uuid, f: F) -> Result<R>
         where F: FnOnce(Index) -> Result<R> + Send + Sync + 'static,
               R: Sync + Send + 'static;
-    async fn get_or_create(&self, uuid: Uuid) -> Result<Index>;
+    async fn get_or_create(&self, uuid: Uuid, primary_key: Option<String>) -> Result<Index>;
     async fn get(&self, uuid: Uuid) -> Result<Option<Index>>;
     async fn delete(&self, uuid: &Uuid) -> Result<Option<Index>>;
     async fn get_meta(&self, uuid: &Uuid) -> Result<Option<IndexMeta>>;
@@ -473,14 +473,49 @@ impl IndexStore for MapIndexStore {
         Ok(meta)
     }
 
-    async fn get_or_create(&self, uuid: Uuid) -> Result<Index> {
+    async fn get_or_create(&self, uuid: Uuid, primary_key: Option<String>) -> Result<Index> {
         match self.index_store.write().await.entry(uuid.clone()) {
-            Entry::Vacant(entry) => match self.meta_store.write().await.entry(uuid.clone()) {
-                Entry::Vacant(_) => {
-                    todo!()
+            Entry::Vacant(index_entry) => match self.meta_store.write().await.entry(uuid.clone()) {
+                Entry::Vacant(meta_entry) => {
+                    let now = Utc::now();
+                    let meta = IndexMeta{
+                        uuid,
+                        created_at: now.clone(),
+                        updated_at: now,
+                        primary_key,
+                    };
+                    let meta = meta_entry.insert(meta);
+                    let db_path = self.root.join(format!("index-{}", meta.uuid));
+
+                    let index: Result<Index> = tokio::task::spawn_blocking(move || {
+                        create_dir_all(&db_path).expect("can't create db");
+                        let mut options = EnvOpenOptions::new();
+                        options.map_size(4096 * 100_000);
+                        let index = milli::Index::new(options, &db_path).map_err(|e| IndexError::Error(e))?;
+                        let index = Index(Arc::new(index));
+                        Ok(index)
+                    })
+                    .await
+                        .expect("thread died");
+
+                    Ok(index_entry.insert(index?).clone())
                 }
                 Entry::Occupied(entry) => {
-                    todo!()
+                    let meta = entry.get();
+                    let db_path = self.root.join(format!("index-{}", meta.uuid));
+
+                    let index: Result<Index> = tokio::task::spawn_blocking(move || {
+                        create_dir_all(&db_path).expect("can't create db");
+                        let mut options = EnvOpenOptions::new();
+                        options.map_size(4096 * 100_000);
+                        let index = milli::Index::new(options, &db_path).map_err(|e| IndexError::Error(e))?;
+                        let index = Index(Arc::new(index));
+                        Ok(index)
+                    })
+                    .await
+                        .expect("thread died");
+
+                    Ok(index_entry.insert(index?).clone())
                 }
             },
             Entry::Occupied(entry) => Ok(entry.get().clone()),
@@ -508,7 +543,7 @@ impl IndexStore for MapIndexStore {
         where F: FnOnce(Index) -> Result<R> + Send + Sync + 'static,
               R: Sync +  Send + 'static,
     {
-        let index = self.get_or_create(uuid.clone()).await?;
+        let index = self.get_or_create(uuid.clone(), None).await?;
         let mut meta = self.get_meta(&uuid).await?
             .ok_or(IndexError::UnexistingIndex)?;
         match f(index) {
