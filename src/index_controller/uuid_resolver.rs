@@ -1,10 +1,10 @@
-use thiserror::Error;
-use tokio::sync::{RwLock, mpsc, oneshot};
-use uuid::Uuid;
+use log::{info, warn};
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::collections::hash_map::Entry;
-use log::{info, warn};
+use thiserror::Error;
+use tokio::sync::{mpsc, oneshot, RwLock};
+use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, UuidError>;
 
@@ -12,7 +12,7 @@ pub type Result<T> = std::result::Result<T, UuidError>;
 enum UuidResolveMsg {
     Resolve {
         name: String,
-        ret: oneshot::Sender<Result<Option<Uuid>>>,
+        ret: oneshot::Sender<Result<Uuid>>,
     },
     GetOrCreate {
         name: String,
@@ -24,7 +24,7 @@ enum UuidResolveMsg {
     },
     Delete {
         name: String,
-        ret: oneshot::Sender<Result<Option<Uuid>>>,
+        ret: oneshot::Sender<Result<Uuid>>,
     },
     List {
         ret: oneshot::Sender<Result<Vec<(String, Uuid)>>>,
@@ -46,13 +46,20 @@ impl<S: UuidStore> UuidResolverActor<S> {
 
         info!("uuid resolver started");
 
-        // TODO: benchmark and use buffered streams to improve throughput.
         loop {
             match self.inbox.recv().await {
-                Some(Create { name, ret }) => self.handle_create(name, ret).await,
-                Some(GetOrCreate { name, ret }) => self.handle_get_or_create(name, ret).await,
-                Some(Resolve { name, ret }) => self.handle_resolve(name, ret).await,
-                Some(Delete { name, ret }) => self.handle_delete(name, ret).await,
+                Some(Create { name, ret }) => {
+                    let _ = ret.send(self.handle_create(name).await);
+                }
+                Some(GetOrCreate { name, ret }) => {
+                    let _ = ret.send(self.handle_get_or_create(name).await);
+                }
+                Some(Resolve { name, ret }) => {
+                    let _ = ret.send(self.handle_resolve(name).await);
+                }
+                Some(Delete { name, ret }) => {
+                    let _ = ret.send(self.handle_delete(name).await);
+                }
                 Some(List { ret }) => {
                     let _ = ret.send(self.handle_list().await);
                 }
@@ -64,24 +71,26 @@ impl<S: UuidStore> UuidResolverActor<S> {
         warn!("exiting uuid resolver loop");
     }
 
-    async fn handle_create(&self, name: String, ret: oneshot::Sender<Result<Uuid>>) {
-        let result = self.store.create_uuid(name, true).await;
-        let _ = ret.send(result);
+    async fn handle_create(&self, name: String) -> Result<Uuid> {
+        self.store.create_uuid(name, true).await
     }
 
-    async fn handle_get_or_create(&self, name: String, ret: oneshot::Sender<Result<Uuid>>) {
-        let result = self.store.create_uuid(name, false).await;
-        let _ = ret.send(result);
+    async fn handle_get_or_create(&self, name: String) -> Result<Uuid> {
+        self.store.create_uuid(name, false).await
     }
 
-    async fn handle_resolve(&self, name: String, ret: oneshot::Sender<Result<Option<Uuid>>>) {
-        let result = self.store.get_uuid(&name).await;
-        let _ = ret.send(result);
+    async fn handle_resolve(&self, name: String) -> Result<Uuid> {
+        self.store
+            .get_uuid(&name)
+            .await?
+            .ok_or(UuidError::UnexistingIndex(name))
     }
 
-    async fn handle_delete(&self, name: String, ret: oneshot::Sender<Result<Option<Uuid>>>) {
-        let result = self.store.delete(&name).await;
-        let _ = ret.send(result);
+    async fn handle_delete(&self, name: String) -> Result<Uuid> {
+        self.store
+            .delete(&name)
+            .await?
+            .ok_or(UuidError::UnexistingIndex(name))
     }
 
     async fn handle_list(&self) -> Result<Vec<(String, Uuid)>> {
@@ -104,39 +113,49 @@ impl UuidResolverHandle {
         Self { sender }
     }
 
-    pub async fn resolve(&self, name: String) -> anyhow::Result<Option<Uuid>> {
+    pub async fn resolve(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::Resolve { name, ret };
         let _ = self.sender.send(msg).await;
-        Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
+        Ok(receiver
+            .await
+            .expect("Uuid resolver actor has been killed")?)
     }
 
     pub async fn get_or_create(&self, name: String) -> Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::GetOrCreate { name, ret };
         let _ = self.sender.send(msg).await;
-        Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
+        Ok(receiver
+            .await
+            .expect("Uuid resolver actor has been killed")?)
     }
 
     pub async fn create(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::Create { name, ret };
         let _ = self.sender.send(msg).await;
-        Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
+        Ok(receiver
+            .await
+            .expect("Uuid resolver actor has been killed")?)
     }
 
-    pub async fn delete(&self, name: String) -> anyhow::Result<Option<Uuid>> {
+    pub async fn delete(&self, name: String) -> anyhow::Result<Uuid> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::Delete { name, ret };
         let _ = self.sender.send(msg).await;
-        Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
+        Ok(receiver
+            .await
+            .expect("Uuid resolver actor has been killed")?)
     }
 
     pub async fn list(&self) -> anyhow::Result<Vec<(String, Uuid)>> {
         let (ret, receiver) = oneshot::channel();
         let msg = UuidResolveMsg::List { ret };
         let _ = self.sender.send(msg).await;
-        Ok(receiver.await.expect("Uuid resolver actor has been killed")?)
+        Ok(receiver
+            .await
+            .expect("Uuid resolver actor has been killed")?)
     }
 }
 
@@ -144,6 +163,8 @@ impl UuidResolverHandle {
 pub enum UuidError {
     #[error("Name already exist.")]
     NameAlreadyExist,
+    #[error("Index \"{0}\" doesn't exist.")]
+    UnexistingIndex(String),
 }
 
 #[async_trait::async_trait]
@@ -168,7 +189,7 @@ impl UuidStore for MapUuidStore {
                 } else {
                     Ok(entry.get().clone())
                 }
-            },
+            }
             Entry::Vacant(entry) => {
                 let uuid = Uuid::new_v4();
                 let uuid = entry.insert(uuid);
@@ -186,7 +207,13 @@ impl UuidStore for MapUuidStore {
     }
 
     async fn list(&self) -> Result<Vec<(String, Uuid)>> {
-        let list = self.0.read().await.iter().map(|(name, uuid)| (name.to_owned(), uuid.clone())).collect();
+        let list = self
+            .0
+            .read()
+            .await
+            .iter()
+            .map(|(name, uuid)| (name.to_owned(), uuid.clone()))
+            .collect();
         Ok(list)
     }
 }

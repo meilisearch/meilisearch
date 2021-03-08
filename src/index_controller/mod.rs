@@ -10,7 +10,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use actix_web::web::{Bytes, Payload};
-use anyhow::Context;
 use futures::stream::StreamExt;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::{Serialize, Deserialize};
@@ -108,7 +107,7 @@ impl IndexController {
     }
 
     pub async fn clear_documents(&self, index: String) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.resolve(index).await?.unwrap();
+        let uuid = self.uuid_resolver.resolve(index).await?;
         let meta = UpdateMeta::ClearDocuments;
         let (_, receiver) = mpsc::channel(1);
         let status = self.update_handle.update(meta, receiver, uuid).await?;
@@ -116,7 +115,7 @@ impl IndexController {
     }
 
     pub async fn delete_documents(&self, index: String, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.resolve(index).await.unwrap().unwrap();
+        let uuid = self.uuid_resolver.resolve(index).await?;
         let meta = UpdateMeta::DeleteDocuments;
         let (sender, receiver) = mpsc::channel(10);
 
@@ -153,8 +152,7 @@ impl IndexController {
     pub async fn delete_index(&self, index_uid: String) -> anyhow::Result<()> {
         let uuid = self.uuid_resolver
             .delete(index_uid)
-            .await?
-            .context("index not found")?;
+            .await?;
         self.update_handle.delete(uuid.clone()).await?;
         self.index_handle.delete(uuid).await?;
         Ok(())
@@ -163,16 +161,14 @@ impl IndexController {
     pub async fn update_status(&self, index: String, id: u64) -> anyhow::Result<Option<UpdateStatus>> {
         let uuid = self.uuid_resolver
             .resolve(index)
-            .await?
-            .context("index not found")?;
+            .await?;
         let result = self.update_handle.update_status(uuid, id).await?;
         Ok(result)
     }
 
     pub async fn all_update_status(&self, index: String) -> anyhow::Result<Vec<UpdateStatus>> {
         let uuid = self.uuid_resolver
-            .resolve(index).await?
-            .context("index not found")?;
+            .resolve(index).await?;
         let result = self.update_handle.get_all_updates_status(uuid).await?;
         Ok(result)
     }
@@ -195,8 +191,7 @@ impl IndexController {
     pub async fn settings(&self, index: String) -> anyhow::Result<Settings> {
         let uuid = self.uuid_resolver
             .resolve(index.clone())
-            .await?
-            .with_context(|| format!("Index {:?} doesn't exist", index))?;
+            .await?;
         let settings = self.index_handle.settings(uuid).await?;
         Ok(settings)
     }
@@ -210,8 +205,7 @@ impl IndexController {
     ) -> anyhow::Result<Vec<Document>> {
         let uuid = self.uuid_resolver
             .resolve(index.clone())
-            .await?
-            .with_context(|| format!("Index {:?} doesn't exist", index))?;
+            .await?;
         let documents = self.index_handle.documents(uuid, offset, limit, attributes_to_retrieve).await?;
         Ok(documents)
     }
@@ -224,8 +218,7 @@ impl IndexController {
     ) -> anyhow::Result<Document> {
         let uuid = self.uuid_resolver
             .resolve(index.clone())
-            .await?
-            .with_context(|| format!("Index {:?} doesn't exist", index))?;
+            .await?;
         let document = self.index_handle.document(uuid, doc_id, attributes_to_retrieve).await?;
         Ok(document)
     }
@@ -235,21 +228,18 @@ impl IndexController {
     }
 
     pub async fn search(&self, name: String, query: SearchQuery) -> anyhow::Result<SearchResult> {
-        let uuid = self.uuid_resolver.resolve(name).await.unwrap().unwrap();
+        let uuid = self.uuid_resolver.resolve(name).await?;
         let result = self.index_handle.search(uuid, query).await?;
         Ok(result)
     }
 
     pub async fn get_index(&self, name: String) -> anyhow::Result<Option<IndexMetadata>> {
         let uuid = self.uuid_resolver.resolve(name.clone()).await?;
-        if let Some(uuid) = uuid {
-            let result = self.index_handle
-                .get_index_meta(uuid)
-                .await?
-                .map(|meta| IndexMetadata { name, meta });
-            return Ok(result)
-        }
-        Ok(None)
+        let result = self.index_handle
+            .get_index_meta(uuid)
+            .await?
+            .map(|meta| IndexMetadata { name, meta });
+        Ok(result)
     }
 }
 
