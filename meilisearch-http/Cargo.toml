@@ -26,7 +26,7 @@ bytes = "1.0.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 crossbeam-channel = "0.5.0"
 env_logger = "0.8.2"
-flate2 = "1.0.19"
+flate2 = "1.0.20"
 futures = "0.3.8"
 http = "0.2.2"
 indexmap = { version = "1.6.1", features = ["serde-1"] }
