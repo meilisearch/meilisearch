@@ -8,7 +8,6 @@ async fn get_settings_unexisting_index() {
     assert_eq!(code, 400)
 }
 
-// test broken, should be fixed with milli#101
 #[actix_rt::test]
 async fn get_settings() {
     let server = Server::new().await;
