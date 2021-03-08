@@ -109,7 +109,7 @@ impl Data {
         let criteria = index
             .criteria(&txn)?
             .into_iter()
-            .map(|v| format!("{:?}", v))
+            .map(|v| format!("{}", v))
             .collect();
 
         Ok(Settings {

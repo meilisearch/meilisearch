@@ -10,7 +10,6 @@ async fn get_settings_unexisting_index() {
 
 // test broken, should be fixed with milli#101
 #[actix_rt::test]
-#[ignore]
 async fn get_settings() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -22,7 +21,7 @@ async fn get_settings() {
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["facetedAttributes"], json!({}));
-    assert_eq!(settings["rankingRules"], json!(["typo", "words", "proximmity", "attributes", "wordsPosition", "exactness"]));
+    assert_eq!(settings["rankingRules"], json!(["typo", "words", "proximity", "attribute", "wordsPosition", "exactness"]));
 }
 
 #[actix_rt::test]

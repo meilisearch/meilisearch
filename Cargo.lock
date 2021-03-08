@@ -1725,7 +1725,7 @@ dependencies = [
 [[package]]
 name = "milli"
 version = "0.1.0"
-source = "git+https://github.com/meilisearch/milli.git?rev=794fce7#794fce7bff3e3461a7f3954fd97f58f8232e5a8e"
+source = "git+https://github.com/meilisearch/milli.git?rev=f190d5f#f190d5f496cc39517b6a81300c6dee9b6dba7a38"
 dependencies = [
  "anyhow",
  "bstr",
@@ -1756,6 +1756,7 @@ dependencies = [
  "roaring",
  "serde",
  "serde_json",
+ "slice-group-by",
  "smallstr",
  "smallvec",
  "tempfile",

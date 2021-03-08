@@ -6,7 +6,7 @@ use anyhow::{bail, Context};
 use either::Either;
 use heed::RoTxn;
 use meilisearch_tokenizer::{Analyzer, AnalyzerConfig};
-use milli::{obkv_to_json, FacetCondition, Index, facet::FacetValue};
+use milli::{FacetCondition, Index, MatchingWords, facet::FacetValue, obkv_to_json};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -60,7 +60,7 @@ impl SearchQuery {
 
         let milli::SearchResult {
             documents_ids,
-            found_words,
+            matching_words,
             candidates,
             ..
         } = search.execute()?;
@@ -92,7 +92,7 @@ impl SearchQuery {
         for (_id, obkv) in index.documents(&rtxn, documents_ids)? {
             let mut object = obkv_to_json(&displayed_fields_ids, &fields_ids_map, obkv)?;
             if let Some(ref attributes_to_highlight) = self.attributes_to_highlight {
-                highlighter.highlight_record(&mut object, &found_words, attributes_to_highlight);
+                highlighter.highlight_record(&mut object, &matching_words, attributes_to_highlight);
             }
             documents.push(object);
         }
@@ -145,7 +145,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
         Self { analyzer }
     }
 
-    fn highlight_value(&self, value: Value, words_to_highlight: &HashSet<String>) -> Value {
+    fn highlight_value(&self, value: Value, words_to_highlight: &MatchingWords) -> Value {
         match value {
             Value::Null => Value::Null,
             Value::Bool(boolean) => Value::Bool(boolean),
@@ -155,7 +155,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
                 let analyzed = self.analyzer.analyze(&old_string);
                 for (word, token) in analyzed.reconstruct() {
                     if token.is_word() {
-                        let to_highlight = words_to_highlight.contains(token.text());
+                        let to_highlight = words_to_highlight.matches(token.text());
                         if to_highlight {
                             string.push_str("<mark>")
                         }
@@ -187,7 +187,7 @@ impl<'a, A: AsRef<[u8]>> Highlighter<'a, A> {
     fn highlight_record(
         &self,
         object: &mut Map<String, Value>,
-        words_to_highlight: &HashSet<String>,
+        words_to_highlight: &MatchingWords,
         attributes_to_highlight: &HashSet<String>,
     ) {
         // TODO do we need to create a string for element that are not and needs to be highlight?
