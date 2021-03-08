@@ -76,5 +76,5 @@ urlencoding = "1.1.1"
 [features]
 default = ["sentry"]
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 jemallocator = "0.3.2"
