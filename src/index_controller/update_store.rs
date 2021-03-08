@@ -30,18 +30,18 @@ pub trait HandleUpdate<M, N, E> {
         &mut self,
         meta: Processing<M>,
         content: File,
-    ) -> Result<Processed<M, N>, Failed<M, E>>;
+    ) -> anyhow::Result<Result<Processed<M, N>, Failed<M, E>>>;
 }
 
 impl<M, N, E, F> HandleUpdate<M, N, E> for F
 where
-    F: FnMut(Processing<M>, File) -> Result<Processed<M, N>, Failed<M, E>>,
+    F: FnMut(Processing<M>, File) -> anyhow::Result<Result<Processed<M, N>, Failed<M, E>>>,
 {
     fn handle_update(
         &mut self,
         meta: Processing<M>,
         content: File,
-    ) -> Result<Processed<M, N>, Failed<M, E>> {
+    ) -> anyhow::Result<Result<Processed<M, N>, Failed<M, E>>> {
         self(meta, content)
     }
 }
@@ -100,7 +100,7 @@ where
                                 update_store.process_pending_update(handler)
                             })
                             .await
-                            .unwrap();
+                            .expect("Fatal error processing update.");
                             match res {
                                 Ok(Some(_)) => (),
                                 Ok(None) => break,
@@ -185,7 +185,7 @@ where
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    fn process_pending_update<U>(&self, mut handler: U) -> heed::Result<Option<()>>
+    fn process_pending_update<U>(&self, mut handler: U) -> anyhow::Result<Option<()>>
     where
         U: HandleUpdate<M, N, E>,
     {
@@ -209,7 +209,7 @@ where
                 self.processing.write().unwrap().replace(processing.clone());
                 let file = File::open(&content_path)?;
                 // Process the pending update using the provided user function.
-                let result = handler.handle_update(processing, file);
+                let result = handler.handle_update(processing, file)?;
                 drop(rtxn);
 
                 // Once the pending update have been successfully processed

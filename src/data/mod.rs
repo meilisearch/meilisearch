@@ -59,10 +59,8 @@ impl Data {
     pub fn new(options: Opt) -> anyhow::Result<Data> {
         let path = options.db_path.clone();
 
-        //let indexer_opts = options.indexer_options.clone();
-
         create_dir_all(&path)?;
-        let index_controller = IndexController::new(&path);
+        let index_controller = IndexController::new(&path)?;
 
         let mut api_keys = ApiKeys {
             master: options.clone().master_key,
