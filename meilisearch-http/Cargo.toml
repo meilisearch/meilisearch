@@ -82,5 +82,5 @@ branch = "master"
 [build-dependencies]
 vergen = "3.1.0"
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 jemallocator = "0.3.2"
