@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::mem::take;
 
-use anyhow::bail;
+use anyhow::{bail, Context as _};
+use heed::{BytesDecode, BytesEncode};
 use itertools::Itertools;
 use log::debug;
+use num_traits::Bounded;
 use ordered_float::OrderedFloat;
 use roaring::RoaringBitmap;
 
@@ -13,17 +15,18 @@ use crate::heed_codec::facet::{FieldDocIdFacetI64Codec, FieldDocIdFacetF64Codec}
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::FacetIter;
 use crate::search::query_tree::Operation;
-use crate::{FieldId, Index};
+use crate::{FieldsIdsMap, FieldId, Index};
 use super::{Criterion, CriterionResult};
 
 pub struct AscDesc<'t> {
     index: &'t Index,
     rtxn: &'t heed::RoTxn<'t>,
+    field_name: String,
     field_id: FieldId,
     facet_type: FacetType,
     ascending: bool,
     query_tree: Option<Operation>,
-    candidates: RoaringBitmap,
+    candidates: Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>,
     bucket_candidates: RoaringBitmap,
     faceted_candidates: RoaringBitmap,
     parent: Option<Box<dyn Criterion + 't>>,
@@ -35,11 +38,10 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
     ) -> anyhow::Result<Self>
     {
-        Self::initial(index, rtxn, query_tree, candidates, field_id, facet_type, true)
+        Self::initial(index, rtxn, query_tree, candidates, field_name, true)
     }
 
     pub fn initial_desc(
@@ -47,33 +49,30 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
     ) -> anyhow::Result<Self>
     {
-        Self::initial(index, rtxn, query_tree, candidates, field_id, facet_type, false)
+        Self::initial(index, rtxn, query_tree, candidates, field_name, false)
     }
 
     pub fn asc(
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
     ) -> anyhow::Result<Self>
     {
-        Self::new(index, rtxn, parent, field_id, facet_type, true)
+        Self::new(index, rtxn, parent, field_name, true)
     }
 
     pub fn desc(
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
     ) -> anyhow::Result<Self>
     {
-        Self::new(index, rtxn, parent, field_id, facet_type, false)
+        Self::new(index, rtxn, parent, field_name, false)
     }
 
     fn initial(
@@ -81,11 +80,14 @@ impl<'t> AscDesc<'t> {
         rtxn: &'t heed::RoTxn,
         query_tree: Option<Operation>,
         candidates: Option<RoaringBitmap>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
         ascending: bool,
     ) -> anyhow::Result<Self>
     {
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let faceted_fields = index.faceted_fields(rtxn)?;
+        let (field_id, facet_type) = field_id_facet_type(&fields_ids_map, &faceted_fields, &field_name)?;
+
         let faceted_candidates = index.faceted_documents_ids(rtxn, field_id)?;
         let candidates = match &query_tree {
             Some(qt) => {
@@ -102,11 +104,12 @@ impl<'t> AscDesc<'t> {
         Ok(AscDesc {
             index,
             rtxn,
+            field_name,
             field_id,
             facet_type,
             ascending,
             query_tree,
-            candidates,
+            candidates: facet_ordered(index, rtxn, field_id, facet_type, ascending, candidates)?,
             faceted_candidates,
             bucket_candidates: RoaringBitmap::new(),
             parent: None,
@@ -117,19 +120,23 @@ impl<'t> AscDesc<'t> {
         index: &'t Index,
         rtxn: &'t heed::RoTxn,
         parent: Box<dyn Criterion + 't>,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: String,
         ascending: bool,
     ) -> anyhow::Result<Self>
     {
+        let fields_ids_map = index.fields_ids_map(rtxn)?;
+        let faceted_fields = index.faceted_fields(rtxn)?;
+        let (field_id, facet_type) = field_id_facet_type(&fields_ids_map, &faceted_fields, &field_name)?;
+
         Ok(AscDesc {
             index,
             rtxn,
+            field_name,
             field_id,
             facet_type,
             ascending,
             query_tree: None,
-            candidates: RoaringBitmap::new(),
+            candidates: Box::new(std::iter::empty()),
             faceted_candidates: index.faceted_documents_ids(rtxn, field_id)?,
             bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
@@ -140,23 +147,28 @@ impl<'t> AscDesc<'t> {
 impl<'t> Criterion for AscDesc<'t> {
     fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
         loop {
-            debug!("Facet {} iteration ({:?})",
-                if self.ascending { "Asc" } else { "Desc" }, self.candidates,
+            debug!("Facet {}({}) iteration",
+                if self.ascending { "Asc" } else { "Desc" }, self.field_name
             );
 
-            match &mut self.candidates {
-                candidates if candidates.is_empty() => {
+            match self.candidates.next().transpose()? {
+                None => {
                     let query_tree = self.query_tree.take();
-                    let candidates = take(&mut self.candidates);
                     let bucket_candidates = take(&mut self.bucket_candidates);
-
                     match self.parent.as_mut() {
                         Some(parent) => {
                             match parent.next()? {
                                 Some(CriterionResult { query_tree, mut candidates, bucket_candidates }) => {
                                     self.query_tree = query_tree;
                                     candidates.intersect_with(&self.faceted_candidates);
-                                    self.candidates = candidates;
+                                    self.candidates = facet_ordered(
+                                        self.index,
+                                        self.rtxn,
+                                        self.field_id,
+                                        self.facet_type,
+                                        self.ascending,
+                                        candidates,
+                                    )?;
                                     self.bucket_candidates = bucket_candidates;
                                 },
                                 None => return Ok(None),
@@ -167,28 +179,21 @@ impl<'t> Criterion for AscDesc<'t> {
                         },
                     }
 
-                    return Ok(Some(CriterionResult { query_tree, candidates, bucket_candidates }));
+                    return Ok(Some(CriterionResult {
+                        query_tree,
+                        candidates: RoaringBitmap::new(),
+                        bucket_candidates,
+                    }));
                 },
-                candidates => {
+                Some(candidates) => {
                     let bucket_candidates = match self.parent {
                         Some(_) => take(&mut self.bucket_candidates),
                         None => candidates.clone(),
                     };
 
-                    let found_candidates = facet_ordered(
-                        self.index,
-                        self.rtxn,
-                        self.field_id,
-                        self.facet_type,
-                        self.ascending,
-                        candidates.clone(),
-                    )?;
-
-                    candidates.difference_with(&found_candidates);
-
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.clone(),
-                        candidates: found_candidates,
+                        candidates,
                         bucket_candidates,
                     }));
                 },
@@ -197,86 +202,113 @@ impl<'t> Criterion for AscDesc<'t> {
     }
 }
 
-fn facet_ordered(
-    index: &Index,
-    rtxn: &heed::RoTxn,
+fn field_id_facet_type(
+    fields_ids_map: &FieldsIdsMap,
+    faceted_fields: &HashMap<String, FacetType>,
+    field: &str,
+) -> anyhow::Result<(FieldId, FacetType)>
+{
+    let id = fields_ids_map.id(field).with_context(|| {
+        format!("field {:?} isn't registered", field)
+    })?;
+    let facet_type = faceted_fields.get(field).with_context(|| {
+        format!("field {:?} isn't faceted", field)
+    })?;
+    Ok((id, *facet_type))
+}
+
+/// Returns an iterator over groups of the given candidates in ascending or descending order.
+///
+/// It will either use an iterative or a recusrsive method on the whole facet database depending
+/// on the number of candidates to rank.
+fn facet_ordered<'t>(
+    index: &'t Index,
+    rtxn: &'t heed::RoTxn,
     field_id: FieldId,
     facet_type: FacetType,
     ascending: bool,
     candidates: RoaringBitmap,
-) -> anyhow::Result<RoaringBitmap>
+) -> anyhow::Result<Box<dyn Iterator<Item = heed::Result<RoaringBitmap>> + 't>>
 {
     match facet_type {
         FacetType::Float => {
             if candidates.len() <= 1000 {
-                let db = index.field_id_docid_facet_values.remap_key_type::<FieldDocIdFacetF64Codec>();
-                let mut docids_values = Vec::with_capacity(candidates.len() as usize);
-                for docid in candidates.iter() {
-                    let left = (field_id, docid, f64::MIN);
-                    let right = (field_id, docid, f64::MAX);
-                    let mut iter = db.range(rtxn, &(left..=right))?;
-                    let entry = if ascending { iter.next() } else { iter.last() };
-                    if let Some(((_, _, value), ())) = entry.transpose()? {
-                        docids_values.push((docid, OrderedFloat(value)));
-                    }
-                }
-                docids_values.sort_unstable_by_key(|(_, value)| *value);
-                let iter = docids_values.into_iter();
-                let iter = if ascending {
-                    Box::new(iter) as Box<dyn Iterator<Item = _>>
-                } else {
-                    Box::new(iter.rev())
-                };
-                match iter.group_by(|(_, v)| *v).into_iter().next() {
-                    Some((_, ids)) => Ok(ids.map(|(id, _)| id).into_iter().collect()),
-                    None => Ok(RoaringBitmap::new())
-                }
+                let iter = iterative_facet_ordered_iter::<FieldDocIdFacetF64Codec, f64, OrderedFloat<f64>>(
+                    index, rtxn, field_id, ascending, candidates,
+                )?;
+                Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
             } else {
                 let facet_fn = if ascending {
                     FacetIter::<f64, FacetLevelValueF64Codec>::new_reducing
                 } else {
                     FacetIter::<f64, FacetLevelValueF64Codec>::new_reverse_reducing
                 };
-
-                let mut iter = facet_fn(rtxn, index, field_id, candidates)?;
-                Ok(iter.next().transpose()?.map(|(_, docids)| docids).unwrap_or_default())
+                let iter = facet_fn(rtxn, index, field_id, candidates)?;
+                Ok(Box::new(iter.map(|res| res.map(|(_, docids)| docids))))
             }
         },
         FacetType::Integer => {
             if candidates.len() <= 1000 {
-                let db = index.field_id_docid_facet_values.remap_key_type::<FieldDocIdFacetI64Codec>();
-                let mut docids_values = Vec::with_capacity(candidates.len() as usize);
-                for docid in candidates.iter() {
-                    let left = (field_id, docid, i64::MIN);
-                    let right = (field_id, docid, i64::MAX);
-                    let mut iter = db.range(rtxn, &(left..=right))?;
-                    let entry = if ascending { iter.next() } else { iter.last() };
-                    if let Some(((_, _, value), ())) = entry.transpose()? {
-                        docids_values.push((docid, value));
-                    }
-                }
-                docids_values.sort_unstable_by_key(|(_, value)| *value);
-                let iter = docids_values.into_iter();
-                let iter = if ascending {
-                    Box::new(iter) as Box<dyn Iterator<Item = _>>
-                } else {
-                    Box::new(iter.rev())
-                };
-                match iter.group_by(|(_, v)| *v).into_iter().next() {
-                    Some((_, ids)) => Ok(ids.map(|(id, _)| id).into_iter().collect()),
-                    None => Ok(RoaringBitmap::new())
-                }
+                let iter = iterative_facet_ordered_iter::<FieldDocIdFacetI64Codec, i64, i64>(
+                    index, rtxn, field_id, ascending, candidates,
+                )?;
+                Ok(Box::new(iter.map(Ok)) as Box<dyn Iterator<Item = _>>)
             } else {
                 let facet_fn = if ascending {
                     FacetIter::<i64, FacetLevelValueI64Codec>::new_reducing
                 } else {
                     FacetIter::<i64, FacetLevelValueI64Codec>::new_reverse_reducing
                 };
-
-                let mut iter = facet_fn(rtxn, index, field_id, candidates)?;
-                Ok(iter.next().transpose()?.map(|(_, docids)| docids).unwrap_or_default())
+                let iter = facet_fn(rtxn, index, field_id, candidates)?;
+                Ok(Box::new(iter.map(|res| res.map(|(_, docids)| docids))))
             }
         },
         FacetType::String => bail!("criteria facet type must be a number"),
     }
+}
+
+/// Fetch the whole list of candidates facet values one by one and order them by it.
+///
+/// This function is fast when the amount of candidates to rank is small.
+fn iterative_facet_ordered_iter<'t, KC, T, U>(
+    index: &'t Index,
+    rtxn: &'t heed::RoTxn,
+    field_id: FieldId,
+    ascending: bool,
+    candidates: RoaringBitmap,
+) -> anyhow::Result<impl Iterator<Item = RoaringBitmap> + 't>
+where
+    KC: BytesDecode<'t, DItem = (FieldId, u32, T)>,
+    KC: for<'a> BytesEncode<'a, EItem = (FieldId, u32, T)>,
+    T: Bounded,
+    U: From<T> + Ord + Clone + 't,
+{
+    let db = index.field_id_docid_facet_values.remap_key_type::<KC>();
+    let mut docids_values = Vec::with_capacity(candidates.len() as usize);
+    for docid in candidates.iter() {
+        let left = (field_id, docid, T::min_value());
+        let right = (field_id, docid, T::max_value());
+        let mut iter = db.range(rtxn, &(left..=right))?;
+        let entry = if ascending { iter.next() } else { iter.last() };
+        if let Some(((_, _, value), ())) = entry.transpose()? {
+            docids_values.push((docid, U::from(value)));
+        }
+    }
+    docids_values.sort_unstable_by_key(|(_, v)| v.clone());
+    let iter = docids_values.into_iter();
+    let iter = if ascending {
+        Box::new(iter) as Box<dyn Iterator<Item = _>>
+    } else {
+        Box::new(iter.rev())
+    };
+
+    // The itertools GroupBy iterator doesn't provide an owned version, we are therefore
+    // required to collect the result into an owned collection (a Vec).
+    // https://github.com/rust-itertools/itertools/issues/499
+    let vec: Vec<_> = iter.group_by(|(_, v)| v.clone())
+        .into_iter()
+        .map(|(_, ids)| ids.map(|(id, _)| id).collect())
+        .collect();
+
+    Ok(vec.into_iter())
 }
