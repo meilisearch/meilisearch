@@ -357,9 +357,9 @@ fn resolve_plane_sweep_candidates(
         ) -> Option<(Position, u8, Position)>
         {
             // take the inner proximity of the first group as initial
-            let mut proximity = groups.first()?.1.1;
-            let left_most_pos = groups.first()?.1.0;
-            let right_most_pos = groups.last()?.1.2;
+            let (_, (_, mut proximity, _)) = groups.first()?;
+            let (_, (left_most_pos, _, _)) = groups.first()?;
+            let (_, (_, _, right_most_pos)) = groups.last()?;
 
             for pair in groups.windows(2) {
                 if let [(i1, (_, _, rpos1)), (i2, (lpos2, prox2, _))] = pair {
@@ -379,7 +379,7 @@ fn resolve_plane_sweep_candidates(
 
             // if groups should be consecutives, we will only accept groups with a proximity of 0
             if !consecutive || proximity == 0 {
-                Some((left_most_pos, proximity, right_most_pos))
+                Some((*left_most_pos, proximity, *right_most_pos))
             } else {
                 None
             }
