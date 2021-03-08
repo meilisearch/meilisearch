@@ -4,8 +4,8 @@ use std::borrow::Cow;
 use anyhow::bail;
 use roaring::RoaringBitmap;
 
-use crate::search::word_derivations;
-use crate::Index;
+use crate::search::{word_derivations, WordDerivationsCache};
+use crate::{Index, DocumentId};
 
 use super::query_tree::{Operation, Query, QueryKind};
 use self::typo::Typo;
@@ -21,7 +21,7 @@ pub mod proximity;
 pub mod fetcher;
 
 pub trait Criterion {
-    fn next(&mut self) -> anyhow::Result<Option<CriterionResult>>;
+    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>>;
 }
 
 /// The result of a call to the parent criterion.
@@ -66,6 +66,7 @@ pub trait Context {
     fn word_prefix_pair_proximity_docids(&self, left: &str, right: &str, proximity: u8) -> heed::Result<Option<RoaringBitmap>>;
     fn words_fst<'t>(&self) -> &'t fst::Set<Cow<[u8]>>;
     fn in_prefix_cache(&self, word: &str) -> bool;
+    fn docid_word_positions(&self, docid: DocumentId, word: &str) -> heed::Result<Option<RoaringBitmap>>;
 }
 pub struct CriteriaBuilder<'t> {
     rtxn: &'t heed::RoTxn<'t>,
@@ -103,6 +104,11 @@ impl<'a> Context for CriteriaBuilder<'a> {
 
     fn in_prefix_cache(&self, word: &str) -> bool {
         self.words_prefixes_fst.contains(word)
+    }
+
+    fn docid_word_positions(&self, docid: DocumentId, word: &str) -> heed::Result<Option<RoaringBitmap>> {
+        let key = (docid, word);
+        self.index.docid_word_positions.get(self.rtxn, &key)
     }
 }
 
@@ -158,12 +164,14 @@ pub fn resolve_query_tree<'t>(
     ctx: &'t dyn Context,
     query_tree: &Operation,
     cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
+    wdcache: &mut WordDerivationsCache,
 ) -> anyhow::Result<RoaringBitmap>
 {
     fn resolve_operation<'t>(
         ctx: &'t dyn Context,
         query_tree: &Operation,
         cache: &mut HashMap<(Operation, u8), RoaringBitmap>,
+        wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<RoaringBitmap>
     {
         use Operation::{And, Consecutive, Or, Query};
@@ -171,7 +179,7 @@ pub fn resolve_query_tree<'t>(
         match query_tree {
             And(ops) => {
                 let mut ops = ops.iter().map(|op| {
-                    resolve_operation(ctx, op, cache)
+                    resolve_operation(ctx, op, cache, wdcache)
                 }).collect::<anyhow::Result<Vec<_>>>()?;
 
                 ops.sort_unstable_by_key(|cds| cds.len());
@@ -194,7 +202,7 @@ pub fn resolve_query_tree<'t>(
                 for slice in ops.windows(2) {
                     match (&slice[0], &slice[1]) {
                         (Operation::Query(left), Operation::Query(right)) => {
-                            match query_pair_proximity_docids(ctx, left, right, 1)? {
+                            match query_pair_proximity_docids(ctx, left, right, 1, wdcache)? {
                                 pair_docids if pair_docids.is_empty() => {
                                     return Ok(RoaringBitmap::new())
                                 },
@@ -215,16 +223,16 @@ pub fn resolve_query_tree<'t>(
             Or(_, ops) => {
                 let mut candidates = RoaringBitmap::new();
                 for op in ops {
-                    let docids = resolve_operation(ctx, op, cache)?;
+                    let docids = resolve_operation(ctx, op, cache, wdcache)?;
                     candidates.union_with(&docids);
                 }
                 Ok(candidates)
             },
-            Query(q) => Ok(query_docids(ctx, q)?),
+            Query(q) => Ok(query_docids(ctx, q, wdcache)?),
         }
     }
 
-    resolve_operation(ctx, query_tree, cache)
+    resolve_operation(ctx, query_tree, cache, wdcache)
 }
 
 
@@ -233,7 +241,8 @@ fn all_word_pair_proximity_docids<T: AsRef<str>, U: AsRef<str>>(
     left_words: &[(T, u8)],
     right_words: &[(U, u8)],
     proximity: u8
-) -> anyhow::Result<RoaringBitmap> {
+) -> anyhow::Result<RoaringBitmap>
+{
     let mut docids = RoaringBitmap::new();
     for (left, _l_typo) in left_words {
         for (right, _r_typo) in right_words {
@@ -244,13 +253,18 @@ fn all_word_pair_proximity_docids<T: AsRef<str>, U: AsRef<str>>(
     Ok(docids)
 }
 
-fn query_docids(ctx: &dyn Context, query: &Query) -> anyhow::Result<RoaringBitmap> {
+fn query_docids(
+    ctx: &dyn Context,
+    query: &Query,
+    wdcache: &mut WordDerivationsCache,
+) -> anyhow::Result<RoaringBitmap>
+{
     match &query.kind {
         QueryKind::Exact { word, .. } => {
             if query.prefix && ctx.in_prefix_cache(&word) {
                 Ok(ctx.word_prefix_docids(&word)?.unwrap_or_default())
             } else if query.prefix {
-                let words = word_derivations(&word, true, 0, ctx.words_fst())?;
+                let words = word_derivations(&word, true, 0, ctx.words_fst(), wdcache)?;
                 let mut docids = RoaringBitmap::new();
                 for (word, _typo) in words {
                     let current_docids = ctx.word_docids(&word)?.unwrap_or_default();
@@ -262,7 +276,7 @@ fn query_docids(ctx: &dyn Context, query: &Query) -> anyhow::Result<RoaringBitma
             }
         },
         QueryKind::Tolerant { typo, word } => {
-            let words = word_derivations(&word, query.prefix, *typo, ctx.words_fst())?;
+            let words = word_derivations(&word, query.prefix, *typo, ctx.words_fst(), wdcache)?;
             let mut docids = RoaringBitmap::new();
             for (word, _typo) in words {
                 let current_docids = ctx.word_docids(&word)?.unwrap_or_default();
@@ -273,10 +287,17 @@ fn query_docids(ctx: &dyn Context, query: &Query) -> anyhow::Result<RoaringBitma
     }
 }
 
-fn query_pair_proximity_docids(ctx: &dyn Context, left: &Query, right: &Query, proximity: u8) -> anyhow::Result<RoaringBitmap> {
+fn query_pair_proximity_docids(
+    ctx: &dyn Context,
+    left: &Query,
+    right: &Query,
+    proximity: u8,
+    wdcache: &mut WordDerivationsCache,
+) -> anyhow::Result<RoaringBitmap>
+{
     if proximity >= 8 {
-        let mut candidates = query_docids(ctx, left)?;
-        let right_candidates = query_docids(ctx, right)?;
+        let mut candidates = query_docids(ctx, left, wdcache)?;
+        let right_candidates = query_docids(ctx, right, wdcache)?;
         candidates.intersect_with(&right_candidates);
         return Ok(candidates);
     }
@@ -287,14 +308,14 @@ fn query_pair_proximity_docids(ctx: &dyn Context, left: &Query, right: &Query, p
             if prefix && ctx.in_prefix_cache(&right) {
                 Ok(ctx.word_prefix_pair_proximity_docids(left.as_str(), right.as_str(), proximity)?.unwrap_or_default())
             } else if prefix {
-                let r_words = word_derivations(&right, true, 0, ctx.words_fst())?;
+                let r_words = word_derivations(&right, true, 0, ctx.words_fst(), wdcache)?;
                 all_word_pair_proximity_docids(ctx, &[(left, 0)], &r_words, proximity)
             } else {
                 Ok(ctx.word_pair_proximity_docids(left.as_str(), right.as_str(), proximity)?.unwrap_or_default())
             }
         },
         (QueryKind::Tolerant { typo, word: left }, QueryKind::Exact { word: right, .. }) => {
-            let l_words = word_derivations(&left, false, *typo, ctx.words_fst())?;
+            let l_words = word_derivations(&left, false, *typo, ctx.words_fst(), wdcache)?.to_owned();
             if prefix && ctx.in_prefix_cache(&right) {
                 let mut docids = RoaringBitmap::new();
                 for (left, _) in l_words {
@@ -303,19 +324,19 @@ fn query_pair_proximity_docids(ctx: &dyn Context, left: &Query, right: &Query, p
                 }
                 Ok(docids)
             } else if prefix {
-                let r_words = word_derivations(&right, true, 0, ctx.words_fst())?;
+                let r_words = word_derivations(&right, true, 0, ctx.words_fst(), wdcache)?;
                 all_word_pair_proximity_docids(ctx, &l_words, &r_words, proximity)
             } else {
                 all_word_pair_proximity_docids(ctx, &l_words, &[(right, 0)], proximity)
             }
         },
         (QueryKind::Exact { word: left, .. }, QueryKind::Tolerant { typo, word: right }) => {
-            let r_words = word_derivations(&right, prefix, *typo, ctx.words_fst())?;
+            let r_words = word_derivations(&right, prefix, *typo, ctx.words_fst(), wdcache)?;
             all_word_pair_proximity_docids(ctx, &[(left, 0)], &r_words, proximity)
         },
         (QueryKind::Tolerant { typo: l_typo, word: left }, QueryKind::Tolerant { typo: r_typo, word: right }) => {
-            let l_words = word_derivations(&left, false, *l_typo, ctx.words_fst())?;
-            let r_words = word_derivations(&right, prefix, *r_typo, ctx.words_fst())?;
+            let l_words = word_derivations(&left, false, *l_typo, ctx.words_fst(), wdcache)?.to_owned();
+            let r_words = word_derivations(&right, prefix, *r_typo, ctx.words_fst(), wdcache)?;
             all_word_pair_proximity_docids(ctx, &l_words, &r_words, proximity)
         },
     }
@@ -367,6 +388,10 @@ pub mod test {
 
         fn in_prefix_cache(&self, word: &str) -> bool {
             self.word_prefix_docids.contains_key(&word.to_string())
+        }
+
+        fn docid_word_positions(&self, _docid: DocumentId, _word: &str) -> heed::Result<Option<RoaringBitmap>> {
+            todo!()
         }
     }
 

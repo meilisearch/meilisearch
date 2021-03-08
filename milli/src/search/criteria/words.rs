@@ -5,6 +5,7 @@ use log::debug;
 use roaring::RoaringBitmap;
 
 use crate::search::query_tree::Operation;
+use crate::search::WordDerivationsCache;
 use super::{resolve_query_tree, Candidates, Criterion, CriterionResult, Context};
 
 pub struct Words<'t> {
@@ -46,7 +47,8 @@ impl<'t> Words<'t> {
 }
 
 impl<'t> Criterion for Words<'t> {
-    fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
+    #[logging_timer::time("Words::{}")]
+    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
         use Candidates::{Allowed, Forbidden};
         loop {
             debug!("Words at iteration {} ({:?})", self.query_trees.len(), self.candidates);
@@ -61,7 +63,7 @@ impl<'t> Criterion for Words<'t> {
                     }));
                 },
                 (Some(qt), Allowed(candidates)) => {
-                    let mut found_candidates = resolve_query_tree(self.ctx, &qt, &mut self.candidates_cache)?;
+                    let mut found_candidates = resolve_query_tree(self.ctx, &qt, &mut self.candidates_cache, wdcache)?;
                     found_candidates.intersect_with(&candidates);
                     candidates.difference_with(&found_candidates);
 
@@ -77,7 +79,7 @@ impl<'t> Criterion for Words<'t> {
                     }));
                 },
                 (Some(qt), Forbidden(candidates)) => {
-                    let mut found_candidates = resolve_query_tree(self.ctx, &qt, &mut self.candidates_cache)?;
+                    let mut found_candidates = resolve_query_tree(self.ctx, &qt, &mut self.candidates_cache, wdcache)?;
                     found_candidates.difference_with(&candidates);
                     candidates.union_with(&found_candidates);
 
@@ -103,7 +105,7 @@ impl<'t> Criterion for Words<'t> {
                 (None, Forbidden(_)) => {
                     match self.parent.as_mut() {
                         Some(parent) => {
-                            match parent.next()? {
+                            match parent.next(wdcache)? {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     self.query_trees = query_tree.map(explode_query_tree).unwrap_or_default();
                                     self.candidates = Candidates::Allowed(candidates);

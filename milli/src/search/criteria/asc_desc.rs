@@ -15,6 +15,7 @@ use crate::heed_codec::facet::{FieldDocIdFacetI64Codec, FieldDocIdFacetF64Codec}
 use crate::search::criteria::{resolve_query_tree, CriteriaBuilder};
 use crate::search::facet::FacetIter;
 use crate::search::query_tree::Operation;
+use crate::search::WordDerivationsCache;
 use crate::{FieldsIdsMap, FieldId, Index};
 use super::{Criterion, CriterionResult};
 
@@ -92,7 +93,7 @@ impl<'t> AscDesc<'t> {
         let candidates = match &query_tree {
             Some(qt) => {
                 let context = CriteriaBuilder::new(rtxn, index)?;
-                let mut qt_candidates = resolve_query_tree(&context, qt, &mut HashMap::new())?;
+                let mut qt_candidates = resolve_query_tree(&context, qt, &mut HashMap::new(), &mut WordDerivationsCache::new())?;
                 if let Some(candidates) = candidates {
                     qt_candidates.intersect_with(&candidates);
                 }
@@ -145,7 +146,8 @@ impl<'t> AscDesc<'t> {
 }
 
 impl<'t> Criterion for AscDesc<'t> {
-    fn next(&mut self) -> anyhow::Result<Option<CriterionResult>> {
+    #[logging_timer::time("AscDesc::{}")]
+    fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
         loop {
             debug!("Facet {}({}) iteration",
                 if self.ascending { "Asc" } else { "Desc" }, self.field_name
@@ -157,7 +159,7 @@ impl<'t> Criterion for AscDesc<'t> {
                     let bucket_candidates = take(&mut self.bucket_candidates);
                     match self.parent.as_mut() {
                         Some(parent) => {
-                            match parent.next()? {
+                            match parent.next(wdcache)? {
                                 Some(CriterionResult { query_tree, mut candidates, bucket_candidates }) => {
                                     self.query_tree = query_tree;
                                     candidates.intersect_with(&self.faceted_candidates);
