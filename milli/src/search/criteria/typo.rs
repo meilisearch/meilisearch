@@ -379,7 +379,7 @@ mod test {
 
         let facet_candidates = None;
 
-let mut wdcache = WordDerivationsCache::new();
+        let mut wdcache = WordDerivationsCache::new();
         let mut criteria = Typo::initial(&context, Some(query_tree), facet_candidates);
 
         let candidates_1 = context.word_docids("split").unwrap().unwrap()
@@ -428,7 +428,7 @@ let mut wdcache = WordDerivationsCache::new();
         let query_tree = None;
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
-let mut wdcache = WordDerivationsCache::new();
+        let mut wdcache = WordDerivationsCache::new();
         let mut criteria = Typo::initial(&context, query_tree, Some(facet_candidates.clone()));
 
         let expected = CriterionResult {
@@ -457,7 +457,7 @@ let mut wdcache = WordDerivationsCache::new();
 
         let facet_candidates = context.word_docids("earth").unwrap().unwrap();
 
-let mut wdcache = WordDerivationsCache::new();
+        let mut wdcache = WordDerivationsCache::new();
         let mut criteria = Typo::initial(&context, Some(query_tree), Some(facet_candidates.clone()));
 
         let candidates_1 = context.word_docids("split").unwrap().unwrap()

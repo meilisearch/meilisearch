@@ -1,5 +1,6 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, btree_map};
+use std::collections::btree_map::{self, BTreeMap};
+use std::collections::hash_map::{HashMap, Entry};
 use std::mem::take;
 
 use roaring::RoaringBitmap;
@@ -331,19 +332,21 @@ fn resolve_candidates<'t>(
     Ok(candidates)
 }
 
-fn resolve_plane_sweep_candidates<'t>(
-    ctx: &'t dyn Context,
+fn resolve_plane_sweep_candidates(
+    ctx: &dyn Context,
     query_tree: &Operation,
     allowed_candidates: &RoaringBitmap,
     wdcache: &mut WordDerivationsCache,
 ) -> anyhow::Result<BTreeMap<u8, RoaringBitmap>>
 {
     /// FIXME may be buggy with query like "new new york"
-    fn plane_sweep<'t>(
-        ctx: &'t dyn Context,
-        operations: &[Operation],
+    fn plane_sweep<'a>(
+        ctx: &dyn Context,
+        operations: &'a [Operation],
         docid: DocumentId,
         consecutive: bool,
+        rocache: &mut HashMap<&'a Operation, Vec<(Position, u8, Position)>>,
+        dwpcache: &mut HashMap<String, Option<RoaringBitmap>>,
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<Vec<(Position, u8, Position)>>
     {
@@ -385,7 +388,7 @@ fn resolve_plane_sweep_candidates<'t>(
         let mut groups_positions = Vec::with_capacity(groups_len);
 
         for operation in operations {
-            let positions = resolve_operation(ctx, operation, docid, wdcache)?;
+            let positions = resolve_operation(ctx, operation, docid, rocache, dwpcache, wdcache)?;
             groups_positions.push(positions.into_iter());
         }
 
@@ -456,25 +459,32 @@ fn resolve_plane_sweep_candidates<'t>(
         Ok(output)
     }
 
-    fn resolve_operation<'t>(
-        ctx: &'t dyn Context,
-        query_tree: &Operation,
+    fn resolve_operation<'a>(
+        ctx: &dyn Context,
+        query_tree: &'a Operation,
         docid: DocumentId,
+        rocache: &mut HashMap<&'a Operation, Vec<(Position, u8, Position)>>,
+        dwpcache: &mut HashMap<String, Option<RoaringBitmap>>,
         wdcache: &mut WordDerivationsCache,
-    ) -> anyhow::Result<Vec<(Position, u8, Position)>> {
+    ) -> anyhow::Result<Vec<(Position, u8, Position)>>
+    {
         use Operation::{And, Consecutive, Or};
 
-        match query_tree {
-            And(ops) => plane_sweep(ctx, ops, docid, false, wdcache),
-            Consecutive(ops) => plane_sweep(ctx, ops, docid, true, wdcache),
+        if let Some(result) = rocache.get(query_tree) {
+            return Ok(result.clone());
+        }
+
+        let result = match query_tree {
+            And(ops) => plane_sweep(ctx, ops, docid, false, rocache, dwpcache, wdcache)?,
+            Consecutive(ops) => plane_sweep(ctx, ops, docid, true, rocache, dwpcache, wdcache)?,
             Or(_, ops) => {
                 let mut result = Vec::new();
                 for op in ops {
-                    result.extend(resolve_operation(ctx, op, docid, wdcache)?)
+                    result.extend(resolve_operation(ctx, op, docid, rocache, dwpcache, wdcache)?)
                 }
 
                 result.sort_unstable();
-                Ok(result)
+                result
             },
             Operation::Query(Query {prefix, kind}) => {
                 let fst = ctx.words_fst();
@@ -493,21 +503,43 @@ fn resolve_plane_sweep_candidates<'t>(
 
                 let mut result = Vec::new();
                 for (word, _) in words.as_ref() {
-                    if let Some(positions) = ctx.docid_word_positions(docid, word)? {
+                    let positions = match dwpcache.entry(word.to_string()) {
+                        Entry::Occupied(entry) => entry.into_mut(),
+                        Entry::Vacant(entry) => {
+                            let positions = ctx.docid_word_positions(docid, word)?;
+                            entry.insert(positions)
+                        }
+                    };
+
+                    if let Some(positions) = positions {
                         let iter = positions.iter().map(|p| (p, 0, p));
                         result.extend(iter);
                     }
                 }
 
                 result.sort_unstable();
-                Ok(result)
+                result
             }
-        }
+        };
+
+        rocache.insert(query_tree, result.clone());
+        Ok(result)
     }
 
+    let mut word_positions_cache = HashMap::new();
+    let mut resolve_operation_cache = HashMap::new();
     let mut candidates = BTreeMap::new();
     for docid in allowed_candidates {
-        let positions =  resolve_operation(ctx, query_tree, docid, wdcache)?;
+        word_positions_cache.clear();
+        resolve_operation_cache.clear();
+        let positions =  resolve_operation(
+            ctx,
+            query_tree,
+            docid,
+            &mut resolve_operation_cache,
+            &mut word_positions_cache,
+            wdcache,
+        )?;
         let best_proximity = positions.into_iter().min_by_key(|(_, proximity, _)| *proximity);
         let best_proximity = best_proximity.map(|(_, proximity, _)| proximity).unwrap_or(7);
         candidates.entry(best_proximity).or_insert_with(RoaringBitmap::new).insert(docid);
