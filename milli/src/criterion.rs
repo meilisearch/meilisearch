@@ -76,8 +76,8 @@ impl fmt::Display for Criterion {
             Attribute       => f.write_str("attribute"),
             WordsPosition   => f.write_str("wordsPosition"),
             Exactness       => f.write_str("exactness"),
-            Asc(attr)       => write!(f, "asc({:?})", attr),
-            Desc(attr)      => write!(f, "desc({:?})", attr),
+            Asc(attr)       => write!(f, "asc({})", attr),
+            Desc(attr)      => write!(f, "desc({})", attr),
         }
     }
 }
