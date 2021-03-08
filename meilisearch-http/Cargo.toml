@@ -30,7 +30,7 @@ flate2 = "1.0.19"
 futures = "0.3.8"
 http = "0.2.2"
 indexmap = { version = "1.6.1", features = ["serde-1"] }
-log = "0.4.11"
+log = "0.4.14"
 main_error = "0.1.1"
 meilisearch-core = { path = "../meilisearch-core", version = "0.19.0" }
 meilisearch-error = { path = "../meilisearch-error", version = "0.19.0" }
