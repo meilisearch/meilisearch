@@ -160,9 +160,21 @@ impl<'t> Criterion for AscDesc<'t> {
                     match self.parent.as_mut() {
                         Some(parent) => {
                             match parent.next(wdcache)? {
-                                Some(CriterionResult { query_tree, mut candidates, bucket_candidates }) => {
+                                Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     self.query_tree = query_tree;
-                                    candidates.intersect_with(&self.faceted_candidates);
+                                    let candidates = match (&self.query_tree, candidates) {
+                                        (_, Some(mut candidates)) => {
+                                            candidates.intersect_with(&self.faceted_candidates);
+                                            candidates
+                                        },
+                                        (Some(qt), None) => {
+                                            let context = CriteriaBuilder::new(&self.rtxn, &self.index)?;
+                                            let mut candidates = resolve_query_tree(&context, qt, &mut HashMap::new(), wdcache)?;
+                                            candidates.intersect_with(&self.faceted_candidates);
+                                            candidates
+                                        },
+                                        (None, None) => take(&mut self.faceted_candidates),
+                                    };
                                     self.candidates = facet_ordered(
                                         self.index,
                                         self.rtxn,
@@ -183,7 +195,7 @@ impl<'t> Criterion for AscDesc<'t> {
 
                     return Ok(Some(CriterionResult {
                         query_tree,
-                        candidates: RoaringBitmap::new(),
+                        candidates: Some(RoaringBitmap::new()),
                         bucket_candidates,
                     }));
                 },
@@ -195,7 +207,7 @@ impl<'t> Criterion for AscDesc<'t> {
 
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.clone(),
-                        candidates,
+                        candidates: Some(candidates),
                         bucket_candidates,
                     }));
                 },

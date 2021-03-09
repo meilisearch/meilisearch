@@ -9,7 +9,7 @@ use log::debug;
 use crate::{DocumentId, Position, search::{query_tree::QueryKind, word_derivations}};
 use crate::search::query_tree::{maximum_proximity, Operation, Query};
 use crate::search::WordDerivationsCache;
-use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
+use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids, resolve_query_tree};
 
 pub struct Proximity<'t> {
     ctx: &'t dyn Context,
@@ -70,7 +70,7 @@ impl<'t> Criterion for Proximity<'t> {
                 (_, Allowed(candidates)) if candidates.is_empty() => {
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.take().map(|(_, qt)| qt),
-                        candidates: take(&mut self.candidates).into_inner(),
+                        candidates: Some(take(&mut self.candidates).into_inner()),
                         bucket_candidates: take(&mut self.bucket_candidates),
                     }));
                 },
@@ -126,7 +126,7 @@ impl<'t> Criterion for Proximity<'t> {
 
                         return Ok(Some(CriterionResult {
                             query_tree: Some(query_tree.clone()),
-                            candidates: new_candidates,
+                            candidates: Some(new_candidates),
                             bucket_candidates,
                         }));
                     }
@@ -155,7 +155,7 @@ impl<'t> Criterion for Proximity<'t> {
 
                         return Ok(Some(CriterionResult {
                             query_tree: Some(query_tree.clone()),
-                            candidates: new_candidates,
+                            candidates: Some(new_candidates),
                             bucket_candidates,
                         }));
                     }
@@ -164,7 +164,7 @@ impl<'t> Criterion for Proximity<'t> {
                     let candidates = take(&mut self.candidates).into_inner();
                     return Ok(Some(CriterionResult {
                         query_tree: None,
-                        candidates: candidates.clone(),
+                        candidates: Some(candidates.clone()),
                         bucket_candidates: candidates,
                     }));
                 },
@@ -173,6 +173,12 @@ impl<'t> Criterion for Proximity<'t> {
                         Some(parent) => {
                             match parent.next(wdcache)? {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
+                                    let candidates = match (&query_tree, candidates) {
+                                        (_, Some(candidates)) => candidates,
+                                        (Some(qt), None) => resolve_query_tree(self.ctx, qt, &mut HashMap::new(), wdcache)?,
+                                        (None, None) => RoaringBitmap::new(),
+                                    };
+
                                     self.query_tree = query_tree.map(|op| (maximum_proximity(&op), op));
                                     self.proximity = 0;
                                     self.candidates = Candidates::Allowed(candidates);

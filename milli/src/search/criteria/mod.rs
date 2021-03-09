@@ -14,10 +14,10 @@ use self::asc_desc::AscDesc;
 use self::proximity::Proximity;
 use self::fetcher::Fetcher;
 
-pub mod typo;
-pub mod words;
-pub mod asc_desc;
-pub mod proximity;
+mod typo;
+mod words;
+mod asc_desc;
+mod proximity;
 pub mod fetcher;
 
 pub trait Criterion {
@@ -28,11 +28,12 @@ pub trait Criterion {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CriterionResult {
     /// The query tree that must be used by the children criterion to fetch candidates.
-    pub query_tree: Option<Operation>,
-    /// The candidates that this criterion is allowed to return subsets of.
-    pub candidates: RoaringBitmap,
+    query_tree: Option<Operation>,
+    /// The candidates that this criterion is allowed to return subsets of,
+    /// if None, it is up to the child to compute the candidates itself.
+    candidates: Option<RoaringBitmap>,
     /// Candidates that comes from the current bucket of the initial criterion.
-    pub bucket_candidates: RoaringBitmap,
+    bucket_candidates: RoaringBitmap,
 }
 
 /// Either a set of candidates that defines the candidates

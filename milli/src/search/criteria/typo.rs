@@ -63,7 +63,7 @@ impl<'t> Criterion for Typo<'t> {
                 (_, Allowed(candidates)) if candidates.is_empty() => {
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.take().map(|(_, qt)| qt),
-                        candidates: take(&mut self.candidates).into_inner(),
+                        candidates: Some(take(&mut self.candidates).into_inner()),
                         bucket_candidates: take(&mut self.bucket_candidates),
                     }));
                 },
@@ -100,7 +100,7 @@ impl<'t> Criterion for Typo<'t> {
 
                         return Ok(Some(CriterionResult {
                             query_tree: Some(new_query_tree),
-                            candidates: new_candidates,
+                            candidates: Some(new_candidates),
                             bucket_candidates,
                         }));
                     }
@@ -138,7 +138,7 @@ impl<'t> Criterion for Typo<'t> {
 
                         return Ok(Some(CriterionResult {
                             query_tree: Some(new_query_tree),
-                            candidates: new_candidates,
+                            candidates: Some(new_candidates),
                             bucket_candidates,
                         }));
                     }
@@ -147,7 +147,7 @@ impl<'t> Criterion for Typo<'t> {
                     let candidates = take(&mut self.candidates).into_inner();
                     return Ok(Some(CriterionResult {
                         query_tree: None,
-                        candidates: candidates.clone(),
+                        candidates: Some(candidates.clone()),
                         bucket_candidates: candidates,
                     }));
                 },
@@ -158,7 +158,7 @@ impl<'t> Criterion for Typo<'t> {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     self.query_tree = query_tree.map(|op| (maximum_typo(&op), op));
                                     self.number_typos = 0;
-                                    self.candidates = Candidates::Allowed(candidates);
+                                    self.candidates = candidates.map_or_else(Candidates::default, Candidates::Allowed);
                                     self.bucket_candidates.union_with(&bucket_candidates);
                                 },
                                 None => return Ok(None),
@@ -394,7 +394,7 @@ mod test {
                     Operation::Query(Query { prefix: false, kind: QueryKind::exact("world".to_string()) }),
                 ]),
             ])),
-            candidates: candidates_1.clone(),
+            candidates: Some(candidates_1.clone()),
             bucket_candidates: candidates_1,
         };
 
@@ -416,7 +416,7 @@ mod test {
                     ]),
                 ]),
             ])),
-            candidates: candidates_2.clone(),
+            candidates: Some(candidates_2.clone()),
             bucket_candidates: candidates_2,
         };
 
@@ -434,7 +434,7 @@ mod test {
 
         let expected = CriterionResult {
             query_tree: None,
-            candidates: facet_candidates.clone(),
+            candidates: Some(facet_candidates.clone()),
             bucket_candidates: facet_candidates,
         };
 
@@ -472,7 +472,7 @@ mod test {
                     Operation::Query(Query { prefix: false, kind: QueryKind::exact("world".to_string()) }),
                 ]),
             ])),
-            candidates: &candidates_1 & &facet_candidates,
+            candidates: Some(&candidates_1 & &facet_candidates),
             bucket_candidates: candidates_1 & &facet_candidates,
         };
 
@@ -494,7 +494,7 @@ mod test {
                     ]),
                 ]),
             ])),
-            candidates: &candidates_2 & &facet_candidates,
+            candidates: Some(&candidates_2 & &facet_candidates),
             bucket_candidates: candidates_2 & &facet_candidates,
         };
 

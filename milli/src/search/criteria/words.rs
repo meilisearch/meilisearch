@@ -6,12 +6,12 @@ use roaring::RoaringBitmap;
 
 use crate::search::query_tree::Operation;
 use crate::search::WordDerivationsCache;
-use super::{resolve_query_tree, Candidates, Criterion, CriterionResult, Context};
+use super::{resolve_query_tree, Criterion, CriterionResult, Context};
 
 pub struct Words<'t> {
     ctx: &'t dyn Context,
     query_trees: Vec<Operation>,
-    candidates: Candidates,
+    candidates: Option<RoaringBitmap>,
     bucket_candidates: RoaringBitmap,
     parent: Option<Box<dyn Criterion + 't>>,
     candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
@@ -27,7 +27,7 @@ impl<'t> Words<'t> {
         Words {
             ctx,
             query_trees: query_tree.map(explode_query_tree).unwrap_or_default(),
-            candidates: candidates.map_or_else(Candidates::default, Candidates::Allowed),
+            candidates,
             bucket_candidates: RoaringBitmap::new(),
             parent: None,
             candidates_cache: HashMap::default(),
@@ -38,7 +38,7 @@ impl<'t> Words<'t> {
         Words {
             ctx,
             query_trees: Vec::default(),
-            candidates: Candidates::default(),
+            candidates: None,
             bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
             candidates_cache: HashMap::default(),
@@ -49,20 +49,19 @@ impl<'t> Words<'t> {
 impl<'t> Criterion for Words<'t> {
     #[logging_timer::time("Words::{}")]
     fn next(&mut self, wdcache: &mut WordDerivationsCache) -> anyhow::Result<Option<CriterionResult>> {
-        use Candidates::{Allowed, Forbidden};
         loop {
             debug!("Words at iteration {} ({:?})", self.query_trees.len(), self.candidates);
 
             match (self.query_trees.pop(), &mut self.candidates) {
-                (query_tree, Allowed(candidates)) if candidates.is_empty() => {
+                (query_tree, Some(candidates)) if candidates.is_empty() => {
                     self.query_trees = Vec::new();
                     return Ok(Some(CriterionResult {
                         query_tree,
-                        candidates: take(&mut self.candidates).into_inner(),
+                        candidates: self.candidates.take(),
                         bucket_candidates: take(&mut self.bucket_candidates),
                     }));
                 },
-                (Some(qt), Allowed(candidates)) => {
+                (Some(qt), Some(candidates)) => {
                     let mut found_candidates = resolve_query_tree(self.ctx, &qt, &mut self.candidates_cache, wdcache)?;
                     found_candidates.intersect_with(&candidates);
                     candidates.difference_with(&found_candidates);
@@ -74,41 +73,37 @@ impl<'t> Criterion for Words<'t> {
 
                     return Ok(Some(CriterionResult {
                         query_tree: Some(qt),
-                        candidates: found_candidates,
+                        candidates: Some(found_candidates),
                         bucket_candidates,
                     }));
                 },
-                (Some(qt), Forbidden(candidates)) => {
-                    let mut found_candidates = resolve_query_tree(self.ctx, &qt, &mut self.candidates_cache, wdcache)?;
-                    found_candidates.difference_with(&candidates);
-                    candidates.union_with(&found_candidates);
-
+                (Some(qt), None) => {
                     let bucket_candidates = match self.parent {
                         Some(_) => take(&mut self.bucket_candidates),
-                        None => found_candidates.clone(),
+                        None => RoaringBitmap::new(),
                     };
 
                     return Ok(Some(CriterionResult {
                         query_tree: Some(qt),
-                        candidates: found_candidates,
+                        candidates: None,
                         bucket_candidates,
                     }));
                 },
-                (None, Allowed(_)) => {
-                    let candidates = take(&mut self.candidates).into_inner();
+                (None, Some(_)) => {
+                    let candidates = self.candidates.take();
                     return Ok(Some(CriterionResult {
                         query_tree: None,
                         candidates: candidates.clone(),
-                        bucket_candidates: candidates,
+                        bucket_candidates: candidates.unwrap_or_default(),
                     }));
                 },
-                (None, Forbidden(_)) => {
+                (None, None) => {
                     match self.parent.as_mut() {
                         Some(parent) => {
                             match parent.next(wdcache)? {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     self.query_trees = query_tree.map(explode_query_tree).unwrap_or_default();
-                                    self.candidates = Candidates::Allowed(candidates);
+                                    self.candidates = candidates;
                                     self.bucket_candidates.union_with(&bucket_candidates);
                                 },
                                 None => return Ok(None),

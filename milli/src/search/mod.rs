@@ -11,7 +11,7 @@ use meilisearch_tokenizer::{AnalyzerConfig, Analyzer};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-use crate::search::criteria::{Criterion, CriterionResult};
+use crate::search::criteria::fetcher::FetcherResult;
 use crate::{Index, DocumentId};
 
 pub use self::facet::FacetIter;
@@ -99,9 +99,8 @@ impl<'a> Search<'a> {
         let mut offset = self.offset;
         let mut limit = self.limit;
         let mut documents_ids = Vec::new();
-        let mut words_derivations_cache = WordDerivationsCache::new();
         let mut initial_candidates = RoaringBitmap::new();
-        while let Some(CriterionResult { candidates, bucket_candidates, .. }) = criteria.next(&mut words_derivations_cache)? {
+        while let Some(FetcherResult { candidates, bucket_candidates, .. }) = criteria.next()? {
 
             debug!("Number of candidates found {}", candidates.len());
 
