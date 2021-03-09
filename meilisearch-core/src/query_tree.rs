@@ -176,7 +176,7 @@ where I: IntoIterator<Item=Operation>,
 
 const MAX_NGRAM: usize = 3;
 
-fn split_query_string<'a, A: AsRef<[u8]>>(s: &str, stop_words: &'a fst::Set<A>) -> Vec<(usize, String)> {
+fn split_query_string<A: AsRef<[u8]>>(s: &str, stop_words: &fst::Set<A>) -> Vec<(usize, String)> {
     // TODO: Use global instance instead
     Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words))
         .analyze(s)

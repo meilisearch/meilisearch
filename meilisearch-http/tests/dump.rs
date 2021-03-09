@@ -16,7 +16,7 @@ async fn trigger_and_wait_dump(server: &mut common::Server) -> String {
 
     let dump_uid = value["uid"].as_str().unwrap().to_string();
 
-    for _ in 0..20 as u8 {
+    for _ in 0..20_u8 {
         let (value, status_code) = server.get_dump_status(&dump_uid).await;
     
         assert_eq!(status_code, 200);

@@ -101,7 +101,7 @@ where
         } else {
             let error = ResponseError::from(Error::InvalidToken(auth_header.to_string())).error_response();
             let (request, _) = req.into_parts();
-            return Box::pin(ok(ServiceResponse::new(request, error)))
+            Box::pin(ok(ServiceResponse::new(request, error)))
         }
     }
 }
