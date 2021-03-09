@@ -1,14 +1,11 @@
 name-template: 'v$RESOLVED_VERSION'
 tag-template: 'v$RESOLVED_VERSION'
 version-template: '0.21.0-alpha.$PATCH'
-version-resolver:
-  default: patch
-categories:
-  - title: 'Breaking changes ⚠️'
-    label: 'breaking-change'
 template: |
   ## Changes
 
   $CHANGES
 no-changes-template: 'Changes are coming soon 😎'
 sort-direction: 'ascending'
+version-resolver:
+  default: patch
