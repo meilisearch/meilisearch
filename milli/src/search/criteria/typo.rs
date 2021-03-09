@@ -127,16 +127,12 @@ impl<'t> Criterion for Typo<'t> {
                         new_candidates.difference_with(&candidates);
                         candidates.union_with(&new_candidates);
                         self.number_typos += 1;
-
-                        let bucket_candidates = match self.parent {
-                            Some(_) => take(&mut self.bucket_candidates),
-                            None => new_candidates.clone(),
-                        };
+                        self.bucket_candidates.union_with(&new_candidates);
 
                         return Ok(Some(CriterionResult {
                             query_tree: Some(new_query_tree),
                             candidates: Some(new_candidates),
-                            bucket_candidates,
+                            bucket_candidates: take(&mut self.bucket_candidates),
                         }));
                     }
                 },

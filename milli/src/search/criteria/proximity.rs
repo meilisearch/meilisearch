@@ -179,10 +179,15 @@ impl<'t> Criterion for Proximity<'t> {
                                         (None, None) => RoaringBitmap::new(),
                                     };
 
+                                    if bucket_candidates.is_empty() {
+                                        self.bucket_candidates.union_with(&candidates);
+                                    } else {
+                                        self.bucket_candidates.union_with(&bucket_candidates);
+                                    }
+
                                     self.query_tree = query_tree.map(|op| (maximum_proximity(&op), op));
                                     self.proximity = 0;
                                     self.candidates = Candidates::Allowed(candidates);
-                                    self.bucket_candidates.union_with(&bucket_candidates);
                                     self.plane_sweep_cache = None;
                                 },
                                 None => return Ok(None),

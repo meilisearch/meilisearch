@@ -175,6 +175,11 @@ impl<'t> Criterion for AscDesc<'t> {
                                         },
                                         (None, None) => take(&mut self.faceted_candidates),
                                     };
+                                    if bucket_candidates.is_empty() {
+                                        self.bucket_candidates.union_with(&candidates);
+                                    } else {
+                                        self.bucket_candidates.union_with(&bucket_candidates);
+                                    }
                                     self.candidates = facet_ordered(
                                         self.index,
                                         self.rtxn,
@@ -183,7 +188,6 @@ impl<'t> Criterion for AscDesc<'t> {
                                         self.ascending,
                                         candidates,
                                     )?;
-                                    self.bucket_candidates = bucket_candidates;
                                 },
                                 None => return Ok(None),
                             }
