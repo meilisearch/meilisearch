@@ -67,7 +67,7 @@ pub trait Context {
     fn word_prefix_pair_proximity_docids(&self, left: &str, right: &str, proximity: u8) -> heed::Result<Option<RoaringBitmap>>;
     fn words_fst<'t>(&self) -> &'t fst::Set<Cow<[u8]>>;
     fn in_prefix_cache(&self, word: &str) -> bool;
-    fn docid_word_positions(&self, docid: DocumentId, word: &str) -> heed::Result<Option<RoaringBitmap>>;
+    fn docid_words_positions(&self, docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>>;
 }
 pub struct CriteriaBuilder<'t> {
     rtxn: &'t heed::RoTxn<'t>,
@@ -107,9 +107,13 @@ impl<'a> Context for CriteriaBuilder<'a> {
         self.words_prefixes_fst.contains(word)
     }
 
-    fn docid_word_positions(&self, docid: DocumentId, word: &str) -> heed::Result<Option<RoaringBitmap>> {
-        let key = (docid, word);
-        self.index.docid_word_positions.get(self.rtxn, &key)
+    fn docid_words_positions(&self, docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>> {
+        let mut words_positions = HashMap::new();
+        for result in self.index.docid_word_positions.prefix_iter(self.rtxn, &(docid, ""))? {
+            let ((_, word), positions) = result?;
+            words_positions.insert(word.to_string(), positions);
+        }
+        Ok(words_positions)
     }
 }
 
@@ -391,7 +395,7 @@ pub mod test {
             self.word_prefix_docids.contains_key(&word.to_string())
         }
 
-        fn docid_word_positions(&self, _docid: DocumentId, _word: &str) -> heed::Result<Option<RoaringBitmap>> {
+        fn docid_words_positions(&self, _docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>> {
             todo!()
         }
     }
