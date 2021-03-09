@@ -16,7 +16,6 @@ pub struct Typo<'t> {
     bucket_candidates: RoaringBitmap,
     parent: Option<Box<dyn Criterion + 't>>,
     candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
-    typo_cache: HashMap<(String, bool, u8), Vec<(String, u8)>>,
 }
 
 impl<'t> Typo<'t> {
@@ -34,7 +33,6 @@ impl<'t> Typo<'t> {
             bucket_candidates: RoaringBitmap::new(),
             parent: None,
             candidates_cache: HashMap::new(),
-            typo_cache: HashMap::new(),
         }
     }
 
@@ -47,7 +45,6 @@ impl<'t> Typo<'t> {
             bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
             candidates_cache: HashMap::new(),
-            typo_cache: HashMap::new(),
         }
     }
 }
@@ -74,9 +71,9 @@ impl<'t> Criterion for Typo<'t> {
                     } else {
                         let fst = self.ctx.words_fst();
                         let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?
+                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?
                         } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?;
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?;
                             query_tree.clone()
                         } else {
                             query_tree.clone()
@@ -112,9 +109,9 @@ impl<'t> Criterion for Typo<'t> {
                     } else {
                         let fst = self.ctx.words_fst();
                         let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?
+                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?
                         } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?;
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?;
                             query_tree.clone()
                         } else {
                             query_tree.clone()
@@ -179,7 +176,6 @@ fn alterate_query_tree(
     words_fst: &fst::Set<Cow<[u8]>>,
     mut query_tree: Operation,
     number_typos: u8,
-    typo_cache: &mut HashMap<(String, bool, u8), Vec<(String, u8)>>,
     wdcache: &mut WordDerivationsCache,
 ) -> anyhow::Result<Operation>
 {
@@ -187,7 +183,6 @@ fn alterate_query_tree(
         words_fst: &fst::Set<Cow<[u8]>>,
         operation: &mut Operation,
         number_typos: u8,
-        typo_cache: &mut HashMap<(String, bool, u8), Vec<(String, u8)>>,
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<()>
     {
@@ -195,7 +190,7 @@ fn alterate_query_tree(
 
         match operation {
             And(ops) | Consecutive(ops) | Or(_, ops) => {
-                ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, typo_cache, wdcache))
+                ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, wdcache))
             },
             Operation::Query(q) => {
                 // TODO may be optimized when number_typos == 0
@@ -209,19 +204,11 @@ fn alterate_query_tree(
                         });
                     } else {
                         let typo = *typo.min(&number_typos);
-                        let cache_key = (word.clone(), q.prefix, typo);
-                        let words = if let Some(derivations) = typo_cache.get(&cache_key) {
-                            derivations.clone()
-                        } else {
-                            let derivations = word_derivations(word, q.prefix, typo, words_fst, wdcache)?.to_vec();
-                            typo_cache.insert(cache_key, derivations.clone());
-                            derivations
-                        };
-
+                        let words = word_derivations(word, q.prefix, typo, words_fst, wdcache)?;
                         let queries = words.into_iter().map(|(word, typo)| {
                             Operation::Query(Query {
                                 prefix: false,
-                                kind: QueryKind::Exact { original_typo: typo, word },
+                                kind: QueryKind::Exact { original_typo: *typo, word: word.to_string() },
                             })
                         }).collect();
 
@@ -234,7 +221,7 @@ fn alterate_query_tree(
         }
     }
 
-    recurse(words_fst, &mut query_tree, number_typos, typo_cache, wdcache)?;
+    recurse(words_fst, &mut query_tree, number_typos, wdcache)?;
     Ok(query_tree)
 }
 
