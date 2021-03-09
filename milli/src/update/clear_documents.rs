@@ -17,7 +17,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
         ClearDocuments { wtxn, index, _update_id: update_id }
     }
 
-    pub fn execute(self) -> anyhow::Result<usize> {
+    pub fn execute(self) -> anyhow::Result<u64> {
         let Index {
             env: _env,
             main: _main,

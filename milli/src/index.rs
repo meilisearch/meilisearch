@@ -118,6 +118,12 @@ impl Index {
         Ok(self.main.get::<_, Str, RoaringBitmapCodec>(rtxn, DOCUMENTS_IDS_KEY)?.unwrap_or_default())
     }
 
+    /// Returns the number of documents indexed in the database.
+    pub fn number_of_documents(&self, rtxn: &RoTxn) -> anyhow::Result<u64> {
+        let count = self.main.get::<_, Str, RoaringBitmapLenCodec>(rtxn, DOCUMENTS_IDS_KEY)?;
+        Ok(count.unwrap_or_default())
+    }
+
     /* primary key */
 
     /// Writes the documents primary key, this is the field name that is used to store the id.
@@ -378,11 +384,6 @@ impl Index {
         }
 
         Ok(documents)
-    }
-
-    /// Returns the number of documents indexed in the database.
-    pub fn number_of_documents(&self, rtxn: &RoTxn) -> anyhow::Result<usize> {
-        Ok(self.documents_ids(rtxn).map(|docids| docids.len() as usize)?)
     }
 
     pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn) -> FacetDistribution<'a> {

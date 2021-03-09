@@ -51,7 +51,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
         Some(docid)
     }
 
-    pub fn execute(self) -> anyhow::Result<usize> {
+    pub fn execute(self) -> anyhow::Result<u64> {
         // We retrieve the current documents ids that are in the database.
         let mut documents_ids = self.index.documents_ids(self.wtxn)?;
 
@@ -308,7 +308,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
 
         drop(iter);
 
-        Ok(self.documents_ids.len() as usize)
+        Ok(self.documents_ids.len())
     }
 }
 
