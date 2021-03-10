@@ -33,13 +33,24 @@ pub struct Search<'a> {
     facet_condition: Option<FacetCondition>,
     offset: usize,
     limit: usize,
+    optional_words: bool,
+    authorize_typos: bool,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
 }
 
 impl<'a> Search<'a> {
     pub fn new(rtxn: &'a heed::RoTxn, index: &'a Index) -> Search<'a> {
-        Search { query: None, facet_condition: None, offset: 0, limit: 20, rtxn, index }
+        Search {
+            query: None,
+            facet_condition: None,
+            offset: 0,
+            limit: 20,
+            optional_words: true,
+            authorize_typos: true,
+            rtxn,
+            index,
+        }
     }
 
     pub fn query(&mut self, query: impl Into<String>) -> &mut Search<'a> {
@@ -57,6 +68,16 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn optional_words(&mut self, value: bool) -> &mut Search<'a> {
+        self.optional_words = value;
+        self
+    }
+
+    pub fn authorize_typos(&mut self, value: bool) -> &mut Search<'a> {
+        self.authorize_typos = value;
+        self
+    }
+
     pub fn facet_condition(&mut self, condition: FacetCondition) -> &mut Search<'a> {
         self.facet_condition = Some(condition);
         self
@@ -67,7 +88,9 @@ impl<'a> Search<'a> {
         let before = Instant::now();
         let query_tree = match self.query.as_ref() {
             Some(query) => {
-                let builder = QueryTreeBuilder::new(self.rtxn, self.index);
+                let mut builder = QueryTreeBuilder::new(self.rtxn, self.index);
+                builder.optional_words(self.optional_words);
+                builder.authorize_typos(self.authorize_typos);
                 let stop_words = &Set::default();
                 let analyzer = Analyzer::new(AnalyzerConfig::default_with_stopwords(stop_words));
                 let result = analyzer.analyze(query);
@@ -129,12 +152,23 @@ impl<'a> Search<'a> {
 
 impl fmt::Debug for Search<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Search { query, facet_condition, offset, limit, rtxn: _, index: _ } = self;
+        let Search {
+            query,
+            facet_condition,
+            offset,
+            limit,
+            optional_words,
+            authorize_typos,
+            rtxn: _,
+            index: _,
+        } = self;
         f.debug_struct("Search")
             .field("query", query)
             .field("facet_condition", facet_condition)
             .field("offset", offset)
             .field("limit", limit)
+            .field("optional_words", optional_words)
+            .field("authorize_typos", authorize_typos)
             .finish()
     }
 }
