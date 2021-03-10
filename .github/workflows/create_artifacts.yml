@@ -1,0 +1,38 @@
+name: Create artifacts
+
+on:
+  push:
+    tags:
+      - v*-alpha.*
+
+jobs:
+  nightly:
+    name: Build Nighlty ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact_name: meilisearch
+            asset_name: meilisearch-alpha-linux-amd64
+          - os: macos-latest
+            artifact_name: meilisearch
+            asset_name: meilisearch-alpha-macos-amd64
+          - os: windows-latest
+            artifact_name: meilisearch.exe
+            asset_name: meilisearch-alpha-windows-amd64.exe
+    steps:
+      - uses: hecrj/setup-rust-action@master
+        with:
+          rust-version: stable
+      - uses: actions/checkout@v1
+      - name: Build
+        run: cargo build --release --locked
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v1-release
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/release/${{ matrix.artifact_name }}
+          asset_name: ${{ matrix.asset_name }}
+          tag: ${{ github.ref }}

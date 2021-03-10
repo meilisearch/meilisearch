@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use actix_web::http::StatusCode;
 use serde_json::{json, Value};
-use tokio::time::sleep;
+use tokio::time::delay_for;
 
 use super::service::Service;
 
@@ -79,7 +79,7 @@ impl Index<'_> {
                 return response;
             }
 
-            sleep(Duration::from_secs(1)).await;
+            delay_for(Duration::from_secs(1)).await;
         }
         panic!("Timeout waiting for update id");
     }

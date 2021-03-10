@@ -16,10 +16,11 @@ async fn get_settings() {
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
     let settings = response.as_object().unwrap();
-    assert_eq!(settings.keys().len(), 3);
+    assert_eq!(settings.keys().len(), 4);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
     assert_eq!(settings["facetedAttributes"], json!({}));
+    assert_eq!(settings["rankingRules"], json!(["typo", "words", "proximity", "attribute", "wordsPosition", "exactness"]));
 }
 
 #[actix_rt::test]
@@ -51,8 +52,6 @@ async fn test_partial_update() {
 }
 
 #[actix_rt::test]
-#[ignore]
-// need fix #54
 async fn delete_settings_unexisting_index() {
     let server = Server::new().await;
     let index = server.index("test");
@@ -90,6 +89,15 @@ async fn update_setting_unexisting_index() {
     assert_eq!(code, 200);
 }
 
+#[actix_rt::test]
+async fn update_setting_unexisting_index_invalid_uid() {
+    let server = Server::new().await;
+    let index = server.index("test##!  ");
+    let (_response, code) = index.update_settings(json!({})).await;
+    println!("response: {}", _response);
+    assert_eq!(code, 400);
+}
+
 macro_rules! test_setting_routes {
     ($($setting:ident), *) => {
         $(
@@ -123,7 +131,6 @@ macro_rules! test_setting_routes {
                 }
 
                 #[actix_rt::test]
-                #[ignore]
                 async fn delete_unexisting_index() {
                     let server = Server::new().await;
                     let url = format!("/indexes/test/settings/{}",
