@@ -8,12 +8,12 @@ use crate::search::query_tree::Operation;
 use crate::search::WordDerivationsCache;
 use super::{resolve_query_tree, Candidates, Criterion, CriterionResult, Context};
 
-/// The result of a call to the parent criterion.
+/// The result of a call to the fetcher.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FetcherResult {
-    /// The query tree that must be used by the children criterion to fetch candidates.
+    /// The query tree corresponding to the current bucket of the last criterion.
     pub query_tree: Option<Operation>,
-    /// The candidates that this criterion is allowed to return subsets of.
+    /// The candidates of the current bucket of the last criterion.
     pub candidates: RoaringBitmap,
     /// Candidates that comes from the current bucket of the initial criterion.
     pub bucket_candidates: RoaringBitmap,
