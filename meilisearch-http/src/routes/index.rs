@@ -140,7 +140,7 @@ async fn get_update_status(
             Ok(HttpResponse::Ok().body(json))
         }
         Ok(None) => {
-            let e = format!("udpate {} for index {:?} doesn't exists.", path.update_id, path.index_uid);
+            let e = format!("update {} for index {:?} doesn't exists.", path.update_id, path.index_uid);
             Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
         Err(e) => {

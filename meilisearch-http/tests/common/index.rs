@@ -73,7 +73,7 @@ impl Index<'_> {
         let url = format!("/indexes/{}/updates/{}", self.uid, update_id);
         for _ in 0..10 {
             let (response, status_code) = self.service.get(&url).await;
-            assert_eq!(status_code, 200);
+            assert_eq!(status_code, 200, "response: {}", response);
 
             if response["status"] == "processed" || response["status"] == "failed" {
                 return response;
@@ -84,8 +84,8 @@ impl Index<'_> {
         panic!("Timeout waiting for update id");
     }
 
-    pub async fn get_update(&self, udpate_id: u64) -> (Value, StatusCode) {
-        let url = format!("/indexes/{}/updates/{}", self.uid, udpate_id);
+    pub async fn get_update(&self, update_id: u64) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/updates/{}", self.uid, update_id);
         self.service.get(url).await
     }
 

@@ -148,7 +148,7 @@ impl IndexController for LocalIndexController {
 
     fn update_index(&self, uid: impl AsRef<str>, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
         if index_settings.name.is_some() {
-            bail!("can't udpate an index name.")
+            bail!("can't update an index name.")
         }
 
         let (primary_key, meta) = match index_settings.primary_key {

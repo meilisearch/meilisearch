@@ -1,9 +1,9 @@
+use std::{fs::create_dir_all, path::Path};
+
+use heed::{Database, Env, EnvOpenOptions, types::{ByteSlice, Str}};
 use log::{info, warn};
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 pub type Result<T> = std::result::Result<T, UuidError>;
@@ -81,14 +81,14 @@ impl<S: UuidStore> UuidResolverActor<S> {
 
     async fn handle_resolve(&self, name: String) -> Result<Uuid> {
         self.store
-            .get_uuid(&name)
+            .get_uuid(name.clone())
             .await?
             .ok_or(UuidError::UnexistingIndex(name))
     }
 
     async fn handle_delete(&self, name: String) -> Result<Uuid> {
         self.store
-            .delete(&name)
+            .delete(name.clone())
             .await?
             .ok_or(UuidError::UnexistingIndex(name))
     }
@@ -105,12 +105,12 @@ pub struct UuidResolverHandle {
 }
 
 impl UuidResolverHandle {
-    pub fn new() -> Self {
+    pub fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let (sender, reveiver) = mpsc::channel(100);
-        let store = MapUuidStore(Arc::new(RwLock::new(HashMap::new())));
+        let store = HeedUuidStore::new(path)?;
         let actor = UuidResolverActor::new(reveiver, store);
         tokio::spawn(actor.run());
-        Self { sender }
+        Ok(Self { sender })
     }
 
     pub async fn resolve(&self, name: String) -> anyhow::Result<Uuid> {
@@ -159,12 +159,18 @@ impl UuidResolverHandle {
     }
 }
 
-#[derive(Clone, Debug, Error)]
+#[derive(Debug, Error)]
 pub enum UuidError {
     #[error("Name already exist.")]
     NameAlreadyExist,
     #[error("Index \"{0}\" doesn't exist.")]
     UnexistingIndex(String),
+    #[error("Error performing task: {0}")]
+    TokioTask(#[from] tokio::task::JoinError),
+    #[error("Database error: {0}")]
+    Heed(#[from] heed::Error),
+    #[error("Uuid error: {0}")]
+    Uuid(#[from] uuid::Error),
 }
 
 #[async_trait::async_trait]
@@ -172,48 +178,157 @@ trait UuidStore {
     // Create a new entry for `name`. Return an error if `err` and the entry already exists, return
     // the uuid otherwise.
     async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid>;
-    async fn get_uuid(&self, name: &str) -> Result<Option<Uuid>>;
-    async fn delete(&self, name: &str) -> Result<Option<Uuid>>;
+    async fn get_uuid(&self, name: String) -> Result<Option<Uuid>>;
+    async fn delete(&self, name: String) -> Result<Option<Uuid>>;
     async fn list(&self) -> Result<Vec<(String, Uuid)>>;
 }
 
-struct MapUuidStore(Arc<RwLock<HashMap<String, Uuid>>>);
+struct HeedUuidStore {
+    env: Env,
+    db: Database<Str, ByteSlice>,
+}
+
+fn open_or_create_database<K: 'static, V: 'static>(env: &Env, name: Option<&str>) -> heed::Result<Database<K, V>> {
+    match env.open_database(name)? {
+        Some(db) => Ok(db),
+        None => env.create_database(name),
+    }
+}
+
+impl HeedUuidStore {
+    fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let path = path.as_ref().join("index_uuids");
+        create_dir_all(&path)?;
+        let mut options = EnvOpenOptions::new();
+        options.map_size(1_073_741_824); // 1GB
+        let env = options.open(path)?;
+        let db = open_or_create_database(&env, None)?;
+        Ok(Self { env, db })
+    }
+}
 
 #[async_trait::async_trait]
-impl UuidStore for MapUuidStore {
+impl UuidStore for HeedUuidStore {
     async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> {
-        match self.0.write().await.entry(name) {
-            Entry::Occupied(entry) => {
-                if err {
-                    Err(UuidError::NameAlreadyExist)
-                } else {
-                    Ok(entry.get().clone())
+        let env = self.env.clone();
+        let db = self.db.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut txn = env.write_txn()?;
+            match db.get(&txn, &name)? {
+                Some(uuid) => {
+                    if err {
+                        Err(UuidError::NameAlreadyExist)
+                    } else {
+                        let uuid = Uuid::from_slice(uuid)?;
+                        Ok(uuid)
+                    }
+                }
+                None => {
+                    let uuid = Uuid::new_v4();
+                    db.put(&mut txn, &name, uuid.as_bytes())?;
+                    txn.commit()?;
+                    Ok(uuid)
                 }
             }
-            Entry::Vacant(entry) => {
-                let uuid = Uuid::new_v4();
-                let uuid = entry.insert(uuid);
-                Ok(uuid.clone())
+        }).await?
+    }
+
+    async fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
+        let env = self.env.clone();
+        let db = self.db.clone();
+        tokio::task::spawn_blocking(move || {
+            let txn = env.read_txn()?;
+            match db.get(&txn, &name)? {
+                Some(uuid) => {
+                    let uuid = Uuid::from_slice(uuid)?;
+                    Ok(Some(uuid))
+                }
+                None => Ok(None),
             }
-        }
+        }).await?
     }
 
-    async fn get_uuid(&self, name: &str) -> Result<Option<Uuid>> {
-        Ok(self.0.read().await.get(name).cloned())
-    }
-
-    async fn delete(&self, name: &str) -> Result<Option<Uuid>> {
-        Ok(self.0.write().await.remove(name))
+    async fn delete(&self, name: String) -> Result<Option<Uuid>> {
+        let env = self.env.clone();
+        let db = self.db.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut txn = env.write_txn()?;
+            match db.get(&txn, &name)? {
+                Some(uuid) => {
+                    let uuid = Uuid::from_slice(uuid)?;
+                    db.delete(&mut txn, &name)?;
+                    txn.commit()?;
+                    Ok(None)
+                }
+                None => Ok(None)
+            }
+        }).await?
     }
 
     async fn list(&self) -> Result<Vec<(String, Uuid)>> {
-        let list = self
-            .0
-            .read()
-            .await
-            .iter()
-            .map(|(name, uuid)| (name.to_owned(), uuid.clone()))
-            .collect();
-        Ok(list)
+        let env = self.env.clone();
+        let db = self.db.clone();
+        tokio::task::spawn_blocking(move || {
+            let txn = env.read_txn()?;
+            let mut entries = Vec::new();
+            for entry in db.iter(&txn)? {
+                let (name, uuid) = entry?;
+                let uuid = Uuid::from_slice(uuid)?;
+                entries.push((name.to_owned(), uuid))
+            }
+            Ok(entries)
+        }).await?
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+    use std::collections::hash_map::Entry;
+    use std::sync::Arc;
+
+    use tokio::sync::RwLock;
+
+    use super::*;
+
+    struct MapUuidStore(Arc<RwLock<HashMap<String, Uuid>>>);
+
+    #[async_trait::async_trait]
+    impl UuidStore for MapUuidStore {
+        async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> {
+            match self.0.write().await.entry(name) {
+                Entry::Occupied(entry) => {
+                    if err {
+                        Err(UuidError::NameAlreadyExist)
+                    } else {
+                        Ok(entry.get().clone())
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    let uuid = Uuid::new_v4();
+                    let uuid = entry.insert(uuid);
+                    Ok(uuid.clone())
+                }
+            }
+        }
+
+        async fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
+            Ok(self.0.read().await.get(&name).cloned())
+        }
+
+        async fn delete(&self, name: String) -> Result<Option<Uuid>> {
+            Ok(self.0.write().await.remove(&name))
+        }
+
+        async fn list(&self) -> Result<Vec<(String, Uuid)>> {
+            let list = self
+                .0
+                .read()
+                .await
+                .iter()
+                .map(|(name, uuid)| (name.to_owned(), uuid.clone()))
+                .collect();
+            Ok(list)
+        }
     }
 }

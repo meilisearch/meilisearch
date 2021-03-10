@@ -1,7 +1,4 @@
-//use async_compression::tokio_02::write::GzipEncoder;
-//use futures_util::stream::StreamExt;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
-//use tokio::io::AsyncWriteExt;
 use actix_web::web::Payload;
 
 use crate::index_controller::{UpdateStatus, IndexMetadata};

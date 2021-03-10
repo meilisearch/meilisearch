@@ -8,7 +8,7 @@ async fn get_update_unexisting_index() {
 }
 
 #[actix_rt::test]
-async fn get_unexisting_udpate_status() {
+async fn get_unexisting_update_status() {
     let server = Server::new().await;
     let index = server.index("test");
     index.create(None).await;
