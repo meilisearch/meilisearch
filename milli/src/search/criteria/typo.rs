@@ -16,7 +16,6 @@ pub struct Typo<'t> {
     bucket_candidates: RoaringBitmap,
     parent: Option<Box<dyn Criterion + 't>>,
     candidates_cache: HashMap<(Operation, u8), RoaringBitmap>,
-    typo_cache: HashMap<(String, bool, u8), Vec<(String, u8)>>,
 }
 
 impl<'t> Typo<'t> {
@@ -34,7 +33,6 @@ impl<'t> Typo<'t> {
             bucket_candidates: RoaringBitmap::new(),
             parent: None,
             candidates_cache: HashMap::new(),
-            typo_cache: HashMap::new(),
         }
     }
 
@@ -47,7 +45,6 @@ impl<'t> Typo<'t> {
             bucket_candidates: RoaringBitmap::new(),
             parent: Some(parent),
             candidates_cache: HashMap::new(),
-            typo_cache: HashMap::new(),
         }
     }
 }
@@ -63,7 +60,7 @@ impl<'t> Criterion for Typo<'t> {
                 (_, Allowed(candidates)) if candidates.is_empty() => {
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.take().map(|(_, qt)| qt),
-                        candidates: take(&mut self.candidates).into_inner(),
+                        candidates: Some(take(&mut self.candidates).into_inner()),
                         bucket_candidates: take(&mut self.bucket_candidates),
                     }));
                 },
@@ -74,9 +71,9 @@ impl<'t> Criterion for Typo<'t> {
                     } else {
                         let fst = self.ctx.words_fst();
                         let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?
+                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?
                         } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?;
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?;
                             query_tree.clone()
                         } else {
                             query_tree.clone()
@@ -100,7 +97,7 @@ impl<'t> Criterion for Typo<'t> {
 
                         return Ok(Some(CriterionResult {
                             query_tree: Some(new_query_tree),
-                            candidates: new_candidates,
+                            candidates: Some(new_candidates),
                             bucket_candidates,
                         }));
                     }
@@ -112,9 +109,9 @@ impl<'t> Criterion for Typo<'t> {
                     } else {
                         let fst = self.ctx.words_fst();
                         let new_query_tree = if self.number_typos < 2 {
-                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?
+                            alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?
                         } else if self.number_typos == 2 {
-                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, &mut self.typo_cache, wdcache)?;
+                            *query_tree = alterate_query_tree(&fst, query_tree.clone(), self.number_typos, wdcache)?;
                             query_tree.clone()
                         } else {
                             query_tree.clone()
@@ -130,16 +127,12 @@ impl<'t> Criterion for Typo<'t> {
                         new_candidates.difference_with(&candidates);
                         candidates.union_with(&new_candidates);
                         self.number_typos += 1;
-
-                        let bucket_candidates = match self.parent {
-                            Some(_) => take(&mut self.bucket_candidates),
-                            None => new_candidates.clone(),
-                        };
+                        self.bucket_candidates.union_with(&new_candidates);
 
                         return Ok(Some(CriterionResult {
                             query_tree: Some(new_query_tree),
-                            candidates: new_candidates,
-                            bucket_candidates,
+                            candidates: Some(new_candidates),
+                            bucket_candidates: take(&mut self.bucket_candidates),
                         }));
                     }
                 },
@@ -147,7 +140,7 @@ impl<'t> Criterion for Typo<'t> {
                     let candidates = take(&mut self.candidates).into_inner();
                     return Ok(Some(CriterionResult {
                         query_tree: None,
-                        candidates: candidates.clone(),
+                        candidates: Some(candidates.clone()),
                         bucket_candidates: candidates,
                     }));
                 },
@@ -158,7 +151,7 @@ impl<'t> Criterion for Typo<'t> {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
                                     self.query_tree = query_tree.map(|op| (maximum_typo(&op), op));
                                     self.number_typos = 0;
-                                    self.candidates = Candidates::Allowed(candidates);
+                                    self.candidates = candidates.map_or_else(Candidates::default, Candidates::Allowed);
                                     self.bucket_candidates.union_with(&bucket_candidates);
                                 },
                                 None => return Ok(None),
@@ -179,7 +172,6 @@ fn alterate_query_tree(
     words_fst: &fst::Set<Cow<[u8]>>,
     mut query_tree: Operation,
     number_typos: u8,
-    typo_cache: &mut HashMap<(String, bool, u8), Vec<(String, u8)>>,
     wdcache: &mut WordDerivationsCache,
 ) -> anyhow::Result<Operation>
 {
@@ -187,7 +179,6 @@ fn alterate_query_tree(
         words_fst: &fst::Set<Cow<[u8]>>,
         operation: &mut Operation,
         number_typos: u8,
-        typo_cache: &mut HashMap<(String, bool, u8), Vec<(String, u8)>>,
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<()>
     {
@@ -195,7 +186,7 @@ fn alterate_query_tree(
 
         match operation {
             And(ops) | Consecutive(ops) | Or(_, ops) => {
-                ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, typo_cache, wdcache))
+                ops.iter_mut().try_for_each(|op| recurse(words_fst, op, number_typos, wdcache))
             },
             Operation::Query(q) => {
                 // TODO may be optimized when number_typos == 0
@@ -209,19 +200,11 @@ fn alterate_query_tree(
                         });
                     } else {
                         let typo = *typo.min(&number_typos);
-                        let cache_key = (word.clone(), q.prefix, typo);
-                        let words = if let Some(derivations) = typo_cache.get(&cache_key) {
-                            derivations.clone()
-                        } else {
-                            let derivations = word_derivations(word, q.prefix, typo, words_fst, wdcache)?.to_vec();
-                            typo_cache.insert(cache_key, derivations.clone());
-                            derivations
-                        };
-
+                        let words = word_derivations(word, q.prefix, typo, words_fst, wdcache)?;
                         let queries = words.into_iter().map(|(word, typo)| {
                             Operation::Query(Query {
                                 prefix: false,
-                                kind: QueryKind::Exact { original_typo: typo, word },
+                                kind: QueryKind::Exact { original_typo: *typo, word: word.to_string() },
                             })
                         }).collect();
 
@@ -234,7 +217,7 @@ fn alterate_query_tree(
         }
     }
 
-    recurse(words_fst, &mut query_tree, number_typos, typo_cache, wdcache)?;
+    recurse(words_fst, &mut query_tree, number_typos, wdcache)?;
     Ok(query_tree)
 }
 
@@ -394,7 +377,7 @@ mod test {
                     Operation::Query(Query { prefix: false, kind: QueryKind::exact("world".to_string()) }),
                 ]),
             ])),
-            candidates: candidates_1.clone(),
+            candidates: Some(candidates_1.clone()),
             bucket_candidates: candidates_1,
         };
 
@@ -416,7 +399,7 @@ mod test {
                     ]),
                 ]),
             ])),
-            candidates: candidates_2.clone(),
+            candidates: Some(candidates_2.clone()),
             bucket_candidates: candidates_2,
         };
 
@@ -434,7 +417,7 @@ mod test {
 
         let expected = CriterionResult {
             query_tree: None,
-            candidates: facet_candidates.clone(),
+            candidates: Some(facet_candidates.clone()),
             bucket_candidates: facet_candidates,
         };
 
@@ -472,7 +455,7 @@ mod test {
                     Operation::Query(Query { prefix: false, kind: QueryKind::exact("world".to_string()) }),
                 ]),
             ])),
-            candidates: &candidates_1 & &facet_candidates,
+            candidates: Some(&candidates_1 & &facet_candidates),
             bucket_candidates: candidates_1 & &facet_candidates,
         };
 
@@ -494,7 +477,7 @@ mod test {
                     ]),
                 ]),
             ])),
-            candidates: &candidates_2 & &facet_candidates,
+            candidates: Some(&candidates_2 & &facet_candidates),
             bucket_candidates: candidates_2 & &facet_candidates,
         };
 

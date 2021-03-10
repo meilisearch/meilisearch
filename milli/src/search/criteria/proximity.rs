@@ -1,15 +1,14 @@
-use std::borrow::Cow;
 use std::collections::btree_map::{self, BTreeMap};
-use std::collections::hash_map::{HashMap, Entry};
+use std::collections::hash_map::HashMap;
 use std::mem::take;
 
 use roaring::RoaringBitmap;
 use log::debug;
 
-use crate::{DocumentId, Position, search::{query_tree::QueryKind, word_derivations}};
+use crate::{DocumentId, Position, search::{query_tree::QueryKind}};
 use crate::search::query_tree::{maximum_proximity, Operation, Query};
-use crate::search::WordDerivationsCache;
-use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids};
+use crate::search::{build_dfa, WordDerivationsCache};
+use super::{Candidates, Criterion, CriterionResult, Context, query_docids, query_pair_proximity_docids, resolve_query_tree};
 
 pub struct Proximity<'t> {
     ctx: &'t dyn Context,
@@ -70,7 +69,7 @@ impl<'t> Criterion for Proximity<'t> {
                 (_, Allowed(candidates)) if candidates.is_empty() => {
                     return Ok(Some(CriterionResult {
                         query_tree: self.query_tree.take().map(|(_, qt)| qt),
-                        candidates: take(&mut self.candidates).into_inner(),
+                        candidates: Some(take(&mut self.candidates).into_inner()),
                         bucket_candidates: take(&mut self.bucket_candidates),
                     }));
                 },
@@ -126,7 +125,7 @@ impl<'t> Criterion for Proximity<'t> {
 
                         return Ok(Some(CriterionResult {
                             query_tree: Some(query_tree.clone()),
-                            candidates: new_candidates,
+                            candidates: Some(new_candidates),
                             bucket_candidates,
                         }));
                     }
@@ -155,7 +154,7 @@ impl<'t> Criterion for Proximity<'t> {
 
                         return Ok(Some(CriterionResult {
                             query_tree: Some(query_tree.clone()),
-                            candidates: new_candidates,
+                            candidates: Some(new_candidates),
                             bucket_candidates,
                         }));
                     }
@@ -164,7 +163,7 @@ impl<'t> Criterion for Proximity<'t> {
                     let candidates = take(&mut self.candidates).into_inner();
                     return Ok(Some(CriterionResult {
                         query_tree: None,
-                        candidates: candidates.clone(),
+                        candidates: Some(candidates.clone()),
                         bucket_candidates: candidates,
                     }));
                 },
@@ -173,10 +172,21 @@ impl<'t> Criterion for Proximity<'t> {
                         Some(parent) => {
                             match parent.next(wdcache)? {
                                 Some(CriterionResult { query_tree, candidates, bucket_candidates }) => {
+                                    let candidates = match (&query_tree, candidates) {
+                                        (_, Some(candidates)) => candidates,
+                                        (Some(qt), None) => resolve_query_tree(self.ctx, qt, &mut HashMap::new(), wdcache)?,
+                                        (None, None) => RoaringBitmap::new(),
+                                    };
+
+                                    if bucket_candidates.is_empty() {
+                                        self.bucket_candidates.union_with(&candidates);
+                                    } else {
+                                        self.bucket_candidates.union_with(&bucket_candidates);
+                                    }
+
                                     self.query_tree = query_tree.map(|op| (maximum_proximity(&op), op));
                                     self.proximity = 0;
                                     self.candidates = Candidates::Allowed(candidates);
-                                    self.bucket_candidates.union_with(&bucket_candidates);
                                     self.plane_sweep_cache = None;
                                 },
                                 None => return Ok(None),
@@ -347,7 +357,7 @@ fn resolve_plane_sweep_candidates(
         docid: DocumentId,
         consecutive: bool,
         rocache: &mut HashMap<&'a Operation, Vec<(Position, u8, Position)>>,
-        dwpcache: &mut HashMap<String, Option<RoaringBitmap>>,
+        words_positions: &HashMap<String, RoaringBitmap>,
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<Vec<(Position, u8, Position)>>
     {
@@ -389,7 +399,7 @@ fn resolve_plane_sweep_candidates(
         let mut groups_positions = Vec::with_capacity(groups_len);
 
         for operation in operations {
-            let positions = resolve_operation(ctx, operation, docid, rocache, dwpcache, wdcache)?;
+            let positions = resolve_operation(ctx, operation, docid, rocache, words_positions, wdcache)?;
             groups_positions.push(positions.into_iter());
         }
 
@@ -465,7 +475,7 @@ fn resolve_plane_sweep_candidates(
         query_tree: &'a Operation,
         docid: DocumentId,
         rocache: &mut HashMap<&'a Operation, Vec<(Position, u8, Position)>>,
-        dwpcache: &mut HashMap<String, Option<RoaringBitmap>>,
+        words_positions: &HashMap<String, RoaringBitmap>,
         wdcache: &mut WordDerivationsCache,
     ) -> anyhow::Result<Vec<(Position, u8, Position)>>
     {
@@ -476,44 +486,34 @@ fn resolve_plane_sweep_candidates(
         }
 
         let result = match query_tree {
-            And(ops) => plane_sweep(ctx, ops, docid, false, rocache, dwpcache, wdcache)?,
-            Consecutive(ops) => plane_sweep(ctx, ops, docid, true, rocache, dwpcache, wdcache)?,
+            And(ops) => plane_sweep(ctx, ops, docid, false, rocache, words_positions, wdcache)?,
+            Consecutive(ops) => plane_sweep(ctx, ops, docid, true, rocache, words_positions, wdcache)?,
             Or(_, ops) => {
                 let mut result = Vec::new();
                 for op in ops {
-                    result.extend(resolve_operation(ctx, op, docid, rocache, dwpcache, wdcache)?)
+                    result.extend(resolve_operation(ctx, op, docid, rocache, words_positions, wdcache)?)
                 }
 
                 result.sort_unstable();
                 result
             },
-            Operation::Query(Query {prefix, kind}) => {
-                let fst = ctx.words_fst();
-                let words = match kind {
+            Operation::Query(Query { prefix, kind }) => {
+                let mut result = Vec::new();
+                match kind {
                     QueryKind::Exact { word, .. } => {
                         if *prefix {
-                            Cow::Borrowed(word_derivations(word, true, 0, fst, wdcache)?)
+                            let iter = word_derivations(word, true, 0, &words_positions)
+                                .flat_map(|positions| positions.iter().map(|p| (p, 0, p)));
+                            result.extend(iter);
                         } else {
-                            Cow::Owned(vec![(word.to_string(), 0)])
+                            if let Some(positions) = words_positions.get(word) {
+                                result.extend(positions.iter().map(|p| (p, 0, p)));
+                            }
                         }
                     },
                     QueryKind::Tolerant { typo, word } => {
-                        Cow::Borrowed(word_derivations(word, *prefix, *typo, fst, wdcache)?)
-                    }
-                };
-
-                let mut result = Vec::new();
-                for (word, _) in words.as_ref() {
-                    let positions = match dwpcache.entry(word.to_string()) {
-                        Entry::Occupied(entry) => entry.into_mut(),
-                        Entry::Vacant(entry) => {
-                            let positions = ctx.docid_word_positions(docid, word)?;
-                            entry.insert(positions)
-                        }
-                    };
-
-                    if let Some(positions) = positions {
-                        let iter = positions.iter().map(|p| (p, 0, p));
+                        let iter = word_derivations(word, *prefix, *typo, &words_positions)
+                            .flat_map(|positions| positions.iter().map(|p| (p, 0, p)));
                         result.extend(iter);
                     }
                 }
@@ -527,18 +527,34 @@ fn resolve_plane_sweep_candidates(
         Ok(result)
     }
 
-    let mut word_positions_cache = HashMap::new();
+    fn word_derivations<'a>(
+        word: &str,
+        is_prefix: bool,
+        max_typo: u8,
+        words_positions: &'a HashMap<String, RoaringBitmap>,
+    ) -> impl Iterator<Item = &'a RoaringBitmap>
+    {
+        let dfa = build_dfa(word, max_typo, is_prefix);
+        words_positions.iter().filter_map(move |(document_word, positions)| {
+            use levenshtein_automata::Distance;
+            match dfa.eval(document_word) {
+                Distance::Exact(_) => Some(positions),
+                Distance::AtLeast(_) => None,
+            }
+        })
+    }
+
     let mut resolve_operation_cache = HashMap::new();
     let mut candidates = BTreeMap::new();
     for docid in allowed_candidates {
-        word_positions_cache.clear();
+        let words_positions = ctx.docid_words_positions(docid)?;
         resolve_operation_cache.clear();
         let positions =  resolve_operation(
             ctx,
             query_tree,
             docid,
             &mut resolve_operation_cache,
-            &mut word_positions_cache,
+            &words_positions,
             wdcache,
         )?;
         let best_proximity = positions.into_iter().min_by_key(|(_, proximity, _)| *proximity);

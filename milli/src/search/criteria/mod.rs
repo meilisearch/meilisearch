@@ -14,10 +14,10 @@ use self::asc_desc::AscDesc;
 use self::proximity::Proximity;
 use self::fetcher::Fetcher;
 
-pub mod typo;
-pub mod words;
-pub mod asc_desc;
-pub mod proximity;
+mod typo;
+mod words;
+mod asc_desc;
+mod proximity;
 pub mod fetcher;
 
 pub trait Criterion {
@@ -28,11 +28,12 @@ pub trait Criterion {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CriterionResult {
     /// The query tree that must be used by the children criterion to fetch candidates.
-    pub query_tree: Option<Operation>,
-    /// The candidates that this criterion is allowed to return subsets of.
-    pub candidates: RoaringBitmap,
+    query_tree: Option<Operation>,
+    /// The candidates that this criterion is allowed to return subsets of,
+    /// if None, it is up to the child to compute the candidates itself.
+    candidates: Option<RoaringBitmap>,
     /// Candidates that comes from the current bucket of the initial criterion.
-    pub bucket_candidates: RoaringBitmap,
+    bucket_candidates: RoaringBitmap,
 }
 
 /// Either a set of candidates that defines the candidates
@@ -66,7 +67,7 @@ pub trait Context {
     fn word_prefix_pair_proximity_docids(&self, left: &str, right: &str, proximity: u8) -> heed::Result<Option<RoaringBitmap>>;
     fn words_fst<'t>(&self) -> &'t fst::Set<Cow<[u8]>>;
     fn in_prefix_cache(&self, word: &str) -> bool;
-    fn docid_word_positions(&self, docid: DocumentId, word: &str) -> heed::Result<Option<RoaringBitmap>>;
+    fn docid_words_positions(&self, docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>>;
 }
 pub struct CriteriaBuilder<'t> {
     rtxn: &'t heed::RoTxn<'t>,
@@ -106,9 +107,13 @@ impl<'a> Context for CriteriaBuilder<'a> {
         self.words_prefixes_fst.contains(word)
     }
 
-    fn docid_word_positions(&self, docid: DocumentId, word: &str) -> heed::Result<Option<RoaringBitmap>> {
-        let key = (docid, word);
-        self.index.docid_word_positions.get(self.rtxn, &key)
+    fn docid_words_positions(&self, docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>> {
+        let mut words_positions = HashMap::new();
+        for result in self.index.docid_word_positions.prefix_iter(self.rtxn, &(docid, ""))? {
+            let ((_, word), positions) = result?;
+            words_positions.insert(word.to_string(), positions);
+        }
+        Ok(words_positions)
     }
 }
 
@@ -390,7 +395,7 @@ pub mod test {
             self.word_prefix_docids.contains_key(&word.to_string())
         }
 
-        fn docid_word_positions(&self, _docid: DocumentId, _word: &str) -> heed::Result<Option<RoaringBitmap>> {
+        fn docid_words_positions(&self, _docid: DocumentId) -> heed::Result<HashMap<String, RoaringBitmap>> {
             todo!()
         }
     }
