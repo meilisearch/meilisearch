@@ -1,13 +1,9 @@
 use std::env;
 
-use actix_cors::Cors;
-use actix_web::{middleware, HttpServer, web, web::ServiceConfig};
+use actix_web::HttpServer;
 use main_error::MainError;
-use meilisearch::{Data, Opt};
+use meilisearch_http::{Data, Opt, create_app};
 use structopt::StructOpt;
-use actix_web::App;
-use meilisearch::error::payload_error_handler;
-use actix_web::middleware::TrailingSlash;
 
 //mod analytics;
 
@@ -83,38 +79,8 @@ async fn main() -> Result<(), MainError> {
 }
 
 async fn run_http(data: Data, opt: Opt, enable_frontend: bool) -> Result<(), Box<dyn std::error::Error>> {
-    use meilisearch::routes::*;
 
-    let http_server = HttpServer::new(move || {
-        let app = App::new()
-            .configure(|c| configure_data(c, &data))
-            .configure(document::services)
-            .configure(index::services)
-            .configure(search::services)
-            .configure(settings::services)
-            .configure(stop_words::services)
-            .configure(synonym::services)
-            .configure(health::services)
-            .configure(stats::services)
-            .configure(key::services);
-        //.configure(routes::dump::services);
-        let app = if enable_frontend {
-            app
-                .service(meilisearch::routes::load_html)
-                .service(meilisearch::routes::load_css)
-        } else {
-            app
-        };
-        app.wrap(
-                Cors::default()
-                    .send_wildcard()
-                    .allowed_headers(vec!["content-type", "x-meili-api-key"])
-                    .max_age(86_400) // 24h
-            )
-            .wrap(middleware::Logger::default())
-            .wrap(middleware::Compress::default())
-            .wrap(middleware::NormalizePath::new(TrailingSlash::Trim))
-    })
+    let http_server = HttpServer::new(move || create_app!(&data, enable_frontend))
     // Disable signals allows the server to terminate immediately when a user enter CTRL-C
     .disable_signals();
 
@@ -129,20 +95,6 @@ async fn run_http(data: Data, opt: Opt, enable_frontend: bool) -> Result<(), Box
     Ok(())
 }
 
-fn configure_data(config: &mut ServiceConfig, data: &Data) {
-    config
-        .data(data.clone())
-        .app_data(
-            web::JsonConfig::default()
-            .limit(data.http_payload_size_limit())
-            .content_type(|_mime| true) // Accept all mime types
-            .error_handler(|err, _req| payload_error_handler(err).into()),
-        )
-        .app_data(
-            web::QueryConfig::default()
-            .error_handler(|err, _req| payload_error_handler(err).into())
-        );
-}
 
 pub fn print_launch_resume(opt: &Opt, data: &Data) {
     let ascii_name = r#"
