@@ -486,6 +486,11 @@ impl IndexStore for HeedIndexStore {
 
         let index = spawn_blocking(move || -> Result<Index> {
             let index = open_index(&path, 4096 * 100_000)?;
+            if let Some(primary_key) = primary_key {
+                let mut txn = index.write_txn()?;
+                index.put_primary_key(&mut txn, &primary_key)?;
+                txn.commit()?;
+            }
             Ok(index)
         })
         .await
