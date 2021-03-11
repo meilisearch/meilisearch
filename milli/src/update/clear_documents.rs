@@ -1,3 +1,4 @@
+use chrono::Utc;
 use roaring::RoaringBitmap;
 use crate::{ExternalDocumentsIds, Index};
 
@@ -18,6 +19,7 @@ impl<'t, 'u, 'i> ClearDocuments<'t, 'u, 'i> {
     }
 
     pub fn execute(self) -> anyhow::Result<u64> {
+        self.index.set_updated_at(self.wtxn, &Utc::now())?;
         let Index {
             env: _env,
             main: _main,

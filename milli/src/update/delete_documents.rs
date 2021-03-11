@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use chrono::Utc;
 use fst::IntoStreamer;
 use heed::types::ByteSlice;
 use roaring::RoaringBitmap;
@@ -52,6 +53,7 @@ impl<'t, 'u, 'i> DeleteDocuments<'t, 'u, 'i> {
     }
 
     pub fn execute(self) -> anyhow::Result<u64> {
+        self.index.set_updated_at(self.wtxn, &Utc::now())?;
         // We retrieve the current documents ids that are in the database.
         let mut documents_ids = self.index.documents_ids(self.wtxn)?;
 

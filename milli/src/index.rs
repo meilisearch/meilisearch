@@ -30,7 +30,7 @@ pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
 pub const WORDS_FST_KEY: &str = "words-fst";
 pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
 const CREATED_AT_KEY: &str = "created-at";
-const UPDATED_AT_KEY: &str  ="updated-at";
+const UPDATED_AT_KEY: &str = "updated-at";
 
 #[derive(Clone)]
 pub struct Index {
@@ -416,7 +416,7 @@ impl Index {
         Ok(time)
     }
 
-    /// Returns the index creation time.
+    /// Returns the index last updated time.
     pub fn updated_at(&self, rtxn: &RoTxn) -> heed::Result<DateTime<Utc>> {
         let time = self.main
             .get::<_, Str, SerdeJson<DateTime<Utc>>>(rtxn, UPDATED_AT_KEY)?

@@ -2,6 +2,7 @@ use std::cmp;
 use std::fs::File;
 use std::num::NonZeroUsize;
 
+use chrono::Utc;
 use grenad::{CompressionType, Reader, Writer, FileFuse};
 use heed::types::{ByteSlice, DecodeIgnore};
 use heed::{BytesEncode, Error};
@@ -57,6 +58,7 @@ impl<'t, 'u, 'i> Facets<'t, 'u, 'i> {
     }
 
     pub fn execute(self) -> anyhow::Result<()> {
+        self.index.set_updated_at(self.wtxn, &Utc::now())?;
         // We get the faceted fields to be able to create the facet levels.
         let faceted_fields = self.index.faceted_fields_ids(self.wtxn)?;
 
