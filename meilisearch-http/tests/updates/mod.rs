@@ -46,6 +46,7 @@ async fn list_no_updates() {
     let index = server.index("test");
     index.create(None).await;
     let (response, code) = index.list_updates().await;
+    println!("response: {}", response);
     assert_eq!(code, 200);
     assert!(response.as_array().unwrap().is_empty());
 }

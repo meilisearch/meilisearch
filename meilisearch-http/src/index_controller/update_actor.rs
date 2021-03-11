@@ -47,6 +47,10 @@ enum UpdateMsg<D> {
         uuid: Uuid,
         ret: oneshot::Sender<Result<()>>,
     },
+    Create {
+        uuid: Uuid,
+        ret: oneshot::Sender<Result<()>>,
+    }
 }
 
 struct UpdateActor<D, S> {
@@ -102,7 +106,10 @@ where
                 Some(Delete { uuid, ret }) => {
                     let _ = ret.send(self.handle_delete(uuid).await);
                 }
-                None => {}
+                Some(Create { uuid, ret }) => {
+                    let _ = ret.send(self.handle_create(uuid).await);
+                }
+                None => break,
             }
         }
     }
@@ -190,6 +197,11 @@ where
 
         Ok(())
     }
+
+    async fn handle_create(&self, uuid: Uuid) -> Result<()> {
+        let _ = self.store.get_or_create(uuid).await?;
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -249,6 +261,13 @@ where
         let _ = self.sender.send(msg).await;
         receiver.await.expect("update actor killed.")
     }
+
+    pub async fn create(&self, uuid: Uuid) -> Result<()> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = UpdateMsg::Create { uuid, ret };
+        let _ = self.sender.send(msg).await;
+        receiver.await.expect("update actor killed.")
+    }
 }
 
 struct MapUpdateStoreStore {
@@ -282,7 +301,7 @@ impl UpdateStoreStore for MapUpdateStoreStore {
                 let store = UpdateStore::open(options, &path, move |meta, file| {
                     futures::executor::block_on(index_handle.update(meta, file))
                 })
-                .unwrap();
+                .map_err(|e| UpdateError::Error(e.into()))?;
                 let store = e.insert(store);
                 Ok(store.clone())
             }
@@ -291,22 +310,35 @@ impl UpdateStoreStore for MapUpdateStoreStore {
     }
 
     async fn get(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>> {
-        // attemps to get pre-loaded ref to the index
-        match self.db.read().await.get(uuid) {
+        let guard = self.db.read().await;
+        match guard.get(uuid) {
             Some(uuid) => Ok(Some(uuid.clone())),
             None => {
-                // otherwise we try to check if it exists, and load it.
+                // The index is not found in the found in the loaded indexes, so we attempt to load
+                // it from disk. We need to acquire a write lock **before** attempting to open the
+                // index, because someone could be trying to open it at the same time as us.
+                drop(guard);
                 let path = self.path.clone().join(format!("updates-{}", uuid));
                 if path.exists() {
-                    let index_handle = self.index_handle.clone();
-                    let mut options = heed::EnvOpenOptions::new();
-                    options.map_size(4096 * 100_000);
-                    let store = UpdateStore::open(options, &path, move |meta, file| {
-                        futures::executor::block_on(index_handle.update(meta, file))
-                    })
-                    .unwrap();
-                    self.db.write().await.insert(uuid.clone(), store.clone());
-                    Ok(Some(store))
+                    let mut guard = self.db.write().await;
+                    match guard.entry(uuid.clone()) {
+                        Entry::Vacant(entry) => {
+                            // We can safely load the index
+                            let index_handle = self.index_handle.clone();
+                            let mut options = heed::EnvOpenOptions::new();
+                            options.map_size(4096 * 100_000);
+                            let store = UpdateStore::open(options, &path, move |meta, file| {
+                                futures::executor::block_on(index_handle.update(meta, file))
+                            })
+                            .map_err(|e| UpdateError::Error(e.into()))?;
+                            let store = entry.insert(store.clone());
+                            Ok(Some(store.clone()))
+                        }
+                        Entry::Occupied(entry) => {
+                            // The index was loaded while we attempted to to iter
+                            Ok(Some(entry.get().clone()))
+                        }
+                    }
                 } else {
                     Ok(None)
                 }

@@ -144,6 +144,7 @@ impl IndexController {
         let name = name.unwrap();
         let uuid = self.uuid_resolver.create(name.clone()).await?;
         let meta = self.index_handle.create_index(uuid, primary_key).await?;
+        let _ = self.update_handle.create(uuid).await?;
         let meta = IndexMetadata { name, meta };
 
         Ok(meta)
