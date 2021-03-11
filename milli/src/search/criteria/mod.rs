@@ -12,12 +12,14 @@ use self::typo::Typo;
 use self::words::Words;
 use self::asc_desc::AscDesc;
 use self::proximity::Proximity;
+use self::attribute::Attribute;
 use self::fetcher::Fetcher;
 
 mod typo;
 mod words;
 mod asc_desc;
 mod proximity;
+mod attribute;
 pub mod fetcher;
 
 pub trait Criterion {
@@ -139,6 +141,7 @@ impl<'t> CriteriaBuilder<'t> {
                     Name::Typo => Box::new(Typo::new(self, father)),
                     Name::Words => Box::new(Words::new(self, father)),
                     Name::Proximity => Box::new(Proximity::new(self, father)),
+                    Name::Attribute => Box::new(Attribute::new(self, father)),
                     Name::Asc(field) => Box::new(AscDesc::asc(&self.index, &self.rtxn, father, field)?),
                     Name::Desc(field) => Box::new(AscDesc::desc(&self.index, &self.rtxn, father, field)?),
                     _otherwise => father,
@@ -147,6 +150,7 @@ impl<'t> CriteriaBuilder<'t> {
                     Name::Typo => Box::new(Typo::initial(self, query_tree.take(), facet_candidates.take())),
                     Name::Words => Box::new(Words::initial(self, query_tree.take(), facet_candidates.take())),
                     Name::Proximity => Box::new(Proximity::initial(self, query_tree.take(), facet_candidates.take())),
+                    Name::Attribute => Box::new(Attribute::initial(self, query_tree.take(), facet_candidates.take())),
                     Name::Asc(field) => {
                         Box::new(AscDesc::initial_asc(&self.index, &self.rtxn, query_tree.take(), facet_candidates.take(), field)?)
                     },
