@@ -3,18 +3,17 @@ use std::fs::{create_dir_all, remove_dir_all};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use itertools::Itertools;
-use log::info;
 use super::index_actor::IndexActorHandle;
+use log::info;
 use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
 
+use super::get_arc_ownership_blocking;
 use crate::index::UpdateResult;
 use crate::index_controller::{UpdateMeta, UpdateStatus};
-use super::get_arc_ownership_blocking;
 
 pub type Result<T> = std::result::Result<T, UpdateError>;
 type UpdateStore = super::update_store::UpdateStore<UpdateMeta, UpdateResult, String>;
@@ -68,7 +67,11 @@ where
     D: AsRef<[u8]> + Sized + 'static,
     S: UpdateStoreStore,
 {
-    fn new(store: S, inbox: mpsc::Receiver<UpdateMsg<D>>, path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    fn new(
+        store: S,
+        inbox: mpsc::Receiver<UpdateMsg<D>>,
+        path: impl AsRef<Path>,
+    ) -> anyhow::Result<Self> {
         let path = path.as_ref().to_owned().join("update_files");
         create_dir_all(&path)?;
         assert!(path.exists());
@@ -87,12 +90,12 @@ where
                     meta,
                     data,
                     ret,
-                }) =>  {
+                }) => {
                     let _ = ret.send(self.handle_update(uuid, meta, data).await);
                 }
                 Some(ListUpdates { uuid, ret }) => {
                     let _ = ret.send(self.handle_list_updates(uuid).await);
-                } ,
+                }
                 Some(GetUpdate { uuid, ret, id }) => {
                     let _ = ret.send(self.handle_get_update(uuid, id).await);
                 }
@@ -113,13 +116,15 @@ where
         let update_store = self.store.get_or_create(uuid).await?;
         let update_file_id = uuid::Uuid::new_v4();
         let path = self.path.join(format!("update_{}", update_file_id));
-        let mut file = File::create(&path).await
+        let mut file = File::create(&path)
+            .await
             .map_err(|e| UpdateError::Error(Box::new(e)))?;
 
         while let Some(bytes) = payload.recv().await {
             match bytes {
                 Ok(bytes) => {
-                    file.write_all(bytes.as_ref()).await
+                    file.write_all(bytes.as_ref())
+                        .await
                         .map_err(|e| UpdateError::Error(Box::new(e)))?;
                 }
                 Err(e) => {
@@ -128,7 +133,8 @@ where
             }
         }
 
-        file.flush().await
+        file.flush()
+            .await
             .map_err(|e| UpdateError::Error(Box::new(e)))?;
 
         let file = file.into_std().await;
@@ -144,50 +150,33 @@ where
         .map_err(|e| UpdateError::Error(Box::new(e)))?
     }
 
-    async fn handle_list_updates(
-        &self,
-        uuid: Uuid,
-    ) -> Result<Vec<UpdateStatus>> {
-        let store = self.store.get(&uuid).await?;
+    async fn handle_list_updates(&self, uuid: Uuid) -> Result<Vec<UpdateStatus>> {
+        let update_store = self.store.get(&uuid).await?;
         tokio::task::spawn_blocking(move || {
-            let result = match store {
-                Some(update_store) => {
-                    let updates = update_store.iter_metas(|processing, processed, pending, aborted, failed| {
-                        Ok(processing
-                            .map(UpdateStatus::from)
-                            .into_iter()
-                            .chain(pending.filter_map(|p| p.ok()).map(|(_, u)| UpdateStatus::from(u)))
-                            .chain(aborted.filter_map(std::result::Result::ok).map(|(_, u)| UpdateStatus::from(u)))
-                            .chain(processed.filter_map(std::result::Result::ok).map(|(_, u)| UpdateStatus::from(u)))
-                            .chain(failed.filter_map(std::result::Result::ok).map(|(_, u)| UpdateStatus::from(u)))
-                            .sorted_by(|a, b| a.id().cmp(&b.id()))
-                            .collect())
-                    })
-                    .map_err(|e| UpdateError::Error(Box::new(e)))?;
-                    Ok(updates)
-                }
-                None => Err(UpdateError::UnexistingIndex(uuid)),
-            };
-            result
-        }).await
+            let result = update_store
+                .ok_or(UpdateError::UnexistingIndex(uuid))?
+                .list()
+                .map_err(|e| UpdateError::Error(e.into()))?;
+            Ok(result)
+        })
+        .await
         .map_err(|e| UpdateError::Error(Box::new(e)))?
     }
 
-
     async fn handle_get_update(&self, uuid: Uuid, id: u64) -> Result<Option<UpdateStatus>> {
-        let store = self.store
+        let store = self
+            .store
             .get(&uuid)
             .await?
             .ok_or(UpdateError::UnexistingIndex(uuid))?;
-        let result = store.meta(id)
+        let result = store
+            .meta(id)
             .map_err(|e| UpdateError::Error(Box::new(e)))?;
         Ok(result)
     }
 
     async fn handle_delete(&self, uuid: Uuid) -> Result<()> {
-        let store = self.store
-            .delete(&uuid)
-            .await?;
+        let store = self.store.delete(&uuid).await?;
 
         if let Some(store) = store {
             tokio::task::spawn(async move {

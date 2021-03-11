@@ -1822,6 +1822,7 @@ dependencies = [
  "milli",
  "mime",
  "once_cell",
+ "parking_lot",
  "rand 0.7.3",
  "rayon",
  "regex",

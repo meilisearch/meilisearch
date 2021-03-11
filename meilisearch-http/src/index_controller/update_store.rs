@@ -1,6 +1,6 @@
 use std::fs::remove_file;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use heed::types::{DecodeIgnore, OwnedType, SerdeJson};
 use heed::{Database, Env, EnvOpenOptions};
@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use tokio::sync::mpsc;
 use uuid::Uuid;
+use parking_lot::RwLock;
 
 use crate::index_controller::updates::*;
 
@@ -206,7 +207,7 @@ where
                 // to the update handler. Processing store is non persistent to be able recover
                 // from a failure
                 let processing = pending.processing();
-                self.processing.write().unwrap().replace(processing.clone());
+                self.processing.write().replace(processing.clone());
                 let file = File::open(&content_path)?;
                 // Process the pending update using the provided user function.
                 let result = handler.handle_update(processing, file)?;
@@ -216,7 +217,7 @@ where
                 // we must remove the content from the pending and processing stores and
                 // write the *new* meta to the processed-meta store and commit.
                 let mut wtxn = self.env.write_txn()?;
-                self.processing.write().unwrap().take();
+                self.processing.write().take();
                 self.pending_meta.delete(&mut wtxn, &first_id)?;
                 remove_file(&content_path)?;
                 self.pending.delete(&mut wtxn, &first_id)?;
@@ -232,36 +233,52 @@ where
         }
     }
 
-    /// Execute the user defined function with the meta-store iterators, the first
-    /// iterator is the *processed* meta one, the second the *aborted* meta one
-    /// and, the last is the *pending* meta one.
-    pub fn iter_metas<F, T>(&self, mut f: F) -> heed::Result<T>
-    where
-        F: for<'a> FnMut(
-            Option<Processing<M>>,
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<Processed<M, N>>>,
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<Aborted<M>>>,
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<Pending<M>>>,
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<Failed<M, E>>>,
-        ) -> heed::Result<T>,
-    {
+    pub fn list(&self) -> anyhow::Result<Vec<UpdateStatus<M, N, E>>> {
         let rtxn = self.env.read_txn()?;
+        let mut updates = Vec::new();
 
-        // We get the pending, processed and aborted meta iterators.
-        let processed_iter = self.processed_meta.iter(&rtxn)?;
-        let aborted_iter = self.aborted_meta.iter(&rtxn)?;
-        let pending_iter = self.pending_meta.iter(&rtxn)?;
-        let processing = self.processing.read().unwrap().clone();
-        let failed_iter = self.failed_meta.iter(&rtxn)?;
+        let processing = self.processing.read();
+        if let Some(ref processing) = *processing {
+            let update = UpdateStatus::from(processing.clone());
+            updates.push(update);
+        }
 
-        // We execute the user defined function with both iterators.
-        (f)(
-            processing,
-            processed_iter,
-            aborted_iter,
-            pending_iter,
-            failed_iter,
-        )
+        let pending = self
+            .pending_meta
+            .iter(&rtxn)?
+            .filter_map(Result::ok)
+            .filter_map(|(_, p)| (Some(p.id()) != processing.as_ref().map(|p| p.id())).then(|| p))
+            .map(UpdateStatus::from);
+
+        updates.extend(pending);
+
+        let aborted =
+            self.aborted_meta.iter(&rtxn)?
+            .filter_map(Result::ok)
+            .map(|(_, p)| p)
+            .map(UpdateStatus::from);
+
+        updates.extend(aborted);
+
+        let processed =
+            self.processed_meta.iter(&rtxn)?
+            .filter_map(Result::ok)
+            .map(|(_, p)| p)
+            .map(UpdateStatus::from);
+
+        updates.extend(processed);
+
+        let failed =
+            self.failed_meta.iter(&rtxn)?
+            .filter_map(Result::ok)
+            .map(|(_, p)| p)
+            .map(UpdateStatus::from);
+
+        updates.extend(failed);
+
+        updates.sort_unstable_by(|a, b| a.id().cmp(&b.id()));
+
+        Ok(updates)
     }
 
     /// Returns the update associated meta or `None` if the update doesn't exist.
@@ -269,7 +286,7 @@ where
         let rtxn = self.env.read_txn()?;
         let key = BEU64::new(update_id);
 
-        if let Some(ref meta) = *self.processing.read().unwrap() {
+        if let Some(ref meta) = *self.processing.read() {
             if meta.id() == update_id {
                 return Ok(Some(UpdateStatus::Processing(meta.clone())));
             }
