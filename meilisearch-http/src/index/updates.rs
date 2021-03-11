@@ -12,7 +12,7 @@ use super::Index;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum UpdateResult {
     DocumentsAddition(DocumentAdditionResult),
-    DocumentDeletion { deleted: usize },
+    DocumentDeletion { deleted: u64 },
     Other,
 }
 
