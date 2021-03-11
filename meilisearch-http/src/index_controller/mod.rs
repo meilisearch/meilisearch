@@ -129,8 +129,12 @@ impl IndexController {
         Ok(status)
     }
 
-    pub async fn update_settings(&self, index_uid: String, settings: Settings) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.get_or_create(index_uid).await?;
+    pub async fn update_settings(&self, index_uid: String, settings: Settings, create: bool) -> anyhow::Result<UpdateStatus> {
+        let uuid = if create {
+            self.uuid_resolver.get_or_create(index_uid).await?
+        } else {
+            self.uuid_resolver.resolve(index_uid).await?
+        };
         let meta = UpdateMeta::Settings(settings);
         // Nothing so send, drop the sender right away, as not to block the update actor.
         let (_, receiver) = mpsc::channel(1);

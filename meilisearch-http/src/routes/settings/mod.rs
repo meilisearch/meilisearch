@@ -26,7 +26,7 @@ macro_rules! make_setting_route {
                     $attr: Some(None),
                     ..Default::default()
                 };
-                match data.update_settings(index_uid.into_inner(), settings).await {
+                match data.update_settings(index_uid.into_inner(), settings, false).await {
                     Ok(update_status) => {
                         let json = serde_json::to_string(&update_status).unwrap();
                         Ok(HttpResponse::Ok().body(json))
@@ -48,7 +48,7 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                match data.update_settings(index_uid.into_inner(), settings).await {
+                match data.update_settings(index_uid.into_inner(), settings, true).await {
                     Ok(update_status) => {
                         let json = serde_json::to_string(&update_status).unwrap();
                         Ok(HttpResponse::Ok().body(json))
@@ -137,7 +137,7 @@ async fn update_all(
     index_uid: web::Path<String>,
     body: web::Json<Settings>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.update_settings(index_uid.into_inner(), body.into_inner()).await {
+    match data.update_settings(index_uid.into_inner(), body.into_inner(), true).await {
         Ok(update_result) => {
             let json = serde_json::to_string(&update_result).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -170,7 +170,7 @@ async fn delete_all(
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = Settings::cleared();
-    match data.update_settings(index_uid.into_inner(), settings).await {
+    match data.update_settings(index_uid.into_inner(), settings, false).await {
         Ok(update_result) => {
             let json = serde_json::to_string(&update_result).unwrap();
             Ok(HttpResponse::Ok().body(json))

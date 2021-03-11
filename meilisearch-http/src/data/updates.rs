@@ -23,9 +23,10 @@ impl Data {
     pub async fn update_settings(
         &self,
         index: String,
-        settings: Settings
+        settings: Settings,
+        create: bool,
     ) -> anyhow::Result<UpdateStatus> {
-        let update = self.index_controller.update_settings(index, settings).await?;
+        let update = self.index_controller.update_settings(index, settings, create).await?;
         Ok(update.into())
     }
 
