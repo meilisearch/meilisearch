@@ -72,10 +72,16 @@ impl<S: UuidStore> UuidResolverActor<S> {
     }
 
     async fn handle_create(&self, name: String) -> Result<Uuid> {
+        if !is_index_uid_valid(&name) {
+            return Err(UuidError::BadlyFormatted(name))
+        }
         self.store.create_uuid(name, true).await
     }
 
     async fn handle_get_or_create(&self, name: String) -> Result<Uuid> {
+        if !is_index_uid_valid(&name) {
+            return Err(UuidError::BadlyFormatted(name))
+        }
         self.store.create_uuid(name, false).await
     }
 
@@ -97,6 +103,10 @@ impl<S: UuidStore> UuidResolverActor<S> {
         let result = self.store.list().await?;
         Ok(result)
     }
+}
+
+fn is_index_uid_valid(uid: &str) -> bool {
+    uid.chars().all(|x| x.is_ascii_alphanumeric() || x == '-' || x == '_')
 }
 
 #[derive(Clone)]
@@ -171,6 +181,8 @@ pub enum UuidError {
     Heed(#[from] heed::Error),
     #[error("Uuid error: {0}")]
     Uuid(#[from] uuid::Error),
+    #[error("Badly formatted index uid: {0}")]
+    BadlyFormatted(String),
 }
 
 #[async_trait::async_trait]
