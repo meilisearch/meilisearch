@@ -6,6 +6,7 @@ use anyhow::Context;
 use heed::types::*;
 use heed::{PolyDatabase, Database, RwTxn, RoTxn};
 use roaring::RoaringBitmap;
+use chrono::{Utc, DateTime};
 
 use crate::facet::FacetType;
 use crate::fields_ids_map::FieldsIdsMap;
@@ -28,6 +29,8 @@ pub const HARD_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "hard-external-documents-ids";
 pub const SOFT_EXTERNAL_DOCUMENTS_IDS_KEY: &str = "soft-external-documents-ids";
 pub const WORDS_FST_KEY: &str = "words-fst";
 pub const WORDS_PREFIXES_FST_KEY: &str = "words-prefixes-fst";
+const CREATED_AT_KEY: &str = "created-at";
+const UPDATED_AT_KEY: &str  ="updated-at";
 
 #[derive(Clone)]
 pub struct Index {
@@ -67,6 +70,17 @@ impl Index {
         let facet_field_id_value_docids = env.create_database(Some("facet-field-id-value-docids"))?;
         let field_id_docid_facet_values = env.create_database(Some("field-id-docid-facet-values"))?;
         let documents = env.create_database(Some("documents"))?;
+
+        {
+            let mut txn = env.write_txn()?;
+            // The db was just created, we update its metadata with the relevant information.
+            if main.get::<_, Str, SerdeJson<DateTime<Utc>>>(&txn, CREATED_AT_KEY)?.is_none() {
+                let now = Utc::now();
+                main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, UPDATED_AT_KEY, &now)?;
+                main.put::<_, Str, SerdeJson<DateTime<Utc>>>(&mut txn, CREATED_AT_KEY, &now)?;
+                txn.commit()?;
+            }
+        }
 
         Ok(Index {
             env,
@@ -392,5 +406,25 @@ impl Index {
 
     pub fn search<'a>(&'a self, rtxn: &'a RoTxn) -> Search<'a> {
         Search::new(rtxn, self)
+    }
+
+    /// Returns the index creation time.
+    pub fn created_at(&self, rtxn: &RoTxn) -> heed::Result<DateTime<Utc>> {
+        let time = self.main
+            .get::<_, Str, SerdeJson<DateTime<Utc>>>(rtxn, CREATED_AT_KEY)?
+            .expect("Index without creation time");
+        Ok(time)
+    }
+
+    /// Returns the index creation time.
+    pub fn updated_at(&self, rtxn: &RoTxn) -> heed::Result<DateTime<Utc>> {
+        let time = self.main
+            .get::<_, Str, SerdeJson<DateTime<Utc>>>(rtxn, UPDATED_AT_KEY)?
+            .expect("Index without update time");
+        Ok(time)
+    }
+
+    pub(crate) fn set_updated_at(&self, wtxn: &mut RwTxn, time: &DateTime<Utc>) -> heed::Result<()> {
+        self.main.put::<_, Str, SerdeJson<DateTime<Utc>>>(wtxn, UPDATED_AT_KEY, &time)
     }
 }
