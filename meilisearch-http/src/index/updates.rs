@@ -42,7 +42,7 @@ pub struct Settings {
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none",
     )]
-    pub criteria: Option<Option<Vec<String>>>,
+    pub ranking_rules: Option<Option<Vec<String>>>,
 }
 
 impl Settings {
@@ -51,7 +51,7 @@ impl Settings {
             displayed_attributes: Some(None),
             searchable_attributes: Some(None),
             faceted_attributes: Some(None),
-            criteria: Some(None),
+            ranking_rules: Some(None),
         }
     }
 }
@@ -164,7 +164,7 @@ impl Index {
         }
 
         // We transpose the settings JSON struct into a real setting update.
-        if let Some(ref criteria) = settings.criteria {
+        if let Some(ref criteria) = settings.ranking_rules {
             match criteria {
                 Some(criteria) => builder.set_criteria(criteria.clone()),
                 None => builder.reset_criteria(),

@@ -44,11 +44,17 @@ impl Index {
             .map(|(k, v)| (k, v.to_string()))
             .collect();
 
+        let criteria = self
+            .criteria(&txn)?
+            .into_iter()
+            .map(|c| c.to_string())
+            .collect();
+
         Ok(Settings {
             displayed_attributes: Some(Some(displayed_attributes)),
             searchable_attributes: Some(Some(searchable_attributes)),
             faceted_attributes: Some(Some(faceted_attributes)),
-            criteria: None,
+            ranking_rules: Some(Some(criteria)),
         })
     }
 
