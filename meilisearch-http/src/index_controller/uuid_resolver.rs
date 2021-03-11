@@ -277,8 +277,7 @@ impl UuidStore for HeedUuidStore {
                 entries.push((name.to_owned(), uuid))
             }
             Ok(entries)
-        }).await?
-    }
+        }).await?  }
 }
 
 #[cfg(test)]

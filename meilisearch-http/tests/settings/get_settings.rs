@@ -35,7 +35,8 @@ async fn update_settings_unknown_field() {
 async fn test_partial_update() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
+    let (response, _code) = index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
+    println!("response: {}", response);
     index.wait_update_id(0).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);

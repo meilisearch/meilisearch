@@ -12,8 +12,7 @@ use heed::{
 };
 use log::{error, info};
 use milli::Index;
-use rayon::ThreadPool;
-use serde::{Deserialize, Serialize};
+use rayon::ThreadPool; use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::update_handler::UpdateHandler;

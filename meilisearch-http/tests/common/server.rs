@@ -12,15 +12,17 @@ use super::service::Service;
 
 pub struct Server {
     pub service: Service,
+    // hod ownership to the tempdir while we use the server instance.
+    _dir: tempdir::TempDir,
 }
 
 impl Server {
     pub async fn new() -> Self {
-        let tmp_dir = TempDir::new("meilisearch").unwrap();
+        let dir = TempDir::new("meilisearch").unwrap();
 
         let opt = Opt {
-            db_path: tmp_dir.path().join("db"),
-            dumps_dir: tmp_dir.path().join("dump"),
+            db_path: dir.path().join("db"),
+            dumps_dir: dir.path().join("dump"),
             dump_batch_size: 16,
             http_addr: "127.0.0.1:7700".to_owned(),
             master_key: None,
@@ -55,6 +57,7 @@ impl Server {
 
         Server {
             service,
+            _dir: dir,
         }
     }
 

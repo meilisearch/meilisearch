@@ -68,10 +68,11 @@ where
     D: AsRef<[u8]> + Sized + 'static,
     S: UpdateStoreStore,
 {
-    fn new(store: S, inbox: mpsc::Receiver<UpdateMsg<D>>, path: impl AsRef<Path>) -> Self {
+    fn new(store: S, inbox: mpsc::Receiver<UpdateMsg<D>>, path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let path = path.as_ref().to_owned().join("update_files");
-        create_dir_all(&path).unwrap();
-        Self { store, inbox, path }
+        create_dir_all(&path)?;
+        assert!(path.exists());
+        Ok(Self { store, inbox, path })
     }
 
     async fn run(mut self) {
@@ -211,15 +212,15 @@ impl<D> UpdateActorHandle<D>
 where
     D: AsRef<[u8]> + Sized + 'static + Sync + Send,
 {
-    pub fn new(index_handle: IndexActorHandle, path: impl AsRef<Path>) -> Self {
+    pub fn new(index_handle: IndexActorHandle, path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let path = path.as_ref().to_owned().join("updates");
         let (sender, receiver) = mpsc::channel(100);
         let store = MapUpdateStoreStore::new(index_handle, &path);
-        let actor = UpdateActor::new(store, receiver, path);
+        let actor = UpdateActor::new(store, receiver, path)?;
 
         tokio::task::spawn(actor.run());
 
-        Self { sender }
+        Ok(Self { sender })
     }
 
     pub async fn update(
