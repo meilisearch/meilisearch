@@ -6,6 +6,7 @@ pub use self::index_documents::{DocumentAdditionResult, IndexDocuments, IndexDoc
 pub use self::settings::{Setting, Settings};
 pub use self::update_builder::UpdateBuilder;
 pub use self::update_step::UpdateIndexingStep;
+pub use self::words_level_positions::WordsLevelPositions;
 pub use self::words_prefixes::WordsPrefixes;
 
 mod available_documents_ids;
@@ -16,5 +17,6 @@ mod index_documents;
 mod settings;
 mod update_builder;
 mod update_step;
+mod words_level_positions;
 mod words_prefixes;
 

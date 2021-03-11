@@ -18,11 +18,12 @@ use rayon::prelude::*;
 use serde::{Serialize, Deserialize};
 
 use crate::index::Index;
-use crate::update::{Facets, WordsPrefixes, UpdateIndexingStep};
+use crate::update::{Facets, WordsLevelPositions, WordsPrefixes, UpdateIndexingStep};
 use self::store::{Store, Readers};
 pub use self::merge_function::{
     main_merge, word_docids_merge, words_pairs_proximities_docids_merge,
-    docid_word_positions_merge, documents_merge, facet_field_value_docids_merge,
+    docid_word_positions_merge, documents_merge,
+    word_level_position_docids_merge, facet_field_value_docids_merge,
     field_id_docid_facet_values_merge,
 };
 pub use self::transform::{Transform, TransformOutput};
@@ -402,6 +403,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         enum DatabaseType {
             Main,
             WordDocids,
+            WordLevel0PositionDocids,
             FacetLevel0ValuesDocids,
         }
 
@@ -467,6 +469,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
             let mut word_docids_readers = Vec::with_capacity(readers.len());
             let mut docid_word_positions_readers = Vec::with_capacity(readers.len());
             let mut words_pairs_proximities_docids_readers = Vec::with_capacity(readers.len());
+            let mut word_level_position_docids_readers = Vec::with_capacity(readers.len());
             let mut facet_field_value_docids_readers = Vec::with_capacity(readers.len());
             let mut field_id_docid_facet_values_readers = Vec::with_capacity(readers.len());
             let mut documents_readers = Vec::with_capacity(readers.len());
@@ -476,6 +479,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                     word_docids,
                     docid_word_positions,
                     words_pairs_proximities_docids,
+                    word_level_position_docids,
                     facet_field_value_docids,
                     field_id_docid_facet_values,
                     documents
@@ -484,6 +488,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                 word_docids_readers.push(word_docids);
                 docid_word_positions_readers.push(docid_word_positions);
                 words_pairs_proximities_docids_readers.push(words_pairs_proximities_docids);
+                word_level_position_docids_readers.push(word_level_position_docids);
                 facet_field_value_docids_readers.push(facet_field_value_docids);
                 field_id_docid_facet_values_readers.push(field_id_docid_facet_values);
                 documents_readers.push(documents);
@@ -513,6 +518,11 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         DatabaseType::FacetLevel0ValuesDocids,
                         facet_field_value_docids_readers,
                         facet_field_value_docids_merge,
+                    ),
+                    (
+                        DatabaseType::WordLevel0PositionDocids,
+                        word_level_position_docids_readers,
+                        word_level_position_docids_merge,
                     ),
                 ]
                 .into_par_iter()
@@ -569,7 +579,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
         self.index.put_documents_ids(self.wtxn, &documents_ids)?;
 
         let mut database_count = 0;
-        let total_databases = 7;
+        let total_databases = 8;
 
         progress_callback(UpdateIndexingStep::MergeDataIntoFinalDatabase {
             databases_seen: 0,
@@ -661,7 +671,7 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                     )?;
                 },
                 DatabaseType::FacetLevel0ValuesDocids => {
-                    debug!("Writing the facet values docids into LMDB on disk...");
+                    debug!("Writing the facet level 0 values docids into LMDB on disk...");
                     let db = *self.index.facet_field_id_value_docids.as_polymorph();
                     write_into_lmdb_database(
                         self.wtxn,
@@ -671,6 +681,17 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
                         write_method,
                     )?;
                 },
+                DatabaseType::WordLevel0PositionDocids => {
+                    debug!("Writing the word level 0 positions docids into LMDB on disk...");
+                    let db = *self.index.word_level_position_docids.as_polymorph();
+                    write_into_lmdb_database(
+                        self.wtxn,
+                        db,
+                        content,
+                        word_level_position_docids_merge,
+                        write_method,
+                    )?;
+                }
             }
 
             database_count += 1;
@@ -682,6 +703,19 @@ impl<'t, 'u, 'i, 'a> IndexDocuments<'t, 'u, 'i, 'a> {
 
         // Run the facets update operation.
         let mut builder = Facets::new(self.wtxn, self.index, self.update_id);
+        builder.chunk_compression_type = self.chunk_compression_type;
+        builder.chunk_compression_level = self.chunk_compression_level;
+        builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
+        if let Some(value) = self.facet_level_group_size {
+            builder.level_group_size(value);
+        }
+        if let Some(value) = self.facet_min_level_size {
+            builder.min_level_size(value);
+        }
+        builder.execute()?;
+
+        // Run the words positions update operation.
+        let mut builder = WordsLevelPositions::new(self.wtxn, self.index, self.update_id);
         builder.chunk_compression_type = self.chunk_compression_type;
         builder.chunk_compression_level = self.chunk_compression_level;
         builder.chunk_fusing_shrink_size = self.chunk_fusing_shrink_size;
