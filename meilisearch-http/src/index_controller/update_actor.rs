@@ -301,13 +301,33 @@ impl UpdateStoreStore for MapUpdateStoreStore {
     }
 
     async fn get(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>> {
-        Ok(self.db.read().await.get(uuid).cloned())
+        // attemps to get pre-loaded ref to the index
+        match self.db.read().await.get(uuid) {
+            Some(uuid) => Ok(Some(uuid.clone())),
+            None => {
+                // otherwise we try to check if it exists, and load it.
+                let path = self.path.clone().join(format!("updates-{}", uuid));
+                if path.exists() {
+                    let index_handle = self.index_handle.clone();
+                    let mut options = heed::EnvOpenOptions::new();
+                    options.map_size(4096 * 100_000);
+                    let store = UpdateStore::open(options, &path, move |meta, file| {
+                        futures::executor::block_on(index_handle.update(meta, file))
+                    })
+                    .unwrap();
+                    self.db.write().await.insert(uuid.clone(), store.clone());
+                    Ok(Some(store))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
     }
 
     async fn delete(&self, uuid: &Uuid) -> Result<Option<Arc<UpdateStore>>> {
         let store = self.db.write().await.remove(&uuid);
-        if store.is_some() {
-            let path = self.path.clone().join(format!("updates-{}", uuid));
+        let path = self.path.clone().join(format!("updates-{}", uuid));
+        if store.is_some() || path.exists() {
             remove_dir_all(path).unwrap();
         }
         Ok(store)
