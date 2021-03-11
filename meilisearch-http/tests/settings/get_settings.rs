@@ -43,7 +43,8 @@ async fn test_partial_update() {
     assert_eq!(response["displayedAttributes"],json!(["foo"]));
     assert_eq!(response["searchableAttributes"],json!(["*"]));
 
-    index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
+    let (response, _) = index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
+    println!("resp: {}", response);
     index.wait_update_id(1).await;
 
     let (response, code) = index.settings().await;
@@ -125,10 +126,10 @@ macro_rules! test_setting_routes {
                         .chars()
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
-                    let (_response, code) = server.service.post(url, serde_json::Value::Null).await;
-                    assert_eq!(code, 200);
-                    let (_response, code) = server.index("test").get().await;
-                    assert_eq!(code, 200);
+                    let (response, code) = server.service.post(url, serde_json::Value::Null).await;
+                    assert_eq!(code, 200, "{}", response);
+                    let (response, code) = server.index("test").get().await;
+                    assert_eq!(code, 200, "{}", response);
                 }
 
                 #[actix_rt::test]

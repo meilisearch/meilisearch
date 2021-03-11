@@ -270,7 +270,7 @@ impl UuidStore for HeedUuidStore {
                     let uuid = Uuid::from_slice(uuid)?;
                     db.delete(&mut txn, &name)?;
                     txn.commit()?;
-                    Ok(None)
+                    Ok(Some(uuid))
                 }
                 None => Ok(None)
             }
@@ -289,57 +289,6 @@ impl UuidStore for HeedUuidStore {
                 entries.push((name.to_owned(), uuid))
             }
             Ok(entries)
-        }).await?  }
-}
-
-#[cfg(test)]
-mod test {
-    use std::collections::HashMap;
-    use std::collections::hash_map::Entry;
-    use std::sync::Arc;
-
-    use tokio::sync::RwLock;
-
-    use super::*;
-
-    struct MapUuidStore(Arc<RwLock<HashMap<String, Uuid>>>);
-
-    #[async_trait::async_trait]
-    impl UuidStore for MapUuidStore {
-        async fn create_uuid(&self, name: String, err: bool) -> Result<Uuid> {
-            match self.0.write().await.entry(name) {
-                Entry::Occupied(entry) => {
-                    if err {
-                        Err(UuidError::NameAlreadyExist)
-                    } else {
-                        Ok(entry.get().clone())
-                    }
-                }
-                Entry::Vacant(entry) => {
-                    let uuid = Uuid::new_v4();
-                    let uuid = entry.insert(uuid);
-                    Ok(uuid.clone())
-                }
-            }
-        }
-
-        async fn get_uuid(&self, name: String) -> Result<Option<Uuid>> {
-            Ok(self.0.read().await.get(&name).cloned())
-        }
-
-        async fn delete(&self, name: String) -> Result<Option<Uuid>> {
-            Ok(self.0.write().await.remove(&name))
-        }
-
-        async fn list(&self) -> Result<Vec<(String, Uuid)>> {
-            let list = self
-                .0
-                .read()
-                .await
-                .iter()
-                .map(|(name, uuid)| (name.to_owned(), uuid.clone()))
-                .collect();
-            Ok(list)
-        }
+        }).await?
     }
 }

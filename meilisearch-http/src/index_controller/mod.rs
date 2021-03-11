@@ -131,7 +131,16 @@ impl IndexController {
 
     pub async fn update_settings(&self, uid: String, settings: Settings, create: bool) -> anyhow::Result<UpdateStatus> {
         let uuid = if create {
-            self.uuid_resolver.get_or_create(uid).await?
+            let uuid = self.uuid_resolver.get_or_create(uid).await?;
+            // We need to create the index upfront, since it would otherwise only be created when
+            // the update is processed. This would make calls to GET index to fail until the update
+            // is complete. Since this is get or create, we ignore the error when the index already
+            // exists.
+            match self.index_handle.create_index(uuid.clone(), None).await {
+                Ok(_) | Err(index_actor::IndexError::IndexAlreadyExists) => (),
+                Err(e) => return Err(e.into()),
+            }
+            uuid
         } else {
             self.uuid_resolver.resolve(uid).await?
         };

@@ -6,13 +6,17 @@ async fn create_and_delete_index() {
     let index = server.index("test");
     let (_response, code) = index.create(None).await;
 
+    println!("response: {}", _response);
+
     assert_eq!(code, 200);
 
     let (_response, code) = index.delete().await;
 
+    println!("response: {}", _response);
+
     assert_eq!(code, 200);
 
-    assert_eq!(index.get().await.1, 400);
+    assert_eq!(index.get().await.1, 404);
 }
 
 #[actix_rt::test]
