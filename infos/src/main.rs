@@ -319,6 +319,7 @@ fn biggest_value_sizes(index: &Index, rtxn: &heed::RoTxn, limit: usize) -> anyho
         docid_word_positions,
         word_pair_proximity_docids,
         word_prefix_pair_proximity_docids,
+        word_level_position_docids,
         facet_field_id_value_docids,
         field_id_docid_facet_values: _,
         documents,

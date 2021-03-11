@@ -22,7 +22,7 @@ use serde_json::{Map, Value};
 pub use self::criterion::{Criterion, default_criteria};
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fields_ids_map::FieldsIdsMap;
-pub use self::heed_codec::{BEU32StrCodec, StrStrU8Codec, ObkvCodec};
+pub use self::heed_codec::{BEU32StrCodec, StrStrU8Codec, StrLevelPositionCodec, ObkvCodec};
 pub use self::heed_codec::{RoaringBitmapCodec, BoRoaringBitmapCodec, CboRoaringBitmapCodec};
 pub use self::heed_codec::{RoaringBitmapLenCodec, BoRoaringBitmapLenCodec, CboRoaringBitmapLenCodec};
 pub use self::index::Index;
