@@ -26,7 +26,7 @@ pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMetadata {
-    name: String,
+    uid: String,
     #[serde(flatten)]
     meta: index_actor::IndexMeta,
 }
@@ -47,7 +47,7 @@ pub enum UpdateMeta {
 
 #[derive(Clone, Debug)]
 pub struct IndexSettings {
-    pub name: Option<String>,
+    pub uid: Option<String>,
     pub primary_key: Option<String>,
 }
 
@@ -77,13 +77,13 @@ impl IndexController {
 
     pub async fn add_documents(
         &self,
-        index: String,
+        uid: String,
         method: milli::update::IndexDocumentsMethod,
         format: milli::update::UpdateFormat,
         mut payload: Payload,
         primary_key: Option<String>,
     ) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.get_or_create(index).await?;
+        let uuid = self.uuid_resolver.get_or_create(uid).await?;
         let meta = UpdateMeta::DocumentsAddition { method, format, primary_key };
         let (sender, receiver) = mpsc::channel(10);
 
@@ -106,16 +106,16 @@ impl IndexController {
         Ok(status)
     }
 
-    pub async fn clear_documents(&self, index: String) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.resolve(index).await?;
+    pub async fn clear_documents(&self, uid: String) -> anyhow::Result<UpdateStatus> {
+        let uuid = self.uuid_resolver.resolve(uid).await?;
         let meta = UpdateMeta::ClearDocuments;
         let (_, receiver) = mpsc::channel(1);
         let status = self.update_handle.update(meta, receiver, uuid).await?;
         Ok(status)
     }
 
-    pub async fn delete_documents(&self, index: String, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus> {
-        let uuid = self.uuid_resolver.resolve(index).await?;
+    pub async fn delete_documents(&self, uid: String, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus> {
+        let uuid = self.uuid_resolver.resolve(uid).await?;
         let meta = UpdateMeta::DeleteDocuments;
         let (sender, receiver) = mpsc::channel(10);
 
@@ -129,11 +129,11 @@ impl IndexController {
         Ok(status)
     }
 
-    pub async fn update_settings(&self, index_uid: String, settings: Settings, create: bool) -> anyhow::Result<UpdateStatus> {
+    pub async fn update_settings(&self, uid: String, settings: Settings, create: bool) -> anyhow::Result<UpdateStatus> {
         let uuid = if create {
-            self.uuid_resolver.get_or_create(index_uid).await?
+            self.uuid_resolver.get_or_create(uid).await?
         } else {
-            self.uuid_resolver.resolve(index_uid).await?
+            self.uuid_resolver.resolve(uid).await?
         };
         let meta = UpdateMeta::Settings(settings);
         // Nothing so send, drop the sender right away, as not to block the update actor.
@@ -144,36 +144,36 @@ impl IndexController {
     }
 
     pub async fn create_index(&self, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
-        let IndexSettings { name, primary_key } = index_settings;
-        let name = name.unwrap();
-        let uuid = self.uuid_resolver.create(name.clone()).await?;
+        let IndexSettings { uid: name, primary_key } = index_settings;
+        let uid = name.unwrap();
+        let uuid = self.uuid_resolver.create(uid.clone()).await?;
         let meta = self.index_handle.create_index(uuid, primary_key).await?;
         let _ = self.update_handle.create(uuid).await?;
-        let meta = IndexMetadata { name, meta };
+        let meta = IndexMetadata { uid, meta };
 
         Ok(meta)
     }
 
-    pub async fn delete_index(&self, index_uid: String) -> anyhow::Result<()> {
+    pub async fn delete_index(&self, uid: String) -> anyhow::Result<()> {
         let uuid = self.uuid_resolver
-            .delete(index_uid)
+            .delete(uid)
             .await?;
         self.update_handle.delete(uuid.clone()).await?;
         self.index_handle.delete(uuid).await?;
         Ok(())
     }
 
-    pub async fn update_status(&self, index: String, id: u64) -> anyhow::Result<Option<UpdateStatus>> {
+    pub async fn update_status(&self, uid: String, id: u64) -> anyhow::Result<Option<UpdateStatus>> {
         let uuid = self.uuid_resolver
-            .resolve(index)
+            .resolve(uid)
             .await?;
         let result = self.update_handle.update_status(uuid, id).await?;
         Ok(result)
     }
 
-    pub async fn all_update_status(&self, index: String) -> anyhow::Result<Vec<UpdateStatus>> {
+    pub async fn all_update_status(&self, uid: String) -> anyhow::Result<Vec<UpdateStatus>> {
         let uuid = self.uuid_resolver
-            .resolve(index).await?;
+            .resolve(uid).await?;
         let result = self.update_handle.get_all_updates_status(uuid).await?;
         Ok(result)
     }
@@ -183,9 +183,9 @@ impl IndexController {
 
         let mut ret = Vec::new();
 
-        for (name, uuid) in uuids {
+        for (uid, uuid) in uuids {
             if let Some(meta) = self.index_handle.get_index_meta(uuid).await? {
-                let meta = IndexMetadata { name, meta };
+                let meta = IndexMetadata { uid, meta };
                 ret.push(meta);
             }
         }
@@ -193,9 +193,9 @@ impl IndexController {
         Ok(ret)
     }
 
-    pub async fn settings(&self, index: String) -> anyhow::Result<Settings> {
+    pub async fn settings(&self, uid: String) -> anyhow::Result<Settings> {
         let uuid = self.uuid_resolver
-            .resolve(index.clone())
+            .resolve(uid.clone())
             .await?;
         let settings = self.index_handle.settings(uuid).await?;
         Ok(settings)
@@ -203,13 +203,13 @@ impl IndexController {
 
     pub async fn documents(
         &self,
-        index: String,
+        uid: String,
         offset: usize,
         limit: usize,
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> anyhow::Result<Vec<Document>> {
         let uuid = self.uuid_resolver
-            .resolve(index.clone())
+            .resolve(uid.clone())
             .await?;
         let documents = self.index_handle.documents(uuid, offset, limit, attributes_to_retrieve).await?;
         Ok(documents)
@@ -217,33 +217,33 @@ impl IndexController {
 
     pub async fn document(
         &self,
-        index: String,
+        uid: String,
         doc_id: String,
         attributes_to_retrieve: Option<Vec<String>>,
     ) -> anyhow::Result<Document> {
         let uuid = self.uuid_resolver
-            .resolve(index.clone())
+            .resolve(uid.clone())
             .await?;
         let document = self.index_handle.document(uuid, doc_id, attributes_to_retrieve).await?;
         Ok(document)
     }
 
-    fn update_index(&self, name: String, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
+    fn update_index(&self, uid: String, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
         todo!()
     }
 
-    pub async fn search(&self, name: String, query: SearchQuery) -> anyhow::Result<SearchResult> {
-        let uuid = self.uuid_resolver.resolve(name).await?;
+    pub async fn search(&self, uid: String, query: SearchQuery) -> anyhow::Result<SearchResult> {
+        let uuid = self.uuid_resolver.resolve(uid).await?;
         let result = self.index_handle.search(uuid, query).await?;
         Ok(result)
     }
 
-    pub async fn get_index(&self, name: String) -> anyhow::Result<Option<IndexMetadata>> {
-        let uuid = self.uuid_resolver.resolve(name.clone()).await?;
+    pub async fn get_index(&self, uid: String) -> anyhow::Result<Option<IndexMetadata>> {
+        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
         let result = self.index_handle
             .get_index_meta(uuid)
             .await?
-            .map(|meta| IndexMetadata { name, meta });
+            .map(|meta| IndexMetadata { uid, meta });
         Ok(result)
     }
 }

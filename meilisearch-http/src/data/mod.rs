@@ -90,7 +90,7 @@ impl Data {
 
     pub async fn create_index(&self, name: impl AsRef<str>, primary_key: Option<impl AsRef<str>>) -> anyhow::Result<IndexMetadata> {
         let settings = IndexSettings {
-            name: Some(name.as_ref().to_string()),
+            uid: Some(name.as_ref().to_string()),
             primary_key: primary_key.map(|s| s.as_ref().to_string()),
         };
 

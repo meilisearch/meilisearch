@@ -7,14 +7,15 @@ async fn create_index_no_primary_key() {
     let index = server.index("test");
     let (response, code) = index.create(None).await;
 
+    println!("response: {}", response);
+
     assert_eq!(code, 200);
     assert_eq!(response["uid"], "test");
-    assert!(response.get("uuid").is_some());
     assert!(response.get("createdAt").is_some());
     assert!(response.get("updatedAt").is_some());
     assert_eq!(response["createdAt"], response["updatedAt"]);
     assert_eq!(response["primaryKey"], Value::Null);
-    assert_eq!(response.as_object().unwrap().len(), 5);
+    assert_eq!(response.as_object().unwrap().len(), 4);
 }
 
 #[actix_rt::test]
@@ -25,12 +26,11 @@ async fn create_index_with_primary_key() {
 
     assert_eq!(code, 200);
     assert_eq!(response["uid"], "test");
-    assert!(response.get("uuid").is_some());
     assert!(response.get("createdAt").is_some());
     assert!(response.get("updatedAt").is_some());
     assert_eq!(response["createdAt"], response["updatedAt"]);
     assert_eq!(response["primaryKey"], "primary");
-    assert_eq!(response.as_object().unwrap().len(), 5);
+    assert_eq!(response.as_object().unwrap().len(), 4);
 }
 
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
