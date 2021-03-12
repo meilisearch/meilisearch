@@ -95,7 +95,7 @@ async fn update_index(
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.update_index(&path.index_uid, body.primary_key.as_ref(),  body.name.as_ref()) {
+    match data.update_index(&path.index_uid, body.primary_key.as_ref(),  body.name.as_ref()).await {
         Ok(meta) => {
             let json = serde_json::to_string(&meta).unwrap();
             Ok(HttpResponse::Ok().body(json))

@@ -9,6 +9,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::bail;
 use actix_web::web::{Bytes, Payload};
 use futures::stream::StreamExt;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
@@ -237,8 +238,17 @@ impl IndexController {
         Ok(document)
     }
 
-    fn update_index(&self, uid: String, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
-        todo!()
+    pub async fn update_index(&self, uid: String, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata> {
+        if index_settings.uid.is_some() {
+            bail!("Can't change the index uid.")
+        }
+
+        let uuid = self.uuid_resolver
+            .resolve(uid.clone())
+            .await?;
+        let meta = self.index_handle.update_index(uuid, index_settings).await?;
+        let meta = IndexMetadata { uid, meta };
+        Ok(meta)
     }
 
     pub async fn search(&self, uid: String, query: SearchQuery) -> anyhow::Result<SearchResult> {

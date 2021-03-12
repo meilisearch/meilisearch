@@ -17,7 +17,7 @@ use tokio::task::spawn_blocking;
 use tokio::fs::remove_dir_all;
 use uuid::Uuid;
 
-use super::get_arc_ownership_blocking;
+use super::{IndexSettings, get_arc_ownership_blocking};
 use super::update_handler::UpdateHandler;
 use crate::index::UpdateResult as UResult;
 use crate::index::{Document, Index, SearchQuery, SearchResult, Settings};
@@ -42,6 +42,10 @@ pub struct IndexMeta {
 impl IndexMeta {
     fn new(index: &Index) -> Result<Self> {
         let txn = index.read_txn()?;
+        Self::new_txn(index, &txn)
+    }
+
+    fn new_txn(index: &Index, txn: &heed::RoTxn) -> Result<Self> {
         let created_at = index.created_at(&txn)?;
         let updated_at = index.updated_at(&txn)?;
         let primary_key = index.primary_key(&txn)?.map(String::from);
@@ -90,6 +94,11 @@ enum IndexMsg {
         uuid: Uuid,
         ret: oneshot::Sender<Result<Option<IndexMeta>>>,
     },
+    UpdateIndex {
+        uuid: Uuid,
+        index_settings: IndexSettings,
+        ret: oneshot::Sender<Result<IndexMeta>>,
+    }
 }
 
 struct IndexActor<S> {
@@ -109,6 +118,8 @@ pub enum IndexError {
     UnexistingIndex,
     #[error("Heed error: {0}")]
     HeedError(#[from] heed::Error),
+    #[error("Existing primary key")]
+    ExistingPrimaryKey,
 }
 
 #[async_trait::async_trait]
@@ -229,6 +240,9 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             }
             GetMeta { uuid, ret } => {
                 let _ = ret.send(self.handle_get_meta(uuid).await);
+            }
+            UpdateIndex { uuid, index_settings, ret } => {
+                let _ = ret.send(self.handle_update_index(uuid, index_settings).await);
             }
         }
     }
@@ -352,6 +366,33 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
             None => Ok(None),
         }
     }
+
+    async fn handle_update_index(&self, uuid: Uuid, index_settings: IndexSettings) -> Result<IndexMeta> {
+        let index = self.store
+            .get(uuid)
+            .await?
+            .ok_or(IndexError::UnexistingIndex)?;
+
+        spawn_blocking(move || {
+            match index_settings.primary_key {
+                Some(ref primary_key) => {
+                    let mut txn = index.write_txn()?;
+                    if index.primary_key(&txn)?.is_some() {
+                        return Err(IndexError::ExistingPrimaryKey)
+                    }
+                    index.put_primary_key(&mut txn, primary_key)?;
+                    let meta = IndexMeta::new_txn(&index, &txn)?;
+                    txn.commit()?;
+                    Ok(meta)
+                },
+                None => {
+                    let meta = IndexMeta::new(&index)?;
+                    Ok(meta)
+                },
+            }
+        }).await
+        .map_err(|e| IndexError::Error(e.into()))?
+    }
 }
 
 #[derive(Clone)]
@@ -456,6 +497,17 @@ impl IndexActorHandle {
     pub async fn get_index_meta(&self, uuid: Uuid) -> Result<Option<IndexMeta>> {
         let (ret, receiver) = oneshot::channel();
         let msg = IndexMsg::GetMeta { uuid, ret };
+        let _ = self.read_sender.send(msg).await;
+        Ok(receiver.await.expect("IndexActor has been killed")?)
+    }
+
+    pub async fn update_index(
+        &self,
+        uuid: Uuid,
+        index_settings: IndexSettings
+    ) -> Result<IndexMeta> {
+        let (ret, receiver) = oneshot::channel();
+        let msg = IndexMsg::UpdateIndex { uuid, index_settings, ret };
         let _ = self.read_sender.send(msg).await;
         Ok(receiver.await.expect("IndexActor has been killed")?)
     }

@@ -1,7 +1,7 @@
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use actix_web::web::Payload;
 
-use crate::index_controller::{UpdateStatus, IndexMetadata};
+use crate::index_controller::{IndexMetadata, IndexSettings, UpdateStatus};
 use crate::index::Settings;
 use super::Data;
 
@@ -63,18 +63,17 @@ impl Data {
         self.index_controller.all_update_status(index.as_ref().to_string()).await
     }
 
-    pub fn update_index(
+    pub async fn update_index(
         &self,
         name: impl AsRef<str>,
         primary_key: Option<impl AsRef<str>>,
         new_name: Option<impl AsRef<str>>
     ) -> anyhow::Result<IndexMetadata> {
-        todo!()
-        //let settings = IndexSettings {
-            //name: new_name.map(|s| s.as_ref().to_string()),
-            //primary_key: primary_key.map(|s| s.as_ref().to_string()),
-        //};
+        let settings = IndexSettings {
+            uid: new_name.map(|s| s.as_ref().to_string()),
+            primary_key: primary_key.map(|s| s.as_ref().to_string()),
+        };
 
-        //self.index_controller.update_index(name, settings)
+        self.index_controller.update_index(name.as_ref().to_string(), settings).await
     }
 }
