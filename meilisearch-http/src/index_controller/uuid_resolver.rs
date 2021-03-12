@@ -200,13 +200,6 @@ struct HeedUuidStore {
     db: Database<Str, ByteSlice>,
 }
 
-fn open_or_create_database<K: 'static, V: 'static>(env: &Env, name: Option<&str>) -> heed::Result<Database<K, V>> {
-    match env.open_database(name)? {
-        Some(db) => Ok(db),
-        None => env.create_database(name),
-    }
-}
-
 impl HeedUuidStore {
     fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let path = path.as_ref().join("index_uuids");
@@ -214,7 +207,7 @@ impl HeedUuidStore {
         let mut options = EnvOpenOptions::new();
         options.map_size(1_073_741_824); // 1GB
         let env = options.open(path)?;
-        let db = open_or_create_database(&env, None)?;
+        let db = env.create_database(None)?;
         Ok(Self { env, db })
     }
 }
