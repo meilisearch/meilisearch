@@ -357,7 +357,6 @@ impl<S: IndexStore + Sync + Send> IndexActor<S> {
     async fn handle_get_meta(&self, uuid: Uuid) -> Result<Option<IndexMeta>> {
         match self.store.get(uuid).await? {
             Some(index) => {
-                println!("geting meta yoyo");
                 let meta = spawn_blocking(move || IndexMeta::new(&index))
                     .await
                     .map_err(|e| IndexError::Error(e.into()))??;

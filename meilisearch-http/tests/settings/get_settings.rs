@@ -36,7 +36,6 @@ async fn test_partial_update() {
     let server = Server::new().await;
     let index = server.index("test");
     let (response, _code) = index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
-    println!("response: {}", response);
     index.wait_update_id(0).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
@@ -44,7 +43,6 @@ async fn test_partial_update() {
     assert_eq!(response["searchableAttributes"],json!(["*"]));
 
     let (response, _) = index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
-    println!("resp: {}", response);
     index.wait_update_id(1).await;
 
     let (response, code) = index.settings().await;
@@ -96,7 +94,6 @@ async fn update_setting_unexisting_index_invalid_uid() {
     let server = Server::new().await;
     let index = server.index("test##!  ");
     let (_response, code) = index.update_settings(json!({})).await;
-    println!("response: {}", _response);
     assert_eq!(code, 400);
 }
 

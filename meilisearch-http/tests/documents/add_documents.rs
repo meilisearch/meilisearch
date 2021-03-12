@@ -28,7 +28,6 @@ async fn add_documents_no_index_creation() {
 
     let (response, code) = index.get_update(0).await;
     assert_eq!(code, 200);
-    println!("response: {}", response);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["updateId"], 0);
     assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 1);

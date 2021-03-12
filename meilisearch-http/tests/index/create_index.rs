@@ -7,7 +7,6 @@ async fn create_index_no_primary_key() {
     let index = server.index("test");
     let (response, code) = index.create(None).await;
 
-    println!("response: {}", response);
 
     assert_eq!(code, 200);
     assert_eq!(response["uid"], "test");
