@@ -144,8 +144,6 @@ where
             .await
             .map_err(|e| UpdateError::Error(Box::new(e)))?;
 
-        let file = file.into_std().await;
-
         tokio::task::spawn_blocking(move || {
             let result = update_store
                 .register_update(meta, path, uuid)

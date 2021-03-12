@@ -14,9 +14,8 @@ use actix_web::web::{Bytes, Payload};
 use futures::stream::StreamExt;
 use milli::update::{IndexDocumentsMethod, UpdateFormat};
 use serde::{Serialize, Deserialize};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tokio::time::sleep;
-use uuid::Uuid;
 
 pub use updates::{Processed, Processing, Failed};
 use crate::index::{SearchResult, SearchQuery, Document};
@@ -59,15 +58,6 @@ pub struct IndexController {
     update_handle: update_actor::UpdateActorHandle<Bytes>,
 }
 
-enum IndexControllerMsg {
-    CreateIndex {
-        uuid: Uuid,
-        primary_key: Option<String>,
-        ret: oneshot::Sender<anyhow::Result<IndexMetadata>>,
-    },
-    Shutdown,
-}
-
 impl IndexController {
     pub fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
@@ -94,10 +84,10 @@ impl IndexController {
         tokio::task::spawn_local(async move {
             while let Some(bytes) = payload.next().await {
                 match bytes {
-                    Ok(bytes) => { sender.send(Ok(bytes)).await; },
+                    Ok(bytes) => { let _ = sender.send(Ok(bytes)).await; },
                     Err(e) => {
                         let error: Box<dyn std::error::Error + Sync + Send + 'static> = Box::new(e);
-                        sender.send(Err(error)).await; },
+                        let _ = sender.send(Err(error)).await; },
                 }
             }
         });
