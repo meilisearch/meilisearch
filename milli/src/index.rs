@@ -142,6 +142,7 @@ impl Index {
 
     /// Writes the documents primary key, this is the field name that is used to store the id.
     pub fn put_primary_key(&self, wtxn: &mut RwTxn, primary_key: &str) -> heed::Result<()> {
+        self.set_updated_at(wtxn, &Utc::now())?;
         self.main.put::<_, Str, Str>(wtxn, PRIMARY_KEY_KEY, &primary_key)
     }
 
