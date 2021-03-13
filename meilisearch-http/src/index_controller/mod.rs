@@ -59,10 +59,10 @@ pub struct IndexController {
 }
 
 impl IndexController {
-    pub fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn new(path: impl AsRef<Path>, index_size: usize, update_store_size: usize) -> anyhow::Result<Self> {
         let uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
-        let index_actor = index_actor::IndexActorHandle::new(&path)?;
-        let update_handle = update_actor::UpdateActorHandle::new(index_actor.clone(), &path)?;
+        let index_actor = index_actor::IndexActorHandle::new(&path, index_size)?;
+        let update_handle = update_actor::UpdateActorHandle::new(index_actor.clone(), &path, update_store_size)?;
         Ok(Self { uuid_resolver, index_handle: index_actor, update_handle })
     }
 

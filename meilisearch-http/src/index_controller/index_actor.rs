@@ -401,11 +401,11 @@ pub struct IndexActorHandle {
 }
 
 impl IndexActorHandle {
-    pub fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn new(path: impl AsRef<Path>, index_size: usize) -> anyhow::Result<Self> {
         let (read_sender, read_receiver) = mpsc::channel(100);
         let (write_sender, write_receiver) = mpsc::channel(100);
 
-        let store = HeedIndexStore::new(path)?;
+        let store = HeedIndexStore::new(path, index_size)?;
         let actor = IndexActor::new(read_receiver, write_receiver, store)?;
         tokio::task::spawn(actor.run());
         Ok(Self {
@@ -416,8 +416,7 @@ impl IndexActorHandle {
 
     pub async fn create_index(&self, uuid: Uuid, primary_key: Option<String>) -> Result<IndexMeta> {
         let (ret, receiver) = oneshot::channel();
-        let msg = IndexMsg::CreateIndex {
-            ret,
+        let msg = IndexMsg::CreateIndex { ret,
             uuid,
             primary_key,
         };
@@ -515,15 +514,17 @@ impl IndexActorHandle {
 struct HeedIndexStore {
     index_store: AsyncMap<Uuid, Index>,
     path: PathBuf,
+    index_size: usize,
 }
 
 impl HeedIndexStore {
-    fn new(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    fn new(path: impl AsRef<Path>, index_size: usize) -> anyhow::Result<Self> {
         let path = path.as_ref().join("indexes/");
         let index_store = Arc::new(RwLock::new(HashMap::new()));
         Ok(Self {
             index_store,
             path,
+            index_size,
         })
     }
 }
@@ -536,8 +537,9 @@ impl IndexStore for HeedIndexStore {
             return Err(IndexError::IndexAlreadyExists);
         }
 
+        let index_size = self.index_size;
         let index = spawn_blocking(move || -> Result<Index> {
-            let index = open_index(&path, 4096 * 100_000)?;
+            let index = open_index(&path, index_size)?;
             if let Some(primary_key) = primary_key {
                 let mut txn = index.write_txn()?;
                 index.put_primary_key(&mut txn, &primary_key)?;
@@ -565,7 +567,8 @@ impl IndexStore for HeedIndexStore {
                     return Ok(None);
                 }
 
-                let index = spawn_blocking(|| open_index(path, 4096 * 100_000))
+                let index_size = self.index_size;
+                let index = spawn_blocking(move || open_index(path, index_size))
                     .await
                     .map_err(|e| IndexError::Error(e.into()))??;
                 self.index_store

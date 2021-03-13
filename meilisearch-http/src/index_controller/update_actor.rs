@@ -211,10 +211,10 @@ impl<D> UpdateActorHandle<D>
 where
     D: AsRef<[u8]> + Sized + 'static + Sync + Send,
 {
-    pub fn new(index_handle: IndexActorHandle, path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    pub fn new(index_handle: IndexActorHandle, path: impl AsRef<Path>, update_store_size: usize) -> anyhow::Result<Self> {
         let path = path.as_ref().to_owned().join("updates");
         let (sender, receiver) = mpsc::channel(100);
-        let store = MapUpdateStoreStore::new(index_handle, &path);
+        let store = MapUpdateStoreStore::new(index_handle, &path, update_store_size);
         let actor = UpdateActor::new(store, receiver, path)?;
 
         tokio::task::spawn(actor.run());
@@ -272,16 +272,18 @@ struct MapUpdateStoreStore {
     db: Arc<RwLock<HashMap<Uuid, Arc<UpdateStore>>>>,
     index_handle: IndexActorHandle,
     path: PathBuf,
+    update_store_size: usize,
 }
 
 impl MapUpdateStoreStore {
-    fn new(index_handle: IndexActorHandle, path: impl AsRef<Path>) -> Self {
+    fn new(index_handle: IndexActorHandle, path: impl AsRef<Path>, update_store_size: usize) -> Self {
         let db = Arc::new(RwLock::new(HashMap::new()));
         let path = path.as_ref().to_owned();
         Self {
             db,
             index_handle,
             path,
+            update_store_size,
         }
     }
 }
@@ -292,7 +294,8 @@ impl UpdateStoreStore for MapUpdateStoreStore {
         match self.db.write().await.entry(uuid) {
             Entry::Vacant(e) => {
                 let mut options = heed::EnvOpenOptions::new();
-                options.map_size(4096 * 100_000);
+                let update_store_size = self.update_store_size;
+                options.map_size(update_store_size);
                 let path = self.path.clone().join(format!("updates-{}", e.key()));
                 create_dir_all(&path).unwrap();
                 let index_handle = self.index_handle.clone();
@@ -324,7 +327,8 @@ impl UpdateStoreStore for MapUpdateStoreStore {
                             // We can safely load the index
                             let index_handle = self.index_handle.clone();
                             let mut options = heed::EnvOpenOptions::new();
-                            options.map_size(4096 * 100_000);
+                            let update_store_size = self.update_store_size;
+                            options.map_size(update_store_size);
                             let store = UpdateStore::open(options, &path, move |meta, file| {
                                 futures::executor::block_on(index_handle.update(meta, file))
                             })

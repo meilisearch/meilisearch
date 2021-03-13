@@ -60,7 +60,9 @@ impl Data {
         let path = options.db_path.clone();
 
         create_dir_all(&path)?;
-        let index_controller = IndexController::new(&path)?;
+        let index_size = options.max_mdb_size.get_bytes() as usize;
+        let update_store_size = options.max_udb_size.get_bytes() as usize;
+        let index_controller = IndexController::new(&path, index_size, update_store_size)?;
 
         let mut api_keys = ApiKeys {
             master: options.clone().master_key,
