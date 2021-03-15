@@ -54,7 +54,7 @@ impl Index {
         Ok(Settings {
             displayed_attributes: Some(Some(displayed_attributes)),
             searchable_attributes: Some(Some(searchable_attributes)),
-            faceted_attributes: Some(Some(faceted_attributes)),
+            attributes_for_faceting: Some(Some(faceted_attributes)),
             ranking_rules: Some(Some(criteria)),
         })
     }

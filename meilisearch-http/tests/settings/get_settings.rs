@@ -19,7 +19,8 @@ async fn get_settings() {
     assert_eq!(settings.keys().len(), 4);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
-    assert_eq!(settings["facetedAttributes"], json!({}));
+    println!("{:?}", settings);
+    assert_eq!(settings["attributesForFaceting"], json!({}));
     assert_eq!(settings["rankingRules"], json!(["typo", "words", "proximity", "attribute", "wordsPosition", "exactness"]));
 }
 

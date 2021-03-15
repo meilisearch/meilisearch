@@ -35,7 +35,7 @@ pub struct Settings {
     pub searchable_attributes: Option<Option<Vec<String>>>,
 
     #[serde(default)]
-    pub faceted_attributes: Option<Option<HashMap<String, String>>>,
+    pub attributes_for_faceting: Option<Option<HashMap<String, String>>>,
 
     #[serde(
         default,
@@ -50,7 +50,7 @@ impl Settings {
         Self {
             displayed_attributes: Some(None),
             searchable_attributes: Some(None),
-            faceted_attributes: Some(None),
+            attributes_for_faceting: Some(None),
             ranking_rules: Some(None),
         }
     }
@@ -158,7 +158,7 @@ impl Index {
         }
 
         // We transpose the settings JSON struct into a real setting update.
-        if let Some(ref facet_types) = settings.faceted_attributes {
+        if let Some(ref facet_types) = settings.attributes_for_faceting {
             let facet_types = facet_types.clone().unwrap_or_else(|| HashMap::new());
             builder.set_faceted_fields(facet_types);
         }
