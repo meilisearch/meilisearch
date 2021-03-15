@@ -78,29 +78,13 @@ impl Index {
         let mut documents = Vec::new();
         let fields_ids_map = self.fields_ids_map(&rtxn).unwrap();
 
-        let displayed_fields_ids = self.displayed_fields_ids(&rtxn).unwrap();
-
-        let attributes_to_retrieve_ids = match query.attributes_to_retrieve {
-            Some(ref attrs) if attrs.iter().any(|f| f == "*") => None,
-            Some(ref attrs) => attrs
-                .iter()
-                .filter_map(|f| fields_ids_map.id(f))
-                .collect::<Vec<_>>()
-                .into(),
-            None => None,
-        };
-
-        let displayed_fields_ids = match (displayed_fields_ids, attributes_to_retrieve_ids) {
-            (_, Some(ids)) => ids,
-            (Some(ids), None) => ids,
-            (None, None) => fields_ids_map.iter().map(|(id, _)| id).collect(),
-        };
+        let fields_to_display = self.fields_to_display(&rtxn, query.attributes_to_retrieve, &fields_ids_map)?;
 
         let stop_words = fst::Set::default();
         let highlighter = Highlighter::new(&stop_words);
 
         for (_id, obkv) in self.documents(&rtxn, documents_ids)? {
-            let mut object = milli::obkv_to_json(&displayed_fields_ids, &fields_ids_map, obkv).unwrap();
+            let mut object = milli::obkv_to_json(&fields_to_display, &fields_ids_map, obkv).unwrap();
             if let Some(ref attributes_to_highlight) = query.attributes_to_highlight {
                 highlighter.highlight_record(&mut object, &matching_words, attributes_to_highlight);
             }
