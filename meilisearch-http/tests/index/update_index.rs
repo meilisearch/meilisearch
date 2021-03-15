@@ -13,6 +13,7 @@ async fn update_primary_key() {
 
     assert_eq!(code, 200);
     assert_eq!(response["uid"], "test");
+    assert_eq!(response["name"], "test");
     assert!(response.get("createdAt").is_some());
     assert!(response.get("updatedAt").is_some());
 
@@ -21,7 +22,7 @@ async fn update_primary_key() {
     assert!(created_at < updated_at);
 
     assert_eq!(response["primaryKey"], "primary");
-    assert_eq!(response.as_object().unwrap().len(), 4);
+    assert_eq!(response.as_object().unwrap().len(), 5);
 }
 
 #[actix_rt::test]
