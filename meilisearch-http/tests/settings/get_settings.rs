@@ -19,8 +19,19 @@ async fn get_settings() {
     assert_eq!(settings.keys().len(), 4);
     assert_eq!(settings["displayedAttributes"], json!(["*"]));
     assert_eq!(settings["searchableAttributes"], json!(["*"]));
-    assert_eq!(settings["facetedAttributes"], json!({}));
-    assert_eq!(settings["rankingRules"], json!(["typo", "words", "proximity", "attribute", "wordsPosition", "exactness"]));
+    println!("{:?}", settings);
+    assert_eq!(settings["attributesForFaceting"], json!({}));
+    assert_eq!(
+        settings["rankingRules"],
+        json!([
+            "typo",
+            "words",
+            "proximity",
+            "attribute",
+            "wordsPosition",
+            "exactness"
+        ])
+    );
 }
 
 #[actix_rt::test]
@@ -35,20 +46,24 @@ async fn update_settings_unknown_field() {
 async fn test_partial_update() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.update_settings(json!({"displayedAttributes": ["foo"]})).await;
+    let (_response, _code) = index
+        .update_settings(json!({"displayedAttributes": ["foo"]}))
+        .await;
     index.wait_update_id(0).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
-    assert_eq!(response["displayedAttributes"],json!(["foo"]));
-    assert_eq!(response["searchableAttributes"],json!(["*"]));
+    assert_eq!(response["displayedAttributes"], json!(["foo"]));
+    assert_eq!(response["searchableAttributes"], json!(["*"]));
 
-    index.update_settings(json!({"searchableAttributes": ["bar"]})).await;
+    let (_response, _) = index
+        .update_settings(json!({"searchableAttributes": ["bar"]}))
+        .await;
     index.wait_update_id(1).await;
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
-    assert_eq!(response["displayedAttributes"],json!(["foo"]));
-    assert_eq!(response["searchableAttributes"],json!(["bar"]));
+    assert_eq!(response["displayedAttributes"], json!(["foo"]));
+    assert_eq!(response["searchableAttributes"], json!(["bar"]));
 }
 
 #[actix_rt::test]
@@ -63,20 +78,22 @@ async fn delete_settings_unexisting_index() {
 async fn reset_all_settings() {
     let server = Server::new().await;
     let index = server.index("test");
-    index.update_settings(json!({"displayedAttributes": ["foo"], "searchableAttributes": ["bar"]})).await;
+    index
+        .update_settings(json!({"displayedAttributes": ["foo"], "searchableAttributes": ["bar"]}))
+        .await;
     index.wait_update_id(0).await;
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
-    assert_eq!(response["displayedAttributes"],json!(["foo"]));
-    assert_eq!(response["searchableAttributes"],json!(["bar"]));
+    assert_eq!(response["displayedAttributes"], json!(["foo"]));
+    assert_eq!(response["searchableAttributes"], json!(["bar"]));
 
     index.delete_settings().await;
     index.wait_update_id(1).await;
 
     let (response, code) = index.settings().await;
     assert_eq!(code, 200);
-    assert_eq!(response["displayedAttributes"],json!(["*"]));
-    assert_eq!(response["searchableAttributes"],json!(["*"]));
+    assert_eq!(response["displayedAttributes"], json!(["*"]));
+    assert_eq!(response["searchableAttributes"], json!(["*"]));
 }
 
 #[actix_rt::test]
@@ -94,7 +111,6 @@ async fn update_setting_unexisting_index_invalid_uid() {
     let server = Server::new().await;
     let index = server.index("test##!  ");
     let (_response, code) = index.update_settings(json!({})).await;
-    println!("response: {}", _response);
     assert_eq!(code, 400);
 }
 
@@ -124,10 +140,10 @@ macro_rules! test_setting_routes {
                         .chars()
                         .map(|c| if c == '_' { '-' } else { c })
                         .collect::<String>());
-                    let (_response, code) = server.service.post(url, serde_json::Value::Null).await;
-                    assert_eq!(code, 200);
-                    let (_response, code) = server.index("test").get().await;
-                    assert_eq!(code, 200);
+                    let (response, code) = server.service.post(url, serde_json::Value::Null).await;
+                    assert_eq!(code, 200, "{}", response);
+                    let (response, code) = server.index("test").get().await;
+                    assert_eq!(code, 200, "{}", response);
                 }
 
                 #[actix_rt::test]
@@ -149,4 +165,5 @@ macro_rules! test_setting_routes {
 test_setting_routes!(
     attributes_for_faceting,
     displayed_attributes,
-    searchable_attributes);
+    searchable_attributes
+);

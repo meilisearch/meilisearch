@@ -1,9 +1,7 @@
 use std::env;
 
-use actix_cors::Cors;
-use actix_web::{middleware, HttpServer};
+use actix_web::HttpServer;
 use main_error::MainError;
-use meilisearch_http::helpers::NormalizePath;
 use meilisearch_http::{create_app, Data, Opt};
 use structopt::StructOpt;
 
@@ -46,46 +44,49 @@ async fn main() -> Result<(), MainError> {
             }
         }
         "development" => {
-            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+                .init();
         }
         _ => unreachable!(),
     }
 
     //if let Some(path) = &opt.import_snapshot {
-        //snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
+    //snapshot::load_snapshot(&opt.db_path, path, opt.ignore_snapshot_if_db_exists, opt.ignore_missing_snapshot)?;
     //}
 
     let data = Data::new(opt.clone())?;
 
     //if !opt.no_analytics {
-        //let analytics_data = data.clone();
-        //let analytics_opt = opt.clone();
-        //thread::spawn(move || analytics::analytics_sender(analytics_data, analytics_opt));
+    //let analytics_data = data.clone();
+    //let analytics_opt = opt.clone();
+    //thread::spawn(move || analytics::analytics_sender(analytics_data, analytics_opt));
     //}
 
     //if let Some(path) = &opt.import_dump {
-        //dump::import_dump(&data, path, opt.dump_batch_size)?;
+    //dump::import_dump(&data, path, opt.dump_batch_size)?;
     //}
 
     //if opt.schedule_snapshot {
-        //snapshot::schedule_snapshot(data.clone(), &opt.snapshot_dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
+    //snapshot::schedule_snapshot(data.clone(), &opt.snapshot_dir, opt.snapshot_interval_sec.unwrap_or(86400))?;
     //}
 
     print_launch_resume(&opt, &data);
 
     let enable_frontend = opt.env != "production";
-    let http_server = HttpServer::new(move || {
-        create_app(&data, enable_frontend)
-            .wrap(
-                Cors::default()
-                    .send_wildcard()
-                    .allowed_headers(vec!["content-type", "x-meili-api-key"])
-                    .max_age(86_400) // 24h
-            )
-            .wrap(middleware::Logger::default())
-            .wrap(middleware::Compress::default())
-            .wrap(NormalizePath)
-    });
+
+    run_http(data, opt, enable_frontend).await?;
+
+    Ok(())
+}
+
+async fn run_http(
+    data: Data,
+    opt: Opt,
+    enable_frontend: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let http_server = HttpServer::new(move || create_app!(&data, enable_frontend))
+        // Disable signals allows the server to terminate immediately when a user enter CTRL-C
+        .disable_signals();
 
     if let Some(config) = opt.get_ssl_config()? {
         http_server
@@ -95,7 +96,6 @@ async fn main() -> Result<(), MainError> {
     } else {
         http_server.bind(opt.http_addr)?.run().await?;
     }
-
     Ok(())
 }
 

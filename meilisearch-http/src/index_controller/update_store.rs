@@ -1,10 +1,14 @@
-use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::fs::remove_file;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use crossbeam_channel::Sender;
-use heed::types::{OwnedType, DecodeIgnore, SerdeJson, ByteSlice};
-use heed::{EnvOpenOptions, Env, Database};
-use serde::{Serialize, Deserialize};
+use heed::types::{DecodeIgnore, OwnedType, SerdeJson};
+use heed::{Database, Env, EnvOpenOptions};
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use tokio::sync::mpsc;
+use uuid::Uuid;
 
 use crate::index_controller::updates::*;
 
@@ -14,16 +18,33 @@ type BEU64 = heed::zerocopy::U64<heed::byteorder::BE>;
 pub struct UpdateStore<M, N, E> {
     env: Env,
     pending_meta: Database<OwnedType<BEU64>, SerdeJson<Pending<M>>>,
-    pending: Database<OwnedType<BEU64>, ByteSlice>,
+    pending: Database<OwnedType<BEU64>, SerdeJson<PathBuf>>,
     processed_meta: Database<OwnedType<BEU64>, SerdeJson<Processed<M, N>>>,
     failed_meta: Database<OwnedType<BEU64>, SerdeJson<Failed<M, E>>>,
     aborted_meta: Database<OwnedType<BEU64>, SerdeJson<Aborted<M>>>,
     processing: Arc<RwLock<Option<Processing<M>>>>,
-    notification_sender: Sender<()>,
+    notification_sender: mpsc::Sender<()>,
 }
 
 pub trait HandleUpdate<M, N, E> {
-    fn handle_update(&mut self, meta: Processing<M>, content: &[u8]) -> Result<Processed<M, N>, Failed<M, E>>;
+    fn handle_update(
+        &mut self,
+        meta: Processing<M>,
+        content: File,
+    ) -> anyhow::Result<Result<Processed<M, N>, Failed<M, E>>>;
+}
+
+impl<M, N, E, F> HandleUpdate<M, N, E> for F
+where
+    F: FnMut(Processing<M>, File) -> anyhow::Result<Result<Processed<M, N>, Failed<M, E>>>,
+{
+    fn handle_update(
+        &mut self,
+        meta: Processing<M>,
+        content: File,
+    ) -> anyhow::Result<Result<Processed<M, N>, Failed<M, E>>> {
+        self(meta, content)
+    }
 }
 
 impl<M, N, E> UpdateStore<M, N, E>
@@ -35,11 +56,11 @@ where
     pub fn open<P, U>(
         mut options: EnvOpenOptions,
         path: P,
-        mut update_handler: U,
+        update_handler: U,
     ) -> heed::Result<Arc<Self>>
     where
         P: AsRef<Path>,
-        U: HandleUpdate<M, N, E> + Send + 'static,
+        U: HandleUpdate<M, N, E> + Sync + Clone + Send + 'static,
     {
         options.max_dbs(5);
 
@@ -51,7 +72,7 @@ where
         let failed_meta = env.create_database(Some("failed-meta"))?;
         let processing = Arc::new(RwLock::new(None));
 
-        let (notification_sender, notification_receiver) = crossbeam_channel::bounded(1);
+        let (notification_sender, mut notification_receiver) = mpsc::channel(10);
         // Send a first notification to trigger the process.
         let _ = notification_sender.send(());
 
@@ -69,13 +90,19 @@ where
         // We need a weak reference so we can take ownership on the arc later when we
         // want to close the index.
         let update_store_weak = Arc::downgrade(&update_store);
-        std::thread::spawn(move || {
+        tokio::task::spawn(async move {
             // Block and wait for something to process.
-            'outer: for _ in notification_receiver {
+            'outer: while notification_receiver.recv().await.is_some() {
                 loop {
                     match update_store_weak.upgrade() {
                         Some(update_store) => {
-                            match update_store.process_pending_update(&mut update_handler) {
+                            let handler = update_handler.clone();
+                            let res = tokio::task::spawn_blocking(move || {
+                                update_store.process_pending_update(handler)
+                            })
+                            .await
+                            .expect("Fatal error processing update.");
+                            match res {
                                 Ok(Some(_)) => (),
                                 Ok(None) => break,
                                 Err(e) => eprintln!("error while processing update: {}", e),
@@ -97,17 +124,20 @@ where
 
     /// Returns the new biggest id to use to store the new update.
     fn new_update_id(&self, txn: &heed::RoTxn) -> heed::Result<u64> {
-        let last_pending = self.pending_meta
+        let last_pending = self
+            .pending_meta
             .remap_data_type::<DecodeIgnore>()
             .last(txn)?
             .map(|(k, _)| k.get());
 
-        let last_processed = self.processed_meta
+        let last_processed = self
+            .processed_meta
             .remap_data_type::<DecodeIgnore>()
             .last(txn)?
             .map(|(k, _)| k.get());
 
-        let last_aborted = self.aborted_meta
+        let last_aborted = self
+            .aborted_meta
             .remap_data_type::<DecodeIgnore>()
             .last(txn)?
             .map(|(k, _)| k.get());
@@ -129,7 +159,8 @@ where
     pub fn register_update(
         &self,
         meta: M,
-        content: &[u8]
+        content: impl AsRef<Path>,
+        index_uuid: Uuid,
     ) -> heed::Result<Pending<M>> {
         let mut wtxn = self.env.write_txn()?;
 
@@ -140,23 +171,24 @@ where
         let update_id = self.new_update_id(&wtxn)?;
         let update_key = BEU64::new(update_id);
 
-        let meta = Pending::new(meta, update_id);
+        let meta = Pending::new(meta, update_id, index_uuid);
         self.pending_meta.put(&mut wtxn, &update_key, &meta)?;
-        self.pending.put(&mut wtxn, &update_key, content)?;
+        self.pending
+            .put(&mut wtxn, &update_key, &content.as_ref().to_owned())?;
 
         wtxn.commit()?;
 
-        if let Err(e) = self.notification_sender.try_send(()) {
-            assert!(!e.is_disconnected(), "update notification channel is disconnected");
-        }
+        self.notification_sender
+            .blocking_send(())
+            .expect("Update store loop exited.");
         Ok(meta)
     }
     /// Executes the user provided function on the next pending update (the one with the lowest id).
     /// This is asynchronous as it let the user process the update with a read-only txn and
     /// only writing the result meta to the processed-meta store *after* it has been processed.
-    fn process_pending_update<U>(&self, handler: &mut U) -> heed::Result<Option<()>>
+    fn process_pending_update<U>(&self, mut handler: U) -> anyhow::Result<Option<()>>
     where
-        U: HandleUpdate<M, N, E> + Send + 'static,
+        U: HandleUpdate<M, N, E>,
     {
         // Create a read transaction to be able to retrieve the pending update in order.
         let rtxn = self.env.read_txn()?;
@@ -166,7 +198,8 @@ where
         // a reader while processing it, not a writer.
         match first_meta {
             Some((first_id, pending)) => {
-                let first_content = self.pending
+                let content_path = self
+                    .pending
                     .get(&rtxn, &first_id)?
                     .expect("associated update content");
 
@@ -174,23 +207,19 @@ where
                 // to the update handler. Processing store is non persistent to be able recover
                 // from a failure
                 let processing = pending.processing();
-                self.processing
-                    .write()
-                    .unwrap()
-                    .replace(processing.clone());
+                self.processing.write().replace(processing.clone());
+                let file = File::open(&content_path)?;
                 // Process the pending update using the provided user function.
-                let result = handler.handle_update(processing, first_content);
+                let result = handler.handle_update(processing, file)?;
                 drop(rtxn);
 
                 // Once the pending update have been successfully processed
                 // we must remove the content from the pending and processing stores and
                 // write the *new* meta to the processed-meta store and commit.
                 let mut wtxn = self.env.write_txn()?;
-                self.processing
-                    .write()
-                    .unwrap()
-                    .take();
+                self.processing.write().take();
                 self.pending_meta.delete(&mut wtxn, &first_id)?;
+                remove_file(&content_path)?;
                 self.pending.delete(&mut wtxn, &first_id)?;
                 match result {
                     Ok(processed) => self.processed_meta.put(&mut wtxn, &first_id, &processed)?,
@@ -199,35 +228,60 @@ where
                 wtxn.commit()?;
 
                 Ok(Some(()))
-            },
-            None => Ok(None)
+            }
+            None => Ok(None),
         }
     }
 
-    /// Execute the user defined function with the meta-store iterators, the first
-    /// iterator is the *processed* meta one, the second the *aborted* meta one
-    /// and, the last is the *pending* meta one.
-    pub fn iter_metas<F, T>(&self, mut f: F) -> heed::Result<T>
-    where
-        F: for<'a> FnMut(
-            Option<Processing<M>>,
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<Processed<M, N>>>,
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<Aborted<M>>>,
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<Pending<M>>>,
-            heed::RoIter<'a, OwnedType<BEU64>, SerdeJson<Failed<M, E>>>,
-        ) -> heed::Result<T>,
-    {
+    pub fn list(&self) -> anyhow::Result<Vec<UpdateStatus<M, N, E>>> {
         let rtxn = self.env.read_txn()?;
+        let mut updates = Vec::new();
 
-        // We get the pending, processed and aborted meta iterators.
-        let processed_iter = self.processed_meta.iter(&rtxn)?;
-        let aborted_iter = self.aborted_meta.iter(&rtxn)?;
-        let pending_iter = self.pending_meta.iter(&rtxn)?;
-        let processing = self.processing.read().unwrap().clone();
-        let failed_iter = self.failed_meta.iter(&rtxn)?;
+        let processing = self.processing.read();
+        if let Some(ref processing) = *processing {
+            let update = UpdateStatus::from(processing.clone());
+            updates.push(update);
+        }
 
-        // We execute the user defined function with both iterators.
-        (f)(processing, processed_iter, aborted_iter, pending_iter, failed_iter)
+        let pending = self
+            .pending_meta
+            .iter(&rtxn)?
+            .filter_map(Result::ok)
+            .filter_map(|(_, p)| (Some(p.id()) != processing.as_ref().map(|p| p.id())).then(|| p))
+            .map(UpdateStatus::from);
+
+        updates.extend(pending);
+
+        let aborted = self
+            .aborted_meta
+            .iter(&rtxn)?
+            .filter_map(Result::ok)
+            .map(|(_, p)| p)
+            .map(UpdateStatus::from);
+
+        updates.extend(aborted);
+
+        let processed = self
+            .processed_meta
+            .iter(&rtxn)?
+            .filter_map(Result::ok)
+            .map(|(_, p)| p)
+            .map(UpdateStatus::from);
+
+        updates.extend(processed);
+
+        let failed = self
+            .failed_meta
+            .iter(&rtxn)?
+            .filter_map(Result::ok)
+            .map(|(_, p)| p)
+            .map(UpdateStatus::from);
+
+        updates.extend(failed);
+
+        updates.sort_by_key(|u| u.id());
+
+        Ok(updates)
     }
 
     /// Returns the update associated meta or `None` if the update doesn't exist.
@@ -235,7 +289,7 @@ where
         let rtxn = self.env.read_txn()?;
         let key = BEU64::new(update_id);
 
-        if let Some(ref meta) = *self.processing.read().unwrap() {
+        if let Some(ref meta) = *self.processing.read() {
             if meta.id() == update_id {
                 return Ok(Some(UpdateStatus::Processing(meta.clone())));
             }
@@ -319,89 +373,92 @@ where
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::thread;
-    use std::time::{Duration, Instant};
+//#[cfg(test)]
+//mod tests {
+//use super::*;
+//use std::thread;
+//use std::time::{Duration, Instant};
 
-    impl<M, N, F, E> HandleUpdate<M, N, E> for F
-        where F: FnMut(Processing<M>, &[u8]) -> Result<Processed<M, N>, Failed<M, E>> + Send + 'static {
-            fn handle_update(&mut self, meta: Processing<M>, content: &[u8]) -> Result<Processed<M, N>, Failed<M, E>> {
-                self(meta, content)
-            }
-        }
+//#[test]
+//fn simple() {
+//let dir = tempfile::tempdir().unwrap();
+//let mut options = EnvOpenOptions::new();
+//options.map_size(4096 * 100);
+//let update_store = UpdateStore::open(
+//options,
+//dir,
+//|meta: Processing<String>, _content: &_| -> Result<_, Failed<_, ()>> {
+//let new_meta = meta.meta().to_string() + " processed";
+//let processed = meta.process(new_meta);
+//Ok(processed)
+//},
+//)
+//.unwrap();
 
-    #[test]
-    fn simple() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(4096 * 100);
-        let update_store = UpdateStore::open(options, dir, |meta: Processing<String>, _content: &_| -> Result<_, Failed<_, ()>> {
-            let new_meta = meta.meta().to_string() + " processed";
-            let processed = meta.process(new_meta);
-            Ok(processed)
-        }).unwrap();
+//let meta = String::from("kiki");
+//let update = update_store.register_update(meta, &[]).unwrap();
+//thread::sleep(Duration::from_millis(100));
+//let meta = update_store.meta(update.id()).unwrap().unwrap();
+//if let UpdateStatus::Processed(Processed { success, .. }) = meta {
+//assert_eq!(success, "kiki processed");
+//} else {
+//panic!()
+//}
+//}
 
-        let meta = String::from("kiki");
-        let update = update_store.register_update(meta, &[]).unwrap();
-        thread::sleep(Duration::from_millis(100));
-        let meta = update_store.meta(update.id()).unwrap().unwrap();
-        if let UpdateStatus::Processed(Processed { success, .. }) = meta {
-            assert_eq!(success, "kiki processed");
-        } else {
-            panic!()
-        }
-    }
+//#[test]
+//#[ignore]
+//fn long_running_update() {
+//let dir = tempfile::tempdir().unwrap();
+//let mut options = EnvOpenOptions::new();
+//options.map_size(4096 * 100);
+//let update_store = UpdateStore::open(
+//options,
+//dir,
+//|meta: Processing<String>, _content: &_| -> Result<_, Failed<_, ()>> {
+//thread::sleep(Duration::from_millis(400));
+//let new_meta = meta.meta().to_string() + "processed";
+//let processed = meta.process(new_meta);
+//Ok(processed)
+//},
+//)
+//.unwrap();
 
-    #[test]
-    #[ignore]
-    fn long_running_update() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut options = EnvOpenOptions::new();
-        options.map_size(4096 * 100);
-        let update_store = UpdateStore::open(options, dir, |meta: Processing<String>, _content:&_| -> Result<_, Failed<_, ()>> {
-            thread::sleep(Duration::from_millis(400));
-            let new_meta = meta.meta().to_string() + "processed";
-            let processed = meta.process(new_meta);
-            Ok(processed)
-        }).unwrap();
+//let before_register = Instant::now();
 
-        let before_register = Instant::now();
+//let meta = String::from("kiki");
+//let update_kiki = update_store.register_update(meta, &[]).unwrap();
+//assert!(before_register.elapsed() < Duration::from_millis(200));
 
-        let meta = String::from("kiki");
-        let update_kiki = update_store.register_update(meta, &[]).unwrap();
-        assert!(before_register.elapsed() < Duration::from_millis(200));
+//let meta = String::from("coco");
+//let update_coco = update_store.register_update(meta, &[]).unwrap();
+//assert!(before_register.elapsed() < Duration::from_millis(200));
 
-        let meta = String::from("coco");
-        let update_coco = update_store.register_update(meta, &[]).unwrap();
-        assert!(before_register.elapsed() < Duration::from_millis(200));
+//let meta = String::from("cucu");
+//let update_cucu = update_store.register_update(meta, &[]).unwrap();
+//assert!(before_register.elapsed() < Duration::from_millis(200));
 
-        let meta = String::from("cucu");
-        let update_cucu = update_store.register_update(meta, &[]).unwrap();
-        assert!(before_register.elapsed() < Duration::from_millis(200));
+//thread::sleep(Duration::from_millis(400 * 3 + 100));
 
-        thread::sleep(Duration::from_millis(400 * 3 + 100));
+//let meta = update_store.meta(update_kiki.id()).unwrap().unwrap();
+//if let UpdateStatus::Processed(Processed { success, .. }) = meta {
+//assert_eq!(success, "kiki processed");
+//} else {
+//panic!()
+//}
 
-        let meta = update_store.meta(update_kiki.id()).unwrap().unwrap();
-        if let UpdateStatus::Processed(Processed { success, .. }) = meta {
-            assert_eq!(success, "kiki processed");
-        } else {
-            panic!()
-        }
+//let meta = update_store.meta(update_coco.id()).unwrap().unwrap();
+//if let UpdateStatus::Processed(Processed { success, .. }) = meta {
+//assert_eq!(success, "coco processed");
+//} else {
+//panic!()
+//}
 
-        let meta = update_store.meta(update_coco.id()).unwrap().unwrap();
-        if let UpdateStatus::Processed(Processed { success, .. }) = meta {
-            assert_eq!(success, "coco processed");
-        } else {
-            panic!()
-        }
-
-        let meta = update_store.meta(update_cucu.id()).unwrap().unwrap();
-        if let UpdateStatus::Processed(Processed { success, .. }) = meta {
-            assert_eq!(success, "cucu processed");
-        } else {
-            panic!()
-        }
-    }
-}
+//let meta = update_store.meta(update_cucu.id()).unwrap().unwrap();
+//if let UpdateStatus::Processed(Processed { success, .. }) = meta {
+//assert_eq!(success, "cucu processed");
+//} else {
+//panic!()
+//}
+//}
+//}

@@ -1,13 +1,13 @@
 use std::error;
 use std::fmt;
 
-use actix_http::ResponseBuilder;
 use actix_web as aweb;
+use actix_web::dev::HttpResponseBuilder;
 use actix_web::error::{JsonPayloadError, QueryPayloadError};
+use actix_web::http::Error as HttpError;
 use actix_web::http::StatusCode;
-use serde::ser::{Serialize, Serializer, SerializeStruct};
-use meilisearch_error::{ErrorCode, Code};
-
+use meilisearch_error::{Code, ErrorCode};
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 #[derive(Debug)]
 pub struct ResponseError {
@@ -31,19 +31,25 @@ impl fmt::Display for ResponseError {
 // TODO: remove this when implementing actual error handling
 impl From<anyhow::Error> for ResponseError {
     fn from(other: anyhow::Error) -> ResponseError {
-        ResponseError { inner: Box::new(Error::NotFound(other.to_string())) }
+        ResponseError {
+            inner: Box::new(Error::NotFound(other.to_string())),
+        }
     }
 }
 
 impl From<Error> for ResponseError {
     fn from(error: Error) -> ResponseError {
-        ResponseError { inner: Box::new(error) }
+        ResponseError {
+            inner: Box::new(error),
+        }
     }
 }
 
 impl From<FacetCountError> for ResponseError {
     fn from(err: FacetCountError) -> ResponseError {
-        ResponseError { inner: Box::new(err) }
+        ResponseError {
+            inner: Box::new(err),
+        }
     }
 }
 
@@ -66,7 +72,7 @@ impl Serialize for ResponseError {
 
 impl aweb::error::ResponseError for ResponseError {
     fn error_response(&self) -> aweb::HttpResponse {
-        ResponseBuilder::new(self.status_code()).json(&self)
+        HttpResponseBuilder::new(self.status_code()).json(&self)
     }
 
     fn status_code(&self) -> StatusCode {
@@ -129,7 +135,10 @@ impl ErrorCode for Error {
 pub enum FacetCountError {
     AttributeNotSet(String),
     SyntaxError(String),
-    UnexpectedToken { found: String, expected: &'static [&'static str] },
+    UnexpectedToken {
+        found: String,
+        expected: &'static [&'static str],
+    },
     NoFacetSet,
 }
 
@@ -142,7 +151,10 @@ impl ErrorCode for FacetCountError {
 }
 
 impl FacetCountError {
-    pub fn unexpected_token(found: impl ToString, expected: &'static [&'static str]) -> FacetCountError {
+    pub fn unexpected_token(
+        found: impl ToString,
+        expected: &'static [&'static str],
+    ) -> FacetCountError {
         let found = found.to_string();
         FacetCountError::UnexpectedToken { expected, found }
     }
@@ -161,7 +173,9 @@ impl fmt::Display for FacetCountError {
         match self {
             AttributeNotSet(attr) => write!(f, "Attribute {} is not set as facet", attr),
             SyntaxError(msg) => write!(f, "Syntax error: {}", msg),
-            UnexpectedToken { expected, found } => write!(f, "Unexpected {} found, expected {:?}", found, expected),
+            UnexpectedToken { expected, found } => {
+                write!(f, "Unexpected {} found, expected {:?}", found, expected)
+            }
             NoFacetSet => write!(f, "Can't perform facet count, as no facet is set"),
         }
     }
@@ -260,8 +274,8 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl From<actix_http::Error> for Error {
-    fn from(err: actix_http::Error) -> Error {
+impl From<HttpError> for Error {
+    fn from(err: HttpError) -> Error {
         Error::Internal(err.to_string())
     }
 }
@@ -275,10 +289,14 @@ impl From<serde_json::error::Error> for Error {
 impl From<JsonPayloadError> for Error {
     fn from(err: JsonPayloadError) -> Error {
         match err {
-            JsonPayloadError::Deserialize(err) => Error::BadRequest(format!("Invalid JSON: {}", err)),
+            JsonPayloadError::Deserialize(err) => {
+                Error::BadRequest(format!("Invalid JSON: {}", err))
+            }
             JsonPayloadError::Overflow => Error::PayloadTooLarge,
             JsonPayloadError::ContentType => Error::UnsupportedMediaType,
-            JsonPayloadError::Payload(err) => Error::BadRequest(format!("Problem while decoding the request: {}", err)),
+            JsonPayloadError::Payload(err) => {
+                Error::BadRequest(format!("Problem while decoding the request: {}", err))
+            }
         }
     }
 }
@@ -286,7 +304,9 @@ impl From<JsonPayloadError> for Error {
 impl From<QueryPayloadError> for Error {
     fn from(err: QueryPayloadError) -> Error {
         match err {
-            QueryPayloadError::Deserialize(err) => Error::BadRequest(format!("Invalid query parameters: {}", err)),
+            QueryPayloadError::Deserialize(err) => {
+                Error::BadRequest(format!("Invalid query parameters: {}", err))
+            }
         }
     }
 }

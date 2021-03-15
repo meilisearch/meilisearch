@@ -3,10 +3,10 @@ use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::Data;
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
 use crate::routes::IndexParam;
+use crate::Data;
 
 pub fn services(cfg: &mut web::ServiceConfig) {
     cfg.service(list_indexes)
@@ -18,10 +18,9 @@ pub fn services(cfg: &mut web::ServiceConfig) {
         .service(get_all_updates_status);
 }
 
-
 #[get("/indexes", wrap = "Authentication::Private")]
 async fn list_indexes(data: web::Data<Data>) -> Result<HttpResponse, ResponseError> {
-    match data.list_indexes() {
+    match data.list_indexes().await {
         Ok(indexes) => {
             let json = serde_json::to_string(&indexes).unwrap();
             Ok(HttpResponse::Ok().body(&json))
@@ -37,13 +36,12 @@ async fn get_index(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.index(&path.index_uid)? {
-        Some(meta) => {
+    match data.index(path.index_uid.clone()).await {
+        Ok(meta) => {
             let json = serde_json::to_string(&meta).unwrap();
             Ok(HttpResponse::Ok().body(json))
         }
-        None => {
-            let e = format!("Index {:?} doesn't exist.", path.index_uid);
+        Err(e) => {
             Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
     }
@@ -61,7 +59,8 @@ async fn create_index(
     data: web::Data<Data>,
     body: web::Json<IndexCreateRequest>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.create_index(&body.uid, body.primary_key.clone()) {
+    let body = body.into_inner();
+    match data.create_index(body.uid, body.primary_key).await {
         Ok(meta) => {
             let json = serde_json::to_string(&meta).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -75,7 +74,7 @@ async fn create_index(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateIndexRequest {
-    name: Option<String>,
+    uid: Option<String>,
     primary_key: Option<String>,
 }
 
@@ -95,7 +94,11 @@ async fn update_index(
     path: web::Path<IndexParam>,
     body: web::Json<UpdateIndexRequest>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.update_index(&path.index_uid, body.primary_key.as_ref(),  body.name.as_ref()) {
+    let body = body.into_inner();
+    match data
+        .update_index(path.into_inner().index_uid, body.primary_key, body.uid)
+        .await
+    {
         Ok(meta) => {
             let json = serde_json::to_string(&meta).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -133,15 +136,14 @@ async fn get_update_status(
     data: web::Data<Data>,
     path: web::Path<UpdateParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let result = data.get_update_status(&path.index_uid, path.update_id);
+    let params = path.into_inner();
+    let result = data
+        .get_update_status(params.index_uid, params.update_id)
+        .await;
     match result {
-        Ok(Some(meta)) => {
+        Ok(meta) => {
             let json = serde_json::to_string(&meta).unwrap();
             Ok(HttpResponse::Ok().body(json))
-        }
-        Ok(None) => {
-            let e = format!("udpate {} for index {:?} doesn't exists.", path.update_id, path.index_uid);
-            Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
         }
         Err(e) => {
             Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
@@ -154,7 +156,7 @@ async fn get_all_updates_status(
     data: web::Data<Data>,
     path: web::Path<IndexParam>,
 ) -> Result<HttpResponse, ResponseError> {
-    let result = data.get_updates_status(&path.index_uid);
+    let result = data.get_updates_status(path.into_inner().index_uid).await;
     match result {
         Ok(metas) => {
             let json = serde_json::to_string(&metas).unwrap();

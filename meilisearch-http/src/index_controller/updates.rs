@@ -1,5 +1,6 @@
-use chrono::{Utc, DateTime};
-use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -7,14 +8,16 @@ pub struct Pending<M> {
     pub update_id: u64,
     pub meta: M,
     pub enqueued_at: DateTime<Utc>,
+    pub index_uuid: Uuid,
 }
 
 impl<M> Pending<M> {
-    pub fn new(meta: M, update_id: u64) -> Self {
+    pub fn new(meta: M, update_id: u64, index_uuid: Uuid) -> Self {
         Self {
             enqueued_at: Utc::now(),
             meta,
             update_id,
+            index_uuid,
         }
     }
 
@@ -71,6 +74,10 @@ impl<M> Processing<M> {
 
     pub fn meta(&self) -> &M {
         self.from.meta()
+    }
+
+    pub fn index_uuid(&self) -> &Uuid {
+        &self.from.index_uuid
     }
 
     pub fn process<N>(self, meta: N) -> Processed<M, N> {

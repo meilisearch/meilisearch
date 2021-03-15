@@ -1,31 +1,34 @@
-mod local_index_controller;
+mod index_actor;
+mod update_actor;
+mod update_handler;
+mod update_store;
 mod updates;
+mod uuid_resolver;
 
-pub use local_index_controller::LocalIndexController;
-
-use std::collections::HashMap;
-use std::num::NonZeroUsize;
+use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
-use anyhow::Result;
-use chrono::{DateTime, Utc};
-use milli::Index;
-use milli::update::{IndexDocumentsMethod, UpdateFormat, DocumentAdditionResult};
-use serde::{Serialize, Deserialize, de::Deserializer};
-use uuid::Uuid;
+use actix_web::web::{Bytes, Payload};
+use anyhow::bail;
+use futures::stream::StreamExt;
+use milli::update::{IndexDocumentsMethod, UpdateFormat};
+use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
+use tokio::time::sleep;
 
-pub use updates::{Processed, Processing, Failed};
+use crate::index::{Document, SearchQuery, SearchResult};
+use crate::index::{Facets, Settings, UpdateResult};
+pub use updates::{Failed, Processed, Processing};
 
 pub type UpdateStatus = updates::UpdateStatus<UpdateMeta, UpdateResult, String>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexMetadata {
-    pub uid: String,
-    uuid: Uuid,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-    primary_key: Option<String>,
+    uid: String,
+    #[serde(flatten)]
+    meta: index_actor::IndexMeta,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,241 +45,248 @@ pub enum UpdateMeta {
     Facets(Facets),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-pub struct Facets {
-    pub level_group_size: Option<NonZeroUsize>,
-    pub min_level_size: Option<NonZeroUsize>,
-}
-
-fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
-where T: Deserialize<'de>,
-      D: Deserializer<'de>
-{
-    Deserialize::deserialize(deserializer).map(Some)
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-pub struct Settings {
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none",
-    )]
-    pub displayed_attributes: Option<Option<Vec<String>>>,
-
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none",
-    )]
-    pub searchable_attributes: Option<Option<Vec<String>>>,
-
-    #[serde(default)]
-    pub faceted_attributes: Option<Option<HashMap<String, String>>>,
-
-    #[serde(
-        default,
-        deserialize_with = "deserialize_some",
-        skip_serializing_if = "Option::is_none",
-    )]
-    pub ranking_rules: Option<Option<Vec<String>>>,
-}
-
-impl Settings {
-    pub fn cleared() -> Self {
-        Self {
-            displayed_attributes: Some(None),
-            searchable_attributes: Some(None),
-            faceted_attributes: Some(None),
-            ranking_rules: Some(None),
-        }
-    }
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum UpdateResult {
-    DocumentsAddition(DocumentAdditionResult),
-    DocumentDeletion { deleted: usize },
-    Other,
-}
-
 #[derive(Clone, Debug)]
 pub struct IndexSettings {
-    pub name: Option<String>,
+    pub uid: Option<String>,
     pub primary_key: Option<String>,
 }
 
-/// The `IndexController` is in charge of the access to the underlying indices. It splits the logic
-/// for read access which is provided thanks to an handle to the index, and write access which must
-/// be provided. This allows the implementer to define the behaviour of write accesses to the
-/// indices, and abstract the scheduling of the updates. The implementer must be able to provide an
-/// instance of `IndexStore`
-pub trait IndexController {
-
-    /*
-     * Write operations
-     *
-     * Logic for the write operation need to be provided by the implementer, since they can be made
-     * asynchronous thanks to an update_store for example.
-     *
-     * */
-
-    /// Perform document addition on the database. If the provided index does not exist, it will be
-    /// created when the addition is applied to the index.
-    fn add_documents<S: AsRef<str>>(
-        &self,
-        index: S,
-        method: IndexDocumentsMethod,
-        format: UpdateFormat,
-        data: &[u8],
-        primary_key: Option<String>,
-    ) -> anyhow::Result<UpdateStatus>;
-
-    /// Clear all documents in the given index.
-    fn clear_documents(&self, index: impl AsRef<str>) -> anyhow::Result<UpdateStatus>;
-
-    /// Delete all documents in `document_ids`.
-    fn delete_documents(&self, index: impl AsRef<str>, document_ids: Vec<String>) -> anyhow::Result<UpdateStatus>;
-
-    /// Updates an index settings. If the index does not exist, it will be created when the update
-    /// is applied to the index. `create` specifies whether an index should be created if not
-    /// existing.
-    fn update_settings<S: AsRef<str>>(&self, index_uid: S, settings: Settings, create: bool) -> anyhow::Result<UpdateStatus>;
-
-    /// Create an index with the given `index_uid`.
-    fn create_index(&self, index_settings: IndexSettings) -> Result<IndexMetadata>;
-
-    /// Delete index with the given `index_uid`, attempting to close it beforehand.
-    fn delete_index<S: AsRef<str>>(&self, index_uid: S) -> Result<()>;
-
-    /// Swap two indexes, concretely, it simply swaps the index the names point to.
-    fn swap_indices<S1: AsRef<str>, S2: AsRef<str>>(&self, index1_uid: S1, index2_uid: S2) -> Result<()>;
-
-    /// Apply an update to the given index. This method can be called when an update is ready to be
-    /// processed
-    fn handle_update<S: AsRef<str>>(
-        &self,
-        _index: S,
-        _update_id: u64,
-        _meta: Processing<UpdateMeta>,
-        _content: &[u8]
-    ) -> Result<Processed<UpdateMeta, UpdateResult>, Failed<UpdateMeta, String>> {
-        todo!()
-    }
-
-    /// Returns, if it exists, the `Index` with the povided name.
-    fn index(&self, name: impl AsRef<str>) -> anyhow::Result<Option<Arc<Index>>>;
-
-    /// Returns the udpate status an update
-    fn update_status(&self, index: impl AsRef<str>, id: u64) -> anyhow::Result<Option<UpdateStatus>>;
-
-    /// Returns all the udpate status for an index
-    fn all_update_status(&self, index: impl AsRef<str>) -> anyhow::Result<Vec<UpdateStatus>>;
-
-    /// List all the indexes
-    fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>>;
-
-    fn update_index(&self, name: impl AsRef<str>, index_settings: IndexSettings) -> anyhow::Result<IndexMetadata>;
+pub struct IndexController {
+    uuid_resolver: uuid_resolver::UuidResolverHandle,
+    index_handle: index_actor::IndexActorHandle,
+    update_handle: update_actor::UpdateActorHandle<Bytes>,
 }
 
-
-#[cfg(test)]
-#[macro_use]
-pub(crate) mod test {
-    use super::*;
-
-    #[macro_export]
-    macro_rules! make_index_controller_tests {
-        ($controller_buider:block) => {
-            #[test]
-            fn test_create_and_list_indexes() {
-                crate::index_controller::test::create_and_list_indexes($controller_buider);
-            }
-
-            #[test]
-            fn test_create_index_with_no_name_is_error() {
-                crate::index_controller::test::create_index_with_no_name_is_error($controller_buider);
-            }
-
-            #[test]
-            fn test_update_index() {
-                crate::index_controller::test::update_index($controller_buider);
-            }
-        };
+impl IndexController {
+    pub fn new(
+        path: impl AsRef<Path>,
+        index_size: usize,
+        update_store_size: usize,
+    ) -> anyhow::Result<Self> {
+        let uuid_resolver = uuid_resolver::UuidResolverHandle::new(&path)?;
+        let index_actor = index_actor::IndexActorHandle::new(&path, index_size)?;
+        let update_handle =
+            update_actor::UpdateActorHandle::new(index_actor.clone(), &path, update_store_size)?;
+        Ok(Self {
+            uuid_resolver,
+            index_handle: index_actor,
+            update_handle,
+        })
     }
 
-    pub(crate) fn create_and_list_indexes(controller: impl IndexController) {
-        let settings1 = IndexSettings {
-            name: Some(String::from("test_index")),
-            primary_key: None,
+    pub async fn add_documents(
+        &self,
+        uid: String,
+        method: milli::update::IndexDocumentsMethod,
+        format: milli::update::UpdateFormat,
+        mut payload: Payload,
+        primary_key: Option<String>,
+    ) -> anyhow::Result<UpdateStatus> {
+        let uuid = self.uuid_resolver.get_or_create(uid).await?;
+        let meta = UpdateMeta::DocumentsAddition {
+            method,
+            format,
+            primary_key,
         };
+        let (sender, receiver) = mpsc::channel(10);
 
-        let settings2 = IndexSettings {
-            name: Some(String::from("test_index2")),
-            primary_key: Some(String::from("foo")),
-        };
+        // It is necessary to spawn a local task to senf the payload to the update handle to
+        // prevent dead_locking between the update_handle::update that waits for the update to be
+        // registered and the update_actor that waits for the the payload to be sent to it.
+        tokio::task::spawn_local(async move {
+            while let Some(bytes) = payload.next().await {
+                match bytes {
+                    Ok(bytes) => {
+                        let _ = sender.send(Ok(bytes)).await;
+                    }
+                    Err(e) => {
+                        let error: Box<dyn std::error::Error + Sync + Send + 'static> = Box::new(e);
+                        let _ = sender.send(Err(error)).await;
+                    }
+                }
+            }
+        });
 
-        controller.create_index(settings1).unwrap();
-        controller.create_index(settings2).unwrap();
-
-        let indexes = controller.list_indexes().unwrap();
-        assert_eq!(indexes.len(), 2);
-        assert_eq!(indexes[0].uid, "test_index");
-        assert_eq!(indexes[1].uid, "test_index2");
-        assert_eq!(indexes[1].primary_key.clone().unwrap(), "foo");
+        // This must be done *AFTER* spawning the task.
+        let status = self.update_handle.update(meta, receiver, uuid).await?;
+        Ok(status)
     }
 
-    pub(crate) fn create_index_with_no_name_is_error(controller: impl IndexController) {
-        let settings = IndexSettings {
-            name: None,
-            primary_key: None,
-        };
-        assert!(controller.create_index(settings).is_err());
+    pub async fn clear_documents(&self, uid: String) -> anyhow::Result<UpdateStatus> {
+        let uuid = self.uuid_resolver.resolve(uid).await?;
+        let meta = UpdateMeta::ClearDocuments;
+        let (_, receiver) = mpsc::channel(1);
+        let status = self.update_handle.update(meta, receiver, uuid).await?;
+        Ok(status)
     }
 
-    pub(crate) fn update_index(controller: impl IndexController) {
+    pub async fn delete_documents(
+        &self,
+        uid: String,
+        document_ids: Vec<String>,
+    ) -> anyhow::Result<UpdateStatus> {
+        let uuid = self.uuid_resolver.resolve(uid).await?;
+        let meta = UpdateMeta::DeleteDocuments;
+        let (sender, receiver) = mpsc::channel(10);
 
-        let settings = IndexSettings {
-            name: Some(String::from("test")),
-            primary_key: None,
+        tokio::task::spawn(async move {
+            let json = serde_json::to_vec(&document_ids).unwrap();
+            let bytes = Bytes::from(json);
+            let _ = sender.send(Ok(bytes)).await;
+        });
+
+        let status = self.update_handle.update(meta, receiver, uuid).await?;
+        Ok(status)
+    }
+
+    pub async fn update_settings(
+        &self,
+        uid: String,
+        settings: Settings,
+        create: bool,
+    ) -> anyhow::Result<UpdateStatus> {
+        let uuid = if create {
+            let uuid = self.uuid_resolver.get_or_create(uid).await?;
+            // We need to create the index upfront, since it would otherwise only be created when
+            // the update is processed. This would make calls to GET index to fail until the update
+            // is complete. Since this is get or create, we ignore the error when the index already
+            // exists.
+            match self.index_handle.create_index(uuid, None).await {
+                Ok(_) | Err(index_actor::IndexError::IndexAlreadyExists) => (),
+                Err(e) => return Err(e.into()),
+            }
+            uuid
+        } else {
+            self.uuid_resolver.resolve(uid).await?
         };
+        let meta = UpdateMeta::Settings(settings);
+        // Nothing so send, drop the sender right away, as not to block the update actor.
+        let (_, receiver) = mpsc::channel(1);
 
-        assert!(controller.create_index(settings).is_ok());
+        let status = self.update_handle.update(meta, receiver, uuid).await?;
+        Ok(status)
+    }
 
-        // perform empty update returns index meta unchanged
-        let settings = IndexSettings {
-            name: None,
-            primary_key: None,
-        };
+    pub async fn create_index(
+        &self,
+        index_settings: IndexSettings,
+    ) -> anyhow::Result<IndexMetadata> {
+        let IndexSettings { uid, primary_key } = index_settings;
+        let uid = uid.ok_or_else(|| anyhow::anyhow!("Can't create an index without a uid."))?;
+        let uuid = self.uuid_resolver.create(uid.clone()).await?;
+        let meta = self.index_handle.create_index(uuid, primary_key).await?;
+        let _ = self.update_handle.create(uuid).await?;
+        let meta = IndexMetadata { uid, meta };
 
-        let result = controller.update_index("test", settings).unwrap();
-        assert_eq!(result.uid, "test");
-        assert_eq!(result.created_at, result.updated_at);
-        assert!(result.primary_key.is_none());
+        Ok(meta)
+    }
 
-        // Changing the name trigger an error
-        let settings = IndexSettings {
-            name: Some(String::from("bar")),
-            primary_key: None,
-        };
+    pub async fn delete_index(&self, uid: String) -> anyhow::Result<()> {
+        let uuid = self.uuid_resolver.delete(uid).await?;
+        self.update_handle.delete(uuid).await?;
+        self.index_handle.delete(uuid).await?;
+        Ok(())
+    }
 
-        assert!(controller.update_index("test", settings).is_err());
+    pub async fn update_status(&self, uid: String, id: u64) -> anyhow::Result<UpdateStatus> {
+        let uuid = self.uuid_resolver.resolve(uid).await?;
+        let result = self.update_handle.update_status(uuid, id).await?;
+        Ok(result)
+    }
 
-        // Update primary key
-        let settings = IndexSettings {
-            name: None,
-            primary_key: Some(String::from("foo")),
-        };
+    pub async fn all_update_status(&self, uid: String) -> anyhow::Result<Vec<UpdateStatus>> {
+        let uuid = self.uuid_resolver.resolve(uid).await?;
+        let result = self.update_handle.get_all_updates_status(uuid).await?;
+        Ok(result)
+    }
 
-        let result = controller.update_index("test", settings.clone()).unwrap();
-        assert_eq!(result.uid, "test");
-        assert!(result.created_at < result.updated_at);
-        assert_eq!(result.primary_key.unwrap(), "foo");
+    pub async fn list_indexes(&self) -> anyhow::Result<Vec<IndexMetadata>> {
+        let uuids = self.uuid_resolver.list().await?;
 
-        // setting the primary key again is an error
-        assert!(controller.update_index("test", settings).is_err());
+        let mut ret = Vec::new();
+
+        for (uid, uuid) in uuids {
+            let meta = self.index_handle.get_index_meta(uuid).await?;
+            let meta = IndexMetadata { uid, meta };
+            ret.push(meta);
+        }
+
+        Ok(ret)
+    }
+
+    pub async fn settings(&self, uid: String) -> anyhow::Result<Settings> {
+        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
+        let settings = self.index_handle.settings(uuid).await?;
+        Ok(settings)
+    }
+
+    pub async fn documents(
+        &self,
+        uid: String,
+        offset: usize,
+        limit: usize,
+        attributes_to_retrieve: Option<Vec<String>>,
+    ) -> anyhow::Result<Vec<Document>> {
+        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
+        let documents = self
+            .index_handle
+            .documents(uuid, offset, limit, attributes_to_retrieve)
+            .await?;
+        Ok(documents)
+    }
+
+    pub async fn document(
+        &self,
+        uid: String,
+        doc_id: String,
+        attributes_to_retrieve: Option<Vec<String>>,
+    ) -> anyhow::Result<Document> {
+        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
+        let document = self
+            .index_handle
+            .document(uuid, doc_id, attributes_to_retrieve)
+            .await?;
+        Ok(document)
+    }
+
+    pub async fn update_index(
+        &self,
+        uid: String,
+        index_settings: IndexSettings,
+    ) -> anyhow::Result<IndexMetadata> {
+        if index_settings.uid.is_some() {
+            bail!("Can't change the index uid.")
+        }
+
+        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
+        let meta = self.index_handle.update_index(uuid, index_settings).await?;
+        let meta = IndexMetadata { uid, meta };
+        Ok(meta)
+    }
+
+    pub async fn search(&self, uid: String, query: SearchQuery) -> anyhow::Result<SearchResult> {
+        let uuid = self.uuid_resolver.resolve(uid).await?;
+        let result = self.index_handle.search(uuid, query).await?;
+        Ok(result)
+    }
+
+    pub async fn get_index(&self, uid: String) -> anyhow::Result<IndexMetadata> {
+        let uuid = self.uuid_resolver.resolve(uid.clone()).await?;
+        let meta = self.index_handle.get_index_meta(uuid).await?;
+        let meta = IndexMetadata { uid, meta };
+        Ok(meta)
+    }
+}
+
+pub async fn get_arc_ownership_blocking<T>(mut item: Arc<T>) -> T {
+    loop {
+        match Arc::try_unwrap(item) {
+            Ok(item) => return item,
+            Err(item_arc) => {
+                item = item_arc;
+                sleep(Duration::from_millis(100)).await;
+                continue;
+            }
+        }
     }
 }

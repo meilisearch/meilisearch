@@ -4,9 +4,9 @@ use std::convert::{TryFrom, TryInto};
 use actix_web::{get, post, web, HttpResponse};
 use serde::Deserialize;
 
-use crate::data::{SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::error::ResponseError;
 use crate::helpers::Authentication;
+use crate::index::{SearchQuery, DEFAULT_SEARCH_LIMIT};
 use crate::routes::IndexParam;
 use crate::Data;
 
@@ -36,19 +36,19 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
     fn try_from(other: SearchQueryGet) -> anyhow::Result<Self> {
         let attributes_to_retrieve = other
             .attributes_to_retrieve
-            .map(|attrs| attrs.split(",").map(String::from).collect::<Vec<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
         let attributes_to_crop = other
             .attributes_to_crop
-            .map(|attrs| attrs.split(",").map(String::from).collect::<Vec<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
         let attributes_to_highlight = other
             .attributes_to_highlight
-            .map(|attrs| attrs.split(",").map(String::from).collect::<HashSet<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<HashSet<_>>());
 
         let facet_distributions = other
             .facet_distributions
-            .map(|attrs| attrs.split(",").map(String::from).collect::<Vec<_>>());
+            .map(|attrs| attrs.split(',').map(String::from).collect::<Vec<_>>());
 
         let facet_filters = match other.facet_filters {
             Some(ref f) => Some(serde_json::from_str(f)?),
@@ -80,10 +80,12 @@ async fn search_with_url_query(
     let query: SearchQuery = match params.into_inner().try_into() {
         Ok(q) => q,
         Err(e) => {
-            return Ok(HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() })))
+            return Ok(
+                HttpResponse::BadRequest().body(serde_json::json!({ "error": e.to_string() }))
+            )
         }
     };
-    let search_result = data.search(&path.index_uid, query);
+    let search_result = data.search(path.into_inner().index_uid, query).await;
     match search_result {
         Ok(docs) => {
             let docs = serde_json::to_string(&docs).unwrap();
@@ -101,7 +103,9 @@ async fn search_with_post(
     path: web::Path<IndexParam>,
     params: web::Json<SearchQuery>,
 ) -> Result<HttpResponse, ResponseError> {
-    let search_result = data.search(&path.index_uid, params.into_inner());
+    let search_result = data
+        .search(path.into_inner().index_uid, params.into_inner())
+        .await;
     match search_result {
         Ok(docs) => {
             let docs = serde_json::to_string(&docs).unwrap();

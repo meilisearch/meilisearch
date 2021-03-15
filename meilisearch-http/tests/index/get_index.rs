@@ -13,12 +13,11 @@ async fn create_and_get_index() {
 
     assert_eq!(code, 200);
     assert_eq!(response["uid"], "test");
-    assert!(response.get("uuid").is_some());
     assert!(response.get("createdAt").is_some());
     assert!(response.get("updatedAt").is_some());
     assert_eq!(response["createdAt"], response["updatedAt"]);
     assert_eq!(response["primaryKey"], Value::Null);
-    assert_eq!(response.as_object().unwrap().len(), 5);
+    assert_eq!(response.as_object().unwrap().len(), 4);
 }
 
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
@@ -53,7 +52,12 @@ async fn list_multiple_indexes() {
     assert!(response.is_array());
     let arr = response.as_array().unwrap();
     assert_eq!(arr.len(), 2);
-    assert!(arr.iter().find(|entry| entry["uid"] == "test" && entry["primaryKey"] == Value::Null).is_some());
-    assert!(arr.iter().find(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key").is_some());
-
+    assert!(arr
+        .iter()
+        .find(|entry| entry["uid"] == "test" && entry["primaryKey"] == Value::Null)
+        .is_some());
+    assert!(arr
+        .iter()
+        .find(|entry| entry["uid"] == "test1" && entry["primaryKey"] == "key")
+        .is_some());
 }

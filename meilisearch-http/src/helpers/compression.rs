@@ -1,9 +1,9 @@
-use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
+use flate2::Compression;
 use std::fs::{create_dir_all, File};
 use std::path::Path;
-use tar::{Builder, Archive};
+use tar::{Archive, Builder};
 
 use crate::error::Error;
 

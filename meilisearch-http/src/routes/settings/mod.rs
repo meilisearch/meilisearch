@@ -1,9 +1,9 @@
-use actix_web::{web, HttpResponse, delete, get, post};
+use actix_web::{delete, get, post, web, HttpResponse};
 
-use crate::Data;
 use crate::error::ResponseError;
-use crate::index_controller::Settings;
 use crate::helpers::Authentication;
+use crate::index::Settings;
+use crate::Data;
 
 #[macro_export]
 macro_rules! make_setting_route {
@@ -14,14 +14,14 @@ macro_rules! make_setting_route {
             use crate::data;
             use crate::error::ResponseError;
             use crate::helpers::Authentication;
-            use crate::index_controller::Settings;
+            use crate::index::Settings;
 
             #[actix_web::delete($route, wrap = "Authentication::Private")]
             pub async fn delete(
                 data: web::Data<data::Data>,
                 index_uid: web::Path<String>,
             ) -> Result<HttpResponse, ResponseError> {
-                use crate::index_controller::Settings;
+                use crate::index::Settings;
                 let settings = Settings {
                     $attr: Some(None),
                     ..Default::default()
@@ -64,7 +64,7 @@ macro_rules! make_setting_route {
                 data: actix_web::web::Data<data::Data>,
                 index_uid: actix_web::web::Path<String>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
-                match data.settings(index_uid.as_ref()) {
+                match data.settings(index_uid.into_inner()).await {
                     Ok(settings) => {
                         let setting = settings.$attr;
                         let json = serde_json::to_string(&setting).unwrap();
@@ -82,7 +82,7 @@ macro_rules! make_setting_route {
 make_setting_route!(
     "/indexes/{index_uid}/settings/attributes-for-faceting",
     std::collections::HashMap<String, String>,
-    faceted_attributes
+    attributes_for_faceting
 );
 
 make_setting_route!(
@@ -98,16 +98,16 @@ make_setting_route!(
 );
 
 //make_setting_route!(
-    //"/indexes/{index_uid}/settings/distinct-attribute",
-    //String,
-    //distinct_attribute
+//"/indexes/{index_uid}/settings/distinct-attribute",
+//String,
+//distinct_attribute
 //);
 
-make_setting_route!(
-    "/indexes/{index_uid}/settings/ranking-rules",
-    Vec<String>,
-    ranking_rules
-);
+//make_setting_route!(
+//"/indexes/{index_uid}/settings/ranking-rules",
+//Vec<String>,
+//ranking_rules
+//);
 
 macro_rules! create_services {
     ($($mod:ident),*) => {
@@ -126,10 +126,9 @@ macro_rules! create_services {
 }
 
 create_services!(
-    faceted_attributes,
+    attributes_for_faceting,
     displayed_attributes,
-    searchable_attributes,
-    ranking_rules
+    searchable_attributes
 );
 
 #[post("/indexes/{index_uid}/settings", wrap = "Authentication::Private")]
@@ -138,7 +137,10 @@ async fn update_all(
     index_uid: web::Path<String>,
     body: web::Json<Settings>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.update_settings(index_uid.into_inner(), body.into_inner(), true).await {
+    match data
+        .update_settings(index_uid.into_inner(), body.into_inner(), true)
+        .await
+    {
         Ok(update_result) => {
             let json = serde_json::to_string(&update_result).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -154,7 +156,7 @@ async fn get_all(
     data: web::Data<Data>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    match data.settings(index_uid.as_ref()) {
+    match data.settings(index_uid.into_inner()).await {
         Ok(settings) => {
             let json = serde_json::to_string(&settings).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -171,7 +173,10 @@ async fn delete_all(
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let settings = Settings::cleared();
-    match data.update_settings(index_uid.into_inner(), settings, false).await {
+    match data
+        .update_settings(index_uid.into_inner(), settings, false)
+        .await
+    {
         Ok(update_result) => {
             let json = serde_json::to_string(&update_result).unwrap();
             Ok(HttpResponse::Ok().body(json))
@@ -181,4 +186,3 @@ async fn delete_all(
         }
     }
 }
-

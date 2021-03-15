@@ -1,7 +1,7 @@
-use serde_json::{json, Value};
 use chrono::DateTime;
+use serde_json::{json, Value};
 
-use crate::common::{Server, GetAllDocumentsOptions};
+use crate::common::{GetAllDocumentsOptions, Server};
 
 #[actix_rt::test]
 async fn add_documents_no_index_creation() {
@@ -28,14 +28,16 @@ async fn add_documents_no_index_creation() {
 
     let (response, code) = index.get_update(0).await;
     assert_eq!(code, 200);
-    println!("response: {}", response);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["updateId"], 0);
     assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 1);
 
-    let processed_at = DateTime::parse_from_rfc3339(response["processedAt"].as_str().unwrap()).unwrap();
-    let enqueued_at = DateTime::parse_from_rfc3339(response["enqueuedAt"].as_str().unwrap()).unwrap();
-    let started_processing_at = DateTime::parse_from_rfc3339(response["startedProcessingAt"].as_str().unwrap()).unwrap();
+    let processed_at =
+        DateTime::parse_from_rfc3339(response["processedAt"].as_str().unwrap()).unwrap();
+    let enqueued_at =
+        DateTime::parse_from_rfc3339(response["enqueuedAt"].as_str().unwrap()).unwrap();
+    let started_processing_at =
+        DateTime::parse_from_rfc3339(response["startedProcessingAt"].as_str().unwrap()).unwrap();
     assert!(processed_at > started_processing_at);
     assert!(started_processing_at > enqueued_at);
 
@@ -72,7 +74,8 @@ async fn document_addition_with_primary_key() {
             "content": "foo",
         }
     ]);
-    let (_response, code) = index.add_documents(documents, Some("primary")).await; assert_eq!(code, 200);
+    let (_response, code) = index.add_documents(documents, Some("primary")).await;
+    assert_eq!(code, 200);
 
     index.wait_update_id(0).await;
 
@@ -98,7 +101,8 @@ async fn document_update_with_primary_key() {
             "content": "foo",
         }
     ]);
-    let (_response, code) = index.update_documents(documents, Some("primary")).await; assert_eq!(code, 200);
+    let (_response, code) = index.update_documents(documents, Some("primary")).await;
+    assert_eq!(code, 200);
 
     index.wait_update_id(0).await;
 
@@ -159,7 +163,7 @@ async fn update_documents_with_primary_key_and_primary_key_already_exists() {
     assert_eq!(code, 200);
 
     index.wait_update_id(0).await;
-let (response, code) = index.get_update(0).await;
+    let (response, code) = index.get_update(0).await;
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["updateId"], 0);
@@ -264,7 +268,10 @@ async fn update_document() {
 
     let (response, code) = index.get_document(1, None).await;
     assert_eq!(code, 200);
-    assert_eq!(response.to_string(), r##"{"doc_id":1,"content":"foo","other":"bar"}"##);
+    assert_eq!(
+        response.to_string(),
+        r##"{"doc_id":1,"content":"foo","other":"bar"}"##
+    );
 }
 
 #[actix_rt::test]
@@ -276,7 +283,12 @@ async fn add_larger_dataset() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 77);
-    let (response, code) = index.get_all_documents(GetAllDocumentsOptions { limit: Some(1000), ..Default::default() }).await;
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            limit: Some(1000),
+            ..Default::default()
+        })
+        .await;
     assert_eq!(code, 200);
     assert_eq!(response.as_array().unwrap().len(), 77);
 }
@@ -292,7 +304,12 @@ async fn update_larger_dataset() {
     assert_eq!(code, 200);
     assert_eq!(response["status"], "processed");
     assert_eq!(response["success"]["DocumentsAddition"]["nb_documents"], 77);
-    let (response, code) = index.get_all_documents(GetAllDocumentsOptions { limit: Some(1000), ..Default::default() }).await;
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            limit: Some(1000),
+            ..Default::default()
+        })
+        .await;
     assert_eq!(code, 200);
     assert_eq!(response.as_array().unwrap().len(), 77);
 }
