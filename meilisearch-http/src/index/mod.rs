@@ -1,6 +1,7 @@
 mod search;
 mod updates;
 
+use std::collections::HashSet;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -70,17 +71,7 @@ impl Index {
         let txn = self.read_txn()?;
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
-
-        let attributes_to_retrieve_ids = match attributes_to_retrieve {
-            Some(attrs) => attrs
-                .iter()
-                .filter_map(|f| fields_ids_map.id(f.as_ref()))
-                .collect::<Vec<_>>(),
-            None => match self.displayed_fields_ids(&txn)? {
-                Some(fields) => fields,
-                None => fields_ids_map.iter().map(|(id, _)| id).collect(),
-            },
-        };
+        let fields_to_display = self.fields_to_display(&txn, attributes_to_retrieve, &fields_ids_map)?;
 
         let iter = self.documents.range(&txn, &(..))?.skip(offset).take(limit);
 
@@ -88,7 +79,7 @@ impl Index {
 
         for entry in iter {
             let (_id, obkv) = entry?;
-            let object = obkv_to_json(&attributes_to_retrieve_ids, &fields_ids_map, obkv)?;
+            let object = obkv_to_json(&fields_to_display, &fields_ids_map, obkv)?;
             documents.push(object);
         }
 
@@ -104,16 +95,7 @@ impl Index {
 
         let fields_ids_map = self.fields_ids_map(&txn)?;
 
-        let attributes_to_retrieve_ids = match attributes_to_retrieve {
-            Some(attrs) => attrs
-                .iter()
-                .filter_map(|f| fields_ids_map.id(f.as_ref()))
-                .collect::<Vec<_>>(),
-            None => match self.displayed_fields_ids(&txn)? {
-                Some(fields) => fields,
-                None => fields_ids_map.iter().map(|(id, _)| id).collect(),
-            },
-        };
+        let fields_to_display = self.fields_to_display(&txn, attributes_to_retrieve, &fields_ids_map)?;
 
         let internal_id = self
             .external_documents_ids(&txn)?
@@ -128,11 +110,34 @@ impl Index {
 
         match document {
             Some(document) => Ok(obkv_to_json(
-                &attributes_to_retrieve_ids,
+                &fields_to_display,
                 &fields_ids_map,
                 document,
             )?),
             None => bail!("Document with id {} not found", doc_id),
         }
+    }
+
+    fn fields_to_display<S: AsRef<str>>(
+        &self,
+        txn: &heed::RoTxn,
+        attributes_to_retrieve: Option<Vec<S>>,
+        fields_ids_map: &milli::FieldsIdsMap,
+    ) -> anyhow::Result<Vec<u8>> {
+        let mut displayed_fields_ids = match self.displayed_fields_ids(&txn)? {
+            Some(ids) => ids.into_iter().collect::<Vec<_>>(),
+            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
+        };
+
+        let attributes_to_retrieve_ids = match attributes_to_retrieve {
+            Some(attrs) => attrs
+                .iter()
+                .filter_map(|f| fields_ids_map.id(f.as_ref()))
+                .collect::<HashSet<_>>(),
+            None => fields_ids_map.iter().map(|(id, _)| id).collect(),
+        };
+
+        displayed_fields_ids.retain(|fid| attributes_to_retrieve_ids.contains(fid));
+        Ok(displayed_fields_ids)
     }
 }
