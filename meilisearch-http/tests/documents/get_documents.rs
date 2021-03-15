@@ -1,6 +1,8 @@
 use crate::common::Server;
 use crate::common::GetAllDocumentsOptions;
 
+use serde_json::json;
+
 // TODO: partial test since we are testing error, amd error is not yet fully implemented in
 // transplant
 #[actix_rt::test]
@@ -146,4 +148,23 @@ async fn test_get_all_documents_attributes_to_retrieve() {
     assert_eq!(code, 200);
     assert_eq!(response.as_array().unwrap().len(), 20);
     assert_eq!(response.as_array().unwrap()[0].as_object().unwrap().keys().count(), 2);
+}
+
+#[actix_rt::test]
+async fn get_documents_displayed_attributes() {
+    let server = Server::new().await;
+    let index = server.index("test");
+    index.update_settings(json!({"displayedAttributes": ["gender"]})).await;
+    index.load_test_set().await;
+
+    let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
+    assert_eq!(code, 200);
+    assert_eq!(response.as_array().unwrap().len(), 20);
+    assert_eq!(response.as_array().unwrap()[0].as_object().unwrap().keys().count(), 1);
+    assert!(response.as_array().unwrap()[0].as_object().unwrap().get("gender").is_some());
+
+    let (response, code) = index.get_document(0, None).await;
+    assert_eq!(code, 200);
+    assert_eq!(response.as_object().unwrap().keys().count(), 1);
+    assert!(response.as_object().unwrap().get("gender").is_some());
 }

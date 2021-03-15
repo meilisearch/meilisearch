@@ -114,6 +114,7 @@ impl Index {
                 None => fields_ids_map.iter().map(|(id, _)| id).collect(),
             },
         };
+
         let internal_id = self
             .external_documents_ids(&txn)?
             .get(doc_id.as_bytes())
